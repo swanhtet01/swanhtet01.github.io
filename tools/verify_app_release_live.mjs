@@ -496,6 +496,11 @@ const ecommerceLiveCopyUpdates = new Map([
   ['Operator ID', 'Staff ID'],
   ['OP-OWNER', 'OP-STAFF'],
   ['Accept intake', 'Accept request'],
+  ['Ready for owner review', 'Ready for review'],
+  ['Shop gate', 'Shop review'],
+  ['owner review', 'review'],
+  ['Owner draft only', 'Review draft only'],
+  ['Confirm stock, payment, delivery, and owner approval before any send.', 'Confirm stock, payment, delivery, and review before any send.'],
 ])
 for (const required of ['Run next step', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Enterprise order controls', 'Inbox, payment, delivery, recovery, replies, and activation evidence.']) {
   const currentRequired = ecommerceLiveCopyUpdates.get(required) ?? required

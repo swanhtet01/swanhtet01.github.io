@@ -636,7 +636,7 @@ export function EcommerceProduct() {
       blockedRows,
       summary: blockedRows
         ? `${blockedRows} row${blockedRows === 1 ? '' : 's'} need SKU, quantity, fulfilment, payment, customer, or source-message repair.`
-        : `${readyRows} order row${readyRows === 1 ? '' : 's'} ready for owner review.`,
+        : `${readyRows} order row${readyRows === 1 ? '' : 's'} ready for review.`,
     }
   }
 
@@ -959,7 +959,7 @@ export function EcommerceProduct() {
         finishStorefrontSetup()
         return
       }
-      setCustomerFollowUpDraft('Owner draft only: the storefront is ready. Wait for a reviewed customer quote request before sending any payment, delivery, discount, or availability message.')
+      setCustomerFollowUpDraft('Review draft only: the storefront is ready. Wait for a reviewed customer quote request before sending any payment, delivery, discount, or availability message.')
       return
     }
     const request = customerFollowUpRequest ?? pendingManagedRequests[0]
@@ -967,7 +967,7 @@ export function EcommerceProduct() {
     const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
     const expiryText = 'quote' in request ? ` Quote expires ${new Date(request.quote.expiresAt).toLocaleString()}.` : ''
     const fulfilmentText = request.fulfilment === 'delivery' ? 'delivery, availability, and payment' : 'pickup, availability, and payment'
-    setCustomerFollowUpDraft(`Owner draft only: Hi ${request.customerReference}, your ${itemSummary} request totals ${formatMmk(request.totalMmk)}. Shop is reviewing ${fulfilmentText} before anything is confirmed.${expiryText} Reference ${request.id}.`)
+    setCustomerFollowUpDraft(`Review draft only: Hi ${request.customerReference}, your ${itemSummary} request totals ${formatMmk(request.totalMmk)}. Shop is reviewing ${fulfilmentText} before anything is confirmed.${expiryText} Reference ${request.id}.`)
   }
 
   function prepareChannelReplyTemplate() {
@@ -976,7 +976,7 @@ export function EcommerceProduct() {
         finishStorefrontSetup()
         return
       }
-      setChannelReplyDraft('Owner draft only: channel reply templates are ready. Wait for a reviewed customer request, then approve the channel, source evidence, payment boundary, and Shop review status before sending.')
+      setChannelReplyDraft('Review draft only: channel reply templates are ready. Wait for a reviewed customer request, then approve the channel, source evidence, payment boundary, and Shop review status before sending.')
       return
     }
     const lines = commerceStorefrontRequestLines(customerFollowUpRequest)
@@ -990,7 +990,7 @@ export function EcommerceProduct() {
           : customerFollowUpRequest.fulfilment === 'delivery'
             ? 'delivery confirmation'
             : 'Shop review update'
-    setChannelReplyDraft(`Owner draft only: ${replyChannelTemplate.toUpperCase()} reply for ${customerFollowUpRequest.customerReference}: Shop is reviewing ${itemSummary} for ${reason}. Confirm stock, payment, delivery, and owner approval before any send. Reference ${customerFollowUpRequest.id}.`)
+    setChannelReplyDraft(`Review draft only: ${replyChannelTemplate.toUpperCase()} reply for ${customerFollowUpRequest.customerReference}: Shop is reviewing ${itemSummary} for ${reason}. Confirm stock, payment, delivery, and review before any send. Reference ${customerFollowUpRequest.id}.`)
   }
 
   function prepareDeliveryFeeReview() {
@@ -999,13 +999,13 @@ export function EcommerceProduct() {
         finishStorefrontSetup()
         return
       }
-      setDeliveryReviewDraft('Owner draft only: delivery review is ready. Wait for a delivery request, then confirm zone, fee, rider assignment, and payment in Shop before quoting a customer.')
+      setDeliveryReviewDraft('Review draft only: delivery review is ready. Wait for a delivery request, then confirm zone, fee, rider assignment, and payment in Shop before quoting a customer.')
       return
     }
     const lines = commerceStorefrontRequestLines(deliveryReviewRequest)
     const zoneHint = deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference)
     const itemSummary = lines.length === 1 ? lines[0].name : `${lines.length} items`
-    setDeliveryReviewDraft(`Owner draft only: review ${zoneHint} as the delivery zone for ${deliveryReviewRequest.customerReference}. Quote ${itemSummary} at ${formatMmk(deliveryReviewRequest.totalMmk)} before delivery fee. Shop must confirm fee, rider assignment, payment, and stock before any customer message or booking. Reference ${deliveryReviewRequest.id}.`)
+    setDeliveryReviewDraft(`Review draft only: review ${zoneHint} as the delivery zone for ${deliveryReviewRequest.customerReference}. Quote ${itemSummary} at ${formatMmk(deliveryReviewRequest.totalMmk)} before delivery fee. Shop must confirm fee, rider assignment, payment, and stock before any customer message or booking. Reference ${deliveryReviewRequest.id}.`)
   }
 
   function prepareDeliveryAreaTemplate() {
@@ -1014,14 +1014,14 @@ export function EcommerceProduct() {
         finishStorefrontSetup()
         return
       }
-      setDeliveryAreaTemplateDraft('Owner draft only: delivery-area templates are ready. Wait for a reviewed delivery request, then approve area, fee rule, rider assignment, payment policy, and cut-off before reuse.')
+      setDeliveryAreaTemplateDraft('Review draft only: delivery-area templates are ready. Wait for a reviewed delivery request, then approve area, fee rule, rider assignment, payment policy, and cut-off before reuse.')
       return
     }
     const area = deliveryAreaFromCustomerReference(deliveryReviewRequest.customerReference)
     const paymentPolicy = 'quote' in deliveryReviewRequest && deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual'
       ? 'manual QR review'
       : 'cash-on-delivery review'
-    setDeliveryAreaTemplateDraft(`Owner draft only: save ${area} as a delivery-area template after Shop approves fee, rider assignment, ${paymentPolicy}, cut-off, and stock confirmation. Reuse stays locked until go-live setup proves audit, roles, and write controls. Reference ${deliveryReviewRequest.id}.`)
+    setDeliveryAreaTemplateDraft(`Review draft only: save ${area} as a delivery-area template after Shop approves fee, rider assignment, ${paymentPolicy}, cut-off, and stock confirmation. Reuse stays locked until go-live setup proves audit, roles, and write controls. Reference ${deliveryReviewRequest.id}.`)
   }
 
   function openFilteredRequestInShop() {
@@ -1393,7 +1393,7 @@ export function EcommerceProduct() {
     ['Payment', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual` : pendingManagedRequests.length || buyingReady ? 'Not charged' : 'Locked'],
     ['Fulfilment', deliveryReviewCount ? `${deliveryReviewCount} delivery` : pickupReviewCount ? `${pickupReviewCount} pickup` : savedDraftIsCurrent ? 'Pickup/delivery' : 'Locked'],
     ['Reply', customerFollowUpRequest ? 'Draftable' : buyingReady ? 'Template ready' : 'Locked'],
-    ['Shop review', pendingManagedRequests.length ? 'Owner queue' : orderImportReview?.status === 'ready' ? 'Packet ready' : buyingReady ? 'Quote only' : 'Save store first'],
+    ['Shop review', pendingManagedRequests.length ? 'Review queue' : orderImportReview?.status === 'ready' ? 'Packet ready' : buyingReady ? 'Quote only' : 'Save store first'],
     ['Boundary', 'No auto fulfill'],
   ] as const
   const deliveryReviewRequest = pendingManagedRequests.find((request) => request.fulfilment === 'delivery')
@@ -1472,7 +1472,7 @@ export function EcommerceProduct() {
     ['Checkout', buyingReady ? 'Quote controlled' : 'Locked'],
     ['Payments', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual QR` : 'Review only'],
     ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : savedDraftIsCurrent ? 'Template ready' : 'Locked'],
-    ['Shop gate', pendingManagedRequests.length ? `${pendingManagedRequests.length} owner review` : 'No queue'],
+    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} to review` : 'No queue'],
     ['Go-live', managedIdentity ? 'Account controls' : 'Download file'],
   ] as const
   function downloadManagedStoreActivationPacket() {
@@ -1765,7 +1765,7 @@ export function EcommerceProduct() {
                 setOrderImportSourceName('')
               }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
               <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
-              {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before Shop review'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
+              {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for review' : 'Repair before Shop review'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
               {orderImportSourceName ? <p className="ecommerce-order-import-source">Local file: {orderImportSourceName}</p> : null}
               {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
             </div>
