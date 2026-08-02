@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v1",
   "asOf": "2026-08-02T16:29:10.990Z",
-  "sourceDigest": "sha256:1e3e46a258a853639227212e3e0649aaad82f1672affe6176ff6494b86f3c40c",
+  "sourceDigest": "sha256:03d12aaa34828ef699cbd204cfaf9427bb254fa391719799193de9463fb7d0ec",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -31,8 +31,8 @@
     {
       "id": "live_product_contract",
       "status": "blocked",
-      "evidence": "HQ records app_product_contract_drift.",
-      "nextAction": "Reconcile and verify the exact paired release before any pilot claim."
+      "evidence": "The exact paired release is verified, but its managed product contract remains isolated_demo.",
+      "nextAction": "Prove managed persistence and security on the approved isolated target before any managed-pilot claim."
     },
     {
       "id": "managed_persistence",
@@ -144,7 +144,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:0af39f6159b579a2ada18faa9a0f71cd9aa4a3d3ebac75cf4b49081683f9f052"
+      "digest": "sha256:62a11077c9d6f89d5353771acd148612af3a461120d71e5369a0bf05bce527b5"
     }
   ]
 }
