@@ -1627,7 +1627,7 @@ export function EcommerceProduct() {
   const ecommerceGuidedJobs = [
     ['1', 'Browse demo', 'See the customer store first.', '#ecommerce-preview-panel'],
     ['2', 'Make store', 'Choose products, photos, and page copy.', '#ecommerce-setup-panel'],
-    ['3', 'Test order', 'Review one checkout before real customers.', '/shop/?tab=orders&source=ecommerce'],
+    ['3', 'Test order', 'Add an item and review checkout here.', '#ecommerce-buying-workspace'],
   ] as const
 
   function runOrderAutopilot() {
