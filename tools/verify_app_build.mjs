@@ -3052,8 +3052,10 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes("window.addEventListener('storage', refresh)")
   || !ecommerceBuyingUiSource.includes('setFreshQuoteId(request.id)')
   || !ecommerceBuyingUiSource.includes('function receiveOrderLabel(value: EcommerceFulfilment)')
-  || !ecommerceBuyingUiSource.includes('ecommercePaymentMatchesFulfilment(next, current)')
-  || !ecommerceBuyingUiSource.includes("next === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup'")
+  || !ecommerceBuyingUiSource.includes('ecommerceAvailablePaymentAdapters')
+  || !ecommerceBuyingUiSource.includes('nextPaymentAdapters.includes(current)')
+  || !ecommerceBuyingUiSource.includes('No Shop payment method')
+  || !ecommerceBuyingUiSource.includes('!paymentPolicyReady')
   || !ecommerceBuyingUiSource.includes('Quote for {latestRequest.customerReference}')
   || !ecommerceBuyingUiSource.includes('const orderAutopilotNext = recoveryBlocked')
   || !ecommerceBuyingUiSource.includes('const orderAutopilotRows = [')
@@ -13622,6 +13624,20 @@ async function verifyStorefrontRuntime() {
       && !buyingModel.ecommercePaymentMatchesFulfilment('pickup', 'cash_on_delivery')
       && !buyingModel.ecommercePaymentMatchesFulfilment('delivery', 'pay_on_pickup'),
     'ecommerce_buying_payment_fulfilment_matrix_invalid')
+    const stalePickupPolicies = paymentPolicies.filter((policy) => policy.adapter !== 'pay_on_pickup')
+    buyingAssert(JSON.stringify(buyingModel.ecommerceAvailablePaymentAdapters(
+      stalePickupPolicies,
+      'pickup',
+      18_500,
+      '2026-07-24T09:00:00.000Z',
+    )) === JSON.stringify(['kbzpay_manual'])
+      && buyingModel.ecommerceAvailablePaymentAdapters(
+        paymentPolicies.filter((policy) => policy.adapter === 'cash_on_delivery'),
+        'pickup',
+        18_500,
+        '2026-07-24T09:00:00.000Z',
+      ).length === 0,
+    'ecommerce_buying_payment_fallback_not_policy_bound')
     let mismatchedBuyingPaymentRejected = false
     try {
       await buyingModel.buildEcommerceCheckoutQuote({

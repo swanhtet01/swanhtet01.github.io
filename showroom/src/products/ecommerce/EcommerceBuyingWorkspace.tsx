@@ -11,6 +11,7 @@ import {
   buildEcommerceReturnIntent,
   buildEcommerceSupportIntent,
   createEmptyEcommerceBuyingState,
+  ecommerceAvailablePaymentAdapters,
   ecommerceBuyingStateStorageKey,
   ecommercePaymentMatchesFulfilment,
   prepareEcommerceShopDraftV2,
@@ -468,6 +469,18 @@ export function EcommerceBuyingWorkspace({
   const cartTotal = cartItems.reduce((total, line) => (
     total + (line.item?.unitPriceMmk ?? 0) * line.quantity
   ), 0)
+  const availablePaymentAdapters = useMemo(() => ecommerceAvailablePaymentAdapters(
+    commerceState.paymentPolicies ?? [],
+    fulfilment,
+    Math.max(1, cartTotal),
+    new Date(quoteClock).toISOString(),
+  ), [cartTotal, commerceState.paymentPolicies, fulfilment, quoteClock])
+  const paymentPolicyReady = availablePaymentAdapters.includes(paymentAdapter)
+  useEffect(() => {
+    if (paymentPolicyReady) return
+    setHandoffConfirmed(false)
+    if (availablePaymentAdapters.length) setPaymentAdapter(availablePaymentAdapters[0])
+  }, [availablePaymentAdapters, paymentPolicyReady])
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
   const quoteMinutesRemaining = latestRequest
     ? Math.max(0, Math.ceil((Date.parse(latestRequest.quote.expiresAt) - quoteClock) / 60000))
@@ -504,10 +517,16 @@ export function EcommerceBuyingWorkspace({
   }
 
   function changeFulfilment(next: EcommerceFulfilment) {
+    const nextPaymentAdapters = ecommerceAvailablePaymentAdapters(
+      commerceState.paymentPolicies ?? [],
+      next,
+      Math.max(1, cartTotal),
+      new Date().toISOString(),
+    )
     setFulfilment(next)
-    setPaymentAdapter((current) => ecommercePaymentMatchesFulfilment(next, current)
+    setPaymentAdapter((current) => nextPaymentAdapters.includes(current)
       ? current
-      : next === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup')
+      : nextPaymentAdapters[0] ?? (next === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup'))
     setHandoffConfirmed(false)
   }
 
@@ -1014,6 +1033,10 @@ export function EcommerceBuyingWorkspace({
   async function reviewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (disabled || quoteBusy || recoveryBlocked || !cart.length) return
+    if (!paymentPolicyReady) {
+      setNotice(`Shop has no active payment method for ${fulfilment}. Set one up in Shop before reviewing this order.`)
+      return
+    }
     if (!globalThis.crypto?.randomUUID) {
       setNotice('Secure checkout identity is unavailable. Nothing was recorded.')
       return
@@ -1211,18 +1234,18 @@ export function EcommerceBuyingWorkspace({
             </> : null}
             <label>
               <span>Payment</span>
-              <select onChange={(event) => { setPaymentAdapter(event.target.value as EcommercePaymentAdapter); setHandoffConfirmed(false) }} value={paymentAdapter}>
-                {fulfilment === 'pickup'
-                  ? <option value="pay_on_pickup">Pay on pickup</option>
-                  : <option value="cash_on_delivery">Cash on delivery</option>}
-                <option value="kbzpay_manual">KBZPay · manual confirmation</option>
+              <select disabled={!availablePaymentAdapters.length} onChange={(event) => { setPaymentAdapter(event.target.value as EcommercePaymentAdapter); setHandoffConfirmed(false) }} value={paymentPolicyReady ? paymentAdapter : ''}>
+                {availablePaymentAdapters.length
+                  ? availablePaymentAdapters.map((adapter) => <option key={adapter} value={adapter}>{paymentLabel(adapter)}</option>)
+                  : <option value="">No Shop payment method</option>}
               </select>
             </label>
+            {!availablePaymentAdapters.length ? <p className="form-notice" role="status">Set up an active Shop payment method for {fulfilment} before reviewing an order.</p> : null}
             <label>
               <span>Promotion code <small>optional · Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => { setPromotionCode(event.target.value); setHandoffConfirmed(false) }} placeholder="Optional" value={promotionCode} />
             </label>
-            {!quoteCurrent ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length} type="submit">
+            {!quoteCurrent ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
               {quoteBusy ? 'Checking…' : 'Review order'}
             </button> : null}
           </form>
