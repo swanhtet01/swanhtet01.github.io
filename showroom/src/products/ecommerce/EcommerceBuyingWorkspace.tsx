@@ -462,7 +462,9 @@ export function EcommerceBuyingWorkspace({
     Math.max(1, cartTotal),
     new Date(quoteClock).toISOString(),
   )
-  const usingSamplePaymentFallback = !onRecordManagedRequest && configuredPaymentAdapters.length === 0
+  const usingSamplePaymentFallback = !onRecordManagedRequest
+    && configuredPaymentPolicies.length === 0
+    && configuredPaymentAdapters.length === 0
   const checkoutPaymentPolicies = usingSamplePaymentFallback ? samplePaymentPolicies : configuredPaymentPolicies
   const availablePaymentAdapters = usingSamplePaymentFallback
     ? ecommerceAvailablePaymentAdapters(
