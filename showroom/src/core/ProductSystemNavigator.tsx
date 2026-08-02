@@ -15,9 +15,9 @@ const productDetails: Record<ClientSolutionId, { label: string; summary: string;
   ecommerce: { label: 'Ecommerce', summary: 'Run storefront orders and Shop review.', setupPath: '/settings/?product=ecommerce', primaryPath: '/ecommerce/' },
 }
 
-function WorkflowLink({ capability }: { capability: ClientCapability }) {
+function WorkflowLink({ capability, fallbackPath }: { capability: ClientCapability; fallbackPath: string }) {
   return (
-    <Link className="product-system-workflow" to={capability.proofPath ?? '#'}>
+    <Link className="product-system-workflow" to={capability.proofPath ?? fallbackPath}>
       <span>{capability.domain.replace('-', ' ')}</span>
       <b>{capability.label}</b>
       <p>{capability.outcome}</p>
@@ -58,7 +58,7 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
           <span><small>Scale later</small><strong>{summary.scaleLater}</strong><em>Enterprise modules</em></span>
         </div>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
-          {workingFlows.map((capability) => <WorkflowLink capability={capability} key={capability.id} />)}
+          {workingFlows.map((capability) => <WorkflowLink capability={capability} fallbackPath={details.primaryPath} key={capability.id} />)}
         </div>
         <details className="product-system-advanced">
           <summary><span>Add your data</span><strong>{setupModules.length}</strong></summary>
