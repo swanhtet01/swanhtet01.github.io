@@ -44,20 +44,20 @@ export function ManagedActivationRunbook({ runtime }: ManagedActivationRunbookPr
   const nextRequirement = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? next?.[2] ?? 'Managed activation is ready for workspace sign-in.'
   const evidenceReady = runtime.evidencePlan.filter((item) => item.ready).length
 
-  return <section aria-label="Managed activation runbook" className="activation-runbook">
+  return <section aria-label="Go-live checklist" className="activation-runbook">
     <div className="activation-runbook-head">
-      <div><span className="core-eyebrow">Managed activation</span><strong>{runtime.status === 'enterprise' ? 'Ready for paid workspaces' : 'Next hosted blocker'}</strong><small>{nextRequirement}</small></div>
+      <div><span className="core-eyebrow">Go-live checklist</span><strong>{runtime.status === 'enterprise' ? 'Ready for paid workspaces' : 'Next hosted blocker'}</strong><small>{nextRequirement}</small></div>
       <span className={`status-pill ${runtime.status === 'enterprise' ? 'approved' : 'pending'}`}>{percent}% ready</span>
     </div>
     <div className="activation-runbook-steps">
       {activationSteps.map(([label, ready, action]) => <span data-ready={ready ? 'true' : 'false'} key={label}><small>{label}</small><b>{ready ? 'Ready' : 'Needed'}</b><em>{action}</em></span>)}
     </div>
-    {runtime.evidencePlan.length ? <div className="activation-evidence-plan" aria-label="Managed activation evidence plan">
+    {runtime.evidencePlan.length ? <div className="activation-evidence-plan" aria-label="Go-live evidence plan">
       <div><span className="core-eyebrow">Evidence to go live</span><strong>{evidenceReady}/{runtime.evidencePlan.length} proof gates ready</strong></div>
       {runtime.evidencePlan.map((item) => <span data-ready={item.ready ? 'true' : 'false'} key={item.id}><small>{item.label}</small><b>{item.ready ? 'Ready' : 'Needed'}</b><em>{item.proof}</em><code>{item.verifier}</code></span>)}
     </div> : null}
-    {runtime.activationManifest ? <div className="activation-evidence-plan" aria-label="Activation automation manifest">
-      <div><span className="core-eyebrow">Automation manifest</span><strong>{runtime.activationManifest.ready_percent}% ready</strong></div>
+    {runtime.activationManifest ? <div className="activation-evidence-plan" aria-label="Go-live automation summary">
+      <div><span className="core-eyebrow">Automation summary</span><strong>{runtime.activationManifest.ready_percent}% ready</strong></div>
       <span data-ready={runtime.activationManifest.blocked_gate_ids.length ? 'false' : 'true'}><small>Next action</small><b>{runtime.activationManifest.blocked_gate_ids.length ? 'Blocked' : 'Ready'}</b><em>{runtime.activationManifest.next_action}</em><code>{runtime.activationManifest.safe_enable.join(', ')}</code></span>
       <span data-ready="false"><small>Authority boundary</small><b>Approval gated</b><em>{runtime.activationManifest.automation_boundary}</em></span>
     </div> : null}

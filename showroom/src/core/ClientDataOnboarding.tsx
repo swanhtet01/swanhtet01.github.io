@@ -424,11 +424,11 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
     : canApplyManagedImport
       ? 'Owner can activate import'
       : validationIsCurrent
-        ? 'Owner approval required'
+        ? 'Review required'
         : state.preview?.readyForStaging
           ? managedIdentity
             ? 'Run managed check'
-            : 'Download activation package'
+            : 'Download setup file'
           : state.preview
             ? 'Clean package first'
             : 'Prepare first package'
@@ -923,13 +923,13 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                 {importCoachRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
               </div>
             </div>
-            <div aria-label={`${productName} activation handoff`} className="catalog-import-handoff">
+            <div aria-label={`${productName} setup handoff`} className="catalog-import-handoff">
               <div><strong>{activationHandoffAction}</strong><small>{activationHandoffReason}</small></div>
               <div className="catalog-import-handoff-list">
                 {activationHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
               </div>
             </div>
-            {provisioningPlan ? <div aria-label={`${productName} managed provisioning plan`} className="catalog-import-handoff">
+            {provisioningPlan ? <div aria-label={`${productName} company setup plan`} className="catalog-import-handoff">
               <div><strong>{provisioningPlan.next_step}</strong><small>No customer message, payment, domain publish, or scheduler action is allowed from this validation.</small></div>
               <div className="catalog-import-handoff-list">
                 {provisioningPlanRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
