@@ -44,7 +44,7 @@ if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') 
 const website = manifest.customerProducts?.find((product) => product.id === 'website')
 if (website?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || website?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
-  || website?.headline !== 'Turn a short business brief into a usable website.') fail('website_download_trial_contract_drift')
+  || website?.headline !== 'Build a simple company website from a brief.') fail('website_download_trial_contract_drift')
 const ecommerce = manifest.customerProducts?.find((product) => product.id === 'ecommerce')
 if (ecommerce?.views?.join(',') !== 'Storefront,Cart and quote,Request receipt,Shop review,Returns'
   || !ecommerce?.workflow?.includes('Review a 15-minute whole-MMK quote')
@@ -122,6 +122,18 @@ const forbiddenCopy = [
   'Start with one live workflow.',
   'Send one real workflow, screenshot, spreadsheet, or recurring handoff.',
   'Capture orders from Messenger, Viber, phone, web, or walk-in channels',
+  'Four managed products',
+  'Working product samples',
+  'Choose the system that fits your work.',
+  'Open Shop, Plant, Website, or Ecommerce and try the working sample before you contact us.',
+  'Need a workspace for your company?',
+  'AI may prepare drafts from approved records.',
+  'Keep every order and stock movement accountable.',
+  'Give the plant floor one operational memory.',
+  'Turn a short business brief into a usable website.',
+  'Create a Shop-backed storefront and hand customer intent to human review.',
+  'Configure Shop',
+  'Configure Plant',
 ]
 const encodingCorruption = ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u00c2', '\u00f0\u0178']
 
@@ -149,8 +161,8 @@ if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_n
 for (const token of [
   manifest.company.headline,
   manifest.company.supporting,
-  'Four managed products',
-  'Working product samples',
+  'Four focused products',
+  'Working samples',
   'Mobile-ready workflows',
   'role="group" aria-label="Core capabilities"',
   '--quiet: #5f6c64;',
@@ -160,18 +172,18 @@ for (const token of [
   'href="#products">Choose a product</a>',
   'id="products"',
   '>Products<',
-  'Choose the system that fits your work.',
-  'Open Shop, Plant, Website, or Ecommerce and try the working sample before you contact us.',
-  'Need a workspace for your company?',
+  'Choose one product to try.',
+  'Open Shop, Plant, Website, or Ecommerce. Each product has a working sample and a setup path for your data.',
+  'Need this for your company?',
   'id="trust"',
   'aria-label="Security boundary"',
-  'AI may prepare drafts from approved records.',
+  'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
   'https://app.supermega.dev/shop/',
   'https://app.supermega.dev/plant/',
   'id="website"',
   'https://app.supermega.dev/website/',
   'id="ecommerce"',
-  'Create a Shop-backed storefront and hand customer intent to human review.',
+  'Create an online ordering page connected to Shop.',
   'https://app.supermega.dev/ecommerce/',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })

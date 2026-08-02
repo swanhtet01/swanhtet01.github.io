@@ -16,8 +16,8 @@
   "company": {
     "positioning": "Operating software for Myanmar companies.",
     "statement": "Four focused SuperMega products for retail, production, websites, and ecommerce ordering.",
-    "headline": "Choose the product for the work you need to run.",
-    "supporting": "Shop runs orders and stock. Plant runs production and quality. Website builds company sites. Ecommerce creates Shop-connected ordering.",
+    "headline": "Pick one product and try the working sample.",
+    "supporting": "Shop sells and tracks stock. Plant runs production. Website builds pages. Ecommerce creates Shop-connected ordering.",
     "publicPricing": false
   },
   "templatePackPolicy": {
@@ -39,20 +39,20 @@
       "appRoute": "https://app.supermega.dev/shop/",
       "status": "available-in-app",
       "eyebrow": "Shop operations",
-      "headline": "Keep every order and stock movement accountable.",
-      "description": "Run browser-local selling, purchasing, stock by location and lot, Plant receipts, fulfilment, returns, payment status, exceptions, and daily close. No live channel, payment, delivery, customer send, or external write is connected.",
+      "headline": "Sell, track stock, and close the day.",
+      "description": "Use the working Shop sample for counter sales, orders, stock, purchases, receipts, returns, and daily close. Real payments, messages, delivery, and stock writes stay behind review.",
       "primaryCta": {
         "label": "Open Shop"
       },
       "secondaryCta": {
-        "label": "Configure Shop",
+        "label": "Set up Shop data",
         "url": "/contact/?product=shop"
       },
       "modules": [
-        "Sell: visual counter, cart, payment choice and accountable confirmation",
-        "Orders: intake, fulfilment, payments, follow-up and close",
-        "Stock: locations, lots, purchase receipts, Plant receipts, transfers, counts and reorder exceptions",
-        "Accountability: evidence, owner review and recovery"
+        "Counter sales and cart",
+        "Orders, fulfilment, and returns",
+        "Stock, lots, receipts, and counts",
+        "Daily close and evidence"
       ],
       "internalTemplatePacks": [
         {"id": "retail", "name": "Retail", "status": "core-compatible", "workflowTemplateId": "retail-wholesale", "entryPoint": "Walk-in", "firstWorkflow": "counter sale and reviewed pickup", "availableNow": ["Sell", "Orders", "Stock", "Purchasing", "Returns", "Pickup schedule"], "plannedNext": ["Promotions", "Loyalty"]},
@@ -216,13 +216,13 @@
       "appRoute": "https://app.supermega.dev/plant/",
       "status": "available-in-app",
       "eyebrow": "Plant operations",
-      "headline": "Give the plant floor one operational memory.",
-      "description": "Run recurring jobs, output, machine state, quality, maintenance, exceptions, and shift handoffs in a clearly labelled local demo. Authenticated tenant writes stay locked until managed activation gates pass. No machine telemetry, machine control, access change, or external write is connected.",
+      "headline": "Plan jobs, record output, and close shifts.",
+      "description": "Use the working Plant sample for jobs, output, material trace, quality holds, maintenance, problems, and shift close. Machine control and live production writes stay behind review.",
       "primaryCta": {
         "label": "Open Plant"
       },
       "secondaryCta": {
-        "label": "Configure Plant",
+        "label": "Set up Plant data",
         "url": "/contact/?product=plant"
       },
       "modules": [
@@ -273,7 +273,7 @@
       "appRoute": "https://app.supermega.dev/website/",
       "status": "available-in-app",
       "eyebrow": "Website maker",
-      "headline": "Turn a short business brief into a usable website.",
+      "headline": "Build a simple company website from a brief.",
       "workspaceSchema": "supermega.website.workspace.v2",
       "views": ["Start", "Edit", "Preview", "Download"],
       "workflow": ["Answer a short business brief", "Edit finite pages", "Review responsive preview", "Save ready pages", "Download standalone website", "Request managed hosting when needed"],
@@ -315,7 +315,7 @@
       "appRoute": "https://app.supermega.dev/ecommerce/",
       "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
-      "headline": "Create a Shop-backed storefront and hand customer intent to human review.",
+      "headline": "Create an online ordering page connected to Shop.",
       "views": ["Storefront", "Cart and quote", "Request receipt", "Shop review", "Returns"],
       "workflow": ["Choose Shop-backed products", "Build cart", "Select pickup or delivery intent", "Review a 15-minute whole-MMK quote", "Save a recoverable request receipt", "Confirm exact Shop handoff", "Complete payment, fulfilment, returns, and refunds in Shop"],
       "templates": [
