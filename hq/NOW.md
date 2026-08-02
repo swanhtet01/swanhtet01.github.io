@@ -4,8 +4,8 @@ Updated: 2026-08-03
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `b898272d884ac372e32e15518809a1580405ac33`
-Live state observed: `2026-08-02T19:17:12.273Z`
+Live release commit: `f34177ac84d257870b45aa8d86a646759060fbb6`
+Live state observed: `2026-08-02T19:51:15.306Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -36,9 +36,8 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
 - Each CEO cycle selects one outcome. Exact disabled two-job live drift may admit local-only work, but any other failure blocks; Vercel, hosted scheduling, release, connectors, and external writes remain zero. Owner-send uncertainty retains claims and is never auto-retried (`34f601d8`).
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
-- Client setup keeps one manifest-backed smart import and one shared launchpad. Successful create/update focuses its sole `Open next demo` action; CSV preparation remains browser-local and installation review-gated (`ac61fd84`).
+- Client setup keeps one manifest-backed smart import and launchpad. Create/update focuses its sole `Open next demo` action. Reset and restore share one bounded record scope and one restore action; installation remains review-gated (`ac61fd84`, `d9acb58f`).
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
-- Shop Sell hides the empty mobile cart, closes it after last-item removal or completion, and confirms with a receipt reference instead of an internal action UUID (`7e321378`).
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted stock from rejected supplier units and measures defects; no posting occurs (`d47f5d9`, `39b7fc2`, `a37c933c`, `552ed20a`).
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
 - Shop owns versioned delivery zones, fee, promise, tax schedule, and payment-method eligibility/limits. Ecommerce draft v7 and the Shop order retain the exact tax decision; Shop rechecks authority and tax-inclusive payment limits before reserving stock (`ENG-136`, `ENG-137`, `ENG-138`, `9ff26ba3`).
@@ -53,10 +52,10 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Verified baseline
 
-- Product: four-product setup handoff and Plant CAPA release gates pass.
-- Checks: 106 Ecommerce, 342 Commerce, 321 Production, 95 security, 233 onboarding, 85 managed import, and 52 PostgreSQL 17 checks across nine migrations.
-- The deterministic 12-profile rehearsal passes 24 rows; live desktop create/update now hands off to the focused next-demo action. Mobile and recovery evidence remain.
-- Both domains serve deployed `b898272d884ac372e32e15518809a1580405ac33`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
+- Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
+- Checks: 106 Ecommerce, 342 Commerce, 321 Production, 95 security, 233 onboarding, 11 backup, 85 managed import, and 52 PostgreSQL 17 checks across nine migrations.
+- The deterministic 12-profile rehearsal passes 24 rows; live desktop create/update, reload, 19-record reset, and exact restore pass. Mobile, import-correction, duplicate, and export evidence remain.
+- Both domains serve deployed `f34177ac84d257870b45aa8d86a646759060fbb6`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -70,7 +69,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - `supermegabase` has the private managed schema at v7 with no activated workspace rows. The reviewed v8 RLS performance migration is released as code but not applied; managed writes remain off until backup, exact target binding, hosted advisor checks, tenant proof, and owner-authorized migration complete. The 27 legacy public tables stay outside the app contract and inaccessible through browser roles.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `b898272d`; no release drift is present. Managed activation and broad marketing remain blocked by the seven explicit hosted-readiness gates, and any external handoff must pass `release:handoff:verify`.
+- Live HQ and both domains agree on `f34177ac`; no release drift is present. Managed activation and broad marketing remain blocked by the seven explicit hosted-readiness gates, and any external handoff must pass `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
@@ -87,6 +86,6 @@ Every slice must keep one primary action, progressive disclosure, mobile accepta
 
 ## Next evidence
 
-1. Finish the live 12-profile client rehearsal with mobile, reload, correction, duplicate handoff, export, reset, and restore evidence; the deterministic model and desktop create/update handoff already pass.
+1. Finish the live 12-profile client rehearsal with mobile, import correction, duplicate handoff, and export; deterministic, desktop create/update, reload, reset, and restore evidence pass.
 2. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
 3. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.
