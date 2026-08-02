@@ -1400,13 +1400,12 @@ export function OverviewPage() {
     .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
     .sort(compareCommerceOrderPromise)
   const nextOperatingOrder = openOrders.find(commerceOrderNeedsAction) ?? openOrders[0]
-  const agentHandoffs = workspace.agents.filter((agent) => ['waiting_review', 'blocked'].includes(agent.state) && !blockedWork.some((item) => item.id === agent.assignedWorkItemId))
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
   const isPilotReady = pilotReady(setup)
   const stockPriorityCount = uncoveredLowStock.length + purchaseArrivalAttention.length
   const operatingExceptions = stockPriorityCount + openProductionIssues.length
-  const ownerAttention = blockedWork.length + pendingApprovals.length + agentHandoffs.length + operatingExceptions + (isPilotReady ? 0 : 1)
+  const ownerAttention = blockedWork.length + pendingApprovals.length + operatingExceptions + (isPilotReady ? 0 : 1)
   const selectedApproval = pendingApprovals.find((approval) => approval.id === selectedApprovalId)
   function purchaseArrivalPriority(row: typeof purchaseArrivalAttention[number]) {
     const itemName = row.item?.name ?? row.purchaseOrder.sku
@@ -1441,9 +1440,7 @@ export function OverviewPage() {
               ? { label: 'Company review', title: pendingApprovals[0].title, detail: `${pendingApprovals[0].packet.claims.length} claims are ready for review.`, action: 'Review now', approvalId: pendingApprovals[0].id }
                 : blockedWork[0]
                   ? { label: 'Company work', title: blockedWork[0].title, detail: `${blockedWork[0].owner} needs a decision to continue.`, action: 'Open work', href: `/work/?team=${blockedWork[0].team}&view=work&item=${blockedWork[0].id}` }
-                  : agentHandoffs[0]
-                    ? { label: 'Company role', title: `${agentHandoffs[0].name} needs review`, detail: `${agentHandoffs[0].humanOwner} owns the next decision.`, action: 'Open role', href: `/work/?team=${agentHandoffs[0].team}&view=agents&agent=${agentHandoffs[0].id}` }
-                    : { label: 'Ready', title: 'Start with Shop', detail: 'No operating exception or owner decision is waiting.', action: 'Open Shop', href: '/shop/?tab=orders' }
+                  : { label: 'Ready', title: 'Start with Shop', detail: 'No operating exception or owner decision is waiting.', action: 'Open Shop', href: '/shop/?tab=orders' }
 
   useEffect(() => {
     if (!managedIdentity) return undefined
@@ -1462,7 +1459,7 @@ export function OverviewPage() {
 
   function prepareCompanyBrief() {
     setBrief([
-      `${openWork.length} company work items remain open; ${activeWork.length} are in delivery or review across ${workspace.agents.length} delegated role records.`,
+      `${openWork.length} company work items remain open; ${activeWork.length} are in delivery or review.`,
       `${openOrders.length} Shop orders, ${stockPriorityCount} stock priorities, and ${openProductionIssues.length} Plant issues need operating attention.`,
       `${workspace.release.name} is ${releasePercent}% ready from ${workspace.release.checks.length} explicit checks.`,
       isPilotReady ? `${setup.workspace} pilot starts from ${setup.entryPoint}; baseline: ${setup.baseline}; target: ${setup.targetOutcome}.` : `Pilot definition is ${pilotProgress(setup)}% complete and still needs a baseline, target, authority boundary, and acceptance evidence.`,
@@ -1593,7 +1590,6 @@ export function OverviewPage() {
           <div className="attention-list">
             {!isPilotReady ? <Link to="/settings/"><span>Pilot</span><strong>Define the measurable workflow</strong><small>{pilotProgress(setup)}% complete · baseline and acceptance required</small></Link> : null}
             {blockedWork.map((item) => <Link key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span>Work</span><strong>{item.title}</strong><small>{item.owner}</small></Link>)}
-            {agentHandoffs.map((agent) => <Link key={agent.id} to={`/work/?team=${agent.team}&view=agents&agent=${agent.id}`}><span>Role</span><strong>{agent.name} {agent.state === 'waiting_review' ? 'needs review' : 'is blocked'}</strong><small>{agent.humanOwner} / {agent.assignedWorkItemId ?? 'unassigned'}</small></Link>)}
             {pendingApprovals.map((approval) => <button className="attention-action" key={approval.id} onClick={() => setSelectedApprovalId(approval.id)} type="button"><span>{approval.managed ? 'Managed approval' : 'Approval'}</span><strong>{approval.title}</strong><small>{approval.packet.claims.length} claims · {formatTime(approval.createdAt)}</small><b>Review</b></button>)}
             {purchaseArrivalAttention.map((row) => { const priority = purchaseArrivalPriority(row); return <Link key={row.purchaseOrder.id} to={priority.href}><span>Purchase</span><strong>{priority.title}</strong><small>{priority.detail}</small></Link> })}
             {uncoveredLowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><span>Stock</span><strong>{item.name}</strong><small>{item.onHand} on hand · reorder at {item.reorderAt}</small></Link>)}
