@@ -1554,7 +1554,7 @@ export function EcommerceProduct() {
   const aiAgentQueueRows = [
     ['Next step', aiAgentJob],
     ['Why', aiAgentReason],
-    ['Owner gate', aiOwnerGate],
+    ['Review', aiOwnerGate],
   ] as const
   const orderAutopilotStage = importNeeded
     ? 'Connect products'

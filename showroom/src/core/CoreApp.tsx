@@ -3239,7 +3239,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const shopAgentRows = [
     ['Next step', shopAgentJob],
     ['Why', shopAgentReason],
-    ['Owner gate', shopOwnerGate],
+    ['Review', shopOwnerGate],
   ]
   const shopAutopilotStage = !commerceCanWrite
     ? 'Restore Shop readiness'
@@ -3282,7 +3282,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Source', commerce.items.length ? `${commerce.items.length} current SKU` : 'Need catalog'],
     ['Upload', 'Shared mapper'],
     ['Checks', 'SKU, price, stock'],
-    ['Owner gate', 'Review package'],
+    ['Review', 'Review package'],
     ['Boundary', 'No Shop write'],
   ] as const
   const shopSetupGuideRows = [
@@ -6344,7 +6344,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
     ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
     ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
-    ['Write gate', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
+    ['Write status', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
   const shopOrderControlBoundary = 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.'
   const shopOrderLifecycleRows = [
@@ -7826,7 +7826,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
     ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'No trace'],
     ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
-    ['Write gate', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
+    ['Write status', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
   const plantLifecycleRows = [
     ['Plan', activeJobs.length ? `${activeJobs.length} active` : 'Add job'],
