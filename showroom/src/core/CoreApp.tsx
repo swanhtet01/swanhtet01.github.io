@@ -9117,6 +9117,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div aria-label="Plant today status" className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>
+  const plantStartGuide = <section className="plant-start-guide" aria-label="Plant guided jobs">
+    <header><span className="core-eyebrow">Start here</span><h2>Three jobs run the plant.</h2><p>Plan the next job, record actual output and material trace, then clear quality or WCM problems.</p></header>
+    <div>
+      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>1</b><span><strong>Record output</strong><small>Open the active job and capture good units, scrap, and shift evidence.</small></span></button>
+      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>2</b><span><strong>Trace materials</strong><small>Attach material reference, lot, quantity, unit, and shift to the job.</small></span></button>
+      <button onClick={() => navigate('/plant/?tab=control')} type="button"><b>3</b><span><strong>Review problems</strong><small>Open quality, maintenance, materials, and operations exceptions.</small></span></button>
+    </div>
+  </section>
   const plantControl = <section aria-label="Plant control" className="plant-control">
     <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
@@ -9182,6 +9190,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   if (tab === 'production') return <div className="operation-module production-operation-module">
     {plantToday}
+    {plantStartGuide}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
