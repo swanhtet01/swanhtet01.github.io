@@ -699,14 +699,14 @@ const productionTabs: Array<{ id: ProductionTab; label: string }> = [
 
 const productStartActions = {
   commerce: [
-    { label: 'Sell now', detail: 'Tap products and review a sale.', to: '/shop/?tab=counter' },
-    { label: 'Finish orders', detail: 'Confirm, fulfil, and follow payment.', to: '/shop/?tab=orders' },
-    { label: 'Check stock', detail: 'Review low stock and purchasing.', to: '/shop/?tab=inventory' },
+    { step: '1', label: 'Sell now', detail: 'Tap products and review a sale.', to: '/shop/?tab=counter' },
+    { step: '2', label: 'Finish orders', detail: 'Confirm, fulfil, and follow payment.', to: '/shop/?tab=orders' },
+    { step: '3', label: 'Check stock', detail: 'Review low stock and purchasing.', to: '/shop/?tab=inventory' },
   ],
   production: [
-    { label: 'Run jobs', detail: 'Record output and material use.', to: '/plant/?tab=production' },
-    { label: 'Fix blockers', detail: 'Quality, machine, and shift problems.', to: '/plant/?tab=control' },
-    { label: 'Use Shop demand', detail: 'Turn order demand into production.', to: '/plant/?tab=production' },
+    { step: '1', label: 'Run jobs', detail: 'Record output and material use.', to: '/plant/?tab=production' },
+    { step: '2', label: 'Fix blockers', detail: 'Quality, machine, and shift problems.', to: '/plant/?tab=control' },
+    { step: '3', label: 'Use Shop demand', detail: 'Turn order demand into production.', to: '/plant/?tab=production' },
   ],
 } as const
 
@@ -1681,8 +1681,8 @@ export function OperationsPage({ product }: { product?: ProductId }) {
       <nav className="product-start-strip" aria-label={`${productDisplayName(view)} quick start`}>
         {startActions.map((action) => (
           <Link aria-current={location.pathname + location.search === action.to ? 'page' : undefined} key={action.label} to={action.to}>
-            <strong>{action.label}</strong>
-            <small>{action.detail}</small>
+            <b>{action.step}</b>
+            <span><strong>{action.label}</strong><small>{action.detail}</small></span>
           </Link>
         ))}
       </nav>

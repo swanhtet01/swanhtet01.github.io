@@ -337,8 +337,10 @@ a { color: inherit; }
 .product-task-tabs { justify-content: flex-start; overflow-x: auto; }
 .product-task-tabs button { min-width: 88px; justify-content: center; font-size: 13px; }
 .product-start-strip { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
-.product-start-strip a { min-width: 0; min-height: 62px; display: grid; align-content: center; gap: 3px; border: 1px solid var(--core-line); border-radius: 11px; padding: 10px 12px; background: var(--core-panel); color: var(--core-ink); text-decoration: none; }
+.product-start-strip a { min-width: 0; min-height: 62px; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 10px; border: 1px solid var(--core-line); border-radius: 11px; padding: 10px 12px; background: var(--core-panel); color: var(--core-ink); text-decoration: none; }
 .product-start-strip a:hover, .product-start-strip a[aria-current="page"] { border-color: rgba(11,116,94,.38); background: var(--core-green-soft); }
+.product-start-strip b { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: var(--core-green); color: #fff; font-family: var(--core-mono); font-size: 10px; }
+.product-start-strip span { min-width: 0; display: grid; gap: 3px; }
 .product-start-strip strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .product-start-strip small { overflow: hidden; color: var(--core-muted); font-size: 10px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 
