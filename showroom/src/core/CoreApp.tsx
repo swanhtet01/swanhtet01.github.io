@@ -1242,7 +1242,7 @@ export function ProductHomePage() {
         </div>
         <Link className="core-button primary" to="/settings/">Open data setup</Link>
       </section>
-      <section className="product-home-autopilot" aria-label="AI operating plan">
+      <section className="product-home-autopilot" aria-label="Recommended next step">
         <div className="product-home-autopilot-head">
           <div>
             <span className="core-eyebrow">Next step</span>
@@ -3257,9 +3257,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
                 ? 'Set up stock foundation'
                 : 'Open counter sales'
   const shopAutopilotNextAction = !commerceCanWrite
-    ? 'Open managed activation controls'
+    ? 'Open setup controls'
     : pendingAction
-      ? 'Finish owner approval'
+      ? 'Finish review'
       : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
         ? 'Open online request review'
         : actionOrders.length
@@ -3272,7 +3272,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
                 ? 'Open inventory setup'
                 : 'Open counter'
   const shopAutopilotRows = [
-    ['Track', pendingAction ? 'Owner review' : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length ? 'Orders' : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection ? 'Inventory' : 'Counter'],
+    ['Track', pendingAction ? 'Review' : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length ? 'Orders' : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection ? 'Inventory' : 'Counter'],
     ['Stage', shopAutopilotStage],
     ['Next', shopAutopilotNextAction],
     ['Learning', 'Records behavior only'],
@@ -3291,7 +3291,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Orders', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
     ['Payments', paymentReview.length ? `${paymentReview.length} exception` : 'Review only'],
     ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
-    ['Boundary', 'Owner approves writes'],
+    ['Boundary', 'Review before writes'],
   ] as const
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
@@ -3332,7 +3332,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       route: commerceLocation.pathname + commerceLocation.search,
       detail: 'Load sample Shop catalog item',
     })
-    setNotice('Sample Shop catalog item loaded for owner review. Click Review catalog item to queue it; no Shop write, stock move, supplier message, sale, payment, or accounting post ran.')
+    setNotice('Sample Shop catalog item loaded for review. Click Review catalog item to queue it; no Shop write, stock move, supplier message, sale, payment, or accounting post ran.')
     requestAnimationFrame(() => catalogCreateFormRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 
