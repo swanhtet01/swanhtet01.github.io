@@ -1193,10 +1193,7 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <details className="website-start-tools">
-            <summary><span><strong>Inquiries</strong><small>Capture and review</small></span><b>Optional</b></summary>
-            <div>
-          {websiteTodayState !== 'ready' ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
+          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
             <div className="website-today-priority">
               <span className="website-kicker">Today</span>
               <h2 id="website-today-title">{websiteAgentJob}</h2>
@@ -1211,6 +1208,10 @@ export function WebsiteProduct() {
               <small>{websiteOwnerGate}</small>
             </div>
           </section> : null}
+
+          {!starterSetupActive ? <details className="website-start-tools">
+            <summary><span><strong>Inquiries</strong><small>Capture and review</small></span><b>Optional</b></summary>
+            <div>
 
           <details className="website-business-controls">
             <summary><span><strong>Inquiry inbox</strong><small>Local capture, ownership, decisions, and export</small></span><b>{leadCounts.new} new</b></summary>
