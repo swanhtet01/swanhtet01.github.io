@@ -1,5 +1,5 @@
 import { sha256Hex } from './managed-trial-proof.ts'
-import { plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderState } from './plant-order-foundation.ts'
+import { createEmptyPlantOrderState, plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderState } from './plant-order-foundation.ts'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
 import { productionOrderPortfolioEntries, validateProductionOrderPortfolio, type ProductionOrderPortfolio } from './production-order-portfolio.ts'
 import type { ShopProductionDemandSourceSnapshot } from './shop-production-demand.ts'
@@ -276,6 +276,8 @@ export type ProductionWorkspaceSnapshot = {
 export type ProductionMutationResult =
   | { ok: true; state: ProductionState; replayed: boolean }
   | { ok: false; error: string }
+
+export type ProductionWorkspaceMutationKind = 'operating-event' | 'order-execution'
 
 export type ProductionShiftOutput = {
   goodUnits: number
@@ -1971,10 +1973,56 @@ export function productionWorkspaceCanWrite(
   }
 }
 
+function productionOrderExecutionAppendIsExact(current: ProductionState, candidate: ProductionState) {
+  if (candidate.schema !== current.schema
+    || candidate.revision !== current.revision
+    || JSON.stringify(candidate.jobs) !== JSON.stringify(current.jobs)
+    || JSON.stringify(candidate.issues) !== JSON.stringify(current.issues)
+    || JSON.stringify(candidate.machines) !== JSON.stringify(current.machines)
+    || JSON.stringify(candidate.events) !== JSON.stringify(current.events)
+    || JSON.stringify(candidate.openingPlan) !== JSON.stringify(current.openingPlan)
+    || JSON.stringify(candidate.equipmentMaster) !== JSON.stringify(current.equipmentMaster)) return false
+
+  const beforeEntries = new Map(productionOrderPortfolioEntries(current).map((entry) => [entry.jobId, entry.execution]))
+  const afterEntries = new Map(productionOrderPortfolioEntries(candidate).map((entry) => [entry.jobId, entry.execution]))
+  const changedJobIds = [...new Set([...beforeEntries.keys(), ...afterEntries.keys()])]
+    .filter((jobId) => JSON.stringify(beforeEntries.get(jobId)) !== JSON.stringify(afterEntries.get(jobId)))
+  if (changedJobIds.length !== 1) return false
+
+  const changedJobId = changedJobIds[0]
+  const before = beforeEntries.get(changedJobId) ?? createEmptyPlantOrderState()
+  const after = afterEntries.get(changedJobId)
+  const command = after?.commands.at(-1)
+  if (!after
+    || !command
+    || after.revision !== before.revision + 1
+    || after.commands.length !== before.commands.length + 1
+    || JSON.stringify(after.commands.slice(0, -1)) !== JSON.stringify(before.commands)
+    || command.previousDigest !== before.headDigest
+    || command.digest !== after.headDigest) return false
+
+  const projection = projectPlantOrder(after)
+  const job = current.jobs.find((candidateJob) => candidateJob.id === changedJobId)
+  const remaining = job ? job.target - job.output - (job.scrap ?? 0) : 0
+  if (!projection.plan
+    || !job
+    || job.closure
+    || job.qualityHold
+    || remaining < 1
+    || projection.plan.job.jobId !== changedJobId
+    || projection.plan.job.product !== job.product
+    || projection.plan.job.targetQuantity !== remaining) return false
+
+  const commandAt = Date.parse(command.payload.proof.capturedAt)
+  const latestOperatingAt = current.events[0] ? Date.parse(current.events[0].createdAt) : Number.NEGATIVE_INFINITY
+  return Number.isFinite(commandAt) && commandAt >= latestOperatingAt
+}
+
 export async function mutateProductionWorkspace(
   transition: (state: ProductionState) => ProductionState | null,
   storage = browserStorage(),
   lockManager = globalThis.navigator?.locks as unknown as ProductionLockManager | undefined,
+  mutationKind: ProductionWorkspaceMutationKind = 'operating-event',
 ): Promise<ProductionMutationResult> {
   if (!storage) return { ok: false, error: 'Production storage is unavailable; the change was not applied.' }
   if (!lockManager?.request) return { ok: false, error: 'This browser cannot lock Production writes; the change was not applied.' }
@@ -1989,17 +2037,30 @@ export async function mutateProductionWorkspace(
       try { next = transition(current) } catch { return { ok: false, error: 'The Production transition failed integrity checks. Nothing was written.' } as const }
       if (!next) return { ok: false, error: 'The Production state changed or the requested transition is not valid. Nothing was written.' } as const
       if (next === current) return { ok: true, state: current, replayed: true } as const
-      const revisionDelta = next.revision - current.revision
-      const eventDelta = next.events.length - current.events.length
-      if (!Number.isSafeInteger(revisionDelta)
-        || revisionDelta < 1
-        || revisionDelta > 100
-        || eventDelta !== revisionDelta
-        || JSON.stringify(next.events.slice(eventDelta)) !== JSON.stringify(current.events)) {
-        return { ok: false, error: 'Production changes must append one event per revision, with at most 100 events in one locked transaction. Nothing was written.' } as const
+      let candidate: ProductionState
+      try { candidate = validateProductionState(next) } catch { return { ok: false, error: 'The proposed Production state failed integrity checks. Nothing was written.' } as const }
+      if (mutationKind === 'order-execution') {
+        if (!productionOrderExecutionAppendIsExact(current, candidate)) {
+          return { ok: false, error: 'Production order execution must append exactly one chained command without changing operating history. Nothing was written.' } as const
+        }
+      } else if (mutationKind === 'operating-event') {
+        const revisionDelta = candidate.revision - current.revision
+        const eventDelta = candidate.events.length - current.events.length
+        if (JSON.stringify(productionOrderPortfolioEntries(candidate)) !== JSON.stringify(productionOrderPortfolioEntries(current))) {
+          return { ok: false, error: 'Production order execution can change only through its dedicated write boundary. Nothing was written.' } as const
+        }
+        if (!Number.isSafeInteger(revisionDelta)
+          || revisionDelta < 1
+          || revisionDelta > 100
+          || eventDelta !== revisionDelta
+          || JSON.stringify(candidate.events.slice(eventDelta)) !== JSON.stringify(current.events)) {
+          return { ok: false, error: 'Production changes must append one event per revision, with at most 100 events in one locked transaction. Nothing was written.' } as const
+        }
+      } else {
+        return { ok: false, error: 'Production write boundary is invalid. Nothing was written.' } as const
       }
       let serialized: string
-      try { serialized = JSON.stringify(validateProductionState(next)) } catch { return { ok: false, error: 'The proposed Production state failed integrity checks. Nothing was written.' } as const }
+      try { serialized = JSON.stringify(candidate) } catch { return { ok: false, error: 'The proposed Production state could not be serialized. Nothing was written.' } as const }
       try {
         storage.setItem(PRODUCTION_KEY, serialized)
         if (storage.getItem(PRODUCTION_KEY) !== serialized) return { ok: false, error: 'Production storage did not confirm the write.' } as const

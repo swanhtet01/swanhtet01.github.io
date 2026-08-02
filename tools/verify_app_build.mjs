@@ -4443,6 +4443,11 @@ if (!plantOrderUiSource.includes('productionState: ProductionState')
   || !managedTrialStoreRuntime.includes('production.order_execution.recorded')
   || !plantOrderUiSource.includes("'production.order_execution.recorded'")
   || !plantOrderUiSource.includes('productionOrderExecutionForJob(current, selectedOrderJobId)')
+  || !plantOrderUiSource.includes('window.dispatchEvent(new CustomEvent(PLANT_ORDER_WORKSPACE_UPDATED_EVENT, { detail: { scope } }))')
+  || !productionSource.includes("export type ProductionWorkspaceMutationKind = 'operating-event' | 'order-execution'")
+  || !productionSource.includes('productionOrderExecutionAppendIsExact')
+  || !productionSource.includes('Production order execution can change only through its dedicated write boundary')
+  || !workspaceRuntimeSource.includes("eventType === 'production.order_execution.recorded' ? 'order-execution' : 'operating-event'")
   || !coreSource.includes('onProductionCommand={mutateProduction}')
   || !coreSource.includes('productionState={production}')) fail('managed_plant_order_execution_contract_missing')
 if (!commerceSource.includes("'production_issue'")
@@ -15704,6 +15709,7 @@ async function verifyProductionRuntime() {
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?verify=${Date.now()}`)
     const plantModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?production-embedding-verify=${Date.now()}`)
+    const portfolioModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-order-portfolio.ts')).href}?production-persistence-verify=${Date.now()}`)
     const emptyExecution = plantModel.createEmptyPlantOrderState()
     const executionProof = proof('ACT-MANAGED-EXECUTION')
     const executionPlan = plantModel.buildPlantOrderPlan({
@@ -17000,6 +17006,74 @@ async function verifyProductionRuntime() {
     values.set(model.LEGACY_PRODUCTION_KEYS[1], JSON.stringify(legacy))
     const staleLegacyFallback = model.loadProductionWorkspace(storage)
     assert(staleLegacyFallback.source === 'recovery' && !values.has(model.PRODUCTION_KEY), 'production_malformed_newer_legacy_restored_stale_data')
+
+    values.clear()
+    values.set(model.PRODUCTION_KEY, JSON.stringify(base))
+    const localOrderBase = {
+      ...model.createEmptyProduction(),
+      jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 0 }],
+    }
+    const applyLocalOrderPlan = (state) => {
+      const currentExecution = portfolioModel.productionOrderExecutionForJob(state, 'JOB-1') ?? plantModel.createEmptyPlantOrderState()
+      const applied = plantModel.applyPlantOrderPlan(currentExecution, executionPlan, executionProof, currentExecution.headDigest)
+      if (applied.replayed) return state
+      return model.validateProductionState(portfolioModel.upsertProductionOrderExecution(state, applied.state))
+    }
+    values.set(model.PRODUCTION_KEY, JSON.stringify(localOrderBase))
+    const rejectedOrderWithoutBoundary = await model.mutateProductionWorkspace(applyLocalOrderPlan, storage, locks)
+    assert(!rejectedOrderWithoutBoundary.ok
+      && rejectedOrderWithoutBoundary.error.includes('dedicated write boundary')
+      && values.get(model.PRODUCTION_KEY) === JSON.stringify(localOrderBase),
+    'production_local_order_command_bypassed_dedicated_boundary')
+    const persistedLocalOrder = await model.mutateProductionWorkspace(applyLocalOrderPlan, storage, locks, 'order-execution')
+    const persistedLocalOrderState = JSON.parse(values.get(model.PRODUCTION_KEY))
+    assert(persistedLocalOrder.ok
+      && persistedLocalOrderState.revision === 0
+      && persistedLocalOrderState.events.length === 0
+      && persistedLocalOrderState.orderPortfolio.entries[0].execution.revision === 1,
+    'production_local_order_command_not_persisted_without_forged_operating_event')
+    const availabilityProof = proof('ACT-LOCAL-AVAILABILITY', 1_000)
+    const applyLocalAvailability = (state) => {
+      const currentExecution = portfolioModel.productionOrderExecutionForJob(state, 'JOB-1')
+      if (!currentExecution) return null
+      const applied = plantModel.checkPlantOrderAvailability(currentExecution, {
+        checkId: 'CHK-LOCAL-001',
+        sourceDigest: plantModel.plantOrderEvidenceDigest({ check: 'CHK-LOCAL-001' }),
+        materials: [{ materialId: 'MAT-MANAGED-001', inputLotId: 'LOT-LOCAL-001', availableQuantityMilli: 100_000 }],
+        workCentres: [{ workCentreId: 'WC-MANAGED-001', availableMinutes: 100 }],
+        proof: availabilityProof,
+        expectedHeadDigest: currentExecution.headDigest,
+      })
+      if (applied.replayed) return state
+      return model.validateProductionState(portfolioModel.upsertProductionOrderExecution(state, applied.state))
+    }
+    const persistedLocalAvailability = await model.mutateProductionWorkspace(applyLocalAvailability, storage, locks, 'order-execution')
+    const persistedLocalAvailabilityState = JSON.parse(values.get(model.PRODUCTION_KEY))
+    assert(persistedLocalAvailability.ok
+      && persistedLocalAvailabilityState.revision === 0
+      && persistedLocalAvailabilityState.events.length === 0
+      && persistedLocalAvailabilityState.orderPortfolio.entries[0].execution.revision === 2,
+    'production_second_local_order_command_not_persisted')
+    const replayedLocalAvailability = await model.mutateProductionWorkspace(applyLocalAvailability, storage, locks, 'order-execution')
+    assert(replayedLocalAvailability.ok && replayedLocalAvailability.replayed === true
+      && values.get(model.PRODUCTION_KEY) === JSON.stringify(persistedLocalAvailabilityState),
+    'production_local_order_command_replay_changed_state')
+    values.set(model.PRODUCTION_KEY, JSON.stringify(localOrderBase))
+    const rejectedOperatingEventAtOrderBoundary = await model.mutateProductionWorkspace(
+      (state) => model.recordProductionOutput(state, 'JOB-1', 1, '2026-07-24 Day', proof('ACT-WRONG-BOUNDARY')),
+      storage,
+      locks,
+      'order-execution',
+    )
+    assert(!rejectedOperatingEventAtOrderBoundary.ok
+      && values.get(model.PRODUCTION_KEY) === JSON.stringify(localOrderBase),
+    'production_operating_event_crossed_order_boundary')
+    const laterOperatingState = model.openProductionIssue(localOrderBase, { id: 'ISS-LATER', createdAt: proof('ACT-LATER-ISSUE', 2_000).capturedAt, area: 'Line 01', kind: 'operations', summary: 'Later operating evidence', status: 'open', severity: 'low', owner: 'Plant owner', dueAt: proof('ACT-LATER-ISSUE', 86_402_000).capturedAt, containment: 'Retain the reviewed record.' }, proof('ACT-LATER-ISSUE', 2_000))
+    values.set(model.PRODUCTION_KEY, JSON.stringify(laterOperatingState))
+    const rejectedPredatedOrder = await model.mutateProductionWorkspace(applyLocalOrderPlan, storage, locks, 'order-execution')
+    assert(!rejectedPredatedOrder.ok
+      && values.get(model.PRODUCTION_KEY) === JSON.stringify(laterOperatingState),
+    'production_local_order_command_predated_operating_history')
 
     values.clear()
     values.set(model.PRODUCTION_KEY, JSON.stringify(base))
