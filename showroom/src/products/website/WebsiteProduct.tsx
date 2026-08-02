@@ -65,7 +65,7 @@ type WebsiteEditSessionState = {
   session: WebsiteEditSession
 }
 
-const DEFAULT_NOTICE = 'Website workspace loaded. No website has been deployed.'
+const DEFAULT_NOTICE = 'Website sample loaded. Nothing has been deployed.'
 
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
@@ -236,7 +236,7 @@ export function WebsiteProduct() {
     : view === 'publish' && storageMode !== 'managed'
       ? {
           title: 'Your website is ready',
-          copy: 'Download it now, or request a workspace when you are ready to put it online.',
+          copy: 'Download it now. Go live only after owner approval.',
         }
       : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
@@ -774,40 +774,40 @@ export function WebsiteProduct() {
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
     : starterSetupActive
-      ? 'Complete business brief'
+      ? 'Answer 5 questions'
       : starterAvailable
-        ? 'Start from business brief'
+        ? 'Use a template'
         : hasUnsavedChanges
-          ? 'Review unsaved site edits'
+          ? 'Save or discard edits'
           : failingContentChecks.length
-            ? 'Fix content readiness'
+            ? 'Fix page checks'
             : leadCounts.new
               ? 'Review new inquiries'
               : managedReleaseRequired && !approvalIsCurrent
-                ? 'Record owner approval'
+                ? 'Approve website'
                 : managedReleaseRequired && !publishIsCurrent
-                  ? 'Record release snapshot'
+                  ? 'Save release file'
                   : managedReleaseRequired
-                    ? 'Prepare rollout plan'
+                    ? 'Review go-live plan'
                     : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
     ? 'Saving or recovery needs attention before Website work can be trusted.'
     : starterSetupActive
-      ? 'A short business brief can replace the sample with client-specific pages before anything is saved.'
+      ? 'Answer a short brief to replace the sample with client-specific pages.'
       : starterAvailable
-        ? 'The sample is still untouched, so the fastest path is to generate a client-specific draft.'
+        ? 'Start from a simple template instead of editing every page by hand.'
         : hasUnsavedChanges
-          ? 'The preview has edits that must be saved or discarded before approval or release review.'
+          ? 'Save the preview or discard it before review.'
           : failingContentChecks.length
-            ? `${failingContentChecks.length} readiness check${failingContentChecks.length === 1 ? '' : 's'} must pass before owner approval.`
+            ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
             : leadCounts.new
               ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a named owner and a local decision before follow-up.`
               : managedReleaseRequired && !approvalIsCurrent
-                ? 'The current Website revision needs named owner review before a release snapshot is recorded.'
+                ? 'Owner approval is required before a release file is saved.'
                 : managedReleaseRequired && !publishIsCurrent
-                  ? 'The approved revision needs an immutable static site package for handoff.'
+                  ? 'Save a static release file for the approved website.'
                   : managedReleaseRequired
-                    ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
+                    ? 'Review the launch checklist. Deployment still requires owner execution.'
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
   const websiteOwnerGate = storageIssue || canRepairLocalStorage
     ? 'Owner exports backup or confirms repair before continuing.'
@@ -1194,7 +1194,7 @@ export function WebsiteProduct() {
           ) : null}
 
           {!starterSetupActive ? <details className="website-start-tools">
-            <summary><span><strong>Inquiries &amp; follow-up</strong><small>Capture, ownership, and automation</small></span><b>Optional</b></summary>
+            <summary><span><strong>Leads</strong><small>Capture and owner review</small></span><b>Optional</b></summary>
             <div>
           {websiteTodayState !== 'ready' ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
             <div className="website-today-priority">
