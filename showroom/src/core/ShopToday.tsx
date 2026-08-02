@@ -79,7 +79,7 @@ export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: 
     </section>
 
     <details className="shop-today-coverage">
-      <summary><span><strong>Enterprise control coverage</strong><small>See the connected lifecycle behind these simple screens</small></span><b>6 areas</b></summary>
+      <summary><span><strong>Shop safeguards</strong><small>What SuperMega checks while the screen stays simple</small></span><b>6 areas</b></summary>
       <div>{capabilityGroups.map(([label, detail]) => <article key={label}><strong>{label}</strong><small>{detail}</small></article>)}</div>
       <p>SuperMega keeps consequential changes behind named human review. External payment, customer messaging, delivery, filing, and accounting posting require separately verified connections.</p>
     </details>

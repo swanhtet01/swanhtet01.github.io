@@ -3274,15 +3274,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Track', pendingAction ? 'Review' : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length ? 'Orders' : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection ? 'Inventory' : 'Counter'],
     ['Stage', shopAutopilotStage],
     ['Next', shopAutopilotNextAction],
-    ['Learning', 'Records behavior only'],
-    ['Boundary', 'No auto write'],
+    ['Memory', 'Saves helpful patterns'],
+    ['Safety', 'Review first'],
   ] as const
   const shopCatalogUploadRows = [
     ['Source', commerce.items.length ? `${commerce.items.length} current SKU` : 'Need catalog'],
     ['Upload', 'Shared mapper'],
     ['Checks', 'SKU, price, stock'],
     ['Review', 'Review package'],
-    ['Boundary', 'No Shop write'],
+    ['Safety', 'Review first'],
   ] as const
   const shopSetupGuideRows = [
     ['Products', commerce.items.length ? `${commerce.items.length} current SKU` : 'Import catalog'],
@@ -3339,7 +3339,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div>
       <span className="core-eyebrow">Shop next step</span>
       <h2>{shopAutopilotStage}</h2>
-      <p>Open the next safe review step from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. SuperMega can prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
+      <p>Open the next useful Shop task. SuperMega brings together online requests, orders, payments, purchasing, and stock so the manager can review one clear step at a time.</p>
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Open next step</button>
@@ -3352,12 +3352,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     </div>
     <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const shopAgentQueue = <section aria-label="Recommended Shop next step" className="shop-agent-queue">
+  const shopAgentQueue = <section aria-label="Next Shop step" className="shop-agent-queue">
     <BehaviorSignalOnRender detail={shopAgentJob} product="commerce" route={commerceLocation.pathname + commerceLocation.search} />
     <div>
-      <span className="core-eyebrow">Recommended next step</span>
+      <span className="core-eyebrow">Next Shop step</span>
       <h2>{shopAgentJob}</h2>
-      <p>SuperMega shows the next Shop move. A named human approves every consequential action.</p>
+      <p>SuperMega chooses the best place to start. The manager reviews important changes before anything is saved.</p>
     </div>
     <div>{shopAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <Link className="core-button compact" onClick={() => {
