@@ -9118,11 +9118,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>
   const plantStartGuide = <section className="plant-start-guide" aria-label="Plant guided jobs">
-    <header><span className="core-eyebrow">Start here</span><h2>Three jobs run the plant.</h2><p>Plan the next job, record actual output and material trace, then clear quality or WCM problems.</p></header>
+    <header><span className="core-eyebrow">Start here</span><h2>Run today&apos;s production in three steps.</h2><p>Choose the next job, enter what was made, then fix blockers before the shift ends.</p></header>
     <div>
-      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>1</b><span><strong>Record output</strong><small>Open the active job and capture good units, scrap, and shift evidence.</small></span></button>
-      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>2</b><span><strong>Trace materials</strong><small>Attach material reference, lot, quantity, unit, and shift to the job.</small></span></button>
-      <button onClick={() => navigate('/plant/?tab=control')} type="button"><b>3</b><span><strong>Review problems</strong><small>Open quality, maintenance, materials, and operations exceptions.</small></span></button>
+      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>1</b><span><strong>Record output</strong><small>Enter good units, waste, and the operator note for the active job.</small></span></button>
+      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>2</b><span><strong>Use materials</strong><small>Record which batch, lot, and quantity were used for the job.</small></span></button>
+      <button onClick={() => navigate('/plant/?tab=control')} type="button"><b>3</b><span><strong>Fix blockers</strong><small>Open quality, machine, material, and daily work issues.</small></span></button>
     </div>
   </section>
   const plantControl = <section aria-label="Plant control" className="plant-control">
@@ -9169,7 +9169,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ] as const
     : [
         ['Step 1', 'Load sample or upload CSV'],
-        ['Step 2', 'Checks MES fields locally'],
+        ['Step 2', 'Checks job fields locally'],
         ['Step 3', 'Review one copied job'],
       ] as const
   const plantBusinessControls = <details className="product-guidance-disclosure plant-business-controls">
