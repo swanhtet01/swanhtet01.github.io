@@ -66,7 +66,7 @@ export function ManagedLoginPage() {
 
   return (
     <div className="workspace-screen managed-login-screen">
-      <PageHeading eyebrow="Managed account" title="Open your company." copy="Sign in once. SuperMega finds the companies assigned to you." />
+      <PageHeading eyebrow="Company account" title="Open your company." copy="Sign in once. SuperMega finds the companies assigned to you." />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <Link className="core-button primary" to="/settings/#controls">Open company</Link>
@@ -81,7 +81,7 @@ export function ManagedLoginPage() {
         {notice ? <p className="form-notice" role="status">{notice}</p> : null}
       </form> : <section className="managed-login-panel" aria-label="Company account unavailable">
         <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>
-        <div className="managed-login-actions"><Link className="core-button primary" to="/">Open free workspace</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
+        <div className="managed-login-actions"><Link className="core-button primary" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
       </section>}
     </div>
   )

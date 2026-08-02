@@ -336,7 +336,7 @@ export function CoreLayout() {
             : 'settings_opened',
       product,
       route,
-      detail: sensitiveAccountRoute ? 'Managed account access viewed.' : routeProduct ? `${productDisplayName(routeProduct)} workspace viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
+      detail: sensitiveAccountRoute ? 'Company account access viewed.' : routeProduct ? `${productDisplayName(routeProduct)} product viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
     })
   }, [location.pathname, location.search, routeProduct, sensitiveAccountRoute, settingsProduct])
 

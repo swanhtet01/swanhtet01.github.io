@@ -625,10 +625,10 @@ export function commitWebsiteEditSession(
   session: WebsiteEditSession,
 ): WebsiteWorkspace {
   if (!websiteEditSessionMatches(session, current)) {
-    throw new Error('Website changed after this edit session started. The saved workspace was preserved; discard this preview and review the newer version.')
+    throw new Error('Website changed after this edit session started. The saved website was preserved; discard this preview and review the newer version.')
   }
   if (!sameReleaseHistory(session.workspace, current)) {
-    throw new Error('Website edit-session history no longer matches the saved workspace.')
+    throw new Error('Website edit-session history no longer matches the saved website.')
   }
   return {
     ...session.workspace,

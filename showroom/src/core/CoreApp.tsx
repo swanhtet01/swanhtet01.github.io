@@ -1166,7 +1166,7 @@ export function CoreLayout() {
             : 'settings_opened',
       product,
       route,
-      detail: routeProduct ? `${productDisplayName(routeProduct)} workspace viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
+      detail: routeProduct ? `${productDisplayName(routeProduct)} product viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
     })
   }, [location.pathname, location.search, routeProduct, settingsProduct])
 
@@ -7815,7 +7815,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               ? 'Prepare shift close'
               : 'Add next Plant job'
   const plantAgentReason = !productionCanWrite
-    ? 'The workspace must confirm durable storage or managed writes before records can change.'
+    ? 'Company data must confirm durable storage before records can change.'
     : urgentIssueCount
       ? `${urgentIssueCount} urgent issue${urgentIssueCount === 1 ? '' : 's'} need owner-reviewed containment.`
       : heldJobs.length

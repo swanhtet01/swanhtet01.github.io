@@ -257,7 +257,7 @@ export function WebsiteProduct() {
           : 'Session only'
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
-    ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved workspace.'
+    ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
     : storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
   const noticePriority = editConflict || storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
   const repairArmed = canRepairLocalStorage
@@ -461,7 +461,7 @@ export function WebsiteProduct() {
     setSurface('preview')
     setSiteSettingsOpen(false)
     requestHeadingFocus()
-    setNotice('Unsaved Website changes discarded. The saved workspace was not changed.')
+    setNotice('Unsaved Website changes discarded. The saved website was not changed.')
   }
 
   function requireSavedWorkspace(action: string) {

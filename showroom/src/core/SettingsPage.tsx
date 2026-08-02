@@ -180,7 +180,7 @@ const demoProgressLabels: Record<ClientDemoProductProgress['status'], string> = 
   not_started: 'Not started',
   needs_fix: 'Needs fixes',
   data_ready: 'Data ready',
-  workspace_checked: 'Workspace checked',
+  workspace_checked: 'Company checked',
   applied: 'Applied',
 }
 
@@ -401,7 +401,7 @@ export function SettingsPage() {
           setManagedPilotBrief(brief)
           setManagedPilotCommandId(settingsCommandUuid())
           setManagedPilotRetained(brief.retention === 'persisted_managed_audit')
-          setManagedPilotNotice(`${brief.sourceCount} managed source${brief.sourceCount === 1 ? '' : 's'} verified for this company.`)
+          setManagedPilotNotice(`${brief.sourceCount} company source${brief.sourceCount === 1 ? '' : 's'} verified for this company.`)
         })
         .catch((error) => {
           if (managedPilotRequestRef.current !== requestId) return
@@ -447,27 +447,27 @@ export function SettingsPage() {
   const launchPackRows: Array<readonly [string, string, string]> = setup.product === 'commerce'
     ? [
       ['Bring', 'Product CSV, stock count, payment proof', 'Start from products, on-hand units, prices, and recent payment exceptions.'],
-      ['AI prepares', 'Catalog, reorder, order, accounting packets', 'The workspace maps SKU data, ranks stock risk, drafts Shop work, and keeps receipts reviewable.'],
+      ['AI prepares', 'Catalog, reorder, order, accounting packets', 'SuperMega maps SKU data, ranks stock risk, drafts Shop work, and keeps receipts reviewable.'],
       ['First proof', 'One clean sale or stock review', 'Show the owner a reviewed queue before any stock, supplier, refund, or ledger write.'],
       ['Gate', 'Owner approves writes', 'No sale, payment, supplier message, stock move, or accounting export runs from setup.'],
     ]
     : setup.product === 'production'
       ? [
         ['Bring', 'Job CSV, material list, quality holds', 'Start from planned work, BOM/material needs, WCM/maintenance issues, and ISO evidence.'],
-        ['AI prepares', 'MES queue, MRP check, ISO handoff', 'The workspace ranks jobs, blockers, material proof, quality release, and cost-readiness.'],
+        ['AI prepares', 'MES queue, MRP check, ISO handoff', 'SuperMega ranks jobs, blockers, material proof, quality release, and cost-readiness.'],
         ['First proof', 'One accountable shift close', 'Show output, same-shift material trace, clear quality/WCM gates, and a revision-bound owner close.'],
         ['Gate', 'Owner approves production', 'No equipment command, material issue, quality release, costing, or production write runs from setup.'],
       ]
       : setup.product === 'website'
         ? [
           ['Bring', 'Facts, offers, proof, photos, links', 'Start from the buyer proof needed to generate a useful website package.'],
-          ['AI prepares', 'Pages, copy, CTAs, SEO, release checklist', 'The workspace creates a reviewable static package and rollout plan without touching DNS.'],
+          ['AI prepares', 'Pages, copy, CTAs, SEO, release checklist', 'SuperMega creates a reviewable static package and rollout plan without touching DNS.'],
           ['First proof', 'One reviewed site package', 'Show the owner a package with contact route, claims, proof, and publish blockers.'],
           ['Gate', 'Owner approves launch', 'No domain, form send, analytics install, CRM write, or publish action runs from setup.'],
         ]
         : [
           ['Bring', 'Catalog rows, order CSV, channel samples', 'Start from products plus Viber, LINE, WeChat, email, form, or CSV order examples.'],
-          ['AI prepares', 'Store, quote, order review, Shop review', 'The workspace normalizes customer, SKU, quantity, fulfilment, payment, and source proof.'],
+          ['AI prepares', 'Store, quote, order review, Shop review', 'SuperMega normalizes customer, SKU, quantity, fulfilment, payment, and source proof.'],
           ['First proof', 'One Shop-ready order packet', 'Show ready/blocked order rows and owner review before customer contact or fulfilment.'],
           ['Gate', 'Owner approves fulfilment', 'No customer message, payment capture, delivery booking, stock move, refund, or Shop write runs from setup.'],
         ]
@@ -1013,7 +1013,7 @@ export function SettingsPage() {
   const operatingLearning = managedPilotBrief ? operatingChangeCopy(managedPilotBrief.operatingChange) : null
   const premiumPilotRows = [
     ['Owner pattern', retainedOwnerProduct ? `${managedContextProductLabel(retainedOwnerProduct)} retained` : topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'Not learned yet', retainedOwnerProduct ? 'Managed briefs may use this preference only after risk and evidence checks.' : topAgentJob ? `${topAgentJob.chosenCount} local choice${topAgentJob.chosenCount === 1 ? '' : 's'}.` : 'Choose a recommended product action to teach the next handoff.'],
-    ['Managed account', managedIdentity?.email ?? 'Not connected', managedIdentity ? 'Named-user access verified for this company.' : 'Your local trial remains usable without an account.'],
+    ['Company account', managedIdentity?.email ?? 'Not connected', managedIdentity ? 'Named-user access verified for this company.' : 'Your local trial remains usable without an account.'],
     ['Approved sources', managedPilotBrief ? `${managedPilotBrief.sourceCount} company` : preparedRecordCount ? `${preparedRecordCount} local prepared` : 'No source proof yet', managedPilotBrief ? 'Counts only; raw source records are not shown here.' : 'Open a company account to verify company-scoped sources.'],
     ['Learning checkpoint', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The aggregate operating baseline has a managed audit receipt.' : 'No external action runs from this panel.'],
   ] as const
@@ -1152,7 +1152,7 @@ export function SettingsPage() {
       if (demoWorkspace) window.localStorage.setItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY, JSON.stringify(demoWorkspace))
       else window.localStorage.removeItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY)
     } catch {
-      failureNoticeTimer = window.setTimeout(() => setNotice('This browser could not save the client workspace. The current setup remains open for this session.'), 0)
+      failureNoticeTimer = window.setTimeout(() => setNotice('This browser could not save the client setup. The current setup remains open for this session.'), 0)
     }
     return () => { if (failureNoticeTimer !== undefined) window.clearTimeout(failureNoticeTimer) }
   }, [demoWorkspace])
@@ -1922,7 +1922,7 @@ export function SettingsPage() {
       setManagedPilotBrief(brief)
       setManagedPilotCommandId(settingsCommandUuid())
       setManagedPilotRetained(brief.retention === 'persisted_managed_audit')
-      setManagedPilotNotice(`${brief.sourceCount} managed source${brief.sourceCount === 1 ? '' : 's'} verified for this company.`)
+          setManagedPilotNotice(`${brief.sourceCount} company source${brief.sourceCount === 1 ? '' : 's'} verified for this company.`)
     } catch (error) {
       if (managedPilotRequestRef.current !== requestId) return
       setManagedPilotBrief(null)
@@ -1979,7 +1979,7 @@ export function SettingsPage() {
     setEcommerceOrderQueueImportPlanBusy(false)
     setEcommerceOrderQueueApplyPreflightBusy(false)
     setApprovals((current) => current.filter((approval) => !approval.managed))
-    setManagedNotice('Managed account disconnected.')
+    setManagedNotice('Company account disconnected.')
     setManagedBusy(false)
   }
 
@@ -2035,7 +2035,7 @@ export function SettingsPage() {
             {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
               <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
               <section aria-label="Client demo launchpad" className="client-demo-launchpad">
-                <div className="client-demo-launchpad-head"><div><span className="core-eyebrow">Demo launchpad</span><strong>{nextDemoMission ? `Next: ${nextDemoMission.label}` : 'All selected demos are proven'}</strong><small>Every product below uses this client workspace. Open any working sample now; add client data only when it is ready.</small></div><Link className="core-button primary" to={demoLaunchPath}>{nextDemoMission ? 'Open next demo' : 'Review demos'}</Link></div>
+                <div className="client-demo-launchpad-head"><div><span className="core-eyebrow">Demo launchpad</span><strong>{nextDemoMission ? `Next: ${nextDemoMission.label}` : 'All selected demos are proven'}</strong><small>Every product below uses this client setup. Open any working sample now; add client data only when it is ready.</small></div><Link className="core-button primary" to={demoLaunchPath}>{nextDemoMission ? 'Open next demo' : 'Review demos'}</Link></div>
                 <div className="client-demo-launch-grid">{demoRunbook?.products.map((mission) => {
                   const blueprintProduct = demoBlueprint.products.find((product) => product.product === mission.product)
                   const statusClass = mission.status === 'proven' ? 'approved' : mission.status === 'needs_fix' ? 'pending' : 'bounded'
@@ -2154,7 +2154,7 @@ export function SettingsPage() {
         <div className="settings-advanced-content">
           <section className="core-panel system-boundary-panel">
             <div className="panel-head"><div><span className="core-eyebrow">System boundary</span><h2>{runtime.status === 'enterprise' ? 'Managed mode ready' : 'Managed mode locked'}</h2></div><RuntimeBadge status={runtime.status} /></div>
-            {managedIdentity ? <div className="template-contract"><span>Managed account</span><strong>{managedIdentity.email}</strong><small>Named-user access verified in Premium pilot</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : runtime.status === 'enterprise' && managedTrialAuthConfigured() && !setup.savedAt ? <form className="core-form compact-form managed-recovery-login" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Managed access recovery</span><p className="authority-note">Sign in and SuperMega will find the active companies assigned to you.</p>{managedWorkspaceSignIn ? <label>Company<select onChange={(event) => setManagedWorkspace(event.target.value)} required value={managedWorkspace}>{managedWorkspaceSignIn.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></>}<button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : managedWorkspaceSignIn ? 'Open company' : 'Recover managed access'}</button>{managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}</form> : runtime.status === 'enterprise' && managedTrialAuthConfigured() ? <p className="authority-note">Connect through Premium pilot after saving a trial.</p> : null}
+            {managedIdentity ? <div className="template-contract"><span>Company account</span><strong>{managedIdentity.email}</strong><small>Named-user access verified in Premium pilot</small><button className="text-link" disabled={managedBusy} onClick={() => void disconnectManagedWorkspace()} type="button">Disconnect</button></div> : runtime.status === 'enterprise' && managedTrialAuthConfigured() && !setup.savedAt ? <form className="core-form compact-form managed-recovery-login" onSubmit={(event) => void connectManagedWorkspace(event)}><span className="core-eyebrow">Company access recovery</span><p className="authority-note">Sign in and SuperMega will find the active companies assigned to you.</p>{managedWorkspaceSignIn ? <label>Company<select onChange={(event) => setManagedWorkspace(event.target.value)} required value={managedWorkspace}>{managedWorkspaceSignIn.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <><label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setManagedEmail(event.target.value)} required type="email" value={managedEmail} /></label><label>Password<input autoComplete="current-password" minLength={8} onChange={(event) => setManagedPassword(event.target.value)} required type="password" value={managedPassword} /></label></>}<button className="core-button primary" disabled={managedBusy} type="submit">{managedBusy ? 'Checking...' : managedWorkspaceSignIn ? 'Open company' : 'Recover company access'}</button>{managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}</form> : runtime.status === 'enterprise' && managedTrialAuthConfigured() ? <p className="authority-note">Connect through Premium pilot after saving a trial.</p> : null}
             <div className="readiness-list" aria-label="Go-live readiness">{activationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             <div className="readiness-list" aria-label="AI learning readiness">{learningRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
             <div className="learning-plan" aria-label="Premium company learning plan">

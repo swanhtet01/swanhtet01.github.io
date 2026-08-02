@@ -725,7 +725,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         ...current,
         applying: false,
         localApplied: null,
-        error: error instanceof Error ? error.message : `The ${productName} workspace was not changed.`,
+        error: error instanceof Error ? error.message : `The ${productName} company data was not changed.`,
       }))
     }
   }
@@ -904,7 +904,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         <p className="catalog-import-boundary">{localAppliedIsCurrent && state.localApplied
           ? `${state.localApplied.created} ${localRecordLabel} were added and ${state.localApplied.alreadyPresent} were already current. Your source CSV was not retained or sent to AI.`
           : appliedIsCurrent && state.applied
-          ? `${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'records'} were imported for this company.${state.applied.shopPack ? ` The ${state.applied.shopPack.id} services and resources are ready in the same workspace.` : ''}${state.applied.plantPack ? ` The ${state.applied.plantPack.id} Plant setup pack is bound to the opening plan.` : ''} Your source CSV was not uploaded or sent to AI.`
+          ? `${state.applied.receipt.activation.row_count} ${managedActivation?.createdLabel ?? 'records'} were imported for this company.${state.applied.shopPack ? ` The ${state.applied.shopPack.id} services and resources are ready in the same company account.` : ''}${state.applied.plantPack ? ` The ${state.applied.plantPack.id} Plant setup pack is bound to the opening plan.` : ''} Your source CSV was not uploaded or sent to AI.`
           : managedIdentity
           ? 'Your CSV stays in this tab. Only prepared rows are checked with your company account; nothing is written until you confirm the import.'
           : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
@@ -938,7 +938,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           </div>
         </details> : null}
         {state.busy ? <p className="form-notice" role="status">Matching columns and checking every row...</p> : null}
-        {state.validating ? <p className="form-notice" role="status">Checking the prepared import with your workspace...</p> : null}
+        {state.validating ? <p className="form-notice" role="status">Checking the prepared import with your company account...</p> : null}
         {state.preflighting ? <p className="form-notice" role="status">Checking the company, product, file, and latest saved records...</p> : null}
         {state.applying ? <p className="form-notice" role="status">{managedActivation?.progressLabel ?? 'Confirming the import...'}</p> : null}
         {state.error ? <p className="form-error" role="alert">{state.error}</p> : null}
@@ -996,9 +996,9 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
               : validationIsCurrent
               ? state.validation?.preflight ? 'Company record check passed. The reviewed import remains bound to this exact receipt.' : 'Checked successfully. Review and confirm above; SuperMega runs one final company record check before writing.'
               : state.preview.readyForStaging && !importContextReady
-                ? 'These details connect the prepared rows to one accountable client workspace.'
+                ? 'These details connect the prepared rows to one accountable company.'
               : managedIdentity
-                ? 'Ready to check with your workspace.'
+                ? 'Ready to check with your company account.'
                 : 'Ready to prepare an accountable import file.'}</small>
               {appliedIsCurrent && state.applied ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.applied.receipt.activation.package_digest.slice(7, 19).toUpperCase()} / revision {state.applied.receipt.result.version} / idempotent command confirmed</p></details> : validationIsCurrent && state.validation ? <details className="catalog-import-technical"><summary>Technical receipt</summary><p>{state.validation.receipt.package_digest.slice(7, 19).toUpperCase()} / {state.validation.preflight ? 'company check retained' : 'zero records written'} / {object.activationBoundary}</p></details> : null}
             </div>
