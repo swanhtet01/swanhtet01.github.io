@@ -253,14 +253,14 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
   }
 
   if (!report || !next) {
-    return <section className="product-home-today" aria-label="Today across SuperMega"><div className="product-home-today-head"><div><span className="core-eyebrow">Today</span><h2>{loading ? 'Checking authorized work...' : 'Operational report unavailable'}</h2><p>{notice || 'No verified product source is available yet.'}</p></div><Link className="core-button primary" to="/settings/">Open setup</Link></div></section>
+    return <section className="product-home-today" aria-label="Today across SuperMega"><div className="product-home-today-head"><div><span className="core-eyebrow">Today</span><h2>{loading ? 'Checking products...' : 'Product summary unavailable'}</h2><p>{notice || 'No verified product source is available yet.'}</p></div><Link className="core-button primary" to="/settings/">Setup data</Link></div></section>
   }
 
   const attentionCount = report.summary.critical + report.summary.warning + report.summary.action
   return (
     <section className="product-home-today" aria-label="Today across SuperMega">
       <div className="product-home-today-head">
-        <div><span className="core-eyebrow">Today · {report.mode === 'managed' ? 'managed records' : report.sources.some((source) => source.mode === 'sample') ? 'local sample' : 'local records'}</span><h2>{next.label}</h2><p>{next.detail} This queue and report are read-only; each product still owns every change.</p></div>
+        <div><span className="core-eyebrow">Today · {report.mode === 'managed' ? 'company records' : report.sources.some((source) => source.mode === 'sample') ? 'sample data' : 'saved data'}</span><h2>{next.label}</h2><p>{next.detail} This summary is read-only; open the product to make changes.</p></div>
         <Link className="core-button primary" to={next.route}>Open {productLabel[next.product]}</Link>
       </div>
       <div className="product-home-today-grid">
@@ -272,7 +272,7 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
         ))}
       </div>
       <details className="product-home-report">
-        <summary><span><strong>Operational report</strong><small>{attentionCount} attention · {report.allowedProducts.length} authorized products</small></span><b>Filter and export</b></summary>
+        <summary><span><strong>Product summary</strong><small>{attentionCount} attention · {report.allowedProducts.length} products</small></span><b>Filter and export</b></summary>
         <div className="product-home-report-body">
           <div className="product-home-report-controls">
             <label>Product<select value={view.product} onChange={(event) => setView((current) => ({ ...current, product: event.target.value as OperationalReportView['product'] }))}><option value="all">All authorized</option>{report.allowedProducts.map((product) => <option key={product} value={product}>{productLabel[product]}</option>)}</select></label>
@@ -290,7 +290,7 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
             <div className="form-row"><label><span>Decision owner</span><input autoComplete="name" maxLength={120} onChange={(event) => updateDuplicateDecision((current) => ({ ...current, owner: event.target.value }))} placeholder="Named reviewer" value={activeDuplicateDecision.owner} /></label><label><span>Evidence reference</span><input maxLength={240} onChange={(event) => updateDuplicateDecision((current) => ({ ...current, evidence: event.target.value }))} placeholder="Ticket, file, or meeting note" value={activeDuplicateDecision.evidence} /></label></div>
             <button className="core-button compact" disabled={!activeDuplicateDecision.owner.trim() || !activeDuplicateDecision.evidence.trim() || report.masterData.duplicateReview.candidates.some((candidate) => !activeDuplicateDecision.resolutions[candidate.id])} onClick={() => void downloadDuplicateRehearsal()} type="button">Download rehearsal plan</button>
           </div> : null}
-          <p className="product-home-report-source">Sources: {report.sources.map((source) => `${source.surface} ${source.mode}${source.revision === null ? '' : ` r${source.revision}`}`).join(' · ')}. View filters are saved on this device; permissions always come from the managed bootstrap.</p>
+          <p className="product-home-report-source">Sources: {report.sources.map((source) => `${source.surface} ${source.mode}${source.revision === null ? '' : ` r${source.revision}`}`).join(' · ')}. View filters are saved on this device; product access still comes from the signed company account.</p>
           {notice ? <p className="form-notice" role="status">{notice}</p> : null}
         </div>
       </details>

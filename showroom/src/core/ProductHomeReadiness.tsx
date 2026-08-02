@@ -89,7 +89,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       detail: `${label}: ${action}`,
     })
   }
-  const agentCommandQueueRows = [
+  const supportEvidenceRows = [
     [ready ? 'Export setup' : 'Finish setup', ready ? 'Ready for support review' : `${progress}% ready`, ready ? 'Package setup, imports, decisions, and go-live proof before support starts.' : 'Finish baseline, owner, source, and acceptance evidence first.'],
     [behaviorPreference.preferred ? 'Recent product' : 'Choose next step', behaviorPreference.preferred && preferredContinuation ? `${preferredContinuation.label} / ${behaviorPreference.preferred.chosenCount} chosen` : 'Needs signal', behaviorPreference.preferred ? behaviorPreference.preferred.detail : 'Open a product and choose a next step so this page can continue from there.'],
     [hostedReady ? 'Prepare live account' : 'Finish live gate', hostedReady ? 'Controls ready' : `${activationCoverage}% gated`, hostedReady ? 'Use account roles, audit, and approval before any real write.' : nextHostedAction],
@@ -120,7 +120,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       const run = await loadManagedOwnerControlRun(identity)
       if (requestId !== ownerControlRequestRef.current) return
       setManagedOwnerControl({ run, identity })
-      setOwnerControlNotice(successNotice || 'Managed company / exact-source owner control.')
+      setOwnerControlNotice(successNotice || 'Company review refreshed from exact product records.')
     } catch {
       if (requestId !== ownerControlRequestRef.current) return
       setManagedOwnerControl(null)
@@ -167,7 +167,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       if (requestId !== managedRequestRef.current) return
       setAnswer(brief)
       setManagedContext({ brief, identity })
-      setManagedNotice(`Managed company / ${brief.sourceCount} validated product sources.`)
+      setManagedNotice(`Company summary / ${brief.sourceCount} validated product sources.`)
     } catch {
       if (requestId !== managedRequestRef.current) return
       setManagedContext(null)
@@ -307,18 +307,18 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
 
   return (
     <>
-      <section className="product-home-readiness product-home-command-queue" id="command-center" aria-label="SuperMega business helper">
+      <section className="product-home-readiness product-home-command-queue" id="command-center" aria-label="SuperMega support helper">
         <div className="product-home-readiness-head">
           <div>
-            <span className="core-eyebrow">Business helper</span>
-            <h2>See what needs attention.</h2>
-            <p>Uses reviewed Shop, Plant, Website, and Ecommerce records. Managed company history is used only after approval.</p>
+            <span className="core-eyebrow">Support helper</span>
+            <h2>Find the next customer-ready step.</h2>
+            <p>Uses Shop, Plant, Website, and Ecommerce records. Company history is used only after approval.</p>
           </div>
         </div>
-        <div className="owner-control-run" aria-label="Daily review status" data-mode={ownerControlMode}>
+        <div className="owner-control-run" aria-label="Readiness review status" data-mode={ownerControlMode}>
           <div className="owner-control-run-head">
             <div>
-              <span>{ownerControlMode === 'managed' ? 'Managed review' : 'Local review'} · {ownerControl.sourceCount}/4 validated sources</span>
+              <span>{ownerControlMode === 'managed' ? 'Company review' : 'Local review'} · {ownerControl.sourceCount}/4 product sources</span>
               <h3>{ownerControl.title}</h3>
               <p>{ownerControl.summary}</p>
             </div>
@@ -331,7 +331,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
               <small>{ownerControlPrimary.summary}</small>
             </div>
             <div className="form-actions">
-              {ownerControl.sourceCount > 0 ? <button className="core-button" disabled={ownerControlPending} onClick={() => void acknowledgeOwnerControl()} type="button">Acknowledge review</button> : null}
+              {ownerControl.sourceCount > 0 ? <button className="core-button" disabled={ownerControlPending} onClick={() => void acknowledgeOwnerControl()} type="button">Mark reviewed</button> : null}
               <Link className="core-button primary" onClick={() => recordOwnerControlFollow(ownerControlPrimary)} to={ownerControlPrimary.nextAction.path}>{ownerControlPrimary.nextAction.label}</Link>
             </div>
           </div> : <p className="owner-control-clear">No repeated check is required for unchanged evidence. A new validated source revision opens the next run automatically.</p>}
@@ -390,9 +390,9 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
           {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
         </div>
         <details className="business-command-evidence">
-          <summary><span>Why this result</span><small>Setup, recent choices, live gates, and product coverage</small></summary>
+          <summary><span>Why this step</span><small>Setup, recent choices, go-live gates, and product coverage</small></summary>
           <div className="product-home-readiness-grid">
-            {agentCommandQueueRows.map(([label, value, detail]) => (
+            {supportEvidenceRows.map(([label, value, detail]) => (
               <span key={label}>
                 <small>{label}</small>
                 <strong>{value}</strong>
@@ -403,12 +403,12 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
           <Link className="text-link" to={commandPath}>{commandLabel}</Link>
         </details>
       </section>
-      <section className="product-home-readiness product-home-business-tracks" aria-label="Product start paths">
+      <section className="product-home-readiness product-home-business-tracks" aria-label="Product setup paths">
         <div className="product-home-readiness-head">
           <div>
             <span className="core-eyebrow">Choose a product</span>
             <h2>Start one product.</h2>
-            <p>Pick a template or open the working sample. Setup stays behind review before business records change.</p>
+            <p>Pick a template or open the working sample. Setup stays in review before business records change.</p>
           </div>
           <Link className="core-button" to="/settings/">Set up data</Link>
         </div>
