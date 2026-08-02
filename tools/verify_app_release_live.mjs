@@ -3,7 +3,36 @@ import { readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 const verifyCurrentHead = process.argv.includes('--current-head')
+const selfTest = process.argv.includes('--self-test')
 const configuredExpectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
+
+export function extractTrialEvidenceVersion(value) {
+  const match = /contract\s*:\s*['"]supermega_trial_evidence['"][\s\S]{0,160}?\bversion\s*:\s*(\d+)/.exec(String(value || ''))
+  return Number(match?.[1])
+}
+
+if (selfTest) {
+  const fixtures = [
+    ["const evidence = { contract: 'supermega_trial_evidence', version: 24, environment: 'isolated_demo' }", 24],
+    ['r.contract!=="supermega_trial_evidence";const href=JSON.stringify({contract:"supermega_trial_evidence",version:24,environment:"isolated_demo"})', 24],
+  ]
+  for (const [source, expected] of fixtures) {
+    if (extractTrialEvidenceVersion(source) !== expected) throw new Error('trial_evidence_version_fixture_rejected')
+  }
+  const invalidFixtures = [
+    'r.contract!=="supermega_trial_evidence"',
+    '{contract:"supermega_trial_evidence",version:"24"}',
+  ]
+  for (const source of invalidFixtures) {
+    if (Number.isInteger(extractTrialEvidenceVersion(source))) throw new Error('invalid_trial_evidence_version_fixture_accepted')
+  }
+  console.log(JSON.stringify({
+    ok: true,
+    contract: 'supermega_app_live_evidence_extractor.v1',
+    checks: fixtures.length + invalidFixtures.length,
+  }, null, 2))
+  process.exit(0)
+}
 
 function readCurrentHead() {
   try {
@@ -28,7 +57,7 @@ const expectedCommit = configuredExpectedCommit || currentHeadCommit
 const verificationScope = expectedCommit ? 'exact_release' : 'availability_and_contract'
 const manifest = JSON.parse(await readFile(new URL('../site-manifest.json', import.meta.url), 'utf8'))
 const settingsSource = await readFile(new URL('../showroom/src/core/SettingsPage.tsx', import.meta.url), 'utf8')
-const localEvidenceVersion = Number(/contract:\s*['"]supermega_trial_evidence['"][\s\S]{0,200}?version:\s*(\d+)/.exec(settingsSource)?.[1])
+const localEvidenceVersion = extractTrialEvidenceVersion(settingsSource)
 if (!Number.isInteger(localEvidenceVersion)) throw new Error('local_settings_evidence_version_missing')
 const baseUrl = String(process.env.APP_BASE_URL || 'https://app.supermega.dev').replace(/\/$/, '')
 const protectedPreview = process.env.VERCEL_PROTECTED_PREVIEW === '1'
@@ -208,9 +237,7 @@ const companyBackupChunkPath = /assets\/CompanyBackupPanel-[A-Za-z0-9_-]+\.js/.e
 if (!companyBackupChunkPath) throw new Error('company_backup_chunk_missing')
 const companyBackupChunk = (await get(`/${companyBackupChunkPath}`)).body
 const companyBackupCorpus = `${settingsChunk}\n${companyBackupChunk}`
-const evidenceMarkerOffset = settingsChunk.indexOf('supermega_trial_evidence')
-const liveEvidenceWindow = evidenceMarkerOffset >= 0 ? settingsChunk.slice(evidenceMarkerOffset, evidenceMarkerOffset + 512) : ''
-const liveEvidenceVersion = Number(/version:(\d+)/.exec(liveEvidenceWindow)?.[1])
+const liveEvidenceVersion = extractTrialEvidenceVersion(settingsChunk)
 if (!Number.isInteger(liveEvidenceVersion)) throw new Error('live_settings_evidence_version_missing')
 if (liveEvidenceVersion !== localEvidenceVersion) {
   throw new Error(`live_settings_evidence_version_mismatch:local=${localEvidenceVersion}:live=${liveEvidenceVersion}`)
