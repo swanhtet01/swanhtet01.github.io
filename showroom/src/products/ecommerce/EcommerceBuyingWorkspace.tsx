@@ -267,9 +267,6 @@ export function EcommerceBuyingWorkspace({
       const stillFresh = Date.parse(latest.quote.expiresAt) > Date.now()
       setFreshQuoteId(stillFresh ? latest.id : '')
       setQuoteClock(Date.now())
-      setNotice(stillFresh
-        ? `${latest.id} recovered on this device. Review current Shop values before Shop review.`
-        : `${latest.id} was recovered, but its quote expired. Review a new total.`)
     })
     return () => { current = false }
   }, [onCartChange, scope, sourcePreviewDigest])
@@ -521,14 +518,21 @@ export function EcommerceBuyingWorkspace({
     ['Cart', cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : 'Empty'],
     ['Quote', latestRequestConfirmed ? 'Confirmed' : quoteCurrent ? `${quoteMinutesRemaining} min left` : latestRequest ? 'Review again' : 'Not quoted'],
     ['Recovery', recoveryBlocked ? 'Blocked' : recoveryStatus === 'ready' ? 'Ready' : 'Local'],
-    ['Shop review', latestRequestConfirmed ? 'Confirmed' : quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs review' : 'Locked'],
-    ['Payment', latestRequestEntry?.paymentStatus === 'reconciled' ? 'Confirmed' : latestRequestConfirmed ? 'Pending' : 'Not charged'],
+    ['Shop review', latestRequestOrder ? 'Confirmed' : quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs review' : 'Locked'],
+    ['Payment', latestRequestEntry?.paymentStatus === 'reconciled' ? 'Confirmed' : latestRequestOrder ? 'Pending' : 'Not charged'],
   ] as const
+  const recoveredCheckoutNotice = latestRequest
+    ? Date.parse(latestRequest.quote.expiresAt) > quoteClock
+      ? `${latestRequest.id} recovered on this device. Review current Shop values before Shop review.`
+      : `${latestRequest.id} was recovered, but its quote expired. Review a new total.`
+    : ''
   const checkoutNotice = latestRequestConfirmed && latestRequestOrder
     ? `${latestRequest?.id} is confirmed as ${latestRequestOrder.id}. ${latestRequestEntry?.paymentStatus === 'reconciled' ? 'Payment is reconciled in Shop.' : 'Payment still needs Shop reconciliation.'}`
-    : recoveryIssue || notice || (cart.length
-      ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
-      : 'Add a product to begin.')
+    : notice || (latestRequestOrder
+      ? `${latestRequest?.id} is already confirmed as ${latestRequestOrder.id}. Review a new total only to start another order.`
+      : recoveredCheckoutNotice || recoveryIssue || (cart.length
+        ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
+        : 'Add a product to begin.'))
 
   function updateCart(sku: string, quantity: number) {
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return
@@ -1326,8 +1330,10 @@ export function EcommerceBuyingWorkspace({
             </article>
           ) : (
             <div className="ecommerce-stale-quote" role="status">
-              <strong>Cart changed — review a new total</strong>
-              <small>The previous quote remains in Your orders and cannot continue with this cart.</small>
+              <strong>{latestRequestOrder ? 'Start another order' : 'Cart changed — review a new total'}</strong>
+              <small>{latestRequestOrder
+                ? `Order ${latestRequestOrder.id} is already confirmed. Review a new total only when creating another order.`
+                : 'The previous quote remains in Your orders and cannot continue with this cart.'}</small>
             </div>
           ) : null}
 
