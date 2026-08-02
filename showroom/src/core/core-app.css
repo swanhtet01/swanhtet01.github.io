@@ -91,6 +91,12 @@ a { color: inherit; }
 .product-system-body h2 { margin: 4px 0; font-size: 20px; letter-spacing: 0; }
 .product-system-body header p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.45; }
 .product-system-actions { display: flex; gap: 7px; }
+.product-system-map { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
+.product-system-map span { min-width: 0; min-height: 76px; display: grid; align-content: center; gap: 3px; border-right: 1px solid var(--core-line); padding: 10px 12px; }
+.product-system-map span:last-child { border-right: 0; }
+.product-system-map small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.product-system-map strong { color: var(--core-ink); font-size: 20px; line-height: 1; }
+.product-system-map em { overflow: hidden; color: var(--core-muted); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 .product-system-workflows { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
 .product-system-workflow { min-width: 0; min-height: 104px; display: grid; align-content: start; gap: 4px; border: 1px solid var(--core-line); border-radius: 8px; padding: 11px; background: var(--core-panel-raised); text-decoration: none; }
 .product-system-workflow:hover { border-color: var(--core-green); background: var(--core-green-soft); }
@@ -1766,6 +1772,9 @@ textarea { min-height: 72px; resize: vertical; }
   .product-system-body { max-height: min(72svh,720px); padding: 13px 12px 16px; }
   .product-system-body > header { align-items: stretch; flex-direction: column; }
   .product-system-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .product-system-map { grid-template-columns: 1fr; }
+  .product-system-map span { min-height: auto; border-right: 0; border-bottom: 1px solid var(--core-line); }
+  .product-system-map span:last-child { border-bottom: 0; }
   .product-system-workflows { grid-template-columns: 1fr; }
   .product-system-workflow { min-height: auto; }
   .core-route-content, .core-main.has-trial-context .core-route-content { height: auto; flex: none; }

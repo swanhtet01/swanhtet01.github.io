@@ -45,13 +45,18 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
     <details className="product-system-navigator" onToggle={(event) => setOpen(event.currentTarget.open)} open={open}>
       <summary>
         <span><b>{details.label}</b><small>{details.summary}</small></span>
-        <strong>{open ? 'Close' : `${summary.demoReady} ready flows`}</strong>
+        <strong>{open ? 'Close' : `${summary.demoReady} run now`}</strong>
       </summary>
       <div className="product-system-body">
         <header>
           <div><span className="core-eyebrow">{details.label}</span><h2>Start with the working demo.</h2><p>Use the sample workflow first. Setup and imports can wait.</p></div>
           <div className="product-system-actions"><Link className="core-button compact primary" to={details.primaryPath}>Open {details.label}</Link><Link className="core-button compact" to={details.setupPath}>Setup later</Link></div>
         </header>
+        <div className="product-system-map" aria-label={`${details.label} product map`}>
+          <span><small>Run now</small><strong>{summary.demoReady}</strong><em>Working sample flows</em></span>
+          <span><small>Setup next</small><strong>{summary.configureNext}</strong><em>Imports and controls</em></span>
+          <span><small>Scale later</small><strong>{summary.scaleLater}</strong><em>Enterprise modules</em></span>
+        </div>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
           {workingFlows.map((capability) => <WorkflowLink capability={capability} key={capability.id} />)}
         </div>
