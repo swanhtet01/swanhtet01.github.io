@@ -818,6 +818,25 @@ export function ecommercePaymentMatchesFulfilment(
     || (fulfilment === 'pickup' ? paymentAdapter === 'pay_on_pickup' : paymentAdapter === 'cash_on_delivery')
 }
 
+export function ecommerceAvailablePaymentAdapters(
+  policies: readonly CommercePaymentPolicy[],
+  fulfilment: EcommerceFulfilment,
+  orderAmountMmk: number,
+  reviewedAt: string,
+) {
+  if (!Number.isSafeInteger(orderAmountMmk) || orderAmountMmk < 1) return []
+  const preferred: EcommercePaymentAdapter[] = fulfilment === 'pickup'
+    ? ['pay_on_pickup', 'kbzpay_manual']
+    : ['cash_on_delivery', 'kbzpay_manual']
+  return preferred.filter((adapter) => commercePaymentDecision(
+    policies,
+    adapter,
+    fulfilment,
+    orderAmountMmk,
+    reviewedAt,
+  )?.status === 'approved')
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
