@@ -1657,12 +1657,6 @@ export function EcommerceProduct() {
     ['Customers', ecommerceTodayCustomerCount ? `${ecommerceTodayCustomerCount} known` : 'No orders yet'],
     ['Returns', ecommerceReturnedUnits ? `${ecommerceReturnedUnits} unit${ecommerceReturnedUnits === 1 ? '' : 's'}` : 'Clear'],
   ] as const
-  const ecommerceGuidedJobs = [
-    ['1', 'Browse demo', 'See the customer store first.', '#ecommerce-preview-panel'],
-    ['2', 'Make store', 'Choose products, photos, and page copy.', '#ecommerce-setup-panel'],
-    ['3', 'Test order', 'Add an item and review checkout here.', '#ecommerce-buying-workspace'],
-  ] as const
-
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -1714,7 +1708,7 @@ export function EcommerceProduct() {
 
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
-          <span className="core-eyebrow">Today</span>
+          <span className="core-eyebrow">Start here</span>
           <h2 id="ecommerce-today-title">{ecommerceTodayHeadline}</h2>
           <p>{ecommerceTodaySummary}</p>
           <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
@@ -1725,31 +1719,6 @@ export function EcommerceProduct() {
         <div className="ecommerce-today-source" role="status">
           <span>{sourceLabel}</span>
           <small>Shop keeps the real stock, payment, delivery, and order record behind this store.</small>
-        </div>
-      </section>
-
-      <section className="ecommerce-start-guide" aria-label="Ecommerce guided jobs">
-        <header>
-          <span className="core-eyebrow">Start here</span>
-          <h2>Open the store in 3 steps.</h2>
-          <p>Browse the demo, make the store, then test one order.</p>
-        </header>
-        <div>
-          {ecommerceGuidedJobs.map(([step, label, detail, to]) => to.startsWith('#') ? (
-            <button key={label} onClick={() => {
-              if (to === '#ecommerce-setup-panel') showWorkspace('setup')
-              else showWorkspace('preview')
-              window.requestAnimationFrame(() => document.querySelector(to)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-            }} type="button">
-              <b>{step}</b>
-              <span><strong>{label}</strong><small>{detail}</small></span>
-            </button>
-          ) : (
-            <Link key={label} to={to}>
-              <b>{step}</b>
-              <span><strong>{label}</strong><small>{detail}</small></span>
-            </Link>
-          ))}
         </div>
       </section>
 

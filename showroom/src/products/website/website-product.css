@@ -3281,96 +3281,6 @@
   box-shadow: 0 6px 20px rgba(23, 33, 28, .04);
 }
 
-.website-start-guide {
-  order: 1;
-  display: grid;
-  grid-template-columns: minmax(220px, .42fr) minmax(0, 1fr);
-  gap: 12px;
-  border: 1px solid var(--website-line);
-  border-radius: 14px;
-  padding: 14px;
-  background: var(--website-panel);
-  box-shadow: 0 6px 20px rgba(23, 33, 28, .04);
-}
-
-.website-start-guide header {
-  display: grid;
-  align-content: center;
-  gap: 5px;
-}
-
-.website-start-guide h2,
-.website-start-guide p {
-  margin: 0;
-}
-
-.website-start-guide h2 {
-  color: var(--website-ink);
-  font-size: clamp(20px, 2vw, 28px);
-  line-height: 1.05;
-  letter-spacing: -.035em;
-}
-
-.website-start-guide p,
-.website-start-guide small {
-  color: var(--website-muted);
-  overflow-wrap: anywhere;
-}
-
-.website-start-guide > div {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.website-start-guide button {
-  min-height: 82px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  border: 1px solid var(--website-line);
-  border-radius: 12px;
-  padding: 12px;
-  background: color-mix(in srgb, var(--website-panel) 92%, var(--website-surface));
-  color: var(--website-ink);
-  text-align: left;
-}
-
-.website-start-guide button:hover {
-  border-color: color-mix(in srgb, var(--website-green) 45%, var(--website-line));
-  background: color-mix(in srgb, var(--website-green) 5%, var(--website-panel));
-}
-
-.website-start-guide b {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--website-green);
-  color: #fff;
-  font-family: var(--core-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
-  font-size: 10px;
-}
-
-.website-start-guide span {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.website-start-guide strong {
-  font-size: 12px;
-  line-height: 1.2;
-}
-
-.website-start-guide small {
-  font-size: 10px;
-  line-height: 1.35;
-  white-space: normal;
-}
-
 .website-page-control {
   min-width: 0;
   display: grid;
@@ -3783,35 +3693,6 @@
 }
 
 @media screen and (max-width: 900px) {
-  .website-start-guide {
-    grid-template-columns: 1fr;
-  }
-
-  .website-start-guide > div {
-    grid-template-columns: 1fr;
-  }
-
-  .website-start-guide button {
-    min-height: 70px;
-  }
-
-  .website-start-guide h2 {
-    font-size: 23px;
-  }
-
-  .website-start-guide p {
-    font-size: 13px;
-    line-height: 1.42;
-  }
-
-  .website-start-guide span {
-    gap: 3px;
-  }
-
-  .website-start-guide small {
-    font-size: 9px;
-  }
-
   .website-action-bar {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 10px;

@@ -75,101 +75,6 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.ecommerce-start-guide {
-  display: grid;
-  grid-template-columns: minmax(220px, .42fr) minmax(0, 1fr);
-  gap: 12px;
-  margin: 0 0 12px;
-  border: 1px solid rgba(31, 68, 51, .14);
-  border-radius: 14px;
-  padding: 14px;
-  background: #fff;
-  box-shadow: 0 12px 32px rgba(25, 54, 42, .05);
-}
-
-.ecommerce-start-guide header {
-  display: grid;
-  align-content: center;
-  gap: 5px;
-}
-
-.ecommerce-start-guide h2,
-.ecommerce-start-guide p {
-  margin: 0;
-}
-
-.ecommerce-start-guide h2 {
-  color: #17231d;
-  font-size: clamp(20px, 2vw, 28px);
-  line-height: 1.05;
-  letter-spacing: -.035em;
-}
-
-.ecommerce-start-guide p,
-.ecommerce-start-guide small {
-  color: #56665d;
-  overflow-wrap: anywhere;
-}
-
-.ecommerce-start-guide > div {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.ecommerce-start-guide a,
-.ecommerce-start-guide button {
-  min-height: 82px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  border: 1px solid rgba(31, 68, 51, .14);
-  border-radius: 12px;
-  padding: 12px;
-  background: #fbfdfb;
-  color: #17231d;
-  text-align: left;
-  text-decoration: none;
-  font: inherit;
-  cursor: pointer;
-}
-
-.ecommerce-start-guide a:hover,
-.ecommerce-start-guide button:hover {
-  border-color: rgba(11, 116, 94, .35);
-  background: rgba(11, 116, 94, .05);
-}
-
-.ecommerce-start-guide b {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: #0b745e;
-  color: #fff;
-  font-family: var(--core-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
-  font-size: 10px;
-}
-
-.ecommerce-start-guide span {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.ecommerce-start-guide strong {
-  font-size: 12px;
-  line-height: 1.2;
-}
-
-.ecommerce-start-guide small {
-  font-size: 10px;
-  line-height: 1.35;
-  white-space: normal;
-}
-
 .ecommerce-workspace[data-view="setup"] > .ecommerce-preview-panel,
 .ecommerce-workspace[data-view="preview"] > .ecommerce-setup {
   display: none;
@@ -1742,23 +1647,6 @@
     font-size: 13px;
   }
 
-  .ecommerce-start-guide h2 {
-    font-size: 23px;
-  }
-
-  .ecommerce-start-guide p {
-    font-size: 13px;
-    line-height: 1.42;
-  }
-
-  .ecommerce-start-guide span {
-    gap: 3px;
-  }
-
-  .ecommerce-start-guide small {
-    font-size: 9px;
-  }
-
   .ecommerce-business-controls > summary b { display: none; }
   .ecommerce-business-controls > summary span { width: 100%; }
   .ecommerce-save-bar {
@@ -1939,19 +1827,6 @@
 }
 
 @media (max-width: 840px) {
-  .ecommerce-start-guide {
-    grid-template-columns: 1fr;
-  }
-
-  .ecommerce-start-guide > div {
-    grid-template-columns: 1fr;
-  }
-
-  .ecommerce-start-guide a,
-  .ecommerce-start-guide button {
-    min-height: 70px;
-  }
-
   .ecommerce-workspace-switch {
     position: sticky;
     z-index: 18;
