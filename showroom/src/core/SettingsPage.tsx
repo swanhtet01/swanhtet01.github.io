@@ -563,9 +563,9 @@ export function SettingsPage() {
   const topAgentJob = behaviorPreference.preferred
   const lastChosenAgentJob = behaviorPreference.latest
   const agentBehaviorRows = [
-    ['Signals', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} queue signals` : 'No queue signals', agentBehaviorSignals.length ? 'Seen and chosen recommendations are saved locally for export.' : 'Open a product queue to start behavior memory.'],
+    ['Signals', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} next-step signals` : 'No next-step signals', agentBehaviorSignals.length ? 'Seen and chosen recommendations are saved locally for export.' : 'Open a product and choose one next step to start behavior memory.'],
     ['Preferred job', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'No pattern yet', topAgentJob ? `${topAgentJob.chosenCount} chosen; last ${formatTime(topAgentJob.lastChosenAt)}.` : 'The system waits for owner choices before selecting a safe continuation.'],
-    ['Last chosen', lastChosenAgentJob ? `${agentProductName(lastChosenAgentJob.product)}: ${lastChosenAgentJob.detail}` : 'Nothing chosen yet', lastChosenAgentJob ? `Captured ${formatTime(lastChosenAgentJob.createdAt)}.` : 'Click a recommended agent job to teach the next handoff.'],
+    ['Last chosen', lastChosenAgentJob ? `${agentProductName(lastChosenAgentJob.product)}: ${lastChosenAgentJob.detail}` : 'Nothing chosen yet', lastChosenAgentJob ? `Captured ${formatTime(lastChosenAgentJob.createdAt)}.` : 'Click a recommended next step to teach the next handoff.'],
   ] as const
   const learningRows = [
     ['Data', preparedRecordCount ? `${preparedRecordCount} records` : 'Import'],
@@ -581,7 +581,7 @@ export function SettingsPage() {
     ['Owner gate', isPilotReady ? 'Ready for managed review' : `${completion}% trial evidence`, isPilotReady ? 'Export evidence, then request managed trial; writes stay locked until server controls pass.' : 'Complete baseline, target, authority boundary, and acceptance evidence first.'],
   ] as const
   const agentPlanRows = [
-    ['Agent worker', `${selectedProduct.name} operator`, `Prepares ${selectedTemplate.name.toLowerCase()} from approved sources.`],
+    ['Product helper', `${selectedProduct.name} operator`, `Prepares ${selectedTemplate.name.toLowerCase()} from approved sources.`],
     ['First job', selectedTemplate.workflow[0] ?? selectedTemplate.outcome, selectedTemplate.outcome],
     ['Tool boundary', runtime.writesReady ? 'Write gate ready' : 'Writes locked', 'Drafts, imports, messages, publishes, payments, and production changes wait for human approval.'],
     ['Learning loop', preparedRecordCount || actions.length || behaviorSignalCount ? `${preparedRecordCount + actions.length + behaviorSignalCount} signals` : 'No signals yet', 'Premium learns only from exported records, local behavior, accountable actions, and reviewed decisions.'],
@@ -589,7 +589,7 @@ export function SettingsPage() {
   const evidencePlanReady = runtime.evidencePlan.length > 0 && runtime.evidencePlan.every((item) => item.ready)
   const aiContextQualityRows = [
     ['Source data', preparedRecordCount ? `${preparedRecordCount} prepared` : 'Need records', preparedRecordCount ? 'Local product records are ready for managed validation.' : 'Import or use a product workspace before premium learning.'],
-    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'Need usage', agentBehaviorSignals.length ? 'Agent queue views and choices can teach ranking after approval.' : 'Open and choose product agent jobs to create behavior memory.'],
+    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} signals` : 'Need usage', agentBehaviorSignals.length ? 'Next-step views and choices can teach ranking after approval.' : 'Open a product and choose recommended next steps to create behavior memory.'],
     ['Decisions', reviewedDecisionCount ? `${reviewedDecisionCount} reviewed` : 'Need review', reviewedDecisionCount ? 'Named human decisions can become reusable context.' : 'Record at least one approval or decline before learning from decisions.'],
     ['Controls', runtime.writesReady && evidencePlanReady ? 'Ready' : 'Locked', runtime.writesReady && evidencePlanReady ? 'Managed writes and evidence gates are ready.' : 'Managed activation gates must pass before AI can learn from customer data.'],
     ['Next handoff', preparedRecordCount && agentBehaviorSignals.length && reviewedDecisionCount ? 'Export context' : 'Collect proof', 'Export stays browser-local until the owner requests managed activation.'],
@@ -599,7 +599,7 @@ export function SettingsPage() {
     ['Plant', production.jobs.length || production.events.length ? `${production.jobs.length} jobs / ${production.events.length} events` : 'Need Plant use', 'Premium can learn MES, quality, WCM, trace, and handoff patterns after managed import.'],
     ['Website', websiteLocalRecordCount ? `${websiteLocalRecordCount} local records` : 'Need website save', 'Premium can learn content, lead capture, approval, package, and rollout readiness after managed import.'],
     ['Ecommerce', ecommerceLocalRecordCount ? `${ecommerceLocalRecordCount} handoff records` : 'Need store handoff', 'Premium can learn catalog, storefront, order review, and Shop queue handoff after managed import.'],
-    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} agent signals` : 'Need usage', 'Premium ranks next actions only from exported local choices and approved decisions.'],
+    ['Behavior', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} choice signals` : 'Need usage', 'Premium ranks next actions only from exported local choices and approved decisions.'],
   ] as const
   const aiProductSourceMap = {
     contract: 'supermega.ai_product_source_map.v1',
@@ -730,7 +730,7 @@ export function SettingsPage() {
   ] as const
   const aiContextReadinessGates = [
     ['Records', preparedRecordCount > 0, preparedRecordCount ? `${preparedRecordCount} local records prepared.` : 'Use or import one product workspace first.'],
-    ['Behavior', agentBehaviorSignals.length > 0, agentBehaviorSignals.length ? `${agentBehaviorSignals.length} agent queue signals captured.` : 'Open product queues and choose a recommended action.'],
+    ['Behavior', agentBehaviorSignals.length > 0, agentBehaviorSignals.length ? `${agentBehaviorSignals.length} next-step signals captured.` : 'Open a product and choose a recommended action.'],
     ['Decisions', reviewedDecisionCount > 0, reviewedDecisionCount ? `${reviewedDecisionCount} named human decision${reviewedDecisionCount === 1 ? '' : 's'} ready.` : 'Record one approval or decline before premium learns from decisions.'],
     ['Controls', runtime.writesReady && evidencePlanReady, runtime.writesReady && evidencePlanReady ? 'Managed evidence gates are ready.' : 'Managed Postgres, identity, audit, and write gates remain locked.'],
     ['Products', aiProductSourceMap.products.some((product) => product.prepared), aiProductSourceMap.products.some((product) => product.prepared) ? 'At least one product has a usable source package.' : 'Create Shop, Plant, Website, or Ecommerce evidence.'],
@@ -742,7 +742,7 @@ export function SettingsPage() {
   const aiContextNextMove = !preparedRecordCount
     ? 'Create or import product records'
     : !agentBehaviorSignals.length
-      ? 'Use agent queues'
+      ? 'Use product next steps'
       : !reviewedDecisionCount
         ? 'Record owner decision'
       : !setup.savedAt
@@ -916,7 +916,7 @@ export function SettingsPage() {
   const aiMemoryNextMove = !aiMemorySourceRecordCount
     ? 'Create or import product records'
     : !agentBehaviorSignals.length
-      ? 'Use agent queues'
+      ? 'Use product next steps'
       : !reviewedDecisionCount
         ? 'Record owner decision'
         : !setup.savedAt
