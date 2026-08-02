@@ -587,7 +587,7 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('| OPS-043 | CEO + Agent Operations / Delivery Security Codex | done-local |')
   && workboard.includes('Checkpoints `cafdafe` and `f626ee7` add `supermega.ceo-outcome-delivery.v1`')
   && workboard.includes('Current accepted agent-operations checkpoint: `a2e1b89`')
-  && now.includes('Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`')
+  && now.includes('Product: Ecommerce-Shop completion `54b4d31`, order recovery `3fb9794`, and database v8 `7963981`; release gates pass.')
   && now.includes('HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle')
   && now.includes('`multi_agent = false`; one lease blocks duplicates')
   && now.includes('unloaded roles/models consume no idle compute')
@@ -664,7 +664,7 @@ requireContract('product QA brief is discoverable from assignment authority',
   && workboard.includes('Checkpoint `dadb013` passes 10 routes at 390/1280 px')
   && workboard.includes('focus lands on `#workspace-main`'))
 requireContract('accepted core checkpoints lead directly to real work',
-  workboard.includes('Current accepted product checkpoint: `7ae8c80617b73c4827bfbc08f74262685620a86f`')
+  workboard.includes('Current accepted product checkpoint: `3fb9794c33c15e3a240abdaf97a678d2703fa3eb`')
   && workboard.includes('| ENG-075 | Shop + Data Engineering Codex | done-local |')
   && workboard.includes('| ENG-076 | Plant + Manufacturing Engineering Codex | done-local |')
   && workboard.includes('| ENG-077 | Website + Product Engineering Codex | done-local |')
@@ -732,10 +732,10 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
-  && now.includes('Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`')
+  && now.includes('Product: Ecommerce-Shop completion `54b4d31`, order recovery `3fb9794`, and database v8 `7963981`; release gates pass.')
   && now.includes('First-action QA routes Shop, Plant, and Website blockers to the next task')
   && now.includes('The active delivery focus is:')
-  && now.includes('Production `7c76b810` and the local candidate diverge from common base `5d1c5d7c`')
+  && now.includes('Live HQ and both domains agree on `95c134a`; no release drift is present.')
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
   && now.includes('Controlled batches bind reviewed productive time and closed downtime')
@@ -768,7 +768,7 @@ requireContract('workboard release authority and active execution order are curr
   && workboard.includes('| UX-005 | Website + Product UX Codex | released |')
   && workboard.includes('standalone HTML download; connected managed workspaces add evidence, approval, and release records')
   && workboardExecutionOrder.includes('usable Website download checkpoint `e18fc6bc`')
-  && workboardExecutionOrder.includes('newly approved isolated Supabase target')
+  && workboardExecutionOrder.includes('owner-approved existing Supabase target')
   && workboardExecutionOrder.includes('Repeat the 12-profile rehearsal against the live isolated release')
   && workboardExecutionOrder.includes('exact-commit protected preview')
   && workboardExecutionOrder.includes('fresh live-HQ snapshot')
@@ -1376,12 +1376,13 @@ requireContract('live HQ state is machine-verifiable and read-only',
   && workboard.includes('Checkpoint `bc19dac2` adds `supermega.hq-live-state.v1`')
   && workboard.includes('A one-off non-terminating working-set trim released 2,084.8 MB'))
 
-requireContract('hosted one-job release drift is recorded',
+requireContract('hosted one-job release drift is resolved',
   workboard.includes('| OPS-123 | CEO + Hosted Agent Release Integrity Codex | done-local |')
   && workboard.includes('production remains `isolated_demo`, scheduler-disabled, and scale-to-zero, but still reports the superseded two-job ceiling')
   && workboard.includes('24 conflicts across five bounded batches')
   && workboard.includes('zero merge, push, deployment, or provider authority')
-  && now.includes('local context drift and the deployed two-job scheduler ceiling block release readiness'))
+  && workboard.includes('| CEO-012 | CEO / Codex integrator | done-live |')
+  && now.includes('scheduler ceiling is one job, and exact live verification passes.'))
 
 requireContract('identity data integration authority follows the owning module',
   workboard.includes('| OPS-124 | CEO + Identity/Data Integration Contract Codex | done-local |')
