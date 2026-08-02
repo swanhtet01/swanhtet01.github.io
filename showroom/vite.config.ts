@@ -66,19 +66,36 @@ export default defineConfig({
   server: { proxy: apiProxy },
   preview: { proxy: apiProxy },
   build: {
+    target: 'es2022',
     rollupOptions: {
       output: {
+        onlyExplicitManualChunks: true,
         manualChunks(id) {
+          if (id.includes('vite/preload-helper')) {
+            return 'preload-helper'
+          }
           if (id.includes('/node_modules/react-router/')
             || id.includes('/node_modules/react-router-dom/')) {
             return 'router'
           }
-          if (id.includes('/src/core/commerce-workspace.ts')
-            || id.includes('/src/core/production-workspace.ts')
+          if (id.includes('/src/core/commerce-workspace.ts')) {
+            return 'commerce-model'
+          }
+          if (id.includes('/src/core/production-workspace.ts')
             || id.includes('/src/core/channel-order-intake.ts')
             || id.includes('/src/core/managed-trial.ts')
             || id.includes('/src/core/team-work.ts')) {
             return 'operating-models'
+          }
+          if (id.includes('/src/core/shop-production-demand.ts')
+            || id.includes('/src/core/shop-demand-intelligence.ts')
+            || id.includes('/src/core/shop-replenishment.ts')
+            || id.includes('/src/core/shop-procurement-decision.ts')) {
+            return 'shop-planning-models'
+          }
+          if (id.includes('/src/core/CoreApp.tsx')
+            || id.includes('/src/core/OperationsPageRoute.tsx')) {
+            return 'core-app'
           }
         },
       },

@@ -282,6 +282,82 @@ def _release_package(current: dict[str, object], scope: str, actor: str = "actor
 
 
 class WebsiteRuntimeTests(unittest.TestCase):
+    def test_managed_inquiry_capture_and_review_are_tenant_state_transitions(self) -> None:
+        current = _state()
+        lead = {
+            "id": "lead-1234abcd",
+            "siteName": "SuperMega",
+            "sourcePage": "/",
+            "name": "Customer A",
+            "contact": "customer@example.test",
+            "request": "Need a product and delivery estimate.",
+            "consentRecorded": True,
+            "status": "new",
+            "owner": "",
+            "decisionNote": "",
+            "createdAt": STAMP,
+            "updatedAt": STAMP,
+        }
+        captured_state = {
+            **current,
+            "revision": 1,
+            "leadLedger": {
+                "schema": "supermega.website.lead-ledger.v1",
+                "revision": 1,
+                "leads": [lead],
+            },
+        }
+        captured = dict(reduce_website_state(
+            "website.inquiry.received",
+            current,
+            _command(
+                captured_state,
+                action_id="inquiry-capture-1",
+                reason="Website inquiry received with recorded contact consent",
+                reference="website:inquiry:lead-1234abcd:received",
+            ),
+        ))
+        self.assertEqual(captured["leadLedger"]["leads"][0]["status"], "new")  # type: ignore[index]
+
+        reviewed_lead = {
+            **lead,
+            "status": "qualified",
+            "owner": "Sales owner",
+            "decisionNote": "Needs follow-up tomorrow.",
+        }
+        reviewed_state = deepcopy(captured)
+        reviewed_state["revision"] = 2
+        reviewed_state["leadLedger"] = {
+            "schema": "supermega.website.lead-ledger.v1",
+            "revision": 2,
+            "leads": [reviewed_lead],
+        }
+        reviewed = dict(reduce_website_state(
+            "website.inquiry.reviewed",
+            captured,
+            _command(
+                reviewed_state,
+                action_id="inquiry-review-1",
+                reason="Website inquiry qualified",
+                reference="website:inquiry:lead-1234abcd:reviewed",
+            ),
+        ))
+        self.assertEqual(reviewed["leadLedger"]["leads"][0]["owner"], "Sales owner")  # type: ignore[index]
+
+        tampered = deepcopy(reviewed_state)
+        tampered["leadLedger"]["leads"][0]["contact"] = "rewritten@example.test"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            reduce_website_state(
+                "website.inquiry.reviewed",
+                captured,
+                _command(
+                    tampered,
+                    action_id="inquiry-review-2",
+                    reason="Website inquiry qualified",
+                    reference="website:inquiry:lead-1234abcd:reviewed",
+                ),
+            )
+
     def test_managed_release_records_bind_the_current_site_file(self) -> None:
         self.assertIn("website.release.recorded", WEBSITE_EVENTS)
         self.assertIn("website.release.recorded", WEBSITE_HUMAN_EVENTS)

@@ -11,9 +11,11 @@ import json
 import re
 from typing import Any, Callable
 
+from supermega_runtime.commerce_runtime import validate_commerce_state
 from supermega_runtime.plant_order_foundation import (
     PlantOrderValidationError,
     create_empty_plant_order_state,
+    plant_order_evidence_digest,
     project_plant_order,
     validate_plant_order_state,
 )
@@ -34,6 +36,9 @@ PRODUCTION_EVENTS = frozenset(
         "production.quality_hold.placed",
         "production.quality_hold.released",
         "production.machine_state.changed",
+        "production.equipment_master.imported",
+        "production.equipment.commissioned",
+        "production.equipment_maintenance_strategy.saved",
         "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
@@ -63,6 +68,9 @@ _EVENT_KIND_BY_TYPE = {
     "production.quality_hold.placed": "quality_hold_placed",
     "production.quality_hold.released": "quality_hold_released",
     "production.machine_state.changed": "machine_state_changed",
+    "production.equipment_master.imported": "equipment_master_imported",
+    "production.equipment.commissioned": "equipment_commissioned",
+    "production.equipment_maintenance_strategy.saved": "equipment_maintenance_strategy_saved",
     "production.downtime.started": "downtime_started",
     "production.downtime.ended": "downtime_ended",
     "production.maintenance.started": "maintenance_started",
@@ -73,13 +81,22 @@ _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _MAX_JOBS = 100
 _MAX_ISSUES = 500
 _MAX_MACHINES = 100
+_MAX_EQUIPMENT = 100
 
 _STATE_FIELDS = frozenset({"schema", "revision", "jobs", "issues", "machines", "events"})
-_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "orderExecution"})
+_STATE_OPTIONAL_FIELDS = frozenset({"openingPlan", "orderExecution", "orderPortfolio", "equipmentMaster"})
+_ORDER_PORTFOLIO_CONTRACT = "supermega.production.order_portfolio.v1"
+_ORDER_PORTFOLIO_MAX = 20
 _OPENING_PLAN_FIELDS = frozenset(
     {"contract", "packageDigest", "confirmedAt", "jobIds", "machineIds"}
 )
+_OPENING_PLAN_OPTIONAL_FIELDS = frozenset({"industryPackId"})
+_PLANT_INDUSTRY_PACK_IDS = frozenset(
+    {"general-manufacturing", "batch-process", "food-beverage", "apparel", "assembly"}
+)
 _OPENING_PLAN_CONTRACT = "supermega.production.opening-plan.v1"
+_SHOP_DEMAND_SOURCE_CONTRACT = "supermega.production.shop-demand-source.v1"
+_SHOP_DEMAND_SCHEMA = "supermega.shop_production_demand.v1"
 _DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 _JOB_REQUIRED_FIELDS = frozenset({"id", "line", "product", "target", "output"})
 _JOB_SCHEDULE_FIELDS = frozenset({"priority", "dueAt"})
@@ -88,7 +105,26 @@ _JOB_OPTIONAL_FIELDS = _JOB_SCHEDULE_FIELDS | {
     "scrap",
     "qualityHold",
     "closure",
+    "shopDemandSource",
 }
+_SHOP_DEMAND_SOURCE_FIELDS = frozenset(
+    {"contract", "sourceDigest", "evidenceReference", "snapshot"}
+)
+_SHOP_DEMAND_SNAPSHOT_FIELDS = frozenset(
+    {
+        "schema",
+        "operatingUnitLocationId",
+        "sku",
+        "productName",
+        "sourceOrderIds",
+        "activeDemandUnits",
+        "uncoveredDemandUnits",
+        "availableToPromiseUnits",
+        "reorderAtUnits",
+        "replenishmentGapUnits",
+        "recommendedBatchUnits",
+    }
+)
 _QUALITY_HOLD_FIELDS = frozenset(
     {"actionId", "heldAt", "heldBy", "reason", "evidenceReference"}
 )
@@ -105,10 +141,86 @@ _JOB_CLOSURE_FIELDS = frozenset(
 )
 _ISSUE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "area", "kind", "summary", "status"})
 _ISSUE_ACTION_FIELDS = frozenset({"severity", "owner", "dueAt", "containment"})
-_ISSUE_OPTIONAL_FIELDS = _ISSUE_ACTION_FIELDS | {"resolution"}
+_ISSUE_OPTIONAL_FIELDS = _ISSUE_ACTION_FIELDS | {"maintenanceFindingSource", "resolution"}
+_MAINTENANCE_FINDING_SOURCE_FIELDS = frozenset(
+    {
+        "contract",
+        "equipmentId",
+        "equipmentName",
+        "maintenanceOwner",
+        "completionActionId",
+        "completedAt",
+        "strategyActionId",
+        "strategyRevision",
+        "returnToService",
+        "findings",
+        "evidenceReference",
+    }
+)
 _MACHINE_FIELDS = frozenset({"id", "name", "state"})
+_EQUIPMENT_MASTER_CONTRACT = "supermega.production.equipment-master.v1"
+_EQUIPMENT_MASTER_FIELDS = frozenset({"contract", "assets"})
+_EQUIPMENT_ASSET_FIELDS = frozenset(
+    {
+        "id",
+        "name",
+        "workCentreId",
+        "criticality",
+        "owner",
+        "commissioningStatus",
+        "sourceActionId",
+        "sourcePackageDigest",
+        "importedAt",
+    }
+)
+_EQUIPMENT_ASSET_OPTIONAL_FIELDS = frozenset({"commissioning", "maintenanceStrategy"})
+_EQUIPMENT_COMMISSIONING_FIELDS = frozenset(
+    {
+        "actionId",
+        "commissionedAt",
+        "commissionedBy",
+        "installedAt",
+        "initialState",
+        "safetyBaselineReference",
+    }
+)
+_EQUIPMENT_COMMISSION_FIELDS = frozenset(
+    {"equipmentId", "installedAt", "initialState", "safetyBaselineReference"}
+)
+_EQUIPMENT_MAINTENANCE_STRATEGY_FIELDS = frozenset(
+    {
+        "revision",
+        "actionId",
+        "savedAt",
+        "savedBy",
+        "maintenanceOwner",
+        "intervalDays",
+        "nextDueAt",
+        "procedureReference",
+        "safetyBaselineReference",
+    }
+)
+_EQUIPMENT_MAINTENANCE_STRATEGY_PAYLOAD_FIELDS = frozenset(
+    {
+        "equipmentId",
+        "maintenanceOwner",
+        "intervalDays",
+        "nextDueAt",
+        "procedureReference",
+        "safetyBaselineReference",
+    }
+)
+_EQUIPMENT_IMPORT_FIELDS = frozenset(
+    {"id", "name", "workCentreId", "criticality", "owner"}
+)
+_EQUIPMENT_CRITICALITIES = frozenset({"critical", "high", "medium", "low"})
+_EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._/-]{0,79}$")
 _EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
 _RESOLUTION_FIELDS = frozenset({"actionId", "resolvedAt", "resolvedBy", "reason", "evidenceReference"})
+_RESOLUTION_OPTIONAL_FIELDS = frozenset({"maintenanceCorrectiveAction"})
+_MAINTENANCE_CORRECTIVE_ACTION_FIELDS = frozenset(
+    {"contract", "correctiveAction", "verificationResult", "finalDisposition"}
+)
 _EVENT_FIELDS = frozenset(
     {
         "id",
@@ -145,12 +257,49 @@ _SHIFT_CLOSE_EVENT_FIELDS = frozenset(
         "materialEntryCount",
     }
 )
+_MAINTENANCE_STRATEGY_BINDING_FIELDS = frozenset(
+    {
+        "maintenanceStrategyActionId",
+        "maintenanceStrategyRevision",
+        "maintenanceProcedureReference",
+        "maintenancePlannedDueAt",
+    }
+)
+_MAINTENANCE_RESULT_FIELDS = frozenset(
+    {
+        "maintenanceOutcome",
+        "maintenanceFindings",
+        "maintenanceProcedureCompleted",
+        "maintenanceReturnToService",
+    }
+)
+_MAINTENANCE_COMPLETION_STRATEGY_FIELDS = (
+    _MAINTENANCE_STRATEGY_BINDING_FIELDS | _MAINTENANCE_RESULT_FIELDS | {"nextDueAt"}
+)
+_MAINTENANCE_OUTCOMES = frozenset({"completed", "completed_with_findings"})
+_MAINTENANCE_RETURN_TO_SERVICE = frozenset(
+    {"recommended", "restricted", "not_recommended"}
+)
 _TIMESTAMP_PATTERN = re.compile(
     r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})"
     r"(?:\.([0-9]{1,6}))?(Z|([+-])([0-9]{2}):([0-9]{2}))$"
 )
 _ISSUE_EVENT_FIELDS = frozenset(
     {"issueSeverity", "issueOwner", "issueDueAt", "issueContainment"}
+)
+_ISSUE_EVENT_OPTIONAL_FIELDS = _ISSUE_EVENT_FIELDS | {"maintenanceFindingSource"}
+_ISSUE_RESOLVED_EVENT_OPTIONAL_FIELDS = frozenset({"maintenanceCorrectiveAction"})
+_EQUIPMENT_COMMISSION_EVENT_FIELDS = frozenset(
+    {"installedAt", "toState", "workCentreId"}
+)
+_EQUIPMENT_MAINTENANCE_STRATEGY_EVENT_FIELDS = frozenset(
+    {
+        "strategyRevision",
+        "maintenanceOwner",
+        "intervalDays",
+        "nextDueAt",
+        "procedureReference",
+    }
 )
 
 
@@ -319,14 +468,36 @@ def _evidence(value: object) -> dict[str, str]:
     }
 
 
+def _maintenance_corrective_action(candidate: object, field: str) -> dict[str, Any]:
+    action = _object(candidate, field)
+    _exact_fields(action, field, required=_MAINTENANCE_CORRECTIVE_ACTION_FIELDS)
+    if action["contract"] != "supermega.production.maintenance-corrective-action.v1":
+        raise TrialValidationError(f"{field}.contract is unsupported.")
+    _text(action["correctiveAction"], f"{field}.correctiveAction", maximum=360)
+    _text(action["verificationResult"], f"{field}.verificationResult", maximum=360)
+    if action["finalDisposition"] not in _MAINTENANCE_RETURN_TO_SERVICE:
+        raise TrialValidationError(f"{field}.finalDisposition is unsupported.")
+    return action
+
+
 def _resolution(value: object, field: str) -> dict[str, Any]:
     resolution = _object(value, field)
-    _exact_fields(resolution, field, required=_RESOLUTION_FIELDS)
+    _exact_fields(
+        resolution,
+        field,
+        required=_RESOLUTION_FIELDS,
+        optional=_RESOLUTION_OPTIONAL_FIELDS,
+    )
     _text(resolution["actionId"], f"{field}.actionId", maximum=160)
     _timestamp(resolution["resolvedAt"], f"{field}.resolvedAt")
     _text(resolution["resolvedBy"], f"{field}.resolvedBy")
     _text(resolution["reason"], f"{field}.reason")
     _text(resolution["evidenceReference"], f"{field}.evidenceReference")
+    if "maintenanceCorrectiveAction" in resolution:
+        _maintenance_corrective_action(
+            resolution["maintenanceCorrectiveAction"],
+            f"{field}.maintenanceCorrectiveAction",
+        )
     return resolution
 
 
@@ -355,6 +526,74 @@ def _job_closure(value: object, field: str) -> dict[str, Any]:
     _text(closure["shiftRef"], f"{field}.shiftRef", maximum=80)
     _integer(closure["remainingUnits"], f"{field}.remainingUnits", minimum=1)
     return closure
+
+
+def _shop_demand_source(value: object, field: str) -> dict[str, Any]:
+    source = _object(value, field)
+    _exact_fields(source, field, required=_SHOP_DEMAND_SOURCE_FIELDS)
+    if source["contract"] != _SHOP_DEMAND_SOURCE_CONTRACT:
+        raise TrialValidationError(f"{field}.contract is unsupported.")
+    snapshot_field = f"{field}.snapshot"
+    snapshot = _object(source["snapshot"], snapshot_field)
+    _exact_fields(snapshot, snapshot_field, required=_SHOP_DEMAND_SNAPSHOT_FIELDS)
+    if snapshot["schema"] != _SHOP_DEMAND_SCHEMA:
+        raise TrialValidationError(f"{snapshot_field}.schema is unsupported.")
+    if snapshot["operatingUnitLocationId"] != "LOC-MAIN":
+        raise TrialValidationError(f"{snapshot_field} operating unit is unsupported.")
+    _text(snapshot["sku"], f"{snapshot_field}.sku", maximum=80)
+    _text(snapshot["productName"], f"{snapshot_field}.productName")
+    source_order_ids = snapshot["sourceOrderIds"]
+    if not isinstance(source_order_ids, list) or len(source_order_ids) > 100:
+        raise TrialValidationError(f"{snapshot_field}.sourceOrderIds must be a bounded list.")
+    canonical_order_ids = [
+        _text(order_id, f"{snapshot_field}.sourceOrderIds[{index}]", maximum=80)
+        for index, order_id in enumerate(source_order_ids)
+    ]
+    if len(set(canonical_order_ids)) != len(canonical_order_ids):
+        raise TrialValidationError(f"{snapshot_field}.sourceOrderIds must be unique.")
+    if canonical_order_ids != sorted(canonical_order_ids):
+        raise TrialValidationError(f"{snapshot_field}.sourceOrderIds must be sorted.")
+    metric_fields = (
+        "activeDemandUnits",
+        "uncoveredDemandUnits",
+        "availableToPromiseUnits",
+        "reorderAtUnits",
+        "replenishmentGapUnits",
+        "recommendedBatchUnits",
+    )
+    for metric in metric_fields:
+        _integer(
+            snapshot[metric],
+            f"{snapshot_field}.{metric}",
+            minimum=1 if metric == "recommendedBatchUnits" else 0,
+        )
+    if (
+        snapshot["uncoveredDemandUnits"]
+        != max(0, snapshot["activeDemandUnits"] - snapshot["availableToPromiseUnits"])
+        or snapshot["replenishmentGapUnits"]
+        != max(0, snapshot["reorderAtUnits"] - snapshot["availableToPromiseUnits"])
+        or snapshot["recommendedBatchUnits"]
+        != max(
+            1,
+            snapshot["uncoveredDemandUnits"],
+            snapshot["replenishmentGapUnits"],
+        )
+    ):
+        raise TrialValidationError(f"{snapshot_field} demand metrics are inconsistent.")
+    source_digest = _text(source["sourceDigest"], f"{field}.sourceDigest", maximum=71)
+    if (
+        _DIGEST_PATTERN.fullmatch(source_digest) is None
+        or source_digest != plant_order_evidence_digest(snapshot)
+    ):
+        raise TrialValidationError(
+            f"{field}.sourceDigest does not match its canonical snapshot."
+        )
+    evidence_reference = _text(
+        source["evidenceReference"], f"{field}.evidenceReference"
+    )
+    if evidence_reference != f"SHOP-DEMAND:{source_digest}:LOC-MAIN":
+        raise TrialValidationError(f"{field}.evidenceReference is invalid.")
+    return source
 
 
 def _validate_job(candidate: object, index: int) -> dict[str, Any]:
@@ -394,7 +633,36 @@ def _validate_job(candidate: object, index: int) -> dict[str, Any]:
             raise TrialValidationError(
                 f"{field}.closure remaining units must match its output."
             )
+    if "shopDemandSource" in job:
+        source = _shop_demand_source(job["shopDemandSource"], f"{field}.shopDemandSource")
+        snapshot = source["snapshot"]
+        if job["product"].lower() not in {
+            snapshot["sku"].lower(),
+            snapshot["productName"].lower(),
+        }:
+            raise TrialValidationError(f"{field} product does not match its Shop demand source.")
+        if target != snapshot["recommendedBatchUnits"]:
+            raise TrialValidationError(f"{field} target does not match its Shop demand source.")
     return job
+
+
+def _maintenance_finding_source(candidate: object, field: str) -> dict[str, Any]:
+    source = _object(candidate, field)
+    _exact_fields(source, field, required=_MAINTENANCE_FINDING_SOURCE_FIELDS)
+    if source["contract"] != "supermega.production.maintenance-finding-source.v1":
+        raise TrialValidationError(f"{field}.contract is unsupported.")
+    _text(source["equipmentId"], f"{field}.equipmentId", maximum=80)
+    _text(source["equipmentName"], f"{field}.equipmentName", maximum=120)
+    _text(source["maintenanceOwner"], f"{field}.maintenanceOwner", maximum=120)
+    _text(source["completionActionId"], f"{field}.completionActionId", maximum=160)
+    _maintenance_timestamp(source["completedAt"], f"{field}.completedAt")
+    _text(source["strategyActionId"], f"{field}.strategyActionId", maximum=160)
+    _integer(source["strategyRevision"], f"{field}.strategyRevision", minimum=1)
+    if source["returnToService"] not in {"restricted", "not_recommended"}:
+        raise TrialValidationError(f"{field}.returnToService is unsupported.")
+    _text(source["findings"], f"{field}.findings", maximum=360)
+    _text(source["evidenceReference"], f"{field}.evidenceReference")
+    return source
 
 
 def _validate_issue(candidate: object, index: int) -> dict[str, Any]:
@@ -430,6 +698,21 @@ def _validate_issue(candidate: object, index: int) -> dict[str, Any]:
         ):
             raise TrialValidationError(f"{field}.dueAt must follow its creation time.")
         _text(issue["containment"], f"{field}.containment", maximum=240)
+    if "maintenanceFindingSource" in issue:
+        source = _maintenance_finding_source(
+            issue["maintenanceFindingSource"],
+            f"{field}.maintenanceFindingSource",
+        )
+        if issue["kind"] != "maintenance":
+            raise TrialValidationError(
+                f"{field} maintenance finding source requires a maintenance issue."
+            )
+        if datetime.fromisoformat(created_at.replace("Z", "+00:00")) < datetime.fromisoformat(
+            source["completedAt"].replace("Z", "+00:00")
+        ):
+            raise TrialValidationError(
+                f"{field} cannot predate its maintenance finding."
+            )
     if (
         not isinstance(issue["status"], str)
         or issue["status"] not in {"open", "resolved"}
@@ -441,7 +724,13 @@ def _validate_issue(candidate: object, index: int) -> dict[str, Any]:
     elif "resolution" not in issue:
         raise TrialValidationError(f"{field} is resolved without resolution evidence.")
     else:
-        _resolution(issue["resolution"], f"{field}.resolution")
+        resolution = _resolution(issue["resolution"], f"{field}.resolution")
+        if ("maintenanceFindingSource" in issue) != (
+            "maintenanceCorrectiveAction" in resolution
+        ):
+            raise TrialValidationError(
+                f"{field} maintenance finding resolution requires one structured corrective action only."
+            )
     return issue
 
 
@@ -459,6 +748,182 @@ def _validate_machine(candidate: object, index: int) -> dict[str, Any]:
     return machine
 
 
+def _validate_equipment_asset(candidate: object, index: int) -> dict[str, Any]:
+    field = f"production state.equipmentMaster.assets[{index}]"
+    asset = _object(candidate, field)
+    _exact_fields(
+        asset,
+        field,
+        required=_EQUIPMENT_ASSET_FIELDS,
+        optional=_EQUIPMENT_ASSET_OPTIONAL_FIELDS,
+    )
+    equipment_id = _text(asset["id"], f"{field}.id", maximum=80)
+    work_centre_id = _text(
+        asset["workCentreId"], f"{field}.workCentreId", maximum=80
+    )
+    if (
+        _EQUIPMENT_ID_PATTERN.fullmatch(equipment_id) is None
+        or _EQUIPMENT_ID_PATTERN.fullmatch(work_centre_id) is None
+    ):
+        raise TrialValidationError(
+            f"{field} IDs must use canonical uppercase equipment identifiers."
+        )
+    _text(asset["name"], f"{field}.name", maximum=180)
+    _text(asset["owner"], f"{field}.owner", maximum=120)
+    if asset["criticality"] not in _EQUIPMENT_CRITICALITIES:
+        raise TrialValidationError(f"{field}.criticality is unsupported.")
+    commissioning_status = asset["commissioningStatus"]
+    if commissioning_status not in {"not_commissioned", "commissioned"}:
+        raise TrialValidationError(f"{field}.commissioningStatus is unsupported.")
+    _text(asset["sourceActionId"], f"{field}.sourceActionId", maximum=160)
+    package_digest = _text(
+        asset["sourcePackageDigest"],
+        f"{field}.sourcePackageDigest",
+        maximum=71,
+    )
+    if _DIGEST_PATTERN.fullmatch(package_digest) is None:
+        raise TrialValidationError(f"{field}.sourcePackageDigest must use SHA-256.")
+    imported_at = _lifecycle_timestamp(
+        asset["importedAt"], f"{field}.importedAt", "equipment import"
+    )
+    commissioning = asset.get("commissioning")
+    if commissioning_status == "not_commissioned":
+        if commissioning is not None or asset.get("maintenanceStrategy") is not None:
+            raise TrialValidationError(
+                f"{field} cannot retain commissioning or maintenance strategy evidence before commissioning."
+            )
+        return asset
+    commissioning_record = _object(commissioning, f"{field}.commissioning")
+    _exact_fields(
+        commissioning_record,
+        f"{field}.commissioning",
+        required=_EQUIPMENT_COMMISSIONING_FIELDS,
+    )
+    _text(
+        commissioning_record["actionId"],
+        f"{field}.commissioning.actionId",
+        maximum=160,
+    )
+    commissioned_at = _lifecycle_timestamp(
+        commissioning_record["commissionedAt"],
+        f"{field}.commissioning.commissionedAt",
+        "equipment commissioning",
+    )
+    _text(
+        commissioning_record["commissionedBy"],
+        f"{field}.commissioning.commissionedBy",
+        maximum=120,
+    )
+    installed_at = _lifecycle_timestamp(
+        commissioning_record["installedAt"],
+        f"{field}.commissioning.installedAt",
+        "equipment installation",
+    )
+    if commissioned_at < imported_at or installed_at > commissioned_at:
+        raise TrialValidationError(
+            f"{field} commissioning chronology is invalid."
+        )
+    if commissioning_record["initialState"] not in _MACHINE_STATES:
+        raise TrialValidationError(
+            f"{field}.commissioning.initialState is unsupported."
+        )
+    _text(
+        commissioning_record["safetyBaselineReference"],
+        f"{field}.commissioning.safetyBaselineReference",
+        maximum=240,
+    )
+    strategy = asset.get("maintenanceStrategy")
+    if strategy is not None:
+        strategy_record = _object(strategy, f"{field}.maintenanceStrategy")
+        _exact_fields(
+            strategy_record,
+            f"{field}.maintenanceStrategy",
+            required=_EQUIPMENT_MAINTENANCE_STRATEGY_FIELDS,
+        )
+        _integer(
+            strategy_record["revision"],
+            f"{field}.maintenanceStrategy.revision",
+            minimum=1,
+        )
+        _text(
+            strategy_record["actionId"],
+            f"{field}.maintenanceStrategy.actionId",
+            maximum=160,
+        )
+        saved_at = _lifecycle_timestamp(
+            strategy_record["savedAt"],
+            f"{field}.maintenanceStrategy.savedAt",
+            "equipment maintenance strategy",
+        )
+        _text(
+            strategy_record["savedBy"],
+            f"{field}.maintenanceStrategy.savedBy",
+            maximum=120,
+        )
+        _text(
+            strategy_record["maintenanceOwner"],
+            f"{field}.maintenanceStrategy.maintenanceOwner",
+            maximum=120,
+        )
+        interval_days = _integer(
+            strategy_record["intervalDays"],
+            f"{field}.maintenanceStrategy.intervalDays",
+            minimum=1,
+        )
+        if interval_days > 3650:
+            raise TrialValidationError(
+                f"{field}.maintenanceStrategy.intervalDays cannot exceed 3650."
+            )
+        next_due_at = _lifecycle_timestamp(
+            strategy_record["nextDueAt"],
+            f"{field}.maintenanceStrategy.nextDueAt",
+            "equipment maintenance strategy",
+        )
+        if next_due_at <= saved_at:
+            raise TrialValidationError(
+                f"{field}.maintenanceStrategy.nextDueAt must follow strategy save time."
+            )
+        _text(
+            strategy_record["procedureReference"],
+            f"{field}.maintenanceStrategy.procedureReference",
+            maximum=240,
+        )
+        _text(
+            strategy_record["safetyBaselineReference"],
+            f"{field}.maintenanceStrategy.safetyBaselineReference",
+            maximum=240,
+        )
+    return asset
+
+
+def _validate_equipment_master(candidate: object) -> dict[str, Any]:
+    master = _object(candidate, "production state.equipmentMaster")
+    _exact_fields(
+        master,
+        "production state.equipmentMaster",
+        required=_EQUIPMENT_MASTER_FIELDS,
+    )
+    if master["contract"] != _EQUIPMENT_MASTER_CONTRACT:
+        raise TrialValidationError(
+            f"production state.equipmentMaster.contract must be {_EQUIPMENT_MASTER_CONTRACT}."
+        )
+    assets_raw = _list(
+        master["assets"],
+        "production state.equipmentMaster.assets",
+        maximum=_MAX_EQUIPMENT,
+    )
+    if not assets_raw:
+        raise TrialValidationError(
+            "production state.equipmentMaster must retain at least one reviewed asset."
+        )
+    assets = [
+        _validate_equipment_asset(candidate, index)
+        for index, candidate in enumerate(assets_raw)
+    ]
+    _unique([asset["id"] for asset in assets], "Production equipment ID")
+    return master
+
+
 def _validate_opening_plan(
     candidate: object,
     *,
@@ -470,10 +935,15 @@ def _validate_opening_plan(
         plan,
         "production state.openingPlan",
         required=_OPENING_PLAN_FIELDS,
+        optional=_OPENING_PLAN_OPTIONAL_FIELDS,
     )
     if plan["contract"] != _OPENING_PLAN_CONTRACT:
         raise TrialValidationError(
             f"production state.openingPlan.contract must be {_OPENING_PLAN_CONTRACT}."
+        )
+    if "industryPackId" in plan and plan["industryPackId"] not in _PLANT_INDUSTRY_PACK_IDS:
+        raise TrialValidationError(
+            "production state.openingPlan.industryPackId is unsupported."
         )
     package_digest = _text(
         plan["packageDigest"],
@@ -499,9 +969,9 @@ def _validate_opening_plan(
         "production state.openingPlan.machineIds",
         maximum=_MAX_MACHINES,
     )
-    if not job_ids_raw or not machine_ids_raw:
+    if not job_ids_raw:
         raise TrialValidationError(
-            "production state.openingPlan must retain its jobs and machines."
+            "production state.openingPlan must retain its jobs."
         )
     job_ids = [
         _text(value, f"production state.openingPlan.jobIds[{index}]", maximum=80)
@@ -522,9 +992,10 @@ def _validate_opening_plan(
         raise TrialValidationError(
             "production state.openingPlan jobs must remain the immutable job suffix."
         )
-    if [machine["id"] for machine in machines] != machine_ids:
+    retained_machine_ids = [machine["id"] for machine in machines]
+    if retained_machine_ids[: len(machine_ids)] != machine_ids:
         raise TrialValidationError(
-            "production state.openingPlan machines must match the retained machines."
+            "production state.openingPlan machines must remain the immutable machine prefix."
         )
     return plan
 
@@ -538,6 +1009,56 @@ def _validate_order_execution(candidate: object) -> dict[str, Any]:
         ) from exc
 
 
+def _validate_order_portfolio(candidate: object) -> dict[str, Any]:
+    portfolio = _object(candidate, "production state.orderPortfolio")
+    _exact_fields(
+        portfolio,
+        "production state.orderPortfolio",
+        required=frozenset({"contract", "entries"}),
+    )
+    if portfolio["contract"] != _ORDER_PORTFOLIO_CONTRACT:
+        raise TrialValidationError("production state.orderPortfolio contract is invalid.")
+    entries_raw = _list(
+        portfolio["entries"],
+        "production state.orderPortfolio.entries",
+        maximum=_ORDER_PORTFOLIO_MAX,
+    )
+    if not entries_raw:
+        raise TrialValidationError("production state.orderPortfolio must retain at least one reviewed order.")
+    entries: list[dict[str, Any]] = []
+    job_ids: list[str] = []
+    plan_ids: list[str] = []
+    for index, candidate_entry in enumerate(entries_raw):
+        field = f"production state.orderPortfolio.entries[{index}]"
+        entry = _object(candidate_entry, field)
+        _exact_fields(entry, field, required=frozenset({"jobId", "execution"}))
+        job_id = _text(entry["jobId"], f"{field}.jobId", maximum=80)
+        if _EQUIPMENT_ID_PATTERN.fullmatch(job_id) is None:
+            raise TrialValidationError(f"{field}.jobId must use a canonical Production identifier.")
+        execution = _validate_order_execution(entry["execution"])
+        plan = project_plant_order(execution).get("plan")
+        if not isinstance(plan, Mapping) or plan["job"]["jobId"] != job_id:
+            raise TrialValidationError(f"{field} must retain its reviewed job plan.")
+        job_ids.append(job_id)
+        plan_ids.append(plan["planId"])
+        entries.append({"jobId": job_id, "execution": execution})
+    _unique(job_ids, "Production order portfolio job ID")
+    _unique(plan_ids, "Production order portfolio plan ID")
+    if job_ids != sorted(job_ids):
+        raise TrialValidationError("production state.orderPortfolio entries must be sorted by job ID.")
+    return {"contract": _ORDER_PORTFOLIO_CONTRACT, "entries": entries}
+
+
+def _production_order_entries(state: Mapping[str, Any]) -> list[dict[str, Any]]:
+    if "orderPortfolio" in state:
+        return _validate_order_portfolio(state["orderPortfolio"])["entries"]
+    if "orderExecution" not in state:
+        return []
+    execution = _validate_order_execution(state["orderExecution"])
+    plan = project_plant_order(execution).get("plan")
+    return [{"jobId": plan["job"]["jobId"], "execution": execution}] if isinstance(plan, Mapping) else []
+
+
 def _validate_event(
     candidate: object,
     index: int,
@@ -545,6 +1066,7 @@ def _validate_event(
     job_ids: frozenset[str],
     issue_ids: frozenset[str],
     machine_ids: frozenset[str],
+    equipment_ids: frozenset[str],
 ) -> dict[str, Any]:
     field = f"events[{index}]"
     event = _object(candidate, field)
@@ -569,6 +1091,12 @@ def _validate_event(
         required = _EVENT_FIELDS | {"maintenanceStartActionId"}
     elif kind == "shift_closed":
         required = _EVENT_FIELDS | _SHIFT_CLOSE_EVENT_FIELDS
+    elif kind == "equipment_master_imported":
+        required = _EVENT_FIELDS | {"equipmentIds"}
+    elif kind == "equipment_commissioned":
+        required = _EVENT_FIELDS | _EQUIPMENT_COMMISSION_EVENT_FIELDS
+    elif kind == "equipment_maintenance_strategy_saved":
+        required = _EVENT_FIELDS | _EQUIPMENT_MAINTENANCE_STRATEGY_EVENT_FIELDS
     elif kind in {
         "job_created",
         "issue_opened",
@@ -597,8 +1125,14 @@ def _validate_event(
             if kind == "job_schedule_updated"
             else _MATERIAL_EVENT_OPTIONAL_FIELDS
             if kind == "material_consumed"
-            else _ISSUE_EVENT_FIELDS
+            else _ISSUE_EVENT_OPTIONAL_FIELDS
             if kind == "issue_opened"
+            else _ISSUE_RESOLVED_EVENT_OPTIONAL_FIELDS
+            if kind == "issue_resolved"
+            else _MAINTENANCE_STRATEGY_BINDING_FIELDS
+            if kind == "maintenance_started"
+            else _MAINTENANCE_COMPLETION_STRATEGY_FIELDS
+            if kind == "maintenance_completed"
             else frozenset()
         ),
     )
@@ -613,7 +1147,91 @@ def _validate_event(
     _text(event["summary"], f"{field}.summary", maximum=360)
     subject_id = _text(event["subjectId"], f"{field}.subjectId", maximum=80)
 
-    if kind == "output_recorded":
+    if kind == "equipment_master_imported":
+        if subject_id != "equipment-master":
+            raise TrialValidationError(
+                f"{field} must reference the equipment master authority."
+            )
+        equipment_ids_raw = _list(
+            event["equipmentIds"],
+            f"{field}.equipmentIds",
+            maximum=_MAX_EQUIPMENT,
+        )
+        if not equipment_ids_raw:
+            raise TrialValidationError(f"{field}.equipmentIds cannot be empty.")
+        imported_ids = [
+            _text(value, f"{field}.equipmentIds[{position}]", maximum=80)
+            for position, value in enumerate(equipment_ids_raw)
+        ]
+        _unique(imported_ids, "Production equipment import ID")
+        if any(equipment_id not in equipment_ids for equipment_id in imported_ids):
+            raise TrialValidationError(
+                f"{field} references an unknown equipment master record."
+            )
+        if event["summary"] != f"Imported {len(imported_ids)} equipment master records":
+            raise TrialValidationError(f"{field}.summary is not canonical.")
+        if _DIGEST_PATTERN.fullmatch(event["evidenceReference"]) is None:
+            raise TrialValidationError(
+                f"{field}.evidenceReference must bind the reviewed package digest."
+            )
+    elif kind == "equipment_commissioned":
+        if subject_id not in equipment_ids or subject_id not in machine_ids:
+            raise TrialValidationError(
+                f"{field} must reference one retained equipment and runtime machine."
+            )
+        installed_at = _lifecycle_timestamp(
+            event["installedAt"], f"{field}.installedAt", "equipment installation"
+        )
+        commissioned_at = _lifecycle_timestamp(
+            event["createdAt"], f"{field}.createdAt", "equipment commissioning"
+        )
+        if installed_at > commissioned_at:
+            raise TrialValidationError(
+                f"{field}.installedAt cannot follow commissioning."
+            )
+        if event["toState"] not in _MACHINE_STATES:
+            raise TrialValidationError(f"{field}.toState is unsupported.")
+        work_centre_id = _text(
+            event["workCentreId"], f"{field}.workCentreId", maximum=80
+        )
+        if _EQUIPMENT_ID_PATTERN.fullmatch(work_centre_id) is None:
+            raise TrialValidationError(
+                f"{field}.workCentreId must use a canonical equipment identifier."
+            )
+    elif kind == "equipment_maintenance_strategy_saved":
+        if subject_id not in equipment_ids or subject_id not in machine_ids:
+            raise TrialValidationError(
+                f"{field} must reference one commissioned equipment runtime."
+            )
+        strategy_revision = _integer(
+            event["strategyRevision"],
+            f"{field}.strategyRevision",
+            minimum=1,
+        )
+        interval_days = _integer(
+            event["intervalDays"], f"{field}.intervalDays", minimum=1
+        )
+        if interval_days > 3650:
+            raise TrialValidationError(f"{field}.intervalDays cannot exceed 3650.")
+        saved_at = _lifecycle_timestamp(
+            event["createdAt"], f"{field}.createdAt", "equipment maintenance strategy"
+        )
+        next_due_at = _lifecycle_timestamp(
+            event["nextDueAt"], f"{field}.nextDueAt", "equipment maintenance strategy"
+        )
+        saved_time = datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
+        due_time = datetime.fromisoformat(next_due_at.replace("Z", "+00:00"))
+        if due_time <= saved_time or due_time > saved_time + timedelta(days=interval_days):
+            raise TrialValidationError(
+                f"{field}.nextDueAt must follow save time within its interval."
+            )
+        owner = _text(event["maintenanceOwner"], f"{field}.maintenanceOwner", maximum=120)
+        procedure = _text(event["procedureReference"], f"{field}.procedureReference", maximum=240)
+        if event["summary"] != f"Saved maintenance strategy R{strategy_revision} for {subject_id}":
+            raise TrialValidationError(f"{field}.summary is not canonical.")
+        if not owner or not procedure:
+            raise TrialValidationError(f"{field} maintenance strategy is incomplete.")
+    elif kind == "output_recorded":
         if subject_id not in job_ids:
             raise TrialValidationError(f"{field} references an unknown job.")
         _integer(event["quantity"], f"{field}.quantity", minimum=1)
@@ -760,6 +1378,87 @@ def _validate_event(
                 f"{field}.maintenanceStartActionId",
                 maximum=160,
             )
+        binding_fields = _MAINTENANCE_STRATEGY_BINDING_FIELDS.intersection(event)
+        if binding_fields and binding_fields != _MAINTENANCE_STRATEGY_BINDING_FIELDS:
+            raise TrialValidationError(
+                f"{field} maintenance strategy binding must be complete or absent."
+            )
+        if kind == "maintenance_completed" and (
+            ("nextDueAt" in event) != bool(binding_fields)
+        ):
+            raise TrialValidationError(
+                f"{field} strategy-bound completion requires one next due timestamp."
+            )
+        result_fields = _MAINTENANCE_RESULT_FIELDS.intersection(event)
+        if result_fields and result_fields != _MAINTENANCE_RESULT_FIELDS:
+            raise TrialValidationError(
+                f"{field} maintenance result must be complete or absent."
+            )
+        if result_fields and (
+            kind != "maintenance_completed" or not binding_fields
+        ):
+            raise TrialValidationError(
+                f"{field} maintenance result requires strategy-bound completion."
+            )
+        if binding_fields:
+            _text(
+                event["maintenanceStrategyActionId"],
+                f"{field}.maintenanceStrategyActionId",
+                maximum=160,
+            )
+            _integer(
+                event["maintenanceStrategyRevision"],
+                f"{field}.maintenanceStrategyRevision",
+                minimum=1,
+            )
+            _text(
+                event["maintenanceProcedureReference"],
+                f"{field}.maintenanceProcedureReference",
+                maximum=240,
+            )
+            _maintenance_timestamp(
+                event["maintenancePlannedDueAt"],
+                f"{field}.maintenancePlannedDueAt",
+            )
+            if kind == "maintenance_completed":
+                next_due_at = _parsed_timestamp(
+                    event["nextDueAt"], f"{field}.nextDueAt"
+                )[1]
+                completed_at = _parsed_timestamp(
+                    event["createdAt"], f"{field}.createdAt"
+                )[1]
+                if next_due_at <= completed_at:
+                    raise TrialValidationError(
+                        f"{field}.nextDueAt must follow reviewed completion."
+                    )
+                if result_fields:
+                    if event["maintenanceOutcome"] not in _MAINTENANCE_OUTCOMES:
+                        raise TrialValidationError(
+                            f"{field}.maintenanceOutcome is unsupported."
+                        )
+                    _text(
+                        event["maintenanceFindings"],
+                        f"{field}.maintenanceFindings",
+                        maximum=360,
+                    )
+                    if event["maintenanceProcedureCompleted"] is not True:
+                        raise TrialValidationError(
+                            f"{field}.maintenanceProcedureCompleted must be confirmed."
+                        )
+                    if (
+                        event["maintenanceReturnToService"]
+                        not in _MAINTENANCE_RETURN_TO_SERVICE
+                    ):
+                        raise TrialValidationError(
+                            f"{field}.maintenanceReturnToService is unsupported."
+                        )
+                    if (
+                        event["maintenanceOutcome"] == "completed"
+                        and event["maintenanceReturnToService"] != "recommended"
+                    ):
+                        raise TrialValidationError(
+                            f"{field} completed maintenance must recommend return to service."
+                        )
     elif kind == "shift_closed":
         shift_ref = _text(event["shiftRef"], f"{field}.shiftRef", maximum=80)
         if subject_id != shift_ref:
@@ -807,6 +1506,19 @@ def _validate_event(
                 f"{field}.issueContainment",
                 maximum=240,
             )
+        if "maintenanceFindingSource" in event:
+            _maintenance_finding_source(
+                event["maintenanceFindingSource"],
+                f"{field}.maintenanceFindingSource",
+            )
+    elif kind == "issue_resolved":
+        if subject_id not in issue_ids:
+            raise TrialValidationError(f"{field} references an unknown issue.")
+        if "maintenanceCorrectiveAction" in event:
+            _maintenance_corrective_action(
+                event["maintenanceCorrectiveAction"],
+                f"{field}.maintenanceCorrectiveAction",
+            )
     elif subject_id not in issue_ids:
         raise TrialValidationError(f"{field} references an unknown issue.")
     return event
@@ -815,6 +1527,7 @@ def _validate_event(
 def _validate_issue_history(
     issues: Sequence[dict[str, Any]],
     events: Sequence[dict[str, Any]],
+    machines: Sequence[dict[str, Any]],
 ) -> None:
     for index, issue in enumerate(issues):
         opened = [
@@ -858,6 +1571,89 @@ def _validate_issue_history(
             raise TrialValidationError(
                 f"issues[{index}] legacy opening event cannot acquire action fields."
             )
+        issue_source = (
+            _maintenance_finding_source(
+                issue["maintenanceFindingSource"],
+                f"issues[{index}].maintenanceFindingSource",
+            )
+            if "maintenanceFindingSource" in issue
+            else None
+        )
+        event_source = (
+            _maintenance_finding_source(
+                opening_event["maintenanceFindingSource"],
+                f"issues[{index}] opening maintenanceFindingSource",
+            )
+            if "maintenanceFindingSource" in opening_event
+            else None
+        )
+        if issue_source != event_source:
+            raise TrialValidationError(
+                f"issues[{index}] maintenance finding source does not match its immutable opening event."
+            )
+        if issue_source is not None:
+            completions = [
+                event
+                for event in events
+                if event["kind"] == "maintenance_completed"
+                and event["actionId"] == issue_source["completionActionId"]
+            ]
+            if len(completions) != 1:
+                raise TrialValidationError(
+                    f"issues[{index}] maintenance finding source requires exactly one reviewed completion."
+                )
+            completion = completions[0]
+            starts = [
+                event
+                for event in events
+                if event["kind"] == "maintenance_started"
+                and event["actionId"] == completion["maintenanceStartActionId"]
+            ]
+            source_machines = [
+                machine
+                for machine in machines
+                if machine["id"] == issue_source["equipmentId"]
+            ]
+            if len(starts) != 1 or len(source_machines) != 1:
+                raise TrialValidationError(
+                    f"issues[{index}] maintenance finding source is not bound to one asset and start record."
+            )
+            start = starts[0]
+            machine = source_machines[0]
+            if (
+                completion["subjectId"] != issue_source["equipmentId"]
+                or machine["name"] != issue_source["equipmentName"]
+                or start["maintenanceOwner"] != issue_source["maintenanceOwner"]
+                or completion["createdAt"] != issue_source["completedAt"]
+                or completion.get("maintenanceStrategyActionId")
+                != issue_source["strategyActionId"]
+                or completion.get("maintenanceStrategyRevision")
+                != issue_source["strategyRevision"]
+                or completion.get("maintenanceReturnToService")
+                != issue_source["returnToService"]
+                or completion.get("maintenanceFindings") != issue_source["findings"]
+                or completion["evidenceReference"]
+                != issue_source["evidenceReference"]
+            ):
+                raise TrialValidationError(
+                    f"issues[{index}] maintenance finding source does not match reviewed completion evidence."
+                )
+            if events.index(opening_event) >= events.index(completion):
+                raise TrialValidationError(
+                    f"issues[{index}] maintenance finding problem must follow its reviewed completion."
+                )
+            duplicates = sum(
+                1
+                for candidate in issues
+                if candidate.get("maintenanceFindingSource", {}).get(
+                    "completionActionId"
+                )
+                == issue_source["completionActionId"]
+            )
+            if duplicates != 1:
+                raise TrialValidationError(
+                    f"issues[{index}] duplicates a maintenance finding problem."
+                )
         if issue["status"] == "open":
             if resolved:
                 raise TrialValidationError(
@@ -876,6 +1672,8 @@ def _validate_issue_history(
             or event["actor"] != resolution["resolvedBy"]
             or event["reason"] != resolution["reason"]
             or event["evidenceReference"] != resolution["evidenceReference"]
+            or event.get("maintenanceCorrectiveAction")
+            != resolution.get("maintenanceCorrectiveAction")
         ):
             raise TrialValidationError(
                 f"issues[{index}] resolution does not match its immutable event."
@@ -1008,6 +1806,19 @@ def _validate_job_history(
             )
         else:
             creation_event = matches[0]
+
+        if "shopDemandSource" in job:
+            source = _shop_demand_source(
+                job["shopDemandSource"], f"jobs[{index}].shopDemandSource"
+            )
+            if creation_event is None:
+                raise TrialValidationError(
+                    f"jobs[{index}] Shop demand source requires immutable creation evidence."
+                )
+            if creation_event["evidenceReference"] != source["evidenceReference"]:
+                raise TrialValidationError(
+                    f"jobs[{index}] Shop demand source does not match its creation evidence."
+                )
 
         schedule_events = [
             event
@@ -1416,6 +2227,22 @@ def _validate_machine_history(
     events: Sequence[dict[str, Any]],
 ) -> None:
     for index, machine in enumerate(machines):
+        commissioning_events = [
+            event
+            for event in events
+            if event["kind"] == "equipment_commissioned"
+            and event["subjectId"] == machine["id"]
+        ]
+        if len(commissioning_events) > 1:
+            raise TrialValidationError(
+                f"machines[{index}] has duplicate commissioning history."
+            )
+        commissioning_event = commissioning_events[0] if commissioning_events else None
+        initial_state = (
+            commissioning_event["toState"]
+            if commissioning_event is not None
+            else "running"
+        )
         newest_first = [
             event
             for event in events
@@ -1423,15 +2250,23 @@ def _validate_machine_history(
             and event["subjectId"] == machine["id"]
         ]
         if not newest_first:
-            if machine["state"] != "running":
+            if machine["state"] != initial_state:
                 raise TrialValidationError(
-                    f"machines[{index}] must begin running before state changes."
+                    f"machines[{index}] must match its initial observed state."
                 )
             continue
         oldest_first = list(reversed(newest_first))
-        if oldest_first[0]["fromState"] != "running":
+        if oldest_first[0]["fromState"] != initial_state:
             raise TrialValidationError(
-                f"machines[{index}] history must begin from running."
+                f"machines[{index}] history must begin from its initial observed state."
+            )
+        if (
+            commissioning_event is not None
+            and _timestamp(oldest_first[0]["createdAt"], "machine event createdAt")
+            < _timestamp(commissioning_event["createdAt"], "commissioning createdAt")
+        ):
+            raise TrialValidationError(
+                f"machines[{index}] state history predates commissioning."
             )
         for before, after in zip(oldest_first, oldest_first[1:], strict=False):
             if before["toState"] != after["fromState"]:
@@ -1545,7 +2380,305 @@ def _validate_maintenance_history(
                 raise TrialValidationError(
                     f"machines[{index}] maintenance completion summary is not canonical."
                 )
+            start_is_bound = "maintenanceStrategyActionId" in active_start
+            completion_is_bound = "maintenanceStrategyActionId" in event
+            if start_is_bound != completion_is_bound:
+                raise TrialValidationError(
+                    f"machines[{index}] maintenance completion strategy binding is inconsistent."
+                )
+            if start_is_bound and any(
+                event[field] != active_start[field]
+                for field in _MAINTENANCE_STRATEGY_BINDING_FIELDS
+            ):
+                raise TrialValidationError(
+                    f"machines[{index}] maintenance completion does not match its reviewed strategy."
+                )
             active_start = None
+
+
+def _validate_equipment_import_history(
+    equipment_master: Mapping[str, Any] | None,
+    machines: Sequence[dict[str, Any]],
+    events: Sequence[dict[str, Any]],
+) -> None:
+    import_events = [
+        event for event in events if event["kind"] == "equipment_master_imported"
+    ]
+    assets = equipment_master["assets"] if equipment_master is not None else []
+    if not assets:
+        if import_events:
+            raise TrialValidationError(
+                "Equipment import history requires retained equipment master records."
+            )
+        return
+    machine_ids = {machine["id"] for machine in machines}
+    if any(
+        asset["commissioningStatus"] == "not_commissioned"
+        and asset["id"] in machine_ids
+        for asset in assets
+    ):
+        raise TrialValidationError(
+            "Uncommissioned equipment master records cannot appear as runtime machines."
+        )
+    if len(import_events) > len(assets):
+        raise TrialValidationError(
+            "Equipment import history contains more events than retained assets."
+        )
+    seen_asset_ids: set[str] = set()
+    for event in import_events:
+        matching_assets = [
+            asset for asset in assets if asset["sourceActionId"] == event["actionId"]
+        ]
+        matching_ids = [asset["id"] for asset in matching_assets]
+        if not matching_assets or matching_ids != event["equipmentIds"]:
+            raise TrialValidationError(
+                "Equipment master records must match one immutable import event."
+            )
+        for asset in matching_assets:
+            if (
+                asset["sourcePackageDigest"] != event["evidenceReference"]
+                or asset["importedAt"] != event["createdAt"]
+            ):
+                raise TrialValidationError(
+                    "Equipment master source evidence does not match its import event."
+                )
+            if asset["id"] in seen_asset_ids:
+                raise TrialValidationError(
+                    "Equipment master records cannot reuse import evidence."
+                )
+            seen_asset_ids.add(asset["id"])
+    if len(seen_asset_ids) != len(assets):
+        raise TrialValidationError(
+            "Every equipment master record requires one immutable import event."
+        )
+
+
+def _validate_equipment_commissioning_history(
+    equipment_master: Mapping[str, Any] | None,
+    machines: Sequence[dict[str, Any]],
+    events: Sequence[dict[str, Any]],
+    opening_plan: Mapping[str, Any] | None,
+) -> None:
+    assets = equipment_master["assets"] if equipment_master is not None else []
+    machine_by_id = {machine["id"]: machine for machine in machines}
+    commission_events = [
+        event for event in events if event["kind"] == "equipment_commissioned"
+    ]
+    commissioned_ids: set[str] = set()
+    for asset in assets:
+        matches = [
+            event
+            for event in commission_events
+            if event["subjectId"] == asset["id"]
+        ]
+        machine = machine_by_id.get(asset["id"])
+        if asset["commissioningStatus"] == "not_commissioned":
+            if matches or machine is not None:
+                raise TrialValidationError(
+                    "Uncommissioned equipment cannot retain runtime commissioning history."
+                )
+            continue
+        if len(matches) != 1 or machine is None:
+            raise TrialValidationError(
+                "Commissioned equipment requires one runtime machine and one immutable event."
+            )
+        event = matches[0]
+        commissioning = asset["commissioning"]
+        if (
+            commissioning["actionId"] != event["actionId"]
+            or commissioning["commissionedAt"] != event["createdAt"]
+            or commissioning["commissionedBy"] != event["actor"]
+            or commissioning["installedAt"] != event["installedAt"]
+            or commissioning["initialState"] != event["toState"]
+            or commissioning["safetyBaselineReference"]
+            != event["evidenceReference"]
+            or asset["workCentreId"] != event["workCentreId"]
+            or machine["name"] != asset["name"]
+            or event["summary"]
+            != f"Commissioned {asset['name']} at {asset['workCentreId']}"
+        ):
+            raise TrialValidationError(
+                "Equipment commissioning record does not match its immutable event."
+            )
+        commissioned_at = _timestamp(
+            event["createdAt"], "equipment commissioning createdAt"
+        )
+        later_lifecycle = [
+            candidate
+            for candidate in events
+            if candidate["subjectId"] == asset["id"]
+            and candidate["kind"]
+            in {
+                "machine_state_changed",
+                "downtime_started",
+                "downtime_ended",
+                "maintenance_started",
+                "maintenance_completed",
+                "equipment_maintenance_strategy_saved",
+            }
+        ]
+        if any(
+            _timestamp(candidate["createdAt"], "equipment lifecycle createdAt")
+            < commissioned_at
+            for candidate in later_lifecycle
+        ):
+            raise TrialValidationError(
+                "Equipment lifecycle history cannot predate commissioning."
+            )
+        commissioned_ids.add(asset["id"])
+    if len(commission_events) != len(commissioned_ids):
+        raise TrialValidationError(
+            "Equipment commissioning history contains an unknown or duplicate event."
+        )
+    if opening_plan is not None:
+        opening_count = len(opening_plan["machineIds"])
+        post_opening_ids = [machine["id"] for machine in machines[opening_count:]]
+        if set(post_opening_ids) != commissioned_ids or len(post_opening_ids) != len(
+            commissioned_ids
+        ):
+            raise TrialValidationError(
+                "Every runtime machine added after opening requires equipment commissioning."
+            )
+
+
+def _validate_equipment_maintenance_strategy_history(
+    equipment_master: Mapping[str, Any] | None,
+    events: Sequence[dict[str, Any]],
+) -> None:
+    assets = equipment_master["assets"] if equipment_master is not None else []
+    strategy_events = [
+        event
+        for event in events
+        if event["kind"] == "equipment_maintenance_strategy_saved"
+    ]
+    maintenance_events = [
+        event
+        for event in events
+        if event["kind"] in {"maintenance_started", "maintenance_completed"}
+    ]
+    retained_events = 0
+    for asset in assets:
+        matches = [
+            event for event in strategy_events if event["subjectId"] == asset["id"]
+        ]
+        asset_maintenance_events = [
+            event for event in maintenance_events if event["subjectId"] == asset["id"]
+        ]
+        for maintenance_event in asset_maintenance_events:
+            maintenance_at = _parsed_timestamp(
+                maintenance_event["createdAt"], "maintenance execution createdAt"
+            )[1]
+            applicable_strategy = next(
+                (
+                    strategy_event
+                    for strategy_event in matches
+                    if _parsed_timestamp(
+                        strategy_event["createdAt"],
+                        "maintenance strategy createdAt",
+                    )[1]
+                    <= maintenance_at
+                ),
+                None,
+            )
+            is_bound = "maintenanceStrategyActionId" in maintenance_event
+            if (applicable_strategy is not None) != is_bound:
+                raise TrialValidationError(
+                    "Commissioned equipment maintenance must bind the strategy active at execution time."
+                )
+            if applicable_strategy is None:
+                continue
+            if (
+                maintenance_event["maintenanceStrategyActionId"]
+                != applicable_strategy["actionId"]
+                or maintenance_event["maintenanceStrategyRevision"]
+                != applicable_strategy["strategyRevision"]
+                or maintenance_event["maintenanceProcedureReference"]
+                != applicable_strategy["procedureReference"]
+                or maintenance_event["maintenancePlannedDueAt"]
+                != applicable_strategy["nextDueAt"]
+                or (
+                    maintenance_event["kind"] == "maintenance_started"
+                    and maintenance_event["maintenanceOwner"]
+                    != applicable_strategy["maintenanceOwner"]
+                )
+            ):
+                raise TrialValidationError(
+                    "Equipment maintenance execution does not match its immutable strategy revision."
+                )
+            if maintenance_event["kind"] == "maintenance_completed":
+                expected_next_due = (
+                    maintenance_at
+                    + timedelta(days=applicable_strategy["intervalDays"])
+                ).astimezone(timezone.utc).isoformat(
+                    timespec="milliseconds"
+                ).replace(
+                    "+00:00", "Z"
+                )
+                if maintenance_event["nextDueAt"] != expected_next_due:
+                    raise TrialValidationError(
+                        "Equipment maintenance completion next due does not match its strategy interval."
+                    )
+        strategy = asset.get("maintenanceStrategy")
+        if strategy is None:
+            if matches:
+                raise TrialValidationError(
+                    "Equipment without a maintenance strategy cannot retain strategy history."
+                )
+            continue
+        if asset["commissioningStatus"] != "commissioned":
+            raise TrialValidationError(
+                "Only commissioned equipment can retain a maintenance strategy."
+            )
+        expected_revisions = list(range(strategy["revision"], 0, -1))
+        if [event["strategyRevision"] for event in matches] != expected_revisions:
+            raise TrialValidationError(
+                "Equipment maintenance strategy revisions must be complete and newest first."
+            )
+        commissioning = asset["commissioning"]
+        commissioned_at = _timestamp(
+            commissioning["commissionedAt"], "equipment commissionedAt"
+        )
+        if any(
+            _timestamp(event["createdAt"], "maintenance strategy createdAt")
+            < commissioned_at
+            for event in matches
+        ):
+            raise TrialValidationError(
+                "Equipment maintenance strategy history cannot predate commissioning."
+            )
+        latest = matches[0]
+        latest_completion = next(
+            (
+                event
+                for event in asset_maintenance_events
+                if event["kind"] == "maintenance_completed"
+                and event.get("maintenanceStrategyActionId") == latest["actionId"]
+            ),
+            None,
+        )
+        expected_current_next_due = (
+            latest_completion["nextDueAt"]
+            if latest_completion is not None
+            else latest["nextDueAt"]
+        )
+        if (
+            strategy["actionId"] != latest["actionId"]
+            or strategy["savedAt"] != latest["createdAt"]
+            or strategy["savedBy"] != latest["actor"]
+            or strategy["maintenanceOwner"] != latest["maintenanceOwner"]
+            or strategy["intervalDays"] != latest["intervalDays"]
+            or strategy["nextDueAt"] != expected_current_next_due
+            or strategy["procedureReference"] != latest["procedureReference"]
+            or strategy["safetyBaselineReference"] != latest["evidenceReference"]
+        ):
+            raise TrialValidationError(
+                "Equipment maintenance strategy does not match its latest immutable event."
+            )
+        retained_events += len(matches)
+    if retained_events != len(strategy_events):
+        raise TrialValidationError(
+            "Equipment maintenance strategy history contains an unknown event."
+        )
 
 
 def validate_production_state(value: object) -> dict[str, Any]:
@@ -1588,9 +2721,17 @@ def validate_production_state(value: object) -> dict[str, Any]:
         _validate_machine(candidate, index)
         for index, candidate in enumerate(machines_raw)
     ]
+    equipment_master = (
+        _validate_equipment_master(state["equipmentMaster"])
+        if "equipmentMaster" in state
+        else None
+    )
     job_ids = [job["id"] for job in jobs]
     issue_ids = [issue["id"] for issue in issues]
     machine_ids = [machine["id"] for machine in machines]
+    equipment_ids = [
+        asset["id"] for asset in equipment_master["assets"]
+    ] if equipment_master is not None else []
     _unique(job_ids, "Production job ID")
     _unique(issue_ids, "Production issue ID")
     _unique(machine_ids, "Production machine ID")
@@ -1608,6 +2749,17 @@ def validate_production_state(value: object) -> dict[str, Any]:
         if "orderExecution" in state
         else None
     )
+    if order_execution is not None and "orderPortfolio" in state:
+        raise TrialValidationError(
+            "production state cannot retain both legacy order execution and the order portfolio."
+        )
+    order_portfolio = (
+        _validate_order_portfolio(state["orderPortfolio"])
+        if "orderPortfolio" in state
+        else None
+    )
+    if order_portfolio is not None and any(entry["jobId"] not in job_ids for entry in order_portfolio["entries"]):
+        raise TrialValidationError("production state.orderPortfolio references an unknown job.")
 
     events = [
         _validate_event(
@@ -1616,15 +2768,18 @@ def validate_production_state(value: object) -> dict[str, Any]:
             job_ids=frozenset(job_ids),
             issue_ids=frozenset(issue_ids),
             machine_ids=frozenset(machine_ids),
+            equipment_ids=frozenset(equipment_ids),
         )
         for index, candidate in enumerate(events_raw)
     ]
     _unique([event["id"] for event in events], "Production event ID")
     _unique([event["actionId"] for event in events], "Production action ID")
-    if order_execution is not None:
+    retained_executions = [entry["execution"] for entry in _production_order_entries(state)]
+    if retained_executions:
         execution_action_ids = {
             command["payload"]["proof"]["actionId"]
-            for command in order_execution["commands"]
+            for execution in retained_executions
+            for command in execution["commands"]
         }
         if execution_action_ids.intersection(event["actionId"] for event in events):
             raise TrialValidationError(
@@ -1650,11 +2805,85 @@ def validate_production_state(value: object) -> dict[str, Any]:
     _validate_output_history(jobs, events)
     _validate_material_history(jobs, events)
     _validate_quality_hold_history(jobs, events)
-    _validate_issue_history(issues, events)
+    _validate_issue_history(issues, events, machines)
     _validate_machine_history(machines, events)
     _validate_downtime_history(machines, events)
     _validate_maintenance_history(machines, events)
+    _validate_equipment_import_history(equipment_master, machines, events)
+    _validate_equipment_commissioning_history(
+        equipment_master,
+        machines,
+        events,
+        opening_plan,
+    )
+    _validate_equipment_maintenance_strategy_history(equipment_master, events)
     return deepcopy(state)
+
+
+def project_production_maintenance_due_queue(
+    value: object,
+    as_of: object,
+) -> dict[str, Any]:
+    """Project reviewed preventive-maintenance due work without dispatching it."""
+
+    state = validate_production_state(value)
+    as_of_value = _maintenance_timestamp(as_of, "maintenance due queue asOf")
+    as_of_time = datetime.fromisoformat(as_of_value.replace("Z", "+00:00"))
+    criticality_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    items: list[dict[str, Any]] = []
+    equipment_master = state.get("equipmentMaster")
+    assets = equipment_master["assets"] if equipment_master is not None else []
+    for asset in assets:
+        strategy = asset.get("maintenanceStrategy")
+        if asset["commissioningStatus"] != "commissioned" or strategy is None:
+            continue
+        due_time = datetime.fromisoformat(strategy["nextDueAt"].replace("Z", "+00:00"))
+        remaining_ms = int((due_time - as_of_time).total_seconds() * 1000)
+        latest_completion = next(
+            (
+                event
+                for event in state["events"]
+                if event["kind"] == "maintenance_completed"
+                and event["subjectId"] == asset["id"]
+                and event.get("maintenanceStrategyActionId") == strategy["actionId"]
+            ),
+            None,
+        )
+        item = {
+            "assetId": asset["id"],
+            "assetName": asset["name"],
+            "criticality": asset["criticality"],
+            "owner": strategy["maintenanceOwner"],
+            "strategyActionId": strategy["actionId"],
+            "strategyRevision": strategy["revision"],
+            "procedureReference": strategy["procedureReference"],
+            "dueAt": strategy["nextDueAt"],
+            "status": (
+                "overdue"
+                if remaining_ms <= 0
+                else "due_soon"
+                if remaining_ms <= 7 * 86_400_000
+                else "planned"
+            ),
+            "daysUntilDue": -(-remaining_ms // 86_400_000),
+        }
+        if latest_completion is not None:
+            item["lastCompletionActionId"] = latest_completion["actionId"]
+            item["lastCompletedAt"] = latest_completion["createdAt"]
+        items.append(item)
+    items.sort(
+        key=lambda item: (
+            0 if item["status"] == "overdue" else 1,
+            item["dueAt"],
+            criticality_rank[item["criticality"]],
+            item["assetId"],
+        )
+    )
+    return {
+        "contract": "supermega.production.maintenance-due-queue.v1",
+        "asOf": as_of_value,
+        "items": items,
+    }
 
 
 def _payload(
@@ -1983,6 +3212,14 @@ def _validate_job_created(
         )
     if event["subjectId"] != job["id"]:
         raise TrialValidationError("job creation event must reference the new job.")
+    if (
+        "shopDemandSource" in job
+        and event["evidenceReference"]
+        != job["shopDemandSource"]["evidenceReference"]
+    ):
+        raise TrialValidationError(
+            "Shop demand source must match the immutable job creation evidence."
+        )
     expected_summary = f"Created {job['product']} job for {job['line']}"
     if event["summary"] != expected_summary:
         raise TrialValidationError("job creation summary is not canonical.")
@@ -1994,6 +3231,10 @@ def _validate_issue_opened(
     event: Mapping[str, Any],
 ) -> None:
     _require_unchanged(current, next_state, "jobs", "machines")
+    if current.get("equipmentMaster") != next_state.get("equipmentMaster"):
+        raise TrialValidationError(
+            "opening a Production issue cannot change the equipment master."
+        )
     if (
         len(next_state["issues"]) != len(current["issues"]) + 1
         or next_state["issues"][1:] != current["issues"]
@@ -2017,6 +3258,10 @@ def _validate_issue_opened(
     if any(event.get(field) != value for field, value in expected_snapshot.items()):
         raise TrialValidationError(
             "new Production issue action fields must match the opening event."
+        )
+    if issue.get("maintenanceFindingSource") != event.get("maintenanceFindingSource"):
+        raise TrialValidationError(
+            "new Production issue maintenance source must match the opening event."
         )
     if datetime.fromisoformat(event["createdAt"].replace("Z", "+00:00")) < datetime.fromisoformat(
         issue["createdAt"].replace("Z", "+00:00")
@@ -2043,6 +3288,10 @@ def _validate_issue_resolved(
     event: Mapping[str, Any],
 ) -> None:
     _require_unchanged(current, next_state, "jobs", "machines")
+    if current.get("equipmentMaster") != next_state.get("equipmentMaster"):
+        raise TrialValidationError(
+            "resolving a Production issue cannot change the equipment master."
+        )
     before, after = _one_changed(
         current["issues"],
         next_state["issues"],
@@ -2056,7 +3305,18 @@ def _validate_issue_resolved(
         "resolvedBy": event["actor"],
         "reason": event["reason"],
         "evidenceReference": event["evidenceReference"],
+        **(
+            {"maintenanceCorrectiveAction": event["maintenanceCorrectiveAction"]}
+            if "maintenanceCorrectiveAction" in event
+            else {}
+        ),
     }
+    if ("maintenanceFindingSource" in before) != (
+        "maintenanceCorrectiveAction" in event
+    ):
+        raise TrialValidationError(
+            "maintenance finding resolution requires one structured corrective action only."
+        )
     if after != {**before, "status": "resolved", "resolution": resolution}:
         raise TrialValidationError(
             "issue resolution may change only status and exact command evidence."
@@ -2249,6 +3509,10 @@ def _validate_maintenance_started(
     event: Mapping[str, Any],
 ) -> None:
     _require_unchanged(current, next_state, "jobs", "issues", "machines")
+    if current.get("equipmentMaster") != next_state.get("equipmentMaster"):
+        raise TrialValidationError(
+            "maintenance start cannot change the equipment master."
+        )
     machine = next(
         (
             candidate
@@ -2265,6 +3529,31 @@ def _validate_maintenance_started(
         )
     if event["summary"] != f"Started maintenance for {machine['name']}":
         raise TrialValidationError("maintenance start summary is not canonical.")
+    asset = next(
+        (
+            candidate
+            for candidate in current.get("equipmentMaster", {}).get("assets", [])
+            if candidate["id"] == machine["id"]
+        ),
+        None,
+    )
+    strategy = asset.get("maintenanceStrategy") if asset is not None else None
+    is_bound = "maintenanceStrategyActionId" in event
+    if (strategy is not None) != is_bound:
+        raise TrialValidationError(
+            "commissioned equipment maintenance must bind its current strategy."
+        )
+    if strategy is not None and (
+        event["maintenanceOwner"] != strategy["maintenanceOwner"]
+        or event["maintenanceStrategyActionId"] != strategy["actionId"]
+        or event["maintenanceStrategyRevision"] != strategy["revision"]
+        or event["maintenanceProcedureReference"]
+        != strategy["procedureReference"]
+        or event["maintenancePlannedDueAt"] != strategy["nextDueAt"]
+    ):
+        raise TrialValidationError(
+            "maintenance start does not match the current reviewed strategy."
+        )
 
 
 def _validate_maintenance_completed(
@@ -2292,6 +3581,382 @@ def _validate_maintenance_completed(
         )
     if event["summary"] != f"Completed maintenance for {machine['name']}":
         raise TrialValidationError("maintenance completion summary is not canonical.")
+    start_is_bound = "maintenanceStrategyActionId" in open_event
+    completion_is_bound = "maintenanceStrategyActionId" in event
+    if start_is_bound != completion_is_bound:
+        raise TrialValidationError(
+            "maintenance completion must retain the open strategy binding."
+        )
+    if not start_is_bound:
+        if current.get("equipmentMaster") != next_state.get("equipmentMaster"):
+            raise TrialValidationError(
+                "legacy maintenance completion cannot change the equipment master."
+            )
+        return
+    if not _MAINTENANCE_RESULT_FIELDS.issubset(event):
+        raise TrialValidationError(
+            "new strategy-bound maintenance completion requires one structured reviewed result."
+        )
+    assets = current.get("equipmentMaster", {}).get("assets", [])
+    asset_index = next(
+        (
+            index
+            for index, candidate in enumerate(assets)
+            if candidate["id"] == machine["id"]
+        ),
+        None,
+    )
+    if asset_index is None:
+        raise TrialValidationError(
+            "strategy-bound maintenance must reference commissioned equipment."
+        )
+    strategy = assets[asset_index].get("maintenanceStrategy")
+    if strategy is None or any(
+        event[field] != open_event[field]
+        for field in _MAINTENANCE_STRATEGY_BINDING_FIELDS
+    ) or (
+        event["maintenanceStrategyActionId"] != strategy["actionId"]
+        or event["maintenanceStrategyRevision"] != strategy["revision"]
+        or event["maintenanceProcedureReference"]
+        != strategy["procedureReference"]
+        or event["maintenancePlannedDueAt"] != strategy["nextDueAt"]
+    ):
+        raise TrialValidationError(
+            "maintenance completion does not match its open reviewed strategy."
+        )
+    completed_at = _parsed_timestamp(
+        event["createdAt"], "maintenance completion createdAt"
+    )[1]
+    expected_next_due = (
+        completed_at + timedelta(days=strategy["intervalDays"])
+    ).astimezone(timezone.utc).isoformat(timespec="milliseconds").replace(
+        "+00:00", "Z"
+    )
+    if event["nextDueAt"] != expected_next_due:
+        raise TrialValidationError(
+            "maintenance completion next due does not match its strategy interval."
+        )
+    expected_master = deepcopy(current["equipmentMaster"])
+    expected_master["assets"][asset_index]["maintenanceStrategy"][
+        "nextDueAt"
+    ] = expected_next_due
+    if next_state.get("equipmentMaster") != expected_master:
+        raise TrialValidationError(
+            "maintenance completion may advance only the selected strategy next due."
+        )
+
+
+def _reduce_equipment_master_import(
+    current: Mapping[str, Any],
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    if set(payload) != {"equipment", "evidence"}:
+        raise TrialValidationError(
+            "Equipment master import must contain exactly equipment and evidence."
+        )
+    current_state = validate_production_state(current)
+    evidence = _evidence(payload.get("evidence"))
+    if evidence["reason"] != "Imported reviewed Plant equipment master":
+        raise TrialValidationError("Equipment master import reason is not canonical.")
+    if _DIGEST_PATTERN.fullmatch(evidence["evidenceReference"]) is None:
+        raise TrialValidationError(
+            "Equipment master import must reference the reviewed package digest."
+        )
+    equipment_raw = _list(
+        payload.get("equipment"),
+        "equipment",
+        maximum=_MAX_EQUIPMENT,
+    )
+    if not equipment_raw:
+        raise TrialValidationError("Equipment master import cannot be empty.")
+    existing_assets = (
+        current_state.get("equipmentMaster", {}).get("assets", [])
+    )
+    if len(existing_assets) + len(equipment_raw) > _MAX_EQUIPMENT:
+        raise TrialValidationError("Equipment master exceeds its record limit.")
+    existing_ids = {asset["id"] for asset in existing_assets}
+    existing_ids.update(machine["id"] for machine in current_state["machines"])
+    imported_ids: list[str] = []
+    imported_assets: list[dict[str, Any]] = []
+    for index, candidate in enumerate(equipment_raw):
+        field = f"equipment[{index}]"
+        equipment = _object(candidate, field)
+        _exact_fields(equipment, field, required=_EQUIPMENT_IMPORT_FIELDS)
+        equipment_id = _text(equipment["id"], f"{field}.id", maximum=80)
+        work_centre_id = _text(
+            equipment["workCentreId"], f"{field}.workCentreId", maximum=80
+        )
+        if (
+            _EQUIPMENT_ID_PATTERN.fullmatch(equipment_id) is None
+            or _EQUIPMENT_ID_PATTERN.fullmatch(work_centre_id) is None
+        ):
+            raise TrialValidationError(
+                f"{field} IDs must use canonical uppercase equipment identifiers."
+            )
+        if equipment_id in existing_ids or equipment_id in imported_ids:
+            raise TrialValidationError(
+                "Equipment master import cannot replace or duplicate an equipment ID."
+            )
+        name = _text(equipment["name"], f"{field}.name", maximum=180)
+        owner = _text(equipment["owner"], f"{field}.owner", maximum=120)
+        criticality = equipment["criticality"]
+        if criticality not in _EQUIPMENT_CRITICALITIES:
+            raise TrialValidationError(f"{field}.criticality is unsupported.")
+        imported_ids.append(equipment_id)
+        imported_assets.append(
+            {
+                "id": equipment_id,
+                "name": name,
+                "workCentreId": work_centre_id,
+                "criticality": criticality,
+                "owner": owner,
+                "commissioningStatus": "not_commissioned",
+                "sourceActionId": evidence["actionId"],
+                "sourcePackageDigest": evidence["evidenceReference"],
+                "importedAt": evidence["capturedAt"],
+            }
+        )
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "equipment_master_imported",
+        "subjectId": "equipment-master",
+        "summary": f"Imported {len(imported_ids)} equipment master records",
+        "equipmentIds": imported_ids,
+    }
+    next_state = deepcopy(current_state)
+    next_state["revision"] += 1
+    next_state["events"] = [event, *current_state["events"]]
+    next_state["equipmentMaster"] = {
+        "contract": _EQUIPMENT_MASTER_CONTRACT,
+        "assets": [*existing_assets, *imported_assets],
+    }
+    return validate_production_state(next_state)
+
+
+def _reduce_equipment_commission(
+    current: Mapping[str, Any],
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    if set(payload) != _EQUIPMENT_COMMISSION_FIELDS | {"evidence"}:
+        raise TrialValidationError(
+            "Equipment commissioning must contain exactly one asset, installation, "
+            "initial observation, safety baseline, and evidence."
+        )
+    current_state = validate_production_state(current)
+    evidence = _evidence(payload.get("evidence"))
+    if evidence["reason"] != "Commissioned reviewed Plant equipment":
+        raise TrialValidationError("Equipment commissioning reason is not canonical.")
+    equipment_id = _text(payload["equipmentId"], "equipmentId", maximum=80)
+    asset = next(
+        (
+            candidate
+            for candidate in current_state.get("equipmentMaster", {}).get("assets", [])
+            if candidate["id"] == equipment_id
+        ),
+        None,
+    )
+    if asset is None:
+        raise TrialValidationError(
+            "Equipment commissioning requires one reviewed master record."
+        )
+    if asset["commissioningStatus"] != "not_commissioned":
+        raise TrialValidationError("Equipment is already commissioned.")
+    if any(machine["id"] == equipment_id for machine in current_state["machines"]):
+        raise TrialValidationError(
+            "Equipment commissioning cannot replace a runtime machine."
+        )
+    if len(current_state["machines"]) >= _MAX_MACHINES:
+        raise TrialValidationError("Production runtime machine limit is reached.")
+    installed_at_text = _text(payload["installedAt"], "installedAt", maximum=40)
+    installed_at = _lifecycle_timestamp(
+        installed_at_text, "installedAt", "equipment installation"
+    )
+    commissioned_at = _lifecycle_timestamp(
+        evidence["capturedAt"],
+        "evidence.capturedAt",
+        "equipment commissioning",
+    )
+    imported_at = _lifecycle_timestamp(
+        asset["importedAt"], "equipment.importedAt", "equipment import"
+    )
+    if installed_at > commissioned_at or commissioned_at < imported_at:
+        raise TrialValidationError("Equipment commissioning chronology is invalid.")
+    initial_state = payload["initialState"]
+    if initial_state not in _MACHINE_STATES:
+        raise TrialValidationError("initialState is unsupported.")
+    safety_reference = _text(
+        payload["safetyBaselineReference"],
+        "safetyBaselineReference",
+        maximum=240,
+    )
+    if evidence["evidenceReference"] != safety_reference:
+        raise TrialValidationError(
+            "Equipment commissioning evidence must match the safety baseline."
+        )
+    commissioned_asset = {
+        **asset,
+        "commissioningStatus": "commissioned",
+        "commissioning": {
+            "actionId": evidence["actionId"],
+            "commissionedAt": evidence["capturedAt"],
+            "commissionedBy": evidence["actor"],
+            "installedAt": installed_at_text,
+            "initialState": initial_state,
+            "safetyBaselineReference": safety_reference,
+        },
+    }
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "equipment_commissioned",
+        "subjectId": equipment_id,
+        "summary": f"Commissioned {asset['name']} at {asset['workCentreId']}",
+        "installedAt": installed_at_text,
+        "toState": initial_state,
+        "workCentreId": asset["workCentreId"],
+    }
+    next_state = deepcopy(current_state)
+    next_state["revision"] += 1
+    next_state["events"] = [event, *current_state["events"]]
+    next_state["machines"] = [
+        *current_state["machines"],
+        {"id": equipment_id, "name": asset["name"], "state": initial_state},
+    ]
+    next_state["equipmentMaster"] = {
+        "contract": _EQUIPMENT_MASTER_CONTRACT,
+        "assets": [
+            commissioned_asset if candidate["id"] == equipment_id else candidate
+            for candidate in current_state["equipmentMaster"]["assets"]
+        ],
+    }
+    return validate_production_state(next_state)
+
+
+def _reduce_equipment_maintenance_strategy(
+    current: Mapping[str, Any],
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    if set(payload) != _EQUIPMENT_MAINTENANCE_STRATEGY_PAYLOAD_FIELDS | {"evidence"}:
+        raise TrialValidationError(
+            "Equipment maintenance strategy must contain exactly one asset, owner, "
+            "interval, next due time, procedure, safety baseline, and evidence."
+        )
+    current_state = validate_production_state(current)
+    evidence = _evidence(payload.get("evidence"))
+    if evidence["reason"] != "Saved reviewed preventive maintenance strategy":
+        raise TrialValidationError(
+            "Equipment maintenance strategy reason is not canonical."
+        )
+    equipment_id = _text(payload["equipmentId"], "equipmentId", maximum=80)
+    asset = next(
+        (
+            candidate
+            for candidate in current_state.get("equipmentMaster", {}).get("assets", [])
+            if candidate["id"] == equipment_id
+        ),
+        None,
+    )
+    if asset is None or asset["commissioningStatus"] != "commissioned":
+        raise TrialValidationError(
+            "Maintenance strategy requires one commissioned equipment master record."
+        )
+    if not any(machine["id"] == equipment_id for machine in current_state["machines"]):
+        raise TrialValidationError(
+            "Maintenance strategy requires the retained equipment runtime."
+        )
+    if _open_maintenance_event(current_state["events"], equipment_id) is not None:
+        raise TrialValidationError(
+            "Complete open maintenance before revising its preventive strategy."
+        )
+    saved_at_text = _lifecycle_timestamp(
+        evidence["capturedAt"],
+        "evidence.capturedAt",
+        "equipment maintenance strategy",
+    )
+    saved_at = datetime.fromisoformat(saved_at_text.replace("Z", "+00:00"))
+    commissioned_at = datetime.fromisoformat(
+        asset["commissioning"]["commissionedAt"].replace("Z", "+00:00")
+    )
+    if saved_at < commissioned_at:
+        raise TrialValidationError(
+            "Equipment maintenance strategy cannot predate commissioning."
+        )
+    maintenance_owner = _text(
+        payload["maintenanceOwner"], "maintenanceOwner", maximum=120
+    )
+    interval_days = _integer(payload["intervalDays"], "intervalDays", minimum=1)
+    if interval_days > 3650:
+        raise TrialValidationError("intervalDays cannot exceed 3650.")
+    next_due_at_text = _lifecycle_timestamp(
+        payload["nextDueAt"], "nextDueAt", "equipment maintenance strategy"
+    )
+    next_due_at = datetime.fromisoformat(next_due_at_text.replace("Z", "+00:00"))
+    if next_due_at <= saved_at or next_due_at > saved_at + timedelta(days=interval_days):
+        raise TrialValidationError(
+            "nextDueAt must follow strategy save time within intervalDays."
+        )
+    procedure_reference = _text(
+        payload["procedureReference"], "procedureReference", maximum=240
+    )
+    safety_reference = _text(
+        payload["safetyBaselineReference"],
+        "safetyBaselineReference",
+        maximum=240,
+    )
+    if evidence["evidenceReference"] != safety_reference:
+        raise TrialValidationError(
+            "Maintenance strategy evidence must match the safety baseline."
+        )
+    strategy_revision = asset.get("maintenanceStrategy", {}).get("revision", 0) + 1
+    strategy = {
+        "revision": strategy_revision,
+        "actionId": evidence["actionId"],
+        "savedAt": saved_at_text,
+        "savedBy": evidence["actor"],
+        "maintenanceOwner": maintenance_owner,
+        "intervalDays": interval_days,
+        "nextDueAt": next_due_at_text,
+        "procedureReference": procedure_reference,
+        "safetyBaselineReference": safety_reference,
+    }
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": saved_at_text,
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "equipment_maintenance_strategy_saved",
+        "subjectId": equipment_id,
+        "summary": f"Saved maintenance strategy R{strategy_revision} for {equipment_id}",
+        "strategyRevision": strategy_revision,
+        "maintenanceOwner": maintenance_owner,
+        "intervalDays": interval_days,
+        "nextDueAt": next_due_at_text,
+        "procedureReference": procedure_reference,
+    }
+    next_state = deepcopy(current_state)
+    next_state["revision"] += 1
+    next_state["events"] = [event, *current_state["events"]]
+    next_state["equipmentMaster"] = {
+        "contract": _EQUIPMENT_MASTER_CONTRACT,
+        "assets": [
+            {**candidate, "maintenanceStrategy": strategy}
+            if candidate["id"] == equipment_id
+            else candidate
+            for candidate in current_state["equipmentMaster"]["assets"]
+        ],
+    }
+    return validate_production_state(next_state)
 
 
 def _validate_shift_closed(
@@ -2415,12 +4080,27 @@ def _validate_order_execution_recorded(
         "machines",
         "events",
     )
-    before = current.get("orderExecution", create_empty_plant_order_state())
-    after = next_state.get("orderExecution")
-    if not isinstance(after, Mapping):
+    if (
+        current.get("openingPlan") != next_state.get("openingPlan")
+        or current.get("equipmentMaster") != next_state.get("equipmentMaster")
+    ):
+        raise TrialValidationError("Plant execution cannot change opening or equipment records.")
+    before_entries = {entry["jobId"]: entry["execution"] for entry in _production_order_entries(current)}
+    after_entries = {entry["jobId"]: entry["execution"] for entry in _production_order_entries(next_state)}
+    changed_job_ids = sorted(
+        job_id
+        for job_id in set(before_entries) | set(after_entries)
+        if before_entries.get(job_id) != after_entries.get(job_id)
+    )
+    if len(changed_job_ids) != 1:
         raise TrialValidationError(
-            "production.order_execution.recorded must retain one Plant execution state."
+            "production.order_execution.recorded must change exactly one controlled order."
         )
+    changed_job_id = changed_job_ids[0]
+    before = before_entries.get(changed_job_id, create_empty_plant_order_state())
+    after = after_entries.get(changed_job_id)
+    if not isinstance(after, Mapping):
+        raise TrialValidationError("production.order_execution.recorded cannot remove a controlled order.")
     if (
         after["revision"] != before["revision"] + 1
         or after["commands"][:-1] != before["commands"]
@@ -2452,6 +4132,8 @@ def _validate_order_execution_recorded(
     plan = projection["plan"]
     if not isinstance(plan, Mapping):
         raise TrialValidationError("Plant execution must retain one reviewed plan.")
+    if plan["job"]["jobId"] != changed_job_id:
+        raise TrialValidationError("Plant execution must remain bound to its portfolio job.")
     matching_jobs = [job for job in current["jobs"] if job["id"] == plan["job"]["jobId"]]
     if len(matching_jobs) != 1:
         raise TrialValidationError("Plant execution must bind one current Production job.")
@@ -2494,6 +4176,153 @@ _TRANSITION_VALIDATORS: dict[
 }
 
 
+def create_production_job_from_intent(
+    current_value: Mapping[str, Any],
+    intent_value: Mapping[str, Any],
+    evidence_value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Create one scheduled Plant job from a narrow server-owned intent."""
+
+    current = validate_production_state(current_value)
+    intent = _object(intent_value, "production job intent")
+    _exact_fields(
+        intent,
+        "production job intent",
+        required=frozenset(
+            {"jobId", "line", "product", "target", "owner", "priority", "dueAt"}
+        ),
+        optional=frozenset({"shopDemandSource"}),
+    )
+    evidence = _evidence(evidence_value)
+    job_id = _text(intent["jobId"], "production job intent.jobId", maximum=80)
+    line = _text(intent["line"], "production job intent.line", maximum=120)
+    product = _text(intent["product"], "production job intent.product")
+    target = _integer(intent["target"], "production job intent.target", minimum=1)
+    owner = _text(intent["owner"], "production job intent.owner", maximum=120)
+    priority = intent["priority"]
+    if not isinstance(priority, str) or priority not in _JOB_PRIORITIES:
+        raise TrialValidationError("production job intent.priority is unsupported.")
+    due_at = _timestamp(intent["dueAt"], "production job intent.dueAt")
+    if _parsed_timestamp(due_at, "production job intent.dueAt")[1] <= _parsed_timestamp(
+        evidence["capturedAt"],
+        "evidence.capturedAt",
+    )[1]:
+        raise TrialValidationError("production job intent.dueAt must remain in the future.")
+    if any(job["id"] == job_id for job in current["jobs"]):
+        raise TrialValidationError("production job intent.jobId is already in use.")
+    job = {
+        "id": job_id,
+        "line": line,
+        "product": product,
+        "target": target,
+        "output": 0,
+        "owner": owner,
+        "priority": priority,
+        "dueAt": due_at,
+        **(
+            {
+                "shopDemandSource": _shop_demand_source(
+                    intent["shopDemandSource"],
+                    "production job intent.shopDemandSource",
+                )
+            }
+            if "shopDemandSource" in intent
+            else {}
+        ),
+    }
+    event = {
+        "id": f"EVT-{evidence['actionId']}",
+        "actionId": evidence["actionId"],
+        "createdAt": evidence["capturedAt"],
+        "actor": evidence["actor"],
+        "reason": evidence["reason"],
+        "evidenceReference": evidence["evidenceReference"],
+        "kind": "job_created",
+        "subjectId": job_id,
+        "summary": f"Created {product} job for {line}",
+        "jobPriority": priority,
+        "jobDueAt": due_at,
+        "jobOwner": owner,
+    }
+    return validate_production_state(
+        {
+            **current,
+            "revision": current["revision"] + 1,
+            "jobs": [job, *current["jobs"]],
+            "events": [event, *current["events"]],
+        }
+    )
+
+
+def require_shop_demand_source_current(
+    production_value: Mapping[str, Any],
+    commerce_value: Mapping[str, Any],
+    source_value: Mapping[str, Any],
+) -> None:
+    """Reject a Plant job when its immutable Shop demand snapshot is stale."""
+
+    production = validate_production_state(production_value)
+    commerce = validate_commerce_state(commerce_value)
+    source = _shop_demand_source(source_value, "production job intent.shopDemandSource")
+    snapshot = source["snapshot"]
+    matches = [item for item in commerce["items"] if item["sku"] == snapshot["sku"]]
+    if len(matches) != 1 or matches[0]["name"] != snapshot["productName"]:
+        raise TrialValidationError("Shop demand source no longer matches the current catalog.")
+    item = matches[0]
+    active_orders = sorted(
+        (
+            order
+            for order in commerce["orders"]
+            if order["status"] in {"confirmed", "preparing", "ready"}
+        ),
+        key=lambda order: order["id"],
+    )
+    source_order_ids: list[str] = []
+    active_demand_units = 0
+    for order in active_orders:
+        lines = (
+            order["lines"]
+            if isinstance(order.get("lines"), list) and order["lines"]
+            else [{"sku": order["itemSku"], "quantity": order["quantity"]}]
+            if order.get("itemSku")
+            else []
+        )
+        matching_lines = [line for line in lines if line["sku"] == item["sku"]]
+        if not matching_lines:
+            continue
+        active_demand_units += sum(line["quantity"] for line in matching_lines)
+        source_order_ids.append(order["id"])
+    available = item["onHand"]
+    uncovered = max(0, active_demand_units - available)
+    replenishment_gap = max(0, item["reorderAt"] - available)
+    if not uncovered and not replenishment_gap:
+        raise TrialValidationError("Shop no longer has uncovered or reorder demand.")
+    expected_snapshot = {
+        "schema": _SHOP_DEMAND_SCHEMA,
+        "operatingUnitLocationId": "LOC-MAIN",
+        "sku": item["sku"],
+        "productName": item["name"],
+        "sourceOrderIds": sorted(source_order_ids),
+        "activeDemandUnits": active_demand_units,
+        "uncoveredDemandUnits": uncovered,
+        "availableToPromiseUnits": available,
+        "reorderAtUnits": item["reorderAt"],
+        "replenishmentGapUnits": replenishment_gap,
+        "recommendedBatchUnits": max(1, uncovered, replenishment_gap),
+    }
+    if snapshot != expected_snapshot:
+        raise TrialValidationError("Shop demand source changed before Plant job creation.")
+    product_keys = {item["sku"].casefold(), item["name"].casefold()}
+    if any(
+        "closure" not in job
+        and "qualityHold" not in job
+        and job["output"] + job.get("scrap", 0) < job["target"]
+        and job["product"].strip().casefold() in product_keys
+        for job in production["jobs"]
+    ):
+        raise TrialValidationError("Shop demand is already covered by an active Plant job.")
+
+
 def reduce_production_state(
     event_type: str,
     current: Mapping[str, Any],
@@ -2505,6 +4334,21 @@ def reduce_production_state(
         raise TrialValidationError(
             "event_type must be a supported Production lifecycle event."
         )
+    if event_type == "production.equipment_master.imported":
+        return _reduce_equipment_master_import(current, payload)
+    if event_type == "production.equipment.commissioned":
+        return _reduce_equipment_commission(current, payload)
+    if event_type == "production.equipment_maintenance_strategy.saved":
+        return _reduce_equipment_maintenance_strategy(current, payload)
+    if event_type == "production.job.created" and isinstance(payload.get("intent"), Mapping):
+        payload = {
+            "state": create_production_job_from_intent(
+                current,
+                payload["intent"],
+                payload.get("evidence", {}),
+            ),
+            "evidence": payload.get("evidence"),
+        }
     next_state, evidence = _payload(payload)
     if event_type == "production.workspace.initialized":
         if dict(current):
@@ -2518,7 +4362,6 @@ def reduce_production_state(
         managed_plan_shape_is_valid = (
             opening_plan is not None
             and bool(next_state["jobs"])
-            and bool(next_state["machines"])
         )
         jobs_are_pristine = all(
             job["output"] == 0
@@ -2530,6 +4373,7 @@ def reduce_production_state(
             for job in next_state["jobs"]
         )
         order_execution = next_state.get("orderExecution")
+        order_portfolio = next_state.get("orderPortfolio")
         if (
             next_state["revision"] != 0
             or not (legacy_shape_is_valid or managed_plan_shape_is_valid)
@@ -2539,6 +4383,7 @@ def reduce_production_state(
                 order_execution is not None
                 and order_execution != create_empty_plant_order_state()
             )
+            or order_portfolio is not None
             or not jobs_are_pristine
             or any(
                 machine["state"] != "running"
@@ -2547,8 +4392,8 @@ def reduce_production_state(
         ):
             raise TrialValidationError(
                 "Production initialization requires owned, scheduled zero-output "
-                "jobs, running machines, and no copied operating history. Multiple "
-                "opening records require one immutable opening plan."
+                "jobs, any declared machines to be running, and no copied operating "
+                "history. Multiple opening records require one immutable opening plan."
             )
         if opening_plan is not None and (
             opening_plan["confirmedAt"] != evidence["capturedAt"]
@@ -2577,7 +4422,10 @@ def reduce_production_state(
     if event_type == "production.order_execution.recorded":
         _validate_order_execution_recorded(current_state, next_state, evidence)
         return next_state
-    if current_state.get("orderExecution") != next_state.get("orderExecution"):
+    if (
+        current_state.get("orderExecution") != next_state.get("orderExecution")
+        or current_state.get("orderPortfolio") != next_state.get("orderPortfolio")
+    ):
         raise TrialValidationError(
             "Production order execution can change only through its dedicated event."
         )
@@ -2595,6 +4443,9 @@ __all__ = [
     "PRODUCTION_EVENTS",
     "PRODUCTION_HUMAN_EVENTS",
     "PRODUCTION_SCHEMA",
+    "create_production_job_from_intent",
+    "require_shop_demand_source_current",
+    "project_production_maintenance_due_queue",
     "reduce_production_state",
     "validate_production_state",
 ]

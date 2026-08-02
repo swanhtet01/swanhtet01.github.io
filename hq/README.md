@@ -33,5 +33,6 @@ signal → decision → owned work → evidence → release gate → outcome →
 - [SuperMega resource-source bundle](https://drive.google.com/file/d/1uxZ1Ey8xLX5yGmOCZrJ7Mx3I0HMd1unT/view?usp=drivesdk) — supplied the research-cycle and provenance discipline; it is not a product backlog by itself.
 - [Open-source service-packaging signal](https://www.instagram.com/p/DawBDyzkTf8/?img_index=3&igsh=MXRiNHJ6Nm4xMmlkbg==) — market signal that value comes from packaging tools into business outcomes, not reselling a repository.
 - [Myanmar conversational-commerce signal](https://www.linkedin.com/posts/drphyopaing_ai-ecommerce-myanmar-share-7483054882816675840-XiO2/) — market signal to work with trusted customer channels while structured operations run behind them.
+- [Unverified AI-company signal](https://www.instagram.com/p/Da-NXcnkz8p/?img_index=8&igsh=MXF6ZDR6NWNyZzg1cQ==) — public fetch and the in-app browser were blocked on 2026-07-28, so HQ derives no claim, feature, or backlog item from it unless the founder supplies an accessible caption or screenshot.
 
 Social posts are discovery signals, not final technical or commercial proof.

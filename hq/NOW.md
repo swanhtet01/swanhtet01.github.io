@@ -1,11 +1,11 @@
 # HQ now
 
-Updated: 2026-07-30
+Updated: 2026-07-31
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `a3886039f08b834ea55dd5b443ea7b9962157ff5`
-Live state observed: `2026-07-30T17:40:30Z`
+Live release commit: `7c76b810d5eb466f3917e785ff1be6db4c9d8007`
+Live state observed: `2026-07-31T12:30:15.683Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -25,42 +25,41 @@ The active delivery focus is:
 3. **Website** — a local website builder and review workflow.
 4. **Ecommerce** — a storefront builder with request receipt and Shop handoff.
 
-AI assistance stays gated R&D until these four pass onboarding, import, recovery, security, and pilot evidence.
+AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay internal.
 
-`Commerce` and `Production` remain internal IDs. Ecommerce owns the customer storefront and order intent; Shop owns the operating record and close.
-
-HQ, Work, Agent Teams, R&D, Ops, Console, and machine coordination are internal, not customer products.
+`Commerce` and `Production` are internal IDs. Ecommerce owns storefront/order intent; Shop owns the operating record.
 
 ## Implemented reality
 
-- HQ caps 12 roles, four jobs, and zero idle compute; overrides fail closed and duplicate ceilings are removed.
-- Ally stays zero-subagent; multi-agent is disabled. One coordinator listener remains, with no duplicate dev server or loaded local model. Idle Ollama hosts were stopped.
-- Seven jobs use Agent Operations or core GitHub; exact-tenant catalogs mean YTF identities cannot render in core operations (`b46c386`).
+- HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle. `multi_agent = false`; one lease blocks duplicates, and unloaded roles/models consume no idle compute (`21afe44`).
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation (`07dd959`).
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked (`be78a02`).
-- Each CEO cycle selects at most one HQ-authorized outcome; blocked, duplicate, or invalid work stops before model or send (`cdd925a`).
-- Model calls reserve before provider I/O. All tenants and retries share one atomic UTC-day ceiling; failures stay charged, cache hits reserve nothing, hosted memory state fails closed, and the hard maximum is 2,000,000 units (`a2e1b89`).
-- Shop opens at `/shop/` with visual selling; orders and stock are one tap away. All products share light/dark mobile-first controls (`2b25e747`).
-- Plant is task-first at `/plant/`; shift close requires good output, same-shift material trace, and no quality, downtime, maintenance, or critical/high problem blocker. It binds the pre-close revision/digest, goes stale after later Plant activity, and controls no equipment (`a388603`).
-- Website turns a five-field brief into a responsive, ready-page preview and standalone HTML download. Browser-local users skip managed release paperwork; connected workspaces retain evidence and approval controls. Download never deploys or changes a domain (`dfbe00b3`).
-- Ecommerce uses versioned Shop data for a recoverable multi-line cart and deterministic quote. Managed workspaces retain exact requests in the Shop inbox; V1 requests stay readable, and only Shop confirmation creates an order (`aed737a`).
-- AI remains gated; Order Intake passed 20 local cases, but provider execution still needs credentials.
-- Client setup is two steps with one manifest-backed smart import; exact matches collapse and exceptions open for review (`ab9a89e`).
-- Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot. Counts reconcile physical balances above reservations; Plant issues consume deterministic fewest-lot ATP. Aggregate-only managed changes fail closed (`3cd4825`).
-- Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, release, replay, and rollback; operation/output requires exact authenticated Shop issue evidence (`3c885d8`).
-- Home keeps Shop and Plant exceptions above collapsed HQ work. Purchases suppress duplicate stock tasks; a Plant issue badge links to Problems and otherwise the card opens Jobs. `/work/` stays labelled HQ; bottom navigation reads Home, HQ, and Products.
+- Each CEO cycle selects one outcome. Exact disabled two-job live drift may admit local-only work, but any other failure blocks; Vercel, hosted scheduling, release, connectors, and external writes remain zero. Owner-send uncertainty retains claims and is never auto-retried (`34f601d8`).
+- YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
+- Client setup keeps one manifest-backed smart import, one shared launchpad, and browser-local four-product CSV preparation; missing data uses connected samples and installation stays review-gated (`ef9e2e7`, `3a56a7d`).
+- Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancel releases, complete consumes, and sellable returns restore the exact fulfilled location/lot (`3cd4825`).
+- Shop Sell hides the empty mobile cart, closes it after last-item removal or completion, and confirms with a receipt reference instead of an internal action UUID (`7e321378`).
+- Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted stock from rejected supplier units and measures defects; no posting occurs (`d47f5d9`, `39b7fc2`, `a37c933c`, `552ed20a`).
+- Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
+- Shop owns versioned delivery zones, fee, promise, tax schedule, and payment-method eligibility/limits. Ecommerce draft v7 and the Shop order retain the exact tax decision; Shop rechecks authority and tax-inclusive payment limits before reserving stock (`ENG-136`, `ENG-137`, `ENG-138`, `9ff26ba3`).
+- Shop Orders downloads digest-bound acknowledgements from exact evidence; no invoice, receipt, message, or provider action (`ENG-139`, `263434db`).
+- Ecommerce post-order exceptions bind Shop evidence through cancellation, amendment, reschedule, return, support, balance review, and contact/address correction (`ENG-140`-`ENG-146`). Accepted orders stay immutable; Shop reviews a separate replacement.
+- Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Shop remains stock authority for exact returns and substitution. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
+- Plant controls up to 20 job-bound order plans in one workspace. Priority-and-due MRP consumes Shop stock and open POs once, exposes per-order exceptions, and changes one managed order chain per reviewed command.
+- Plant maintenance binds strategy, due work, structured results, evidence-linked finding problems, and corrective-action closeout with final human disposition. It performs no automatic problem opening, dispatch, control, telemetry, status, or parts action.
+- Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
+- CEO status is output-free across weekly briefs. Company Week separates recorded from delivered and fails incomplete delivery to attention; Company Health shows receipt counts (`8d97d4d`, `ece46ce`).
+- CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 
 ## Verified baseline
 
-- Current checkpoints: Plant implementation `33508cc`, release `a388603`, agent operations `a2e1b89`, operations `63a245f`, and security `98b8044`.
-- App/local gates pass: 45 focused Python tests, lint/build, 290 Production, 26 pilot-outcome, 71 workflow, 83 security, and 11 privacy checks plus the full release/database/Vercel/HQ suite.
-- PostgreSQL 17 rehearsal passes 52 loopback checks, now including signed context retention and restore. Hosted Storage privacy remains unproven (`33508cc`).
-- Plant shift review and close preparation pass at 390 and 1365 px without overflow or console errors. Managed close parity remains model/runtime verified.
-- First-action QA routes Shop, Plant, and Website blockers to the next task; mobile controls are 44 px and guide/review actions create no record (`36fa7dd`).
-- Both `supermega.dev` and `app.supermega.dev` serve exact commit `a3886039f08b834ea55dd5b443ea7b9962157ff5`. The public site exposes four direct product links with no template catalogue; the app opens all four samples directly. Protected promotion, exact paired release identity, and live verifiers pass at catalog `2026-07-30.2`.
-- Production remains an `isolated_demo`: managed database, schema, audit, security, and writes are not ready. The hosted scheduler is degraded and unconfigured by design, uses no Ally compute, and retains a zero-idle execution target.
-
+- Current local checkpoints: Ecommerce tax authority `b70d3412`, governed v7 Shop handoff `1975c550`, tax-inclusive limits `0eb180f9`, and order proof `9ff26ba3`; all gates pass.
+- Checks pass: 105 Ecommerce, 310 Commerce, 274 Production including 93 Plant-order checks, 64 managed Commerce, 77 security, 233 onboarding, and 82 managed import.
+- First-action QA routes Shop, Plant, and Website blockers to the next task.
+- Both domains serve deployed `7c76b810d5eb466f3917e785ff1be6db4c9d8007`; paired brand, context, and catalog identities match, but local context drift and the deployed two-job scheduler ceiling block release readiness.
+- Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
+- Working-set trim is non-terminating; audit retains one frontend, backend, idle worker, zero models/subagents, and one-run admission. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
@@ -69,19 +68,19 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Blockers
 
-- Website, Plant, and Ecommerce still lack hosted cross-device activation proof.
-- AI-budget controls pass local checks but lack hosted proof; model calls fail closed.
+- Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - `supermegabase` is not a trial target: it has existing records, one recorded migration, and 27 public RLS tables without policies. No isolated branch is verified, so managed writes remain off.
-- The four live products are isolated samples; managed persistence and tenant security are unproven.
+- The live products remain isolated samples; managed persistence and tenant security are unproven.
+- Production `7c76b810` and the local candidate diverge from common base `5d1c5d7c`; direct release is unsafe. Integrate selectively from current `origin/main`; PR #258 is historical only.
+- Live HQ reports `app_product_contract_drift`; preview, marketing, and managed activation remain blocked; any external handoff must pass `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Hosted scheduling stays blocked: no signed bundle, cron credentials, worker URL, or allowlist exists. Activate only after managed storage, security, recovery, and owner evidence pass.
-- Enterprise gaps remain: Shop tax/accounting/refunds; Plant costing/OEE/calibration; Website hosted CMS/release; Ecommerce payment/shipping/tax/returns.
+- Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
 ## Decisions in force
 
 - Delivery stays on Shop, Plant, Website, and Ecommerce; Ecommerce feeds Shop, and AI remains gated R&D.
 - Use one app, identity foundation, evidence/approval model, and release path.
-- Keep four teams, twelve roster roles, four active assignments, and zero idle compute.
+- Keep four teams, twelve dormant roles, one cycle, one active assignment, and zero idle compute.
 - New modules require a real user job, an implemented state transition, a failure/recovery path, and an acceptance test.
 
 ## Build rule
@@ -90,8 +89,6 @@ Every slice must keep one primary action, progressive disclosure, mobile accepta
 
 ## Next evidence
 
-1. On an approved isolated Supabase target, prove private Storage, RLS, replay/isolation, recovery, and one real managed tenant before enabling writes.
-2. Repeat the 12-profile rehearsal against the live isolated release, including mobile, reload, import correction, duplicate handoff, export, and reset recovery.
-3. Recruit one founder-approved Shop design partner with a named operator, baseline, five-day evidence plan, and explicit acceptance criteria.
-4. Keep AI and hosted scheduling dormant until the managed-security, durable-budget, recovery, and owner-approval gates pass; registered roles must continue to consume zero idle compute.
-5. For the next release, require exact-commit protected preview, paired live verification, observability, rollback evidence, and an updated `hq:verify:live` snapshot before broader marketing.
+1. Rehearse founder-selected client CSVs across all four products, including reconciliation, rollback, mobile, reload, duplicate handoff, export, and reset.
+2. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
+3. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.

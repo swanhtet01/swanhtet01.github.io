@@ -9,6 +9,7 @@ import { dirname, extname, resolve, sep } from 'node:path'
 import { handleAgentCompanyAuth } from '../api/agent-company-auth.mjs'
 import { handleAgentCompany } from '../api/agent-company.mjs'
 import { handle } from './api.mjs'
+import { providerChain } from '../gateway.mjs'
 import store from '../store.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -91,6 +92,6 @@ const server = createServer(async (req, res) => {
 })
 
 server.listen(PORT, () => {
-  const aiOn = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY
+  const aiOn = providerChain().length > 0
   console.log(`SuperMega console -> http://localhost:${PORT}  (store: ${store.mode}, ai: ${aiOn ? 'on' : 'off'})`)
 })

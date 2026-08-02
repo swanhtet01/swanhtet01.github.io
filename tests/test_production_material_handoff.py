@@ -9,8 +9,10 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from supermega_runtime.plant_order_foundation import (
+    approve_plant_order_material_substitution,
     check_plant_order_availability,
     issue_plant_order_material,
+    issue_plant_order_substitute_material,
     plant_order_evidence_digest,
     record_plant_order_operation,
     release_plant_order,
@@ -25,6 +27,7 @@ from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
     InMemoryTrialStore,
     TrialPrincipal,
+    TrialState,
     TrialValidationError,
 )
 from tests.test_commerce_runtime import catalog_state, movement
@@ -37,6 +40,7 @@ from tests.test_shop_inventory_runtime import (
     opening_inventory,
     production_issue_movement,
     production_issued_inventory,
+    production_returned_inventory,
 )
 
 
@@ -92,6 +96,79 @@ def issued_production() -> dict[str, object]:
     return production
 
 
+def substitute_issued_production() -> dict[str, object]:
+    production = starting_workspace(target=10)
+    execution = planned_order_execution(
+        production,
+        action_evidence("ACT-SUB-HANDOFF-PLAN-001"),
+    )
+    execution = check_plant_order_availability(
+        execution,
+        check_id="CHK-SUB-HANDOFF-001",
+        source_digest=plant_order_evidence_digest({"warehouse": "observed"}),
+        materials=[
+            {
+                "materialId": "MAT-MANAGED-001",
+                "inputLotId": "LOT-MANAGED-001",
+                "availableQuantityMilli": 10_000,
+            }
+        ],
+        work_centres=[
+            {"workCentreId": "WC-MANAGED-001", "availableMinutes": 10}
+        ],
+        proof=action_evidence(
+            "ACT-SUB-HANDOFF-CHECK-001",
+            captured_at="2026-07-24T09:15:00.000Z",
+        ),
+        expected_head_digest=execution["headDigest"],
+    )["state"]
+    execution = release_plant_order(
+        execution,
+        release_id="REL-SUB-HANDOFF-001",
+        availability_check_id="CHK-SUB-HANDOFF-001",
+        proof=action_evidence(
+            "ACT-SUB-HANDOFF-RELEASE-001",
+            captured_at="2026-07-24T09:30:00.000Z",
+        ),
+        expected_head_digest=execution["headDigest"],
+    )["state"]
+    execution = approve_plant_order_material_substitution(
+        execution,
+        substitution_id="SUB-HANDOFF-001",
+        material_id="MAT-MANAGED-001",
+        substitute_material_id="MAT-MANAGED-ALT-001",
+        substitute_name="Approved managed alternate",
+        substitute_unit="kg",
+        original_quantity_per_unit_milli=1_000,
+        substitute_quantity_per_unit_milli=1_200,
+        approval_source_digest=plant_order_evidence_digest(
+            {"certificate": "CERT-MANAGED-ALT-001"}
+        ),
+        technical_basis="Engineering review approved 1.2 kg alternate per 1 kg BOM basis.",
+        proof=action_evidence(
+            "ACT-SUB-HANDOFF-APPROVAL-001",
+            captured_at="2026-07-24T09:35:00.000Z",
+        ),
+        expected_head_digest=execution["headDigest"],
+    )["state"]
+    execution = issue_plant_order_substitute_material(
+        execution,
+        issue_id="ISSUE-SUB-HANDOFF-001",
+        substitution_id="SUB-HANDOFF-001",
+        material_id="MAT-MANAGED-001",
+        substitute_material_id="MAT-MANAGED-ALT-001",
+        input_lot_id="LOT-MANAGED-ALT-001",
+        substitute_quantity_milli=12_000,
+        proof=action_evidence(
+            "ACT-SUB-HANDOFF-ISSUE-001",
+            captured_at="2026-07-24T09:45:00.000Z",
+        ),
+        expected_head_digest=execution["headDigest"],
+    )["state"]
+    production["orderExecution"] = execution
+    return production
+
+
 def issued_commerce(request: dict[str, object]) -> dict[str, object]:
     commerce = catalog_state()
     stock_issue = movement(
@@ -117,7 +194,105 @@ def issued_commerce(request: dict[str, object]) -> dict[str, object]:
     return commerce
 
 
+def located_issued_commerce(request: dict[str, object]) -> dict[str, object]:
+    current = catalog_state()
+    current["inventoryFoundation"] = opening_inventory(
+        action_evidence(
+            "ACT-WAREHOUSE-OPENING-LOCATED-001",
+            captured_at="2026-07-24T09:50:00.000Z",
+        )
+    )
+    proof = action_evidence(
+        "ACT-WAREHOUSE-ISSUE-LOCATED-001",
+        captured_at="2026-07-24T10:00:00.000Z",
+    )
+    candidate = deepcopy(current)
+    candidate["items"][0]["onHand"] = 8  # type: ignore[index]
+    candidate["movements"] = [production_issue_movement(proof, request)]
+    candidate["inventoryFoundation"] = production_issued_inventory(
+        current["inventoryFoundation"], proof, request
+    )
+    return reduce_trial_state(
+        "commerce",
+        "commerce.production_material.issued",
+        current,
+        {"state": candidate, "evidence": proof},
+    )
+
+
+def production_return_movement(
+    issue: dict[str, object],
+    proof: dict[str, str],
+    *,
+    production_quantity_milli: int = 5_000,
+    stock_quantity: int = 1,
+    stock_unit_id: str = "LOT-SKU1-OPENING-001",
+    location_id: str = "LOC-MAIN",
+) -> dict[str, object]:
+    record = movement(
+        "production_return",
+        proof["actionId"],
+        stock_quantity,
+        created_at=proof["capturedAt"],
+    )
+    record.update(
+        {
+            "actor": proof["actor"],
+            "reason": proof["reason"],
+            "evidenceReference": proof["evidenceReference"],
+            "productionRequestId": issue["productionRequestId"],
+            "productionCommandDigest": issue["productionCommandDigest"],
+            "productionJobId": issue["productionJobId"],
+            "productionMaterialId": issue["productionMaterialId"],
+            "productionInputLotId": issue["productionInputLotId"],
+            "productionQuantityMilli": issue["productionQuantityMilli"],
+            "productionUnit": issue["productionUnit"],
+            "conversionNote": issue["conversionNote"],
+            "productionIssueActionId": issue["actionId"],
+            "productionReturnedQuantityMilli": production_quantity_milli,
+            "productionReturnStockUnitId": stock_unit_id,
+            "productionReturnLocationId": location_id,
+        }
+    )
+    return record
+
+
 class ProductionMaterialHandoffTests(unittest.TestCase):
+    def test_substitute_handoff_uses_physical_stock_and_retains_original_bom(self) -> None:
+        production = substitute_issued_production()
+        request = production_material_requests(production)[0]
+        self.assertEqual(request["materialId"], "MAT-MANAGED-ALT-001")
+        self.assertEqual(request["inputLotId"], "LOT-MANAGED-ALT-001")
+        self.assertEqual(request["quantityMilli"], 12_000)
+        self.assertEqual(request["unit"], "kg")
+        self.assertEqual(
+            request["substitution"],
+            {
+                "approvalId": "SUB-HANDOFF-001",
+                "originalMaterialId": "MAT-MANAGED-001",
+                "originalMaterialName": "Managed material",
+                "originalQuantityMilli": 10_000,
+                "originalUnit": "kg",
+                "approvalSourceDigest": plant_order_evidence_digest(
+                    {"certificate": "CERT-MANAGED-ALT-001"}
+                ),
+                "technicalBasis": "Engineering review approved 1.2 kg alternate per 1 kg BOM basis.",
+            },
+        )
+
+        current = catalog_state()
+        accepted = issued_commerce(request)
+        require_shop_issue_matches_plant(current, accepted, production)
+        movement_record = accepted["movements"][0]
+        self.assertEqual(movement_record["productionMaterialId"], "MAT-MANAGED-ALT-001")
+        self.assertEqual(movement_record["productionInputLotId"], "LOT-MANAGED-ALT-001")
+        self.assertEqual(movement_record["productionQuantityMilli"], 12_000)
+
+        spoofed = deepcopy(accepted)
+        spoofed["movements"][0]["productionMaterialId"] = "MAT-MANAGED-001"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "match one immutable Plant"):
+            require_shop_issue_matches_plant(current, spoofed, production)
+
     def test_shop_issue_must_match_exact_plant_command_digest(self) -> None:
         production = issued_production()
         request = production_material_requests(production)[0]
@@ -157,6 +332,71 @@ class ProductionMaterialHandoffTests(unittest.TestCase):
             operated,
             issued_commerce(request),
         )
+
+    def test_reviewed_material_return_restores_exact_shop_lot(self) -> None:
+        production = issued_production()
+        request = production_material_requests(production)[0]
+        issued = located_issued_commerce(request)
+        issue = issued["movements"][0]
+        proof = action_evidence(
+            "ACT-WAREHOUSE-RETURN-001",
+            captured_at="2026-07-24T10:15:00.000Z",
+            actor="warehouse-return-operator",
+        )
+        candidate = deepcopy(issued)
+        candidate["items"][0]["onHand"] = 9  # type: ignore[index]
+        candidate["movements"] = [
+            production_return_movement(issue, proof),
+            *issued["movements"],
+        ]
+        candidate["inventoryFoundation"] = production_returned_inventory(
+            issued["inventoryFoundation"],
+            proof,
+            production_quantity_milli=5_000,
+            stock_quantity=1,
+        )
+        accepted = reduce_trial_state(
+            "commerce",
+            "commerce.production_material.returned",
+            issued,
+            {"state": candidate, "evidence": proof},
+        )
+        self.assertEqual(accepted["items"][0]["onHand"], 9)  # type: ignore[index]
+        self.assertEqual(accepted["movements"][0]["kind"], "production_return")  # type: ignore[index]
+        self.assertEqual(
+            accepted["inventoryFoundation"]["commands"][-1]["payload"]["kind"],  # type: ignore[index]
+            "production_return",
+        )
+
+        aggregate_only = deepcopy(candidate)
+        aggregate_only["inventoryFoundation"] = issued["inventoryFoundation"]
+        with self.assertRaisesRegex(TrialValidationError, "location command"):
+            reduce_trial_state(
+                "commerce",
+                "commerce.production_material.returned",
+                issued,
+                {"state": aggregate_only, "evidence": proof},
+            )
+
+        wrong_ratio = deepcopy(candidate)
+        wrong_ratio["movements"][0]["productionReturnedQuantityMilli"] = 4_000  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "conversion ratio"):
+            reduce_trial_state(
+                "commerce",
+                "commerce.production_material.returned",
+                issued,
+                {"state": wrong_ratio, "evidence": proof},
+            )
+
+        wrong_source = deepcopy(candidate)
+        wrong_source["movements"][0]["productionIssueActionId"] = "ACT-UNKNOWN-ISSUE"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "retained Plant issue"):
+            reduce_trial_state(
+                "commerce",
+                "commerce.production_material.returned",
+                issued,
+                {"state": wrong_source, "evidence": proof},
+            )
 
     def test_managed_api_checks_related_states_atomically(self) -> None:
         principal = TrialPrincipal("workspace-handoff", "actor-operator", "human")
@@ -340,6 +580,121 @@ class ProductionMaterialHandoffTests(unittest.TestCase):
             replay = client.post("/api/trial/v1/commands", json=issue_body)
             self.assertEqual(replay.status_code, 200)
             self.assertTrue(replay.json()["result"]["idempotent_replay"])
+
+            return_proof = action_evidence(
+                "ACT-WAREHOUSE-RETURN-API-001",
+                captured_at="2099-01-01T00:00:00.000Z",
+                actor="fabricated-return-operator",
+            )
+            returned_commerce = deepcopy(retained)
+            returned_commerce["items"][0]["onHand"] = 9
+            returned_commerce["movements"] = [
+                production_return_movement(
+                    retained["movements"][0],
+                    return_proof,
+                ),
+                *retained["movements"],
+            ]
+            returned_commerce["inventoryFoundation"] = production_returned_inventory(
+                retained["inventoryFoundation"],
+                return_proof,
+                production_quantity_milli=5_000,
+                stock_quantity=1,
+            )
+            return_evidence = {
+                "actionId": return_proof["actionId"],
+                "capturedAt": return_proof["capturedAt"],
+                "actor": principal.actor_id,
+                "reason": return_proof["reason"],
+                "evidenceReference": return_proof["evidenceReference"],
+            }
+            return_command_id = str(uuid4())
+            return_body = {
+                "command_id": return_command_id,
+                "surface": "commerce",
+                "event_type": "commerce.production_material.returned",
+                "expected_version": 3,
+                "payload": {
+                    "state": returned_commerce,
+                    "evidence": return_evidence,
+                },
+            }
+            with patch(
+                "supermega_runtime.trial_store._utc_now",
+                return_value="2026-07-24T10:05:00+00:00",
+            ):
+                returned = client.post("/api/trial/v1/commands", json=return_body)
+            self.assertEqual(returned.status_code, 200)
+            self.assertEqual(returned.json()["result"]["version"], 4)
+            retained_return = returned.json()["result"]["state"]
+            self.assertEqual(
+                retained_return["movements"][0]["actor"], principal.actor_id
+            )
+            self.assertEqual(
+                retained_return["movements"][0]["createdAt"],
+                "2026-07-24T10:05:00+00:00",
+            )
+            self.assertEqual(
+                retained_return["inventoryFoundation"]["commands"][-1]["payload"]["kind"],
+                "production_return",
+            )
+            self.assertEqual(
+                retained_return["inventoryFoundation"]["commands"][-1]["payload"]["proof"]["actor"],
+                principal.actor_id,
+            )
+            replayed_return = client.post(
+                "/api/trial/v1/commands", json=return_body
+            )
+            self.assertEqual(replayed_return.status_code, 200)
+            self.assertTrue(
+                replayed_return.json()["result"]["idempotent_replay"]
+            )
+
+            stale_proof = action_evidence(
+                "ACT-WAREHOUSE-RETURN-STALE-001",
+                captured_at="2026-07-24T10:10:00.000Z",
+                actor=principal.actor_id,
+            )
+            stale_candidate = deepcopy(retained_return)
+            stale_candidate["items"][0]["onHand"] = 10
+            stale_candidate["movements"] = [
+                production_return_movement(
+                    retained["movements"][0], stale_proof
+                ),
+                *retained_return["movements"],
+            ]
+            stale_candidate["inventoryFoundation"] = production_returned_inventory(
+                retained_return["inventoryFoundation"],
+                stale_proof,
+                production_quantity_milli=5_000,
+                stock_quantity=1,
+            )
+            production_key = (principal.workspace_id, "production")
+            retained_production_state = store._states[production_key]
+            store._states[production_key] = TrialState(
+                workspace_id=principal.workspace_id,
+                surface="production",
+                version=retained_production_state.version,
+                state=starting_workspace(target=10),
+                updated_by=retained_production_state.updated_by,
+                updated_at=retained_production_state.updated_at,
+            )
+            stale_body = {
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.production_material.returned",
+                "expected_version": 4,
+                "payload": {
+                    "state": stale_candidate,
+                    "evidence": stale_proof,
+                },
+            }
+            stale = client.post("/api/trial/v1/commands", json=stale_body)
+            self.assertEqual(stale.status_code, 422)
+            self.assertEqual(
+                stale.json()["detail"]["code"], "trial_validation_error"
+            )
+            store._states[production_key] = retained_production_state
 
             accepted = client.post("/api/trial/v1/commands", json=operation_body)
             self.assertEqual(accepted.status_code, 200)

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "supermega.site-context.v2",
-  "contextVersion": "2026-07-30.2",
-  "catalogVersion": "2026-07-30.2",
+  "contextVersion": "2026-07-31.3",
+  "catalogVersion": "2026-07-31.3",
   "brand": {
     "name": "SuperMega",
     "domain": "supermega.dev",
@@ -16,8 +16,8 @@
   "company": {
     "positioning": "Operating software for Myanmar companies.",
     "statement": "Four focused SuperMega products for retail, production, websites, and ecommerce ordering.",
-    "headline": "Choose the product for the work you need to run.",
-    "supporting": "Shop runs orders and stock. Plant runs production and quality. Website builds company sites. Ecommerce creates Shop-connected ordering.",
+    "headline": "Pick one product and try the working sample.",
+    "supporting": "Shop sells and tracks stock. Plant runs production. Website builds pages. Ecommerce creates Shop-connected ordering.",
     "publicPricing": false
   },
   "templatePackPolicy": {
@@ -36,31 +36,31 @@
       "kind": "operating-product",
       "name": "Shop",
       "publicAnchor": "/#shop",
-      "appRoute": "https://app.supermega.dev/shop/?tab=counter",
+      "appRoute": "https://app.supermega.dev/shop/",
       "status": "available-in-app",
       "eyebrow": "Shop operations",
-      "headline": "Keep every order and stock movement accountable.",
-      "description": "Run browser-local orders, stock, fulfilment, payment status, exceptions, and daily close across common channels. No live channel, checkout, payment, delivery, customer send, or external write is connected.",
+      "headline": "Sell, track stock, and close the day.",
+      "description": "Use the working Shop sample for counter sales, orders, stock, purchases, receipts, returns, and daily close. Real payments, messages, delivery, and stock writes stay behind review.",
       "primaryCta": {
         "label": "Open Shop"
       },
       "secondaryCta": {
-        "label": "Configure Shop",
+        "label": "Set up Shop data",
         "url": "/contact/?product=shop"
       },
       "modules": [
-        "Sell: visual counter, cart, payment choice and accountable confirmation",
-        "Orders: intake, fulfilment, payments, follow-up and close",
-        "Stock: catalogue, balances, receipts and reorder exceptions",
-        "Accountability: evidence, owner review and recovery"
+        "Counter sales and cart",
+        "Orders, fulfilment, and returns",
+        "Stock, lots, receipts, and counts",
+        "Daily close and evidence"
       ],
       "internalTemplatePacks": [
-        {"id": "retail", "name": "Retail", "status": "core-compatible", "firstWorkflow": "counter sale", "availableNow": ["Sell", "Orders", "Stock", "Purchasing", "Returns"], "plannedNext": ["Promotions", "Loyalty"]},
-        {"id": "cafe", "name": "Cafe", "status": "core-compatible", "firstWorkflow": "counter order", "availableNow": ["Sell", "Orders", "Stock", "Daily close"], "plannedNext": ["Menu modifiers", "Kitchen tickets"]},
-        {"id": "restaurant", "name": "Restaurant", "status": "core-compatible", "firstWorkflow": "take and prepare order", "availableNow": ["Sell", "Orders", "Stock", "Payments"], "plannedNext": ["Tables", "Kitchen display"]},
-        {"id": "spa", "name": "Spa", "status": "core-compatible", "firstWorkflow": "sell service or product", "availableNow": ["Sell", "Orders", "Stock", "Payments"], "plannedNext": ["Appointments", "Service rooms", "Staff commission"]},
-        {"id": "gym", "name": "Gym", "status": "core-compatible", "firstWorkflow": "sell membership or product", "availableNow": ["Sell", "Orders", "Stock", "Payments"], "plannedNext": ["Memberships", "Check-in", "Classes"]},
-        {"id": "school", "name": "School", "status": "core-compatible", "firstWorkflow": "record fee or supply sale", "availableNow": ["Sell", "Orders", "Stock", "Payments"], "plannedNext": ["Students", "Fees", "Attendance", "Classes"]}
+        {"id": "retail", "name": "Retail", "status": "core-compatible", "workflowTemplateId": "retail-wholesale", "entryPoint": "Walk-in", "firstWorkflow": "counter sale and reviewed pickup", "availableNow": ["Sell", "Orders", "Stock", "Purchasing", "Returns", "Pickup schedule"], "plannedNext": ["Promotions", "Loyalty"]},
+        {"id": "cafe", "name": "Cafe", "status": "core-compatible", "workflowTemplateId": "restaurant-ordering", "entryPoint": "Walk-in", "firstWorkflow": "counter order and collection slot", "availableNow": ["Sell", "Orders", "Stock", "Daily close", "Collection schedule"], "plannedNext": ["Menu modifiers", "Kitchen tickets"]},
+        {"id": "restaurant", "name": "Restaurant", "status": "core-compatible", "workflowTemplateId": "restaurant-ordering", "entryPoint": "Walk-in", "firstWorkflow": "order and table reservation", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Reservations"], "plannedNext": ["Table map", "Kitchen display"]},
+        {"id": "spa", "name": "Spa", "status": "core-compatible", "workflowTemplateId": "social-commerce", "entryPoint": "Phone", "firstWorkflow": "treatment appointment", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Appointments", "Service resources"], "plannedNext": ["Staff commission", "Customer messaging"]},
+        {"id": "gym", "name": "Gym", "status": "core-compatible", "workflowTemplateId": "social-commerce", "entryPoint": "Phone", "firstWorkflow": "personal training session", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Training schedule", "Staff resources"], "plannedNext": ["Memberships", "Facility check-in"]},
+        {"id": "school", "name": "School", "status": "core-compatible", "workflowTemplateId": "social-commerce", "entryPoint": "Phone", "firstWorkflow": "enrollment consultation or class session", "availableNow": ["Sell", "Orders", "Stock", "Payments", "Class schedule", "Teacher resources"], "plannedNext": ["Students", "Fees ledger", "Attendance"]}
       ],
       "templates": [
         {
@@ -213,16 +213,16 @@
       "kind": "operating-product",
       "name": "Plant",
       "publicAnchor": "/#plant",
-      "appRoute": "https://app.supermega.dev/plant/?tab=production",
+      "appRoute": "https://app.supermega.dev/plant/",
       "status": "available-in-app",
       "eyebrow": "Plant operations",
-      "headline": "Give the plant floor one operational memory.",
-      "description": "Run recurring jobs, output, machine state, quality, maintenance, exceptions, and shift handoffs in a clearly labelled local demo. Authenticated tenant writes stay locked until managed activation gates pass. No machine telemetry, machine control, access change, or external write is connected.",
+      "headline": "Plan jobs, record output, and close shifts.",
+      "description": "Use the working Plant sample for jobs, output, material trace, quality holds, maintenance, problems, and shift close. Machine control and live production writes stay behind review.",
       "primaryCta": {
         "label": "Open Plant"
       },
       "secondaryCta": {
-        "label": "Configure Plant",
+        "label": "Set up Plant data",
         "url": "/contact/?product=plant"
       },
       "modules": [
@@ -273,7 +273,7 @@
       "appRoute": "https://app.supermega.dev/website/",
       "status": "available-in-app",
       "eyebrow": "Website maker",
-      "headline": "Turn a short business brief into a usable website.",
+      "headline": "Build a simple company website from a brief.",
       "workspaceSchema": "supermega.website.workspace.v2",
       "views": ["Start", "Edit", "Preview", "Download"],
       "workflow": ["Answer a short business brief", "Edit finite pages", "Review responsive preview", "Save ready pages", "Download standalone website", "Request managed hosting when needed"],
@@ -315,9 +315,9 @@
       "appRoute": "https://app.supermega.dev/ecommerce/",
       "status": "release-candidate-local",
       "eyebrow": "Ecommerce maker",
-      "headline": "Create a Shop-backed storefront and hand customer intent to human review.",
-      "views": ["Storefront", "Preview", "Request receipt", "Shop inbox", "Shop review"],
-      "workflow": ["Choose products", "Write storefront copy", "Review phone and desktop", "Retain deterministic preview digest", "Create pending request receipt", "Optionally retain exact receipt in authenticated Shop inbox", "Recover or review exact request", "Choose payment review", "Open accountable Shop action gate"],
+      "headline": "Create an online ordering page connected to Shop.",
+      "views": ["Storefront", "Cart and quote", "Request receipt", "Shop review", "Returns"],
+      "workflow": ["Choose Shop-backed products", "Build cart", "Select pickup or delivery intent", "Review a 15-minute whole-MMK quote", "Save a recoverable request receipt", "Confirm exact Shop handoff", "Complete payment, fulfilment, returns, and refunds in Shop"],
       "templates": [
         {
           "id": "social-storefront",
@@ -344,8 +344,52 @@
           "metric": "Qualified wholesale requests and review cycle time"
         }
       ],
-      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Exact retained-ledger membership", "Idempotent receipt and exact managed replay", "Revision, action-identity, and cross-tenant conflict rejection", "Bootstrap recovery", "Unchanged Shop orders and stock movements", "Human-confirmed source-locked Shop draft", "83 Shop runtime checks", "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, oversized-inbox, and tampered request rejection"],
-      "boundaries": ["No duplicate stock ledger", "No isolated hosted tenant proof", "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale", "No Shop order or stock reservation before separate accountable confirmation", "No cart or payment initiation", "No delivery execution", "No customer send", "No publishing", "No external write"]
+      "proof": ["Read-only Shop catalogue snapshot", "Locked price and availability projection", "Deterministic SHA-256 preview digest", "Deterministic 15-minute checkout quote", "Recoverable cart and request state", "Exact retained-ledger membership", "Idempotent receipt and exact managed replay", "Revision, action-identity, and cross-tenant conflict rejection", "Bootstrap recovery", "Unchanged Shop orders and stock movements", "Human-confirmed source-locked Shop draft", "Payment remains unauthorized before Shop", "23 Ecommerce buying runtime checks", "Stale, duplicate, unknown, sold-out, repriced, insufficient-stock, oversized-inbox, and tampered request rejection"],
+      "boundaries": ["No duplicate stock ledger", "No isolated hosted tenant proof", "Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale", "No Shop order or stock reservation before separate accountable confirmation", "No payment authorization or charge", "Delivery stays an intent until Shop confirms fee and fulfilment", "Returns and refunds are completed in Shop", "No customer send", "No publishing", "No external write"]
+    }
+  ],
+  "serviceProducts": [
+    {
+      "id": "vision",
+      "runtimeId": "vision",
+      "kind": "service-product",
+      "name": "Vision",
+      "publicAnchor": "/#vision",
+      "publicRoute": "/vision/",
+      "salesRoute": "/contact/?product=vision&template=release-qa",
+      "status": "founding-pilot-local",
+      "eyebrow": "Private screen workflows",
+      "headline": "Teach one repetitive screen workflow and measure it locally.",
+      "description": "Define approved screen states, train on customer-authorized examples, measure held-out recognition, and deliver an observation-only Windows or Android pilot without sending screenshots to a cloud model provider.",
+      "workflow": ["Choose one repetitive workflow", "Confirm screenshot rights", "Capture representative states", "Review local annotations", "Train and calibrate locally", "Measure held-out performance", "Run observation-only pilot"],
+      "templates": [
+        {
+          "id": "release-qa",
+          "name": "Software release QA",
+          "outcome": "Recognize ready, loading, error, and degraded application states before a human release decision.",
+          "workflow": ["Define release states", "Capture approved screens", "Annotate visual evidence", "Train local detector", "Measure held-out states", "Review release observations"],
+          "entryPoints": ["Release checklist", "Test environment", "Owned application screenshots"],
+          "metric": "Review time, missed visible failures, and abstention rate"
+        },
+        {
+          "id": "legacy-windows",
+          "name": "Legacy Windows workflow",
+          "outcome": "Recognize stable states in desktop software where reliable APIs are unavailable.",
+          "workflow": ["Map operator steps", "Capture approved states", "Label visible controls", "Train local detector", "Run shadow workflow", "Measure exceptions"],
+          "entryPoints": ["Desktop procedure", "Operator checklist", "Owned Windows screenshots"],
+          "metric": "Operator review time and correctly recognized workflow states"
+        },
+        {
+          "id": "android-field",
+          "name": "Android field workflow",
+          "outcome": "Recognize approved states in a fixed Android field application while keeping screen data local.",
+          "workflow": ["Choose field task", "Qualify Android device", "Capture authorized states", "Review annotations", "Train portable detector", "Measure physical-device performance"],
+          "entryPoints": ["Field procedure", "Approved Android device", "Owned application screenshots"],
+          "metric": "Recognition accuracy, device latency, and manual fallback rate"
+        }
+      ],
+      "proof": ["Sealed Windows runtime", "Android AAR and APK packages", "Content-addressed model and evidence receipts", "Replayable buyer evaluation kit", "Observation-only workflow qualification", "Tamper and supply-chain verification"],
+      "boundaries": ["No surveillance", "No biometric identification", "No CAPTCHA bypass", "No credential handling", "No medical or safety-critical decisions", "No consequential action without separate exact approval", "Physical Android performance remains device-qualified"]
     }
   ],
   "sharedCapabilities": [
@@ -362,7 +406,7 @@
     }
   ],
   "pages": [
-    { "route": "/", "file": "index.html", "title": "SuperMega | Four focused business products" },
+    { "route": "/", "file": "index.html", "title": "SuperMega | Four products" },
     { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
     { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
   ],
@@ -378,7 +422,7 @@
     { "source": "^/products/(?:production|factory|operations|erp|plant)/?.*$", "destination": "/#plant" },
     { "source": "^/products/website/?.*$", "destination": "/#website" },
     { "source": "^/products/ecommerce/?.*$", "destination": "/#ecommerce" },
-    { "source": "^/(?:ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/#products" },
+    { "source": "^/(?:vision|ai-agent-solutions|ai-agents|agents|agent-templates|workcell|machine|agentops)/?.*$", "destination": "/#products" },
     { "source": "^/(?:find-clients|company-list|receiving-control|receiving-log|founder-brief|reconcile)/?.*$", "destination": "/#products" },
     { "source": "^/(?:start|book|setup|get-started|intake)/?.*$", "destination": "/contact/" },
     { "source": "^/(?:app|login|clients)/?.*$", "destination": "https://app.supermega.dev/" },

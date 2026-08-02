@@ -2,10 +2,9 @@
   "clientId": "internal-example",
   "cycleId": "first-proof-001",
   "agents": [
-    "operations-analyst",
-    "project-controller"
+    "operations-analyst"
   ],
-  "roleBudget": 6,
+  "roleBudget": 3,
   "evidence": {
     "operations-analyst": {
       "objective": "Rank the next operating period from approved, redacted facts.",
@@ -16,16 +15,6 @@
       "constraints": [
         "No external writes.",
         "No customer or revenue claim without evidence."
-      ]
-    },
-    "project-controller": {
-      "acceptedOutcome": "Produce a bounded milestone and risk update for owner review.",
-      "milestones": [
-        "Replace this example with the approved baseline and current state."
-      ],
-      "constraints": [
-        "No unattended dispatch.",
-        "No recursive delegation."
       ]
     }
   }

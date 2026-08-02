@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -9,6 +9,14 @@ import { SitePreview } from './SitePreview'
 import { WebsiteStarterSetup } from './WebsiteStarterSetup'
 import { useWebsiteWorkspace } from './useWebsiteWorkspace'
 import { createWebsiteHtmlDownload } from './website-export'
+import {
+  captureWebsiteLead,
+  emptyWebsiteLeadLedger,
+  readWebsiteLeadLedger,
+  reviewWebsiteLead,
+  websiteLeadCounts,
+  writeWebsiteLeadLedger,
+} from './website-leads'
 import type { WebsiteReleaseState } from './website-release-foundation'
 import {
   applyWebsiteStarterBrief,
@@ -57,7 +65,7 @@ type WebsiteEditSessionState = {
   session: WebsiteEditSession
 }
 
-const DEFAULT_NOTICE = 'Website workspace loaded. No website has been deployed.'
+const DEFAULT_NOTICE = 'Website example loaded. Nothing has been deployed.'
 
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
@@ -65,8 +73,8 @@ const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
     copy: 'Edit one section, preview it, then save or discard.',
   },
   publish: {
-    title: 'Review release',
-    copy: 'Verify the managed revision and its accountable release record.',
+    title: 'Prepare website file',
+    copy: 'Check the pages, record review notes, then download the approved website file.',
   },
 }
 
@@ -106,7 +114,7 @@ function TrialReadyWorkspace({
         <ol className="website-trial-ready-steps">
           <li>
             <span aria-hidden="true">1</span>
-            <div><strong>Preview</strong><p>Use Back to edit to check desktop, tablet, or mobile again.</p></div>
+            <div><strong>Preview</strong><p>Go back, then Preview to check desktop, tablet, or mobile.</p></div>
           </li>
           <li>
             <span aria-hidden="true">2</span>
@@ -173,6 +181,16 @@ export function WebsiteProduct() {
   ))
   const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
+  const [localLeadLedger, setLocalLeadLedger] = useState(() => {
+    if (typeof window === 'undefined') return emptyWebsiteLeadLedger()
+    try { return readWebsiteLeadLedger(window.localStorage) } catch { return emptyWebsiteLeadLedger() }
+  })
+  const leadLedger = storageMode === 'managed'
+    ? workspace.leadLedger ?? emptyWebsiteLeadLedger()
+    : localLeadLedger
+  const [leadDraft, setLeadDraft] = useState({ name: '', contact: '', request: '', consentRecorded: false })
+  const [leadOwner, setLeadOwner] = useState('')
+  const [leadDecisionNote, setLeadDecisionNote] = useState('')
   const editSessionScope = storageMode === 'managed'
     ? managedActorId ? `managed:${managedActorId}` : ''
     : storageMode
@@ -198,13 +216,13 @@ export function WebsiteProduct() {
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
-        title: 'Website demo',
-        copy: 'Explore the responsive site first. Edit or reuse it only when you are ready.',
+        title: 'Website',
+        copy: 'Preview, edit, and download the website file.',
       }
     : starterSetupActive
     ? {
-        title: 'Start your website',
-        copy: 'Answer five short questions, then preview before anything is saved.',
+        title: 'Make this website yours',
+        copy: 'Edit the ready example, then preview it before anything is saved.',
       }
     : view === 'content' && surface === 'preview'
     ? {
@@ -212,17 +230,17 @@ export function WebsiteProduct() {
         copy: hasUnsavedChanges
           ? 'This preview is not saved yet. Return to edit, then save or discard it.'
           : selectedPage.stage === 'draft'
-            ? 'This page is saved as a draft. Return to edit and mark it ready.'
+            ? 'This page is saved as a draft. Select Edit site to update it and mark it ready.'
             : 'Check the selected page at desktop, tablet, or mobile size.',
       }
     : view === 'publish' && storageMode !== 'managed'
       ? {
           title: 'Your website is ready',
-          copy: 'Download it now, or request a workspace when you are ready to put it online.',
+          copy: 'Download it now. Go live only after final review.',
         }
       : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
-    ? 'Changes are saved to this managed workspace. Nothing has been deployed.'
+    ? 'Changes are saved to this company account. Nothing has been deployed.'
     : storageMode === 'browser-local'
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
@@ -233,13 +251,13 @@ export function WebsiteProduct() {
     : hasUnsavedChanges
       ? 'Unsaved preview'
       : storageMode === 'managed'
-        ? 'Saved to workspace'
+        ? 'Saved to company'
         : storageMode === 'browser-local'
           ? 'Saved on this device'
           : 'Session only'
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
-    ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved workspace.'
+    ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
     : storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
   const noticePriority = editConflict || storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
   const repairArmed = canRepairLocalStorage
@@ -308,11 +326,11 @@ export function WebsiteProduct() {
 
   function openWorkspaceView(nextView: WebsiteView) {
     if (nextView === 'publish' && hasUnsavedChanges) {
-      setNotice('Save or discard the unsaved Website preview before reviewing release evidence.')
+      setNotice('Save or discard the unsaved Website preview before reviewing the file checklist.')
       return
     }
     if (nextView === 'publish' && !canReview) {
-      setNotice('Finish and save every page before reviewing release evidence.')
+      setNotice('Finish and save every page before reviewing the file checklist.')
       return
     }
     const next = new URLSearchParams(searchParams)
@@ -356,7 +374,7 @@ export function WebsiteProduct() {
         ? [...retained, nextRelease]
         : retained.map((record, recordIndex) => recordIndex === index ? nextRelease : record)
       return { ...current, releaseRecords }
-    }, 'Release record saved to this managed workspace.', true)
+    }, 'Website checklist saved to this company account.', true)
     return result.ok ? { ok: true as const } : result
   }
 
@@ -439,13 +457,11 @@ export function WebsiteProduct() {
     if (!activeEditSession || savingDraft) return
     clearEditSession()
     setDeleteCandidateId('')
-    if (isUntouchedWebsiteStarter(workspace)) {
-      setStarterDismissed(false)
-      setSurface('work')
-      setSiteSettingsOpen(false)
-      requestHeadingFocus()
-    }
-    setNotice('Unsaved Website changes discarded. The saved workspace was not changed.')
+    setStarterDismissed(true)
+    setSurface('preview')
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
+    setNotice('Unsaved Website changes discarded. The saved website was not changed.')
   }
 
   function requireSavedWorkspace(action: string) {
@@ -572,7 +588,7 @@ export function WebsiteProduct() {
 
   function startWithBusiness(brief: WebsiteStarterBrief) {
     if (!starterAvailable) {
-      setNotice('The Website sample has already changed. Nothing was replaced.')
+      setNotice('The Website example has already changed. Nothing was replaced.')
       return
     }
     const staged = stageWorkspace((current) => (
@@ -591,7 +607,7 @@ export function WebsiteProduct() {
       route: location.pathname + location.search,
       detail: `Website starter brief generated: ${brief.businessName}`,
     })
-    setNotice('Your one-page site is ready as an unsaved preview. Review it, then Save or Discard.')
+    setNotice('Your three-page site is ready as an unsaved preview. Review every page, then Save or Discard.')
   }
 
   function openStarterSetup() {
@@ -599,6 +615,11 @@ export function WebsiteProduct() {
     setSurface('work')
     setSiteSettingsOpen(false)
     requestHeadingFocus()
+  }
+
+  function viewWebsiteSample() {
+    setStarterDismissed(true)
+    openContentSurface('preview')
   }
 
   function copySelectedPage() {
@@ -696,7 +717,7 @@ export function WebsiteProduct() {
         actionId: createId('local-snapshot'),
         capturedAt: new Date().toISOString(),
       }),
-      'Approved site file saved and confirmed. No deployment occurred.',
+      'Approved website file saved. Nothing was deployed.',
       true,
     )
   }
@@ -718,7 +739,7 @@ export function WebsiteProduct() {
       link.click()
       link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 0)
-      setNotice(`${download.filename} downloaded. No deployment or domain change occurred.`)
+      setNotice(`${download.filename} downloaded. No site or domain was changed.`)
     } catch (error) {
       setNotice('The retained site file failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
     }
@@ -744,178 +765,108 @@ export function WebsiteProduct() {
   }
 
   const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
-  const websiteAgentJob = storageIssue || canRepairLocalStorage
-    ? 'Recover Website workspace'
-    : starterSetupActive
-      ? 'Complete business brief'
-      : starterAvailable
-        ? 'Start from business brief'
-        : hasUnsavedChanges
-          ? 'Review unsaved site edits'
-          : failingContentChecks.length
-            ? 'Fix content readiness'
-            : !approvalIsCurrent
-              ? 'Record owner approval'
-              : !publishIsCurrent
-                ? 'Record release snapshot'
-                : storageMode === 'managed'
-                  ? 'Prepare rollout plan'
-                  : 'Download site handoff'
-  const websiteAgentReason = storageIssue || canRepairLocalStorage
-    ? 'Saving or recovery needs attention before Website work can be trusted.'
-    : starterSetupActive
-      ? 'A short business brief can replace the sample with client-specific pages before anything is saved.'
-      : starterAvailable
-        ? 'The sample is still untouched, so the fastest path is to generate a client-specific draft.'
-        : hasUnsavedChanges
-          ? 'The preview has edits that must be saved or discarded before approval or release review.'
-          : failingContentChecks.length
-            ? `${failingContentChecks.length} readiness check${failingContentChecks.length === 1 ? '' : 's'} must pass before owner approval.`
-            : !approvalIsCurrent
-              ? 'The current Website revision needs named owner review before a release snapshot is recorded.'
-              : !publishIsCurrent
-                ? 'The approved revision needs an immutable static site package for handoff.'
-                : storageMode === 'managed'
-                  ? 'The managed release can prepare a rollout plan, but provider deployment still requires owner execution.'
-                  : 'The approved static site package is ready to download; no domain or deployment changes happen here.'
-  const websiteOwnerGate = storageIssue || canRepairLocalStorage
-    ? 'Owner exports backup or confirms repair before continuing.'
-    : starterSetupActive
-      ? 'Owner reviews the generated pages before saving.'
-      : starterAvailable
-        ? 'Owner chooses to reuse the sample or enter a real business brief.'
-        : hasUnsavedChanges
-          ? 'Owner saves or discards the preview.'
-          : failingContentChecks.length
-            ? 'Owner fixes content, navigation, proof, and CTA readiness.'
-            : !approvalIsCurrent
-              ? 'Owner records approval with evidence.'
-              : !publishIsCurrent
-                ? 'Owner records the release snapshot.'
-                : storageMode === 'managed'
-                  ? 'Owner approves release manager and reviewer before deployment planning.'
-                  : 'Owner downloads the package and decides where it goes live.'
-  const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
-    ? 'Open recovery'
-    : starterSetupActive || starterAvailable
-      ? 'Open brief'
-      : hasUnsavedChanges || failingContentChecks.length
-        ? 'Open editor'
-        : !approvalIsCurrent || !publishIsCurrent || storageMode === 'managed'
-          ? 'Open release'
-          : 'Get website'
-  const websiteAgentRows = [
-    ['Agent job', websiteAgentJob],
-    ['Reason', websiteAgentReason],
-    ['Owner gate', websiteOwnerGate],
-  ]
-  const websiteAutopilotTrack = storageIssue || canRepairLocalStorage
-    ? 'Recovery'
-    : starterSetupActive || starterAvailable
-      ? 'Brief'
-      : hasUnsavedChanges || failingContentChecks.length
-        ? 'Content'
-        : !approvalIsCurrent || !publishIsCurrent
-          ? 'Release'
-          : storageMode === 'managed'
-            ? 'Rollout'
-            : 'Handoff'
-  const websiteAutopilotRows = [
-    ['Track', websiteAutopilotTrack],
-    ['Stage', websiteAgentJob],
-    ['Next', websiteAgentActionLabel],
-    ['Learning', 'Records behavior only'],
-    ['Boundary', 'No auto deploy'],
-  ]
-  const websiteGeneratorGuideRows = [
-    ['Inputs', 'Business facts, offers, proof, photos, links'],
-    ['AI creates', 'Pages, copy, CTAs, SEO basics, release checklist'],
-    ['Owner reviews', 'Brand, claims, contact route, pricing, proof'],
-    ['Handoff', 'Static package plus managed rollout plan'],
-  ]
-  const websiteLaunchPriority = storageIssue || canRepairLocalStorage
-    ? 'Recover workspace'
-    : hasUnsavedChanges
-      ? 'Save current edits'
-      : failingContentChecks.length
-        ? 'Clear readiness gaps'
-        : !approvalIsCurrent
-          ? 'Record owner approval'
-          : !publishIsCurrent
-            ? 'Package release'
-            : storageMode === 'managed'
-              ? 'Plan deployment'
-              : 'Download handoff'
-  const websiteLaunchRows = [
-    ['Priority', websiteLaunchPriority],
-    ['Readiness', failingContentChecks.length ? `${failingContentChecks.length} blocked` : 'Passed'],
-    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
-    ['Package', publishIsCurrent ? 'Retained' : 'Needed'],
-    ['Publish gate', storageMode === 'managed' ? 'Owner-run rollout' : 'No deploy here'],
-  ]
   const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
     && Boolean(page.hero.ctaLabel.trim())
     && Boolean(page.hero.ctaHref.trim()))
-  const websiteLeadCaptureNext = storageIssue || canRepairLocalStorage
+  const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
+  const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
+  const managedReleaseRequired = storageMode === 'managed'
+  const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
+    : starterSetupActive
+      ? 'Answer 5 questions'
+    : starterAvailable
+        ? 'Create from template'
+        : hasUnsavedChanges
+          ? 'Save or discard edits'
+          : failingContentChecks.length
+            ? 'Fix page checks'
+            : leadCounts.new
+              ? 'Review new inquiries'
+              : managedReleaseRequired && !approvalIsCurrent
+                ? 'Final review'
+                : managedReleaseRequired && !publishIsCurrent
+                  ? 'Save website file'
+                  : managedReleaseRequired
+                    ? 'Review go-live plan'
+                    : 'Download website'
+  const websiteAgentReason = storageIssue || canRepairLocalStorage
+    ? 'Saving or recovery needs attention before Website work can be trusted.'
+    : starterSetupActive
+      ? 'Answer a short brief to replace the example with client-specific pages.'
+      : starterAvailable
+        ? 'Start with the sample template and change only the business details.'
+        : hasUnsavedChanges
+          ? 'Save the preview or discard it before review.'
+          : failingContentChecks.length
+            ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
+            : leadCounts.new
+              ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
+              : managedReleaseRequired && !approvalIsCurrent
+                ? 'Final review is required before a website file is saved.'
+                : managedReleaseRequired && !publishIsCurrent
+                  ? 'Save a static release file for the approved website.'
+                  : managedReleaseRequired
+                    ? 'Review the go-live checklist. Deployment still happens separately.'
+                    : 'Your reviewed site is ready to download. Nothing is deployed here.'
+  const websiteReviewNote = storageIssue || canRepairLocalStorage
+    ? 'Export a backup or confirm repair before continuing.'
+    : starterSetupActive
+      ? 'Review the generated pages before saving.'
+      : starterAvailable
+        ? 'Use the sample now, or create a client-specific version.'
+        : hasUnsavedChanges
+          ? 'Save or discard the preview.'
+          : failingContentChecks.length
+            ? 'Fix content, navigation, proof, and contact readiness.'
+            : leadCounts.new
+              ? 'You qualify or close each inquiry; no customer message is sent here.'
+              : managedReleaseRequired && !approvalIsCurrent
+                ? 'You record review evidence.'
+                : managedReleaseRequired && !publishIsCurrent
+                  ? 'You create the website file.'
+                  : managedReleaseRequired
+                    ? 'You review the go-live checklist before deployment planning.'
+                    : 'You decide where it goes live.'
+  const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
+    ? 'Open recovery'
     : starterSetupActive || starterAvailable
-      ? 'Start business brief'
-      : hasUnsavedChanges
-        ? 'Save site edits'
-        : failingContentChecks.length
-          ? 'Fix capture blockers'
-          : !readyBuyerCtaPages.length
-            ? 'Add contact path'
-            : !approvalIsCurrent
-              ? 'Record owner approval'
-              : !publishIsCurrent
-                ? 'Build release package'
-                : 'Lead capture ready'
-  const websiteLeadCaptureRows = [
-    ['Brief', starterAvailable ? 'Sample only' : 'Saved'],
-    ['Contact', readyBuyerCtaPages.length ? `${readyBuyerCtaPages.length} CTA ready` : 'Missing'],
-    ['Content', failingContentChecks.length ? `${failingContentChecks.length} fixes` : 'Passed'],
-    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
-    ['Handoff', publishIsCurrent ? 'Package ready' : 'No send here'],
-  ]
-  const managedRolloutNext = storageIssue || canRepairLocalStorage
-    ? 'Recover Website workspace'
-    : failingContentChecks.length
-      ? 'Fix rollout blockers'
-      : !approvalIsCurrent
-        ? 'Record approval evidence'
-        : !publishIsCurrent
-          ? 'Build static package'
-          : storageMode === 'managed'
-            ? 'Prepare managed rollout'
-            : 'Download activation packet'
-  const managedRolloutRows = [
-    ['Domain', storageMode === 'managed' ? 'Owner maps DNS' : 'Not connected'],
-    ['Forms', readyBuyerCtaPages.length ? 'Route planned' : 'Need CTA'],
-    ['Analytics', publishIsCurrent ? 'Plan ready' : 'Needs package'],
-    ['Content', failingContentChecks.length ? `${failingContentChecks.length} blocker` : 'Approved proof'],
-    ['Package', publishIsCurrent ? 'Static snapshot' : 'Needed'],
-    ['Gate', storageMode === 'managed' ? 'Owner rollout' : 'Free local only'],
-  ]
-  const websiteHandoffNext = storageIssue || canRepairLocalStorage
-    ? 'Recover Website workspace'
-    : failingContentChecks.length
-      ? 'Finish page readiness'
-      : !approvalIsCurrent
-        ? 'Record owner approval'
-        : !publishIsCurrent
-          ? 'Download static package'
-          : storageMode === 'managed'
-            ? 'Prepare managed handoff'
-            : 'Hand off website package'
-  const websiteHandoffRows = [
-    ['Pages', `${workspace.pages.filter((page) => page.stage === 'ready').length}/${workspace.pages.length} ready`],
-    ['Approval', approvalIsCurrent ? 'Recorded' : 'Needed'],
-    ['Package', publishIsCurrent ? 'Retained' : canReview ? 'Ready to build' : 'Needs review'],
-    ['Lead capture', websiteLeadCaptureNext],
-    ['Managed gate', storageMode === 'managed' ? 'Tenant review' : 'Free export'],
-    ['Boundary', 'No auto launch'],
+      ? 'Create from template'
+      : hasUnsavedChanges || failingContentChecks.length
+        ? 'Open editor'
+        : leadCounts.new
+          ? 'Review inquiries'
+        : managedReleaseRequired
+          ? 'Open checklist'
+          : 'Get website'
+  const websiteTodayState = storageIssue || canRepairLocalStorage
+    ? 'blocked'
+    : starterAvailable || starterSetupActive
+      ? 'setup'
+      : hasUnsavedChanges || failingContentChecks.length || leadCounts.new
+        ? 'attention'
+        : 'ready'
+  const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace
+  const websiteTodayMetrics = [
+    ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
+    ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
+    ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
+    ['Review', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
+    ['File', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
   ] as const
+  const websiteTodaySource = storageMode === 'managed'
+    ? `Company account · ${managedActorId || 'signed in'}`
+    : storageMode === 'browser-local'
+      ? 'Saved on this device'
+      : 'Available in this browser session'
+  const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
+    contract: 'supermega.website.lead-export.v1',
+    exportedAt: new Date().toISOString(),
+    siteName: workspace.siteName,
+    revision: leadLedger.revision,
+    leads: websiteLeads,
+    controls: { localOnly: true, externalWritesPerformed: false, humanReviewRequired: true },
+  }, null, 2))}`
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_seen',
@@ -930,7 +881,7 @@ export function WebsiteProduct() {
       event: 'agent_job_chosen',
       product: 'website',
       route: location.pathname + location.search,
-      detail: `Website autopilot: ${websiteAgentJob}`,
+      detail: `Website next step: ${websiteAgentJob}`,
     })
     if (storageIssue || canRepairLocalStorage) {
       requestRecoveryFocus()
@@ -944,37 +895,92 @@ export function WebsiteProduct() {
       openContentSurface('work')
       return
     }
-    if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
-      openWorkspaceView('publish')
+    if (leadCounts.new) {
+      const controls = document.querySelector<HTMLDetailsElement>('.website-business-controls')
+      if (controls) controls.open = true
+      requestAnimationFrame(() => {
+        const inbox = document.getElementById('website-lead-inbox')
+        inbox?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        document.getElementById('website-lead-inbox-title')?.focus({ preventScroll: true })
+      })
       return
     }
-    downloadTrialSite()
+    openWorkspaceView('publish')
   }
 
-  function runWebsiteAgentJob() {
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_chosen',
-      product: 'website',
-      route: location.pathname + location.search,
-      detail: websiteAgentJob,
-    })
-    if (storageIssue || canRepairLocalStorage) {
-      requestRecoveryFocus()
-      return
+  function saveLeadLedger(nextLedger: typeof leadLedger, success: string) {
+    try {
+      const confirmed = writeWebsiteLeadLedger(window.localStorage, nextLedger)
+      setLocalLeadLedger(confirmed)
+      setNotice(success)
+      return true
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The Website lead record could not be saved.')
+      return false
     }
-    if (starterAvailable || starterSetupActive) {
-      openStarterSetup()
-      return
+  }
+
+  async function captureDemoInquiry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    try {
+      const next = captureWebsiteLead(leadLedger, {
+        siteName: workspace.siteName,
+        sourcePage: selectedPage.slug,
+        ...leadDraft,
+      }, { id: createId('lead'), now: new Date().toISOString() })
+      if (storageMode === 'managed') {
+        const result = await mutateWorkspace((current) => ({
+          ...current,
+          leadLedger: captureWebsiteLead(current.leadLedger ?? emptyWebsiteLeadLedger(), {
+            siteName: current.siteName,
+            sourcePage: selectedPage.slug,
+            ...leadDraft,
+          }, { id: next.leads[0].id, now: next.leads[0].createdAt }),
+        }), { durable: true })
+        if (!result.ok) throw new Error(result.error)
+        setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
+        setNotice('Inquiry saved to the company Website inbox for manager review. No message, CRM write, or external send ran.')
+        return
+      }
+      if (saveLeadLedger(next, 'Inquiry saved to the local Website inbox. No message, CRM write, or external send ran.')) {
+        setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The Website inquiry is invalid.')
     }
-    if (hasUnsavedChanges || failingContentChecks.length) {
-      openContentSurface('work')
-      return
+  }
+
+  async function decideLead(leadId: string, status: 'qualified' | 'closed') {
+    try {
+      const next = reviewWebsiteLead(leadLedger, leadId, {
+        status,
+        owner: leadOwner,
+        decisionNote: leadDecisionNote,
+      }, new Date().toISOString())
+      if (storageMode === 'managed') {
+        const reviewed = next.leads.find((lead) => lead.id === leadId)
+        if (!reviewed) throw new Error('The Website inquiry no longer exists.')
+        const result = await mutateWorkspace((current) => ({
+          ...current,
+          leadLedger: reviewWebsiteLead(current.leadLedger ?? emptyWebsiteLeadLedger(), leadId, {
+            status,
+            owner: leadOwner,
+            decisionNote: leadDecisionNote,
+          }, reviewed.updatedAt),
+        }), { durable: true })
+        if (!result.ok) throw new Error(result.error)
+        setLeadDecisionNote('')
+        setNotice(status === 'qualified'
+          ? 'Inquiry qualified and assigned in this company account. No customer message was sent.'
+          : 'Inquiry closed in this company account. No customer message was sent.')
+        return
+      }
+      if (saveLeadLedger(next, status === 'qualified'
+        ? 'Inquiry qualified and assigned locally. No customer message was sent.'
+        : 'Inquiry closed locally. No customer message was sent.')) setLeadDecisionNote('')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The Website inquiry decision is invalid.')
     }
-    if (!approvalIsCurrent || !publishIsCurrent || storageMode === 'managed') {
-      openWorkspaceView('publish')
-      return
-    }
-    downloadTrialSite()
   }
 
   return (
@@ -984,7 +990,7 @@ export function WebsiteProduct() {
           {noticePriority !== 'routine' ? (
             <div className="website-notice" aria-busy={repairing} aria-live="polite" data-priority={noticePriority} role="status">
               <p>{repairArmed
-                ? 'SuperMega will keep a recovery copy on this device, then restore saving with the valid Website shown here. Nothing will be published; Shop, Plant, managed data, and domains stay unchanged.'
+                ? 'SuperMega will keep a recovery copy on this device, then restore saving with the valid Website shown here. Nothing will be published; Shop, Plant, company data, and domains stay unchanged.'
                 : repairing ? 'Keeping a recovery copy and restoring Website saving…' : statusNotice}</p>
               {repairArchiveKey && !repairArmed ? (
                 <div className="website-notice-actions">
@@ -1007,12 +1013,38 @@ export function WebsiteProduct() {
             </div>
           ) : null}
 
+          <header className="website-heading" data-view={view}>
+            <div>
+              <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
+              <p>{activeViewCopy.copy}</p>
+            </div>
+            {view === 'publish' ? (
+              <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
+            ) : null}
+          </header>
+
+          {view === 'content' && !starterSetupActive ? (
+            <section className="website-start-guide" aria-label="Website setup steps">
+              <header>
+                <span className="website-kicker">Start here</span>
+                <h2>Try the sample. Then make it yours.</h2>
+                <p>Most users only need these three actions. Advanced review stays out of the way.</p>
+              </header>
+              <div>
+                <button onClick={() => previewPage()} type="button"><b>1</b><span><strong>View demo</strong><small>See the finished example first.</small></span></button>
+                <button onClick={openStarterSetup} type="button"><b>2</b><span><strong>Use template</strong><small>Answer a few business questions.</small></span></button>
+                <button onClick={() => openWorkspaceView('publish')} type="button"><b>3</b><span><strong>Get website</strong><small>Download the reviewed file.</small></span></button>
+              </div>
+            </section>
+          ) : null}
+
           {view === 'content' ? (
             <section
               aria-label="Website actions"
               className="website-action-bar"
               data-editing={hasUnsavedChanges ? 'true' : 'false'}
               data-starter={starterSetupActive ? 'true' : 'false'}
+              data-surface={surface}
             >
               {starterSetupActive ? (
                 <div className="website-page-control website-starter-control">
@@ -1045,7 +1077,7 @@ export function WebsiteProduct() {
               </span>
               {!starterSetupActive ? (
                 <div className="website-primary-actions">
-                {starterAvailable ? (
+                {starterAvailable && surface === 'preview' ? (
                   <button className="website-button is-primary" onClick={openStarterSetup} type="button">
                     Use this demo
                   </button>
@@ -1118,8 +1150,7 @@ export function WebsiteProduct() {
                   </details>
                 ) : null}
                 <button
-                  aria-pressed={surface === 'preview'}
-                  className="website-button is-secondary"
+                  className={`website-button ${surface === 'preview' && !starterAvailable ? 'is-primary' : 'is-secondary'}`}
                   onClick={() => {
                     if (surface === 'preview') openContentSurface('work')
                     else previewPage()
@@ -1148,9 +1179,13 @@ export function WebsiteProduct() {
                       {savingDraft ? 'Saving…' : 'Save'}
                     </button>
                   </>
-                ) : canReview ? (
+                ) : storageMode === 'managed' ? canReview ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
-                    {storageMode === 'managed' ? 'Review release' : 'Get website'}
+                    Prepare file
+                  </button>
+                ) : null : surface === 'work' ? (
+                  <button className="website-button is-primary" onClick={downloadTrialSite} type="button">
+                    {canReview ? 'Download website' : 'Download draft'}
                   </button>
                 ) : null}
                 </div>
@@ -1158,92 +1193,51 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          <header className="website-heading" data-view={view}>
-            <div>
-              <h1 ref={headingRef} tabIndex={-1}>{activeViewCopy.title}</h1>
-              <p>{activeViewCopy.copy}</p>
+          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
+            <div className="website-today-priority">
+              <span className="website-kicker">Today</span>
+              <h2 id="website-today-title">{websiteAgentJob}</h2>
+              <p>{websiteAgentReason}</p>
+              <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
             </div>
-            {view === 'publish' ? (
-              <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
-            ) : null}
-          </header>
+            <div aria-label="Website today status" className="website-today-metrics" role="group">
+              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+            <div className="website-today-source" role="status">
+              <span>{websiteTodaySource}</span>
+              <small>{websiteReviewNote}</small>
+            </div>
+          </section> : null}
 
-          <section aria-label="Website Autopilot" className="website-autopilot">
-            <div>
-              <span className="website-kicker">Website Autopilot</span>
-              <h2>{websiteAgentJob}</h2>
-              <p>One button chooses the next safe owner action from recovery, business brief, content proof, lead capture, owner approval, release package, and rollout-readiness state. AI may prepare pages and packets; it does not publish, change DNS, send forms, install analytics, write CRM, write Shop, or deploy from here.</p>
-            </div>
-            <div className="website-autopilot-rows">
-              {websiteAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-            <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">Run next step</button>
-          </section>
+          {!starterSetupActive ? <details className="website-start-tools website-business-controls">
+            <summary><span><strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small></span><b>{leadCounts.new} new</b></summary>
+            <div className="website-business-controls-content">
+              <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
+                <header>
+                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} Nothing is sent to customers, CRM, or Shop from this screen.</p></div>
+                  <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
+                </header>
 
-          <section aria-label="Website generator guide" className="website-generator-guide">
-            <div>
-              <span className="website-kicker">Website generator guide</span>
-              <h2>Bring any business. Get a reviewed site package.</h2>
-              <p>AI turns a simple business brief into a complete website draft and launch packet. The owner still approves claims, proof, contact paths, release package, and rollout before anything goes public.</p>
-            </div>
-            <div className="website-generator-guide-rows">
-              {websiteGeneratorGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
+                <form className="website-lead-capture-form" onSubmit={captureDemoInquiry}>
+                  <label>Name<input autoComplete="name" maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
+                  <label>Phone or email<input autoComplete="email" maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
+                  <label className="website-lead-request">What do they need?<textarea maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
+                  <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
+                  <button className="website-button is-primary is-compact" disabled={!readyBuyerCtaPages.length} type="submit">Add inquiry</button>
+                  {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action before capturing inquiries.</small> : null}
+                </form>
 
-          <section aria-label="Recommended Website agent job" className="website-agent-queue">
-            <div>
-              <span>Website agent queue</span>
-              <h2>{websiteAgentJob}</h2>
-              <p>AI prepares the next Website move. Owners approve every content, release, domain, and deployment step.</p>
+                {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible person<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Name or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing, or closure reason" value={leadDecisionNote} /></label></div> : null}
+                <div className="website-lead-list">
+                  {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
+                    <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Person: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
+                    {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
+                  </article>) : <p className="website-lead-empty">No inquiry yet. Add one above to test capture, assignment, decision, persistence, and export.</p>}
+                </div>
+                {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export inquiries</a> : null}
+              </section>
             </div>
-            <div>{websiteAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-            <button className="website-button is-primary is-compact" onClick={runWebsiteAgentJob} type="button">{websiteAgentActionLabel}</button>
-          </section>
-
-          <section aria-label="Website launch cockpit" className="website-launch-cockpit">
-            <div>
-              <span className="website-kicker">Website launch cockpit</span>
-              <h2>{websiteLaunchPriority}</h2>
-              <p>AI turns content checks, owner approval, static package, and rollout boundary into one launch queue. No domain, publish, or deployment action runs here.</p>
-            </div>
-            <div className="website-launch-cockpit-rows">
-              {websiteLaunchRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
-
-          <section aria-label="Website lead capture readiness" className="website-lead-capture-cockpit">
-            <div>
-              <span className="website-kicker">Website lead capture readiness</span>
-              <h2>{websiteLeadCaptureNext}</h2>
-              <p>AI checks business brief, contact path, content proof, owner approval, and release package before the site can capture a real customer request. No form send, customer message, domain, publish, CRM, or Shop write runs from this panel.</p>
-            </div>
-            <div className="website-lead-capture-cockpit-rows">
-              {websiteLeadCaptureRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
-
-          <section aria-label="Website managed rollout packet" className="website-rollout-packet">
-            <div>
-              <span className="website-kicker">Managed rollout packet</span>
-              <h2>{managedRolloutNext}</h2>
-              <p>AI packages domain setup, form routing, analytics plan, approved content, static snapshot, and owner rollout gate for managed activation. No DNS change, publish, form send, analytics install, CRM write, Shop write, or deployment action runs from this packet.</p>
-            </div>
-            <div className="website-rollout-packet-rows">
-              {managedRolloutRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
-
-          <section aria-label="Website handoff packet" className="website-handoff-packet">
-            <div>
-              <span className="website-kicker">Website handoff packet</span>
-              <h2>{websiteHandoffNext}</h2>
-              <p>AI turns ready pages, owner approval, static package state, lead capture route, and managed gate into one handoff checklist. No DNS change, form send, analytics install, CRM write, Shop write, publish, or deployment action runs from this packet.</p>
-            </div>
-            <div className="website-handoff-packet-rows">
-              {websiteHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-          </section>
+          </details> : null}
 
           <div
             aria-label={view === 'content' ? 'Edit' : 'Publish'}
@@ -1257,7 +1251,7 @@ export function WebsiteProduct() {
                 starterSetupActive ? (
                   <WebsiteStarterSetup
                     onCreate={startWithBusiness}
-                    onViewSample={() => setStarterDismissed(true)}
+                    onViewSample={viewWebsiteSample}
                   />
                 ) : (
                   <ContentWorkspace

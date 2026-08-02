@@ -14,9 +14,9 @@ import {
 } from './managed-trial'
 
 function ManagedUnavailable({ productIntent }: { productIntent: string | null }) {
-  return <section className="managed-login-panel" aria-label="Managed account unavailable">
-    <div><span className="core-eyebrow">Premium activation</span><h2>Managed account access is not active in this release.</h2><p>Use the complete local workspace now, or request a managed company account.</p></div>
-    <div className="managed-login-actions"><Link className="core-button primary" to="/">Open free workspace</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request managed activation</a></div>
+  return <section className="managed-login-panel" aria-label="Company account unavailable">
+    <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>
+    <div className="managed-login-actions"><Link className="core-button primary" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
   </section>
 }
 
@@ -118,7 +118,7 @@ export function ManagedAccountPage() {
 
   if (recoveryRequest) {
     return <div className="workspace-screen managed-login-screen">
-      <PageHeading eyebrow="Managed account" title="Recover your account." copy="Enter your work email. We will send one secure password link." />
+      <PageHeading eyebrow="Company account" title="Recover your account." copy="Enter your work email. We will send one secure password link." />
       {!managedReady ? <ManagedUnavailable productIntent={productIntent} /> : sent ? <section className="managed-login-panel" aria-label="Recovery link requested">
         <div><span className="core-eyebrow">Check your inbox</span><h2>Recovery requested.</h2><p>{notice}</p></div>
         <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountPath('/login', productIntent)}>Back to sign in</Link><button className="core-button account-link-button" onClick={() => { setSent(false); setNotice('') }} type="button">Try another email</button></div>
@@ -133,7 +133,7 @@ export function ManagedAccountPage() {
   }
 
   return <div className="workspace-screen managed-login-screen">
-    <PageHeading eyebrow="Managed account" title="Secure your account." copy="Accept your invitation or recovery link, then set one strong password." />
+    <PageHeading eyebrow="Company account" title="Secure your account." copy="Accept your invitation or recovery link, then set one strong password." />
     {!managedReady ? <ManagedUnavailable productIntent={productIntent} /> : directory ? <form className="managed-login-panel core-form" onSubmit={(event) => void chooseWorkspace(event)}>
       <div><span className="core-eyebrow">Account ready</span><h2>Choose your company.</h2><p>Only active companies assigned to this named account are shown.</p></div>
       <label>Company<select onChange={(event) => setWorkspaceId(event.target.value)} required value={workspaceId}>{directory.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label>

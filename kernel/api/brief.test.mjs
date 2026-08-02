@@ -2,9 +2,56 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { runScheduledBrief } from './brief.mjs'
+import { notifyDetailed } from '../alert.mjs'
+import { loadCeoOutcomeCycleState, recordCeoOutcomeCompletion } from '../agent-company-operations.mjs'
+import { SUPERMEGA_HQ_AUTHORITY } from '../supermega-hq-authority.mjs'
 import { executionClaimId } from '../workcell-run.mjs'
 
 const NOW = new Date('2026-07-13T01:30:00.000Z')
+const SUCCESS_MEASURE_DIGEST = 'b'.repeat(64)
+
+function emptyCycleState(input, completedOutcomeIds = []) {
+  return {
+    ok: true,
+    contract: 'supermega.ceo-outcome-cycle-state.v1',
+    durable: true,
+    clientId: input.clientId,
+    authorityDigest: input.authorityDigest,
+    cycleId: '2026-07-13',
+    startsAt: '2026-07-13T00:00:00.000Z',
+    endsAt: '2026-07-20T00:00:00.000Z',
+    completedOutcomeIds,
+    completedCount: completedOutcomeIds.length,
+    matchedRecords: completedOutcomeIds.length,
+  }
+}
+
+const CEO_USAGE = Object.freeze({
+  contract: 'supermega.operator-usage.v1',
+  units: 'bulk_equivalent_tokens',
+  modelCalls: 1,
+  cacheHits: 0,
+  measuredCalls: 1,
+  unmeasuredCalls: 0,
+  weightedTotalUnits: 45,
+})
+
+async function makeCeoOutcomeRecord({ outcomeId, authorityDigest, completedAt, successMeasureDigest = SUCCESS_MEASURE_DIGEST }) {
+  let saved = null
+  const result = await recordCeoOutcomeCompletion({
+    clientId: 'client-acme',
+    outcomeId,
+    authorityDigest,
+    successMeasureDigest,
+    completedAt,
+    usage: CEO_USAGE,
+  }, {
+    claimActivity: async () => ({ fresh: true, durable: true }),
+    putCeoOutcomeRecord: async (key, payload) => { saved = { key, payload }; return true },
+  })
+  assert.equal(result.ok, true)
+  return saved
+}
 
 function workcell(slug) {
   return {
@@ -149,6 +196,36 @@ test('a failed owner send releases its claim so a manual retry can deliver', asy
   assert.equal(attempts, 2)
 })
 
+test('an uncertain workcell send retains both claims and cannot duplicate on replay', async () => {
+  const executions = durableClaimStore('execution')
+  const deliveries = durableClaimStore('delivery')
+  let runs = 0
+  let sends = 0
+  let releases = 0
+  const options = {
+    env: { SUPERMEGA_WORKCELL_SLUG: 'cash-close' },
+    now: NOW,
+    runWorkcell: async (slug) => { runs += 1; return workcell(slug) },
+    claimWorkcellExecution: executions.claim,
+    claimWorkcellDelivery: deliveries.claim,
+    releaseWorkcellDelivery: async () => { releases += 1; return true },
+    notify: async () => { sends += 1; return { ok: false, status: 'uncertain' } },
+  }
+
+  const uncertain = await runScheduledBrief(options)
+  const duplicate = await runScheduledBrief(options)
+
+  assert.equal(uncertain.ok, false)
+  assert.equal(uncertain.results[0].reason, 'owner_delivery_uncertain')
+  assert.equal(uncertain.results[0].retryable, false)
+  assert.equal(uncertain.results[0].deliveryStatus, 'uncertain')
+  assert.equal(duplicate.ok, true)
+  assert.equal(duplicate.results[0].duplicate, true)
+  assert.equal(runs, 1)
+  assert.equal(sends, 1)
+  assert.equal(releases, 0)
+})
+
 test('failed computation releases only the execution claim for an immediate retry', async () => {
   const executions = durableClaimStore('execution')
   const deliveries = durableClaimStore('delivery')
@@ -179,8 +256,9 @@ test('legacy CEO brief remains available and is also duplicate-safe', async () =
   let sends = 0
   let runs = 0
   const result = await runScheduledBrief({
-    env: {},
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
+    completedOutcomeIds: [],
     runOperator: async () => { runs += 1; return { ok: true, answer: 'Real numbers', results: [{ tool: 'platform_status' }] } },
     claimWorkcellExecution: async () => ({ fresh: false, durable: true }),
     claimWorkcellDelivery: async () => ({ fresh: false, durable: true }),
@@ -197,15 +275,31 @@ test('legacy CEO brief remains available and is also duplicate-safe', async () =
   assert.equal(runs, 0)
 })
 
+test('deferred CEO operations load on demand and fail closed without durable state', async () => {
+  let work = 0
+  const result = await runScheduledBrief({
+    env: { SUPERMEGA_CLIENT_ID: 'client-deferred-operations' },
+    now: NOW,
+    runOperator: async () => { work += 1; return { ok: true } },
+    claimWorkcellExecution: async () => { work += 1; return { fresh: true, durable: true } },
+    notify: async () => { work += 1; return true },
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.reason, 'ceo_outcome_cycle_store_unavailable')
+  assert.equal(work, 0)
+})
+
 test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence plan', async () => {
   const executions = durableClaimStore('execution')
   const deliveries = durableClaimStore('delivery')
   const operatorInputs = []
   const sent = []
   const recorded = []
+  const deliveryRecords = []
   const result = await runScheduledBrief({
     env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
+    loadCeoOutcomeCycleState: async (input) => emptyCycleState(input),
     runOperator: async (input) => {
       operatorInputs.push(input)
       return {
@@ -239,6 +333,17 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
         },
       }
     },
+    recordCeoOutcomeDeliveryResult: async (input) => {
+      deliveryRecords.push(input)
+      return {
+        ok: true,
+        delivery: {
+          deliveryId: `ceo-outcome-delivery:${'c'.repeat(40)}`,
+          status: input.status,
+          deliveryHash: 'd'.repeat(64),
+        },
+      }
+    },
   })
 
   assert.equal(result.ok, true)
@@ -249,8 +354,7 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
   assert.deepEqual(operatorInputs[0].approvedPlan.map((step) => step.tool), [
     'leads_overview',
     'pipeline_overview',
-    'fx_rate',
-    'platform_status',
+    'company_operations_status',
   ])
   assert.match(operatorInputs[0].goal, /Blocked context only - never execute/)
   assert.equal(sent.length, 1)
@@ -261,6 +365,7 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
     clientId: 'client-acme',
     outcomeId: 'daily-company-control',
     authorityDigest: result.outcome.authorityDigest,
+    successMeasureDigest: result.outcome.successMeasureDigest,
     completedAt: NOW.toISOString(),
     usage: {
       contract: 'supermega.operator-usage.v1',
@@ -274,6 +379,70 @@ test('SuperMega CEO cycle selects one HQ outcome and uses its fixed evidence pla
   })
   assert.equal(JSON.stringify(recorded[0]).includes('One decision'), false)
   assert.equal(JSON.stringify(recorded[0]).includes('provider'), false)
+  assert.equal(deliveryRecords.length, 1)
+  assert.deepEqual(deliveryRecords[0], {
+    clientId: 'client-acme',
+    operationId: `ceo-outcome:${'a'.repeat(40)}`,
+    recordHash: 'b'.repeat(64),
+    deliveryClaimId: 'delivery:ceo-daily-company-control',
+    status: 'sent',
+  })
+  assert.equal(JSON.stringify(deliveryRecords[0]).includes('One decision'), false)
+  assert.equal(result.deliveryStatus, 'sent')
+  assert.equal(result.outcomeMetrics.delivery.status, 'sent')
+})
+
+test('failed CEO delivery is durably recorded once and never advertised as an automatic retry', async () => {
+  const executions = durableClaimStore('execution')
+  const deliveries = durableClaimStore('delivery')
+  let runs = 0
+  let sends = 0
+  let releases = 0
+  const deliveryRecords = []
+  const options = {
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
+    now: NOW,
+    completedOutcomeIds: [],
+    runOperator: async () => {
+      runs += 1
+      return { ok: true, answer: 'private answer', results: [], usage: CEO_USAGE }
+    },
+    claimWorkcellExecution: executions.claim,
+    claimWorkcellDelivery: deliveries.claim,
+    releaseWorkcellDelivery: async () => { releases += 1; return true },
+    recordCeoOutcomeCompletion: async () => ({
+      ok: true,
+      outcome: { operationId: `ceo-outcome:${'a'.repeat(40)}`, status: 'completed', recordHash: 'b'.repeat(64) },
+    }),
+    recordCeoOutcomeDeliveryResult: async (input) => {
+      deliveryRecords.push(input)
+      return {
+        ok: true,
+        delivery: {
+          deliveryId: `ceo-outcome-delivery:${'c'.repeat(40)}`,
+          status: input.status,
+          deliveryHash: 'd'.repeat(64),
+        },
+      }
+    },
+    notify: async () => { sends += 1; return { ok: false, status: 'failed' } },
+  }
+
+  const failed = await runScheduledBrief(options)
+  const duplicate = await runScheduledBrief(options)
+
+  assert.equal(failed.ok, false)
+  assert.equal(failed.reason, 'owner_delivery_failed')
+  assert.equal(failed.retryable, false)
+  assert.equal(failed.deliveryStatus, 'failed')
+  assert.equal(failed.outcomeMetrics.delivery.status, 'failed')
+  assert.equal(duplicate.ok, true)
+  assert.equal(duplicate.duplicate, true)
+  assert.equal(runs, 1)
+  assert.equal(sends, 1)
+  assert.equal(releases, 0)
+  assert.equal(deliveryRecords.length, 1)
+  assert.doesNotMatch(JSON.stringify(deliveryRecords), /private answer/)
 })
 
 test('CEO cycle does not notify the owner when completion metadata is not durable', async () => {
@@ -283,6 +452,7 @@ test('CEO cycle does not notify the owner when completion metadata is not durabl
   const result = await runScheduledBrief({
     env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
+    loadCeoOutcomeCycleState: async (input) => emptyCycleState(input),
     runOperator: async () => ({
       ok: true,
       answer: 'private answer',
@@ -316,9 +486,11 @@ test('blocked or completed HQ outcomes decline before claims, models, or sends',
   let runs = 0
   let sends = 0
   const result = await runScheduledBrief({
-    env: {},
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
-    completedOutcomeIds: ['daily-company-control'],
+    completedOutcomeIds: SUPERMEGA_HQ_AUTHORITY.outcomes
+      .filter((outcome) => outcome.state === 'ready')
+      .map((outcome) => outcome.id),
     runOperator: async () => { runs += 1; return { ok: true, answer: 'unused', results: [] } },
     claimWorkcellExecution: async () => { claims += 1; return { fresh: true, durable: true } },
     claimWorkcellDelivery: async () => { claims += 1; return { fresh: true, durable: true } },
@@ -333,10 +505,106 @@ test('blocked or completed HQ outcomes decline before claims, models, or sends',
   assert.equal(sends, 0)
 })
 
+test('durable weekly CEO state rotates departments and exposes metadata only', async () => {
+  const initial = SUPERMEGA_HQ_AUTHORITY.outcomes.find((outcome) => outcome.id === 'daily-company-control')
+  const authorityProbe = await runScheduledBrief({
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
+    now: NOW,
+    completedOutcomeIds: SUPERMEGA_HQ_AUTHORITY.outcomes
+      .filter((outcome) => outcome.state === 'ready')
+      .map((outcome) => outcome.id),
+  })
+  const authorityDigest = authorityProbe.authorityDigest
+  assert.match(authorityDigest, /^[a-f0-9]{64}$/)
+
+  const current = await makeCeoOutcomeRecord({
+    outcomeId: initial.id,
+    authorityDigest,
+    completedAt: '2026-07-13T00:30:00.000Z',
+  })
+  const previous = await makeCeoOutcomeRecord({
+    outcomeId: 'daily-company-control',
+    authorityDigest,
+    completedAt: '2026-07-12T23:59:59.000Z',
+  })
+  const state = await loadCeoOutcomeCycleState({
+    clientId: 'client-acme',
+    authorityDigest,
+    asOf: NOW.toISOString(),
+  }, {
+    listCeoOutcomeRecords: async () => ({ durable: true, records: [current, previous] }),
+  })
+  assert.equal(state.ok, true)
+  assert.equal(state.cycleId, '2026-07-13')
+  assert.deepEqual(state.completedOutcomeIds, ['daily-company-control'])
+  assert.equal(JSON.stringify(state).includes('answer'), false)
+  assert.equal(JSON.stringify(state).includes('usage'), false)
+
+  let selectedGoal = ''
+  const rotated = await runScheduledBrief({
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
+    now: NOW,
+    loadCeoOutcomeCycleState: async () => state,
+    runOperator: async (input) => {
+      selectedGoal = input.goal
+      return { ok: false, reason: 'stop_after_selection' }
+    },
+    claimWorkcellExecution: async () => ({ fresh: true, durable: true, claimId: 'rotation' }),
+    releaseWorkcellDelivery: async () => true,
+  })
+  assert.equal(rotated.ok, false)
+  assert.equal(rotated.outcome.id, 'engineering-release-control')
+  assert.match(selectedGoal, /Review engineering and release health/)
+  assert.equal(rotated.cycle.cycleId, '2026-07-13')
+  assert.equal(rotated.cycle.completedCount, 1)
+
+  const invalid = await loadCeoOutcomeCycleState({
+    clientId: 'client-acme',
+    authorityDigest,
+    asOf: NOW.toISOString(),
+  }, {
+    listCeoOutcomeRecords: async () => ({
+      durable: true,
+      records: [{ ...current, payload: { ...current.payload, recordHash: '0'.repeat(64) } }],
+    }),
+  })
+  assert.equal(invalid.reason, 'ceo_outcome_cycle_record_invalid')
+
+  const unavailable = await loadCeoOutcomeCycleState({
+    clientId: 'client-acme',
+    authorityDigest,
+    asOf: NOW.toISOString(),
+  }, {
+    listCeoOutcomeRecords: async () => ({ durable: false, records: [] }),
+  })
+  assert.equal(unavailable.reason, 'ceo_outcome_cycle_store_unavailable')
+
+  let work = 0
+  const stopped = await runScheduledBrief({
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
+    now: NOW,
+    loadCeoOutcomeCycleState: async () => unavailable,
+    runOperator: async () => { work += 1; return { ok: true } },
+    claimWorkcellExecution: async () => { work += 1; return { fresh: true, durable: true } },
+    notify: async () => { work += 1; return true },
+  })
+  assert.equal(stopped.reason, 'ceo_outcome_cycle_store_unavailable')
+  assert.equal(work, 0)
+
+  const mismatched = await runScheduledBrief({
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
+    now: NOW,
+    loadCeoOutcomeCycleState: async () => ({ ...state, authorityDigest: 'f'.repeat(64) }),
+    runOperator: async () => { work += 1; return { ok: true } },
+  })
+  assert.equal(mismatched.reason, 'ceo_outcome_cycle_state_invalid')
+  assert.equal(work, 0)
+})
+
 test('invalid HQ authority fails closed before claims, models, or sends', async () => {
   let work = 0
   const result = await runScheduledBrief({
-    env: {},
+    env: { SUPERMEGA_CLIENT_ID: 'client-acme' },
     now: NOW,
     ceoAuthority: {},
     runOperator: async () => { work += 1; return { ok: true } },
@@ -346,4 +614,42 @@ test('invalid HQ authority fails closed before claims, models, or sends', async 
   assert.equal(result.ok, false)
   assert.equal(result.reason, 'ceo_outcome_authority_invalid')
   assert.equal(work, 0)
+})
+
+test('missing or invalid CEO client identity stops before state, claims, tools, models, or sends', async () => {
+  let work = 0
+  const options = {
+    now: NOW,
+    selectCeoOutcome: () => { work += 1; return { ok: false } },
+    loadCeoOutcomeCycleState: async () => { work += 1; return { ok: false } },
+    runOperator: async () => { work += 1; return { ok: true } },
+    claimWorkcellExecution: async () => { work += 1; return { fresh: true, durable: true } },
+    claimWorkcellDelivery: async () => { work += 1; return { fresh: true, durable: true } },
+    recordCeoOutcomeCompletion: async () => { work += 1; return { ok: true } },
+    notify: async () => { work += 1; return true },
+  }
+
+  const missing = await runScheduledBrief({ ...options, env: {} })
+  const invalid = await runScheduledBrief({ ...options, env: { SUPERMEGA_CLIENT_ID: 'bad client/private-token' } })
+
+  assert.equal(missing.reason, 'company_client_id_missing')
+  assert.equal(invalid.reason, 'company_client_id_invalid')
+  assert.equal(work, 0)
+  assert.doesNotMatch(JSON.stringify(invalid), /bad client|private-token/)
+})
+
+test('owner notification distinguishes acknowledgement, rejection, and transport uncertainty', async () => {
+  const env = { TELEGRAM_BOT_TOKEN: 'private-token', TELEGRAM_ALERT_CHAT_ID: 'owner-chat' }
+  const sent = await notifyDetailed('brief', { env, fetch: async () => ({ ok: true }) })
+  const rejected = await notifyDetailed('brief', { env, fetch: async () => ({ ok: false }) })
+  const uncertain = await notifyDetailed('brief', { env, fetch: async () => { throw new Error('private transport failure') } })
+  let requests = 0
+  const unconfigured = await notifyDetailed('brief', { env: {}, fetch: async () => { requests += 1; return { ok: true } } })
+
+  assert.deepEqual(sent, { ok: true, status: 'sent' })
+  assert.deepEqual(rejected, { ok: false, status: 'failed' })
+  assert.deepEqual(uncertain, { ok: false, status: 'uncertain' })
+  assert.deepEqual(unconfigured, { ok: false, status: 'failed' })
+  assert.equal(requests, 0)
+  assert.doesNotMatch(JSON.stringify({ sent, rejected, uncertain, unconfigured }), /private|owner-chat/)
 })

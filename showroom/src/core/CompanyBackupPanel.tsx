@@ -27,7 +27,7 @@ export function CompanyBackupPanel() {
   const [inspection, setInspection] = useState<CompanyBackupInspection | null>(null)
   const [busyAction, setBusyAction] = useState<'download' | 'inspect' | 'restore' | null>(null)
   const [restoreArmed, setRestoreArmed] = useState(false)
-  const [notice, setNotice] = useState('Encrypted locally. Nothing is uploaded, sent, or written to a managed workspace.')
+  const [notice, setNotice] = useState('Encrypted locally. Nothing is uploaded, sent, or written to a company account.')
 
   async function downloadBackup() {
     if (passphrase !== confirmation) {
@@ -100,7 +100,7 @@ export function CompanyBackupPanel() {
       <div><span className="core-eyebrow">Company backup</span><h2>Move or recover this company.</h2><p>Free mode can download and restore current Shop, Plant, Website, Ecommerce, owner decisions, and local AI memory.</p></div>
       <span className="status-pill bounded">browser only</span>
     </div>
-    <div className="company-backup-boundary" role="note"><strong>Customer-owned and encrypted</strong><span>AES-GCM encryption with a password you choose. Auth sessions, managed workspace IDs, and credentials are excluded. SuperMega cannot recover a lost password.</span></div>
+      <div className="company-backup-boundary" role="note"><strong>Customer-owned and encrypted</strong><span>AES-GCM encryption with a password you choose. Auth sessions, company account IDs, and credentials are excluded. SuperMega cannot recover a lost password.</span></div>
     <div className="company-backup-fields">
       <label>Backup password<input autoComplete="new-password" maxLength={256} minLength={12} onChange={(event) => { setPassphrase(event.target.value); setInspection(null); setRestoreArmed(false) }} placeholder="At least 12 characters" type="password" value={passphrase} /></label>
       <label>Confirm for download<input autoComplete="new-password" maxLength={256} minLength={12} onChange={(event) => setConfirmation(event.target.value)} placeholder="Repeat before download" type="password" value={confirmation} /></label>
@@ -113,7 +113,7 @@ export function CompanyBackupPanel() {
     {inspection ? <div aria-label="Inspected backup summary" className="company-backup-inspection">
       <div><span className="core-eyebrow">Integrity passed</span><strong>{inspection.recordCount} records from {formatBackupDate(inspection.exportedAt)}</strong><small>{inspection.snapshotDigest.slice(0, 22)}...</small></div>
       <div className="company-backup-categories">{inspection.categories.map((category) => <span key={category.label}><small>{category.label}</small><strong>{category.count}</strong></span>)}</div>
-      <p>This replaces current free-mode company records in this browser. It never restores auth, managed workspace identity, or credentials.</p>
+      <p>This replaces current free-mode company records in this browser. It never restores auth, company account identity, or credentials.</p>
       <div className="company-backup-actions">{restoreArmed ? <><button className="text-link" disabled={busyAction !== null} onClick={() => setRestoreArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={busyAction !== null} onClick={() => void restoreBackup()} type="button">{busyAction === 'restore' ? 'Restoring...' : 'Confirm restore'}</button></> : <button className="core-button" disabled={busyAction !== null} onClick={() => setRestoreArmed(true)} type="button">Restore this backup</button>}</div>
     </div> : null}
     <p aria-live="polite" className="form-notice company-backup-notice" role="status">{notice}</p>

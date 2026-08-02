@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from datetime import date
+from copy import deepcopy
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
 from typing import Any, Literal, TypeVar
@@ -35,7 +36,10 @@ from supermega_runtime.managed_context import (
     company_state_with_context_profile,
     managed_context_validation_digest,
 )
-from supermega_runtime.production_runtime import PRODUCTION_HUMAN_EVENTS
+from supermega_runtime.production_runtime import (
+    PRODUCTION_HUMAN_EVENTS,
+    require_shop_demand_source_current,
+)
 from supermega_runtime.order_intake import (
     MAX_ORDER_MESSAGE_LENGTH,
     OrderIntakeCatalogItem,
@@ -45,7 +49,13 @@ from supermega_runtime.order_intake_provider import (
     OrderIntakeDraftProvider,
     OrderIntakeProviderError,
 )
+from supermega_runtime.plant_equipment_import import (
+    PLANT_EQUIPMENT_MAX_PACKAGE_BYTES,
+    PlantEquipmentImportError,
+    validate_plant_equipment_import,
+)
 from supermega_runtime.production_material_handoff import (
+    production_material_requests,
     require_shop_issue_before_plant_progress,
     require_shop_issue_matches_plant,
 )
@@ -79,7 +89,14 @@ TRIAL_API_PREFIX = "/api/trial/v1"
 TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "website", "setup")
 
 PrincipalResolver = Callable[[Request], TrialPrincipal | None]
+DateResolver = Callable[[], date]
 ResultT = TypeVar("ResultT")
+
+_YANGON_TIME_ZONE = timezone(timedelta(hours=6, minutes=30))
+
+
+def _current_yangon_date() -> date:
+    return datetime.now(_YANGON_TIME_ZONE).date()
 
 _CLIENT_IDENTITY_FIELDS = frozenset(
     {
@@ -141,6 +158,43 @@ class TrialClientImportApplyPreflightRequest(_StrictRequest):
     package: dict[str, Any]
 
 
+class TrialPlantEquipmentImportApplyRequest(_StrictRequest):
+    command_id: UUID
+    expected_version: int = Field(ge=1)
+    confirmation: str = Field(min_length=77, max_length=77)
+    package: dict[str, Any]
+
+
+class TrialPlantEquipmentCommissionRequest(_StrictRequest):
+    command_id: UUID
+    expected_version: int = Field(ge=1)
+    equipment_id: str = Field(
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Z0-9][A-Z0-9._/-]{0,79}$",
+    )
+    installed_at: str = Field(min_length=24, max_length=24)
+    initial_state: Literal["running", "attention", "stopped"]
+    safety_baseline_reference: str = Field(min_length=1, max_length=240)
+    confirmation: str = Field(min_length=12, max_length=91)
+
+
+class TrialPlantEquipmentMaintenanceStrategyRequest(_StrictRequest):
+    command_id: UUID
+    expected_version: int = Field(ge=1)
+    equipment_id: str = Field(
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Z0-9][A-Z0-9._/-]{0,79}$",
+    )
+    maintenance_owner: str = Field(min_length=1, max_length=120)
+    interval_days: int = Field(ge=1, le=3650)
+    next_due_at: str = Field(min_length=24, max_length=24)
+    procedure_reference: str = Field(min_length=1, max_length=240)
+    safety_baseline_reference: str = Field(min_length=1, max_length=240)
+    confirmation: str = Field(min_length=18, max_length=98)
+
+
 class TrialOrderIntakeDraftRequest(_StrictRequest):
     source_label: str = Field(min_length=1, max_length=120)
     message: str = Field(min_length=1, max_length=MAX_ORDER_MESSAGE_LENGTH)
@@ -192,6 +246,13 @@ class TrialManagedContextRetainRequest(TrialManagedContextValidateRequest):
     expected_company_version: int = Field(ge=0)
     profile_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
     validation_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class TrialServiceScheduleSaveRequest(_StrictRequest):
+    command_id: UUID
+    expected_version: int = Field(ge=1)
+    captured_at: str = Field(min_length=20, max_length=40)
+    schedule: dict[str, Any]
 
 
 class TrialDecisionSubject(_StrictRequest):
@@ -510,11 +571,15 @@ def _plant_jobs_import_payload(
 ) -> dict[str, Any]:
     rows = package.get("rows")
     owner = package.get("owner")
-    if not isinstance(rows, list) or not rows or not isinstance(owner, str):
+    industry_pack_id = package.get("plantIndustryPackId")
+    if (
+        not isinstance(rows, list)
+        or not rows
+        or not isinstance(owner, str)
+        or not isinstance(industry_pack_id, str)
+    ):
         raise _error(422, "client_import_activation_invalid")
     jobs: list[dict[str, Any]] = []
-    machines: list[dict[str, str]] = []
-    machine_ids_by_line: dict[str, str] = {}
     try:
         for row in rows:
             if not isinstance(row, Mapping) or not isinstance(row.get("values"), Mapping):
@@ -543,16 +608,6 @@ def _plant_jobs_import_payload(
                     "dueAt": f"{canonical_due_date}T17:29:59.999Z",
                 }
             )
-            if line not in machine_ids_by_line:
-                machine_id = f"machine-import-{len(machines) + 1}"
-                machine_ids_by_line[line] = machine_id
-                machines.append(
-                    {
-                        "id": machine_id,
-                        "name": line,
-                        "state": "running",
-                    }
-                )
     except (KeyError, TypeError, ValueError) as exc:
         raise _error(422, "client_import_activation_invalid") from exc
     return {
@@ -561,14 +616,15 @@ def _plant_jobs_import_payload(
             "revision": 0,
             "jobs": jobs,
             "issues": [],
-            "machines": machines,
+            "machines": [],
             "events": [],
             "openingPlan": {
                 "contract": "supermega.production.opening-plan.v1",
                 "packageDigest": package_digest,
                 "confirmedAt": "server-assigned",
+                "industryPackId": industry_pack_id,
                 "jobIds": [job["id"] for job in jobs],
-                "machineIds": [machine["id"] for machine in machines],
+                "machineIds": [],
             },
         },
         "evidence": {
@@ -642,6 +698,13 @@ def _website_pages_import_payload(
             "approvals": [],
             "localPublishes": [],
             "events": [],
+            "openingPlan": {
+                "contract": "supermega.website.opening-plan.v1",
+                "packageDigest": package_digest,
+                "workflowTemplateId": package["workflowTemplateId"],
+                "confirmedAt": "server-assigned",
+                "pageIds": [page["id"] for page in pages],
+            },
         },
         "evidence": {
             "actionId": f"ACT-IMPORT-{command_id}",
@@ -855,6 +918,7 @@ def create_trial_router(
     store: TrialStore,
     resolve_principal: PrincipalResolver,
     order_intake_provider: OrderIntakeDraftProvider | None = None,
+    current_date: DateResolver = _current_yangon_date,
 ) -> APIRouter:
     """Create an unwired private-trial router with injected storage and auth.
 
@@ -1366,6 +1430,95 @@ def create_trial_router(
             ),
         }
 
+    @router.get("/commerce/service-schedule")
+    def trial_service_schedule(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        if not has_surface_read_capability(readiness.capabilities, "commerce"):
+            raise _error(
+                403,
+                "trial_capability_required",
+                required_capability="commerce.read",
+            )
+        commerce = _invoke(lambda: store.get_state(principal, "commerce"))
+        if not commerce.state:
+            raise _error(409, "commerce_workspace_required")
+        state = _invoke(lambda: validate_commerce_state(commerce.state))
+        return {
+            "workspace_id": principal.workspace_id,
+            "version": commerce.version,
+            "schedule": deepcopy(state.get("serviceSchedule")),
+        }
+
+    @router.post("/commerce/service-schedule")
+    async def trial_service_schedule_save(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "commerce.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(request, maximum_bytes=64 * 1024)
+        try:
+            body = TrialServiceScheduleSaveRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "service_schedule_request_invalid") from exc
+        _reject_client_identity(body.schedule, path="schedule")
+        commerce = _invoke(lambda: store.get_state(principal, "commerce"))
+        if not commerce.state:
+            raise _error(409, "commerce_workspace_required")
+        current_state = _invoke(lambda: validate_commerce_state(commerce.state))
+        schedule = deepcopy(body.schedule)
+        events = schedule.get("events")
+        revision = schedule.get("revision")
+        initializing = (
+            revision == 0
+            and events == []
+        )
+        if initializing:
+            pack_id = schedule.get("industryPackId")
+            event_type = "commerce.service_schedule.initialized"
+            evidence = {
+                "actionId": f"ACT-SERVICE-SCHEDULE-INIT-{str(pack_id).upper()}",
+                "capturedAt": body.captured_at,
+                "actor": principal.actor_id,
+                "reason": f"Initialize the reviewed {pack_id} Shop industry pack.",
+                "evidenceReference": f"SHOP-SERVICE-SCHEDULE:{pack_id}:R0",
+            }
+        elif (
+            not isinstance(events, list)
+            or not events
+            or not isinstance(revision, int)
+            or isinstance(revision, bool)
+            or revision < 1
+            or not isinstance(events[-1], Mapping)
+        ):
+            raise _error(422, "service_schedule_evidence_required")
+        else:
+            latest_event = dict(events[-1])
+            latest_event["actor"] = principal.actor_id
+            events[-1] = latest_event
+            event_type = "commerce.service_schedule.saved"
+            evidence = {
+                "actionId": f"ACT-SERVICE-SCHEDULE-R{revision}",
+                "capturedAt": latest_event.get("happenedAt"),
+                "actor": principal.actor_id,
+                "reason": latest_event.get("reason"),
+                "evidenceReference": f"SHOP-SERVICE-SCHEDULE:R{revision}",
+            }
+        next_state = {**current_state, "serviceSchedule": schedule}
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=body.command_id,
+                surface="commerce",
+                event_type=event_type,
+                expected_version=body.expected_version,
+                payload={"state": next_state, "evidence": evidence},
+            )
+        )
+        return _command_response(result)
+
     @router.post("/imports/validate")
     async def trial_import_validation(request: Request) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
@@ -1379,7 +1532,10 @@ def create_trial_router(
             )
         package = await _bounded_json_body(request)
         try:
-            validation = validate_client_import_staging_package(package)
+            validation = validate_client_import_staging_package(
+                package,
+                minimum_production_due_date=current_date(),
+            )
         except ClientImportValidationError as exc:
             raise _error(
                 422,
@@ -1434,6 +1590,216 @@ def create_trial_router(
             "secret_values_exposed": False,
         }
 
+    @router.post("/imports/plant-equipment/validate")
+    async def trial_plant_equipment_validation(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        if not has_surface_read_capability(readiness.capabilities, "setup"):
+            raise _error(
+                403,
+                "trial_capability_required",
+                required_capability="setup.read",
+            )
+        package = await _bounded_json_body(
+            request,
+            maximum_bytes=PLANT_EQUIPMENT_MAX_PACKAGE_BYTES,
+        )
+        try:
+            validation, _ = validate_plant_equipment_import(package)
+        except PlantEquipmentImportError as exc:
+            raise _error(
+                422,
+                "plant_equipment_import_validation_error",
+                message=str(exc),
+            ) from exc
+        return {
+            "validation": {
+                **validation.to_dict(),
+                "workspace_id": principal.workspace_id,
+            }
+        }
+
+    @router.post("/imports/plant-equipment/apply")
+    async def trial_plant_equipment_apply(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "setup.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(
+            request,
+            maximum_bytes=PLANT_EQUIPMENT_MAX_PACKAGE_BYTES + 2048,
+        )
+        try:
+            body = TrialPlantEquipmentImportApplyRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "plant_equipment_import_apply_invalid") from exc
+        try:
+            validation, package = validate_plant_equipment_import(body.package)
+        except PlantEquipmentImportError as exc:
+            raise _error(
+                422,
+                "plant_equipment_import_validation_error",
+                message=str(exc),
+            ) from exc
+        _require_write_ready(readiness, "production.write")
+        if body.confirmation != f"APPLY {validation.package_digest}":
+            raise _error(409, "plant_equipment_import_confirmation_mismatch")
+        command_id = str(body.command_id)
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=command_id,
+                surface="production",
+                event_type="production.equipment_master.imported",
+                expected_version=body.expected_version,
+                payload={
+                    "equipment": [
+                        {
+                            "id": row["values"]["equipmentId"],
+                            "name": row["values"]["name"],
+                            "workCentreId": row["values"]["workCentreId"],
+                            "criticality": row["values"]["criticality"],
+                            "owner": package["owner"],
+                        }
+                        for row in package["rows"]
+                    ],
+                    "evidence": {
+                        "actionId": f"ACT-EQUIPMENT-IMPORT-{command_id}",
+                        "capturedAt": "server-assigned",
+                        "actor": principal.actor_id,
+                        "reason": "Imported reviewed Plant equipment master",
+                        "evidenceReference": validation.package_digest,
+                    },
+                },
+            )
+        )
+        return {
+            "activation": {
+                "contract": "supermega.production.equipment-import-activation.v1",
+                "status": "applied",
+                "package_digest": validation.package_digest,
+                "row_count": validation.row_count,
+                "workspace_id": principal.workspace_id,
+                "external_writes_performed": True,
+                "commissioning_performed": False,
+            },
+            **_command_response(result),
+        }
+
+    @router.post("/production/equipment/commission")
+    async def trial_plant_equipment_commission(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "production.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(request, maximum_bytes=4096)
+        try:
+            body = TrialPlantEquipmentCommissionRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "plant_equipment_commission_invalid") from exc
+        if body.confirmation != f"COMMISSION {body.equipment_id}":
+            raise _error(409, "plant_equipment_commission_confirmation_mismatch")
+        command_id = str(body.command_id)
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=command_id,
+                surface="production",
+                event_type="production.equipment.commissioned",
+                expected_version=body.expected_version,
+                payload={
+                    "equipmentId": body.equipment_id,
+                    "installedAt": body.installed_at,
+                    "initialState": body.initial_state,
+                    "safetyBaselineReference": body.safety_baseline_reference,
+                    "evidence": {
+                        "actionId": f"ACT-EQUIPMENT-COMMISSION-{command_id}",
+                        "capturedAt": "server-assigned",
+                        "actor": principal.actor_id,
+                        "reason": "Commissioned reviewed Plant equipment",
+                        "evidenceReference": body.safety_baseline_reference,
+                    },
+                },
+            )
+        )
+        return {
+            "commissioning": {
+                "contract": "supermega.production.equipment-commissioning.v1",
+                "status": "commissioned",
+                "equipment_id": body.equipment_id,
+                "workspace_id": principal.workspace_id,
+                "runtime_machine_created": True,
+                "equipment_command_performed": False,
+                "telemetry_connected": False,
+                "bulk_commissioning_performed": False,
+            },
+            **_command_response(result),
+        }
+
+    @router.post("/production/equipment/maintenance-strategy")
+    async def trial_plant_equipment_maintenance_strategy(
+        request: Request,
+    ) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_ready(readiness, "production.write")
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        raw_body = await _bounded_json_body(request, maximum_bytes=6144)
+        try:
+            body = TrialPlantEquipmentMaintenanceStrategyRequest.model_validate(
+                raw_body
+            )
+        except ValidationError as exc:
+            raise _error(422, "plant_equipment_maintenance_strategy_invalid") from exc
+        if body.confirmation != f"SAVE MAINTENANCE {body.equipment_id}":
+            raise _error(
+                409,
+                "plant_equipment_maintenance_strategy_confirmation_mismatch",
+            )
+        command_id = str(body.command_id)
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=command_id,
+                surface="production",
+                event_type="production.equipment_maintenance_strategy.saved",
+                expected_version=body.expected_version,
+                payload={
+                    "equipmentId": body.equipment_id,
+                    "maintenanceOwner": body.maintenance_owner,
+                    "intervalDays": body.interval_days,
+                    "nextDueAt": body.next_due_at,
+                    "procedureReference": body.procedure_reference,
+                    "safetyBaselineReference": body.safety_baseline_reference,
+                    "evidence": {
+                        "actionId": f"ACT-EQUIPMENT-MAINTENANCE-STRATEGY-{command_id}",
+                        "capturedAt": "server-assigned",
+                        "actor": principal.actor_id,
+                        "reason": "Saved reviewed preventive maintenance strategy",
+                        "evidenceReference": body.safety_baseline_reference,
+                    },
+                },
+            )
+        )
+        return {
+            "maintenance_strategy": {
+                "contract": "supermega.production.equipment-maintenance-strategy.v1",
+                "status": "saved",
+                "equipment_id": body.equipment_id,
+                "workspace_id": principal.workspace_id,
+                "maintenance_execution_started": False,
+                "work_order_created": False,
+                "equipment_command_performed": False,
+                "telemetry_connected": False,
+                "bulk_strategy_created": False,
+            },
+            **_command_response(result),
+        }
+
     @router.post("/imports/apply")
     async def trial_import_apply(request: Request) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
@@ -1450,7 +1816,10 @@ def create_trial_router(
         except ValidationError as exc:
             raise _error(422, "client_import_apply_invalid") from exc
         try:
-            validation = validate_client_import_staging_package(body.package)
+            validation = validate_client_import_staging_package(
+                body.package,
+                minimum_production_due_date=current_date(),
+            )
         except ClientImportValidationError as exc:
             raise _error(
                 422,
@@ -1601,24 +1970,104 @@ def create_trial_router(
             related_surfaces = ("production",)
             state_precondition = require_plant_request
         elif (
+            body.surface == "commerce"
+            and body.event_type == "commerce.production_material.returned"
+        ):
+            submitted_commerce = body.payload.get("state")
+            submitted_movements = (
+                submitted_commerce.get("movements")
+                if isinstance(submitted_commerce, Mapping)
+                else None
+            )
+            return_movement = (
+                submitted_movements[0]
+                if isinstance(submitted_movements, list)
+                and submitted_movements
+                and isinstance(submitted_movements[0], Mapping)
+                else None
+            )
+            if (
+                not isinstance(return_movement, Mapping)
+                or return_movement.get("kind") != "production_return"
+            ):
+                raise _error(422, "production_material_return_state_required")
+
+            def require_current_plant_issue(
+                commerce_state: Mapping[str, Any],
+                related_states: Mapping[str, Mapping[str, Any]],
+            ) -> None:
+                source_issue_action_id = return_movement.get(
+                    "productionIssueActionId"
+                )
+                movements = commerce_state.get("movements")
+                source_issues = [
+                    movement
+                    for movement in movements
+                    if isinstance(movement, Mapping)
+                    and movement.get("kind") == "production_issue"
+                    and movement.get("actionId") == source_issue_action_id
+                ] if isinstance(movements, list) else []
+                if len(source_issues) != 1:
+                    raise TrialValidationError(
+                        "the material return source issue is not retained in Shop."
+                    )
+                source = source_issues[0]
+                requests = production_material_requests(
+                    related_states.get("production", {})
+                )
+                matching = [
+                    request
+                    for request in requests
+                    if request.get("requestId") == source.get("productionRequestId")
+                    and request.get("sourceCommandDigest")
+                    == source.get("productionCommandDigest")
+                    and request.get("jobId") == source.get("productionJobId")
+                    and request.get("materialId")
+                    == source.get("productionMaterialId")
+                    and request.get("inputLotId")
+                    == source.get("productionInputLotId")
+                    and request.get("quantityMilli")
+                    == source.get("productionQuantityMilli")
+                    and request.get("unit") == source.get("productionUnit")
+                ]
+                if len(matching) != 1:
+                    raise TrialValidationError(
+                        "the material return no longer matches the locked Plant issue."
+                    )
+
+            related_surfaces = ("production",)
+            state_precondition = require_current_plant_issue
+        elif (
             body.surface == "production"
             and body.event_type == "production.order_execution.recorded"
         ):
             submitted_production = body.payload.get("state")
-            execution = (
-                submitted_production.get("orderExecution")
-                if isinstance(submitted_production, Mapping)
-                else None
-            )
-            commands = (
-                execution.get("commands") if isinstance(execution, Mapping) else None
-            )
-            latest_payload = (
-                commands[-1].get("payload")
-                if isinstance(commands, list)
-                and commands
-                and isinstance(commands[-1], Mapping)
-                else None
+            submitted_executions: list[Mapping[str, Any]] = []
+            if isinstance(submitted_production, Mapping):
+                legacy_execution = submitted_production.get("orderExecution")
+                if isinstance(legacy_execution, Mapping):
+                    submitted_executions.append(legacy_execution)
+                portfolio = submitted_production.get("orderPortfolio")
+                entries = portfolio.get("entries") if isinstance(portfolio, Mapping) else None
+                if isinstance(entries, list):
+                    submitted_executions.extend(
+                        entry["execution"]
+                        for entry in entries
+                        if isinstance(entry, Mapping) and isinstance(entry.get("execution"), Mapping)
+                    )
+            evidence_action_id = evidence.get("actionId") if isinstance(evidence, Mapping) else None
+            latest_payload = next(
+                (
+                    commands[-1].get("payload")
+                    for execution in submitted_executions
+                    if isinstance((commands := execution.get("commands")), list)
+                    and commands
+                    and isinstance(commands[-1], Mapping)
+                    and isinstance(commands[-1].get("payload"), Mapping)
+                    and isinstance(commands[-1]["payload"].get("proof"), Mapping)
+                    and commands[-1]["payload"]["proof"].get("actionId") == evidence_action_id
+                ),
+                None,
             )
             if (
                 isinstance(submitted_production, Mapping)
@@ -1638,6 +2087,26 @@ def create_trial_router(
 
                 related_surfaces = ("commerce",)
                 state_precondition = require_shop_issue
+        elif (
+            body.surface == "production"
+            and body.event_type == "production.job.created"
+            and isinstance(body.payload.get("intent"), Mapping)
+            and isinstance(body.payload["intent"].get("shopDemandSource"), Mapping)
+        ):
+            submitted_source = deepcopy(body.payload["intent"]["shopDemandSource"])
+
+            def require_current_shop_demand(
+                production_state: Mapping[str, Any],
+                related_states: Mapping[str, Mapping[str, Any]],
+            ) -> None:
+                require_shop_demand_source_current(
+                    production_state,
+                    related_states.get("commerce", {}),
+                    submitted_source,
+                )
+
+            related_surfaces = ("commerce",)
+            state_precondition = require_current_shop_demand
         result = _invoke(
             lambda: store.apply_command(
                 principal,

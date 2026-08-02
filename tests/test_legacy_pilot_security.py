@@ -644,6 +644,39 @@ class LegacyPilotSecurityTests(unittest.TestCase):
             ), self.assertRaises(RuntimeError):
                 runner._allowed_remote_hosts()
 
+    def test_agent_runner_cycle_budget_is_canonical_bounded_and_scale_to_zero(self) -> None:
+        runner = _load_module(AGENT_RUNNER_PATH, "supermega_agent_runner_cycle_budget_test")
+        queued = runner.build_job_cycle_plan(None, durable_queue=True)
+        self.assertEqual(queued["contract"], "supermega.agent-runner-cycle-budget.v1")
+        self.assertEqual(queued["job_types"], runner.DEFAULT_JOB_TYPES)
+        self.assertEqual(queued["requested_count"], 7)
+        self.assertEqual(queued["process_limit"], 1)
+        self.assertEqual(queued["max_processed_per_cycle"], 1)
+        self.assertTrue(queued["scale_to_zero"])
+
+        canonical = runner.build_job_cycle_plan(
+            ["list_clerk", "OPS_WATCH", "list_clerk", "task_triage", "founder_brief", "github_release_watch"],
+            durable_queue=True,
+        )
+        self.assertEqual(
+            canonical["job_types"],
+            ["ops_watch", "github_release_watch", "task_triage", "founder_brief", "list_clerk"],
+        )
+        self.assertEqual(canonical["process_limit"], 1)
+
+        direct = runner.build_job_cycle_plan(["ops_watch"], durable_queue=False)
+        self.assertEqual(direct["mode"], "workspace_login")
+        self.assertEqual(direct["process_limit"], 1)
+        for values, durable_queue, error in (
+            (None, False, "workspace_login_requires_explicit_job_types"),
+            (["ops_watch", "github_release_watch"], False, "workspace_login_job_limit_exceeded"),
+            (["unknown"], True, "job_type_not_canonical"),
+            ([""], True, "job_type_empty"),
+            (["ops_watch"] * 25, True, "job_type_argument_limit_exceeded"),
+        ):
+            with self.subTest(error=error), self.assertRaisesRegex(RuntimeError, error):
+                runner.build_job_cycle_plan(values, durable_queue=durable_queue)
+
     def test_agent_credentials_are_not_defaulted_or_forwarded_on_cli(self) -> None:
         runner = AGENT_RUNNER_PATH.read_text(encoding="utf-8")
         founder = FOUNDER_CYCLE_PATH.read_text(encoding="utf-8")

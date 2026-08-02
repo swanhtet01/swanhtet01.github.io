@@ -20,8 +20,18 @@ from typing import Any
 PLANT_ORDER_STATE_SCHEMA = "supermega.plant.order_foundation.v1"
 PLANT_ORDER_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v1"
 PLANT_ORDER_EXECUTION_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v2"
+PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"
+PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v4"
 PLANT_ORDER_PROJECTION_CONTRACT = "supermega.plant.order_projection.v1"
+PLANT_ORDER_EFFECTIVENESS_CONTRACT = "supermega.plant.order_effectiveness.v2"
+PLANT_ORDER_COST_DRIVER_CONTRACT = "supermega.plant.cost_driver_variance.v1"
+PLANT_ORDER_FINANCIAL_COST_CONTRACT = "supermega.plant.financial_job_cost.v1"
+PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT = "supermega.plant.cost_review_packet.v1"
+PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT = (
+    "supermega.plant.material-substitution-approval.v1"
+)
 EMPTY_PLANT_ORDER_DIGEST = f"sha256:{'0' * 64}"
+PLANT_ORDER_PLAN_REVISION_MAX = 25
 
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _BUSINESS_ID = re.compile(r"^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$")
@@ -35,9 +45,15 @@ _MATERIAL_UNITS = frozenset(
 _COMMAND_KINDS = frozenset(
     {
         "import_plan",
+        "supersede_plan",
         "availability_check",
         "release_order",
+        "record_calibration",
+        "record_quality_rework",
+        "approve_material_substitution",
         "issue_material",
+        "issue_substitute_material",
+        "record_effectiveness",
         "record_operation",
         "record_output",
         "inspect_output",
@@ -220,14 +236,32 @@ def _materials(value: object, field: str) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for index, candidate in enumerate(rows):
         row_field = f"{field}[{index}]"
+        has_cost = isinstance(candidate, Mapping) and "standardCostPerUnitMmk" in candidate
+        has_shop_supply = isinstance(candidate, Mapping) and "shopSupply" in candidate
         source = _object(
             candidate,
             row_field,
-            ("materialId", "name", "unit", "quantityPerUnitMilli"),
+            (
+                "materialId",
+                "name",
+                "unit",
+                "quantityPerUnitMilli",
+                *(("standardCostPerUnitMmk",) if has_cost else ()),
+                *(("shopSupply",) if has_shop_supply else ()),
+            ),
         )
         unit = source["unit"]
         if not isinstance(unit, str) or unit not in _MATERIAL_UNITS:
             raise _fail(f"{row_field}.unit is unsupported.")
+        shop_supply = (
+            _object(
+                source["shopSupply"],
+                f"{row_field}.shopSupply",
+                ("sku", "materialQuantityMilliPerStockUnit"),
+            )
+            if has_shop_supply
+            else None
+        )
         result.append(
             {
                 "materialId": _identifier(
@@ -239,6 +273,35 @@ def _materials(value: object, field: str) -> list[dict[str, Any]]:
                     source["quantityPerUnitMilli"],
                     f"{row_field}.quantityPerUnitMilli",
                     minimum=1,
+                ),
+                **(
+                    {
+                        "standardCostPerUnitMmk": _integer(
+                            source["standardCostPerUnitMmk"],
+                            f"{row_field}.standardCostPerUnitMmk",
+                            minimum=1,
+                        )
+                    }
+                    if has_cost
+                    else {}
+                ),
+                **(
+                    {
+                        "shopSupply": {
+                            "sku": _text(
+                                shop_supply["sku"],
+                                f"{row_field}.shopSupply.sku",
+                                maximum=80,
+                            ),
+                            "materialQuantityMilliPerStockUnit": _integer(
+                                shop_supply["materialQuantityMilliPerStockUnit"],
+                                f"{row_field}.shopSupply.materialQuantityMilliPerStockUnit",
+                                minimum=1,
+                            ),
+                        }
+                    }
+                    if shop_supply is not None
+                    else {}
                 ),
             }
         )
@@ -278,6 +341,7 @@ def _routing(
     result: list[dict[str, Any]] = []
     for index, candidate in enumerate(rows):
         row_field = f"{field}[{index}]"
+        has_cost = isinstance(candidate, Mapping) and "standardCostPerMinuteMmk" in candidate
         source = _object(
             candidate,
             row_field,
@@ -287,6 +351,7 @@ def _routing(
                 "name",
                 "workCentreId",
                 "minutesPerUnitMilli",
+                *(("standardCostPerMinuteMmk",) if has_cost else ()),
             ),
         )
         work_centre_id = _identifier(
@@ -310,6 +375,17 @@ def _routing(
                     f"{row_field}.minutesPerUnitMilli",
                     minimum=1,
                 ),
+                **(
+                    {
+                        "standardCostPerMinuteMmk": _integer(
+                            source["standardCostPerMinuteMmk"],
+                            f"{row_field}.standardCostPerMinuteMmk",
+                            minimum=1,
+                        )
+                    }
+                    if has_cost
+                    else {}
+                ),
             }
         )
     _unique([row["operationId"] for row in result], f"{field} operation IDs")
@@ -317,6 +393,10 @@ def _routing(
 
 
 def _validate_plan_package(value: object) -> dict[str, Any]:
+    effective_contract = (
+        isinstance(value, Mapping)
+        and value.get("contract") == PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+    )
     source = _object(
         value,
         "plan package",
@@ -324,6 +404,7 @@ def _validate_plan_package(value: object) -> dict[str, Any]:
             "contract",
             "planId",
             "sourceDigest",
+            *(("effectiveFrom", "effectiveUntil") if effective_contract else ()),
             "job",
             "materials",
             "workCentres",
@@ -334,11 +415,28 @@ def _validate_plan_package(value: object) -> dict[str, Any]:
     if source["contract"] not in {
         PLANT_ORDER_PLAN_CONTRACT,
         PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+        PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+        PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
     }:
         raise _fail("plan package.contract is unsupported.")
     contract = source["contract"]
     plan_id = _identifier(source["planId"], "plan package.planId", "PLN")
     source_digest = _digest(source["sourceDigest"], "plan package.sourceDigest")
+    effective_from = (
+        _timestamp(source["effectiveFrom"], "plan package.effectiveFrom")
+        if effective_contract
+        else None
+    )
+    effective_until = (
+        _timestamp(source["effectiveUntil"], "plan package.effectiveUntil")
+        if effective_contract
+        else None
+    )
+    if effective_from is not None and effective_until is not None:
+        start = datetime.fromisoformat(effective_from.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(effective_until.replace("Z", "+00:00"))
+        if end <= start:
+            raise _fail("plan package.effectiveUntil must follow effectiveFrom.")
     job = _job(source["job"], "plan package.job")
     materials = _materials(source["materials"], "plan package.materials")
     work_centres = _work_centres(source["workCentres"], "plan package.workCentres")
@@ -363,6 +461,11 @@ def _validate_plan_package(value: object) -> dict[str, Any]:
         "contract": contract,
         "planId": plan_id,
         "sourceDigest": source_digest,
+        **(
+            {"effectiveFrom": effective_from, "effectiveUntil": effective_until}
+            if effective_from is not None and effective_until is not None
+            else {}
+        ),
         "job": job,
         "materials": materials,
         "workCentres": work_centres,
@@ -413,6 +516,58 @@ def build_plant_order_execution_plan(
         "contract": PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
         "planId": plan_id,
         "sourceDigest": source_digest,
+        "job": job,
+        "materials": materials,
+        "workCentres": work_centres,
+        "routing": routing,
+    }
+    candidate["packageDigest"] = _canonical_digest(candidate)
+    return _validate_plan_package(candidate)
+
+
+def build_plant_order_controlled_plan(
+    *,
+    plan_id: object,
+    source_digest: object,
+    job: object,
+    materials: object,
+    work_centres: object,
+    routing: object,
+) -> dict[str, Any]:
+    """Build a v3 package with routed calibration controls."""
+
+    candidate = {
+        "contract": PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+        "planId": plan_id,
+        "sourceDigest": source_digest,
+        "job": job,
+        "materials": materials,
+        "workCentres": work_centres,
+        "routing": routing,
+    }
+    candidate["packageDigest"] = _canonical_digest(candidate)
+    return _validate_plan_package(candidate)
+
+
+def build_plant_order_effective_plan(
+    *,
+    plan_id: object,
+    source_digest: object,
+    effective_from: object,
+    effective_until: object,
+    job: object,
+    materials: object,
+    work_centres: object,
+    routing: object,
+) -> dict[str, Any]:
+    """Build a v4 controlled package with an accountable release window."""
+
+    candidate = {
+        "contract": PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
+        "planId": plan_id,
+        "sourceDigest": source_digest,
+        "effectiveFrom": effective_from,
+        "effectiveUntil": effective_until,
         "job": job,
         "materials": materials,
         "workCentres": work_centres,
@@ -484,6 +639,181 @@ def _capacity_availability(value: object, field: str) -> list[dict[str, Any]]:
     return result
 
 
+def _effectiveness_work_centres(value: object, field: str) -> list[dict[str, Any]]:
+    rows = _array(value, field, minimum=1, maximum=_MAX_WORK_CENTRES)
+    result: list[dict[str, Any]] = []
+    for index, candidate in enumerate(rows):
+        row_field = f"{field}[{index}]"
+        source = _object(
+            candidate, row_field, ("workCentreId", "plannedProductiveMinutesMilli")
+        )
+        result.append(
+            {
+                "workCentreId": _identifier(
+                    source["workCentreId"], f"{row_field}.workCentreId", "WC"
+                ),
+                "plannedProductiveMinutesMilli": _integer(
+                    source["plannedProductiveMinutesMilli"],
+                    f"{row_field}.plannedProductiveMinutesMilli",
+                    minimum=1,
+                ),
+            }
+        )
+    ids = [row["workCentreId"] for row in result]
+    _unique(ids, f"{field} work-centre IDs")
+    _sorted(ids, f"{field} work-centre IDs")
+    return result
+
+
+def _duration_minutes_milli(started_at: object, ended_at: object, field: str) -> int:
+    started = datetime.fromisoformat(
+        _timestamp(started_at, f"{field}.startedAt").replace("Z", "+00:00")
+    )
+    ended = datetime.fromisoformat(
+        _timestamp(ended_at, f"{field}.endedAt").replace("Z", "+00:00")
+    )
+    delta = ended - started
+    duration_micros = (
+        delta.days * 86_400_000_000
+        + delta.seconds * 1_000_000
+        + delta.microseconds
+    )
+    if duration_micros <= 0:
+        raise _fail(f"{field}.endedAt must follow startedAt.")
+    if duration_micros % 60_000:
+        raise _fail(
+            f"{field} duration must resolve to whole thousandths of a minute."
+        )
+    duration = duration_micros // 60_000
+    if duration > _MAX_SAFE_INTEGER:
+        raise _fail(f"{field} duration exceeds the supported range.")
+    return duration
+
+
+def _downtime_intervals(value: object, field: str) -> list[dict[str, Any]]:
+    rows = _array(value, field, maximum=200)
+    result: list[dict[str, Any]] = []
+    for index, candidate in enumerate(rows):
+        row_field = f"{field}[{index}]"
+        source = _object(
+            candidate,
+            row_field,
+            ("downtimeId", "workCentreId", "startedAt", "endedAt"),
+        )
+        row = {
+            "downtimeId": _identifier(
+                source["downtimeId"], f"{row_field}.downtimeId", "DT"
+            ),
+            "workCentreId": _identifier(
+                source["workCentreId"], f"{row_field}.workCentreId", "WC"
+            ),
+            "startedAt": _timestamp(source["startedAt"], f"{row_field}.startedAt"),
+            "endedAt": _timestamp(source["endedAt"], f"{row_field}.endedAt"),
+        }
+        _duration_minutes_milli(row["startedAt"], row["endedAt"], row_field)
+        result.append(row)
+    ids = [row["downtimeId"] for row in result]
+    _unique(ids, f"{field} downtime IDs")
+    _sorted(ids, f"{field} downtime IDs")
+    return result
+
+
+def _effectiveness_command(value: object, field: str) -> dict[str, Any]:
+    source = _object(
+        value,
+        field,
+        (
+            "kind",
+            "id",
+            "planId",
+            "jobId",
+            "windowStart",
+            "windowEnd",
+            "sourceDigest",
+            "workCentres",
+            "downtimeIntervals",
+            "proof",
+        ),
+    )
+    plan_id = _identifier(source["planId"], f"{field}.planId", "PLN")
+    job_id = _identifier(source["jobId"], f"{field}.jobId", "JOB")
+    window_start = _timestamp(source["windowStart"], f"{field}.windowStart")
+    window_end = _timestamp(source["windowEnd"], f"{field}.windowEnd")
+    window_duration = _duration_minutes_milli(window_start, window_end, field)
+    work_centres = _effectiveness_work_centres(
+        source["workCentres"], f"{field}.workCentres"
+    )
+    downtime_intervals = _downtime_intervals(
+        source["downtimeIntervals"], f"{field}.downtimeIntervals"
+    )
+    source_digest = _digest(source["sourceDigest"], f"{field}.sourceDigest")
+    evidence = {
+        "planId": plan_id,
+        "jobId": job_id,
+        "windowStart": window_start,
+        "windowEnd": window_end,
+        "workCentres": work_centres,
+        "downtimeIntervals": downtime_intervals,
+    }
+    if source_digest != _canonical_digest(evidence):
+        raise _fail(
+            f"{field}.sourceDigest does not match its order-bound effectiveness evidence."
+        )
+    centre_ids = {row["workCentreId"] for row in work_centres}
+    window_start_dt = datetime.fromisoformat(window_start.replace("Z", "+00:00"))
+    window_end_dt = datetime.fromisoformat(window_end.replace("Z", "+00:00"))
+    by_centre: dict[str, list[tuple[datetime, datetime, int]]] = {}
+    for index, interval in enumerate(downtime_intervals):
+        if interval["workCentreId"] not in centre_ids:
+            raise _fail(
+                f"{field}.downtimeIntervals[{index}].workCentreId is not in the effectiveness work centres."
+            )
+        start = datetime.fromisoformat(interval["startedAt"].replace("Z", "+00:00"))
+        end = datetime.fromisoformat(interval["endedAt"].replace("Z", "+00:00"))
+        if start < window_start_dt or end > window_end_dt:
+            raise _fail(
+                f"{field}.downtimeIntervals[{index}] falls outside the effectiveness window."
+            )
+        by_centre.setdefault(interval["workCentreId"], []).append(
+            (
+                start,
+                end,
+                _duration_minutes_milli(
+                    interval["startedAt"],
+                    interval["endedAt"],
+                    f"{field}.downtimeIntervals[{index}]",
+                ),
+            )
+        )
+    for centre in work_centres:
+        centre_id = centre["workCentreId"]
+        if centre["plannedProductiveMinutesMilli"] > window_duration:
+            raise _fail(
+                f"{field} planned productive time for {centre_id} exceeds the evidence window."
+            )
+        intervals = sorted(by_centre.get(centre_id, []), key=lambda row: row[0])
+        if any(intervals[index][0] < intervals[index - 1][1] for index in range(1, len(intervals))):
+            raise _fail(f"{field} downtime overlaps for {centre_id}.")
+        downtime = sum(row[2] for row in intervals)
+        if downtime > centre["plannedProductiveMinutesMilli"]:
+            raise _fail(
+                f"{field} downtime exceeds planned productive time for {centre_id}."
+            )
+    proof = _proof(source["proof"], f"{field}.proof")
+    proof_time = datetime.fromisoformat(proof["capturedAt"].replace("Z", "+00:00"))
+    if proof_time < window_end_dt:
+        raise _fail(
+            f"{field}.proof.capturedAt must be at or after the closed effectiveness window."
+        )
+    return {
+        "kind": "record_effectiveness",
+        "id": _identifier(source["id"], f"{field}.id", "OEE"),
+        **evidence,
+        "sourceDigest": source_digest,
+        "proof": proof,
+    }
+
+
 def _command_payload(value: object, field: str) -> dict[str, Any]:
     if not isinstance(value, Mapping) or not isinstance(value.get("kind"), str):
         raise _fail(f"{field}.kind is unsupported.")
@@ -501,6 +831,23 @@ def _command_payload(value: object, field: str) -> dict[str, Any]:
             "kind": kind,
             "id": command_id,
             "package": package,
+            "proof": _proof(source["proof"], f"{field}.proof"),
+        }
+
+    if kind == "supersede_plan":
+        source = _object(
+            value,
+            field,
+            ("kind", "id", "supersededPlanId", "package", "reason", "proof"),
+        )
+        return {
+            "kind": kind,
+            "id": _identifier(source["id"], f"{field}.id", "REV"),
+            "supersededPlanId": _identifier(
+                source["supersededPlanId"], f"{field}.supersededPlanId", "PLN"
+            ),
+            "package": _validate_plan_package(source["package"]),
+            "reason": _text(source["reason"], f"{field}.reason", maximum=300),
             "proof": _proof(source["proof"], f"{field}.proof"),
         }
 
@@ -556,6 +903,177 @@ def _command_payload(value: object, field: str) -> dict[str, Any]:
             ),
             "proof": _proof(source["proof"], f"{field}.proof"),
         }
+
+    if kind == "approve_material_substitution":
+        source = _object(
+            value,
+            field,
+            (
+                "kind",
+                "contract",
+                "id",
+                "materialId",
+                "substituteMaterialId",
+                "substituteName",
+                "substituteUnit",
+                "originalQuantityPerUnitMilli",
+                "substituteQuantityPerUnitMilli",
+                "approvalSourceDigest",
+                "technicalBasis",
+                "proof",
+            ),
+        )
+        if source["contract"] != PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT:
+            raise _fail(f"{field}.contract is unsupported.")
+        substitute_unit = _text(
+            source["substituteUnit"], f"{field}.substituteUnit", maximum=12
+        )
+        if substitute_unit not in _MATERIAL_UNITS:
+            raise _fail(f"{field}.substituteUnit is unsupported.")
+        return {
+            "kind": kind,
+            "contract": PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT,
+            "id": _identifier(source["id"], f"{field}.id", "SUB"),
+            "materialId": _identifier(
+                source["materialId"], f"{field}.materialId", "MAT"
+            ),
+            "substituteMaterialId": _identifier(
+                source["substituteMaterialId"],
+                f"{field}.substituteMaterialId",
+                "MAT",
+            ),
+            "substituteName": _text(
+                source["substituteName"], f"{field}.substituteName", maximum=180
+            ),
+            "substituteUnit": substitute_unit,
+            "originalQuantityPerUnitMilli": _integer(
+                source["originalQuantityPerUnitMilli"],
+                f"{field}.originalQuantityPerUnitMilli",
+                minimum=1,
+            ),
+            "substituteQuantityPerUnitMilli": _integer(
+                source["substituteQuantityPerUnitMilli"],
+                f"{field}.substituteQuantityPerUnitMilli",
+                minimum=1,
+            ),
+            "approvalSourceDigest": _digest(
+                source["approvalSourceDigest"],
+                f"{field}.approvalSourceDigest",
+            ),
+            "technicalBasis": _text(
+                source["technicalBasis"], f"{field}.technicalBasis", maximum=300
+            ),
+            "proof": _proof(source["proof"], f"{field}.proof"),
+        }
+
+    if kind == "issue_substitute_material":
+        source = _object(
+            value,
+            field,
+            (
+                "kind",
+                "id",
+                "substitutionId",
+                "materialId",
+                "substituteMaterialId",
+                "inputLotId",
+                "substituteQuantityMilli",
+                "proof",
+            ),
+        )
+        return {
+            "kind": kind,
+            "id": _identifier(source["id"], f"{field}.id", "ISSUE"),
+            "substitutionId": _identifier(
+                source["substitutionId"], f"{field}.substitutionId", "SUB"
+            ),
+            "materialId": _identifier(
+                source["materialId"], f"{field}.materialId", "MAT"
+            ),
+            "substituteMaterialId": _identifier(
+                source["substituteMaterialId"],
+                f"{field}.substituteMaterialId",
+                "MAT",
+            ),
+            "inputLotId": _identifier(
+                source["inputLotId"], f"{field}.inputLotId", "LOT"
+            ),
+            "substituteQuantityMilli": _integer(
+                source["substituteQuantityMilli"],
+                f"{field}.substituteQuantityMilli",
+                minimum=1,
+            ),
+            "proof": _proof(source["proof"], f"{field}.proof"),
+        }
+
+    if kind == "record_calibration":
+        source = _object(
+            value,
+            field,
+            (
+                "kind",
+                "id",
+                "workCentreId",
+                "certificateId",
+                "calibratedAt",
+                "validUntil",
+                "standardReference",
+                "proof",
+            ),
+        )
+        calibrated_at = _timestamp(source["calibratedAt"], f"{field}.calibratedAt")
+        valid_until = _timestamp(source["validUntil"], f"{field}.validUntil")
+        calibration_proof = _proof(source["proof"], f"{field}.proof")
+        calibrated_time = datetime.fromisoformat(calibrated_at.replace("Z", "+00:00"))
+        valid_time = datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
+        proof_time = datetime.fromisoformat(calibration_proof["capturedAt"].replace("Z", "+00:00"))
+        if calibrated_time > proof_time:
+            raise _fail(f"{field}.calibratedAt cannot follow its review.")
+        if valid_time <= proof_time:
+            raise _fail(f"{field}.validUntil must follow its review.")
+        return {
+            "kind": kind,
+            "id": _identifier(source["id"], f"{field}.id", "CAL"),
+            "workCentreId": _identifier(source["workCentreId"], f"{field}.workCentreId", "WC"),
+            "certificateId": _identifier(source["certificateId"], f"{field}.certificateId", "CERT"),
+            "calibratedAt": calibrated_at,
+            "validUntil": valid_until,
+            "standardReference": _text(source["standardReference"], f"{field}.standardReference"),
+            "proof": calibration_proof,
+        }
+
+    if kind == "record_quality_rework":
+        source = _object(
+            value,
+            field,
+            (
+                "kind",
+                "id",
+                "inspectionId",
+                "operationId",
+                "quantity",
+                "actualMinutesMilli",
+                "owner",
+                "cause",
+                "correctiveAction",
+                "proof",
+            ),
+        )
+        return {
+            "kind": kind,
+            "id": _identifier(source["id"], f"{field}.id", "RWK"),
+            "inspectionId": _identifier(source["inspectionId"], f"{field}.inspectionId", "INSP"),
+            "operationId": _identifier(source["operationId"], f"{field}.operationId", "OP"),
+            "quantity": _integer(source["quantity"], f"{field}.quantity", minimum=1),
+            "actualMinutesMilli": _integer(source["actualMinutesMilli"], f"{field}.actualMinutesMilli", minimum=1),
+            "owner": _text(source["owner"], f"{field}.owner", maximum=120),
+            "cause": _text(source["cause"], f"{field}.cause", maximum=300),
+            "correctiveAction": _text(source["correctiveAction"], f"{field}.correctiveAction", maximum=300),
+            "proof": _proof(source["proof"], f"{field}.proof"),
+        }
+
+    if kind == "record_effectiveness":
+        return _effectiveness_command(value, field)
 
     if kind == "record_operation":
         source = _object(
@@ -741,12 +1259,47 @@ def _availability_projection(
     }
 
 
+def _calibration_covers(command: Mapping[str, Any], captured_at: str) -> bool:
+    observed = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    calibrated = datetime.fromisoformat(command["calibratedAt"].replace("Z", "+00:00"))
+    valid_until = datetime.fromisoformat(command["validUntil"].replace("Z", "+00:00"))
+    return calibrated <= observed < valid_until
+
+
+def _is_controlled_plan(plan: Mapping[str, Any]) -> bool:
+    return plan["contract"] in {
+        PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+        PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
+    }
+
+
+def _assert_plan_effective_at_release(
+    plan: Mapping[str, Any], captured_at: str, field: str
+) -> None:
+    if plan["contract"] != PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT:
+        return
+    observed = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    effective_from = datetime.fromisoformat(plan["effectiveFrom"].replace("Z", "+00:00"))
+    effective_until = datetime.fromisoformat(plan["effectiveUntil"].replace("Z", "+00:00"))
+    if observed < effective_from:
+        raise _fail(f"{field} cannot release a plan before its effective window.")
+    if observed >= effective_until:
+        raise _fail(f"{field} cannot release an expired plan.")
+
+
 def _empty_projection() -> dict[str, Any]:
     return {
         "plan": None,
+        "planHistory": [],
+        "planRevisions": [],
         "status": "unplanned",
         "latestAvailability": None,
         "orderRelease": None,
+        "calibrations": [],
+        "qualityReworks": [],
+        "materialSubstitutions": [],
+        "materialIssues": [],
+        "effectivenessWindow": None,
         "materials": [],
         "routing": [],
         "operations": [],
@@ -774,8 +1327,14 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         return _empty_projection()
 
     plan: dict[str, Any] | None = None
+    plan_history: list[dict[str, Any]] = []
+    plan_revisions: list[dict[str, Any]] = []
     latest_availability: dict[str, Any] | None = None
     order_release: dict[str, Any] | None = None
+    effectiveness_window: dict[str, Any] | None = None
+    calibrations: dict[str, dict[str, Any]] = {}
+    quality_reworks: list[dict[str, Any]] = []
+    material_substitutions: dict[str, dict[str, Any]] = {}
     issued: dict[str, int] = {}
     operation_quantities: dict[str, int] = {}
     operation_minutes: dict[str, int] = {}
@@ -795,6 +1354,7 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             if plan is not None or index != 0:
                 raise _fail(f"{field} attempts to replace the immutable reviewed plan.")
             plan = command["package"]
+            plan_history.append(command["package"])
             issued = {row["materialId"]: 0 for row in plan["materials"]}
             operation_quantities = {
                 row["operationId"]: 0 for row in plan["routing"]
@@ -807,10 +1367,93 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             raise _fail(f"{field} has no reviewed plan.")
         job = plan["job"]
 
+        if kind == "supersede_plan":
+            successor = command["package"]
+            if order_release is not None:
+                raise _fail(f"{field} cannot supersede a released work package.")
+            if len(plan_revisions) >= PLANT_ORDER_PLAN_REVISION_MAX:
+                raise _fail(f"{field} exceeds the plan revision limit.")
+            if (
+                plan["contract"] != PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+                or successor["contract"] != PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT
+            ):
+                raise _fail(
+                    f"{field} requires version 4 effective-dated predecessor and successor plans."
+                )
+            if command["supersededPlanId"] != plan["planId"]:
+                raise _fail(f"{field}.supersededPlanId is not the current reviewed plan.")
+            if successor["planId"] == plan["planId"]:
+                raise _fail(f"{field}.package.planId must identify a new reviewed plan.")
+            if any(
+                retained["planId"] == successor["planId"]
+                for retained in plan_history
+            ):
+                raise _fail(
+                    f"{field}.package.planId was already retained in this revision chain."
+                )
+            if (
+                successor["job"]["jobId"] != job["jobId"]
+                or successor["job"]["product"] != job["product"]
+            ):
+                raise _fail(
+                    f"{field}.package must remain bound to the same production job and product."
+                )
+            reviewed_at = datetime.fromisoformat(
+                command["proof"]["capturedAt"].replace("Z", "+00:00")
+            )
+            effective_until = datetime.fromisoformat(
+                successor["effectiveUntil"].replace("Z", "+00:00")
+            )
+            if effective_until <= reviewed_at:
+                raise _fail(
+                    f"{field}.package must remain effective after its supersession review."
+                )
+            plan = successor
+            plan_history.append(successor)
+            plan_revisions.append(command)
+            latest_availability = None
+            effectiveness_window = None
+            calibrations.clear()
+            quality_reworks.clear()
+            material_substitutions.clear()
+            material_issue_commands.clear()
+            operation_commands.clear()
+            output_entries.clear()
+            inspections.clear()
+            batch_release = None
+            total_output = 0
+            issued = {row["materialId"]: 0 for row in successor["materials"]}
+            operation_quantities = {
+                row["operationId"]: 0 for row in successor["routing"]
+            }
+            operation_minutes = {
+                row["operationId"]: 0 for row in successor["routing"]
+            }
+            continue
+
         if kind == "availability_check":
             if order_release is not None:
                 raise _fail(f"{field} cannot replace availability after order release.")
             latest_availability = _availability_projection(plan, command)
+            continue
+
+        if kind == "record_calibration":
+            if not _is_controlled_plan(plan):
+                raise _fail(f"{field} requires a version 3 or 4 controlled plan.")
+            if batch_release is not None:
+                raise _fail(f"{field} follows final batch release.")
+            work_centre_id = command["workCentreId"]
+            if not any(row["workCentreId"] == work_centre_id for row in plan["routing"]):
+                raise _fail(f"{field}.workCentreId is not in the reviewed routing.")
+            previous = calibrations.get(work_centre_id)
+            if previous is not None:
+                calibrated = datetime.fromisoformat(command["calibratedAt"].replace("Z", "+00:00"))
+                valid_until = datetime.fromisoformat(command["validUntil"].replace("Z", "+00:00"))
+                previous_calibrated = datetime.fromisoformat(previous["calibratedAt"].replace("Z", "+00:00"))
+                previous_valid_until = datetime.fromisoformat(previous["validUntil"].replace("Z", "+00:00"))
+                if calibrated <= previous_calibrated or valid_until <= previous_valid_until:
+                    raise _fail(f"{field} does not advance the retained calibration.")
+            calibrations[work_centre_id] = command
             continue
 
         if kind == "release_order":
@@ -822,13 +1465,72 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 raise _fail(f"{field} references a stale availability check.")
             if not latest_availability["passed"]:
                 raise _fail(f"{field} cannot release an order with a shortfall.")
+            _assert_plan_effective_at_release(plan, command["proof"]["capturedAt"], field)
+            if _is_controlled_plan(plan):
+                routed_centres = sorted({row["workCentreId"] for row in plan["routing"]})
+                missing = [
+                    work_centre_id
+                    for work_centre_id in routed_centres
+                    if work_centre_id not in calibrations
+                    or not _calibration_covers(calibrations[work_centre_id], command["proof"]["capturedAt"])
+                ]
+                if missing:
+                    raise _fail(f"{field} requires current calibration for {', '.join(missing)}.")
             order_release = command
             continue
 
         if order_release is None:
             raise _fail(f"{field} requires human order release.")
+        if kind == "record_effectiveness":
+            if command["planId"] != plan["planId"] or command["jobId"] != job["jobId"]:
+                raise _fail(f"{field} is not bound to the reviewed order.")
+            routed_centres = sorted({row["workCentreId"] for row in plan["routing"]})
+            observed_centres = [row["workCentreId"] for row in command["workCentres"]]
+            if routed_centres != observed_centres:
+                raise _fail(f"{field} must cover every and only routed work centre.")
+            effectiveness_window = command
+            continue
         if batch_release is not None:
             raise _fail(f"{field} follows final batch release.")
+
+        if kind == "approve_material_substitution":
+            material = next(
+                (
+                    row
+                    for row in plan["materials"]
+                    if row["materialId"] == command["materialId"]
+                ),
+                None,
+            )
+            if material is None:
+                raise _fail(f"{field}.materialId is not in the reviewed BOM.")
+            if command["substituteMaterialId"] == command["materialId"] or any(
+                row["materialId"] == command["substituteMaterialId"]
+                for row in plan["materials"]
+            ):
+                raise _fail(
+                    f"{field}.substituteMaterialId must be a distinct non-BOM material."
+                )
+            if (
+                command["originalQuantityPerUnitMilli"]
+                != material["quantityPerUnitMilli"]
+            ):
+                raise _fail(
+                    f"{field}.originalQuantityPerUnitMilli must match the reviewed BOM basis."
+                )
+            if issued[command["materialId"]] != 0:
+                raise _fail(f"{field} must precede material issue.")
+            if command["materialId"] in material_substitutions:
+                raise _fail(
+                    f"{field} attempts to approve a second substitute for one BOM material."
+                )
+            _safe_product(
+                plan["job"]["targetQuantity"],
+                command["substituteQuantityPerUnitMilli"],
+                f"{field}.substituteQuantityPerUnitMilli",
+            )
+            material_substitutions[command["materialId"]] = command
+            continue
 
         latest_inspection = inspections[-1] if inspections else None
         current_hold = bool(
@@ -836,6 +1538,37 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             and latest_inspection["inspectedQuantity"] == total_output
             and latest_inspection["result"] == "fail"
         )
+
+        if kind == "record_quality_rework":
+            if not _is_controlled_plan(plan):
+                raise _fail(f"{field} requires a version 3 or 4 controlled plan.")
+            if (
+                not current_hold
+                or latest_inspection is None
+                or command["inspectionId"] != latest_inspection["id"]
+            ):
+                raise _fail(f"{field} requires the current failed inspection.")
+            if any(row["inspectionId"] == command["inspectionId"] for row in quality_reworks):
+                raise _fail(f"{field} attempts to rework one failed inspection twice.")
+            if command["quantity"] != latest_inspection["rejectedQuantity"]:
+                raise _fail(f"{field}.quantity must equal the current rejected quantity.")
+            operation = next(
+                (row for row in plan["routing"] if row["operationId"] == command["operationId"]),
+                None,
+            )
+            if operation is None:
+                raise _fail(f"{field}.operationId is not in the reviewed routing.")
+            calibration = calibrations.get(operation["workCentreId"])
+            if calibration is None or not _calibration_covers(
+                calibration, command["proof"]["capturedAt"]
+            ):
+                raise _fail(f"{field} requires current calibration for {operation['workCentreId']}.")
+            next_minutes = operation_minutes[operation["operationId"]] + command["actualMinutesMilli"]
+            if next_minutes > _MAX_SAFE_INTEGER:
+                raise _fail(f"{field}.actualMinutesMilli exceeds the supported range.")
+            operation_minutes[operation["operationId"]] = next_minutes
+            quality_reworks.append(command)
+            continue
 
         if kind == "issue_material":
             if current_hold:
@@ -862,11 +1595,67 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             material_issue_commands.append(command)
             continue
 
+        if kind == "issue_substitute_material":
+            if current_hold:
+                raise _fail(f"{field} is blocked by the failed current inspection.")
+            material = next(
+                (
+                    row
+                    for row in plan["materials"]
+                    if row["materialId"] == command["materialId"]
+                ),
+                None,
+            )
+            if material is None:
+                raise _fail(f"{field}.materialId is not in the reviewed BOM.")
+            approval = material_substitutions.get(command["materialId"])
+            if approval is None or approval["id"] != command["substitutionId"]:
+                raise _fail(
+                    f"{field}.substitutionId does not reference the approved substitute "
+                    "for this BOM material."
+                )
+            if approval["substituteMaterialId"] != command["substituteMaterialId"]:
+                raise _fail(
+                    f"{field}.substituteMaterialId differs from the approved substitute."
+                )
+            credit_numerator = (
+                command["substituteQuantityMilli"]
+                * approval["originalQuantityPerUnitMilli"]
+            )
+            credit_denominator = approval["substituteQuantityPerUnitMilli"]
+            if credit_numerator % credit_denominator:
+                raise _fail(
+                    f"{field}.substituteQuantityMilli does not produce an exact approved "
+                    "BOM conversion."
+                )
+            credited_quantity = credit_numerator // credit_denominator
+            if credited_quantity < 1 or credited_quantity > _MAX_SAFE_INTEGER:
+                raise _fail(
+                    f"{field}.substituteQuantityMilli exceeds the supported conversion range."
+                )
+            next_issued = issued[command["materialId"]] + credited_quantity
+            required_quantity = _safe_product(
+                plan["job"]["targetQuantity"],
+                material["quantityPerUnitMilli"],
+                f"material requirement for {material['materialId']}",
+            )
+            if next_issued > required_quantity:
+                raise _fail(
+                    f"{field} exceeds the reviewed BOM requirement after approved conversion."
+                )
+            issued[command["materialId"]] = next_issued
+            material_issue_commands.append(command)
+            continue
+
         if kind == "record_operation":
             if current_hold:
                 raise _fail(f"{field} is blocked by the failed current inspection.")
-            if plan["contract"] != PLANT_ORDER_EXECUTION_PLAN_CONTRACT:
-                raise _fail(f"{field} requires a version 2 execution plan.")
+            if plan["contract"] not in {
+                PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+                PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+                PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
+            }:
+                raise _fail(f"{field} requires a version 2, 3, or 4 execution plan.")
             operation_index = next(
                 (
                     route_index
@@ -877,6 +1666,11 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             )
             if operation_index < 0:
                 raise _fail(f"{field}.operationId is not in the reviewed routing.")
+            if _is_controlled_plan(plan):
+                work_centre_id = plan["routing"][operation_index]["workCentreId"]
+                calibration = calibrations.get(work_centre_id)
+                if calibration is None or not _calibration_covers(calibration, command["proof"]["capturedAt"]):
+                    raise _fail(f"{field} requires current calibration for {work_centre_id}.")
             completed_quantity = operation_quantities[command["operationId"]]
             next_completed_quantity = completed_quantity + command["quantity"]
             if next_completed_quantity > job["targetQuantity"]:
@@ -921,7 +1715,11 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
             next_output = total_output + command["quantity"]
             if next_output > job["targetQuantity"]:
                 raise _fail(f"{field} exceeds the reviewed order target.")
-            if plan["contract"] == PLANT_ORDER_EXECUTION_PLAN_CONTRACT:
+            if plan["contract"] in {
+                PLANT_ORDER_EXECUTION_PLAN_CONTRACT,
+                PLANT_ORDER_CONTROLLED_PLAN_CONTRACT,
+                PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
+            }:
                 final_operation_id = plan["routing"][-1]["operationId"]
                 if operation_quantities[final_operation_id] < next_output:
                     raise _fail(
@@ -946,6 +1744,13 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 raise _fail(f"{field}.outputBatchId differs from the reviewed batch.")
             if total_output < 1 or command["inspectedQuantity"] != total_output:
                 raise _fail(f"{field} must inspect all currently recorded output.")
+            if (
+                current_hold
+                and _is_controlled_plan(plan)
+                and latest_inspection is not None
+                and not any(row["inspectionId"] == latest_inspection["id"] for row in quality_reworks)
+            ):
+                raise _fail(f"{field} requires attributable rework for the current failed inspection.")
             inspections.append(command)
             continue
 
@@ -973,7 +1778,6 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
         for row in (latest_availability["materials"] if latest_availability else [])
     }
     material_rows = []
-    genealogy = []
     for material_id in sorted(material_plan):
         row = material_plan[material_id]
         required = _safe_product(
@@ -994,16 +1798,34 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
                 ),
             }
         )
-        if issued[material_id] and availability:
-            genealogy.append(
+
+    genealogy = []
+    for command in material_issue_commands:
+        material = material_plan[command["materialId"]]
+        row = {
+            "materialId": command["materialId"],
+            "inputLotId": command["inputLotId"],
+            "outputBatchId": plan["job"]["outputBatchId"],
+            "unit": material["unit"],
+        }
+        if command["kind"] == "issue_material":
+            row["issuedQuantityMilli"] = command["quantityMilli"]
+        else:
+            approval = material_substitutions[command["materialId"]]
+            row.update(
                 {
-                    "materialId": material_id,
-                    "inputLotId": availability["inputLotId"],
-                    "outputBatchId": plan["job"]["outputBatchId"],
-                    "issuedQuantityMilli": issued[material_id],
-                    "unit": row["unit"],
+                    "issuedQuantityMilli": (
+                        command["substituteQuantityMilli"]
+                        * approval["originalQuantityPerUnitMilli"]
+                        // approval["substituteQuantityPerUnitMilli"]
+                    ),
+                    "substitutionId": command["substitutionId"],
+                    "substituteMaterialId": command["substituteMaterialId"],
+                    "substituteQuantityMilli": command["substituteQuantityMilli"],
+                    "substituteUnit": approval["substituteUnit"],
                 }
             )
+        genealogy.append(row)
 
     operations = []
     for index, row in enumerate(plan["routing"]):
@@ -1076,9 +1898,18 @@ def _replay_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         "plan": plan,
+        "planHistory": plan_history,
+        "planRevisions": plan_revisions,
         "status": status,
         "latestAvailability": latest_availability,
         "orderRelease": order_release,
+        "calibrations": [calibrations[key] for key in sorted(calibrations)],
+        "qualityReworks": quality_reworks,
+        "materialSubstitutions": [
+            material_substitutions[key] for key in sorted(material_substitutions)
+        ],
+        "materialIssues": material_issue_commands,
+        "effectivenessWindow": effectiveness_window,
         "materials": material_rows,
         "routing": plan["routing"],
         "operations": operations,
@@ -1196,6 +2027,459 @@ def project_plant_order(state: object) -> dict[str, Any]:
             **projection,
         }
     )
+
+
+def _ratio_basis_points(numerator: int, denominator: int) -> int | None:
+    if numerator < 0 or denominator < 1:
+        return None
+    rounded = (numerator * 10_000 + denominator // 2) // denominator
+    return rounded if rounded <= _MAX_SAFE_INTEGER else None
+
+
+def project_plant_order_effectiveness(projection: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive evidence-bound availability, performance, quality, and OEE."""
+
+    missing_evidence: list[str] = []
+    if projection.get("plan") is None:
+        return {
+            "contract": PLANT_ORDER_EFFECTIVENESS_CONTRACT,
+            "status": "not_started",
+            "availabilityBasisPoints": None,
+            "availability": None,
+            "performance": None,
+            "quality": None,
+            "oeeBasisPoints": None,
+            "missingEvidence": [
+                "Order-bound planned productive time and downtime",
+                "Reviewed routing time",
+                "Current output inspection",
+            ],
+        }
+
+    window = projection["effectivenessWindow"]
+    planned_productive_minutes_milli = 0
+    downtime_minutes_milli = 0
+    if window is not None:
+        planned_productive_minutes_milli = sum(
+            row["plannedProductiveMinutesMilli"] for row in window["workCentres"]
+        )
+        downtime_minutes_milli = sum(
+            _duration_minutes_milli(
+                row["startedAt"],
+                row["endedAt"],
+                f"effectiveness downtime {row['downtimeId']}",
+            )
+            for row in window["downtimeIntervals"]
+        )
+    operating_minutes_milli = (
+        planned_productive_minutes_milli - downtime_minutes_milli
+    )
+    availability_basis_points = (
+        _ratio_basis_points(
+            operating_minutes_milli, planned_productive_minutes_milli
+        )
+        if window is not None
+        else None
+    )
+    availability = (
+        {
+            "basisPoints": availability_basis_points,
+            "plannedProductiveMinutesMilli": planned_productive_minutes_milli,
+            "downtimeMinutesMilli": downtime_minutes_milli,
+            "operatingMinutesMilli": operating_minutes_milli,
+            "windowStart": window["windowStart"],
+            "windowEnd": window["windowEnd"],
+            "workCentreCount": len(window["workCentres"]),
+            "downtimeIntervalCount": len(window["downtimeIntervals"]),
+            "sourceDigest": window["sourceDigest"],
+            "proof": window["proof"],
+        }
+        if window is not None and availability_basis_points is not None
+        else None
+    )
+    if availability is None:
+        missing_evidence.append("Order-bound planned productive time and downtime")
+
+    designed_minutes_milli = sum(
+        operation["completedQuantity"] * operation["minutesPerUnitMilli"]
+        for operation in projection["operations"]
+    )
+    if designed_minutes_milli > _MAX_SAFE_INTEGER:
+        performance_basis_points = None
+    else:
+        performance_basis_points = _ratio_basis_points(
+            designed_minutes_milli,
+            projection["metrics"]["actualOperationMinutesMilli"],
+        )
+    performance = (
+        {
+            "basisPoints": performance_basis_points,
+            "designedMinutesMilli": designed_minutes_milli,
+            "actualMinutesMilli": projection["metrics"]["actualOperationMinutesMilli"],
+            "speedLossMinutesMilli": max(
+                projection["metrics"]["actualOperationMinutesMilli"]
+                - designed_minutes_milli,
+                0,
+            ),
+        }
+        if performance_basis_points is not None
+        else None
+    )
+    if performance is None:
+        missing_evidence.append("Reviewed routing time")
+
+    inspection = projection["latestInspection"]
+    quality_basis_points = (
+        _ratio_basis_points(
+            inspection["acceptedQuantity"], inspection["inspectedQuantity"]
+        )
+        if inspection is not None
+        and inspection["inspectedQuantity"] == projection["totalOutput"]
+        and inspection["inspectedQuantity"] > 0
+        else None
+    )
+    quality = (
+        {
+            "basisPoints": quality_basis_points,
+            "inspectedQuantity": inspection["inspectedQuantity"],
+            "acceptedQuantity": inspection["acceptedQuantity"],
+            "rejectedQuantity": inspection["rejectedQuantity"],
+        }
+        if inspection is not None and quality_basis_points is not None
+        else None
+    )
+    if quality is None:
+        missing_evidence.append("Current output inspection")
+
+    oee_basis_points = None
+    if availability is not None and performance is not None and quality is not None:
+        rounded = (
+            availability["basisPoints"]
+            * performance["basisPoints"]
+            * quality["basisPoints"]
+            + 50_000_000
+        ) // 100_000_000
+        if rounded <= _MAX_SAFE_INTEGER:
+            oee_basis_points = rounded
+
+    return {
+        "contract": PLANT_ORDER_EFFECTIVENESS_CONTRACT,
+        "status": (
+            "complete"
+            if oee_basis_points is not None
+            else "availability_setup_required"
+            if performance is not None and quality is not None and availability is None
+            else "collecting"
+        ),
+        "availabilityBasisPoints": availability_basis_points,
+        "availability": availability,
+        "performance": performance,
+        "quality": quality,
+        "oeeBasisPoints": oee_basis_points,
+        "missingEvidence": missing_evidence,
+    }
+
+
+def project_plant_order_cost_drivers(projection: Mapping[str, Any]) -> dict[str, Any]:
+    """Derive standard-versus-actual material and conversion quantities."""
+
+    if projection.get("plan") is None:
+        return {
+            "contract": PLANT_ORDER_COST_DRIVER_CONTRACT,
+            "status": "not_started",
+            "earnedUnits": 0,
+            "materials": [],
+            "operations": [],
+            "conversion": {
+                "standardMinutesMilli": 0,
+                "actualMinutesMilli": 0,
+                "varianceMinutesMilli": 0,
+            },
+            "financialCostAvailable": False,
+            "financialCostReason": "Configure reviewed material and work-centre rates before claiming MMK cost.",
+        }
+    first_operation_quantity = (
+        projection["operations"][0]["completedQuantity"]
+        if projection["operations"]
+        else 0
+    )
+    earned_units = max(projection["totalOutput"], first_operation_quantity)
+    materials = []
+    for material in projection["materials"]:
+        standard_quantity_milli = _safe_product(
+            earned_units,
+            material["quantityPerUnitMilli"],
+            f"standard material quantity for {material['materialId']}",
+        )
+        materials.append(
+            {
+                "materialId": material["materialId"],
+                "name": material["name"],
+                "unit": material["unit"],
+                "standardQuantityMilli": standard_quantity_milli,
+                "actualQuantityMilli": material["issuedQuantityMilli"],
+                "varianceQuantityMilli": material["issuedQuantityMilli"]
+                - standard_quantity_milli,
+            }
+        )
+    operations = []
+    for operation in projection["operations"]:
+        standard_minutes_milli = _safe_product(
+            operation["completedQuantity"],
+            operation["minutesPerUnitMilli"],
+            f"standard conversion minutes for {operation['operationId']}",
+        )
+        operations.append(
+            {
+                "operationId": operation["operationId"],
+                "name": operation["name"],
+                "completedQuantity": operation["completedQuantity"],
+                "standardMinutesMilli": standard_minutes_milli,
+                "actualMinutesMilli": operation["actualMinutesMilli"],
+                "varianceMinutesMilli": operation["actualMinutesMilli"]
+                - standard_minutes_milli,
+            }
+        )
+    standard_minutes_milli = sum(
+        operation["standardMinutesMilli"] for operation in operations
+    )
+    actual_minutes_milli = sum(
+        operation["actualMinutesMilli"] for operation in operations
+    )
+    return {
+        "contract": PLANT_ORDER_COST_DRIVER_CONTRACT,
+        "status": (
+            "complete"
+            if projection["status"] == "released_to_stock"
+            else "collecting"
+            if earned_units
+            or actual_minutes_milli
+            or any(material["actualQuantityMilli"] for material in materials)
+            else "not_started"
+        ),
+        "earnedUnits": earned_units,
+        "materials": materials,
+        "operations": operations,
+        "conversion": {
+            "standardMinutesMilli": standard_minutes_milli,
+            "actualMinutesMilli": actual_minutes_milli,
+            "varianceMinutesMilli": actual_minutes_milli - standard_minutes_milli,
+        },
+        "financialCostAvailable": False,
+        "financialCostReason": "Configure reviewed material and work-centre rates before claiming MMK cost.",
+    }
+
+
+def _mmk_from_milli_basis(quantity_milli: int, rate_mmk: int, field: str) -> int:
+    rounded = (quantity_milli * rate_mmk + 500) // 1_000
+    if rounded > _MAX_SAFE_INTEGER:
+        raise _fail(f"{field} exceeds the supported MMK range.")
+    return rounded
+
+
+def _proportional_mmk(total_mmk: int, numerator: int, denominator: int, field: str) -> int:
+    rounded = (total_mmk * numerator + denominator // 2) // denominator
+    if rounded > _MAX_SAFE_INTEGER:
+        raise _fail(f"{field} exceeds the supported MMK range.")
+    return rounded
+
+
+def project_plant_order_financial_cost(projection: Mapping[str, Any]) -> dict[str, Any]:
+    """Price validated cost drivers using only reviewed MMK rates."""
+
+    missing_rates = [
+        material["materialId"]
+        for material in projection["materials"]
+        if not material.get("standardCostPerUnitMmk")
+    ] + [
+        operation["operationId"]
+        for operation in projection["operations"]
+        if not operation.get("standardCostPerMinuteMmk")
+    ]
+    empty = {"materialMmk": 0, "conversionMmk": 0, "totalMmk": 0}
+    if projection.get("plan") is None or missing_rates:
+        return {
+            "contract": PLANT_ORDER_FINANCIAL_COST_CONTRACT,
+            "status": "setup_required",
+            "currency": "MMK",
+            "missingRates": missing_rates,
+            "planned": empty,
+            "earned": empty,
+            "actual": empty,
+            "varianceMmk": None,
+            "qualityLossMmk": None,
+        }
+
+    drivers = project_plant_order_cost_drivers(projection)
+    planned_material_mmk = sum(
+        _mmk_from_milli_basis(
+            material["requiredQuantityMilli"],
+            material["standardCostPerUnitMmk"],
+            f"planned material cost for {material['materialId']}",
+        )
+        for material in projection["materials"]
+    )
+    actual_material_mmk = sum(
+        _mmk_from_milli_basis(
+            material["issuedQuantityMilli"],
+            material["standardCostPerUnitMmk"],
+            f"actual material cost for {material['materialId']}",
+        )
+        for material in projection["materials"]
+    )
+    materials_by_id = {
+        material["materialId"]: material for material in projection["materials"]
+    }
+    earned_material_mmk = sum(
+        _mmk_from_milli_basis(
+            driver["standardQuantityMilli"],
+            materials_by_id[driver["materialId"]]["standardCostPerUnitMmk"],
+            f"earned material cost for {driver['materialId']}",
+        )
+        for driver in drivers["materials"]
+    )
+    planned_conversion_mmk = sum(
+        _mmk_from_milli_basis(
+            operation["plannedMinutesMilli"],
+            operation["standardCostPerMinuteMmk"],
+            f"planned conversion cost for {operation['operationId']}",
+        )
+        for operation in projection["operations"]
+    )
+    actual_conversion_mmk = sum(
+        _mmk_from_milli_basis(
+            operation["actualMinutesMilli"],
+            operation["standardCostPerMinuteMmk"],
+            f"actual conversion cost for {operation['operationId']}",
+        )
+        for operation in projection["operations"]
+    )
+    operations_by_id = {
+        operation["operationId"]: operation for operation in projection["operations"]
+    }
+    earned_conversion_mmk = sum(
+        _mmk_from_milli_basis(
+            driver["standardMinutesMilli"],
+            operations_by_id[driver["operationId"]]["standardCostPerMinuteMmk"],
+            f"earned conversion cost for {driver['operationId']}",
+        )
+        for driver in drivers["operations"]
+    )
+    planned = {
+        "materialMmk": planned_material_mmk,
+        "conversionMmk": planned_conversion_mmk,
+        "totalMmk": planned_material_mmk + planned_conversion_mmk,
+    }
+    earned = {
+        "materialMmk": earned_material_mmk,
+        "conversionMmk": earned_conversion_mmk,
+        "totalMmk": earned_material_mmk + earned_conversion_mmk,
+    }
+    actual = {
+        "materialMmk": actual_material_mmk,
+        "conversionMmk": actual_conversion_mmk,
+        "totalMmk": actual_material_mmk + actual_conversion_mmk,
+    }
+    rejected_quantity = (
+        projection["latestInspection"]["rejectedQuantity"]
+        if projection["latestInspection"] is not None
+        else 0
+    )
+    return {
+        "contract": PLANT_ORDER_FINANCIAL_COST_CONTRACT,
+        "status": (
+            "complete"
+            if projection["status"] == "released_to_stock"
+            else "collecting"
+        ),
+        "currency": "MMK",
+        "missingRates": [],
+        "planned": planned,
+        "earned": earned,
+        "actual": actual,
+        "varianceMmk": actual["totalMmk"] - earned["totalMmk"],
+        "qualityLossMmk": (
+            _proportional_mmk(
+                planned["totalMmk"],
+                rejected_quantity,
+                projection["metrics"]["targetQuantity"],
+                "quality loss cost",
+            )
+            if rejected_quantity
+            else 0
+        ),
+    }
+
+
+def build_plant_order_cost_review_packet(state: object) -> dict[str, Any] | None:
+    """Build a detached, digest-bound ERP review packet without posting cost."""
+
+    source_state = validate_plant_order_state(state)
+    projection = project_plant_order(source_state)
+    if projection["plan"] is None:
+        return None
+    financial_cost = project_plant_order_financial_cost(projection)
+    if financial_cost["status"] == "setup_required":
+        return None
+    body = {
+        "contract": PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT,
+        "source": {
+            "revision": projection["revision"],
+            "headDigest": projection["headDigest"],
+            "projectionStatus": projection["status"],
+        },
+        "sourceState": _canonical_copy(source_state),
+        "plan": _canonical_copy(projection["plan"]),
+        "costDrivers": project_plant_order_cost_drivers(projection),
+        "financialCost": financial_cost,
+        "effectiveness": project_plant_order_effectiveness(projection),
+        "inspection": _canonical_copy(projection["latestInspection"]),
+        "releaseEvidence": {
+            "orderRelease": _canonical_copy(projection["orderRelease"]),
+            "batchRelease": _canonical_copy(projection["batchRelease"]),
+        },
+        "materialGenealogy": _canonical_copy(projection["genealogy"]),
+        "authority": {
+            "costPosted": False,
+            "inventoryPosted": False,
+            "journalPosted": False,
+            "payrollPosted": False,
+            "invoiceCreated": False,
+            "providerCalled": False,
+        },
+    }
+    return {**body, "digest": _canonical_digest(body)}
+
+
+def validate_plant_order_cost_review_packet(value: object) -> dict[str, Any]:
+    """Reject any cost packet not reproduced from its retained command chain."""
+
+    packet = _object(
+        value,
+        "Plant cost review packet",
+        (
+            "contract",
+            "source",
+            "sourceState",
+            "plan",
+            "costDrivers",
+            "financialCost",
+            "effectiveness",
+            "inspection",
+            "releaseEvidence",
+            "materialGenealogy",
+            "authority",
+            "digest",
+        ),
+    )
+    if packet["contract"] != PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT:
+        raise _fail("Plant cost review packet contract is unsupported.")
+    expected = build_plant_order_cost_review_packet(packet["sourceState"])
+    if expected is None or _canonical_copy(packet) != expected:
+        raise _fail(
+            "Plant cost review packet does not match its validated command chain."
+        )
+    return expected
 
 
 def _append_command(
@@ -1320,6 +2604,185 @@ def issue_plant_order_material(
     )
 
 
+def supersede_plant_order_plan(
+    state: object,
+    *,
+    revision_id: object,
+    superseded_plan_id: object,
+    package: object,
+    reason: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "supersede_plan",
+            "id": revision_id,
+            "supersededPlanId": superseded_plan_id,
+            "package": _validate_plan_package(package),
+            "reason": reason,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
+def approve_plant_order_material_substitution(
+    state: object,
+    *,
+    substitution_id: object,
+    material_id: object,
+    substitute_material_id: object,
+    substitute_name: object,
+    substitute_unit: object,
+    original_quantity_per_unit_milli: object,
+    substitute_quantity_per_unit_milli: object,
+    approval_source_digest: object,
+    technical_basis: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "approve_material_substitution",
+            "contract": PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT,
+            "id": substitution_id,
+            "materialId": material_id,
+            "substituteMaterialId": substitute_material_id,
+            "substituteName": substitute_name,
+            "substituteUnit": substitute_unit,
+            "originalQuantityPerUnitMilli": original_quantity_per_unit_milli,
+            "substituteQuantityPerUnitMilli": substitute_quantity_per_unit_milli,
+            "approvalSourceDigest": approval_source_digest,
+            "technicalBasis": technical_basis,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
+def issue_plant_order_substitute_material(
+    state: object,
+    *,
+    issue_id: object,
+    substitution_id: object,
+    material_id: object,
+    substitute_material_id: object,
+    input_lot_id: object,
+    substitute_quantity_milli: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "issue_substitute_material",
+            "id": issue_id,
+            "substitutionId": substitution_id,
+            "materialId": material_id,
+            "substituteMaterialId": substitute_material_id,
+            "inputLotId": input_lot_id,
+            "substituteQuantityMilli": substitute_quantity_milli,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
+def record_plant_order_calibration(
+    state: object,
+    *,
+    calibration_id: object,
+    work_centre_id: object,
+    certificate_id: object,
+    calibrated_at: object,
+    valid_until: object,
+    standard_reference: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "record_calibration",
+            "id": calibration_id,
+            "workCentreId": work_centre_id,
+            "certificateId": certificate_id,
+            "calibratedAt": calibrated_at,
+            "validUntil": valid_until,
+            "standardReference": standard_reference,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
+def record_plant_order_quality_rework(
+    state: object,
+    *,
+    rework_id: object,
+    inspection_id: object,
+    operation_id: object,
+    quantity: object,
+    actual_minutes_milli: object,
+    owner: object,
+    cause: object,
+    corrective_action: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "record_quality_rework",
+            "id": rework_id,
+            "inspectionId": inspection_id,
+            "operationId": operation_id,
+            "quantity": quantity,
+            "actualMinutesMilli": actual_minutes_milli,
+            "owner": owner,
+            "cause": cause,
+            "correctiveAction": corrective_action,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
+def record_plant_order_effectiveness(
+    state: object,
+    *,
+    effectiveness_id: object,
+    plan_id: object,
+    job_id: object,
+    window_start: object,
+    window_end: object,
+    source_digest: object,
+    work_centres: object,
+    downtime_intervals: object,
+    proof: object,
+    expected_head_digest: object,
+) -> dict[str, Any]:
+    return _append_command(
+        state,
+        {
+            "kind": "record_effectiveness",
+            "id": effectiveness_id,
+            "planId": plan_id,
+            "jobId": job_id,
+            "windowStart": window_start,
+            "windowEnd": window_end,
+            "sourceDigest": source_digest,
+            "workCentres": work_centres,
+            "downtimeIntervals": downtime_intervals,
+            "proof": _proof(proof, "proof"),
+        },
+        expected_head_digest=expected_head_digest,
+    )
+
+
 def record_plant_order_operation(
     state: object,
     *,
@@ -1418,23 +2881,44 @@ def release_plant_order_batch(
 
 __all__ = (
     "EMPTY_PLANT_ORDER_DIGEST",
+    "PLANT_ORDER_CONTROLLED_PLAN_CONTRACT",
+    "PLANT_ORDER_COST_DRIVER_CONTRACT",
+    "PLANT_ORDER_COST_REVIEW_PACKET_CONTRACT",
+    "PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT",
+    "PLANT_ORDER_EFFECTIVENESS_CONTRACT",
     "PLANT_ORDER_EXECUTION_PLAN_CONTRACT",
+    "PLANT_ORDER_FINANCIAL_COST_CONTRACT",
+    "PLANT_ORDER_MATERIAL_SUBSTITUTION_CONTRACT",
     "PLANT_ORDER_PLAN_CONTRACT",
+    "PLANT_ORDER_PLAN_REVISION_MAX",
     "PLANT_ORDER_PROJECTION_CONTRACT",
     "PLANT_ORDER_STATE_SCHEMA",
     "PlantOrderValidationError",
     "apply_plant_order_plan",
+    "approve_plant_order_material_substitution",
+    "build_plant_order_cost_review_packet",
     "build_plant_order_execution_plan",
+    "build_plant_order_controlled_plan",
+    "build_plant_order_effective_plan",
     "build_plant_order_plan",
     "check_plant_order_availability",
     "create_empty_plant_order_state",
     "inspect_plant_order_output",
     "issue_plant_order_material",
+    "issue_plant_order_substitute_material",
     "plant_order_evidence_digest",
     "project_plant_order",
+    "project_plant_order_cost_drivers",
+    "project_plant_order_effectiveness",
+    "project_plant_order_financial_cost",
+    "record_plant_order_effectiveness",
+    "record_plant_order_calibration",
+    "record_plant_order_quality_rework",
     "record_plant_order_operation",
     "record_plant_order_output",
     "release_plant_order",
     "release_plant_order_batch",
+    "supersede_plant_order_plan",
+    "validate_plant_order_cost_review_packet",
     "validate_plant_order_state",
 )

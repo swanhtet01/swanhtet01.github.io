@@ -35,27 +35,36 @@ if (manifest.schemaVersion !== 'supermega.site-context.v2') fail('manifest_schem
 if (manifest.company?.publicPricing !== false) fail('public_pricing_enabled')
 if (manifest.release?.sourceBranch !== 'main') fail('release_source_not_main')
 if (manifest.customerProducts?.map((product) => `${product.id}:${product.runtimeId}:${product.name}`).join(',') !== 'shop:commerce:Shop,plant:production:Plant,website:website:Website,ecommerce:ecommerce:Ecommerce') fail('customer_product_portfolio_drift')
-if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 'https://app.supermega.dev/shop/?tab=counter,https://app.supermega.dev/plant/?tab=production,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/') fail('customer_product_routes_drift')
+if (manifest.customerProducts?.map((product) => product.appRoute).join(',') !== 'https://app.supermega.dev/shop/,https://app.supermega.dev/plant/,https://app.supermega.dev/website/,https://app.supermega.dev/ecommerce/') fail('customer_product_routes_drift')
 const operatingProducts = manifest.customerProducts?.filter((product) => product.kind === 'operating-product') || []
 const makerProducts = manifest.customerProducts?.filter((product) => product.kind === 'maker-product') || []
+const publicProducts = manifest.customerProducts || []
 if (operatingProducts.map((product) => product.id).join(',') !== 'shop,plant') fail('operating_product_portfolio_drift')
 if (makerProducts.map((product) => `${product.id}:${product.status}`).join(',') !== 'website:available-in-app,ecommerce:release-candidate-local') fail('maker_product_portfolio_drift')
 const website = manifest.customerProducts?.find((product) => product.id === 'website')
 if (website?.views?.join(',') !== 'Start,Edit,Preview,Download'
   || website?.templates?.some((template) => template.workflow?.at(-1) !== 'Download website')
-  || website?.headline !== 'Turn a short business brief into a usable website.') fail('website_download_trial_contract_drift')
+  || website?.headline !== 'Build a simple company website from a brief.') fail('website_download_trial_contract_drift')
 const ecommerce = manifest.customerProducts?.find((product) => product.id === 'ecommerce')
-if (ecommerce?.views?.join(',') !== 'Storefront,Preview,Request receipt,Shop inbox,Shop review'
+if (ecommerce?.views?.join(',') !== 'Storefront,Cart and quote,Request receipt,Shop review,Returns'
+  || !ecommerce?.workflow?.includes('Review a 15-minute whole-MMK quote')
+  || !ecommerce?.proof?.includes('Deterministic 15-minute checkout quote')
+  || !ecommerce?.proof?.includes('Recoverable cart and request state')
   || !ecommerce?.proof?.includes('Idempotent receipt and exact managed replay')
   || !ecommerce?.proof?.includes('Exact retained-ledger membership')
   || !ecommerce?.proof?.includes('Revision, action-identity, and cross-tenant conflict rejection')
   || !ecommerce?.proof?.includes('Bootstrap recovery')
   || !ecommerce?.proof?.includes('Human-confirmed source-locked Shop draft')
+  || !ecommerce?.proof?.includes('Payment remains unauthorized before Shop')
+  || !ecommerce?.proof?.includes('23 Ecommerce buying runtime checks')
   || !ecommerce?.boundaries?.includes('No isolated hosted tenant proof')
   || !ecommerce?.boundaries?.includes('Managed inbox uses a 100-entry revisioned Shop workspace pilot envelope; a normalized indexed queue is gated on measured scale')
-  || !ecommerce?.boundaries?.includes('No Shop order or stock reservation before separate accountable confirmation')) fail('ecommerce_request_receipt_contract_drift')
+  || !ecommerce?.boundaries?.includes('No Shop order or stock reservation before separate accountable confirmation')
+  || !ecommerce?.boundaries?.includes('No payment authorization or charge')
+  || !ecommerce?.boundaries?.includes('Delivery stays an intent until Shop confirms fee and fulfilment')
+  || !ecommerce?.boundaries?.includes('Returns and refunds are completed in Shop')) fail('ecommerce_request_receipt_contract_drift')
 if (manifest.sharedCapabilities?.map((capability) => `${capability.id}:${capability.status}`).join(',') !== 'ai-assistance:gated-r-and-d') fail('shared_capability_drift')
-for (const product of manifest.customerProducts || []) {
+for (const product of publicProducts) {
   if (product.templates?.length !== 3) fail('public_template_count_wrong', { product: product.id })
   for (const template of product.templates || []) {
     if (!template.outcome?.trim() || !template.metric?.trim() || template.workflow?.length < 5 || template.entryPoints?.length < 3) fail('public_template_contract_incomplete', { product: product.id, template: template.id })
@@ -100,6 +109,7 @@ const forbiddenCopy = [
   'public agent',
   'agent company',
   'autonomous employee',
+  'Vision',
   'foundry',
   'console.supermega.dev',
   'ops.supermega.dev',
@@ -112,6 +122,18 @@ const forbiddenCopy = [
   'Start with one live workflow.',
   'Send one real workflow, screenshot, spreadsheet, or recurring handoff.',
   'Capture orders from Messenger, Viber, phone, web, or walk-in channels',
+  'Four managed products',
+  'Working product samples',
+  'Choose the system that fits your work.',
+  'Open Shop, Plant, Website, or Ecommerce and try the working sample before you contact us.',
+  'Need a workspace for your company?',
+  'AI may prepare drafts from approved records.',
+  'Keep every order and stock movement accountable.',
+  'Give the plant floor one operational memory.',
+  'Turn a short business brief into a usable website.',
+  'Create a Shop-backed storefront and hand customer intent to human review.',
+  'Configure Shop',
+  'Configure Plant',
 ]
 const encodingCorruption = ['\uFFFD', '\u00e2\u20ac\u201d', '\u00e2\u20ac\u201c', '\u00c2', '\u00f0\u0178']
 
@@ -139,31 +161,34 @@ if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_n
 for (const token of [
   manifest.company.headline,
   manifest.company.supporting,
-  'Four separate products',
-  'One secure foundation',
+  'Four focused products',
+  'Working samples',
   'Mobile-ready workflows',
-  'aria-label="Core capabilities"',
+  'role="group" aria-label="Core capabilities"',
+  '--quiet: #5f6c64;',
+  '@media (max-width: 520px)',
+  '.compact-solution .module-tags { display: none; }',
   'min-height: 44px',
+  'href="#products">Choose a product</a>',
   'id="products"',
-  'SuperMega products',
-  'Open a working product.',
-  'Each product starts with a usable sample. Explore the main job first; configuration and data import stay out of the way until you need them.',
-  'Choose a product',
-  'Need a workspace for your company?',
+  '>Products<',
+  'Choose one product to try.',
+  'Open Shop, Plant, Website, or Ecommerce. Each product has a working sample and a setup path for your data.',
+  'Need this for your company?',
   'id="trust"',
   'aria-label="Security boundary"',
-  'AI may prepare drafts from approved records.',
-  'https://app.supermega.dev/shop/?tab=counter',
-  'https://app.supermega.dev/plant/?tab=production',
+  'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
+  'https://app.supermega.dev/shop/',
+  'https://app.supermega.dev/plant/',
   'id="website"',
   'https://app.supermega.dev/website/',
   'id="ecommerce"',
-  'Create a Shop-backed storefront and hand customer intent to human review.',
+  'Create an online ordering page connected to Shop.',
   'https://app.supermega.dev/ecommerce/',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
-for (const product of manifest.customerProducts || []) {
+for (const product of publicProducts) {
   if (!home.includes(product.appRoute)) fail('direct_product_route_missing', { product: product.id })
   for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
     if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
@@ -181,7 +206,7 @@ if (home.includes('Commerce and Production carry real records and actions.')) fa
 if ((home.match(/<a\b/g) || []).length > 9) fail('homepage_link_surface_too_large')
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Your company and goal are already filled. Add your name and reply email, review the request, then send it.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Company and goal are ready for review from your AI memory.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'Could not route the request here. Please wait and try again.']) {
+for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', '/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||\'\')', "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Your company and goal are already filled. Add your name and reply email, review the request, then send it.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Company and goal are ready for review from your AI memory.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'Could not route the request here. Please wait and try again.']) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
@@ -226,9 +251,10 @@ for (const name of expectedFunctionNames) {
   if (functionConfig.handler !== 'index.js' || functionConfig.runtime !== 'nodejs24.x') fail('function_runtime_drift', { name, functionConfig })
 }
 const contactFunction = readFileSync(resolve(functionsDir, 'contact-submissions.js.func', 'index.js'), 'utf8')
-for (const token of ['supermega_leads', 'SUPABASE_SERVICE_ROLE_KEY', 'RESEND_API_KEY', 'TELEGRAM_BOT_TOKEN', 'SUPERMEGA_LEAD_WEBHOOK_URL', 'SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'required_fields_missing', 'idempotency_key_required', 'idempotency_conflict', 'rate_limited', 'supermega.managed_trial_proof.v2', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'trial_proof_invalid', 'client_provided_summary', 'CONTACT_FINGERPRINT_CURRENT_VERSION', 'proof_bound', 'privacyUrl', 'resolution=ignore-duplicates,return=representation', "'idempotency-key'"]) {
+for (const token of ['supermega_leads', 'SUPABASE_SERVICE_ROLE_KEY', 'RESEND_API_KEY', 'TELEGRAM_BOT_TOKEN', 'SUPERMEGA_LEAD_WEBHOOK_URL', 'SUPERMEGA_CONTACT_IDEMPOTENCY_SECRET', 'required_fields_missing', 'product_not_supported', 'idempotency_key_required', 'idempotency_conflict', 'rate_limited', 'supermega.managed_trial_proof.v2', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'trial_proof_invalid', 'client_provided_summary', 'CONTACT_FINGERPRINT_CURRENT_VERSION', 'proof_bound', 'privacyUrl', 'resolution=ignore-duplicates,return=representation', "'idempotency-key'"]) {
   if (!contactFunction.includes(token)) fail('contact_runtime_contract_missing', { token })
 }
+if (/\bvision\b/i.test(contactFunction)) fail('retired_product_present_in_contact_runtime')
 if (/require\(['"]pg['"]\)|DATABASE_URL|postgres/i.test(contactFunction)) fail('public_contact_has_direct_postgres_access')
 
 const config = JSON.parse(readFileSync(configPath, 'utf8'))

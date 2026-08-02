@@ -3,8 +3,11 @@ import { Link, NavLink, Outlet, useLocation, useOutletContext } from 'react-rout
 
 import './core-app.css'
 import { recordBehaviorSignal } from './behavior-trail'
+import type { ClientSolutionId } from './client-onboarding'
 
 const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
+const ProductHomeToday = lazy(() => import('./ProductHomeToday').then((module) => ({ default: module.ProductHomeToday })))
+const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -77,7 +80,7 @@ const checkingRuntime: RuntimeHealth = {
   auditReady: false,
   writesReady: false,
   coverageScore: 0,
-  requirements: ['Checking managed activation.'],
+  requirements: ['Checking company account readiness.'],
   activationSteps: [],
   evidencePlan: [],
   activationManifest: null,
@@ -90,8 +93,9 @@ const navigation = [
   { to: '/plant/', label: 'Plant' },
   { to: '/website/', label: 'Website' },
   { to: '/ecommerce/', label: 'Ecommerce' },
-  { to: '/settings/', label: 'Settings' },
 ] as const
+
+const mobileNavigation = navigation.filter((item) => item.to !== '/')
 
 const THEME_KEY = 'supermega-interface-theme'
 const SETUP_KEY = 'supermega.setup.v3'
@@ -143,12 +147,12 @@ function initialInterfaceTheme(): InterfaceTheme {
     const saved = window.localStorage.getItem(THEME_KEY)
     if (saved === 'light' || saved === 'dark') return saved
   } catch {
-    // Fall back to the browser theme below.
+    // Keep the first-run interface readable even when storage is unavailable.
   }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return 'light'
 }
 
-function productFromPathname(pathname: string) {
+function productFromPathname(pathname: string): ClientSolutionId | null {
   if (pathname.startsWith('/shop/')) return 'commerce'
   if (pathname.startsWith('/plant/')) return 'production'
   if (pathname.startsWith('/website/')) return 'website'
@@ -257,7 +261,7 @@ function useRuntimeHealth() {
         })
       })
       .catch(() => {
-        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before managed activation.'] })
+        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before company account setup.'] })
       })
     return () => controller.abort()
   }, [])
@@ -275,7 +279,7 @@ function Brand() {
 }
 
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed' : 'Sample workspace'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Demo mode'}</span>
 }
 
 export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: string; title: string; copy: string; actions?: ReactNode }) {
@@ -302,8 +306,10 @@ export function CoreLayout() {
       ? 'Website'
       : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
+      : location.pathname.startsWith('/vision/')
+        ? 'Vision'
       : location.pathname.startsWith('/settings/')
-        ? 'Workspace'
+        ? 'Setup'
         : location.pathname.startsWith('/shop/')
           ? 'Shop'
           : location.pathname.startsWith('/plant/')
@@ -317,6 +323,7 @@ export function CoreLayout() {
   }, [location.pathname, location.search, routeName])
 
   useEffect(() => {
+    if (location.pathname.startsWith('/vision/')) return
     const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}`
     const product = routeProduct ?? settingsProduct ?? 'unknown'
     recordBehaviorSignal(window.localStorage, {
@@ -329,7 +336,7 @@ export function CoreLayout() {
             : 'settings_opened',
       product,
       route,
-      detail: sensitiveAccountRoute ? 'Managed account access viewed.' : routeProduct ? `${productDisplayName(routeProduct)} workspace viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
+      detail: sensitiveAccountRoute ? 'Company account access viewed.' : routeProduct ? `${productDisplayName(routeProduct)} product viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
     })
   }, [location.pathname, location.search, routeProduct, sensitiveAccountRoute, settingsProduct])
 
@@ -346,19 +353,20 @@ export function CoreLayout() {
   const themeLabel = theme === 'dark' ? 'Use light theme' : 'Use dark theme'
 
   return (
-    <div className={`core-shell theme-${theme}${theme === 'dark' ? ' shop-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
+    <div className={`core-shell theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
         <nav className="core-nav" aria-label="Application">
           {navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Company sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '*' : 'o'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Company login</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Company sign in" className="account-shell-link mobile-account-link" to={companyLoginPath}>Sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '*' : 'o'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
-        <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
-        <main id="workspace-main" className={`core-main${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
+        <nav className="mobile-nav" aria-label="Mobile product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
+        <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
+          {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} product={routeProduct} /></Suspense> : null}
           <div className="core-route-content"><Outlet context={runtime} /></div>
         </main>
       </div>
@@ -367,71 +375,49 @@ export function CoreLayout() {
 }
 
 const customerTracks = [
-  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', '/settings/?product=commerce'],
-  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', '/settings/?product=production'],
-  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/', '/settings/?product=website'],
-  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', '/settings/?product=ecommerce'],
+  ['Shop', 'Sales and inventory', 'Sell at the counter, track stock, fulfil orders, and close the day.', 'retail, cafe, restaurant, spa, gym, school', '/shop/?tab=counter'],
+  ['Plant', 'Production and quality', 'Choose a job, record output, trace materials, and handle problems.', 'food, packaging, printing, workshop, assembly', '/plant/?tab=production'],
+  ['Website', 'Pages and inquiries', 'Edit a real site preview, collect leads, and prepare launch.', 'business site, services, catalog, landing page', '/website/'],
+  ['Ecommerce', 'Storefront and checkout', 'Run online orders, delivery, and Shop review.', 'pickup, local delivery, preorder, social orders', '/ecommerce/'],
 ] as const
 
 export function ProductHomePage() {
   const runtime = useOutletContext<RuntimeHealth>()
-  const [setup] = useState(readLocalSetupReadiness)
   const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
   const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
-  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
-  const setupProductName = productDisplayName(setup.product)
-  const autopilotRows = [
-    ['Track', setup.workspace ? setupProductName : 'Pick one product', setup.workspace || 'Shop, Plant, Website, or Ecommerce.'],
-    ['Data', setup.currentRecord ? 'First source named' : 'Local first', setup.currentRecord || 'Upload, paste, or describe one real record.'],
-    ['Proof', setup.acceptanceEvidence ? 'Acceptance proof named' : 'Evidence before premium', setup.acceptanceEvidence || 'Define what proves the workflow works.'],
-    ['AI context', setup.ready ? 'Ready for managed import' : 'Locked until approval', setup.ready ? 'Approved setup can now be exported for managed review.' : 'Premium can learn from approved data, roles, and audit.'],
-  ] as const
-
+  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Start from grounded local records. Managed data and AI activate only after approval." title="Company control" />
-      <Suspense fallback={<p className="form-notice" role="status">Loading company control...</p>}>
-        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={setup.progress} ready={setup.ready} />
-      </Suspense>
-      <section className="product-home-operating-model" aria-label="SuperMega operating model">
-        <div>
-          <span className="core-eyebrow">Free workspace</span>
-          <strong>Sample data, imports, review, and evidence.</strong>
-        </div>
-        <div>
-          <span className="core-eyebrow">Premium activation</span>
-          <strong>Managed data, AI context, roles, audit, and writes.</strong>
-        </div>
-        <Link className="core-button primary" to="/settings/">Check readiness</Link>
-      </section>
-      <section className="product-home-autopilot" aria-label="AI operating plan">
-        <div className="product-home-autopilot-head">
-          <div>
-            <span className="core-eyebrow">AI operating plan</span>
-            <h2>Recommended next move</h2>
-            <p>Choose a product, bring in real records, then export evidence for managed activation. No external send, publish, payment, or production write runs from this screen.</p>
-          </div>
-          <Link className="core-button primary" to={setup.ready ? '/settings/#controls' : '/settings/'}>{setup.ready ? 'Export evidence' : 'Check readiness'}</Link>
-        </div>
-        <div className="product-home-autopilot-grid">
-          {autopilotRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}
-        </div>
-      </section>
+      <PageHeading copy="Pick one product and use the working demo first. Add your data only after the flow makes sense." eyebrow="SuperMega" title="Start with one product." />
       <nav aria-label="Business tracks" className="product-track-grid">
-        {customerTracks.map(([name, fit, outcome, path, setupPath]) => (
+        {customerTracks.map(([name, fit, outcome, examples, path]) => (
           <article className="product-track-card" key={name}>
             <div>
               <span className="core-eyebrow">{fit}</span>
               <h2>{name}</h2>
               <p>{outcome}</p>
+              <small className="product-track-examples">{examples}</small>
             </div>
             <div className="product-track-actions">
-              <Link to={path}>Open product</Link>
-              <Link to={setupPath}>Set up product</Link>
+              <Link aria-label={`Try ${name} demo`} to={path}>Try demo</Link>
             </div>
           </article>
         ))}
       </nav>
+      <details className="product-home-setup">
+        <summary><span><strong>Add your data</strong><small>Imports, readiness, and secure access</small></span><b>Later</b></summary>
+        <div>
+          <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
+          <section className="product-home-operating-model" aria-label="SuperMega operating model">
+            <div><span className="core-eyebrow">Try first</span><strong>Sample data stays on this device.</strong></div>
+            <div><span className="core-eyebrow">Add data later</span><strong>Import data after the demo makes sense.</strong></div>
+            <Link className="core-button primary" to="/settings/">Add data</Link>
+          </section>
+          <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
+            <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
+          </Suspense>
+        </div>
+      </details>
     </div>
   )
 }

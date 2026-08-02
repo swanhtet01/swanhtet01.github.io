@@ -14,12 +14,11 @@ import {
 const work = (patch = {}) => ({
   clientId: 'client-acme',
   cycleId: 'queue-2026-07-14-a',
-  agents: ['sales-qualifier', 'quality-reviewer'],
+  agents: ['sales-qualifier'],
   evidence: {
     'sales-qualifier': { problem: 'Manual close takes two days', buyer: 'Owner' },
-    'quality-reviewer': 'Review draft v2 against acceptance rules A and B.',
   },
-  roleBudget: 6,
+  roleBudget: 3,
   ...patch,
 })
 
@@ -73,9 +72,8 @@ async function completeOrder(state) {
       actionMode: 'draft_only',
       results: [
         { ok: true, status: 'completed', agentId: 'sales-qualifier', department: 'Revenue', output: { fit: 'strong', nextStep: 'Owner review' } },
-        { ok: true, status: 'completed', agentId: 'quality-reviewer', department: 'Quality', output: { verdict: 'pass' } },
       ],
-      budget: { usedRoleCalls: 6 },
+      budget: { usedRoleCalls: 3 },
     }),
   })
 }
@@ -92,12 +90,60 @@ test('creation durably queues one exact reviewed plan without running a model', 
   assert.equal(result.workOrder.status, 'planned')
   assert.match(result.workOrder.workOrderId, /^company-order:[a-f0-9]{40}$/)
   assert.match(result.workOrder.planHash, /^[a-f0-9]{64}$/)
-  assert.equal(result.workOrder.plan.assignments.length, 2)
-  assert.equal(result.workOrder.plan.budget.plannedRoles, 6)
-  assert.equal(result.workOrder.evidence.length, 2)
+  assert.equal(result.workOrder.plan.assignments.length, 1)
+  assert.equal(result.workOrder.plan.budget.plannedRoles, 3)
+  assert.equal(result.workOrder.evidence.length, 1)
   assert.match(result.workOrder.evidence[0].digest, /^[a-f0-9]{64}$/)
   assert.equal('input' in result.workOrder, false)
   assert.equal(JSON.stringify(result).includes('Manual close takes two days'), false)
+  assert.equal(runs, 0)
+})
+
+test('dispatch rejects a stored plan with unused role authority', async () => {
+  const state = harness()
+  const created = await createCompanyWorkOrder(work(), state.options)
+  const key = `company-work-order-record:${created.workOrder.workOrderId}`
+  const record = state.records.get(key)
+  record.plan.budget.roleLimit = record.plan.budget.plannedRoles + 1
+  state.records.set(key, record)
+
+  let runs = 0
+  const result = await runCompanyWorkOrder({
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `RUN ${created.workOrder.workOrderId}`,
+  }, {
+    ...state.options,
+    runCompanyCycle: async () => { runs += 1; return { ok: true } },
+  })
+  assert.equal(result.reason, 'company_work_order_role_authority_mismatch')
+  assert.equal(result.status, 'blocked')
+  assert.deepEqual(result.retry, { requiresNewCycleId: true })
+  assert.equal(runs, 0)
+})
+
+test('dispatch rejects a stored plan that exceeds company assignment capacity', async () => {
+  const state = harness()
+  const created = await createCompanyWorkOrder(work(), state.options)
+  const key = `company-work-order-record:${created.workOrder.workOrderId}`
+  const record = state.records.get(key)
+  record.plan.controls.maxConcurrentCycles += 1
+  state.records.set(key, record)
+
+  let runs = 0
+  const result = await runCompanyWorkOrder({
+    clientId: created.workOrder.clientId,
+    workOrderId: created.workOrder.workOrderId,
+    planHash: created.workOrder.planHash,
+    confirmation: `RUN ${created.workOrder.workOrderId}`,
+  }, {
+    ...state.options,
+    runCompanyCycle: async () => { runs += 1; return { ok: true } },
+  })
+  assert.equal(result.reason, 'company_work_order_capacity_authority_mismatch')
+  assert.equal(result.status, 'blocked')
+  assert.deepEqual(result.retry, { requiresNewCycleId: true })
   assert.equal(runs, 0)
 })
 
@@ -353,7 +399,7 @@ test('dispatch is bound to the saved fingerprint and exact confirmation', async 
   assert.equal(result.workOrder.startedAt, '2026-07-14T00:00:00.000Z')
   assert.equal(result.workOrder.dispatchAttempts, 1)
   assert.equal(received.clientId, 'client-acme')
-  assert.deepEqual(received.agents, ['sales-qualifier', 'quality-reviewer'])
+  assert.deepEqual(received.agents, ['sales-qualifier'])
   assert.match(received.evidence['sales-qualifier'], /Manual close/)
   assert.equal(JSON.stringify(result.workOrder).includes('Manual close takes two days'), false)
   const saved = [...state.records.values()].find((row) => row.workOrderId === created.workOrder.workOrderId)
@@ -396,9 +442,9 @@ test('completed work orders produce deterministic customer delivery proof withou
   assert.equal(proof.proofPacket.kind, 'agent_company_delivery_proof')
   assert.match(proof.proofPacket.delivery.resultHash, /^[a-f0-9]{64}$/)
   assert.match(proof.proofPacket.packetHash, /^[a-f0-9]{64}$/)
-  assert.equal(proof.proofPacket.delivery.specialists.length, 2)
+  assert.equal(proof.proofPacket.delivery.specialists.length, 1)
   assert.equal(proof.proofPacket.delivery.specialists[0].output.fit, 'strong')
-  assert.deepEqual(proof.proofPacket.delivery.budget, { plannedRoleCalls: 6, usedRoleCalls: 6 })
+  assert.deepEqual(proof.proofPacket.delivery.budget, { plannedRoleCalls: 3, usedRoleCalls: 3 })
   assert.equal(proof.proofPacket.controls.externalWrites, false)
   assert.equal(proof.proofPacket.controls.rawEvidenceIncluded, false)
   assert.equal(proof.proofPacket.review, null)

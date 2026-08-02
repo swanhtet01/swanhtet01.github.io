@@ -89,11 +89,11 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       detail: `${label}: ${action}`,
     })
   }
-  const agentCommandQueueRows = [
-    [ready ? 'Export evidence' : 'Finish setup', ready ? 'Ready for support review' : `${progress}% ready`, ready ? 'Package setup, imports, behavior, decisions, and activation proof before premium starts.' : 'Finish baseline, owner, source, and acceptance evidence first.'],
-    [behaviorPreference.preferred ? 'Owner pattern' : 'Choose an agent job', behaviorPreference.preferred && preferredContinuation ? `${preferredContinuation.label} / ${behaviorPreference.preferred.chosenCount} chosen` : 'Needs signal', behaviorPreference.preferred ? behaviorPreference.preferred.detail : 'Open a product and choose one recommended job to teach the local queue.'],
-    [hostedReady ? 'Activate managed lane' : 'Clear managed gate', hostedReady ? 'Controls ready' : `${activationCoverage}% gated`, hostedReady ? 'Use tenant roles, audit, and approval before any real write.' : nextHostedAction],
-    ['Operate products', behaviorProducts ? `${behaviorProducts}/4 touched` : 'Pick one product', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.'],
+  const supportEvidenceRows = [
+    [ready ? 'Export setup' : 'Finish setup', ready ? 'Ready for support review' : `${progress}% ready`, ready ? 'Package setup, imports, decisions, and go-live proof before support starts.' : 'Finish baseline, owner, source, and acceptance evidence first.'],
+    [behaviorPreference.preferred ? 'Recent product' : 'Choose next step', behaviorPreference.preferred && preferredContinuation ? `${preferredContinuation.label} / ${behaviorPreference.preferred.chosenCount} chosen` : 'Needs signal', behaviorPreference.preferred ? behaviorPreference.preferred.detail : 'Open a product and choose a next step so this page can continue from there.'],
+    [hostedReady ? 'Prepare live account' : 'Finish live gate', hostedReady ? 'Controls ready' : `${activationCoverage}% gated`, hostedReady ? 'Use account roles, audit, and approval before any real write.' : nextHostedAction],
+    ['Product coverage', behaviorProducts ? `${behaviorProducts}/4 touched` : 'Pick one product', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.'],
   ] as const
 
   const refreshLocalOwnerControl = useCallback(() => {
@@ -120,7 +120,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       const run = await loadManagedOwnerControlRun(identity)
       if (requestId !== ownerControlRequestRef.current) return
       setManagedOwnerControl({ run, identity })
-      setOwnerControlNotice(successNotice || 'Managed company / exact-source owner control.')
+      setOwnerControlNotice(successNotice || 'Company review refreshed from exact product records.')
     } catch {
       if (requestId !== ownerControlRequestRef.current) return
       setManagedOwnerControl(null)
@@ -167,7 +167,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
       if (requestId !== managedRequestRef.current) return
       setAnswer(brief)
       setManagedContext({ brief, identity })
-      setManagedNotice(`Managed company / ${brief.sourceCount} validated product sources.`)
+      setManagedNotice(`Company summary / ${brief.sourceCount} validated product sources.`)
     } catch {
       if (requestId !== managedRequestRef.current) return
       setManagedContext(null)
@@ -307,18 +307,18 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
 
   return (
     <>
-      <section className="product-home-readiness product-home-command-queue" id="command-center" aria-label="Ask SuperMega business command center">
+      <section className="product-home-readiness product-home-command-queue" id="command-center" aria-label="SuperMega support helper">
         <div className="product-home-readiness-head">
           <div>
-            <span className="core-eyebrow">Ask SuperMega</span>
-            <h2>Ask what needs attention.</h2>
-            <p>Free mode answers from validated local Shop, Plant, Website, and Ecommerce records. Premium can add approved managed history and cross-workflow context.</p>
+            <span className="core-eyebrow">Support helper</span>
+            <h2>Find the next customer-ready step.</h2>
+            <p>Uses Shop, Plant, Website, and Ecommerce records. Company history is used only after approval.</p>
           </div>
         </div>
-        <div className="owner-control-run" aria-label="Owner Control run" data-mode={ownerControlMode}>
+        <div className="owner-control-run" aria-label="Readiness review status" data-mode={ownerControlMode}>
           <div className="owner-control-run-head">
             <div>
-              <span>{ownerControlMode === 'managed' ? 'Premium managed control' : 'Free local control'} · {ownerControl.sourceCount}/4 validated sources</span>
+              <span>{ownerControlMode === 'managed' ? 'Company review' : 'Local review'} · {ownerControl.sourceCount}/4 product sources</span>
               <h3>{ownerControl.title}</h3>
               <p>{ownerControl.summary}</p>
             </div>
@@ -331,7 +331,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
               <small>{ownerControlPrimary.summary}</small>
             </div>
             <div className="form-actions">
-              {ownerControl.sourceCount > 0 ? <button className="core-button" disabled={ownerControlPending} onClick={() => void acknowledgeOwnerControl()} type="button">Acknowledge review</button> : null}
+              {ownerControl.sourceCount > 0 ? <button className="core-button" disabled={ownerControlPending} onClick={() => void acknowledgeOwnerControl()} type="button">Mark reviewed</button> : null}
               <Link className="core-button primary" onClick={() => recordOwnerControlFollow(ownerControlPrimary)} to={ownerControlPrimary.nextAction.path}>{ownerControlPrimary.nextAction.label}</Link>
             </div>
           </div> : <p className="owner-control-clear">No repeated check is required for unchanged evidence. A new validated source revision opens the next run automatically.</p>}
@@ -343,10 +343,10 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
           {ownerControlNotice ? <p className="form-notice" role="status">{ownerControlNotice}</p> : null}
         </div>
         <form className="business-command-form" onSubmit={submitBusinessQuestion}>
-          <label htmlFor="business-command-question">Business question</label>
+          <label htmlFor="business-command-question">Ask about today</label>
           <div>
             <input
-              aria-label="Ask a business question"
+              aria-label="Ask about today"
               id="business-command-question"
               maxLength={240}
               onChange={(event) => setQuestion(event.target.value)}
@@ -357,7 +357,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
             />
             <button className="core-button primary" type="submit">Ask</button>
           </div>
-          <small>Raw questions stay in this field and are not written to behavior memory.</small>
+          <small>Your question stays on this screen unless you choose a saved managed review.</small>
         </form>
         <div className="business-command-prompts" aria-label="Suggested business questions">
           {BUSINESS_COMMAND_PROMPTS.map((prompt) => (
@@ -370,7 +370,7 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
               <span>{answer.sourceCount}/4 validated {managedContext ? 'managed' : 'local'} product sources</span>
               <h3>{answer.title}</h3>
               <p>{answer.summary}</p>
-              {managedLearning ? <div className="business-command-learning"><span>AI learned</span><strong>{managedLearning.label}</strong><small>{managedLearning.detail}</small></div> : null}
+              {managedLearning ? <div className="business-command-learning"><span>Saved learning</span><strong>{managedLearning.label}</strong><small>{managedLearning.detail}</small></div> : null}
             </div>
             <div className="form-actions">
               {managedContext ? <button className="core-button" disabled={managedPending || managedBriefRetained} onClick={() => void retainBrief()} type="button">{managedBriefRetained ? 'Checkpoint retained' : 'Keep learning checkpoint'}</button> : null}
@@ -390,9 +390,9 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
           {managedNotice ? <p className="form-notice" role="status">{managedNotice}</p> : null}
         </div>
         <details className="business-command-evidence">
-          <summary><span>Why this answer</span><small>Setup, owner behavior, managed gates, and product coverage</small></summary>
+          <summary><span>Why this step</span><small>Setup, recent choices, go-live gates, and product coverage</small></summary>
           <div className="product-home-readiness-grid">
-            {agentCommandQueueRows.map(([label, value, detail]) => (
+            {supportEvidenceRows.map(([label, value, detail]) => (
               <span key={label}>
                 <small>{label}</small>
                 <strong>{value}</strong>
@@ -403,16 +403,16 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
           <Link className="text-link" to={commandPath}>{commandLabel}</Link>
         </details>
       </section>
-      <section className="product-home-readiness product-home-business-tracks" aria-label="Product starter paths">
+      <section className="product-home-readiness product-home-business-tracks" aria-label="Product setup paths">
         <div className="product-home-readiness-head">
           <div>
-            <span className="core-eyebrow">Starter paths</span>
-            <h2>Start one product in 2 clicks.</h2>
-            <p>Choose a local template, then open the working app. AI prepares the setup and keeps business changes behind owner approval.</p>
+            <span className="core-eyebrow">Choose a product</span>
+            <h2>Start one product.</h2>
+            <p>Pick a template or open the working sample. Setup stays in review before business records change.</p>
           </div>
-          <Link className="core-button" to="/settings/">Open setup hub</Link>
+          <Link className="core-button" to="/settings/">Set up data</Link>
         </div>
-        <div className="product-home-track-actions" aria-label="Product starter actions">
+        <div className="product-home-track-actions" aria-label="Product start actions">
           {trackActionRows.map(([label, product, setupPath, workPath, setupAction, openAction]) => (
             <span key={label}>
               <strong>{label}</strong>

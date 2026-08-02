@@ -174,7 +174,7 @@ try {
   const readyStatus = await invoke({ method: 'GET' })
   assert.equal(readyStatus.body.accepting, true)
 
-  const accepted = await invoke({ body: { ...validSubmission, product: 'UNRECOGNIZED' }, headers: withKey(3) })
+  const accepted = await invoke({ body: { ...validSubmission, product: 'guide' }, headers: withKey(3) })
   assert.equal(accepted.status, 202)
   assert.match(accepted.body.request_id, /^LEAD-[A-F0-9]{16}$/)
   assert.equal(fetchCalls, 1)
@@ -188,13 +188,13 @@ try {
   assert.equal(event.record.source, 'supermega.dev')
   assert.equal(accepted.body.proof_bound, false)
 
-  const replay = await invoke({ body: { ...validSubmission, product: 'UNRECOGNIZED' }, headers: withKey(3) })
+  const replay = await invoke({ body: { ...validSubmission, product: 'guide' }, headers: withKey(3) })
   assert.equal(replay.status, 202)
   assert.equal(replay.body.request_id, accepted.body.request_id)
   assert.equal(replay.headers['x-idempotent-replay'], 'true')
   assert.equal(fetchCalls, 1)
 
-  const conflict = await invoke({ body: { ...validSubmission, product: 'UNRECOGNIZED', goal: 'Different request.' }, headers: withKey(3) })
+  const conflict = await invoke({ body: { ...validSubmission, product: 'guide', goal: 'Different request.' }, headers: withKey(3) })
   assert.equal(conflict.status, 409)
   assert.equal(conflict.body.reason, 'idempotency_conflict')
 
@@ -351,6 +351,19 @@ try {
   })
   assert.equal(proofConflict.status, 409)
   assert.equal(proofConflict.body.reason, 'idempotency_conflict')
+  const retiredProduct = await invoke({
+    body: { ...validSubmission, product: 'vision', template: 'release-qa' },
+    headers: withKey(300, { 'x-forwarded-for': '203.0.113.30' }),
+  })
+  assert.equal(retiredProduct.status, 400)
+  assert.equal(retiredProduct.body.reason, 'product_not_supported')
+
+  const unknownProduct = await invoke({
+    body: { ...validSubmission, product: 'unrecognized' },
+    headers: withKey(301, { 'x-forwarded-for': '203.0.113.31' }),
+  })
+  assert.equal(unknownProduct.status, 400)
+  assert.equal(unknownProduct.body.reason, 'product_not_supported')
 
   const rateHeaders = { 'x-forwarded-for': '203.0.113.77' }
   for (let index = 0; index < 5; index += 1) {
@@ -499,7 +512,7 @@ try {
   assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
   assert.equal(unexpectedDeliveryCalls, 0)
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 120 }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 128 }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {

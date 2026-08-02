@@ -217,7 +217,7 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
         {identity
           ? <button className="core-button primary" disabled={controlsDisabled || !sourceLabel.trim() || !message.trim() || items.length === 0} onClick={() => void prepareWithAi()} type="button">{aiBusy ? 'Preparing draft…' : 'Prepare with AI'}</button>
           : <button className="core-button" disabled={controlsDisabled} onClick={() => setManualOpen(true)} type="button">Map manually</button>}
-        <small>{identity ? 'Uses the managed backend and current Shop catalog. No order or stock change happens yet.' : 'Connect a managed workspace to use AI. Manual mapping stays available.'}</small>
+        <small>{identity ? 'Uses the company account and current Shop catalog. No order or stock change happens yet.' : 'Open a company account to use AI. Manual mapping stays available.'}</small>
       </div>
       {aiIssue ? <p className="form-notice" role="alert">{aiIssue}</p> : null}
       <details className="channel-intake-disclosure" onToggle={(event) => setManualOpen(event.currentTarget.open)} open={manualOpen}>

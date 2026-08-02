@@ -1,3 +1,5 @@
+import type { CommerceStorefrontMerchandising } from '../../core/commerce-workspace'
+
 export const STOREFRONT_DRAFT_SCHEMA = 'supermega.ecommerce.storefront_draft.v2' as const
 export const LEGACY_STOREFRONT_DRAFT_SCHEMA = 'supermega.ecommerce.storefront_draft.v1' as const
 export const STOREFRONT_DRAFT_KEY_PREFIX = 'supermega.ecommerce.storefront_draft.v2.'
@@ -10,6 +12,7 @@ export type StorefrontDraftInput = {
   summary: string
   selectedSkus: string[]
   sourcePreviewDigest: string
+  merchandising?: CommerceStorefrontMerchandising[]
 }
 
 export type StorefrontDraft = StorefrontDraftInput & {
@@ -43,7 +46,7 @@ export type StorefrontDraftLockManager = {
   ) => Promise<T>
 }
 
-type SaveStorefrontDraftOptions = {
+export type SaveStorefrontDraftOptions = {
   storage?: StorefrontDraftStorage
   locks?: StorefrontDraftLockManager
   now?: () => string
@@ -53,14 +56,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
-function hasExactKeys(value: Record<string, unknown>, keys: string[]) {
+function hasExactKeys(value: Record<string, unknown>, keys: string[], optional: string[] = []) {
   const actual = Object.keys(value)
-  return actual.length === keys.length && keys.every((key) => actual.includes(key))
+  return keys.every((key) => actual.includes(key))
+    && actual.every((key) => keys.includes(key) || optional.includes(key))
 }
 
 function canonicalText(value: unknown, field: string, maximum: number) {
   if (typeof value !== 'string' || value !== value.trim() || !value || value.length > maximum) {
     throw new Error(`${field} must be visible canonical text of at most ${maximum} characters.`)
+  }
+  return value
+}
+
+function canonicalBlankableText(value: unknown, field: string, maximum: number) {
+  if (typeof value !== 'string' || value !== value.trim() || value.length > maximum) {
+    throw new Error(`${field} must be canonical text of at most ${maximum} characters or empty.`)
   }
   return value
 }
@@ -101,7 +112,33 @@ function canonicalFields(value: Omit<StorefrontDraftInput, 'sourcePreviewDigest'
   if (new Set(selectedSkus).size !== selectedSkus.length) {
     throw new Error('Selected Shop SKUs must be unique.')
   }
-  return { storeName, summary, selectedSkus }
+  let merchandising: CommerceStorefrontMerchandising[] | undefined
+  if (value.merchandising !== undefined) {
+    if (!Array.isArray(value.merchandising) || value.merchandising.length !== selectedSkus.length) {
+      throw new Error('Storefront merchandising must cover every selected Shop SKU exactly once.')
+    }
+    merchandising = value.merchandising
+      .map((entry, index) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          throw new Error(`Merchandising row ${index + 1} is invalid.`)
+        }
+        if (typeof entry.featured !== 'boolean') {
+          throw new Error(`Merchandising row ${index + 1} featured must be boolean.`)
+        }
+        return {
+          sku: canonicalText(entry.sku, `Merchandising row ${index + 1} SKU`, 80),
+          featured: entry.featured,
+          collection: canonicalText(entry.collection, `Merchandising row ${index + 1} collection`, 120),
+          displayName: canonicalBlankableText(entry.displayName, `Merchandising row ${index + 1} display name`, 180),
+          note: canonicalBlankableText(entry.note, `Merchandising row ${index + 1} note`, 300),
+        }
+      })
+      .sort((left, right) => left.sku.localeCompare(right.sku, 'en'))
+    if (merchandising.some((entry, index) => entry.sku !== selectedSkus[index])) {
+      throw new Error('Storefront merchandising must follow the selected Shop SKU order.')
+    }
+  }
+  return { storeName, summary, selectedSkus, ...(merchandising ? { merchandising } : {}) }
 }
 
 function canonicalPreviewDigest(value: unknown) {
@@ -161,11 +198,12 @@ function sameDraftInput(left: StorefrontDraft, right: StorefrontDraftInput) {
     && left.sourcePreviewDigest === right.sourcePreviewDigest
     && left.selectedSkus.length === right.selectedSkus.length
     && left.selectedSkus.every((sku, index) => sku === right.selectedSkus[index])
+    && JSON.stringify(left.merchandising ?? null) === JSON.stringify(right.merchandising ?? null)
 }
 
 export function validateStorefrontDraft(value: unknown, expectedScope?: string): StorefrontDraft {
   if (!isRecord(value)
-    || !hasExactKeys(value, ['schema', 'scope', 'revision', 'savedAt', 'storeName', 'summary', 'selectedSkus', 'sourcePreviewDigest'])
+    || !hasExactKeys(value, ['schema', 'scope', 'revision', 'savedAt', 'storeName', 'summary', 'selectedSkus', 'sourcePreviewDigest'], ['merchandising'])
     || value.schema !== STOREFRONT_DRAFT_SCHEMA
     || !Number.isSafeInteger(value.revision)
     || Number(value.revision) < 1) {
@@ -176,6 +214,7 @@ export function validateStorefrontDraft(value: unknown, expectedScope?: string):
     summary: value.summary as string,
     selectedSkus: value.selectedSkus as string[],
     sourcePreviewDigest: value.sourcePreviewDigest as string,
+    ...(value.merchandising !== undefined ? { merchandising: value.merchandising as CommerceStorefrontMerchandising[] } : {}),
   })
   const scope = canonicalScope(value.scope)
   if (expectedScope !== undefined && scope !== canonicalScope(expectedScope)) {

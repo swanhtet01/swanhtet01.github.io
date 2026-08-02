@@ -66,9 +66,9 @@ export function ManagedLoginPage() {
 
   return (
     <div className="workspace-screen managed-login-screen">
-      <PageHeading eyebrow="Managed account" title="Open your company." copy="Sign in once. SuperMega finds the companies assigned to you." />
+      <PageHeading eyebrow="Company account" title="Open your company." copy="Sign in once. SuperMega finds the companies assigned to you." />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
-        <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your managed company is ready.</p></div>
+        <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <Link className="core-button primary" to="/settings/#controls">Open company</Link>
       </section> : managedReady ? <form className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
         <div><span className="core-eyebrow">Premium access</span><h2>{directory ? 'Choose your company.' : 'Use your work account.'}</h2><p>{directory ? 'Only active companies assigned to this account are shown.' : 'No workspace code or technical setup is required.'}</p></div>
@@ -79,9 +79,9 @@ export function ManagedLoginPage() {
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? 'Open company' : 'Find my company'}</button>
         {notice ? <p className="form-notice" role="status">{notice}</p> : null}
-      </form> : <section className="managed-login-panel" aria-label="Managed activation unavailable">
-        <div><span className="core-eyebrow">Premium activation</span><h2>Managed access is not active in this release.</h2><p>Use the complete local workspace now, or request a managed company account.</p></div>
-        <div className="managed-login-actions"><Link className="core-button primary" to="/">Open free workspace</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request managed activation</a></div>
+      </form> : <section className="managed-login-panel" aria-label="Company account unavailable">
+        <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>
+        <div className="managed-login-actions"><Link className="core-button primary" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
       </section>}
     </div>
   )

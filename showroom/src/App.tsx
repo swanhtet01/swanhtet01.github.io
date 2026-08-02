@@ -6,12 +6,16 @@ import {
   ProductHomePage,
 } from './core/CoreShell'
 
-const OperationsPage = lazy(() => import('./core/CoreApp').then((module) => ({ default: module.OperationsPage })))
+const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 const SettingsPage = lazy(() => import('./core/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 const ManagedLoginPage = lazy(() => import('./core/ManagedLoginPage').then((module) => ({ default: module.ManagedLoginPage })))
 const ManagedAccountPage = lazy(() => import('./core/ManagedAccountPage').then((module) => ({ default: module.ManagedAccountPage })))
+const visionPreviewEnabled = import.meta.env.DEV || import.meta.env.VITE_SUPERMEGA_VISION_PREVIEW === '1'
+const VisionProduct = visionPreviewEnabled
+  ? lazy(() => import('./products/vision/VisionProduct').then((module) => ({ default: module.VisionProduct })))
+  : null
 
 function ProductLoading({ name }: { name: string }) {
   return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Loading {name}…</p></div>
@@ -23,6 +27,7 @@ function productDemoPath(value: string | null) {
   if (demo === 'shop' || demo === 'retail') return '/shop/'
   if (demo === 'website' || demo === 'site') return '/website/'
   if (demo === 'ecommerce' || demo === 'storefront' || demo === 'online-orders') return '/ecommerce/'
+  if (visionPreviewEnabled && (demo === 'vision' || demo === 'computer-vision')) return '/vision/'
   return null
 }
 
@@ -50,16 +55,17 @@ export default function App() {
           <Route element={<Suspense fallback={<ProductLoading name="Plant" />}><OperationsPage product="production" /></Suspense>} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceProduct /></Suspense>} path="ecommerce/*" />
+          {visionPreviewEnabled && VisionProduct ? <Route element={<Suspense fallback={<ProductLoading name="Vision" />}><VisionProduct /></Suspense>} path="vision/*" /> : null}
           <Route element={<Navigate replace to="/shop/" />} path="operations/commerce/*" />
           <Route element={<Navigate replace to="/plant/" />} path="operations/production/*" />
           <Route element={<Navigate replace to="/" />} path="operations/*" />
           <Route element={<Navigate replace to="/" />} path="work/*" />
           <Route element={<Navigate replace to="/website/" />} path="products/website/*" />
           <Route element={<Navigate replace to="/ecommerce/" />} path="products/ecommerce/*" />
-          <Route element={<Suspense fallback={<ProductLoading name="Settings" />}><SettingsPage /></Suspense>} path="settings/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="client setup" />}><SettingsPage /></Suspense>} path="settings/*" />
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
-          <Route element={<Navigate replace to="/#command-center" />} path="agents/*" />
-          <Route element={<Navigate replace to="/#command-center" />} path="assist/*" />
+          <Route element={<Navigate replace to="/" />} path="agents/*" />
+          <Route element={<Navigate replace to="/" />} path="assist/*" />
           <Route element={<Navigate replace to="/settings/" />} path="setup/*" />
           <Route element={<Navigate replace to="/settings/#controls" />} path="trust/*" />
           <Route element={<Navigate replace to="/" />} path="app/*" />

@@ -431,6 +431,37 @@ def _production_inventory_command_id(request_id: str) -> str:
     return f"PIS-{identity[7:39].upper()}"
 
 
+def _production_return_command_id(production_issue_id: str, action_id: str) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.production-return-inventory-command.v1",
+            "productionIssueId": production_issue_id,
+            "actionId": action_id,
+        }
+    )
+    return f"PRT-{identity[7:39].upper()}"
+
+
+def _production_receipt_command_id(release_id: str) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.production-receipt-inventory-command.v1",
+            "releaseId": release_id,
+        }
+    )
+    return f"PRC-{identity[7:39].upper()}"
+
+
+def _production_receipt_stock_unit_id(release_id: str) -> str:
+    identity = _canonical_digest(
+        {
+            "contract": "supermega.shop.production-receipt-stock-unit.v1",
+            "releaseId": release_id,
+        }
+    )
+    return f"LOT-PLANT-{identity[7:31].upper()}"
+
+
 def _order_inventory_reservation_id(
     order_id: str, allocation: Mapping[str, Any]
 ) -> str:
@@ -462,6 +493,95 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "kind": "import",
             "id": command_id,
             "package": package,
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
+    if kind == "master_create":
+        row = _exact(row, field, {"kind", "id", "masterType", "master", "proof"})
+        master_type = _text(row["masterType"], f"{field}.masterType", 12)
+        if master_type not in {"client", "vendor"}:
+            raise ShopInventoryValidationError(f"{field}.masterType is unsupported.")
+        master_row = _exact(row["master"], f"{field}.master", {"id", "name"})
+        master_prefix = "CLI" if master_type == "client" else "VEN"
+        return {
+            "kind": "master_create",
+            "id": _identifier(row["id"], f"{field}.id", "MST"),
+            "masterType": master_type,
+            "master": {
+                "id": _identifier(
+                    master_row["id"], f"{field}.master.id", master_prefix
+                ),
+                "name": _text(master_row["name"], f"{field}.master.name", 120),
+            },
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
+    if kind == "supplier_policy_set":
+        row = _exact(row, field, {"kind", "id", "policy", "proof"})
+        policy = _exact(
+            row["policy"],
+            f"{field}.policy",
+            {
+                "vendorId", "sku", "leadTimeDays", "minimumOrderUnits",
+                "orderMultipleUnits", "safetyStockUnits",
+                "serviceLevelBasisPoints", "status",
+            },
+        )
+        sku = _text(policy["sku"], f"{field}.policy.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{field}.policy.sku is not in the Shop catalog."
+            )
+        lead_time_days = _integer(
+            policy["leadTimeDays"], f"{field}.policy.leadTimeDays", 1
+        )
+        minimum_order_units = _integer(
+            policy["minimumOrderUnits"], f"{field}.policy.minimumOrderUnits", 1
+        )
+        order_multiple_units = _integer(
+            policy["orderMultipleUnits"], f"{field}.policy.orderMultipleUnits", 1
+        )
+        safety_stock_units = _integer(
+            policy["safetyStockUnits"], f"{field}.policy.safetyStockUnits"
+        )
+        service_level = _integer(
+            policy["serviceLevelBasisPoints"],
+            f"{field}.policy.serviceLevelBasisPoints",
+            5_000,
+        )
+        if lead_time_days > 365:
+            raise ShopInventoryValidationError(
+                f"{field}.policy.leadTimeDays cannot exceed 365."
+            )
+        if any(
+            value > 1_000_000
+            for value in (minimum_order_units, order_multiple_units, safety_stock_units)
+        ):
+            raise ShopInventoryValidationError(
+                f"{field}.policy quantities cannot exceed 1,000,000 units."
+            )
+        if service_level > 9_999:
+            raise ShopInventoryValidationError(
+                f"{field}.policy.serviceLevelBasisPoints cannot exceed 9,999."
+            )
+        status = _text(policy["status"], f"{field}.policy.status", 8)
+        if status not in {"active", "inactive"}:
+            raise ShopInventoryValidationError(
+                f"{field}.policy.status is unsupported."
+            )
+        return {
+            "kind": "supplier_policy_set",
+            "id": _identifier(row["id"], f"{field}.id", "SPP"),
+            "policy": {
+                "vendorId": _identifier(
+                    policy["vendorId"], f"{field}.policy.vendorId", "VEN"
+                ),
+                "sku": sku,
+                "leadTimeDays": lead_time_days,
+                "minimumOrderUnits": minimum_order_units,
+                "orderMultipleUnits": order_multiple_units,
+                "safetyStockUnits": safety_stock_units,
+                "serviceLevelBasisPoints": service_level,
+                "status": status,
+            },
             "proof": _proof(row["proof"], f"{field}.proof"),
         }
     if kind == "transfer":
@@ -529,6 +649,83 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             "trackingCode": _text(
                 row["trackingCode"], f"{field}.trackingCode", 80
             ),
+            "locationId": _identifier(
+                row["locationId"], f"{field}.locationId", "LOC"
+            ),
+            "quantity": _integer(row["quantity"], f"{field}.quantity", 1),
+            "proof": _proof(row["proof"], f"{field}.proof"),
+        }
+    if kind == "production_receipt":
+        row = _exact(
+            row,
+            field,
+            {
+                "kind",
+                "id",
+                "productionReleaseId",
+                "productionCommandDigest",
+                "productionJobId",
+                "productionOutputBatchId",
+                "productionReleasedAt",
+                "stockUnitId",
+                "sku",
+                "trackingCode",
+                "locationId",
+                "quantity",
+                "proof",
+            },
+        )
+        release_id = _identifier(
+            row["productionReleaseId"], f"{field}.productionReleaseId", "QREL"
+        )
+        command_id = _identifier(row["id"], f"{field}.id", "PRC")
+        if command_id != _production_receipt_command_id(release_id):
+            raise ShopInventoryValidationError(
+                f"{field}.id is not deterministic for its Plant release."
+            )
+        stock_unit_id = _identifier(
+            row["stockUnitId"], f"{field}.stockUnitId", "LOT"
+        )
+        if stock_unit_id != _production_receipt_stock_unit_id(release_id):
+            raise ShopInventoryValidationError(
+                f"{field}.stockUnitId is not deterministic for its Plant release."
+            )
+        output_batch_id = _identifier(
+            row["productionOutputBatchId"],
+            f"{field}.productionOutputBatchId",
+            "BATCH",
+        )
+        released_at, _ = _timestamp(
+            row["productionReleasedAt"], f"{field}.productionReleasedAt"
+        )
+        tracking_code = _text(
+            row["trackingCode"], f"{field}.trackingCode", 80
+        )
+        if tracking_code != output_batch_id:
+            raise ShopInventoryValidationError(
+                f"{field}.trackingCode must equal its released Plant output batch."
+            )
+        sku = _text(row["sku"], f"{field}.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{field}.sku is not in the Shop catalog."
+            )
+        return {
+            "kind": "production_receipt",
+            "id": command_id,
+            "productionReleaseId": release_id,
+            "productionCommandDigest": _digest(
+                row["productionCommandDigest"],
+                f"{field}.productionCommandDigest",
+            ),
+            "productionJobId": _text(
+                row["productionJobId"], f"{field}.productionJobId", 80
+            ),
+            "productionOutputBatchId": output_batch_id,
+            "productionReleasedAt": released_at,
+            "stockUnitId": stock_unit_id,
+            "sku": sku,
+            "trackingCode": tracking_code,
             "locationId": _identifier(
                 row["locationId"], f"{field}.locationId", "LOC"
             ),
@@ -648,6 +845,91 @@ def _payload(value: object, field: str, catalog_skus: list[str]) -> dict[str, An
             ),
             "allocations": allocations,
             "proof": _proof(row["proof"], f"{field}.proof"),
+        }
+    if kind == "production_return":
+        row = _exact(
+            row,
+            field,
+            {
+                "kind",
+                "id",
+                "productionIssueId",
+                "productionRequestId",
+                "productionCommandDigest",
+                "productionJobId",
+                "productionMaterialId",
+                "productionInputLotId",
+                "productionQuantityMilli",
+                "productionUnit",
+                "sku",
+                "stockQuantity",
+                "conversionNote",
+                "stockUnitId",
+                "locationId",
+                "proof",
+            },
+        )
+        action_proof = _proof(row["proof"], f"{field}.proof")
+        production_issue_id = _identifier(
+            row["productionIssueId"], f"{field}.productionIssueId", "PIS"
+        )
+        command_id = _identifier(row["id"], f"{field}.id", "PRT")
+        if command_id != _production_return_command_id(
+            production_issue_id, action_proof["actionId"]
+        ):
+            raise ShopInventoryValidationError(
+                f"{field}.id is not deterministic for its Plant return evidence."
+            )
+        sku = _text(row["sku"], f"{field}.sku", 80)
+        if sku not in catalog_skus:
+            raise ShopInventoryValidationError(
+                f"{field}.sku is not in the Shop catalog."
+            )
+        production_unit = _text(
+            row["productionUnit"], f"{field}.productionUnit", 12
+        )
+        if production_unit not in _PRODUCTION_MATERIAL_UNITS:
+            raise ShopInventoryValidationError(
+                f"{field}.productionUnit is unsupported."
+            )
+        return {
+            "kind": "production_return",
+            "id": command_id,
+            "productionIssueId": production_issue_id,
+            "productionRequestId": _text(
+                row["productionRequestId"], f"{field}.productionRequestId", 80
+            ),
+            "productionCommandDigest": _digest(
+                row["productionCommandDigest"],
+                f"{field}.productionCommandDigest",
+            ),
+            "productionJobId": _text(
+                row["productionJobId"], f"{field}.productionJobId", 80
+            ),
+            "productionMaterialId": _text(
+                row["productionMaterialId"], f"{field}.productionMaterialId", 80
+            ),
+            "productionInputLotId": _text(
+                row["productionInputLotId"], f"{field}.productionInputLotId", 80
+            ),
+            "productionQuantityMilli": _integer(
+                row["productionQuantityMilli"],
+                f"{field}.productionQuantityMilli",
+                1,
+            ),
+            "productionUnit": production_unit,
+            "sku": sku,
+            "stockQuantity": _integer(
+                row["stockQuantity"], f"{field}.stockQuantity", 1
+            ),
+            "conversionNote": _text(
+                row["conversionNote"], f"{field}.conversionNote", 240
+            ),
+            "stockUnitId": _text(row["stockUnitId"], f"{field}.stockUnitId", 80),
+            "locationId": _identifier(
+                row["locationId"], f"{field}.locationId", "LOC"
+            ),
+            "proof": action_proof,
         }
     if kind == "order_reserve":
         row = _exact(
@@ -843,11 +1125,17 @@ def _plan_order_return_allocations(
 
 
 def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
+    clients: dict[str, dict[str, str]] = {}
+    vendors: dict[str, dict[str, str]] = {}
+    supplier_policies: dict[tuple[str, str], dict[str, Any]] = {}
     locations: set[str] = set()
     units: dict[str, dict[str, str]] = {}
     balances: dict[tuple[str, str], dict[str, int]] = {}
     reservations: dict[str, dict[str, Any]] = {}
     returned_by_reservation: dict[str, int] = {}
+    production_issues: dict[str, dict[str, Any]] = {}
+    production_returned_by_issue: dict[str, dict[str, int]] = {}
+    production_returned_by_allocation: dict[tuple[str, str, str], int] = {}
     import_count = 0
 
     def current_balance(stock_unit_id: str, location_id: str) -> dict[str, int]:
@@ -889,6 +1177,8 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
             if import_count != 1:
                 raise ShopInventoryValidationError("managed v1 accepts one opening import.")
             package = command["package"]
+            clients.update({client["id"]: client for client in package["clients"]})
+            vendors.update({vendor["id"]: vendor for vendor in package["vendors"]})
             locations.update(location["id"] for location in package["locations"])
             units.update({unit["id"]: unit for unit in package["stockUnits"]})
             for opening in package["openings"]:
@@ -900,7 +1190,38 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                     field=field,
                 )
             continue
-        if command["kind"] == "receipt":
+        if command["kind"] == "master_create":
+            masters = clients if command["masterType"] == "client" else vendors
+            label = "client" if command["masterType"] == "client" else "vendor"
+            master = command["master"]
+            if len(masters) >= 200:
+                raise ShopInventoryValidationError(
+                    f"{field} exceeds the supported {label} master limit."
+                )
+            if master["id"] in masters:
+                raise ShopInventoryValidationError(
+                    f"{field}.master.id is already recorded."
+                )
+            folded_name = str(master["name"]).lower()
+            if any(str(existing["name"]).lower() == folded_name for existing in masters.values()):
+                raise ShopInventoryValidationError(
+                    f"{field}.master.name is already recorded."
+                )
+            masters[str(master["id"])] = master
+            continue
+        if command["kind"] == "supplier_policy_set":
+            policy = command["policy"]
+            if policy["vendorId"] not in vendors:
+                raise ShopInventoryValidationError(
+                    f"{field}.policy.vendorId is unknown."
+                )
+            supplier_policies[(str(policy["sku"]), str(policy["vendorId"]))] = {
+                **deepcopy(policy),
+                "commandId": command["id"],
+                "proof": deepcopy(command["proof"]),
+            }
+            continue
+        if command["kind"] in {"receipt", "production_receipt"}:
             if command["locationId"] not in locations:
                 raise ShopInventoryValidationError(
                     "receipt references an unknown location."
@@ -1038,6 +1359,92 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
                     reserved_delta=0,
                     field=field,
                 )
+            production_issues[command["id"]] = command
+            continue
+        if command["kind"] == "production_return":
+            issue = production_issues.get(command["productionIssueId"])
+            if issue is None:
+                raise ShopInventoryValidationError(
+                    "production return does not reference an earlier Plant issue."
+                )
+            identity_fields = (
+                "productionRequestId",
+                "productionCommandDigest",
+                "productionJobId",
+                "productionMaterialId",
+                "productionInputLotId",
+                "productionUnit",
+                "sku",
+                "conversionNote",
+            )
+            if any(command[key] != issue[key] for key in identity_fields):
+                raise ShopInventoryValidationError(
+                    "production return does not match its immutable Plant issue evidence."
+                )
+            source_allocation = next(
+                (
+                    allocation
+                    for allocation in issue["allocations"]
+                    if allocation["stockUnitId"] == command["stockUnitId"]
+                    and allocation["locationId"] == command["locationId"]
+                ),
+                None,
+            )
+            if source_allocation is None:
+                raise ShopInventoryValidationError(
+                    "production return must use an exact lot and location from its Plant issue."
+                )
+            if (
+                command["productionQuantityMilli"] * issue["stockQuantity"]
+                != command["stockQuantity"] * issue["productionQuantityMilli"]
+            ):
+                raise ShopInventoryValidationError(
+                    "production return does not preserve the reviewed Plant-to-Shop conversion ratio."
+                )
+            returned = production_returned_by_issue.get(
+                issue["id"], {"productionQuantityMilli": 0, "stockQuantity": 0}
+            )
+            if (
+                returned["productionQuantityMilli"]
+                + command["productionQuantityMilli"]
+                > issue["productionQuantityMilli"]
+                or returned["stockQuantity"] + command["stockQuantity"]
+                > issue["stockQuantity"]
+            ):
+                raise ShopInventoryValidationError(
+                    "production return exceeds the unconsumed quantity from its Plant issue."
+                )
+            allocation_key = (
+                issue["id"],
+                command["stockUnitId"],
+                command["locationId"],
+            )
+            allocation_returned = production_returned_by_allocation.get(
+                allocation_key, 0
+            )
+            if (
+                allocation_returned + command["stockQuantity"]
+                > source_allocation["quantity"]
+            ):
+                raise ShopInventoryValidationError(
+                    "production return exceeds the quantity issued from its exact lot and location."
+                )
+            apply_delta(
+                command["stockUnitId"],
+                command["locationId"],
+                on_hand_delta=command["stockQuantity"],
+                reserved_delta=0,
+                field=field,
+            )
+            production_returned_by_issue[issue["id"]] = {
+                "productionQuantityMilli": returned["productionQuantityMilli"]
+                + command["productionQuantityMilli"],
+                "stockQuantity": returned["stockQuantity"]
+                + command["stockQuantity"],
+            }
+            production_returned_by_allocation[allocation_key] = (
+                allocation_returned + command["stockQuantity"]
+            )
             continue
         if command["kind"] == "order_reserve":
             if any(
@@ -1182,6 +1589,11 @@ def _project(commands: list[dict[str, Any]]) -> dict[str, Any]:
             - balance["reserved"]
         )
     return {
+        "clients": [clients[key] for key in sorted(clients)],
+        "vendors": [vendors[key] for key in sorted(vendors)],
+        "supplierPolicies": [
+            supplier_policies[key] for key in sorted(supplier_policies)
+        ],
         "skuTotals": {sku: value for sku, value in sku_totals.items() if value > 0},
         "skuAvailableToPromise": {
             sku: value for sku, value in sku_available.items() if value > 0
@@ -1264,11 +1676,159 @@ def validate_shop_inventory_state(
     )
 
 
+def reserve_shop_inventory_order(
+    value: object,
+    *,
+    order_id: str,
+    customer_reference: str,
+    lines: Sequence[Mapping[str, Any]],
+    proof: Mapping[str, Any],
+    catalog_skus: Sequence[str],
+) -> dict[str, Any]:
+    """Append one deterministic location reservation from server-owned order intent."""
+
+    trusted_catalog = sorted({_text(sku, "catalog sku", 80) for sku in catalog_skus})
+    if len(trusted_catalog) != len(catalog_skus):
+        raise ShopInventoryValidationError("catalog skus contain duplicates.")
+    current = validate_shop_inventory_state(value, trusted_catalog)
+    canonical_order_id = _text(order_id, "order reservation.orderId", 160)
+    canonical_customer = _text(
+        customer_reference,
+        "order reservation.customerReference",
+        180,
+    )
+    canonical_lines: list[dict[str, Any]] = []
+    for index, candidate in enumerate(_list(list(lines), "order reservation.lines", 1, 20)):
+        row = _exact(candidate, f"order reservation.lines[{index}]", {"sku", "quantity"})
+        sku = _text(row["sku"], f"order reservation.lines[{index}].sku", 80)
+        if sku not in trusted_catalog:
+            raise ShopInventoryValidationError(
+                f"order reservation.lines[{index}].sku is not in the Shop catalog."
+            )
+        canonical_lines.append(
+            {
+                "sku": sku,
+                "quantity": _integer(
+                    row["quantity"],
+                    f"order reservation.lines[{index}].quantity",
+                    1,
+                ),
+            }
+        )
+    canonical_lines.sort(key=lambda row: row["sku"])
+    if len({row["sku"] for row in canonical_lines}) != len(canonical_lines):
+        raise ShopInventoryValidationError("order reservation line SKUs are duplicated.")
+
+    command_id = _order_inventory_command_id("ORS", canonical_order_id)
+    if any(command["payload"]["id"] == command_id for command in current["commands"]):
+        raise ShopInventoryValidationError(
+            "the order location reservation is already recorded."
+        )
+
+    projection = _project([command["payload"] for command in current["commands"]])
+    allocations: list[dict[str, Any]] = []
+    for line in canonical_lines:
+        remaining = line["quantity"]
+        candidates: list[dict[str, Any]] = []
+        for (stock_unit_id, location_id), balance in projection["balances"].items():
+            unit = projection["units"][stock_unit_id]
+            available = balance["onHand"] - balance["reserved"]
+            if unit["sku"] == line["sku"] and available > 0:
+                candidates.append(
+                    {
+                        "stockUnitId": stock_unit_id,
+                        "locationId": location_id,
+                        "available": available,
+                    }
+                )
+        candidates.sort(
+            key=lambda row: (
+                -row["available"],
+                f"{row['locationId']}|{row['stockUnitId']}",
+            )
+        )
+        for candidate in candidates:
+            if remaining == 0:
+                break
+            quantity = min(remaining, candidate["available"])
+            allocation = {
+                "sku": line["sku"],
+                "stockUnitId": candidate["stockUnitId"],
+                "locationId": candidate["locationId"],
+                "quantity": quantity,
+            }
+            allocations.append(
+                {
+                    "reservationId": _order_inventory_reservation_id(
+                        canonical_order_id,
+                        allocation,
+                    ),
+                    **allocation,
+                }
+            )
+            remaining -= quantity
+        if remaining:
+            raise ShopInventoryValidationError(
+                f"location stock cannot allocate {line['quantity']} units of {line['sku']}."
+            )
+    allocations.sort(
+        key=lambda row: (
+            f"{row['sku']}|{row['locationId']}|{row['stockUnitId']}|{row['reservationId']}"
+        )
+    )
+    payload = _payload(
+        {
+            "kind": "order_reserve",
+            "id": command_id,
+            "orderId": canonical_order_id,
+            "customerReference": canonical_customer,
+            "allocations": allocations,
+            "proof": proof,
+        },
+        "order reservation payload",
+        trusted_catalog,
+    )
+    body = {
+        "sequence": current["revision"] + 1,
+        "previousDigest": current["headDigest"],
+        "payload": payload,
+    }
+    envelope = {**body, "digest": _canonical_digest(body)}
+    return validate_shop_inventory_state(
+        {
+            "schema": SHOP_INVENTORY_SCHEMA,
+            "revision": body["sequence"],
+            "headDigest": envelope["digest"],
+            "commands": [*current["commands"], envelope],
+        },
+        trusted_catalog,
+    )
+
+
 def shop_inventory_sku_totals(
     value: object, catalog_skus: Sequence[str]
 ) -> dict[str, int]:
     state = validate_shop_inventory_state(value, catalog_skus)
     return dict(_project([command["payload"] for command in state["commands"]])["skuTotals"])
+
+
+def shop_inventory_business_partners(
+    value: object, catalog_skus: Sequence[str]
+) -> dict[str, list[dict[str, str]]]:
+    state = validate_shop_inventory_state(value, catalog_skus)
+    projection = _project([command["payload"] for command in state["commands"]])
+    return {
+        "clients": deepcopy(projection["clients"]),
+        "vendors": deepcopy(projection["vendors"]),
+    }
+
+
+def shop_inventory_supplier_policies(
+    value: object, catalog_skus: Sequence[str]
+) -> list[dict[str, Any]]:
+    state = validate_shop_inventory_state(value, catalog_skus)
+    projection = _project([command["payload"] for command in state["commands"]])
+    return deepcopy(projection["supplierPolicies"])
 
 
 def shop_inventory_sku_available_to_promise(
@@ -1367,8 +1927,10 @@ __all__ = [
     "SHOP_INVENTORY_SCHEMA",
     "ShopInventoryValidationError",
     "restamp_latest_shop_inventory_command",
+    "reserve_shop_inventory_order",
     "shop_inventory_available_balances",
     "shop_inventory_balances",
+    "shop_inventory_business_partners",
     "shop_inventory_catalog_digest",
     "shop_inventory_sku_available_to_promise",
     "shop_inventory_sku_totals",

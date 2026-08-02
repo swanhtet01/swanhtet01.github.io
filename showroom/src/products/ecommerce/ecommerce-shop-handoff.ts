@@ -198,6 +198,24 @@ export function ecommerceShopDraftPayment(value: EcommerceShopDraft) {
   return ecommercePaymentLabel(validateEcommerceShopDraftV2(value).pricing.payment.adapter)
 }
 
+export function ecommerceShopDraftOperatingContext(value: EcommerceShopDraft) {
+  if (value.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V2) return null
+  return validateEcommerceShopDraftV2(value).operatingContext
+}
+
+export function ecommerceShopDraftMatchesOperatingContext(
+  value: EcommerceShopDraft,
+  availableLocationIds: readonly string[] | null,
+) {
+  try {
+    const context = ecommerceShopDraftOperatingContext(value)
+    if (!context) return false
+    return availableLocationIds === null || availableLocationIds.includes(context.operatingUnitLocationId)
+  } catch {
+    return false
+  }
+}
+
 export function dismissEcommerceShopDraft(id: string) {
   const before = drafts.length
   drafts = drafts.filter((draft) => draft.id !== id)

@@ -19,7 +19,7 @@ AGENT_BUDGET_GRANT_CONTRACT = "supermega.agent-budget-grant.v1"
 AGENT_BUDGET_ACCOUNTING_CONTRACT = "supermega.agent-budget-accounting.v1"
 AGENT_FAILURE_CONTRACT = "supermega.agent-run-failure.v1"
 AGENT_BUDGET_AUDIENCE = "supermega-agent-runtime"
-AGENT_ACTIVE_ASSIGNMENT_LIMIT = 4
+AGENT_ACTIVE_ASSIGNMENT_LIMIT = 1
 AGENT_ROSTER_LIMIT = 12
 
 # Registered jobs are reusable capabilities; only these reviewed lanes are
@@ -52,6 +52,17 @@ AGENT_JOB_DAILY_LIMITS: dict[str, int] = {
     "founder_brief": 1,
     "github_release_watch": 6,
 }
+
+# These are compiled ceilings, not suggested defaults. Environment settings may
+# narrow them for a smaller host or pilot, but may never expand the reviewed
+# queue, run, work-unit, or lease envelope.
+AGENT_QUEUE_LIMIT = 24
+AGENT_DAILY_RUN_LIMIT = sum(AGENT_JOB_DAILY_LIMITS.values())
+AGENT_DAILY_WORK_UNIT_LIMIT = sum(
+    AGENT_JOB_UNITS[job_type] * daily_limit
+    for job_type, daily_limit in AGENT_JOB_DAILY_LIMITS.items()
+)
+AGENT_LEASE_LIMIT_SECONDS = 300
 
 # Higher numbers win scarce execution slots. This is deliberately fixed in
 # reviewed code rather than caller input so a queued growth task cannot outrank
@@ -101,7 +112,7 @@ if (
 if (
     not AGENT_AUTOMATED_JOB_TYPES
     or len(AGENT_AUTOMATED_JOB_TYPES) != sum(len(lane) for lane in AGENT_AUTOMATION_LANES.values())
-    or any(not lane or len(lane) > AGENT_ACTIVE_ASSIGNMENT_LIMIT for lane in AGENT_AUTOMATION_LANES.values())
+    or any(not lane for lane in AGENT_AUTOMATION_LANES.values())
     or not set(AGENT_AUTOMATED_JOB_TYPES).issubset(AGENT_JOB_UNITS)
 ):
     raise RuntimeError("agent_automation_lane_contract_invalid")
@@ -183,12 +194,12 @@ class AgentGovernanceError(RuntimeError):
 @dataclass(frozen=True)
 class AgentWorkforcePolicy:
     max_running: int = AGENT_ACTIVE_ASSIGNMENT_LIMIT
-    max_queued: int = 24
-    max_daily_runs: int = 64
-    max_daily_units: int = 96
+    max_queued: int = AGENT_QUEUE_LIMIT
+    max_daily_runs: int = AGENT_DAILY_RUN_LIMIT
+    max_daily_units: int = AGENT_DAILY_WORK_UNIT_LIMIT
     max_batch_jobs: int = AGENT_ACTIVE_ASSIGNMENT_LIMIT
     max_registered_specialists: int = AGENT_ROSTER_LIMIT
-    lease_seconds: int = 300
+    lease_seconds: int = AGENT_LEASE_LIMIT_SECONDS
 
     @property
     def allowed_job_types(self) -> tuple[str, ...]:
@@ -240,12 +251,12 @@ def _bounded_environment_int(name: str, default: int, minimum: int, maximum: int
 def _validate_agent_workforce_policy(policy: AgentWorkforcePolicy) -> AgentWorkforcePolicy:
     bounded_fields = {
         "max_running": (policy.max_running, 1, AGENT_ACTIVE_ASSIGNMENT_LIMIT),
-        "max_queued": (policy.max_queued, 1, 100),
-        "max_daily_runs": (policy.max_daily_runs, 1, 128),
-        "max_daily_units": (policy.max_daily_units, 1, 256),
+        "max_queued": (policy.max_queued, 1, AGENT_QUEUE_LIMIT),
+        "max_daily_runs": (policy.max_daily_runs, 1, AGENT_DAILY_RUN_LIMIT),
+        "max_daily_units": (policy.max_daily_units, 1, AGENT_DAILY_WORK_UNIT_LIMIT),
         "max_batch_jobs": (policy.max_batch_jobs, 1, AGENT_ACTIVE_ASSIGNMENT_LIMIT),
         "max_registered_specialists": (policy.max_registered_specialists, 4, AGENT_ROSTER_LIMIT),
-        "lease_seconds": (policy.lease_seconds, 30, 900),
+        "lease_seconds": (policy.lease_seconds, 30, AGENT_LEASE_LIMIT_SECONDS),
     }
     for field, (value, minimum, maximum) in bounded_fields.items():
         if type(value) is not int or value < minimum or value > maximum:
@@ -270,9 +281,24 @@ def load_agent_workforce_policy() -> AgentWorkforcePolicy:
             1,
             AGENT_ACTIVE_ASSIGNMENT_LIMIT,
         ),
-        max_queued=_bounded_environment_int("SUPERMEGA_AGENT_MAX_QUEUED", 24, 1, 100),
-        max_daily_runs=_bounded_environment_int("SUPERMEGA_AGENT_MAX_DAILY_RUNS", 64, 1, 128),
-        max_daily_units=_bounded_environment_int("SUPERMEGA_AGENT_MAX_DAILY_UNITS", 96, 1, 256),
+        max_queued=_bounded_environment_int(
+            "SUPERMEGA_AGENT_MAX_QUEUED",
+            AGENT_QUEUE_LIMIT,
+            1,
+            AGENT_QUEUE_LIMIT,
+        ),
+        max_daily_runs=_bounded_environment_int(
+            "SUPERMEGA_AGENT_MAX_DAILY_RUNS",
+            AGENT_DAILY_RUN_LIMIT,
+            1,
+            AGENT_DAILY_RUN_LIMIT,
+        ),
+        max_daily_units=_bounded_environment_int(
+            "SUPERMEGA_AGENT_MAX_DAILY_UNITS",
+            AGENT_DAILY_WORK_UNIT_LIMIT,
+            1,
+            AGENT_DAILY_WORK_UNIT_LIMIT,
+        ),
         max_batch_jobs=_bounded_environment_int(
             "SUPERMEGA_AGENT_MAX_BATCH_JOBS",
             AGENT_ACTIVE_ASSIGNMENT_LIMIT,
@@ -285,7 +311,12 @@ def load_agent_workforce_policy() -> AgentWorkforcePolicy:
             4,
             AGENT_ROSTER_LIMIT,
         ),
-        lease_seconds=_bounded_environment_int("SUPERMEGA_AGENT_LEASE_SECONDS", 300, 30, 900),
+        lease_seconds=_bounded_environment_int(
+            "SUPERMEGA_AGENT_LEASE_SECONDS",
+            AGENT_LEASE_LIMIT_SECONDS,
+            30,
+            AGENT_LEASE_LIMIT_SECONDS,
+        ),
     )
     return _validate_agent_workforce_policy(policy)
 
@@ -615,7 +646,7 @@ def issue_agent_budget_grant(
     normalized_job_types = normalize_agent_job_types(job_types)
     if not normalized_job_types:
         raise AgentGovernanceError("budget_grant_jobs_required", "A budget grant needs at least one job type.")
-    requested_runs = len(normalized_job_types) if max_runs is None else int(max_runs)
+    requested_runs = min(len(normalized_job_types), policy.max_batch_jobs) if max_runs is None else int(max_runs)
     if requested_runs < 1 or requested_runs > min(len(normalized_job_types), policy.max_batch_jobs):
         raise AgentGovernanceError("budget_grant_runs_invalid", "The budget grant run limit exceeds its unique job set.")
     issued_at = _utc(now).replace(microsecond=0)
@@ -627,7 +658,7 @@ def issue_agent_budget_grant(
         "cycle": str(cycle or "").strip().lower() or "bounded",
         "job_types": normalized_job_types,
         "max_runs": requested_runs,
-        "max_work_units": sum(agent_job_units(job_type) for job_type in normalized_job_types),
+        "max_work_units": sum(sorted((agent_job_units(job_type) for job_type in normalized_job_types), reverse=True)[:requested_runs]),
         "issued_at": issued_at.isoformat(),
         "expires_at": expires_at.isoformat(),
     }

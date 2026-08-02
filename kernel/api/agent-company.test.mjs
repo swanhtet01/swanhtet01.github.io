@@ -3,8 +3,10 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { handleAgentCompany } from './agent-company.mjs'
+import { SUPERMEGA_HQ_AUTHORITY } from '../supermega-hq-authority.mjs'
 
 const KEY = 'ops-secret'
+const CYCLE_NOW = new Date('2026-07-14T09:00:00.000Z')
 const validBody = {
   action: 'plan',
   clientId: 'client-acme',
@@ -19,6 +21,36 @@ const request = (patch = {}) => ({
   body: validBody,
   ...patch,
 })
+const hostedResponse = (payload, { status = 200, contentType = 'application/json', contentLength } = {}) => {
+  const body = typeof payload === 'string' ? payload : JSON.stringify(payload)
+  return {
+    status,
+    headers: {
+      get(name) {
+        if (String(name).toLowerCase() === 'content-type') return contentType
+        if (String(name).toLowerCase() === 'content-length') return contentLength ?? String(Buffer.byteLength(body))
+        return null
+      },
+    },
+    text: async () => body,
+  }
+}
+const cycleDelivery = (outcomes, patch = {}) => {
+  const counts = { sent: 0, failed: 0, uncertain: 0, missing: 0 }
+  outcomes.forEach((outcome) => { counts[outcome.status] += 1 })
+  const completed = outcomes.length
+  const recorded = completed - counts.missing
+  const state = counts.missing ? 'missing' : counts.failed + counts.uncertain ? 'attention' : completed ? 'ready' : 'no_outcomes'
+  return {
+    contract: 'supermega.ceo-outcome-delivery.v1',
+    available: true,
+    durable: true,
+    state,
+    counts: { completed, recorded, ...counts },
+    outcomes,
+    ...patch,
+  }
+}
 
 test('Agent Company API is ops-gated and method-restricted', async () => {
   assert.equal((await handleAgentCompany(request(), { env: {} })).status, 503)
@@ -39,9 +71,10 @@ test('GET returns the protected fixed roster and hard limits', async () => {
     15,
   )
   assert.equal(result.json.agents.every((agent) => agent.evidenceHint), true)
-  assert.equal(result.json.limits.maxAgents, 2)
+  assert.equal(result.json.limits.maxAgents, 1)
   assert.equal(result.json.limits.maxRoleBudget, 8)
-  assert.equal(result.json.limits.maxConcurrentCycles, 4)
+  assert.equal(result.json.limits.maxActiveAssignments, 1)
+  assert.equal(result.json.limits.maxConcurrentCycles, 1)
   assert.equal(result.json.limits.capacityClaimContract, 'supermega.agent-company-capacity-claims.v1')
   assert.equal(result.json.limits.capacityClaimTtlSeconds, 120)
   assert.equal(result.json.playbooks.enabled, true)
@@ -79,6 +112,261 @@ test('GET returns the protected fixed roster and hard limits', async () => {
   assert.equal(result.json.operations.modelOutputReturned, false)
   assert.equal(result.json.operations.workforceMetrics, true)
   assert.equal(result.json.operations.customerSlaClaimed, false)
+  assert.equal(result.json.operations.ownerDeliveryCoverage, true)
+  assert.equal(result.json.operations.ownerDeliveryContentReturned, false)
+  assert.equal(result.json.ceoCycle.contract, 'supermega.ceo-cycle-view.v1')
+  assert.equal(result.json.ceoCycle.available, false)
+  assert.equal(result.json.ceoCycle.reason, 'company_client_id_missing')
+  assert.equal(result.json.ceoCycle.totalOutcomes, 5)
+  assert.equal(result.json.hostedActivation.contract, 'supermega.hosted-activation-view.v1')
+  assert.equal(result.json.hostedActivation.source.status, 'unavailable')
+  assert.equal(result.json.hostedActivation.source.reason, 'hosted_status_not_checked')
+  assert.equal(result.json.hostedActivation.activationReady, false)
+  assert.equal(result.json.hostedActivation.proofs.length, 5)
+  assert.equal(result.json.hostedActivation.scheduler.currentInvocationsPerDay, 0)
+  assert.equal(result.json.hostedActivation.scheduler.plannedInvocationsPerDay, 25)
+})
+
+test('GET observes fixed-origin hosted activation metadata without returning secrets', async () => {
+  const calls = []
+  const result = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    fetchHostedStatus: async (url, init) => {
+      calls.push({ url, init })
+      return hostedResponse({
+        status: 'ready',
+        runtime_target: 'hosted_vercel_api',
+        pc_dependency: false,
+        scheduler: {
+          configured: true,
+          activation_requested: true,
+          activation_enabled: true,
+          activation_evidence_valid: true,
+          activation_evidence_count: 5,
+          activation_evidence_digest: 'private-evidence-digest',
+          activation_evidence_environment_key: 'PRIVATE_EVIDENCE_ENV',
+          configuration_errors: ['private-configuration-detail'],
+          max_jobs_per_run: 1,
+        },
+      })
+    },
+  })
+  assert.equal(result.status, 200)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, 'https://app.supermega.dev/api/cloud-autonomy/status')
+  assert.equal(calls[0].init.method, 'GET')
+  assert.equal(calls[0].init.redirect, 'error')
+  assert.equal(calls[0].init.cache, 'no-store')
+  assert.equal(calls[0].init.headers.accept, 'application/json')
+  assert.ok(calls[0].init.signal instanceof AbortSignal)
+  assert.equal(result.json.hostedActivation.liveState, 'enabled_unverified')
+  assert.equal(result.json.hostedActivation.activationReady, false)
+  assert.equal(result.json.hostedActivation.scheduler.runtimeReady, true)
+  assert.equal(result.json.hostedActivation.scheduler.maxJobsPerRun, 1)
+  assert.equal(result.json.hostedActivation.verifiedProofCount, 5)
+  assert.equal(result.json.hostedActivation.requiredProofCount, 5)
+  assert.equal(result.json.hostedActivation.nextProof, null)
+  assert.equal(result.json.hostedActivation.scheduler.cadenceCompatibility, 'unverified')
+  assert.match(result.json.hostedActivation.nextAction, /Confirm the Vercel plan/)
+  const serialized = JSON.stringify(result.json.hostedActivation)
+  assert.doesNotMatch(serialized, /private-evidence-digest|PRIVATE_EVIDENCE_ENV|private-configuration-detail/)
+
+  const authority = JSON.parse(await readFile(new URL('../../tools/supermega_scheduler_authority.json', import.meta.url), 'utf8'))
+  assert.deepEqual(
+    result.json.hostedActivation.proofs.map((proof) => proof.id),
+    authority.activation.required_evidence,
+  )
+  assert.equal(result.json.hostedActivation.declaredState, authority.activation.state)
+  assert.equal(result.json.hostedActivation.scheduler.currentInvocationsPerDay, authority.maximum_scheduler_invocations_per_day)
+  assert.equal(result.json.hostedActivation.scheduler.plannedInvocationsPerDay, authority.activation_plan.maximum_scheduler_invocations_per_day)
+})
+
+test('GET fails hosted observation closed without blocking protected company work', async () => {
+  const cases = [
+    async () => hostedResponse({}, { status: 503 }),
+    async () => hostedResponse('{}', { contentType: 'text/html' }),
+    async () => hostedResponse('{}', { contentLength: String(64 * 1024 + 1) }),
+    async () => hostedResponse('{bad json'),
+    async () => hostedResponse({ runtime_target: 'other', pc_dependency: false, scheduler: {} }),
+    async () => { throw new Error('dns unavailable') },
+  ]
+  const expectedReasons = [
+    'hosted_status_rejected',
+    'hosted_status_content_type_invalid',
+    'hosted_status_too_large',
+    'hosted_status_json_invalid',
+    'hosted_status_contract_invalid',
+    'hosted_status_unavailable',
+  ]
+  for (const [index, fetchHostedStatus] of cases.entries()) {
+    const result = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+      opsKey: KEY,
+      fetchHostedStatus,
+    })
+    assert.equal(result.status, 200)
+    assert.equal(result.json.ok, true)
+    assert.equal(result.json.hostedActivation.source.status, 'unavailable')
+    assert.equal(result.json.hostedActivation.source.reason, expectedReasons[index])
+    assert.equal(result.json.hostedActivation.activationReady, false)
+    assert.equal(result.json.hostedActivation.verifiedProofCount, 0)
+    assert.equal(result.json.hostedActivation.proofs.every((proof) => proof.status === 'unverified'), true)
+  }
+})
+
+test('GET exposes one tenant-bound metadata-only company week', async () => {
+  const calls = []
+  const result = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    clientId: 'client-acme',
+    now: CYCLE_NOW,
+    loadCeoOutcomeCycleState: async (input) => {
+      calls.push(input)
+      return {
+        ok: true,
+        contract: 'supermega.ceo-outcome-cycle-state.v1',
+        durable: true,
+        clientId: input.clientId,
+        authorityDigest: input.authorityDigest,
+        cycleId: '2026-07-13',
+        startsAt: '2026-07-13T00:00:00.000Z',
+        endsAt: '2026-07-20T00:00:00.000Z',
+        completedOutcomeIds: ['daily-company-control'],
+        completedCount: 1,
+        matchedRecords: 1,
+        delivery: cycleDelivery([{ outcomeId: 'daily-company-control', status: 'sent' }]),
+      }
+    },
+  })
+  assert.equal(result.status, 200)
+  assert.deepEqual(calls, [{
+    clientId: 'client-acme',
+    authorityDigest: result.json.ceoCycle.authorityDigest,
+    asOf: CYCLE_NOW.toISOString(),
+    includeDelivery: true,
+  }])
+  assert.equal(result.json.ceoCycle.available, true)
+  assert.equal(result.json.ceoCycle.durable, true)
+  assert.equal(result.json.ceoCycle.completedCount, 1)
+  assert.equal(result.json.ceoCycle.deliveredCount, 1)
+  assert.equal(result.json.ceoCycle.totalOutcomes, 5)
+  assert.equal(result.json.ceoCycle.nextOutcome.id, 'engineering-release-control')
+  assert.deepEqual(result.json.ceoCycle.outcomes.map((outcome) => outcome.status), [
+    'delivered',
+    'next',
+    'queued',
+    'queued',
+    'queued',
+  ])
+  assert.equal(result.json.ceoCycle.blockedConsequentialCount, 3)
+  assert.deepEqual(result.json.ceoCycle.controls, {
+    maxOutcomesPerCycle: 1,
+    externalWrites: false,
+    dynamicDelegation: false,
+    recursiveDelegation: false,
+    humanApprovalForConsequentialActions: true,
+    deliveryRequiredForCycleComplete: true,
+  })
+  assert.deepEqual(result.json.ceoCycle.delivery, {
+    contract: 'supermega.ceo-outcome-delivery.v1',
+    available: true,
+    durable: true,
+    state: 'ready',
+    completed: 1,
+    recorded: 1,
+    sent: 1,
+    failed: 0,
+    uncertain: 0,
+    missing: 0,
+    contentReturned: false,
+  })
+  const serialized = JSON.stringify(result.json.ceoCycle)
+  assert.doesNotMatch(serialized, /evidencePlan|objective|sourceRefs|blockers|usage|answer|output|deliveryId|claim/i)
+
+  const allReadyOutcomeIds = SUPERMEGA_HQ_AUTHORITY.outcomes
+    .filter((outcome) => outcome.state === 'ready')
+    .map((outcome) => outcome.id)
+  const failedDelivery = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    clientId: 'client-acme',
+    now: CYCLE_NOW,
+    loadCeoOutcomeCycleState: async (input) => ({
+      ok: true,
+      contract: 'supermega.ceo-outcome-cycle-state.v1',
+      durable: true,
+      clientId: input.clientId,
+      authorityDigest: input.authorityDigest,
+      cycleId: '2026-07-13',
+      startsAt: '2026-07-13T00:00:00.000Z',
+      endsAt: '2026-07-20T00:00:00.000Z',
+      completedOutcomeIds: allReadyOutcomeIds,
+      completedCount: allReadyOutcomeIds.length,
+      matchedRecords: allReadyOutcomeIds.length,
+      delivery: cycleDelivery(allReadyOutcomeIds.map((outcomeId, index) => ({
+        outcomeId,
+        status: index === 0 ? 'failed' : 'sent',
+      }))),
+    }),
+  })
+  assert.equal(failedDelivery.json.ceoCycle.completionRecorded, true)
+  assert.equal(failedDelivery.json.ceoCycle.cycleComplete, false)
+  assert.equal(failedDelivery.json.ceoCycle.deliveredCount, 4)
+  assert.equal(failedDelivery.json.ceoCycle.delivery.failed, 1)
+  assert.equal(failedDelivery.json.ceoCycle.outcomes.filter((outcome) => outcome.status === 'delivery_failed').length, 1)
+  const forgedDelivery = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    clientId: 'client-acme',
+    now: CYCLE_NOW,
+    loadCeoOutcomeCycleState: async (input) => ({
+      ok: true,
+      contract: 'supermega.ceo-outcome-cycle-state.v1',
+      durable: true,
+      clientId: input.clientId,
+      authorityDigest: input.authorityDigest,
+      cycleId: '2026-07-13',
+      startsAt: '2026-07-13T00:00:00.000Z',
+      endsAt: '2026-07-20T00:00:00.000Z',
+      completedOutcomeIds: ['daily-company-control'],
+      completedCount: 1,
+      matchedRecords: 1,
+      delivery: cycleDelivery([{ outcomeId: 'daily-company-control', status: 'sent', briefText: 'must-not-escape' }]),
+    }),
+  })
+  assert.equal(forgedDelivery.json.ceoCycle.available, false)
+  assert.equal(forgedDelivery.json.ceoCycle.reason, 'ceo_outcome_cycle_state_invalid')
+  assert.doesNotMatch(JSON.stringify(forgedDelivery.json.ceoCycle), /must-not-escape|briefText/)
+  const consoleHtml = await readFile(new URL('../public/index.html', import.meta.url), 'utf8')
+  assert.match(consoleHtml, /delivery_failed:'Delivery failed'/)
+  assert.match(consoleHtml, /delivery_uncertain:'Delivery uncertain'/)
+  assert.match(consoleHtml, /delivery_missing:'Delivery missing'/)
+  assert.match(consoleHtml, /delivery_unverified:'Delivery unverified'/)
+  assert.match(consoleHtml, /delivery\.contentReturned!==false/)
+  assert.match(consoleHtml, /deliveryAttention=.*delivery\.failed.*delivery\.uncertain.*delivery\.missing/)
+  assert.match(consoleHtml, /week delivered/)
+  assert.match(consoleHtml, /recorded Â·.*delivered Â·.*no external writes/)
+  assert.doesNotMatch(consoleHtml, /statusLabel=\{complete:'Done'/)
+  assert.match(consoleHtml, /\.company-week-step\.delivery_failed,.company-week-step\.delivery_unverified/)
+  assert.match(consoleHtml, /\.company-week-step\.delivery_uncertain,.company-week-step\.delivery_missing/)
+
+  const mismatched = await handleAgentCompany(request({ method: 'GET', body: undefined }), {
+    opsKey: KEY,
+    clientId: 'client-acme',
+    now: CYCLE_NOW,
+    loadCeoOutcomeCycleState: async () => ({
+      ok: true,
+      contract: 'supermega.ceo-outcome-cycle-state.v1',
+      durable: true,
+      clientId: 'client-other',
+      authorityDigest: 'a'.repeat(64),
+      cycleId: '2026-07-13',
+      startsAt: '2026-07-13T00:00:00.000Z',
+      endsAt: '2026-07-20T00:00:00.000Z',
+      completedOutcomeIds: [],
+      completedCount: 0,
+    }),
+  })
+  assert.equal(mismatched.status, 200)
+  assert.equal(mismatched.json.ceoCycle.available, false)
+  assert.equal(mismatched.json.ceoCycle.reason, 'ceo_outcome_cycle_state_invalid')
 })
 
 test('tenant sessions bind one client and enforce viewer, reviewer, and operator roles', async () => {
@@ -196,6 +484,7 @@ test('customer sessions expose and decide on one exact proof without workspace a
   assert.equal('agents' in customerGet.json, false)
   assert.equal('playbooks' in customerGet.json, false)
   assert.equal('missions' in customerGet.json, false)
+  assert.equal('ceoCycle' in customerGet.json, false)
 
   const reads = []
   const reviews = []
@@ -424,6 +713,7 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     reviewCompanyWorkOrder: async (body) => { calls.push(['review', body]); return { ok: true, mode: 'work_order_review' } },
     evaluateCompanyWorkOrder: async (body) => { calls.push(['evaluate', body]); return { ok: true, mode: 'work_order_evaluate' } },
     evaluateCeoOutcomeDelivery: async (body) => { calls.push(['evaluate-outcome', body]); return { ok: true, mode: 'ceo_outcome_evaluate' } },
+    promoteAcceptedCeoOutcomeAction: async (body) => { calls.push(['promote-outcome', body]); return { ok: true, mode: 'ceo_outcome_action_promote' } },
     buildCompanyOperationsReport: async (body) => { calls.push(['report', body]); return { ok: true, mode: 'operations_report' } },
   }
   const actions = [
@@ -435,14 +725,15 @@ test('protected work-order actions delegate to the durable queue contract', asyn
     ['work-order-proof', { clientId: 'client-acme', workOrderId: 'company-order:abc' }],
     ['work-order-review', { clientId: 'client-acme', workOrderId: 'company-order:abc', resultHash: 'a'.repeat(64), decision: 'accepted', reviewerName: 'Aye Aye', source: 'chat', statement: 'Accepted.', recordedBy: 'Swan', confirmation: 'ACCEPT company-order:abc hash' }],
     ['work-order-evaluate', { clientId: 'client-acme', workOrderId: 'company-order:abc', planHash: 'a'.repeat(64), verdict: 'accepted', checks: { accurate: true, complete: true, usable: true, boundarySafe: true }, confirmation: 'EVALUATE company-order:abc' }],
-    ['ceo-outcome-evaluate', { clientId: 'client-acme', operationId: `ceo-outcome:${'a'.repeat(40)}`, recordHash: 'b'.repeat(64), verdict: 'accepted', confirmation: `EVALUATE ceo-outcome:${'a'.repeat(40)}` }],
+    ['ceo-outcome-evaluate', { clientId: 'client-acme', operationId: `ceo-outcome:${'a'.repeat(40)}`, recordHash: 'b'.repeat(64), successMeasureDigest: 'c'.repeat(64), verdict: 'accepted', confirmation: `EVALUATE ceo-outcome:${'a'.repeat(40)} ${'c'.repeat(64)}` }],
+    ['ceo-outcome-promote', { clientId: 'client-acme', operationId: `ceo-outcome:${'a'.repeat(40)}`, evaluationHash: 'd'.repeat(64), confirmation: `PROMOTE ceo-outcome:${'a'.repeat(40)} ${'d'.repeat(64)}` }],
     ['operations-report', { clientId: 'client-acme', windowDays: 30 }],
   ]
   for (const [action, body] of actions) {
     const result = await handleAgentCompany(request({ body: { ...body, action } }), options)
     assert.equal(result.status, 200)
   }
-  assert.deepEqual(calls.map(([name]) => name), ['create', 'list', 'get', 'run', 'cancel', 'proof', 'review', 'evaluate', 'evaluate-outcome', 'report'])
+  assert.deepEqual(calls.map(([name]) => name), ['create', 'list', 'get', 'run', 'cancel', 'proof', 'review', 'evaluate', 'evaluate-outcome', 'promote-outcome', 'report'])
   assert.equal(calls.every(([, body]) => !('action' in body)), true)
 })
 

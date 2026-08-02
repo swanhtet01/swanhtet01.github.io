@@ -35,9 +35,9 @@ const retiredReleasePaths = [
 ]
 for (const path of retiredReleasePaths) {
   if (existsSync(resolve(root, path))) failures.push(`legacy_release_bypass_present:${path}`)
-  if (!releaseWorkflow.includes(`- ${path}`) || !ciWorkflow.includes(`- '${path}'`)) failures.push(`legacy_release_path_not_watched:${path}`)
+  if (!ciWorkflow.includes(`- '${path}'`)) failures.push(`legacy_release_path_not_watched:${path}`)
 }
-if (!releaseWorkflow.includes('- tools/serve_solution.py') || !ciWorkflow.includes("- 'tools/serve_solution.py'")) failures.push('local_control_server_not_watched')
+if (!ciWorkflow.includes("- 'tools/serve_solution.py'")) failures.push('local_control_server_not_watched')
 if (localControlServer.includes('/api/cloud/deployments/production') || localControlServer.includes('_run_production_deploy') || localControlServer.includes('command.append("--prod")') || localControlServer.includes('vercel deploy --prebuilt --prod')) failures.push('local_production_deploy_endpoint_present')
 if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_deployments_not_disabled')
 if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')
@@ -68,43 +68,62 @@ for (const [name, expected] of Object.entries({
 }
 
 for (const token of [
-  'branches:\n      - main',
   'group: supermega-coordinated-production',
   "if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}",
+  'workflow_dispatch:',
+  'release_commit:',
+  'confirmation:',
+  'REQUESTED_RELEASE_COMMIT: ${{ inputs.release_commit }}',
+  'RELEASE_CONFIRMATION: ${{ inputs.confirmation }}',
+  'RELEASE_ACTOR: ${{ github.actor }}',
+  '[ "$RELEASE_ACTOR" != "swanhtet01" ]',
   'VERCEL_PROJECT_ID: prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
+  'APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG',
   'npx --yes vercel@56.1.0 pull',
   'npm run public:prebuilt',
-  'tools/test_public_contact_function.mjs',
   'tools/resolve_vercel_rollback_target.mjs',
+  'api "/now/aliases/app.supermega.dev" --raw',
   'api "/now/aliases/supermega.dev" --raw',
+  'resolve_vercel_rollback_target.mjs alias app.supermega.dev prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG',
   'resolve_vercel_rollback_target.mjs alias supermega.dev prj_Yaf0cZYbiFXcLkMcKaAm4alPWMhR',
   'read -r PREVIOUS_URL PREVIOUS_ID',
   'resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID"',
   'npx --yes vercel@56.1.0 deploy --prebuilt',
   'deploy --prebuilt --prod --skip-domain --yes',
   'npx --yes vercel@56.1.0 inspect',
+  'node tools/verify_app_release_live.mjs',
   'node tools/verify_public_preview_live.mjs',
   'node tools/verify_vercel_project_state.mjs public',
+  'node tools/verify_vercel_project_state.mjs app',
   '/v9/projects/$PUBLIC_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID',
+  '/v9/projects/$APP_VERCEL_PROJECT_ID/domains?teamId=$VERCEL_ORG_ID',
   'node tools/verify_vercel_domain_state.mjs public',
+  'node tools/verify_vercel_domain_state.mjs app',
   '/v10/projects/$PUBLIC_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID',
+  '/v10/projects/$APP_VERCEL_PROJECT_ID/env?teamId=$VERCEL_ORG_ID',
   'node tools/verify_vercel_environment_state.mjs public',
+  'node tools/verify_vercel_environment_state.mjs app',
   'node tools/verify_public_firewall_state.mjs',
   '/v1/security/firewall/config/active?',
   'npx --yes vercel@56.1.0 promote',
   'npx --yes vercel@56.1.0 rollback',
   'EXPECTED_RELEASE_COMMIT:',
+  'EXPECTED_OPERATING_MODE:',
   'npm run public:verify:live',
   'githubCommitRef=${{ github.ref_name }}',
-  '- vercel.json',
-  '- .vercelignore',
 ]) requireToken(releaseWorkflow, token, 'release_workflow_missing')
+if (/^\s*push:/m.test(releaseWorkflow)) failures.push('release_workflow_has_automatic_push_trigger')
 
 const orderedReleaseSteps = [
+  'Enforce exact app runtime database and RLS gate',
+  'Deploy isolated app production candidate',
+  'Inspect and verify app candidate',
   'Capture current production rollback target',
   'Deploy isolated production candidate',
   'Inspect candidate deployment',
   'Verify protected candidate content',
+  'Verify candidate release identity barrier',
+  'Promote the verified app artifact',
   'Promote the verified artifact',
   'Verify production aliases and exact release',
   'Verify production project controls',

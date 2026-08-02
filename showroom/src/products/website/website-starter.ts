@@ -4,7 +4,16 @@ import {
   type WebsiteWorkspace,
 } from './website-model.ts'
 
+export const websiteStarterTemplates = [
+  { id: 'business-presence', label: 'Business presence', detail: 'Home, About, and Contact for a clear company website.' },
+  { id: 'lead-generation', label: 'Lead generation', detail: 'Home, Services, and Contact with a direct inquiry path.' },
+  { id: 'catalog-showcase', label: 'Catalog showcase', detail: 'Home, Catalog, and Contact for products or packages.' },
+] as const
+
+export type WebsiteStarterTemplateId = (typeof websiteStarterTemplates)[number]['id']
+
 export type WebsiteStarterBrief = {
+  templateId: WebsiteStarterTemplateId
   businessName: string
   audience: string
   offer: string
@@ -53,6 +62,9 @@ export function websiteStarterBriefIssues(brief: WebsiteStarterBrief) {
   const issues: WebsiteStarterBriefIssue[] = []
   const contactHref = normalizedLine(brief.contactHref)
 
+  if (!websiteStarterTemplates.some((template) => template.id === brief.templateId)) {
+    issues.push({ field: 'templateId', message: 'Choose a supported website layout.' })
+  }
   if (!isBoundedLine(brief.businessName, 50)) {
     issues.push({ field: 'businessName', message: 'Add a business name of 50 characters or fewer.' })
   }
@@ -92,42 +104,82 @@ export function applyWebsiteStarterBrief(
     || !isCanonicalTimestamp(capturedAt)) return workspace
 
   const home = workspace.pages.find((page) => page.slug.trim() === '/')
-  if (!home || home.sections.length === 0) return workspace
+  const secondary = workspace.pages.find((page) => page.slug.trim() === '/products')
+  const contact = workspace.pages.find((page) => page.slug.trim() === '/contact')
+  if (!home || home.sections.length < 2 || !secondary?.sections.length || !contact?.sections.length) return workspace
 
   const businessName = normalizedLine(brief.businessName)
   const audience = normalizedLine(brief.audience)
   const offer = normalizedLine(brief.offer)
   const proof = normalizedLine(brief.proof)
   const contactHref = normalizedLine(brief.contactHref)
+  const secondaryPage = brief.templateId === 'business-presence'
+    ? { name: 'About', slug: '/about', eyebrow: 'Our business', headline: `Why ${businessName} exists`, sectionEyebrow: 'How we work', sectionTitle: 'Clear service, clear next step.' }
+    : brief.templateId === 'lead-generation'
+      ? { name: 'Services', slug: '/services', eyebrow: 'Services', headline: `How ${businessName} can help`, sectionEyebrow: 'What to expect', sectionTitle: 'A simple path from inquiry to answer.' }
+      : { name: 'Catalog', slug: '/catalog', eyebrow: 'Catalog', headline: `Explore ${businessName}`, sectionEyebrow: 'Products and packages', sectionTitle: 'Start with the right option.' }
+  const contactDestination = contactHref || '/contact'
+  const contactDescription = `Contact ${businessName} about ${offer}`.slice(0, 160).trim()
 
   return {
     ...workspace,
     siteName: businessName,
     selectedPageId: home.id,
-    pages: [{
-      ...home,
-      internalName: 'Home',
-      slug: '/',
-      stage: 'draft' as const,
-      navigation: { label: 'Home', visible: true },
-      hero: {
-        eyebrow: `For ${audience}`,
-        headline: offer,
-        summary: `${businessName} · ${audience}`,
-        ctaLabel: contactHref ? 'Contact us' : '',
-        ctaHref: contactHref,
+    pages: [
+      {
+        ...home,
+        internalName: 'Home',
+        slug: '/',
+        stage: 'draft' as const,
+        navigation: { label: 'Home', visible: true },
+        hero: {
+          eyebrow: `For ${audience}`,
+          headline: offer,
+          summary: `${businessName} helps ${audience}.`,
+          ctaLabel: `View ${secondaryPage.name.toLowerCase()}`,
+          ctaHref: secondaryPage.slug,
+        },
+        sections: [
+          { ...home.sections[0], eyebrow: 'Proof', title: `Why choose ${businessName}?`, body: proof },
+          { ...home.sections[1], eyebrow: 'Next step', title: 'Know what happens before you contact us.', body: `Review our ${secondaryPage.name.toLowerCase()}, then use one clear contact route when you are ready.` },
+        ],
+        seo: { title: `${businessName} | Home`, description: offer },
+        updatedAt: capturedAt,
       },
-      sections: [{
-        id: home.sections[0].id,
-        eyebrow: 'Proof',
-        title: `Why choose ${businessName}?`,
-        body: proof,
-      }],
-      seo: {
-        title: `${businessName} | Home`,
-        description: offer,
+      {
+        ...secondary,
+        internalName: secondaryPage.name,
+        slug: secondaryPage.slug,
+        stage: 'draft' as const,
+        navigation: { label: secondaryPage.name, visible: true },
+        hero: {
+          eyebrow: secondaryPage.eyebrow,
+          headline: secondaryPage.headline,
+          summary: offer,
+          ctaLabel: 'Contact us',
+          ctaHref: contactDestination,
+        },
+        sections: [{ ...secondary.sections[0], eyebrow: secondaryPage.sectionEyebrow, title: secondaryPage.sectionTitle, body: proof }],
+        seo: { title: `${secondaryPage.name} | ${businessName}`, description: offer },
+        updatedAt: capturedAt,
       },
-      updatedAt: capturedAt,
-    }],
+      {
+        ...contact,
+        internalName: 'Contact',
+        slug: '/contact',
+        stage: 'draft' as const,
+        navigation: { label: 'Contact', visible: true },
+        hero: {
+          eyebrow: 'Contact',
+          headline: `Talk to ${businessName}`,
+          summary: `Tell us what you need and when you need it. ${businessName} will review the request before making a promise.`,
+          ctaLabel: contactHref ? 'Open contact channel' : '',
+          ctaHref: contactHref,
+        },
+        sections: [{ ...contact.sections[0], eyebrow: 'Before you send', title: 'Share the need, quantity, location, and timing.', body: `This page is for ${audience}. Contact details and claims still require owner review before release.` }],
+        seo: { title: `Contact | ${businessName}`, description: contactDescription },
+        updatedAt: capturedAt,
+      },
+    ],
   }
 }

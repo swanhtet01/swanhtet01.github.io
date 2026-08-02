@@ -1,67 +1,146 @@
-import { lazy, Suspense, type ChangeEvent, type Dispatch, type FormEvent, type MouseEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
-import siteManifest from '../../../site-manifest.json'
 import './core-app.css'
 import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
-import {
-  LEGACY_WEBSITE_STORAGE_KEY,
-  WEBSITE_ECOMMERCE_HANDOFF_KEY,
-  WEBSITE_STORAGE_KEY,
-  readWebsiteEcommerceHandoff,
-  type WebsiteOrderRecord,
-} from '../products/product-handoff'
+import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
+import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import {
   createManagedApproval,
-  currentManagedIdentity,
   decideManagedApproval,
   loadManagedBootstrap,
-  ManagedTrialError,
-  requireManagedSurfaceState,
-  saveManagedCommerceCommand,
-  saveManagedProductionCommand,
-  sameManagedIdentity,
-  type ManagedApprovalRecord,
-  type ManagedCommerceEvent,
   type ManagedIdentity,
-  type ManagedProductionEvent,
-  type ManagedStateRecord,
 } from './managed-trial'
 import { recordBehaviorSignal, type BehaviorProductId } from './behavior-trail'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
+import {
+  ACTION_KEY,
+  pilotProgress,
+  pilotReady,
+  productContracts,
+  productDisplayName,
+  productFromPathname,
+  setupProductFromQuery,
+  SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
+  SHOP_ORDER_DRAFT_RESET_PREFIX,
+  templateFor,
+  clientSetupPath,
+  type SetupProductId,
+} from './product-setup'
+import {
+  PlantReviewRequiredError,
+  ShopReviewRequiredError,
+  commerceActionProof,
+  confirmAccountableAction,
+  decisionPacketFingerprint,
+  fromManagedApproval,
+  mergeManagedApprovals,
+  normalizeActions,
+  productionActionProof,
+  toManagedApprovalRequest,
+  useApprovalWorkspace,
+  useCommerceWorkspace,
+  useManagedIdentity,
+  useProductionWorkspace,
+  useSetupWorkspace,
+  useStoredState,
+  type AccountableAction,
+  type ActionDetails,
+  type ActionDomain,
+  type Approval,
+  type DecisionClaim,
+  type DecisionPacket,
+  type PendingAccountableAction,
+} from './workspace-runtime'
 import { formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
+import { readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
+  approveCommercePurchaseBudgetEnvelope,
+  approveCommercePurchaseRequisition,
+  approveCommerceSupplierSourcingDecision,
+  authorizeCommerceSupplierReturn,
   cancelCommercePurchaseOrder,
   cancelCommerceOrder,
   countCommerceStock,
+  commerceAccountingHandoff,
+  commerceAccountingHandoffCsv,
   commerceDailyCloseCsv,
   commerceDailyCloseExport,
   commerceCloseExpectation,
+  commerceCloseSettlementReview,
+  commerceCorrectionCalculation,
+  commerceCurrentTaxConfiguration,
+  commerceCurrentAccountMappingConfiguration,
+  commerceCurrentCustomerCreditPolicy,
+  commerceCurrentPromotionPolicy,
+  commerceCurrentShippingPolicy,
+  commerceCurrentPaymentPolicy,
+  commerceCustomerCreditReview,
+  commerceOrderCalculation,
+  commerceOrderAcknowledgement,
+  commerceOrderAcknowledgementText,
+  commerceOrderCorrectionExpectation,
+  commerceOrderAdjustedTotal,
   commerceOrderReturnExpectation,
+  commerceOrderSupportOpenExpectation,
+  commerceOrderSupportReopenExpectation,
+  commerceOrderSupportResolveExpectation,
+  commerceOrderSupportServiceExpectation,
+  commerceSupportCaseUrgency,
+  commerceSupportCheckpointState,
+  commerceSupportQueue,
+  commerceSupportSlaSummary,
+  commerceSupportServiceState,
+  commerceSupportWorkloadCsv,
+  commerceSupportWorkloadExport,
   commerceOrderItemSummary,
   commerceOrderLocationAllocationPreview,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
   commerceOrderPromiseUrgency,
+  commerceReceivablesAging,
   compareCommercePurchaseOrderAttention,
   commercePurchaseOrderArrivalUrgency,
   commercePurchaseOrderProgress,
   commercePurchaseOrders,
+  commercePurchaseBudgetCommitment,
+  commercePurchaseBudgetEnvelopes,
+  commercePurchaseRequisitions,
+  commerceSupplierSourcingDecisions,
+  commerceSupplierSourcingSelectedQuote,
+  commerceSupplierInvoiceMatch,
+  commerceSupplierPayablesHandoff,
+  commerceSupplierPayablesHandoffCsv,
+  commerceSupplierPayablesAging,
+  commerceSupplierReturnClaimBalance,
+  commerceSupplierReturnClaimStatus,
+  commerceSupplierPerformance,
   commerceStorefrontRequestLines,
   commerceStorefrontRequests,
-  commerceWorkspaceCanWrite,
   commerceWebsiteIntakes,
   convertCommerceWebsiteIntake,
+  configureCommerceTax,
+  configureCommerceAccountMapping,
+  configureCommerceCustomerCreditPolicy,
+  configureCommercePromotionPolicy,
+  configureCommerceShippingPolicy,
+  configureCommercePaymentPolicy,
   createCommerceCatalogBaseline,
   createCommercePurchaseOrder,
-  createEmptyCommerce,
-  loadCommerceWorkspace,
-  mutateCommerceWorkspace,
+  markCommerceSupplierInvoicePayableReady,
+  recordCommerceSupplierInvoice,
+  recordCommerceSupplierCreditNote,
   receiveCommercePurchaseOrder,
   reconcileCommercePayment,
+  recordCommerceCollectionAction,
   recordCommerceOrderReturn,
+  recordCommerceOrderSupportCase,
+  recordCommerceOrderSupportServiceEvent,
+  reopenCommerceOrderSupportCase,
+  resolveCommerceOrderSupportCase,
+  recordCommerceOrderCorrection,
   registerCommerceItem,
   reserveCommerceOrder,
   saveCommerceClose,
@@ -69,48 +148,59 @@ import {
   updateCommerceItem,
   validateCommerceState,
   type CommerceActionProof,
+  type CommerceCloseSettlementInputLine,
+  type CommerceCorrectionKind,
+  type CommerceCorrectionReasonCode,
   type CommerceItem,
   type CommerceItemUpdate,
   type CommerceOrder,
   type CommerceOrderLine,
   type CommerceOrderStatus,
-  type CommerceReturnDisposition,
   type CommerceState,
+  type CommercePurchaseOrderDiscrepancyCode,
+  type CommerceSupplierReturnClaim,
+  type CommerceReturnDisposition,
+  type CommerceSupportResolutionOutcome,
+  type CommerceSupportPriority,
+  type CommerceSupportServiceEventKind,
   type CommerceStockMovement,
+  type CommerceTaxConfiguration,
+  type CommerceTaxMode,
+  type CommerceCustomerCreditPolicyStatus,
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import { projectShopInventory } from './shop-inventory-foundation'
+import { projectProductionMaterialRequirements } from './production-material-handoff'
 import { channelOrderDraftIsReady, type ChannelOrderDraft } from './channel-order-intake'
-import type { ClientSolutionId } from './client-onboarding'
 import type {
   CommerceOrderDraft,
   CommerceOrderDraftInput,
   CommerceOrderDraftReadResult,
 } from './commerce-order-draft'
 import {
-  PRODUCTION_KEY,
   buildProductionShiftHandoff,
+  buildProductionBatchGenealogy,
   closeProductionJob,
   compareProductionJobSchedule,
   completeProductionMaintenance,
   currentProductionShiftClose,
-  createEmptyProduction,
   endProductionDowntime,
   formatProductionShiftHandoff,
-  loadProductionWorkspace,
-  mutateProductionWorkspace,
+  formatProductionBatchGenealogy,
   openProductionIssue,
   parseProductionMaterialQuantity,
   placeProductionQualityHold,
   productionDowntimeIntervals,
   productionIssueSeverities,
   productionJobPriorities,
+  productionMaintenanceDueQueue,
+  productionMaintenanceFindingSource,
   productionMaintenanceRecords,
   productionMaterialUnits,
   productionMachineStates,
+  productionShopDemandSource,
   productionShiftOutput,
   productionStateCanonical,
-  productionWorkspaceCanWrite,
   recordProductionOutput,
   recordProductionScrap,
   recordProductionMaterialConsumption,
@@ -130,126 +220,157 @@ import {
   type ProductionIssueSeverity,
   type ProductionJob,
   type ProductionJobPriority,
+  type ProductionMaintenanceOutcome,
+  type ProductionMaintenanceCorrectiveAction,
+  type ProductionMaintenanceFindingSource,
   type ProductionMaintenanceRecord,
+  type ProductionMaintenanceResult,
+  type ProductionMaintenanceReturnToService,
   type ProductionMaterialUnit,
   type ProductionMachineState,
   type ProductionOutputKind,
   type ProductionShiftHandoff,
-  type ProductionState,
 } from './production-workspace'
+import {
+  projectShopProductionDemand,
+  shopProductionDemandIsCurrent,
+  type ShopProductionDemandSignal,
+} from './shop-production-demand'
 import { projectPlantOrder } from './plant-order-foundation'
+import { productionOrderPortfolioEntries } from './production-order-portfolio'
+import { projectShopDemandIntelligence } from './shop-demand-intelligence'
+import { projectShopProcurementDecision, projectShopReplenishment } from './shop-replenishment'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
+const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module) => ({ default: module.ShopOperatingFlow })))
+const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
+const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: module.ShopToday })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
 const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
 
-type DecisionClaim = {
-  id: string
-  claimType: 'fact' | 'analysis'
-  statement: string
-  sourceReference: string
-  capturedAt: string
-  status: 'observed' | 'verified'
-  uncertainty: 'low' | 'medium' | 'high'
-  visibility: 'private' | 'public'
-  digest?: string
-}
-
-type DecisionPacket = {
-  contract: 'decision_packet.v1'
-  subject: { kind: string; id: string; version: 1 }
-  decision: string
-  claims: DecisionClaim[]
-  baseline: string
-  target: string
-  result: string
-  acceptance: string
-  artifactReference: string
-}
-
-type ManagedDecisionPacket = {
-  contract: 'decision_packet.v1'
-  subject: { kind: string; id: string; version: 1 }
-  decision: string
-  claims: Array<{
-    id: string
-    claim_type: DecisionClaim['claimType']
-    statement: string
-    source_reference: string
-    captured_at: string
-    status: DecisionClaim['status']
-    uncertainty: DecisionClaim['uncertainty']
-    visibility: DecisionClaim['visibility']
-    digest?: string
-  }>
-  baseline: string
-  target: string
-  result: string
-  acceptance: string
-  artifact_reference: string
-}
-
-type Approval = {
-  id: string
-  commandId?: string
-  createdAt: string
-  title: string
-  requestedBy: string
-  requestedActorKind: 'human' | 'service' | 'agent' | 'unknown'
-  packet: DecisionPacket
-  packetFingerprint: string
-  status: 'pending' | 'approved' | 'declined' | 'superseded'
-  decidedAt?: string
-  decidedBy?: string
-  decidedActorKind?: 'human' | 'service' | 'agent' | 'unknown'
-  decisionNote?: string
-  managed?: boolean
-}
-
-type ActionDomain = 'commerce' | 'production'
-
-type ActionKind =
-  | 'order_create'
-  | 'order_status'
-  | 'order_cancel'
-  | 'order_return'
-  | 'payment_reconcile'
-  | 'refund_settle'
-  | 'catalog_item_create'
-  | 'catalog_item_update'
-  | 'inventory_receipt'
-  | 'inventory_count'
-  | 'purchase_order_create'
-  | 'purchase_order_receive'
-  | 'purchase_order_cancel'
-  | 'daily_close'
-  | 'production_job'
-  | 'production_job_schedule'
-  | 'production_job_close'
-  | 'production_output'
-  | 'production_scrap'
-  | 'production_material'
-  | 'issue_create'
-  | 'issue_resolution'
-  | 'quality_hold'
-  | 'quality_release'
-  | 'machine_state'
-  | 'downtime_start'
-  | 'downtime_end'
-  | 'maintenance_start'
-  | 'maintenance_complete'
-  | 'production_shift_close'
-
 type PurchaseOrderDraft =
-  | { mode: 'create'; sku: string; supplier: string; expectedAt: string; quantity: string }
-  | { mode: 'receive'; purchaseOrderId: string; quantity: string; locationId: string; trackingCode: string }
+  | { mode: 'create'; requisitionId?: string; sku: string; supplier: string; expectedAt: string; quantity: string; unitCostMmk: string }
+  | { mode: 'receive'; purchaseOrderId: string; quantity: string; rejectedQuantity: string; discrepancyCode: CommercePurchaseOrderDiscrepancyCode; locationId: string; trackingCode: string }
+
+type PurchaseBudgetDraft = {
+  budgetCode: string
+  label: string
+  periodEnd: string
+  ceilingMmk: string
+  perRequisitionLimitMmk: string
+}
+
+type SupplierQuoteDraft = {
+  supplier: string
+  quoteReference: string
+  vendorApprovalReference: string
+  unitCostMmk: string
+  deliveryAt: string
+}
+
+type SupplierSourcingDraft = {
+  sku: string
+  itemName: string
+  quantity: number
+  validUntil: string
+  quotes: [SupplierQuoteDraft, SupplierQuoteDraft]
+  selectedIndex: 0 | 1
+  unitCostTolerancePercent: string
+  deliveryToleranceDays: string
+}
+
+type SupplierInvoiceDraft = {
+  purchaseOrderId: string
+  supplierReference: string
+  issuedAt: string
+  dueAt: string
+  quantity: string
+  unitCostMmk: string
+}
+
+type SupplierReturnDraft = {
+  purchaseOrderId: string
+  receiptMovementId: string
+  internalReturnReference: string
+}
+
+type SupplierCreditDraft = {
+  purchaseOrderId: string
+  supplierReturnId: string
+  supplierReference: string
+  issuedAt: string
+  amountMmk: string
+}
 
 type StockCountDraft = {
   sku: string
   stockUnitId: string
   locationId: string
   quantity: string
+}
+
+type TaxConfigurationDraft = {
+  code: string
+  label: string
+  ratePercent: string
+  mode: CommerceTaxMode
+  jurisdictionCode: string
+  effectiveFrom: string
+}
+
+type AccountMappingDraft = {
+  paymentClearing: string
+  salesRevenue: string
+  taxPayable: string
+  legacyRevenue: string
+  salesAdjustment: string
+  correctionReceivable: string
+  correctionPayable: string
+}
+
+type CustomerCreditPolicyDraft = {
+  customer: string
+  creditLimitMmk: string
+  maxPaymentTermsDays: 0 | 7 | 30
+  status: CommerceCustomerCreditPolicyStatus
+}
+
+type PromotionPolicyDraft = {
+  code: string
+  discountPercent: string
+  minimumSubtotalMmk: string
+  maximumDiscountMmk: string
+  status: 'active' | 'inactive'
+  effectiveFrom: string
+  effectiveUntil: string
+}
+
+type ShippingPolicyDraft = {
+  zoneCode: string
+  townships: string
+  feeMmk: string
+  promiseMinutes: string
+  status: 'active' | 'inactive'
+  effectiveFrom: string
+  effectiveUntil: string
+}
+
+type PaymentPolicyDraft = {
+  adapter: 'pay_on_pickup' | 'cash_on_delivery' | 'kbzpay_manual'
+  allowedFulfilments: 'pickup' | 'delivery' | 'both'
+  maximumOrderMmk: string
+  instructions: string
+  status: 'active' | 'inactive'
+  effectiveFrom: string
+  effectiveUntil: string
+}
+
+type CloseSettlementDraftLine = {
+  paymentMethod: string
+  countedMmk: string
+  varianceOwner: string
+  varianceReason: string
 }
 
 type CatalogItemEditDraft = {
@@ -265,87 +386,127 @@ type CommerceReturnDraft = {
   sku: string
   quantity: string
   disposition: CommerceReturnDisposition
+  sourceIntent?: EcommerceReturnIntent
 }
 
-type AccountableAction = {
-  id: string
-  commandId: string
-  capturedAt: string
-  domain: ActionDomain
-  kind: ActionKind
-  subjectId: string
-  summary: string
-  actorKind: 'human'
-  actor: string
-  reason: string
-  evidenceReference: string
-  before: string
-  after: string
+type CommerceSupportResolutionDraft = {
+  orderId: string
+  caseId: string
+  outcome: CommerceSupportResolutionOutcome
+  note: string
 }
 
-type PendingAccountableAction = Omit<AccountableAction, 'capturedAt' | 'actorKind' | 'actor' | 'reason' | 'evidenceReference'> & {
-  apply: (record: AccountableAction) => void | Promise<void>
-  confirmation?: AccountableAction
-  evidenceReferenceLocked?: boolean
-  evidenceReferenceSuggestion?: string
-  presentation?: 'default' | 'counter'
-  reasonSuggestion?: string
+type CommerceSupportOpenDraft = {
+  intent: EcommerceSupportIntent
+  priority: CommerceSupportPriority
+  owner: string
+  dueAt: string
 }
 
-type ActionDetails = Pick<AccountableAction, 'actor' | 'reason' | 'evidenceReference'>
+type CommerceSupportReopenDraft = {
+  orderId: string
+  caseId: string
+  sourceResolutionActionId: string
+  priority: CommerceSupportPriority
+  owner: string
+  dueAt: string
+  note: string
+}
 
-class ShopReviewRequiredError extends Error {}
-class PlantReviewRequiredError extends Error {}
+type CommerceSupportServiceDraft = {
+  orderId: string
+  caseId: string
+  kind: CommerceSupportServiceEventKind
+  owner: string
+  priority: CommerceSupportPriority
+  dueAt: string
+  note: string
+}
+
+const commerceSupportPriorityOrder: CommerceSupportPriority[] = ['urgent', 'high', 'normal', 'low']
+const commerceSupportServiceActionLabels: Record<CommerceSupportServiceEventKind, string> = {
+  reassigned: 'Reassign case',
+  escalated: 'Escalate case',
+  acknowledged: 'Acknowledge case',
+  first_response_ready: 'First response ready',
+}
 
 type ProductId = 'commerce' | 'production'
-export type SetupProductId = ClientSolutionId
 
-export function productDisplayName(product: SetupProductId) {
-  return productContracts[product].name
+function ecommerceCancellationMatchesCurrentShop(state: CommerceState, intent: EcommerceCancellationIntent) {
+  const order = state.orders.find((candidate) => candidate.id === intent.orderId)
+  const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
+  return Boolean(order
+    && acknowledgement
+    && order.sourceRecordId === intent.sourceRequestId
+    && acknowledgement.digest === intent.sourceAcknowledgementDigest
+    && acknowledgement.status === intent.orderStatus
+    && acknowledgement.payment.status === intent.paymentStatus
+    && acknowledgement.payment.refundStatus === intent.refundStatus
+    && acknowledgement.totalMmk === intent.totalMmk
+    && acknowledgement.cancellation.state === 'not_cancelled'
+    && commerceOrderHasReleasableReservation(state, intent.orderId))
 }
 
-export function setupProductPreviewPath(product: SetupProductId) {
-  if (product === 'commerce') return '/shop/?tab=counter'
-  if (product === 'production') return '/plant/?tab=production'
-  if (product === 'website') return '/website/'
-  return '/ecommerce/'
+function ecommerceOrderAmendmentShopState(state: CommerceState, intent: EcommerceOrderAmendmentIntent) {
+  const order = state.orders.find((candidate) => candidate.id === intent.orderId)
+  const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
+  if (!order || !acknowledgement
+    || order.sourceRecordId !== intent.sourceRequestId
+    || acknowledgement.evidence.sourceRecordId !== intent.sourceRequestId
+    || acknowledgement.payment.status !== intent.paymentStatus
+    || acknowledgement.payment.refundStatus !== intent.refundStatus) return 'stale' as const
+  if (acknowledgement.status === intent.orderStatus
+    && acknowledgement.digest === intent.sourceAcknowledgementDigest
+    && acknowledgement.totalMmk === intent.originalTotalMmk
+    && acknowledgement.cancellation.state === 'not_cancelled'
+    && commerceOrderHasReleasableReservation(state, intent.orderId)) return 'active' as const
+  if (acknowledgement.status === 'cancelled'
+    && acknowledgement.cancellation.state === 'cancelled'
+    && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) return 'replacement_needed' as const
+  return 'stale' as const
+}
+
+function ecommerceOrderAmendmentSummary(intent: EcommerceOrderAmendmentIntent) {
+  if (intent.lineChanges.length) {
+    return intent.lineChanges.map((line) => `${line.name} ${line.fromQuantity}→${line.toQuantity}`).join(' · ')
+  }
+  if (intent.fromFulfilment !== intent.toFulfilment) return `${intent.fromFulfilment}→${intent.toFulfilment}`
+  return 'Customer contact or delivery details'
+}
+
+function ecommerceOrderRescheduleShopState(state: CommerceState, intent: EcommerceOrderRescheduleIntent) {
+  const order = state.orders.find((candidate) => candidate.id === intent.orderId)
+  const acknowledgement = commerceOrderAcknowledgement(state, intent.orderId)
+  if (!order || !acknowledgement
+    || order.sourceRecordId !== intent.sourceRequestId
+    || acknowledgement.evidence.sourceRecordId !== intent.sourceRequestId
+    || acknowledgement.payment.status !== intent.paymentStatus
+    || acknowledgement.payment.refundStatus !== intent.refundStatus) return 'stale' as const
+  if (acknowledgement.status === intent.orderStatus
+    && acknowledgement.digest === intent.sourceAcknowledgementDigest
+    && acknowledgement.totalMmk === intent.originalTotalMmk
+    && acknowledgement.delivery.promisedAt === intent.originalPromisedAt
+    && acknowledgement.cancellation.state === 'not_cancelled'
+    && commerceOrderHasReleasableReservation(state, intent.orderId)) return 'active' as const
+  if (acknowledgement.status === 'cancelled'
+    && acknowledgement.cancellation.state === 'cancelled'
+    && acknowledgement.cancellation.evidenceReference === intent.evidenceReference) return 'replacement_needed' as const
+  return 'stale' as const
+}
+
+function ecommerceReschedulePromiseAllowed(draft: EcommerceShopDraftV2, intent: EcommerceOrderRescheduleIntent) {
+  const requested = Date.parse(intent.requestedPromisedAt)
+  const reviewed = Date.parse(draft.confirmedAt)
+  if (!Number.isFinite(requested) || !Number.isFinite(reviewed) || requested <= reviewed) return false
+  if (intent.fulfilment === 'pickup') return draft.pricing.shipping.status === 'pickup'
+  return draft.pricing.shipping.status === 'approved'
+    && draft.pricing.shipping.promiseMinutes !== null
+    && requested >= reviewed + draft.pricing.shipping.promiseMinutes * 60_000
 }
 
 function productCanonicalPath(product: ProductId) {
   return product === 'commerce' ? '/shop/' : '/plant/'
-}
-
-type WorkflowTemplate = {
-  id: string
-  name: string
-  outcome: string
-  workflow: string[]
-  entryPoints: string[]
-  metric: string
-}
-
-type ProductContract = {
-  id: SetupProductId
-  slug: string
-  name: string
-  status: string
-  headline: string
-  templates: WorkflowTemplate[]
-}
-
-export type SetupState = {
-  product: SetupProductId
-  templateId: string
-  workspace: string
-  owner: string
-  entryPoint: string
-  currentRecord: string
-  baseline: string
-  targetOutcome: string
-  authorityBoundary: string
-  acceptanceEvidence: string
-  startedAt?: string
-  savedAt?: string
 }
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
@@ -410,22 +571,10 @@ export type RuntimeHealth = {
   importProvisioning: RuntimeImportProvisioning | null
 }
 
-type CommerceTab = 'counter' | 'orders' | 'inventory'
+type CommerceTab = 'today' | 'counter' | 'orders' | 'inventory'
 type ProductionTab = 'production' | 'control'
 
-export const APPROVAL_KEY = 'supermega.approvals.v3'
-export const SETUP_KEY = 'supermega.setup.v3'
-const SETUP_SYNC_EVENT = 'supermega:setup-updated'
-export const ACTION_KEY = 'supermega.accountable.actions.v1'
 const THEME_KEY = 'supermega.interface.theme.v1'
-export const STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v2.'
-export const LEGACY_STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v1.'
-export const LEGACY_STOREFRONT_DRAFT_RESET_KEY = 'supermega.ecommerce.storefront_draft.v1'
-export const SHOP_ORDER_DRAFT_RESET_PREFIX = 'supermega.shop.order_draft.v1.'
-export const SHOP_ORDER_DRAFT_RESET_EPOCH_KEY = 'supermega.shop.order_draft_reset.v1'
-const WEBSITE_RECOVERY_EXPORT_PREFIX = 'supermega.website.workspace.recovery.v1.'
-export const LEGACY_APPROVAL_KEYS = ['supermega.approvals.v2']
-export const LEGACY_SETUP_KEYS = ['supermega.setup.v2']
 
 type InterfaceTheme = 'light' | 'dark'
 
@@ -435,120 +584,9 @@ function initialInterfaceTheme(): InterfaceTheme {
     const saved = window.localStorage.getItem(THEME_KEY)
     if (saved === 'light' || saved === 'dark') return saved
   } catch {
-    // Use the device preference when local theme storage is unavailable.
+    // Keep the first-run interface readable even when storage is unavailable.
   }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
-export function collectLocalProductRecords(storage: Pick<Storage, 'getItem' | 'key' | 'length'>) {
-  const exactKeys = new Set([
-    WEBSITE_STORAGE_KEY,
-    LEGACY_WEBSITE_STORAGE_KEY,
-    WEBSITE_ECOMMERCE_HANDOFF_KEY,
-    LEGACY_STOREFRONT_DRAFT_RESET_KEY,
-  ])
-  const records: Record<string, string> = {}
-  try {
-    for (let index = 0; index < storage.length; index += 1) {
-      const key = storage.key(index)
-      if (!key
-        || (!exactKeys.has(key)
-          && !key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
-          && !key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)
-          && !key.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)
-          && !key.startsWith(WEBSITE_RECOVERY_EXPORT_PREFIX))) continue
-      const value = storage.getItem(key)
-      if (value !== null) records[key] = value
-    }
-  } catch {
-    return {}
-  }
-  return records
-}
-
-function requireProductContract(id: SetupProductId): ProductContract {
-  const product = siteManifest.customerProducts.find((candidate) => candidate.runtimeId === id)
-  if (!product) throw new Error(`Missing ${id} product contract.`)
-  return {
-    id,
-    slug: product.id,
-    name: product.name,
-    status: product.status,
-    headline: product.headline,
-    templates: product.templates,
-  }
-}
-
-export const productContracts: Record<SetupProductId, ProductContract> = {
-  commerce: requireProductContract('commerce'),
-  production: requireProductContract('production'),
-  website: requireProductContract('website'),
-  ecommerce: requireProductContract('ecommerce'),
-}
-
-export function templatesFor(product: SetupProductId) {
-  return productContracts[product].templates
-}
-
-export function templateFor(product: SetupProductId, name: string) {
-  const templates = templatesFor(product)
-  const fallback = templates[0]
-  if (!fallback) throw new Error(`Missing ${product} workflow templates.`)
-  return templates.find((template) => template.id === name || template.name === name) ?? fallback
-}
-
-const seedCommerceTemplate = templateFor('commerce', '')
-
-const seedSetup: SetupState = {
-  product: 'commerce',
-  templateId: seedCommerceTemplate.id,
-  workspace: '',
-  owner: '',
-  entryPoint: seedCommerceTemplate.entryPoints[0] ?? '',
-  currentRecord: '',
-  baseline: '',
-  targetOutcome: '',
-  authorityBoundary: '',
-  acceptanceEvidence: '',
-}
-
-const pilotRequiredFields = ['workspace', 'owner', 'entryPoint', 'currentRecord', 'baseline', 'targetOutcome', 'authorityBoundary', 'acceptanceEvidence'] as const
-
-function normalizeSetup(value: SetupState) {
-  const source = (value && typeof value === 'object' ? value : seedSetup) as Omit<Partial<SetupState>, 'product'> & { product?: string; template?: string }
-  const product: SetupProductId = source.product === 'production' || source.product === 'plant'
-    ? 'production'
-    : source.product === 'website'
-      ? 'website'
-      : source.product === 'ecommerce'
-        ? 'ecommerce'
-        : 'commerce'
-  const template = templateFor(product, String(source.templateId || source.template || ''))
-  const sourceEntryPoint = String(source.entryPoint || '')
-  const normalized: SetupState = {
-    product,
-    templateId: template.id,
-    workspace: typeof source.workspace === 'string' ? source.workspace : '',
-    owner: typeof source.owner === 'string' ? source.owner : '',
-    entryPoint: template.entryPoints.includes(sourceEntryPoint) ? sourceEntryPoint : template.entryPoints[0] ?? '',
-    currentRecord: typeof source.currentRecord === 'string' ? source.currentRecord : '',
-    baseline: typeof source.baseline === 'string' ? source.baseline : '',
-    targetOutcome: typeof source.targetOutcome === 'string' ? source.targetOutcome : '',
-    authorityBoundary: typeof source.authorityBoundary === 'string' ? source.authorityBoundary : '',
-    acceptanceEvidence: typeof source.acceptanceEvidence === 'string' ? source.acceptanceEvidence : '',
-    ...(typeof source.startedAt === 'string' && source.startedAt ? { startedAt: source.startedAt } : {}),
-    ...(typeof source.savedAt === 'string' && source.savedAt ? { savedAt: source.savedAt } : {}),
-  }
-  return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized
-}
-
-export function setupProductFromQuery(value: string | null): SetupProductId | null {
-  if (!value) return null
-  return Object.values(productContracts).find((product) => product.slug === value || product.id === value)?.id ?? null
-}
-
-export function clientSetupPath(product: SetupProductId) {
-  return `/settings/?product=${encodeURIComponent(productContracts[product].slug)}`
+  return 'light'
 }
 
 export type ManagedTrialRequestPrefill = {
@@ -623,23 +661,6 @@ export function managedAccountPath(path: '/login' | '/account/recovery', value: 
   return product ? `${path}?product=${encodeURIComponent(productContracts[product].slug)}` : path
 }
 
-function productFromPathname(pathname: string): SetupProductId | null {
-  if (pathname.startsWith('/shop/')) return 'commerce'
-  if (pathname.startsWith('/plant/')) return 'production'
-  if (pathname.startsWith('/website/')) return 'website'
-  if (pathname.startsWith('/ecommerce/')) return 'ecommerce'
-  return null
-}
-
-export function pilotProgress(setup: SetupState) {
-  const complete = pilotRequiredFields.filter((field) => setup[field].trim()).length
-  return Math.round((complete / pilotRequiredFields.length) * 100)
-}
-
-export function pilotReady(setup: SetupState) {
-  return pilotProgress(setup) === 100 && Boolean(setup.savedAt)
-}
-
 const checkingRuntime: RuntimeHealth = {
   status: 'checking',
   serviceStatus: 'checking',
@@ -665,6 +686,7 @@ const navigation = [
 ] as const
 
 const commerceTabs: Array<{ id: CommerceTab; label: string }> = [
+  { id: 'today', label: 'Today' },
   { id: 'counter', label: 'Sell' },
   { id: 'orders', label: 'Orders' },
   { id: 'inventory', label: 'Stock' },
@@ -674,6 +696,19 @@ const productionTabs: Array<{ id: ProductionTab; label: string }> = [
   { id: 'production', label: 'Jobs' },
   { id: 'control', label: 'Problems' },
 ]
+
+const productStartActions = {
+  commerce: [
+    { step: '1', label: 'Sell now', detail: 'Tap products and review a sale.', to: '/shop/?tab=counter' },
+    { step: '2', label: 'Finish orders', detail: 'Confirm, fulfil, and follow payment.', to: '/shop/?tab=orders' },
+    { step: '3', label: 'Check stock', detail: 'See low stock and purchasing.', to: '/shop/?tab=inventory' },
+  ],
+  production: [
+    { step: '1', label: 'Choose job', detail: 'Open the active job first.', to: '/plant/?tab=production' },
+    { step: '2', label: 'Record output', detail: 'Add good units, waste, and material use.', to: '/plant/?tab=production' },
+    { step: '3', label: 'Fix blockers', detail: 'Open quality, machine, and shift problems.', to: '/plant/?tab=control' },
+  ],
+} as const
 
 const productionMachineStateLabels: Record<ProductionMachineState, string> = {
   running: 'Running',
@@ -821,6 +856,12 @@ function uid(prefix: string) {
   return `${prefix}-${commandUuid()}`.toUpperCase()
 }
 
+function commerceOrderDisplayReference(orderId: string) {
+  const canonical = orderId.trim().toUpperCase()
+  const match = /^ORD-([A-F0-9]{8})(?:-[A-F0-9-]+)?$/.exec(canonical)
+  return match ? `#${match[1]}` : canonical
+}
+
 function commandUuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
@@ -830,691 +871,64 @@ function commandUuid() {
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`
 }
 
-function stableFingerprint(value: unknown) {
-  const input = JSON.stringify(value)
-  let hash = 2166136261
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`
-}
 
-function decisionPacketFingerprint(packet: DecisionPacket) {
-  return stableFingerprint({
-    contract: packet.contract,
-    subject: { kind: packet.subject.kind, version: packet.subject.version },
-    decision: packet.decision,
-    claims: packet.claims.map(({ claimType, statement, sourceReference, status, uncertainty, visibility, digest }) => ({ claimType, statement, sourceReference, status, uncertainty, visibility, digest })),
-    baseline: packet.baseline,
-    target: packet.target,
-    result: packet.result,
-    acceptance: packet.acceptance,
-    artifactReference: packet.artifactReference,
-  })
-}
 
-function toManagedDecisionPacket(packet: DecisionPacket): ManagedDecisionPacket {
-  return {
-    contract: packet.contract,
-    subject: packet.subject,
-    decision: packet.decision,
-    claims: packet.claims.map((claim) => ({
-      id: claim.id,
-      claim_type: claim.claimType,
-      statement: claim.statement,
-      source_reference: claim.sourceReference,
-      captured_at: claim.capturedAt,
-      status: claim.status,
-      uncertainty: claim.uncertainty,
-      visibility: claim.visibility,
-      ...(claim.digest ? { digest: claim.digest } : {}),
-    })),
-    baseline: packet.baseline,
-    target: packet.target,
-    result: packet.result,
-    acceptance: packet.acceptance,
-    artifact_reference: packet.artifactReference,
-  }
-}
 
-export function toManagedApprovalRequest(approval: Approval) {
-  if (approval.status !== 'pending' || !approval.commandId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(approval.commandId)) return null
-  return {
-    command_id: approval.commandId,
-    title: approval.title,
-    proposal: toManagedDecisionPacket(approval.packet),
-    evidence_refs: [...new Set(approval.packet.claims.map((claim) => claim.sourceReference))],
-  }
-}
-
-function fromManagedApproval(record: ManagedApprovalRecord): Approval {
-  const managedPacket = record.proposal as unknown as ManagedDecisionPacket
-  if (
-    managedPacket.contract !== 'decision_packet.v1'
-    || !managedPacket.subject
-    || !Array.isArray(managedPacket.claims)
-  ) {
-    throw new Error('managed_approval_contract_invalid')
-  }
-  const packet: DecisionPacket = {
-    contract: 'decision_packet.v1',
-    subject: managedPacket.subject,
-    decision: managedPacket.decision,
-    claims: managedPacket.claims.map((claim) => ({
-      id: claim.id,
-      claimType: claim.claim_type,
-      statement: claim.statement,
-      sourceReference: claim.source_reference,
-      capturedAt: claim.captured_at,
-      status: claim.status,
-      uncertainty: claim.uncertainty,
-      visibility: claim.visibility,
-      digest: claim.digest,
-    })),
-    baseline: managedPacket.baseline,
-    target: managedPacket.target,
-    result: managedPacket.result,
-    acceptance: managedPacket.acceptance,
-    artifactReference: managedPacket.artifact_reference,
-  }
-  return {
-    id: record.approval_id,
-    commandId: record.command_id,
-    createdAt: record.requested_at,
-    title: record.title,
-    requestedBy: record.requested_by,
-    requestedActorKind: record.requested_actor_kind,
-    packet,
-    packetFingerprint: decisionPacketFingerprint(packet),
-    status: record.status,
-    decidedAt: record.decided_at || undefined,
-    decidedBy: record.decided_by || undefined,
-    decidedActorKind: record.decided_actor_kind === 'human' || record.decided_actor_kind === 'service' || record.decided_actor_kind === 'agent' ? record.decided_actor_kind : undefined,
-    decisionNote: record.decision_note || undefined,
-    managed: true,
-  }
-}
-
-export function mergeManagedApprovals(current: Approval[], records: ManagedApprovalRecord[]) {
-  const managed = records.map(fromManagedApproval)
-  const managedIds = new Set(managed.map((approval) => approval.id))
-  return [...managed, ...current.filter((approval) => !approval.managed && !managedIds.has(approval.id))]
-}
-
-function normalizeApprovals(value: Approval[]) {
-  if (!Array.isArray(value)) return []
-
-  const approvals = value.map((approval) => {
-    const candidate = approval as unknown as Record<string, unknown>
-    const packetCandidate = candidate.packet && typeof candidate.packet === 'object' ? candidate.packet as Record<string, unknown> : {}
-    const subjectCandidate = packetCandidate.subject && typeof packetCandidate.subject === 'object' ? packetCandidate.subject as Record<string, unknown> : {}
-    const createdAt = typeof candidate.createdAt === 'string' ? candidate.createdAt : new Date().toISOString()
-    const approvalId = String(candidate.id || 'APR-LEGACY')
-    const title = String(candidate.title || 'Review the proposed company action.')
-    const legacyEvidence = Array.isArray(candidate.evidence) ? candidate.evidence : []
-    const legacyContext = Array.isArray(packetCandidate.context) ? packetCandidate.context.map(String) : []
-    const claimCandidates = Array.isArray(packetCandidate.claims) ? packetCandidate.claims : []
-    const claims: DecisionClaim[] = (claimCandidates.length ? claimCandidates : legacyContext.length ? legacyContext : legacyEvidence.length ? legacyEvidence : [title]).slice(0, 20).map((item, index) => {
-      const claim = item && typeof item === 'object' ? item as Record<string, unknown> : {}
-      const legacySource = legacyEvidence[index]
-      const legacySourceRecord = legacySource && typeof legacySource === 'object' ? legacySource as Record<string, unknown> : {}
-      const legacyLabel = typeof legacySource === 'string' ? legacySource : String(legacySourceRecord.label || '')
-      const statement = typeof item === 'string' ? item : String(claim.statement || legacyLabel || `Decision evidence ${index + 1}`)
-      const sourceReference = String(claim.sourceReference || legacySourceRecord.reference || `local://legacy-approval/${approvalId}/${index + 1}`)
-      const digest = String(claim.digest || '').trim()
-      const isVerified = (claim.status === 'verified' || legacySourceRecord.status === 'verified') && /^sha256:[0-9a-f]{64}$/.test(digest)
-      return {
-        id: String(claim.id || `${approvalId}-CLM-${index + 1}`),
-        claimType: claim.claimType === 'analysis' ? 'analysis' as const : 'fact' as const,
-        statement,
-        sourceReference,
-        capturedAt: String(claim.capturedAt || legacySourceRecord.capturedAt || createdAt),
-        status: isVerified ? 'verified' as const : 'observed' as const,
-        uncertainty: claim.uncertainty === 'high' ? 'high' as const : claim.uncertainty === 'medium' ? 'medium' as const : 'low' as const,
-        visibility: claim.visibility === 'public' ? 'public' as const : 'private' as const,
-        digest: digest || undefined,
-      }
-    })
-    const packet: DecisionPacket = {
-      contract: 'decision_packet.v1',
-      subject: {
-        kind: String(subjectCandidate.kind || 'company_brief'),
-        id: String(subjectCandidate.id || approvalId),
-        version: 1,
-      },
-      decision: String(packetCandidate.decision || title),
-      claims,
-      baseline: String(packetCandidate.baseline || 'Not recorded'),
-      target: String(packetCandidate.target || 'Not recorded'),
-      result: String(packetCandidate.result || 'No measured result recorded.'),
-      acceptance: String(packetCandidate.acceptance || 'Not recorded'),
-      artifactReference: String(packetCandidate.artifactReference || 'local://exports/supermega-trial-evidence'),
-    }
-    const requestedActorKind: Approval['requestedActorKind'] = candidate.requestedActorKind === 'human' || candidate.requestedActorKind === 'service' || candidate.requestedActorKind === 'agent' ? candidate.requestedActorKind : 'unknown'
-    const decidedActorKind: Approval['decidedActorKind'] = candidate.decidedActorKind === 'human' || candidate.decidedActorKind === 'service' || candidate.decidedActorKind === 'agent' ? candidate.decidedActorKind : 'unknown'
-    const decidedBy = typeof candidate.decidedBy === 'string' ? candidate.decidedBy.trim() : ''
-    const decisionNote = typeof candidate.decisionNote === 'string' ? candidate.decisionNote.trim() : ''
-    const isAttributedHumanDecision = decidedActorKind === 'human' && Boolean(decidedBy) && Boolean(decisionNote)
-    const requestedStatus = candidate.status === 'approved' || candidate.status === 'declined' || candidate.status === 'superseded' ? candidate.status : 'pending'
-    const status: Approval['status'] = requestedStatus === 'approved' || requestedStatus === 'declined'
-      ? isAttributedHumanDecision ? requestedStatus : 'pending'
-      : requestedStatus
-
-    return {
-      id: approvalId,
-      commandId: typeof candidate.commandId === 'string' ? candidate.commandId : undefined,
-      createdAt,
-      title,
-      requestedBy: String(candidate.requestedBy || 'Local workspace operator'),
-      requestedActorKind,
-      packet,
-      packetFingerprint: typeof candidate.packetFingerprint === 'string' ? candidate.packetFingerprint : decisionPacketFingerprint(packet),
-      status,
-      decidedAt: typeof candidate.decidedAt === 'string' ? candidate.decidedAt : undefined,
-      decidedBy: decidedBy || undefined,
-      decidedActorKind,
-      decisionNote: decisionNote || undefined,
-      managed: candidate.managed === true,
-    }
-  })
-
-  return JSON.stringify(approvals) === JSON.stringify(value) ? value : approvals
-}
-
-function localApprovalsOnly(approvals: Approval[]) {
-  return approvals.some((approval) => approval.managed) ? approvals.filter((approval) => !approval.managed) : approvals
-}
-
-function normalizeActions(value: AccountableAction[]) {
-  if (!Array.isArray(value)) return []
-  return value.filter((action) => action && typeof action.id === 'string' && action.actorKind === 'human').slice(0, 200)
-}
-
-function confirmAccountableAction(action: PendingAccountableAction, details: ActionDetails): AccountableAction {
-  if (action.confirmation) return action.confirmation
-  return {
-    id: action.id,
-    commandId: action.commandId,
-    capturedAt: new Date().toISOString(),
-    domain: action.domain,
-    kind: action.kind,
-    subjectId: action.subjectId,
-    summary: action.summary,
-    actorKind: 'human',
-    actor: details.actor,
-    reason: details.reason,
-    evidenceReference: details.evidenceReference,
-    before: action.before,
-    after: action.after,
-  }
-}
-
-function commerceActionProof(action: AccountableAction): CommerceActionProof {
-  return {
-    actionId: action.id,
-    capturedAt: action.capturedAt,
-    actor: action.actor,
-    reason: action.reason,
-    evidenceReference: action.evidenceReference,
-  }
-}
-
-function productionActionProof(action: AccountableAction): ProductionActionProof {
-  return {
-    actionId: action.id,
-    capturedAt: action.capturedAt,
-    actor: action.actor,
-    reason: action.reason,
-    evidenceReference: action.evidenceReference,
-  }
-}
-
-function useStoredState<T>(key: string, seed: T, normalize?: (value: T) => T, legacyKeys: string[] = [], persist?: (value: T) => T) {
-  const [state, setState] = useState<T>(() => {
-    for (const storageKey of [key, ...legacyKeys]) {
-      try {
-        const stored = window.localStorage.getItem(storageKey)
-        if (!stored) continue
-        const value = JSON.parse(stored) as T
-        return normalize ? normalize(value) : value
-      } catch {
-        // Continue to a valid legacy record before falling back to the seed.
-      }
-    }
-    return seed
-  })
-  const normalizedState = normalize ? normalize(state) : state
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(key, JSON.stringify(persist ? persist(normalizedState) : normalizedState))
-    } catch {
-      // The workspace remains usable in memory when browser storage is unavailable.
-    }
-  }, [key, normalizedState, persist])
-
-  return [normalizedState, setState] as const
-}
-
-type CommerceWorkspaceMode = 'local' | 'managed-loading' | 'managed-ready' | 'managed-unprovisioned' | 'managed-error'
-
-type CommerceWorkspaceView = {
-  state: CommerceState
-  mode: CommerceWorkspaceMode
-  workspaceId: string
-  version: number | null
-  error: string
-  writeReady: boolean
-}
-
-function managedCommerceView(record: ManagedStateRecord, workspaceId: string): CommerceWorkspaceView {
-  if (record.surface !== 'commerce' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Shop returned an invalid state envelope.')
-  if (record.version === 0) {
-    if (Object.keys(record.state).length) throw new Error('Managed Shop has state without a valid revision.')
-    return { state: createEmptyCommerce(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Shop catalog yet.', writeReady: false }
-  }
-  return { state: validateCommerceState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
-}
-
-export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = null) {
-  const [localSnapshot, setLocalSnapshot] = useState<CommerceWorkspaceView>(() => {
-    const local = loadCommerceWorkspace()
-    return { state: local.state, mode: 'local', workspaceId: '', version: null, error: local.error, writeReady: !local.error && commerceWorkspaceCanWrite() }
-  })
-  const [managedSnapshot, setManagedSnapshot] = useState<CommerceWorkspaceView>(() => ({
-    state: createEmptyCommerce(), mode: 'managed-loading', workspaceId: '', version: null, error: '', writeReady: false,
-  }))
-  const snapshotRef = useRef(localSnapshot)
-  const identityRef = useRef(managedIdentity)
-
-  useEffect(() => {
-    identityRef.current = managedIdentity
-    snapshotRef.current = managedIdentity ? managedSnapshot : localSnapshot
-  }, [localSnapshot, managedIdentity, managedSnapshot])
-
-  useEffect(() => {
-    if (!managedIdentity) return undefined
-
-    let active = true
-    loadManagedBootstrap(managedIdentity)
-      .then((bootstrap) => {
-        if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
-        const record = requireManagedSurfaceState(bootstrap, 'commerce', 'Shop')
-        const next = managedCommerceView(record, managedIdentity.workspaceId)
-        snapshotRef.current = next
-        setManagedSnapshot(next)
-      })
-      .catch((error) => {
-        if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
-        const next = { state: createEmptyCommerce(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Shop could not be loaded.', writeReady: false }
-        snapshotRef.current = next
-        setManagedSnapshot(next)
-      })
-    return () => { active = false }
-  }, [managedIdentity])
-
-  async function mutate(
-    eventType: ManagedCommerceEvent,
-    commandId: string,
-    evidence: CommerceActionProof,
-    transition: (state: CommerceState) => CommerceState | null,
-  ) {
-    if (!managedIdentity) {
-      if (eventType === 'commerce.workspace.initialized') throw new Error('Browser demo Shop is already initialized.')
-      const result = await mutateCommerceWorkspace(transition)
-      if (!result.ok) {
-        if (result.error === 'The Commerce state changed or the requested transition is not valid. Nothing was written.') {
-          const latest = loadCommerceWorkspace()
-          const refreshed = { state: latest.state, mode: 'local' as const, workspaceId: '', version: null, error: latest.error, writeReady: !latest.error && commerceWorkspaceCanWrite() }
-          snapshotRef.current = refreshed
-          setLocalSnapshot(refreshed)
-          throw new ShopReviewRequiredError(latest.error
-            ? `Shop changed before this action was applied. Nothing was written; reload to recover the current record. ${latest.error}`
-            : 'Shop changed before this action was applied. Nothing was written; the latest record is loaded for fresh review.')
-        }
-        const rejected = { ...snapshotRef.current, error: result.error }
-        snapshotRef.current = rejected
-        setLocalSnapshot(rejected)
-        throw new Error(result.error)
-      }
-      const accepted = { state: result.state, mode: 'local' as const, workspaceId: '', version: null, error: '', writeReady: true }
-      snapshotRef.current = accepted
-      setLocalSnapshot(accepted)
-      return
-    }
-
-    const workspaceId = managedIdentity.workspaceId
-    const current = snapshotRef.current
-    const initializing = eventType === 'commerce.workspace.initialized'
-    const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
-    if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
-      throw new Error(current.error || 'Managed Shop is not ready for writes.')
-    }
-    const next = transition(current.state)
-    if (!next) throw new Error('The Shop state changed or this lifecycle step is no longer valid. Nothing was written.')
-    if (next === current.state) return
-    const candidate = validateCommerceState(next)
-
-    try {
-      const result = await saveManagedCommerceCommand({
-        commandId,
-        evidence,
-        eventType,
-        expectedVersion: current.version,
-        state: candidate as unknown as Record<string, unknown>,
-      })
-      if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the write was confirmed.')
-      if (result.surface !== 'commerce' || result.event_type !== eventType || result.version !== current.version + 1) {
-        throw new Error('Managed Shop returned an invalid command result.')
-      }
-      const accepted = validateCommerceState(result.state)
-      let nextSnapshot: CommerceWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
-      if (result.idempotent_replay) {
-        const bootstrap = await loadManagedBootstrap(managedIdentity)
-        if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the replay could be reconciled.')
-        const refreshed = managedCommerceView(
-          requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
-          workspaceId,
-        )
-        if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
-          throw new Error('Managed Shop could not reconcile the committed command with current state.')
-        }
-        nextSnapshot = { ...refreshed, error: '' }
-      }
-      snapshotRef.current = nextSnapshot
-      setManagedSnapshot(nextSnapshot)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'The managed Shop write was not confirmed.'
-      if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
-        try {
-          const bootstrap = await loadManagedBootstrap(managedIdentity)
-          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Shop could refresh.', { cause: error })
-          const refreshed = managedCommerceView(
-            requireManagedSurfaceState(bootstrap, 'commerce', 'Shop'),
-            workspaceId,
-          )
-          const conflict = { ...refreshed, error: '' }
-          snapshotRef.current = conflict
-          setManagedSnapshot(conflict)
-        } catch (refreshError) {
-          const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Shop changed and the latest revision could not be loaded.'
-          const rejected = { ...snapshotRef.current, error: refreshMessage }
-          snapshotRef.current = rejected
-          setManagedSnapshot(rejected)
-          throw refreshError
-        }
-        throw new ShopReviewRequiredError('Shop changed in another session. The latest revision is loaded; review and confirm the action again.')
-      }
-      if (identityRef.current && sameManagedIdentity(identityRef.current, managedIdentity)) {
-        const rejected = { ...snapshotRef.current, error: message }
-        snapshotRef.current = rejected
-        setManagedSnapshot(rejected)
-      }
-      throw error
-    }
-  }
-
-  const visible = managedIdentity ? managedSnapshot : localSnapshot
-  const canWrite = managedIdentity
-    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error
-    : visible.mode === 'local' && !visible.error && visible.writeReady
-  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite] as const
-}
-
-type ProductionWorkspaceMode = 'local' | 'managed-loading' | 'managed-ready' | 'managed-unprovisioned' | 'managed-error'
-
-type ProductionWorkspaceView = {
-  state: ProductionState
-  mode: ProductionWorkspaceMode
-  workspaceId: string
-  version: number | null
-  error: string
-  writeReady: boolean
-}
-
-function managedProductionView(record: ManagedStateRecord, workspaceId: string): ProductionWorkspaceView {
-  if (record.surface !== 'production' || !Number.isSafeInteger(record.version) || record.version < 0) throw new Error('Managed Plant returned an invalid state envelope.')
-  if (record.version === 0) {
-    if (Object.keys(record.state).length) throw new Error('Managed Plant has state without a valid revision.')
-    return { state: createEmptyProduction(), mode: 'managed-unprovisioned', workspaceId, version: 0, error: 'This managed workspace has no Plant plan yet.', writeReady: false }
-  }
-  return { state: validateProductionState(record.state), mode: 'managed-ready', workspaceId, version: record.version, error: '', writeReady: true }
-}
-
-export function useProductionWorkspace(managedIdentity: ManagedIdentity | null = null) {
-  const [localSnapshot, setLocalSnapshot] = useState<ProductionWorkspaceView>(() => {
-    const local = loadProductionWorkspace()
-    return { state: local.state, mode: 'local', workspaceId: '', version: null, error: local.error, writeReady: !local.error && productionWorkspaceCanWrite() }
-  })
-  const [managedSnapshot, setManagedSnapshot] = useState<ProductionWorkspaceView>(() => ({
-    state: createEmptyProduction(), mode: 'managed-loading', workspaceId: '', version: null, error: '', writeReady: false,
-  }))
-  const snapshotRef = useRef(localSnapshot)
-  const identityRef = useRef(managedIdentity)
-
-  useEffect(() => {
-    identityRef.current = managedIdentity
-    snapshotRef.current = managedIdentity ? managedSnapshot : localSnapshot
-  }, [localSnapshot, managedIdentity, managedSnapshot])
-
-  useEffect(() => {
-    if (managedIdentity) return undefined
-    function refreshFromStorage(event: StorageEvent) {
-      if (event.key !== PRODUCTION_KEY) return
-      const local = loadProductionWorkspace()
-      const next = { state: local.state, mode: 'local' as const, workspaceId: '', version: null, error: local.error, writeReady: !local.error && productionWorkspaceCanWrite() }
-      snapshotRef.current = next
-      setLocalSnapshot(next)
-    }
-    window.addEventListener('storage', refreshFromStorage)
-    return () => window.removeEventListener('storage', refreshFromStorage)
-  }, [managedIdentity])
-
-  useEffect(() => {
-    if (!managedIdentity) return undefined
-
-    let active = true
-    loadManagedBootstrap(managedIdentity)
-      .then((bootstrap) => {
-        if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
-        const record = requireManagedSurfaceState(bootstrap, 'production', 'Plant')
-        const next = managedProductionView(record, managedIdentity.workspaceId)
-        snapshotRef.current = next
-        setManagedSnapshot(next)
-      })
-      .catch((error) => {
-        if (!active || !identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) return
-        const next = { state: createEmptyProduction(), mode: 'managed-error' as const, workspaceId: managedIdentity.workspaceId, version: null, error: error instanceof Error ? error.message : 'Managed Plant could not be loaded.', writeReady: false }
-        snapshotRef.current = next
-        setManagedSnapshot(next)
-      })
-    return () => { active = false }
-  }, [managedIdentity])
-
-  async function mutate(
-    eventType: ManagedProductionEvent,
-    commandId: string,
-    evidence: ProductionActionProof,
-    transition: (state: ProductionState) => ProductionState | null,
-  ) {
-    if (!managedIdentity) {
-      if (eventType === 'production.workspace.initialized') throw new Error('Browser demo Plant is already initialized.')
-      const result = await mutateProductionWorkspace(transition)
-      if (!result.ok) {
-        if (result.error === 'The Production state changed or the requested transition is not valid. Nothing was written.') {
-          const latest = loadProductionWorkspace()
-          const current = {
-            state: latest.state,
-            mode: 'local' as const,
-            workspaceId: '',
-            version: null,
-            error: latest.error,
-            writeReady: !latest.error && productionWorkspaceCanWrite(),
-          }
-          snapshotRef.current = current
-          setLocalSnapshot(current)
-          throw new PlantReviewRequiredError(latest.error
-            ? `Plant changed before this action was applied. Nothing was written; reload to recover the current record. ${latest.error}`
-            : 'Plant changed before this action was applied. Nothing was written; the latest record is loaded for fresh review.')
-        }
-        const refreshed = loadProductionWorkspace()
-        const rejected = {
-          state: refreshed.error ? snapshotRef.current.state : refreshed.state,
-          mode: 'local' as const,
-          workspaceId: '',
-          version: null,
-          error: result.error,
-          writeReady: false,
-        }
-        snapshotRef.current = rejected
-        setLocalSnapshot(rejected)
-        throw new Error(result.error)
-      }
-      const accepted = { state: result.state, mode: 'local' as const, workspaceId: '', version: null, error: '', writeReady: true }
-      snapshotRef.current = accepted
-      setLocalSnapshot(accepted)
-      return
-    }
-
-    const workspaceId = managedIdentity.workspaceId
-    const current = snapshotRef.current
-    const initializing = eventType === 'production.workspace.initialized'
-    const modeReady = initializing ? current.mode === 'managed-unprovisioned' && current.version === 0 : current.mode === 'managed-ready' && current.version !== null
-    if (!modeReady || current.workspaceId !== workspaceId || current.version === null) {
-      throw new Error(current.error || 'Managed Plant is not ready for writes.')
-    }
-    const next = transition(current.state)
-    if (!next) throw new PlantReviewRequiredError('The Plant record changed or this lifecycle step is no longer valid. Nothing was written; review the current record again.')
-    if (next === current.state) return
-    const candidate = validateProductionState(next)
-
-    try {
-      const result = await saveManagedProductionCommand({
-        commandId,
-        evidence,
-        eventType,
-        expectedVersion: current.version,
-        identity: managedIdentity,
-        state: candidate as unknown as Record<string, unknown>,
-      })
-      if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the write was confirmed.')
-      if (result.surface !== 'production' || result.event_type !== eventType || result.version !== current.version + 1) {
-        throw new Error('Managed Plant returned an invalid command result.')
-      }
-      const accepted = validateProductionState(result.state)
-      let nextSnapshot: ProductionWorkspaceView = { state: accepted, mode: 'managed-ready', workspaceId, version: result.version, error: '', writeReady: true }
-      if (result.idempotent_replay) {
-        const bootstrap = await loadManagedBootstrap(managedIdentity)
-        if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before the replay could be reconciled.')
-        const refreshed = managedProductionView(
-          requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
-          workspaceId,
-        )
-        if (refreshed.mode !== 'managed-ready' || refreshed.version === null || refreshed.version < result.version) {
-          throw new Error('Managed Plant could not reconcile the committed command with current state.')
-        }
-        nextSnapshot = { ...refreshed, error: '' }
-      }
-      snapshotRef.current = nextSnapshot
-      setManagedSnapshot(nextSnapshot)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'The managed Plant write was not confirmed.'
-      if (error instanceof ManagedTrialError && error.code === 'trial_version_conflict') {
-        try {
-          const bootstrap = await loadManagedBootstrap(managedIdentity)
-          if (!identityRef.current || !sameManagedIdentity(identityRef.current, managedIdentity)) throw new Error('The managed workspace changed before Plant could refresh.', { cause: error })
-          const refreshed = managedProductionView(
-            requireManagedSurfaceState(bootstrap, 'production', 'Plant'),
-            workspaceId,
-          )
-          const conflict = { ...refreshed, error: '' }
-          snapshotRef.current = conflict
-          setManagedSnapshot(conflict)
-        } catch (refreshError) {
-          const refreshMessage = refreshError instanceof Error ? refreshError.message : 'Plant changed and the latest revision could not be loaded.'
-          const rejected = { ...snapshotRef.current, error: refreshMessage }
-          snapshotRef.current = rejected
-          setManagedSnapshot(rejected)
-          throw refreshError
-        }
-        throw new PlantReviewRequiredError('Plant changed in another session. The latest revision is loaded; review and confirm the action again.')
-      }
-      if (identityRef.current && sameManagedIdentity(identityRef.current, managedIdentity)) {
-        const rejected = { ...snapshotRef.current, error: message }
-        snapshotRef.current = rejected
-        setManagedSnapshot(rejected)
-      }
-      throw error
-    }
-  }
-
-  const visible = managedIdentity ? managedSnapshot : localSnapshot
-  const canWrite = managedIdentity
-    ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error
-    : visible.mode === 'local' && !visible.error && visible.writeReady
-  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite] as const
-}
-
-export function useApprovalWorkspace() {
-  return useStoredState<Approval[]>(APPROVAL_KEY, [], normalizeApprovals, LEGACY_APPROVAL_KEYS, localApprovalsOnly)
-}
-
-export function useAccountableActions() {
-  return useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
-}
-
-export function useSetupWorkspace() {
-  const [setup, setSetup] = useStoredState<SetupState>(SETUP_KEY, seedSetup, normalizeSetup, LEGACY_SETUP_KEYS)
-  const setupRef = useRef(setup)
-
-  useEffect(() => {
-    setupRef.current = setup
-  }, [setup])
-
-  useEffect(() => {
-    function synchronizeSetup(event: Event) {
-      const next = (event as CustomEvent<SetupState>).detail
-      if (!next) return
-      const normalized = normalizeSetup(next)
-      setupRef.current = normalized
-      setSetup(normalized)
-    }
-    window.addEventListener(SETUP_SYNC_EVENT, synchronizeSetup)
-    return () => window.removeEventListener(SETUP_SYNC_EVENT, synchronizeSetup)
-  }, [setSetup])
-
-  const updateSetup = useCallback<Dispatch<SetStateAction<SetupState>>>((next) => {
-    const normalized = normalizeSetup(typeof next === 'function' ? next(setupRef.current) : next)
-    setupRef.current = normalized
-    setSetup(normalized)
-    window.dispatchEvent(new CustomEvent<SetupState>(SETUP_SYNC_EVENT, { detail: normalized }))
-  }, [setSetup])
-
-  return [setup, updateSetup] as const
-}
-
-export function useManagedIdentity(enabled: boolean) {
-  const [identity, setIdentity] = useState<ManagedIdentity | null>(null)
-
-  useEffect(() => {
-    if (!enabled) return undefined
-    let active = true
-    currentManagedIdentity()
-      .then((current) => {
-        if (active) setIdentity(current)
-      })
-      .catch(() => {
-        if (active) setIdentity(null)
-      })
-    return () => { active = false }
-  }, [enabled])
-
-  return [enabled ? identity : null, setIdentity] as const
-}
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('en-US').format(value)} MMK`
+}
+
+type CommerceCorrectionDraft = {
+  orderId: string
+  kind: CommerceCorrectionKind
+  reasonCode: CommerceCorrectionReasonCode
+  listedAmountMmk: string
+  sourceIntent?: EcommerceCorrectionIntent
+}
+
+function formatTaxRate(rateBasisPoints: number) {
+  return `${(rateBasisPoints / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`
+}
+
+function formatCommerceCalculation(calculation: NonNullable<CommerceOrder['calculation']>) {
+  if (!('taxCode' in calculation)) {
+    return `Subtotal ${formatMoney(calculation.subtotalMmk)} · Tax not configured · Total ${formatMoney(calculation.totalMmk)}`
+  }
+  const treatment = calculation.taxMode === 'inclusive' ? 'included' : 'added'
+  const jurisdiction = calculation.taxJurisdictionCode ? ` · ${calculation.taxJurisdictionCode}` : ''
+  return `Net ${formatMoney(calculation.subtotalMmk)} · Tax ${calculation.taxCode}${jurisdiction} ${formatTaxRate(calculation.taxRateBasisPoints)} ${treatment} ${formatMoney(calculation.taxMmk)} · Total ${formatMoney(calculation.totalMmk)}`
+}
+
+function taxConfigurationDraft(configuration: CommerceTaxConfiguration | null): TaxConfigurationDraft {
+  return {
+    code: configuration?.code ?? '',
+    label: configuration?.label ?? '',
+    ratePercent: configuration ? String(configuration.rateBasisPoints / 100) : '',
+    mode: configuration?.mode ?? 'exclusive',
+    jurisdictionCode: configuration?.jurisdictionCode ?? '',
+    effectiveFrom: '',
+  }
+}
+
+function accountMappingDraft(configuration: ReturnType<typeof commerceCurrentAccountMappingConfiguration>): AccountMappingDraft {
+  const mappings = new Map(configuration?.mappings.map((mapping) => [mapping.accountRole, mapping.externalAccountCode]) ?? [])
+  return {
+    paymentClearing: mappings.get('payment_clearing') ?? '',
+    salesRevenue: mappings.get('sales_revenue') ?? '',
+    taxPayable: mappings.get('tax_payable') ?? '',
+    legacyRevenue: mappings.get('sales_revenue_unverified') ?? '',
+    salesAdjustment: mappings.get('sales_adjustment') ?? '',
+    correctionReceivable: mappings.get('correction_receivable') ?? '',
+    correctionPayable: mappings.get('correction_payable') ?? '',
+  }
+}
+
+function parseTaxRateBasisPoints(value: string) {
+  const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(value.trim())
+  if (!match) return null
+  const basisPoints = Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'))
+  return Number.isSafeInteger(basisPoints) && basisPoints <= 10_000 ? basisPoints : null
 }
 
 function fulfilmentLabel(value: string | undefined) {
@@ -1539,7 +953,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   returnFocus?: HTMLElement | null
 }) {
   const [trialSetup] = useSetupWorkspace()
-  const [actor, setActor] = useState(trialSetup.owner)
+  const [actor, setActor] = useState(action?.actorSuggestion ?? trialSetup.owner)
   const [reason, setReason] = useState(action?.reasonSuggestion ?? '')
   const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
@@ -1595,7 +1009,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
       {isCounterConfirmation
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Receipt</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
-      {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Completing this records a sample order and sample stock change in this browser. No payment is captured, no customer is contacted, no server or managed workspace is written, and no real stock is moved.</p> : null}
+      {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Completing this records a sample order and sample stock change in this browser. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
       <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Complete sale' : 'Confirm change'}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
@@ -1700,7 +1114,7 @@ function useRuntimeHealth() {
         })
       })
       .catch(() => {
-        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before managed activation.'] })
+        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before company account setup.'] })
       })
     return () => controller.abort()
   }, [])
@@ -1709,7 +1123,7 @@ function useRuntimeHealth() {
 }
 
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed' : 'Sample workspace'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Sample mode'}</span>
 }
 
 export function CoreLayout() {
@@ -1752,7 +1166,7 @@ export function CoreLayout() {
             : 'settings_opened',
       product,
       route,
-      detail: routeProduct ? `${productDisplayName(routeProduct)} workspace viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
+      detail: routeProduct ? `${productDisplayName(routeProduct)} product viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
     })
   }, [location.pathname, location.search, routeProduct, settingsProduct])
 
@@ -1769,7 +1183,7 @@ export function CoreLayout() {
   const themeLabel = theme === 'dark' ? 'Use light theme' : 'Use dark theme'
 
   return (
-    <div className={`core-shell theme-${theme}${theme === 'dark' ? ' shop-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
+    <div className={`core-shell theme-${theme}${routeProduct === 'commerce' ? ' shop-product-shell' : ''}${routeProduct === 'production' ? ' plant-shell' : ''}`}>
       <a className="core-skip" href="#workspace-main" onClick={() => requestAnimationFrame(() => workspaceMainRef.current?.focus())}>Skip to workspace</a>
       <aside className="core-sidebar">
         <Brand />
@@ -1798,10 +1212,10 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 const customerTracks = [
-  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', 'commerce'],
-  ['Plant', 'Factory, workshop, service floor.', 'Plan, record, hand off shifts.', '/plant/?tab=production', 'production'],
-  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/', 'website'],
-  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop handoff.', '/ecommerce/', 'ecommerce'],
+  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter'],
+  ['Plant', 'Factory, workshop, service floor.', 'Plan jobs, record output, and close shifts.', '/plant/?tab=production'],
+  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/'],
+  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop review.', '/ecommerce/'],
 ] as const
 
 export function ProductHomePage() {
@@ -1816,35 +1230,49 @@ export function ProductHomePage() {
   const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
   const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
   const nextHref = ready ? '/settings/' : clientSetupPath(setup.product)
-  const nextAction = ready ? 'Export evidence' : 'Finish setup'
+  const nextAction = ready ? 'Export readiness file' : 'Add your data'
   const nextDetail = ready
-    ? `${contract.name} is ready for managed data review.`
-    : `${contract.name} setup is ${progress}% complete.`
+    ? `${contract.name} is ready for data review.`
+    : `${contract.name} data setup is ${progress}% complete.`
   const autopilotRows = [
     ['Track', contract.name, template.name],
     ['Data', sourceNamed ? 'First source named' : 'Needs first source', sourceNamed ? setup.currentRecord : 'Upload, paste, or describe one real record.'],
-    ['Proof', proofNamed ? 'Acceptance proof named' : 'Needs acceptance proof', proofNamed ? setup.acceptanceEvidence : 'Define the evidence that proves the workflow works.'],
-    ['AI context', ready ? 'Ready for managed import' : 'Locked until evidence', ready ? 'Premium can learn from approved data, roles, and audit.' : 'Free stays local until the owner approves activation.'],
+    ['Proof', proofNamed ? 'Acceptance proof named' : 'Needs acceptance proof', proofNamed ? setup.acceptanceEvidence : 'Define how you know the workflow works.'],
+    ['Data access', ready ? 'Ready for import review' : 'Locked until approved', ready ? 'Approved data can use users, audit, and controlled writes.' : 'Samples stay local until you approve real data.'],
   ] as const
-  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
+  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Use a local workspace first. Activate managed data and AI when ready." eyebrow="Products" title="Choose a product. Run work." />
+      <PageHeading copy="Pick one product and try the sample. Add your data only when it helps." eyebrow="Products" title="Start with one product." />
       <section className="product-home-operating-model" aria-label="SuperMega operating model">
         <div>
-          <span className="core-eyebrow">Free workspace</span>
-          <strong>Sample data, imports, review, and evidence.</strong>
+          <span className="core-eyebrow">Try first</span>
+          <strong>Sample data stays on this device.</strong>
         </div>
         <div>
-          <span className="core-eyebrow">Premium activation</span>
-          <strong>Managed data, AI context, roles, audit, and writes.</strong>
+          <span className="core-eyebrow">Add data later</span>
+          <strong>Import data after the demo makes sense.</strong>
         </div>
-        <Link className="core-button primary" to="/settings/">Check readiness</Link>
+        <Link className="core-button primary" to="/settings/">Add data</Link>
       </section>
-      <section className="product-home-autopilot" aria-label="AI operating plan">
+      <nav aria-label="Business tracks" className="product-track-grid">
+        {customerTracks.map(([name, fit, outcome, path]) => (
+          <article className="product-track-card" key={name}>
+            <div>
+              <span className="core-eyebrow">{fit}</span>
+              <h2>{name}</h2>
+              <p>{outcome}</p>
+            </div>
+            <div className="product-track-actions">
+              <Link to={path}>Try demo</Link>
+            </div>
+          </article>
+        ))}
+      </nav>
+      <section className="product-home-autopilot" aria-label="Recommended next step">
         <div className="product-home-autopilot-head">
           <div>
-            <span className="core-eyebrow">AI operating plan</span>
+            <span className="core-eyebrow">Next step</span>
             <h2>Recommended next move</h2>
             <p>{nextDetail} No external send, publish, payment, or production write runs from this screen.</p>
           </div>
@@ -1863,21 +1291,6 @@ export function ProductHomePage() {
       <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
         <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={progress} ready={ready} />
       </Suspense>
-      <nav aria-label="Business tracks" className="product-track-grid">
-        {customerTracks.map(([name, fit, outcome, path, product]) => (
-          <article className="product-track-card" key={name}>
-            <div>
-              <span className="core-eyebrow">{fit}</span>
-              <h2>{name}</h2>
-              <p>{outcome}</p>
-            </div>
-            <div className="product-track-actions">
-              <Link to={path}>Open product</Link>
-              <Link to={clientSetupPath(product)}>Set up product</Link>
-            </div>
-          </article>
-        ))}
-      </nav>
     </div>
   )
 }
@@ -1987,13 +1400,12 @@ export function OverviewPage() {
     .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
     .sort(compareCommerceOrderPromise)
   const nextOperatingOrder = openOrders.find(commerceOrderNeedsAction) ?? openOrders[0]
-  const agentHandoffs = workspace.agents.filter((agent) => ['waiting_review', 'blocked'].includes(agent.state) && !blockedWork.some((item) => item.id === agent.assignedWorkItemId))
   const releaseComplete = workspace.release.checks.filter((check) => check.complete).length
   const releasePercent = Math.round((releaseComplete / workspace.release.checks.length) * 100)
   const isPilotReady = pilotReady(setup)
   const stockPriorityCount = uncoveredLowStock.length + purchaseArrivalAttention.length
   const operatingExceptions = stockPriorityCount + openProductionIssues.length
-  const ownerAttention = blockedWork.length + pendingApprovals.length + agentHandoffs.length + operatingExceptions + (isPilotReady ? 0 : 1)
+  const ownerAttention = blockedWork.length + pendingApprovals.length + operatingExceptions + (isPilotReady ? 0 : 1)
   const selectedApproval = pendingApprovals.find((approval) => approval.id === selectedApprovalId)
   function purchaseArrivalPriority(row: typeof purchaseArrivalAttention[number]) {
     const itemName = row.item?.name ?? row.purchaseOrder.sku
@@ -2025,12 +1437,10 @@ export function OverviewPage() {
             : !isPilotReady
               ? { label: 'Setup', title: 'Define the measurable workflow', detail: `${pilotProgress(setup)}% complete; add the baseline and acceptance evidence.`, action: 'Finish setup', href: '/settings/' }
               : pendingApprovals[0]
-                ? { label: 'HQ approval', title: pendingApprovals[0].title, detail: `${pendingApprovals[0].packet.claims.length} claims are ready for a human decision.`, action: 'Review now', approvalId: pendingApprovals[0].id }
+              ? { label: 'Company review', title: pendingApprovals[0].title, detail: `${pendingApprovals[0].packet.claims.length} claims are ready for review.`, action: 'Review now', approvalId: pendingApprovals[0].id }
                 : blockedWork[0]
-                  ? { label: 'HQ blocker', title: blockedWork[0].title, detail: `${blockedWork[0].owner} needs a decision to continue.`, action: 'Open HQ', href: `/work/?team=${blockedWork[0].team}&view=work&item=${blockedWork[0].id}` }
-                  : agentHandoffs[0]
-                    ? { label: 'HQ handoff', title: `${agentHandoffs[0].name} needs review`, detail: `${agentHandoffs[0].humanOwner} owns the next decision.`, action: 'Open HQ', href: `/work/?team=${agentHandoffs[0].team}&view=agents&agent=${agentHandoffs[0].id}` }
-                    : { label: 'Ready', title: 'Start with Shop', detail: 'No operating exception or owner decision is waiting.', action: 'Open Shop', href: '/shop/?tab=orders' }
+                  ? { label: 'Company work', title: blockedWork[0].title, detail: `${blockedWork[0].owner} needs a decision to continue.`, action: 'Open work', href: `/work/?team=${blockedWork[0].team}&view=work&item=${blockedWork[0].id}` }
+                  : { label: 'Ready', title: 'Start with Shop', detail: 'No operating exception or owner decision is waiting.', action: 'Open Shop', href: '/shop/?tab=orders' }
 
   useEffect(() => {
     if (!managedIdentity) return undefined
@@ -2049,7 +1459,7 @@ export function OverviewPage() {
 
   function prepareCompanyBrief() {
     setBrief([
-      `${openWork.length} company work items remain open; ${activeWork.length} are in delivery or review across ${workspace.agents.length} delegated role records.`,
+      `${openWork.length} company work items remain open; ${activeWork.length} are in delivery or review.`,
       `${openOrders.length} Shop orders, ${stockPriorityCount} stock priorities, and ${openProductionIssues.length} Plant issues need operating attention.`,
       `${workspace.release.name} is ${releasePercent}% ready from ${workspace.release.checks.length} explicit checks.`,
       isPilotReady ? `${setup.workspace} pilot starts from ${setup.entryPoint}; baseline: ${setup.baseline}; target: ${setup.targetOutcome}.` : `Pilot definition is ${pilotProgress(setup)}% complete and still needs a baseline, target, authority boundary, and acceptance evidence.`,
@@ -2161,15 +1571,15 @@ export function OverviewPage() {
         </Link>
         <Link to="/website/">
           <span><strong>Website</strong><small>Build and review a website</small></span>
-          <b>Open</b>
+          <b>Try demo</b>
         </Link>
         <Link to="/ecommerce/">
           <span><strong>Ecommerce</strong><small>Build a Shop-backed storefront</small></span>
-          <b>Open</b>
+          <b>Try demo</b>
         </Link>
       </nav>
       <details className="home-more">
-        <summary><span>SuperMega HQ</span><small>Internal company work</small></summary>
+        <summary><span>Advanced</span><small>Company setup and review</small></summary>
         <div className="command-grid">
         <section className="core-panel command-queue-panel">
           <div className="panel-head"><div><span className="core-eyebrow">Active work</span><h2>{visibleWork.length} items in motion</h2></div><Link className="text-link" to="/work/?team=product&view=work">View all work</Link></div>
@@ -2180,7 +1590,6 @@ export function OverviewPage() {
           <div className="attention-list">
             {!isPilotReady ? <Link to="/settings/"><span>Pilot</span><strong>Define the measurable workflow</strong><small>{pilotProgress(setup)}% complete · baseline and acceptance required</small></Link> : null}
             {blockedWork.map((item) => <Link key={item.id} to={`/work/?team=${item.team}&view=work&item=${item.id}`}><span>Work</span><strong>{item.title}</strong><small>{item.owner}</small></Link>)}
-            {agentHandoffs.map((agent) => <Link key={agent.id} to={`/work/?team=${agent.team}&view=agents&agent=${agent.id}`}><span>Agent</span><strong>{agent.name} {agent.state === 'waiting_review' ? 'needs review' : 'is blocked'}</strong><small>{agent.humanOwner} / {agent.assignedWorkItemId ?? 'unassigned'}</small></Link>)}
             {pendingApprovals.map((approval) => <button className="attention-action" key={approval.id} onClick={() => setSelectedApprovalId(approval.id)} type="button"><span>{approval.managed ? 'Managed approval' : 'Approval'}</span><strong>{approval.title}</strong><small>{approval.packet.claims.length} claims · {formatTime(approval.createdAt)}</small><b>Review</b></button>)}
             {purchaseArrivalAttention.map((row) => { const priority = purchaseArrivalPriority(row); return <Link key={row.purchaseOrder.id} to={priority.href}><span>Purchase</span><strong>{priority.title}</strong><small>{priority.detail}</small></Link> })}
             {uncoveredLowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><span>Stock</span><strong>{item.name}</strong><small>{item.onHand} on hand · reorder at {item.reorderAt}</small></Link>)}
@@ -2208,6 +1617,12 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const [searchParams] = useSearchParams()
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const ecommerceNavigationDraft = (location.state as { ecommerceShopDraft?: EcommerceShopDraft } | null)?.ecommerceShopDraft ?? null
+  const ecommerceReturnNavigationIntent = (location.state as { ecommerceReturnIntent?: EcommerceReturnIntent } | null)?.ecommerceReturnIntent ?? null
+  const ecommerceSupportNavigationIntent = (location.state as { ecommerceSupportIntent?: EcommerceSupportIntent } | null)?.ecommerceSupportIntent ?? null
+  const ecommerceCorrectionNavigationIntent = (location.state as { ecommerceCorrectionIntent?: EcommerceCorrectionIntent } | null)?.ecommerceCorrectionIntent ?? null
+  const ecommerceCancellationNavigationIntent = (location.state as { ecommerceCancellationIntent?: EcommerceCancellationIntent } | null)?.ecommerceCancellationIntent ?? null
+  const ecommerceOrderAmendmentNavigationIntent = (location.state as { ecommerceOrderAmendmentIntent?: EcommerceOrderAmendmentIntent } | null)?.ecommerceOrderAmendmentIntent ?? null
+  const ecommerceOrderRescheduleNavigationIntent = (location.state as { ecommerceOrderRescheduleIntent?: EcommerceOrderRescheduleIntent } | null)?.ecommerceOrderRescheduleIntent ?? null
   const routeModule = location.pathname.split('/').filter(Boolean)[1]
   const requestedView = searchParams.get('view')
   const requestedSource = searchParams.get('source')
@@ -2215,7 +1630,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const isProductRoute = Boolean(product) || routeModule === 'commerce' || routeModule === 'production'
   const view: ProductId = product ?? (routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce')
   const requestedTab = searchParams.get('tab')
-  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'
+  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'today'
   const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
   const activeTab = view === 'commerce' ? commerceTab : productionTab
   const requestedTabIsCanonical = requestedTab === activeTab
@@ -2231,18 +1646,27 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   }
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
+  const startActions = productStartActions[view]
   const productCopy = view === 'commerce'
-    ? 'Tap an item, choose payment, and confirm the sale.'
-    : 'Jobs, output, equipment, and problems in one place.'
+    ? {
+        today: 'See today’s next job and key numbers.',
+        counter: 'Tap an item, choose payment, and confirm the sale.',
+        orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
+        inventory: 'Count stock, replenish items, and review location availability.',
+      }[commerceTab]
+    : {
+        production: 'Choose jobs, record output, and keep material trace current.',
+        control: 'Contain quality, equipment, downtime, and maintenance problems.',
+      }[productionTab]
 
   if (!isProductRoute && !requestedView) {
     return <div className="workspace-screen product-catalog-screen">
-      <PageHeading eyebrow="Products" title="Choose a product" copy="Open the product for the job you need to do." actions={<Link className="core-button" to="/settings/">Set up a client</Link>} />
+      <PageHeading eyebrow="Products" title="Choose a product" copy="Try the working demo first. Add client data only when the demo makes sense." actions={<Link className="core-button" to="/settings/">Add data later</Link>} />
       <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
-        <Link to="/shop/?tab=orders"><span><strong>Shop</strong><small>Orders, payments, and stock</small></span><b>Open</b></Link>
-        <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
-        <Link to="/website/"><span><strong>Website</strong><small>Build, preview, and review a site</small></span><b>Open</b></Link>
-        <Link to="/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Open</b></Link>
+        <Link to="/shop/?tab=counter"><span><strong>Shop</strong><small>Sell, take payment, and manage stock</small></span><b>Try demo</b></Link>
+        <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Try demo</b></Link>
+        <Link to="/website/"><span><strong>Website</strong><small>Build, preview, and review a site</small></span><b>Try demo</b></Link>
+        <Link to="/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Try demo</b></Link>
       </nav>
     </div>
   }
@@ -2250,8 +1674,16 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   return (
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
+      <nav className="product-start-strip" aria-label={`${productDisplayName(view)} quick start`}>
+        {startActions.map((action) => (
+          <Link aria-current={location.pathname + location.search === action.to ? 'page' : undefined} key={action.label} to={action.to}>
+            <b>{action.step}</b>
+            <span><strong>{action.label}</strong><small>{action.detail}</small></span>
+          </Link>
+        ))}
+      </nav>
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
-      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceNavigationDraft={ecommerceNavigationDraft} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
+      <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
   )
 }
@@ -2295,14 +1727,15 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
 
   function changeQuantity(item: CommerceItem, next: number) {
+    const nextQuantity = Math.max(0, Math.min(next, item.onHand))
+    if (!nextQuantity && unitCount === 1) setCartOpen(false)
     setCart((current) => {
-      const quantity = Math.max(0, Math.min(next, item.onHand))
-      if (!quantity) {
+      if (!nextQuantity) {
         const remaining = { ...current }
         delete remaining[item.sku]
         return remaining
       }
-      return { ...current, [item.sku]: quantity }
+      return { ...current, [item.sku]: nextQuantity }
     })
   }
 
@@ -2311,10 +1744,21 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
     setCart((current) => ({ ...current, [item.sku]: Math.min((current[item.sku] ?? 0) + 1, item.onHand) }))
   }
 
+  function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Enter' || !normalizedQuery) return
+    const exactSku = visibleItems.find((item) => item.sku.toLocaleLowerCase() === normalizedQuery)
+    const match = exactSku ?? (visibleItems.length === 1 ? visibleItems[0] : null)
+    if (!match || match.onHand < 1) return
+    event.preventDefault()
+    addItem(match)
+    setQuery('')
+  }
+
   function clearSale() {
     setCart({})
     setCustomer('')
     setPayment('Cash')
+    setCartOpen(false)
   }
 
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
@@ -2325,7 +1769,6 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
       payment,
       onCommitted: () => {
         clearSale()
-        setCartOpen(false)
       },
     }, event.currentTarget)
   }
@@ -2334,8 +1777,8 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
-          <div><span className="core-eyebrow">Counter open</span><h2>Tap an item to add it</h2><div className="shop-counter-summary"><span>{openOrderCount} open orders</span><span>{lowStockCount} low stock</span></div></div>
-          <label className="shop-item-search"><span className="sr-only">Find an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} placeholder="Find an item" type="search" value={query} /></label>
+          <div><span className="core-eyebrow">Counter open</span><h2>Tap an item to add it</h2><nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
+          <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label>
         </header>
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item) => {
@@ -2363,7 +1806,7 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
         <footer><div><span>Total</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={!unitCount || disabled} onClick={reviewSale} type="button">{disabled ? 'Sales paused' : 'Review sale'}<span aria-hidden="true">→</span></button><small>Nothing changes until the cashier confirms.</small></footer>
       </aside>
     </div>
-    <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>Current sale</small><strong>{unitCount || 'Empty'}</strong></span><b>{formatMoney(total)}</b></button>
+    {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>Current sale</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
   </section>
 }
 
@@ -2403,6 +1846,7 @@ function buildCommerceOrderRecoveryInput(
     fulfilment: '' | 'pickup' | 'delivery'
     fulfilmentReference: string
     promisedAt: string
+    paymentTermsDays: 0 | 7 | 30
     lines: Array<{ sku: string; quantity: number }>
   },
   catalog: CommerceItem[],
@@ -2430,12 +1874,19 @@ function buildCommerceOrderRecoveryInput(
     fulfilment: fields.fulfilment,
     fulfilmentReference: fields.fulfilmentReference.trim(),
     promisedAt: promisedAt && !Number.isNaN(promisedAt.getTime()) ? promisedAt.toISOString() : '',
+    paymentTermsDays: fields.paymentTermsDays,
     lines: lines as CommerceOrderDraftInput['lines'],
   }
 }
 
-function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequestId, requestedSource, tab }: {
+function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrectionNavigationIntent, ecommerceNavigationDraft, ecommerceOrderAmendmentNavigationIntent, ecommerceOrderRescheduleNavigationIntent, ecommerceReturnNavigationIntent, ecommerceSupportNavigationIntent, managedIdentity, requestedRequestId, requestedSource, tab }: {
+  ecommerceCancellationNavigationIntent: EcommerceCancellationIntent | null
+  ecommerceCorrectionNavigationIntent: EcommerceCorrectionIntent | null
   ecommerceNavigationDraft: EcommerceShopDraft | null
+  ecommerceOrderAmendmentNavigationIntent: EcommerceOrderAmendmentIntent | null
+  ecommerceOrderRescheduleNavigationIntent: EcommerceOrderRescheduleIntent | null
+  ecommerceReturnNavigationIntent: EcommerceReturnIntent | null
+  ecommerceSupportNavigationIntent: EcommerceSupportIntent | null
   managedIdentity: ManagedIdentity | null
   requestedRequestId: string | null
   requestedSource: string | null
@@ -2445,7 +1896,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
+  const [relatedProduction] = useProductionWorkspace(managedIdentity)
+  const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
+  const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
+  const ecommerceBuyingScope = managedIdentity ? `ecommerce:${managedIdentity.workspaceId}` : 'ecommerce:local'
+  const commerceRef = useRef(commerce)
+  useEffect(() => {
+    commerceRef.current = commerce
+  }, [commerce])
   const [actions, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
@@ -2457,6 +1916,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [fulfilment, setFulfilment] = useState<'' | 'pickup' | 'delivery'>('')
   const [fulfilmentReference, setFulfilmentReference] = useState('')
   const [promisedAt, setPromisedAt] = useState('')
+  const [paymentTermsDays, setPaymentTermsDays] = useState<0 | 7 | 30>(0)
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
   const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
@@ -2485,9 +1945,17 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const stockCountEditorRef = useRef<HTMLFormElement>(null)
   const returnTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const returnEditorRef = useRef<HTMLFormElement>(null)
+  const correctionTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
+  const correctionEditorRef = useRef<HTMLFormElement>(null)
   const ecommerceInboxTargetRef = useRef<HTMLButtonElement>(null)
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
+  const consumedEcommerceReturnIntentId = useRef('')
+  const consumedEcommerceSupportIntentId = useRef('')
+  const consumedEcommerceCorrectionIntentId = useRef('')
+  const consumedEcommerceCancellationIntentId = useRef('')
+  const consumedEcommerceOrderAmendmentIntentId = useRef('')
+  const consumedEcommerceOrderRescheduleIntentId = useRef('')
   const consumedEcommerceInboxSource = useRef('')
   const orderDraftRevisionRef = useRef(orderDraftRead.draft?.revision ?? 0)
   const orderDraftSaveQueueRef = useRef(Promise.resolve())
@@ -2501,11 +1969,62 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const [itemDraft, setItemDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '' })
   const [catalogCreateOpen, setCatalogCreateOpen] = useState(false)
   const [catalogEditDraft, setCatalogEditDraft] = useState<CatalogItemEditDraft | null>(null)
+  const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
+  const [supplierSourcingDraft, setSupplierSourcingDraft] = useState<SupplierSourcingDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
+  const [supplierInvoiceDraft, setSupplierInvoiceDraft] = useState<SupplierInvoiceDraft | null>(null)
+  const [supplierReturnDraft, setSupplierReturnDraft] = useState<SupplierReturnDraft | null>(null)
+  const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
   const [stockCountDraft, setStockCountDraft] = useState<StockCountDraft | null>(null)
   const [returnDraft, setReturnDraft] = useState<CommerceReturnDraft | null>(null)
+  const [cancellationDraft, setCancellationDraft] = useState<EcommerceCancellationIntent | null>(null)
+  const [orderAmendmentReview, setOrderAmendmentReview] = useState<{ intent: EcommerceOrderAmendmentIntent; replacementRequest: EcommerceOrderRequestV2; draft: EcommerceShopDraftV2 } | null>(null)
+  const [orderRescheduleReview, setOrderRescheduleReview] = useState<{ intent: EcommerceOrderRescheduleIntent; replacementRequest: EcommerceOrderRequestV2; draft: EcommerceShopDraftV2 } | null>(null)
+  const [supportDraft, setSupportDraft] = useState<CommerceSupportOpenDraft | null>(null)
+  const [supportReopenDraft, setSupportReopenDraft] = useState<CommerceSupportReopenDraft | null>(null)
+  const [supportServiceDraft, setSupportServiceDraft] = useState<CommerceSupportServiceDraft | null>(null)
+  const [supportResolutionDraft, setSupportResolutionDraft] = useState<CommerceSupportResolutionDraft | null>(null)
+  const [correctionDraft, setCorrectionDraft] = useState<CommerceCorrectionDraft | null>(null)
+  const [taxDraft, setTaxDraft] = useState<TaxConfigurationDraft | null>(null)
+  const [accountMapping, setAccountMapping] = useState<AccountMappingDraft | null>(null)
+  const [creditPolicyDraft, setCreditPolicyDraft] = useState<CustomerCreditPolicyDraft>({
+    customer: '',
+    creditLimitMmk: '',
+    maxPaymentTermsDays: 30,
+    status: 'active',
+  })
+  const [promotionPolicyDraft, setPromotionPolicyDraft] = useState<PromotionPolicyDraft>({
+    code: 'WELCOME',
+    discountPercent: '10',
+    minimumSubtotalMmk: '10000',
+    maximumDiscountMmk: '10000',
+    status: 'active',
+    effectiveFrom: '',
+    effectiveUntil: '',
+  })
+  const [shippingPolicyDraft, setShippingPolicyDraft] = useState<ShippingPolicyDraft>({
+    zoneCode: 'YGN-CENTRAL',
+    townships: 'Bahan, Kamayut, Sanchaung, Tamwe',
+    feeMmk: '3000',
+    promiseMinutes: '120',
+    status: 'active',
+    effectiveFrom: '',
+    effectiveUntil: '',
+  })
+  const [paymentPolicyDraft, setPaymentPolicyDraft] = useState<PaymentPolicyDraft>({
+    adapter: 'cash_on_delivery',
+    allowedFulfilments: 'delivery',
+    maximumOrderMmk: '500000',
+    instructions: 'Collect at delivery and reconcile the courier cash handoff in Shop.',
+    status: 'active',
+    effectiveFrom: '',
+    effectiveUntil: '',
+  })
+  const [closeSettlementDraft, setCloseSettlementDraft] = useState<CloseSettlementDraftLine[]>([])
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
+  const effectiveTaxDraft = taxDraft ?? taxConfigurationDraft(currentTaxConfiguration)
+  const effectiveAccountMapping = accountMapping ?? accountMappingDraft(currentAccountMappingConfiguration)
   const selectedSku = commerce.items.some((item) => item.sku === sku) || (resumedOrderDraft && sku)
     ? sku
     : commerce.items[0]?.sku ?? ''
@@ -2517,12 +2036,34 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   }))
   const manualOrderQuantity = manualOrderLineDrafts.reduce((total, line) => total + Math.max(line.quantity, 0), 0)
   const manualOrderTotal = manualOrderLineItems.reduce((total, line) => total + (line.item?.price ?? 0) * Math.max(line.quantity, 0), 0)
+  const manualOrderPricedTotal = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    ? preparedEcommerceDraft.totalMmk
+    : manualOrderTotal
+  const orderCreditCalculation = commerceOrderCalculation(commerce, manualOrderPricedTotal, new Date(purchaseOrderClock).toISOString())
+  const orderCreditReview = orderCreditCalculation
+    ? commerceCustomerCreditReview(
+      commerce,
+      customer.trim() || 'Guest',
+      orderCreditCalculation.totalMmk,
+      paymentTermsDays,
+      new Date(purchaseOrderClock).toISOString(),
+    )
+    : null
+  const orderCreditBlocked = paymentTermsDays !== 0 && orderCreditReview?.allowed !== true
+  const creditPolicyCustomer = creditPolicyDraft.customer.trim()
+  const currentCreditPolicy = creditPolicyCustomer
+    ? commerceCurrentCustomerCreditPolicy(commerce, creditPolicyCustomer)
+    : null
+  const currentPromotionPolicy = commerceCurrentPromotionPolicy(commerce, promotionPolicyDraft.code)
+  const currentShippingPolicy = commerceCurrentShippingPolicy(commerce, shippingPolicyDraft.zoneCode)
+  const currentPaymentPolicy = commerceCurrentPaymentPolicy(commerce, paymentPolicyDraft.adapter)
   const orderDraftHasMeaningfulFields = Boolean(customer.trim()
     || channel !== 'Messenger'
     || payment
     || fulfilment
     || fulfilmentReference.trim()
     || promisedAt
+    || paymentTermsDays !== 0
     || extraOrderLines.length
     || quantity !== 1
     || selectedSku !== (commerce.items[0]?.sku ?? ''))
@@ -2533,10 +2074,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     fulfilment,
     fulfilmentReference,
     promisedAt,
+    paymentTermsDays,
     lines: manualOrderLineDrafts,
   })
   const currentOrderRecoveryInput = buildCommerceOrderRecoveryInput(
-    { customer, channel, payment, fulfilment, fulfilmentReference, promisedAt, lines: manualOrderLineDrafts },
+    { customer, channel, payment, fulfilment, fulfilmentReference, promisedAt, paymentTermsDays, lines: manualOrderLineDrafts },
     commerce.items,
     null,
   )
@@ -2559,6 +2101,27 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const closePreviewOrderIds = new Set(closePreview?.orderIds ?? [])
   const closableOrders = commerce.orders.filter((order) => closePreviewOrderIds.has(order.id))
   const reconciledValue = closePreview?.total ?? 0
+  const closeExpectedByPayment = new Map<string, number>()
+  for (const order of closableOrders) {
+    const adjustedTotal = commerceOrderAdjustedTotal(order)
+    if (adjustedTotal !== null) closeExpectedByPayment.set(order.payment, (closeExpectedByPayment.get(order.payment) ?? 0) + adjustedTotal)
+  }
+  const effectiveCloseSettlementDraft = [...closeExpectedByPayment.entries()]
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([paymentMethod, expectedMmk]) => closeSettlementDraft.find((line) => line.paymentMethod === paymentMethod) ?? {
+      paymentMethod,
+      countedMmk: String(expectedMmk),
+      varianceOwner: '',
+      varianceReason: '',
+    })
+  const closeSettlementInput = effectiveCloseSettlementDraft.map((line): CommerceCloseSettlementInputLine | null => {
+    if (!/^(?:0|[1-9]\d*)$/.test(line.countedMmk)) return null
+    const countedMmk = Number(line.countedMmk)
+    return Number.isSafeInteger(countedMmk) ? { ...line, countedMmk } : null
+  })
+  const closeSettlement = closePreview && closeSettlementInput.every((line) => line !== null)
+    ? commerceCloseSettlementReview(commerce, closePreview, closeSettlementInput as CommerceCloseSettlementInputLine[])
+    : null
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const stockRows = commerce.items
     .map((item, index) => ({ item, index }))
@@ -2573,9 +2136,19 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     })
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
   const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
+  const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
+  const supplierPayablesAging = commerceSupplierPayablesAging(commerce, purchaseOrderClock)
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
   const closedOrders = commerce.orders.filter((order) => !actionOrderIds.has(order.id))
+  const orderAcknowledgementDownloads = useMemo(() => {
+    const downloads = new Map<string, OrderAcknowledgementDownload>()
+    commerce.orders.forEach((order) => {
+      const download = orderAcknowledgementDownload(commerce, order.id)
+      if (download) downloads.set(order.id, download)
+    })
+    return downloads
+  }, [commerce])
   const latestClose = commerce.closes.find((close) => close.operator)
   const latestCloseDownload = useMemo(() => {
     if (!latestClose) return null
@@ -2586,6 +2159,38 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceDailyCloseCsv(artifact)}`)}`,
     }
   }, [commerce, latestClose])
+  const latestAccountingDownload = useMemo(() => {
+    if (!latestClose) return null
+    const artifact = commerceAccountingHandoff(commerce, latestClose.id)
+    if (!artifact) return null
+    return {
+      filename: `supermega-shop-accounting-${artifact.businessDate}-${artifact.digest.slice(7, 15)}.csv`,
+      href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceAccountingHandoffCsv(artifact)}`)}`,
+      artifact,
+    }
+  }, [commerce, latestClose])
+  const supplierPayablesDownload = useMemo(() => {
+    const artifact = commerceSupplierPayablesHandoff(commerce)
+    if (!artifact) return null
+    return {
+      filename: `supermega-shop-payables-${artifact.generatedAt.slice(0, 10)}-${artifact.digest.slice(7, 15)}.csv`,
+      href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceSupplierPayablesHandoffCsv(artifact)}`)}`,
+      artifact,
+    }
+  }, [commerce])
+  const supportWorkloadDownload = useMemo(() => {
+    try {
+      const artifact = commerceSupportWorkloadExport(commerce, new Date(purchaseOrderClock).toISOString())
+      if (!artifact.rows.length) return null
+      return {
+        filename: `supermega-shop-support-${artifact.asOf.slice(0, 10)}-${artifact.digest.slice(7, 15)}.csv`,
+        href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceSupportWorkloadCsv(artifact)}`)}`,
+        artifact,
+      }
+    } catch {
+      return null
+    }
+  }, [commerce, purchaseOrderClock])
   const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
   const websiteIntakes = commerceWebsiteIntakes(commerce)
   const localWebsiteIntake = managedIdentity ? null : readWebsiteEcommerceHandoff()
@@ -2607,11 +2212,43 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       item: commerce.items.find((item) => item.sku === purchaseOrder.sku),
     }))
     .sort(compareCommercePurchaseOrderAttention)
+  const convertedRequisitionIds = new Set(purchaseOrderRows.flatMap(({ purchaseOrder }) => purchaseOrder.requisitionId ? [purchaseOrder.requisitionId] : []))
+  const openPurchaseRequisitions = commercePurchaseRequisitions(commerce).filter((requisition) => !convertedRequisitionIds.has(requisition.id))
+  const purchaseBudgetEnvelopes = commercePurchaseBudgetEnvelopes(commerce)
+  const activePurchaseBudget = purchaseBudgetEnvelopes.find((envelope) => (
+    Date.parse(envelope.periodStart) <= purchaseOrderClock && purchaseOrderClock < Date.parse(envelope.periodEnd)
+  ))
+  const activePurchaseBudgetCommitment = activePurchaseBudget
+    ? commercePurchaseBudgetCommitment(commerce, activePurchaseBudget)
+    : null
+  const consumedSourcingDecisionIds = new Set(commercePurchaseRequisitions(commerce).flatMap((requisition) => (
+    requisition.sourceSourcingDecisionId ? [requisition.sourceSourcingDecisionId] : []
+  )))
+  const openSupplierSourcingDecisions = commerceSupplierSourcingDecisions(commerce).filter((decision) => {
+    const selected = commerceSupplierSourcingSelectedQuote(decision)
+    return selected && !consumedSourcingDecisionIds.has(decision.id) && Date.parse(selected.validUntil) >= purchaseOrderClock
+  })
+  const supplierPerformance = commerceSupplierPerformance(commerce, purchaseOrderClock)
   const activePurchaseOrderBySku = new Map(
     purchaseOrderRows
       .filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
       .map((row) => [row.purchaseOrder.sku, row]),
   )
+  const shopDemandIntelligence = useMemo(
+    () => projectShopDemandIntelligence(commerce, purchaseOrderClock),
+    [commerce, purchaseOrderClock],
+  )
+  const demandForecastRows = shopDemandIntelligence.rows.filter((row) => row.netDemandUnits > 0)
+  const shopReplenishment = useMemo(
+    () => projectShopReplenishment(commerce, relatedProduction),
+    [commerce, relatedProduction],
+  )
+  const purchaseRecommendations = shopReplenishment.rows.filter((row) => row.recommendedOrderUnits > 0)
+  const shopProcurementDecision = useMemo(
+    () => projectShopProcurementDecision(commerce, shopReplenishment, purchaseOrderClock),
+    [commerce, purchaseOrderClock, shopReplenishment],
+  )
+  const procurementReviews = shopProcurementDecision.rows
   const managedInventoryProjection = useMemo(() => {
     if (!commerce.inventoryFoundation) return null
     try {
@@ -2636,9 +2273,16 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const purchaseOrderQuantity = /^\d+$/.test(purchaseOrderQuantityText)
     ? Number(purchaseOrderQuantityText)
     : Number.NaN
+  const purchaseOrderRejectedText = purchaseOrderDraft?.mode === 'receive' ? purchaseOrderDraft.rejectedQuantity.trim() : '0'
+  const purchaseOrderRejectedQuantity = /^\d+$/.test(purchaseOrderRejectedText)
+    ? Number(purchaseOrderRejectedText)
+    : Number.NaN
+  const purchaseOrderRejectedResult = Number.isSafeInteger(purchaseOrderRejectedQuantity) && purchaseOrderRejectedQuantity >= 0
+    ? purchaseOrderRejectedQuantity
+    : null
   const purchaseOrderQuantityLimit = purchaseOrderDraft?.mode === 'receive'
     ? Math.min(
-        purchaseOrderDraftOrder?.progress.remaining ?? 0,
+        Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderRejectedResult ?? 0)),
         purchaseOrderDraftItem ? Number.MAX_SAFE_INTEGER - purchaseOrderDraftItem.onHand : 0,
       )
     : Number.MAX_SAFE_INTEGER
@@ -2655,6 +2299,77 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && purchaseOrderExpectedAtTime > purchaseOrderClock
     ? new Date(purchaseOrderExpectedAtTime).toISOString()
     : null
+  const purchaseOrderUnitCostText = purchaseOrderDraft?.mode === 'create' ? purchaseOrderDraft.unitCostMmk.trim() : ''
+  const purchaseOrderUnitCost = /^\d+$/.test(purchaseOrderUnitCostText) ? Number(purchaseOrderUnitCostText) : Number.NaN
+  const purchaseOrderUnitCostResult = Number.isSafeInteger(purchaseOrderUnitCost) && purchaseOrderUnitCost > 0
+    ? purchaseOrderUnitCost
+    : null
+  const purchaseOrderDraftTotal = purchaseOrderQuantityResult !== null && purchaseOrderUnitCostResult !== null
+    && Number.isSafeInteger(purchaseOrderQuantityResult * purchaseOrderUnitCostResult)
+    ? purchaseOrderQuantityResult * purchaseOrderUnitCostResult
+    : null
+  const supplierInvoiceDraftRow = supplierInvoiceDraft
+    ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === supplierInvoiceDraft.purchaseOrderId)
+    : null
+  const supplierInvoiceQuantity = supplierInvoiceDraft && /^\d+$/.test(supplierInvoiceDraft.quantity.trim())
+    ? Number(supplierInvoiceDraft.quantity)
+    : Number.NaN
+  const supplierInvoiceUnitCost = supplierInvoiceDraft && /^\d+$/.test(supplierInvoiceDraft.unitCostMmk.trim())
+    ? Number(supplierInvoiceDraft.unitCostMmk)
+    : Number.NaN
+  const supplierInvoiceIssuedAt = supplierInvoiceDraft ? new Date(supplierInvoiceDraft.issuedAt).getTime() : Number.NaN
+  const supplierInvoiceDueAt = supplierInvoiceDraft ? new Date(supplierInvoiceDraft.dueAt).getTime() : Number.NaN
+  const supplierInvoiceTotal = Number.isSafeInteger(supplierInvoiceQuantity)
+    && supplierInvoiceQuantity > 0
+    && Number.isSafeInteger(supplierInvoiceUnitCost)
+    && supplierInvoiceUnitCost > 0
+    && Number.isSafeInteger(supplierInvoiceQuantity * supplierInvoiceUnitCost)
+    ? supplierInvoiceQuantity * supplierInvoiceUnitCost
+    : null
+  const supplierInvoiceDraftReady = Boolean(
+    supplierInvoiceDraftRow
+    && !supplierInvoiceDraftRow.purchaseOrder.supplierInvoice
+    && supplierInvoiceDraft?.supplierReference.trim()
+    && supplierInvoiceDraft.supplierReference.trim().length <= 80
+    && supplierInvoiceTotal !== null
+    && Number.isFinite(supplierInvoiceIssuedAt)
+    && Number.isFinite(supplierInvoiceDueAt)
+    && supplierInvoiceIssuedAt >= Date.parse(supplierInvoiceDraftRow.purchaseOrder.createdAt)
+    && supplierInvoiceDueAt >= supplierInvoiceIssuedAt,
+  )
+  const supplierReturnDraftRow = supplierReturnDraft
+    ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === supplierReturnDraft.purchaseOrderId)
+    : null
+  const supplierReturnDraftReceipt = supplierReturnDraft
+    ? commerce.movements.find((movement) => movement.id === supplierReturnDraft.receiptMovementId)
+    : null
+  const supplierReturnDraftReady = Boolean(
+    supplierReturnDraftRow
+    && supplierReturnDraftReceipt?.kind === 'receipt'
+    && supplierReturnDraftReceipt.purchaseOrderId === supplierReturnDraftRow.purchaseOrder.id
+    && supplierReturnDraftReceipt.rejectedQuantity
+    && supplierReturnDraft?.internalReturnReference.trim()
+    && supplierReturnDraft.internalReturnReference.trim().length <= 80,
+  )
+  const supplierCreditDraftRow = supplierCreditDraft
+    ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === supplierCreditDraft.purchaseOrderId)
+    : null
+  const supplierCreditDraftClaim = supplierCreditDraftRow?.purchaseOrder.supplierReturns
+    ?.find((claim) => claim.id === supplierCreditDraft?.supplierReturnId)
+  const supplierCreditAmount = supplierCreditDraft && /^\d+$/.test(supplierCreditDraft.amountMmk.trim())
+    ? Number(supplierCreditDraft.amountMmk)
+    : Number.NaN
+  const supplierCreditIssuedAt = supplierCreditDraft ? new Date(supplierCreditDraft.issuedAt).getTime() : Number.NaN
+  const supplierCreditDraftReady = Boolean(
+    supplierCreditDraftClaim
+    && supplierCreditDraft?.supplierReference.trim()
+    && supplierCreditDraft.supplierReference.trim().length <= 80
+    && Number.isSafeInteger(supplierCreditAmount)
+    && supplierCreditAmount > 0
+    && supplierCreditAmount <= commerceSupplierReturnClaimBalance(supplierCreditDraftClaim)
+    && Number.isFinite(supplierCreditIssuedAt)
+    && supplierCreditIssuedAt >= Date.parse(supplierCreditDraftClaim.createdAt),
+  )
   const purchaseReceiptLocation = purchaseOrderDraft?.mode === 'receive'
     ? managedInventoryProjection?.locations.find((location) => location.id === purchaseOrderDraft.locationId)
     : undefined
@@ -2667,6 +2382,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     && purchaseReceiptTrackingCode
     && purchaseReceiptTrackingCode.length <= 80,
   )
+  const purchaseReceiptDiscrepancyReady = purchaseOrderDraft?.mode !== 'receive'
+    || (purchaseOrderRejectedResult !== null
+      && purchaseOrderQuantityResult !== null
+      && purchaseOrderQuantityResult + purchaseOrderRejectedResult <= (purchaseOrderDraftOrder?.progress.remaining ?? 0))
   const catalogEditItem = catalogEditDraft
     ? commerce.items.find((item) => item.sku === catalogEditDraft.sku)
     : undefined
@@ -2757,6 +2476,21 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     const stockUnit = managedInventoryProjection?.stockUnits.find((candidate) => candidate.id === allocation.stockUnitId)
     return `${location?.name ?? allocation.locationId} · ${stockUnit?.trackingCode ?? allocation.stockUnitId} × ${allocation.quantity}`
   }).join(', ') ?? ''
+  const correctionDraftOrder = correctionDraft
+    ? commerce.orders.find((order) => order.id === correctionDraft.orderId)
+    : undefined
+  const correctionAmountText = correctionDraft?.listedAmountMmk.trim() ?? ''
+  const correctionAmount = /^[0-9]+$/.test(correctionAmountText)
+    ? Number(correctionAmountText)
+    : Number.NaN
+  const correctionCalculation = correctionDraftOrder
+    && Number.isSafeInteger(correctionAmount)
+    && correctionAmount > 0
+    ? commerceCorrectionCalculation(correctionDraftOrder, correctionAmount)
+    : null
+  const correctionReviewExpectation = useMemo(() => (
+    correctionDraft ? commerceOrderCorrectionExpectation(commerce, correctionDraft.orderId) : null
+  ), [commerce, correctionDraft])
 
   useEffect(() => {
     if (tab !== 'inventory' || commerceLocation.hash !== '#purchase-orders') return
@@ -2870,6 +2604,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       fulfilment: '' | 'pickup' | 'delivery'
       fulfilmentReference: string
       promisedAt: string
+      paymentTermsDays: 0 | 7 | 30
       lines: Array<{ sku: string; quantity: number }>
     }
     const timer = window.setTimeout(() => {
@@ -2954,9 +2689,19 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
     let current = true
     void import('../products/ecommerce/ecommerce-shop-handoff')
-      .then(({ ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftPayment }) => {
+      .then(({ ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftMatchesOperatingContext, ecommerceShopDraftPayment }) => {
         if (!current) return
         const navigationDraftId = ecommerceNavigationDraft.id
+        const availableLocationIds = commerce.inventoryFoundation
+          ? managedInventoryProjection?.locations.map((candidate) => candidate.id) ?? []
+          : null
+        if (!ecommerceShopDraftMatchesOperatingContext(ecommerceNavigationDraft, availableLocationIds)) {
+          consumedEcommerceDraftId.current = navigationDraftId
+          setPreparedEcommerceDraft(null)
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+          setNotice('The Ecommerce request has no valid Shop operating authority. Nothing was prepared.')
+          return
+        }
         if (!ecommerceShopDraftMatchesCatalog(ecommerceNavigationDraft, commerce.items)) {
           consumedEcommerceDraftId.current = navigationDraftId
           if (preparedEcommerceDraft) {
@@ -2967,9 +2712,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           setNotice('The Ecommerce request no longer matches the current Shop catalog. Nothing was prepared.')
           return
         }
+        const navigationCustomer = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v7'
+          ? ecommerceNavigationDraft.customerProfile?.name ?? ecommerceNavigationDraft.customerReference
+          : ecommerceNavigationDraft.customerReference
+        const navigationAddress = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v7'
+          ? ecommerceNavigationDraft.deliveryAddress
+          : null
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(ecommerceNavigationDraft)
-        setCustomer(ecommerceNavigationDraft.customerReference)
+        setCustomer(navigationCustomer)
         setChannel('Ecommerce')
         const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)
         setSku(draftLines[0].sku)
@@ -2977,7 +2728,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setExtraOrderLines(draftLines.slice(1).map((line) => ({ sku: line.sku, quantity: line.quantity })))
         setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))
         setFulfilment(ecommerceNavigationDraft.fulfilment)
-        setFulfilmentReference(ecommerceNavigationDraft.sourceRequestId)
+        setFulfilmentReference(navigationAddress
+          ? `${navigationAddress.line1} · ${navigationAddress.township} · ${navigationAddress.city}${navigationAddress.instructions ? ` · ${navigationAddress.instructions}` : ''}`
+          : ecommerceNavigationDraft.sourceRequestId)
         setPromisedAt(defaultOrderPromiseInput())
         setOrderEntryMode('manual')
         setOrderDraftActive(true)
@@ -2994,7 +2747,315 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         if (current) setNotice('The Ecommerce request guard could not load. Nothing was prepared.')
       })
     return () => { current = false }
-  }, [commerce.items, ecommerceNavigationDraft, managedIdentity, navigate, preparedEcommerceDraft, workspaceMode])
+  }, [commerce.inventoryFoundation, commerce.items, ecommerceNavigationDraft, managedIdentity, managedInventoryProjection, navigate, preparedEcommerceDraft, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceReturnNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceReturnIntentId.current === ecommerceReturnNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(({ projectEcommerceReturnOutcome, validateEcommerceReturnIntent }) => {
+        if (!current) return
+        const intent = validateEcommerceReturnIntent(ecommerceReturnNavigationIntent)
+        const order = commerce.orders.find((candidate) => candidate.id === intent.orderId)
+        const outcome = order ? projectEcommerceReturnOutcome(intent, order) : null
+        if (outcome) {
+          consumedEcommerceReturnIntentId.current = intent.id
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+          setNotice(`${intent.id} was already accepted by ${outcome.reviewedBy}. Ecommerce can recover the recorded outcome; no second return was prepared.`)
+          return
+        }
+        if (order?.returns?.some((record) => record.evidenceReference === intent.evidenceReference)) {
+          consumedEcommerceReturnIntentId.current = intent.id
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+          setNotice('The return evidence conflicts with the exact Ecommerce request. No second return was prepared.')
+          return
+        }
+        const expected = commerceOrderReturnExpectation(commerce, intent.orderId, intent.sku, intent.disposition, intent.quantity)
+        if (!order
+          || order.status !== 'completed'
+          || !order.completion
+          || order.sourceRecordId !== intent.sourceRequestId
+          || !expected
+          || intent.quantity > expected.soldQuantity - expected.returnedQuantity) {
+          consumedEcommerceReturnIntentId.current = intent.id
+          navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+          setNotice('The Ecommerce return request no longer matches a completed Shop order. Nothing was prepared.')
+          return
+        }
+        consumedEcommerceReturnIntentId.current = intent.id
+        setReturnDraft({
+          orderId: intent.orderId,
+          sku: intent.sku,
+          quantity: String(intent.quantity),
+          disposition: intent.disposition,
+          sourceIntent: intent,
+        })
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setNotice(`${intent.id} is ready for Shop review. Confirm the received item and stock condition; no refund has started.`)
+        requestAnimationFrame(() => returnEditorRef.current?.querySelector<HTMLElement>('#order-return-quantity')?.focus())
+      })
+      .catch(() => {
+        if (!current) return
+        consumedEcommerceReturnIntentId.current = ecommerceReturnNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setNotice('The Ecommerce return request could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceReturnNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceCancellationNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceCancellationIntentId.current === ecommerceCancellationNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(({ validateEcommerceCancellationIntent }) => {
+        if (!current) return
+        const intent = validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)
+        consumedEcommerceCancellationIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        if (!ecommerceCancellationMatchesCurrentShop(commerce, intent)) {
+          setCancellationDraft(null)
+          setNotice('The cancellation request no longer matches the current Shop order, payment, refund, or reserved stock. Nothing was prepared.')
+          return
+        }
+        setReturnDraft(null)
+        setSupportDraft(null)
+        setOrderAmendmentReview(null)
+        setOrderRescheduleReview(null)
+        setCancellationDraft(intent)
+        setNotice(`${intent.id} is ready for Shop review. Keeping the order changes nothing; cancellation still requires the accountable Shop gate.`)
+        requestAnimationFrame(() => document.getElementById('shop-cancellation-review')?.focus())
+      })
+      .catch(() => {
+        if (!current) return
+        consumedEcommerceCancellationIntentId.current = ecommerceCancellationNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setCancellationDraft(null)
+        setNotice('The cancellation request could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceCancellationNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceOrderAmendmentNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceOrderAmendmentIntentId.current === ecommerceOrderAmendmentNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(async (lifecycle) => {
+        const intent = lifecycle.validateEcommerceOrderAmendmentIntent(ecommerceOrderAmendmentNavigationIntent)
+        const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+        if (!current) return
+        consumedEcommerceOrderAmendmentIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        if (!recovered.state || recovered.status !== 'ready') throw new Error(recovered.error || 'Order amendment recovery is unavailable.')
+        const storedIntent = recovered.state.amendmentIntents.find((candidate) => candidate.id === intent.id)
+        const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
+        if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent) || !replacementRequest) {
+          throw new Error('Order amendment does not match its recovered request.')
+        }
+        if (ecommerceOrderAmendmentShopState(commerce, intent) === 'stale') {
+          throw new Error('The original order no longer matches this change request. Nothing was prepared.')
+        }
+        const draft = await lifecycle.prepareEcommerceShopDraftV2({
+          request: replacementRequest,
+          state: recovered.state,
+          currentCatalog: commerce.items,
+          currentPromotionPolicies: commerce.promotionPolicies ?? [],
+          currentShippingPolicies: commerce.shippingPolicies ?? [],
+          currentPaymentPolicies: commerce.paymentPolicies ?? [],
+          currentTaxConfigurations: commerce.taxConfigurations ?? [],
+          catalogRevision: commerce.catalogChanges?.length ?? 0,
+          confirmedAt: new Date().toISOString(),
+        })
+        if (!current) return
+        setCancellationDraft(null)
+        setOrderRescheduleReview(null)
+        setOrderAmendmentReview({ intent, replacementRequest, draft })
+        setNotice(`${intent.id} is ready for a two-step Shop replacement. Review the repriced total before the original order is cancelled.`)
+        requestAnimationFrame(() => document.getElementById('shop-order-amendment-review')?.focus())
+      })
+      .catch((error) => {
+        if (!current) return
+        consumedEcommerceOrderAmendmentIntentId.current = ecommerceOrderAmendmentNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setOrderAmendmentReview(null)
+        setNotice(error instanceof Error ? error.message : 'The order amendment could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceBuyingScope, ecommerceOrderAmendmentNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceOrderRescheduleNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceOrderRescheduleIntentId.current === ecommerceOrderRescheduleNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(async (lifecycle) => {
+        const intent = lifecycle.validateEcommerceOrderRescheduleIntent(ecommerceOrderRescheduleNavigationIntent)
+        const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+        if (!current) return
+        consumedEcommerceOrderRescheduleIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        if (!recovered.state || recovered.status !== 'ready') throw new Error(recovered.error || 'Order reschedule recovery is unavailable.')
+        const storedIntent = recovered.state.rescheduleIntents.find((candidate) => candidate.id === intent.id)
+        const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
+        if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent) || !replacementRequest) {
+          throw new Error('Order reschedule does not match its recovered request.')
+        }
+        if (ecommerceOrderRescheduleShopState(commerce, intent) === 'stale') {
+          throw new Error('The original order no longer matches this reschedule request. Nothing was prepared.')
+        }
+        const draft = await lifecycle.prepareEcommerceShopDraftV2({
+          request: replacementRequest,
+          state: recovered.state,
+          currentCatalog: commerce.items,
+          currentPromotionPolicies: commerce.promotionPolicies ?? [],
+          currentShippingPolicies: commerce.shippingPolicies ?? [],
+          currentPaymentPolicies: commerce.paymentPolicies ?? [],
+          currentTaxConfigurations: commerce.taxConfigurations ?? [],
+          catalogRevision: commerce.catalogChanges?.length ?? 0,
+          confirmedAt: new Date().toISOString(),
+        })
+        if (!ecommerceReschedulePromiseAllowed(draft, intent)) {
+          throw new Error('The requested promise no longer satisfies current Shop delivery policy. Nothing was prepared.')
+        }
+        if (!current) return
+        setCancellationDraft(null)
+        setOrderAmendmentReview(null)
+        setOrderRescheduleReview({ intent, replacementRequest, draft })
+        setNotice(`${intent.id} is ready for two-step Shop rescheduling. Review the current total and requested promise before cancelling the original.`)
+        requestAnimationFrame(() => document.getElementById('shop-order-reschedule-review')?.focus())
+      })
+      .catch((error) => {
+        if (!current) return
+        consumedEcommerceOrderRescheduleIntentId.current = ecommerceOrderRescheduleNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setOrderRescheduleReview(null)
+        setNotice(error instanceof Error ? error.message : 'The order reschedule could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceBuyingScope, ecommerceOrderRescheduleNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceSupportNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceSupportIntentId.current === ecommerceSupportNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(({ projectEcommerceSupportOutcome, validateEcommerceSupportIntent }) => {
+        if (!current) return
+        const intent = validateEcommerceSupportIntent(ecommerceSupportNavigationIntent)
+        const order = commerce.orders.find((candidate) => candidate.id === intent.orderId)
+        const existing = order?.supportCases?.find((supportCase) => supportCase.sourceIntentId === intent.id)
+        const outcome = order ? projectEcommerceSupportOutcome(intent, order) : null
+        const expected = commerceOrderSupportOpenExpectation(commerce, intent.orderId, intent.id)
+        consumedEcommerceSupportIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        if (existing) {
+          setSupportDraft(null)
+          setNotice(outcome
+            ? `${intent.id} is already ${outcome.state} as ${outcome.caseId}. Ecommerce can recover the accountable Shop outcome.`
+            : 'The Shop help-case evidence conflicts with the exact Ecommerce request. No second case was prepared.')
+          return
+        }
+        if (!order
+          || order.status !== 'completed'
+          || !order.completion
+          || order.sourceRecordId !== intent.sourceRequestId
+          || !expected) {
+          setNotice('The Ecommerce help request no longer matches a completed Shop order. Nothing was prepared.')
+          return
+        }
+        setReturnDraft(null)
+        setSupportDraft({
+          intent,
+          priority: 'normal',
+          owner: managedIdentity?.email ?? order.owner ?? '',
+          dueAt: defaultIssueDueInput(),
+        })
+        setNotice(`${intent.id} is ready for Shop review. Assign priority, owner, and due time before opening it; no message or refund is sent.`)
+        requestAnimationFrame(() => document.getElementById('shop-support-open-review')?.focus())
+      })
+      .catch(() => {
+        if (!current) return
+        consumedEcommerceSupportIntentId.current = ecommerceSupportNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setNotice('The Ecommerce help request could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceSupportNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
+
+  useEffect(() => {
+    if (!ecommerceCorrectionNavigationIntent
+      || tab !== 'orders'
+      || managedIdentity && workspaceMode !== 'managed-ready'
+      || consumedEcommerceCorrectionIntentId.current === ecommerceCorrectionNavigationIntent.id) return
+    let current = true
+    void import('../products/ecommerce/ecommerce-buying-lifecycle')
+      .then(async (lifecycle) => {
+        const intent = lifecycle.validateEcommerceCorrectionIntent(ecommerceCorrectionNavigationIntent)
+        const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+        if (!current) return
+        consumedEcommerceCorrectionIntentId.current = intent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        const storedIntent = recovered.state?.correctionIntents.find((candidate) => candidate.id === intent.id)
+        if (recovered.status !== 'ready' || !storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent)) {
+          throw new Error('The balance request no longer matches its recovered Ecommerce evidence. Nothing was prepared.')
+        }
+        const order = commerce.orders.find((candidate) => candidate.id === intent.orderId)
+        const outcome = order ? lifecycle.projectEcommerceCorrectionOutcome(intent, order) : null
+        const existing = order?.corrections?.filter((record) => record.evidenceReference === intent.evidenceReference) ?? []
+        if (outcome || existing.length) {
+          setCorrectionDraft(null)
+          setNotice(outcome
+            ? `${intent.id} was already reviewed by ${outcome.reviewedBy}. Ecommerce can recover the correction outcome; no second note was prepared.`
+            : 'The Shop correction evidence conflicts with the exact Ecommerce request. No second note was prepared.')
+          return
+        }
+        const expectation = commerceOrderCorrectionExpectation(commerce, intent.orderId)
+        if (!order
+          || order.sourceRecordId !== intent.sourceRequestId
+          || order.paymentStatus !== intent.paymentStatus
+          || order.refundStatus !== intent.refundStatus
+          || !expectation
+          || expectation.sourceCalculationDigest !== intent.sourceCalculationDigest
+          || expectation.correctionCount !== intent.sourceCorrectionCount
+          || expectation.currentBalanceMmk !== intent.originalBalanceMmk) {
+          setCorrectionDraft(null)
+          setNotice('The Ecommerce balance request no longer matches the current Shop calculation, payment, refund, or correction history. Nothing was prepared.')
+          return
+        }
+        setReturnDraft(null)
+        setSupportDraft(null)
+        setCancellationDraft(null)
+        setCorrectionDraft({
+          orderId: intent.orderId,
+          kind: intent.requestedKind,
+          reasonCode: intent.reasonCode,
+          listedAmountMmk: String(intent.listedAmountMmk),
+          sourceIntent: intent,
+        })
+        setNotice(`${intent.id} is ready for Shop review. Recheck the calculated adjustment before recording a review-only correction note.`)
+        requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
+      })
+      .catch((error) => {
+        if (!current) return
+        consumedEcommerceCorrectionIntentId.current = ecommerceCorrectionNavigationIntent.id
+        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        setCorrectionDraft(null)
+        setNotice(error instanceof Error ? error.message : 'The Ecommerce balance request could not be verified. Nothing was prepared.')
+      })
+    return () => { current = false }
+  }, [commerce, ecommerceBuyingScope, ecommerceCorrectionNavigationIntent, managedIdentity, navigate, tab, workspaceMode])
 
   useEffect(() => {
     const sourceKey = requestedRequestId || 'ecommerce-inbox'
@@ -3061,10 +3122,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   }
 
   const effectiveMode = managedIdentity && (workspaceMode === 'local' || managedWorkspaceId !== managedIdentity.workspaceId) ? 'managed-loading' : workspaceMode
-  if (managedIdentity && effectiveMode !== 'managed-ready') {
+  const managedCommerceBoundary: ReactNode = managedIdentity && effectiveMode !== 'managed-ready' ? (() => {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Company Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">Start with the first real inventory item. No browser demo orders, customers, or stock records are copied into this workspace.</p>
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
         <div className="form-row"><label>SKU<input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
@@ -3073,15 +3134,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet, stocktake, or source record" required value={catalogDraft.evidenceReference} /></label>
         <div className="form-actions"><Link className="text-link" to="/settings/">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : 'Create managed catalog'}</button></div>
-        <p className="form-notice" role="status">{catalogError || commerceStorageError || `Authenticated as ${managedIdentity.email}. The tenant API records this initialization.`}</p>
+        <p className="form-notice" role="status">{catalogError || commerceStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
       </form>
     </section>
     return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Shop</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Company Shop</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{commerceStorageError || 'Shop remains read-only until the authenticated tenant state is confirmed.'}</p>
       <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
     </section>
-  }
+  })() : null
 
   const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Sample data'}</span>
@@ -3090,8 +3151,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       : !commerceCanWrite
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
         : notice || (managedIdentity
-          ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the tenant API.`
-          : 'Sample records saved only in this browser. Connect a managed workspace before using shared operational data.')}</p>
+          ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the company account.`
+          : 'Sample data on this device. Sign in for team data.')}</p>
     {!commerceCanWrite ? <Link to="/settings/#controls">Open Settings</Link> : null}
   </div>
   const orderNotice = notice || commerceStorageError
@@ -3103,33 +3164,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   }))
   const overduePurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'late')
   const dueSoonPurchaseOrders = procurementArrivalRows.filter(({ urgency }) => urgency === 'due_soon')
-  const uncoveredReorderItems = lowStock.filter((item) => !activePurchaseOrderBySku.has(item.sku))
-  const openPurchaseRemainingUnits = activePurchaseOrders.reduce((total, { progress }) => total + progress.remaining, 0)
-  const activeSupplierCount = new Set(activePurchaseOrders.map(({ purchaseOrder }) => purchaseOrder.supplier)).size
   const partiallyReceivedPurchaseOrders = activePurchaseOrders.filter(({ progress }) => progress.status === 'partially_received')
-  const shopProcurementNext = !commerceCanWrite
-    ? 'Restore Shop readiness'
-    : pendingAction
-      ? 'Approve pending stock action'
-      : overduePurchaseOrders.length
-        ? 'Receive or cancel late PO'
-        : dueSoonPurchaseOrders.length
-          ? 'Check arriving PO'
-          : uncoveredReorderItems.length
-            ? 'Order uncovered stock'
-            : activePurchaseOrders.length
-              ? 'Track open supply'
-              : !commerce.inventoryFoundation || !managedInventoryProjection
-                ? 'Set up stock foundation'
-                : 'Supply ready'
-  const shopProcurementRows = [
-    ['Need', uncoveredReorderItems.length ? `${uncoveredReorderItems.length} SKU` : 'Covered'],
-    ['On order', activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'None'],
-    ['Remaining', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} units` : 'Clear'],
-    ['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due soon` : 'Scheduled'],
-    ['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + lot' : 'Simple stock'],
-    ['Owner gate', commerceCanWrite && !pendingAction ? 'Required' : 'Locked'],
-  ] as const
   const supplierControlNext = !commerceCanWrite
     ? 'Restore purchasing readiness'
     : pendingAction
@@ -3140,25 +3175,31 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           ? 'Prepare receiving evidence'
           : partiallyReceivedPurchaseOrders.length
             ? 'Close partial receipt'
-            : uncoveredReorderItems.length
-              ? 'Choose supplier and arrival'
+            : openPurchaseRequisitions.length
+              ? 'Second operator creates order'
+              : !activePurchaseBudget
+                ? 'Set buying limits'
+              : procurementReviews.length
+                ? openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : shopProcurementDecision.summary.riskReviews ? 'Review supplier risk' : 'Compare supplier quotes'
               : activePurchaseOrders.length
                 ? 'Monitor supplier promise'
                 : 'Supplier controls ready'
   const supplierControlRows = [
-    ['Suppliers', activeSupplierCount ? `${activeSupplierCount} active` : uncoveredReorderItems.length ? 'Choose one' : 'None needed'],
-    ['Arrival', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : dueSoonPurchaseOrders.length ? `${dueSoonPurchaseOrders.length} due` : activePurchaseOrders.length ? 'Scheduled' : 'Clear'],
-    ['Open units', openPurchaseRemainingUnits ? `${openPurchaseRemainingUnits} remaining` : 'Clear'],
-    ['Receipt', commerce.inventoryFoundation && managedInventoryProjection ? 'Lot evidence' : 'Simple count'],
-    ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Owner confirms' : 'Locked'],
+    ['Buy', purchaseRecommendations.length ? `${shopReplenishment.summary.recommendedOrderUnits} units` : 'Covered'],
+    ['Budget', activePurchaseBudgetCommitment ? `${formatMoney(activePurchaseBudgetCommitment.availableMmk)} left` : 'Set limits'],
+    ['Demand', shopDemandIntelligence.summary.forecastWeeklyUnits ? `${shopDemandIntelligence.summary.forecastWeeklyUnits}/week` : 'Collecting'],
+    ['Plant', shopReplenishment.summary.productionDemandUnits ? `${shopReplenishment.summary.productionDemandUnits} units` : 'No demand'],
+    ['Risk', overduePurchaseOrders.length ? `${overduePurchaseOrders.length} late` : shopReplenishment.summary.supplyAtRisk ? `${shopReplenishment.summary.supplyAtRisk} at risk` : 'Clear'],
+    ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Two-person' : 'Locked'],
   ] as const
-  const shopProcurement = <section className="shop-order-control" aria-label="Shop procurement readiness">
-    <div><span className="core-eyebrow">Procurement readiness</span><strong>{shopProcurementNext}</strong><small>AI checks reorder demand, open POs, arrival risk, receipt evidence, and location/lot readiness. No supplier message, payment, receipt, stock, costing, or accounting write runs from this panel.</small></div>
-    <div className="shop-order-control-rows">{shopProcurementRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-  </section>
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
-    <div><span className="core-eyebrow">Supplier control</span><strong>{supplierControlNext}</strong><small>AI turns supplier reference, promised arrival, open quantity, receipt evidence, and owner approval into one purchasing queue. No RFQ, supplier send, payment, payable, costing, or inventory write runs from this panel.</small><button className="text-link" disabled={commerceControlsDisabled || !uncoveredReorderItems.length} onClick={startSupplierRequest} type="button">Start supplier request</button></div>
+    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, stock, Plant materials, approved-vendor evidence, comparable quotes, delivery, quality, and exposure. Budget, sourcing, requisition, and independent PO approval stay separate. Nothing contacts or pays a supplier here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : !activePurchaseBudget ? 'Set buying limits' : openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : 'Compare supplier quotes'}</button></div>
     <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    {procurementReviews.length ? <section aria-label="Shop procurement decisions" className="supplier-performance"><div className="supplier-performance-heading"><span className="core-eyebrow">Requisition review</span><small>Source-bound ranking · budget and review required</small></div><div className="shop-replenishment-list" role="list">{procurementReviews.slice(0, 4).map((row) => { const approved = openPurchaseRequisitions.find((requisition) => requisition.sku === row.sku); const budget = approved?.budgetEnvelopeId ? purchaseBudgetEnvelopes.find((envelope) => envelope.id === approved.budgetEnvelopeId) : null; return <div data-status={approved ? 'approved' : row.status} key={row.requisitionReference} role="listitem"><span><strong>{row.itemName}</strong><small>{approved?.id ?? row.requisitionReference} · {approved?.quantityRequested ?? row.quantity} units{row.plantJobIds.length ? ` · Plant ${row.plantJobIds.join(', ')}` : ''}</small></span><span><b>{approved ? 'Approved requisition' : row.recommendedSupplier ?? 'Supplier terms needed'}</b><small>{approved ? `${approved.supplier} · ${formatMoney(approved.totalMmk)} · ${budget?.budgetCode ?? 'legacy authority'} · second operator next` : `${row.estimatedTotalMmk === null ? 'Cost not retained' : formatMoney(row.estimatedTotalMmk)} · ${row.supplierOptions.length} ${row.supplierOptions.length === 1 ? 'option' : 'options'} · ${row.status === 'risk_review_required' ? 'risk review' : row.status === 'terms_required' ? 'terms review' : 'ready for review'}`}</small></span></div> })}</div></section> : null}
+    {demandForecastRows.length ? <section aria-label="Shop demand intelligence" className="supplier-performance">
+      <div className="supplier-performance-heading"><span className="core-eyebrow">Demand intelligence</span><small>28-day completed sales · returns netted · recommendation only</small></div>
+      <div className="shop-replenishment-list" role="list">{demandForecastRows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.completedOrderCount} completed {row.completedOrderCount === 1 ? 'order' : 'orders'} · {row.confidence} evidence</small></span><span><b>{row.status === 'stockout_risk' ? 'Stockout risk' : row.status === 'reorder_soon' ? 'Reorder soon' : `${row.forecastWeeklyUnits}/week`}</b><small>{row.projectedDaysOfCover === null ? 'Cover collecting' : `${row.projectedDaysOfCover}d projected cover`} · {row.planningHorizonDays}d {row.planningHorizonSource === 'supplier_policy' ? 'supplier lead' : 'planning horizon'}{row.recommendedSafetyStockUnits === null ? '' : ` · ${row.recommendedSafetyStockUnits} safety suggested`}</small></span></div>)}</div>
+    </section> : <p className="empty-state">Demand forecast starts after the first completed sale.</p>}
   </section>
   const shopAgentJob = !commerceCanWrite
     ? 'Restore Shop write readiness'
@@ -3176,13 +3217,13 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
                 ? 'Set up stock locations'
                 : 'Open counter for next sale'
   const shopAgentReason = !commerceCanWrite
-    ? 'Writes are paused until durable storage or managed workspace readiness is confirmed.'
+    ? 'Writes are paused until durable storage or company account readiness is confirmed.'
     : pendingAction
       ? 'A reviewed Shop change is waiting for a named human confirmation.'
       : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
         ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online request${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0) === 1 ? '' : 's'} need Shop review before order, stock, payment, or delivery changes.`
         : actionOrders.length
-          ? `${actionOrders.length} order${actionOrders.length === 1 ? '' : 's'} need fulfilment, payment, return, or cancellation handling.`
+          ? `${actionOrders.length} order${actionOrders.length === 1 ? '' : 's'} need fulfilment or payment review.`
           : activePurchaseOrders.length
             ? `${activePurchaseOrders.length} purchase order${activePurchaseOrders.length === 1 ? '' : 's'} can be checked against received stock evidence.`
             : lowStock.length
@@ -3191,20 +3232,20 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
                 ? 'Stock can move from simple on-hand counts to location, lot, ATP, reservation, and count evidence.'
                 : 'Orders, inventory, purchase orders, and stock foundation are ready for front-counter work.'
   const shopOwnerGate = !commerceCanWrite
-    ? 'Owner opens Settings before any Shop write is allowed.'
+    ? 'Open Settings before any Shop write is allowed.'
     : pendingAction
-      ? 'Owner approves or cancels the pending accountable action.'
+      ? 'Approve or cancel the pending accountable action.'
       : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
-        ? 'Owner chooses whether each online request becomes a Shop order.'
+        ? 'Choose whether each online request becomes a Shop order.'
         : actionOrders.length
-          ? 'Owner confirms fulfilment, payment, return, cancellation, or settlement.'
+          ? 'Confirm fulfilment, payment, return, cancellation, or settlement.'
           : activePurchaseOrders.length
-            ? 'Owner confirms received quantity, location, lot, and evidence.'
+            ? 'Confirm received quantity, location, lot, and evidence.'
             : lowStock.length
-              ? 'Owner confirms supplier reference, expected arrival, and quantity.'
+              ? 'Confirm supplier reference, expected arrival, and quantity.'
               : !commerce.inventoryFoundation || !managedInventoryProjection
-                ? 'Owner enables the inventory foundation before location-level stock control.'
-                : 'Owner confirms each sale before stock or cash records change.'
+                ? 'Enable the inventory foundation before location-level stock control.'
+                : 'Confirm each sale before stock or cash records change.'
   const shopAgentPath = !commerceCanWrite
     ? '/settings/#controls'
     : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length || pendingAction
@@ -3213,14 +3254,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         ? '/shop/?tab=inventory'
         : '/shop/?tab=counter'
   const shopAgentRows = [
-    ['Agent job', shopAgentJob],
-    ['Reason', shopAgentReason],
-    ['Owner gate', shopOwnerGate],
+    ['Next step', shopAgentJob],
+    ['Why', shopAgentReason],
+    ['Review', shopOwnerGate],
   ]
   const shopAutopilotStage = !commerceCanWrite
     ? 'Restore Shop readiness'
     : pendingAction
-      ? 'Approve pending Shop change'
+      ? 'Review pending Shop change'
       : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
         ? 'Review online requests'
         : actionOrders.length
@@ -3233,9 +3274,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
                 ? 'Set up stock foundation'
                 : 'Open counter sales'
   const shopAutopilotNextAction = !commerceCanWrite
-    ? 'Open managed activation controls'
+    ? 'Open setup controls'
     : pendingAction
-      ? 'Finish owner approval'
+      ? 'Finish review'
       : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
         ? 'Open online request review'
         : actionOrders.length
@@ -3248,18 +3289,18 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
                 ? 'Open inventory setup'
                 : 'Open counter'
   const shopAutopilotRows = [
-    ['Track', pendingAction ? 'Owner review' : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length ? 'Orders' : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection ? 'Inventory' : 'Counter'],
+    ['Track', pendingAction ? 'Review' : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length ? 'Orders' : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection ? 'Inventory' : 'Counter'],
     ['Stage', shopAutopilotStage],
     ['Next', shopAutopilotNextAction],
-    ['Learning', 'Records behavior only'],
-    ['Boundary', 'No auto write'],
+    ['Memory', 'Saves helpful patterns'],
+    ['Safety', 'Review first'],
   ] as const
   const shopCatalogUploadRows = [
     ['Source', commerce.items.length ? `${commerce.items.length} current SKU` : 'Need catalog'],
     ['Upload', 'Shared mapper'],
     ['Checks', 'SKU, price, stock'],
-    ['Owner gate', 'Review package'],
-    ['Boundary', 'No Shop write'],
+    ['Review', 'Review package'],
+    ['Safety', 'Review first'],
   ] as const
   const shopSetupGuideRows = [
     ['Products', commerce.items.length ? `${commerce.items.length} current SKU` : 'Import catalog'],
@@ -3267,7 +3308,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Orders', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
     ['Payments', paymentReview.length ? `${paymentReview.length} exception` : 'Review only'],
     ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
-    ['Boundary', 'Owner approves writes'],
+    ['Boundary', 'Review before writes'],
   ] as const
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
@@ -3308,39 +3349,54 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       route: commerceLocation.pathname + commerceLocation.search,
       detail: 'Load sample Shop catalog item',
     })
-    setNotice('Sample Shop catalog item loaded for owner review. Click Review catalog item to queue it; no Shop write, stock move, supplier message, sale, payment, or accounting post ran.')
+    setNotice('Sample Shop catalog item loaded for review. Click Review catalog item to queue it; no Shop write, stock move, supplier message, sale, payment, or accounting post ran.')
     requestAnimationFrame(() => catalogCreateFormRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 
-  const shopCommandCenter = <section aria-label="Shop Autopilot" className="shop-command-center">
+  const shopCommandCenter = <section aria-label="Shop next step" className="shop-command-center">
     <div>
-      <span className="core-eyebrow">Shop Autopilot</span>
+      <span className="core-eyebrow">Shop next step</span>
       <h2>{shopAutopilotStage}</h2>
-      <p>One button chooses the next safe owner action from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. AI may prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
+      <p>Open the next useful Shop task. SuperMega brings together online requests, orders, payments, purchasing, and stock so the manager can review one clear step at a time.</p>
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Run next step</button>
+    <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Open next step</button>
   </section>
   const shopSetupGuide = <section aria-label="Shop setup guide" className="shop-order-control shop-setup-guide">
     <div>
       <span className="core-eyebrow">Shop setup guide</span>
-      <strong>Import products once. Let AI run the daily queue.</strong>
-      <small>AI prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.</small>
+      <strong>Import products once. Then run the daily queue.</strong>
+      <small>Use this only when you are adding real products, receiving stock, checking payment problems, or preparing end-of-day reports. Daily selling stays in the main order screen.</small>
     </div>
     <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const shopAgentQueue = <section aria-label="Recommended Shop agent job" className="shop-agent-queue">
+  const shopAgentQueue = <section aria-label="Next Shop step" className="shop-agent-queue">
     <BehaviorSignalOnRender detail={shopAgentJob} product="commerce" route={commerceLocation.pathname + commerceLocation.search} />
     <div>
-      <span className="core-eyebrow">Shop agent queue</span>
+      <span className="core-eyebrow">Next Shop step</span>
       <h2>{shopAgentJob}</h2>
-      <p>AI prepares the next Shop move. Humans approve every consequential action.</p>
+      <p>SuperMega chooses the best place to start. The manager reviews important changes before anything is saved.</p>
     </div>
     <div>{shopAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <Link className="core-button compact" onClick={() => {
       recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'commerce', route: commerceLocation.pathname + commerceLocation.search, detail: shopAgentJob })
     }} to={shopAgentPath}>{shopAgentPath.includes('settings') ? 'Open Settings' : shopAgentPath.includes('inventory') ? 'Open Inventory' : shopAgentPath.includes('orders') ? 'Open Orders' : 'Open Counter'}</Link>
   </section>
+  const shopGuidance = <details className="product-guidance-disclosure">
+    <summary><span>Need help choosing?</span><small>Shows the next safe Shop step</small></summary>
+    <div className="product-guidance-content">{shopAgentQueue}</div>
+  </details>
+
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'commerce',
+      route: commerceLocation.pathname + commerceLocation.search,
+      detail: shopAgentJob,
+    })
+  }, [commerceLocation.pathname, commerceLocation.search, shopAgentJob])
+
+  if (managedCommerceBoundary) return managedCommerceBoundary
 
   function showOrderComposer() {
     const dialog = orderComposerRef.current
@@ -3358,6 +3414,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setFulfilment('')
     setFulfilmentReference('')
     setPromisedAt('')
+    setPaymentTermsDays(0)
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
     setOrderEntryMode('manual')
@@ -3378,7 +3435,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     return removed
   }
 
-  function openOrderComposer() {
+  function openOrderComposer(mode: 'manual' | 'online' = 'manual') {
     if (!commerceCanWrite) {
       setNotice('Shop changes are paused. Open Settings before adding an order.')
       return
@@ -3396,6 +3453,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
     setOrderDraftIssue('')
+    setOrderEntryMode(mode)
     showOrderComposer()
   }
 
@@ -3439,6 +3497,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     setFulfilment(draft.fulfilment)
     setFulfilmentReference(draft.fulfilmentReference)
     setPromisedAt(draft.promisedAt ? localDateTimeInputValue(new Date(draft.promisedAt)) : '')
+    setPaymentTermsDays(draft.paymentTermsDays)
     setSku(firstLine.sku)
     setQuantity(firstLine.quantity)
     setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
@@ -3719,7 +3778,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       throw error
     }
     if (!managedIdentity) setActions((current) => [record, ...current])
-    setNotice(managedIdentity ? `${record.id} confirmed by the managed Shop API.` : `${record.id} applied and added to the action history.`)
+    setNotice(pendingAction.presentation === 'counter'
+      ? `Sale ${commerceOrderDisplayReference(pendingAction.subjectId)} complete. Stock updated. Receipt saved.`
+      : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
     setPendingAction(null)
   }
 
@@ -3763,21 +3824,32 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         const draft = await prepareManagedEcommerceShopDraftV2({
           request,
           currentCatalog: commerce.items,
+          currentPromotionPolicies: commerce.promotionPolicies ?? [],
+          currentShippingPolicies: commerce.shippingPolicies ?? [],
+          currentPaymentPolicies: commerce.paymentPolicies ?? [],
+          currentTaxConfigurations: commerce.taxConfigurations ?? [],
+          catalogRevision: commerce.catalogChanges?.length ?? 0,
           confirmedAt: new Date().toISOString(),
         })
         const [firstLine, ...remainingLines] = draft.lines
         if (!firstLine) throw new Error('The managed Ecommerce request has no reviewed item.')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(draft)
-        setCustomer(draft.customerReference)
+        setCustomer(draft.customerProfile?.name ?? draft.customerReference)
         setChannel('Ecommerce')
         setSku(firstLine.sku)
         setQuantity(firstLine.quantity)
         setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
-        setPayment('')
+        setPayment(draft.pricing.payment.adapter === 'cash_on_delivery'
+          ? 'Cash on delivery'
+          : draft.pricing.payment.adapter === 'kbzpay_manual' ? 'KBZPay' : 'Cash')
         setFulfilment(draft.fulfilment)
-        setFulfilmentReference(draft.sourceRequestId)
-        setPromisedAt(defaultOrderPromiseInput())
+        setFulfilmentReference(draft.deliveryAddress
+          ? `${draft.deliveryAddress.line1} · ${draft.deliveryAddress.township} · ${draft.deliveryAddress.city}${draft.deliveryAddress.instructions ? ` · ${draft.deliveryAddress.instructions}` : ''}`
+          : draft.sourceRequestId)
+        setPromisedAt(draft.pricing.shipping.promiseMinutes
+          ? localDateTimeInputValue(new Date(Date.parse(draft.confirmedAt) + draft.pricing.shipping.promiseMinutes * 60_000))
+          : defaultOrderPromiseInput())
         setOrderEntryMode('manual')
         setNotice(`${request.id} loaded from the authenticated inbox with ${draft.lines.length} ${draft.lines.length === 1 ? 'item' : 'items'}. Confirm the promise and payment, then use the separate Shop action gate.`)
         return
@@ -3891,14 +3963,16 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       const item = commerce.items.find((candidate) => candidate.sku === line.sku)
       return `${line.sku} ${item?.onHand ?? 0} → ${(item?.onHand ?? 0) - line.quantity}`
     }).join(', ')
+    const displayReference = commerceOrderDisplayReference(order.id)
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
       summary: `Complete ${formatMoney(order.total)} sale`,
       before: `${lineReview} · ${review.payment}`,
-      after: `Order ${order.id} · Stock ${stockReview}`,
+      after: `Sale ${displayReference} · Stock ${stockReview}`,
       presentation: 'counter',
-      evidenceReferenceSuggestion: `${order.id} counter receipt`,
+      actorSuggestion: managedIdentity ? undefined : 'Sample cashier',
+      evidenceReferenceSuggestion: `Counter receipt ${displayReference}`,
       evidenceReferenceLocked: true,
       reasonSuggestion: 'Walk-in sale reviewed at the Shop counter.',
       apply: async (action) => {
@@ -3933,6 +4007,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       return
     }
     const canonicalPromisedAt = promisedTime.toISOString()
+    const paymentDueAt = paymentTermsDays === 0
+      ? undefined
+      : new Date(reviewedAt.getTime() + paymentTermsDays * 24 * 60 * 60 * 1000).toISOString()
     const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
     const ecommerceDraft = preparedEcommerceDraft
     if (sourceDraft && ecommerceDraft) {
@@ -3992,18 +4069,68 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       return
     }
     const ecommerceLines = ecommerceDraft
-      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v2'
+      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7'
         ? ecommerceDraft.lines
         : [ecommerceDraft.line]
       : []
-    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v2'
+    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
       ? ecommerceDraft.pricing.payment.adapter === 'cash_on_delivery'
         ? 'Cash on delivery'
         : ecommerceDraft.pricing.payment.adapter === 'kbzpay_manual'
           ? 'KBZPay'
           : 'Cash'
       : ''
-    if (ecommerceDraft && (customer.trim() !== ecommerceDraft.customerReference
+    const ecommerceCustomer = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+      ? ecommerceDraft.customerProfile?.name ?? ecommerceDraft.customerReference
+      : ecommerceDraft?.customerReference ?? ''
+    if (ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+      && commerce.inventoryFoundation
+      && !managedInventoryProjection?.locations.some((candidate) => candidate.id === ecommerceDraft.operatingContext.operatingUnitLocationId)) {
+      detachPreparedOrderSources({ ecommerce: true })
+      setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')
+      return
+    }
+    const promotionDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+      ? ecommerceDraft.pricing.promotion
+      : undefined
+    const shippingDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+      ? ecommerceDraft.pricing.shipping
+      : undefined
+    const paymentDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+      ? ecommerceDraft.pricing.payment
+      : undefined
+    const taxDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+      ? ecommerceDraft.pricing.tax
+      : undefined
+    if (taxDecision) {
+      const draftTaxCalculation = commerceOrderCalculation(
+        commerce,
+        taxDecision.listedSubtotalMmk,
+        taxDecision.reviewedAt,
+      )
+      const draftTaxConfiguration = taxDecision.taxConfigurationRevision === null
+        ? null
+        : (commerce.taxConfigurations ?? []).find((candidate) => candidate.revision === taxDecision.taxConfigurationRevision) ?? null
+      if (!draftTaxCalculation
+        || draftTaxCalculation.totalMmk !== taxDecision.totalMmk
+        || draftTaxCalculation.taxMmk !== taxDecision.taxMmk
+        || ('taxConfigurationRevision' in draftTaxCalculation
+          ? draftTaxCalculation.taxConfigurationRevision !== taxDecision.taxConfigurationRevision
+          : taxDecision.taxConfigurationRevision !== null)
+        || (draftTaxConfiguration?.proof.actionId ?? null) !== taxDecision.policyActionId) {
+        detachPreparedOrderSources({ channel: false })
+        setNotice('The Shop tax schedule changed after Ecommerce review. Reopen the request; no order was prepared.')
+        return
+      }
+    }
+    const listedOrderTotal = (promotionDecision?.netSubtotalMmk ?? orderTotal) + (shippingDecision?.feeMmk ?? 0)
+    const pricedOrderTotal = taxDecision?.totalMmk ?? listedOrderTotal
+    if (shippingDecision?.promiseMinutes
+      && Date.parse(canonicalPromisedAt) < Date.parse(shippingDecision.reviewedAt) + shippingDecision.promiseMinutes * 60_000) {
+      setNotice(`Choose a promise at least ${shippingDecision.promiseMinutes} minutes after the governed delivery review.`)
+      return
+    }
+    if (ecommerceDraft && (customer.trim() !== ecommerceCustomer
       || channel !== 'Ecommerce'
       || fulfilment !== ecommerceDraft.fulfilment
       || Boolean(ecommercePayment && payment !== ecommercePayment)
@@ -4017,7 +4144,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           || (line.variant ?? null) !== expected.variant
           || line.unitPriceMmk !== expected.unitPriceMmk
       })
-      || orderTotal !== ecommerceDraft.totalMmk)) {
+      || pricedOrderTotal !== ecommerceDraft.totalMmk)) {
       detachPreparedOrderSources({ channel: false })
       setNotice('The Ecommerce request changed after confirmation. Return to Ecommerce or continue as a manual order.')
       return
@@ -4048,10 +4175,15 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       fulfilment,
       fulfilmentReference: handoffReference,
       promisedAt: canonicalPromisedAt,
+      ...(paymentDueAt ? { paymentDueAt } : {}),
       sourceRecordId,
       evidenceReference: sourceEvidence,
-      ...(!sourceBacked || orderLines.length > 1 ? { lines: orderLines } : {}),
-      total: orderTotal,
+      ...(!sourceBacked || orderLines.length > 1 || promotionDecision ? { lines: orderLines } : {}),
+      ...(promotionDecision ? { promotionDecision } : {}),
+      ...(shippingDecision ? { shippingDecision } : {}),
+      ...(paymentDecision ? { paymentDecision } : {}),
+      ...(taxDecision ? { taxDecision } : {}),
+      total: listedOrderTotal,
       status: 'confirmed',
     }
     const lineReview = orderLines.map((line) => `${line.sku} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(', ')
@@ -4072,12 +4204,47 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         return
       }
     }
+    const calculationReview = commerceOrderCalculation(commerce, listedOrderTotal, reviewedAt.toISOString())
+    if (!calculationReview) {
+      setNotice('The order total cannot be calculated safely. Review item prices and tax setup before continuing.')
+      return
+    }
+    if (taxDecision && (calculationReview.totalMmk !== taxDecision.totalMmk
+      || calculationReview.taxMmk !== taxDecision.taxMmk
+      || ('listedSubtotalMmk' in calculationReview
+        ? calculationReview.listedSubtotalMmk
+        : calculationReview.subtotalMmk) !== taxDecision.listedSubtotalMmk
+      || ('taxConfigurationRevision' in calculationReview
+        ? calculationReview.taxConfigurationRevision !== taxDecision.taxConfigurationRevision
+        : taxDecision.taxConfigurationRevision !== null))) {
+      detachPreparedOrderSources({ channel: false })
+      setNotice('The governed Ecommerce tax total no longer matches Shop. Reopen the request; no order was queued.')
+      return
+    }
+    const creditReview = commerceCustomerCreditReview(
+      commerce,
+      order.customer,
+      calculationReview.totalMmk,
+      paymentTermsDays,
+      order.createdAt,
+    )
+    if (!creditReview.allowed) {
+      setNotice(creditReview.reason === 'policy_missing'
+        ? `Set a customer credit policy for ${order.customer} before offering payment terms.`
+        : creditReview.reason === 'customer_hold'
+          ? `${order.customer} is on credit hold. Choose payment at handoff or review the policy.`
+          : creditReview.reason === 'terms_exceeded'
+            ? `${order.customer} is not approved for ${paymentTermsDays}-day terms.`
+            : `This order would exceed ${order.customer}'s ${formatMoney(creditReview.policy?.creditLimitMmk ?? 0)} credit limit.`)
+      return
+    }
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
       summary: ecommerceDraft ? 'Review Ecommerce order' : `Confirm order for ${order.customer}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
-      after: `Order ${order.id} · Subtotal ${formatMoney(orderTotal)} · Tax not configured · Payment ${payment} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
+      after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)}${promotionDecision?.status === 'approved' ? ` · promotion ${promotionDecision.code} -${formatMoney(promotionDecision.discountMmk)} under policy R${promotionDecision.policyRevision}` : promotionDecision?.status === 'rejected' ? ` · promotion ${promotionDecision.code} rejected (${promotionDecision.reason.replaceAll('_', ' ')})` : ''} · Payment ${payment} · due ${paymentDueAt ? formatIssueDue(paymentDueAt) : 'at handoff'}${paymentTermsDays ? ` · credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}` : ''} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
+      actorSuggestion: managedIdentity ? undefined : 'Shop reviewer',
       evidenceReferenceSuggestion: confirmationEvidence,
       evidenceReferenceLocked: Boolean(sourceRecordId),
       reasonSuggestion: ecommerceDraft
@@ -4183,6 +4350,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       fulfilment: orderFulfilment,
       fulfilmentReference: record.id,
       promisedAt: canonicalPromisedAt,
+      paymentDueAt: record.createdAt,
       sourceRecordId: record.id,
       evidenceReference: record.completion.evidenceReference,
       total: record.totalMmk,
@@ -4249,6 +4417,29 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
   }
 
+  function recordCollectionContact(orderId: string) {
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    if (!order || order.status === 'cancelled' || order.paymentStatus !== 'pending') {
+      setNotice('Only a pending, active customer balance can receive a collection note.')
+      return
+    }
+    const dueAt = order.paymentDueAt ?? order.promisedAt ?? order.createdAt
+    queueAction({
+      kind: 'collection_contact',
+      subjectId: orderId,
+      summary: `Record customer follow-up for ${order.id}`,
+      before: `${order.customer} · ${formatMoney(order.total)} pending · due ${formatTime(dueAt)} · ${order.collectionActions?.length ?? 0} prior notes`,
+      after: 'Append an attributable contact note · no message sent · no payment changed',
+      reasonSuggestion: 'Customer payment follow-up recorded.',
+      apply: (action) => mutateCommerce(
+        'commerce.collection_action.recorded',
+        action.commandId,
+        commerceActionProof(action),
+        (current) => recordCommerceCollectionAction(current, orderId, commerceActionProof(action)),
+      ),
+    })
+  }
+
   function settleRefund(orderId: string) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.refundStatus !== 'due') {
@@ -4278,8 +4469,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   }
 
   function openReturnEditor(orderId: string) {
-    if (pendingAction) {
-      setNotice('Finish or cancel the current Shop action before recording a return.')
+    if (pendingAction || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
+      setNotice('Finish or cancel the current Shop help action before recording a return.')
       return
     }
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
@@ -4313,6 +4504,11 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice('Choose an order item and a whole return quantity within the remaining sold quantity.')
       return
     }
+    if (returnDraft.sourceIntent && returnDraftOrder.returns?.some((record) => record.evidenceReference === returnDraft.sourceIntent?.evidenceReference)) {
+      setReturnDraft(null)
+      setNotice('This Ecommerce return request already has Shop evidence. No second return was queued.')
+      return
+    }
     const expected = returnReviewExpectation
     if (!expected || returnQuantityResult > expected.soldQuantity - expected.returnedQuantity) {
       setNotice('The order or its remaining return quantity changed. Review the latest order record.')
@@ -4339,22 +4535,699 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       summary: `Record ${input.quantity} ${input.sku} returned from ${input.orderId}`,
       before: `${expected.returnedQuantity} of ${expected.soldQuantity} returned · ${item.onHand} sellable units`,
       after: `${nextReturned} of ${expected.soldQuantity} returned · ${dispositionAfter} · payment and order total unchanged`,
+      reasonSuggestion: returnDraft.sourceIntent
+        ? `Customer requested return review: ${returnDraft.sourceIntent.reason}`
+        : 'Reviewed the received return and its stock condition.',
+      evidenceReferenceSuggestion: returnDraft.sourceIntent?.evidenceReference,
+      evidenceReferenceLocked: Boolean(returnDraft.sourceIntent),
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce(
           'commerce.order.return_recorded',
           action.commandId,
           proof,
-          (current) => recordCommerceOrderReturn(current, input, proof, expected),
+          (current) => {
+            const latestOrder = current.orders.find((candidate) => candidate.id === input.orderId)
+            if (returnDraft.sourceIntent && latestOrder?.returns?.some((record) => record.evidenceReference === returnDraft.sourceIntent?.evidenceReference)) return null
+            return recordCommerceOrderReturn(current, input, proof, expected)
+          },
         )
         setReturnDraft(null)
       },
     }, returnTriggerRefs.current.get(input.orderId))
   }
 
-  function cancelOrder(orderId: string) {
+  function reviewSupportCaseOpen(event: FormEvent) {
+    event.preventDefault()
+    if (!supportDraft) return
+    const intent = supportDraft.intent
+    const sourceOrder = commerce.orders.find((order) => order.id === intent.orderId)
+    if (sourceOrder?.supportCases?.some((supportCase) => supportCase.sourceIntentId === intent.id)) {
+      setSupportDraft(null)
+      setNotice('This Ecommerce help request already has a Shop case. No second case was queued.')
+      return
+    }
+    const dueAt = new Date(supportDraft.dueAt)
+    const owner = supportDraft.owner.trim()
+    const expected = commerceOrderSupportOpenExpectation(commerce, intent.orderId, intent.id)
+    if (!expected) {
+      setSupportDraft(null)
+      setNotice('This help request was already handled or its Shop order changed. Nothing was queued.')
+      return
+    }
+    if (!owner || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= purchaseOrderClock) {
+      setNotice('Choose one accountable owner and a future due time for this support case.')
+      return
+    }
+    const input = {
+      orderId: intent.orderId,
+      sourceIntentId: intent.id,
+      sourceRequestId: intent.sourceRequestId,
+      customerRequestedAt: intent.createdAt,
+      category: intent.category,
+      customerDescription: intent.description,
+      priority: supportDraft.priority,
+      owner,
+      dueAt: dueAt.toISOString(),
+      externalMessageSent: false,
+      refundStarted: false,
+    } as const
+    queueAction({
+      kind: 'order_support_open',
+      subjectId: `${input.orderId}:${input.sourceIntentId}`,
+      summary: `Open support case for ${input.orderId}`,
+      before: `${input.category.replaceAll('_', ' ')} request waiting for Shop review`,
+      after: `${input.priority} · owner ${input.owner} · due ${formatTime(input.dueAt)} · no message or refund sent`,
+      reasonSuggestion: `Customer requested help: ${input.customerDescription}`,
+      evidenceReferenceSuggestion: intent.evidenceReference,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.support_case_opened',
+          action.commandId,
+          proof,
+          (current) => {
+            const latestOrder = current.orders.find((order) => order.id === input.orderId)
+            if (latestOrder?.supportCases?.some((supportCase) => supportCase.sourceIntentId === input.sourceIntentId)) return null
+            return recordCommerceOrderSupportCase(current, input, proof, expected)
+          },
+        )
+        setSupportDraft(null)
+      },
+    })
+  }
+
+  function openSupportResolution(orderId: string, caseId: string) {
+    if (pendingAction || returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
+      setNotice('Finish or close the current Shop action before resolving a support case.')
+      return
+    }
+    if (!commerceOrderSupportResolveExpectation(commerce, orderId, caseId)) {
+      setNotice('This support case is not open or changed before review.')
+      return
+    }
+    setSupportResolutionDraft({ orderId, caseId, outcome: 'information_provided', note: '' })
+    requestAnimationFrame(() => document.getElementById(`support-resolution-${caseId}`)?.focus())
+  }
+
+  function openSupportReopen(orderId: string, caseId: string) {
+    if (pendingAction || returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
+      setNotice('Finish or close the current Shop action before reopening a support case.')
+      return
+    }
+    const expected = commerceOrderSupportReopenExpectation(commerce, orderId, caseId)
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === caseId)
+    const service = supportCase ? commerceSupportServiceState(supportCase) : null
+    if (!expected || !supportCase?.resolution || !service) {
+      setNotice('Only one resolved, attributable support case can enter follow-up review.')
+      return
+    }
+    setSupportReopenDraft({
+      orderId,
+      caseId,
+      sourceResolutionActionId: supportCase.resolution.proof.actionId,
+      priority: service.priority,
+      owner: service.owner,
+      dueAt: localDateTimeInputValue(new Date(purchaseOrderClock + 4 * 60 * 60 * 1000)),
+      note: '',
+    })
+    requestAnimationFrame(() => document.getElementById(`support-reopen-${caseId}`)?.focus())
+  }
+
+  function reviewSupportReopen(event: FormEvent) {
+    event.preventDefault()
+    if (!supportReopenDraft) return
+    const expected = commerceOrderSupportReopenExpectation(
+      commerce,
+      supportReopenDraft.orderId,
+      supportReopenDraft.caseId,
+    )
+    const owner = supportReopenDraft.owner.trim()
+    const note = supportReopenDraft.note.trim()
+    const dueAt = new Date(supportReopenDraft.dueAt)
+    if (!expected || !owner || !note || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= purchaseOrderClock) {
+      setNotice('Choose one accountable owner, a future due time, and the linked follow-up reason.')
+      return
+    }
+    const input = {
+      orderId: supportReopenDraft.orderId,
+      caseId: supportReopenDraft.caseId,
+      sourceResolutionActionId: supportReopenDraft.sourceResolutionActionId,
+      priority: supportReopenDraft.priority,
+      owner,
+      dueAt: dueAt.toISOString(),
+      note,
+    }
+    queueAction({
+      kind: 'order_support_reopen',
+      subjectId: `${input.orderId}:${input.caseId}`,
+      summary: `Reopen ${input.caseId}`,
+      before: `Resolved by action ${input.sourceResolutionActionId}`,
+      after: `${input.priority} · owner ${input.owner} · due ${formatTime(input.dueAt)} · original resolution retained`,
+      reasonSuggestion: input.note,
+      evidenceReferenceSuggestion: `SUPPORT-REOPEN:${input.caseId}:${input.sourceResolutionActionId}`,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.support_case_reopened',
+          action.commandId,
+          proof,
+          (current) => reopenCommerceOrderSupportCase(current, input, proof, expected),
+        )
+        setSupportReopenDraft(null)
+      },
+    })
+  }
+
+  function openSupportService(orderId: string, caseId: string, kind: CommerceSupportServiceEventKind) {
+    if (pendingAction || returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
+      setNotice('Finish or close the current Shop action before changing support responsibility.')
+      return
+    }
+    const order = commerce.orders.find((candidate) => candidate.id === orderId)
+    const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === caseId)
+    const service = supportCase ? commerceSupportServiceState(supportCase) : null
+    const checkpoints = supportCase ? commerceSupportCheckpointState(supportCase) : null
+    if (!supportCase || !service || !commerceOrderSupportServiceExpectation(commerce, orderId, caseId)) {
+      setNotice('This support case is resolved, untriaged, or changed before review.')
+      return
+    }
+    if (kind === 'acknowledged' && (checkpoints?.acknowledged || checkpoints?.firstResponseReady)) {
+      setNotice('This support case already has immutable acknowledgement evidence.')
+      return
+    }
+    if (kind === 'first_response_ready' && (!checkpoints?.acknowledged || checkpoints.firstResponseReady)) {
+      setNotice(checkpoints?.firstResponseReady ? 'This support case already has first-response evidence.' : 'Acknowledge this support case before preparing its first response.')
+      return
+    }
+    const currentPriorityIndex = commerceSupportPriorityOrder.indexOf(service.priority)
+    let priority = service.priority
+    let dueAt = service.dueAt
+    if (kind === 'escalated') {
+      if (currentPriorityIndex > 0) priority = commerceSupportPriorityOrder[currentPriorityIndex - 1]
+      else {
+        const currentDueTime = Date.parse(service.dueAt)
+        if (!Number.isFinite(currentDueTime) || currentDueTime <= purchaseOrderClock + 60_000) {
+          setNotice('This urgent case has no earlier future due time available. Resolve or reassign it instead.')
+          return
+        }
+        dueAt = new Date(purchaseOrderClock + Math.max(60_000, Math.floor((currentDueTime - purchaseOrderClock) / 2))).toISOString()
+      }
+    }
+    setSupportServiceDraft({
+      orderId,
+      caseId,
+      kind,
+      owner: service.owner,
+      priority,
+      dueAt: localDateTimeInputValue(new Date(dueAt)),
+      note: '',
+    })
+    requestAnimationFrame(() => document.getElementById(`support-service-${caseId}`)?.focus())
+  }
+
+  function reviewSupportService(event: FormEvent) {
+    event.preventDefault()
+    if (!supportServiceDraft) return
+    const expected = commerceOrderSupportServiceExpectation(
+      commerce,
+      supportServiceDraft.orderId,
+      supportServiceDraft.caseId,
+    )
+    const order = commerce.orders.find((candidate) => candidate.id === supportServiceDraft.orderId)
+    const supportCase = order?.supportCases?.find((candidate) => candidate.caseId === supportServiceDraft.caseId)
+    const service = supportCase ? commerceSupportServiceState(supportCase) : null
+    const checkpoints = supportCase ? commerceSupportCheckpointState(supportCase) : null
+    const dueAt = new Date(supportServiceDraft.dueAt)
+    const owner = supportServiceDraft.owner.trim()
+    const note = supportServiceDraft.note.trim()
+    if (!expected || !service || !checkpoints) {
+      setSupportServiceDraft(null)
+      setNotice('This support case changed before review. Nothing was queued.')
+      return
+    }
+    if (!owner || !note || Number.isNaN(dueAt.getTime())) {
+      setNotice('Record one accountable owner and the reason for this support action.')
+      return
+    }
+    const dueChanged = supportServiceDraft.dueAt !== localDateTimeInputValue(new Date(service.dueAt))
+    const canonicalDueAt = supportServiceDraft.kind === 'escalated' && dueChanged ? dueAt.toISOString() : service.dueAt
+    const previousPriority = commerceSupportPriorityOrder.indexOf(service.priority)
+    const nextPriority = commerceSupportPriorityOrder.indexOf(supportServiceDraft.priority)
+    if (supportServiceDraft.kind === 'reassigned') {
+      if (owner === service.owner || supportServiceDraft.priority !== service.priority || canonicalDueAt !== service.dueAt) {
+        setNotice('Reassignment changes only the owner. Use escalation to tighten priority or due time.')
+        return
+      }
+    } else if (supportServiceDraft.kind === 'escalated') {
+      if (owner !== service.owner
+        || nextPriority > previousPriority
+        || Date.parse(canonicalDueAt) > Date.parse(service.dueAt)
+        || (nextPriority === previousPriority && canonicalDueAt === service.dueAt)
+        || (canonicalDueAt !== service.dueAt && Date.parse(canonicalDueAt) <= purchaseOrderClock)) {
+        setNotice('Escalation keeps the owner and must raise priority or bring a future due time forward.')
+        return
+      }
+    } else if (supportServiceDraft.kind === 'acknowledged') {
+      if (checkpoints.acknowledged || checkpoints.firstResponseReady
+        || owner !== service.owner
+        || supportServiceDraft.priority !== service.priority
+        || canonicalDueAt !== service.dueAt) {
+        setNotice('Acknowledgement records the current owner, priority, and due time exactly once.')
+        return
+      }
+    } else if (!checkpoints.acknowledged || checkpoints.firstResponseReady
+      || owner !== service.owner
+      || supportServiceDraft.priority !== service.priority
+      || canonicalDueAt !== service.dueAt) {
+      setNotice('First response must follow acknowledgement and preserve the current service responsibility.')
+      return
+    }
+    const input = {
+      orderId: supportServiceDraft.orderId,
+      caseId: supportServiceDraft.caseId,
+      kind: supportServiceDraft.kind,
+      owner,
+      priority: supportServiceDraft.priority,
+      dueAt: canonicalDueAt,
+      note,
+    }
+    const actionLabel = input.kind === 'reassigned'
+      ? 'Reassign'
+      : input.kind === 'escalated'
+        ? 'Escalate'
+        : input.kind === 'acknowledged'
+          ? 'Acknowledge'
+          : 'Record first response ready'
+    queueAction({
+      kind: 'order_support_service',
+      subjectId: `${input.orderId}:${input.caseId}`,
+      summary: `${actionLabel} ${input.caseId}`,
+      before: `${service.priority} · ${service.owner} · due ${formatTime(service.dueAt)}`,
+      after: input.kind === 'acknowledged'
+        ? `${input.owner} acknowledged internally · no customer message sent`
+        : input.kind === 'first_response_ready'
+          ? 'First response ready for independent delivery · no customer message sent'
+          : `${input.priority} · ${input.owner} · due ${formatTime(input.dueAt)} · no external action`,
+      reasonSuggestion: input.note,
+      evidenceReferenceSuggestion: `SUPPORT-SERVICE:${input.caseId}`,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.support_case_service_recorded',
+          action.commandId,
+          proof,
+          (current) => recordCommerceOrderSupportServiceEvent(current, input, proof, expected),
+        )
+        setSupportServiceDraft(null)
+      },
+    })
+  }
+
+  function reviewSupportCaseResolution(event: FormEvent) {
+    event.preventDefault()
+    if (!supportResolutionDraft) return
+    const expected = commerceOrderSupportResolveExpectation(
+      commerce,
+      supportResolutionDraft.orderId,
+      supportResolutionDraft.caseId,
+    )
+    if (!expected || !supportResolutionDraft.note.trim()) {
+      setNotice('Add the reviewed outcome note for one open support case.')
+      return
+    }
+    const input = {
+      orderId: supportResolutionDraft.orderId,
+      caseId: supportResolutionDraft.caseId,
+      outcome: supportResolutionDraft.outcome,
+      note: supportResolutionDraft.note.trim(),
+    }
+    queueAction({
+      kind: 'order_support_resolve',
+      subjectId: `${input.orderId}:${input.caseId}`,
+      summary: `Resolve ${input.caseId}`,
+      before: 'Support case open',
+      after: `${input.outcome.replaceAll('_', ' ')} · no external action performed`,
+      reasonSuggestion: input.note,
+      evidenceReferenceSuggestion: `SUPPORT-RESOLUTION:${input.caseId}`,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.support_case_resolved',
+          action.commandId,
+          proof,
+          (current) => resolveCommerceOrderSupportCase(current, input, proof, expected),
+        )
+        setSupportResolutionDraft(null)
+      },
+    })
+  }
+
+  function canCorrectOrder(orderId: string) {
+    return Boolean(commerceOrderCorrectionExpectation(commerce, orderId))
+  }
+
+  function openCorrectionEditor(orderId: string) {
+    if (pendingAction || returnDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) {
+      setNotice('Finish or close the current Shop action before recording a correction.')
+      return
+    }
+    const expectation = commerceOrderCorrectionExpectation(commerce, orderId)
+    if (!expectation) {
+      setNotice('Corrections require an unclosed, calculated, reconciled, completed order.')
+      return
+    }
+    setCorrectionDraft((current) => current?.orderId === orderId
+      ? current
+      : { orderId, kind: 'credit', reasonCode: 'pricing_error', listedAmountMmk: '' })
+    requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
+  }
+
+  function cancelCorrectionEditor() {
+    const orderId = correctionDraft?.orderId
+    setCorrectionDraft(null)
+    setNotice('Correction draft closed. Shop data was not modified.')
+    requestAnimationFrame(() => orderId && correctionTriggerRefs.current.get(orderId)?.focus())
+  }
+
+  function reviewOrderCorrection(event: FormEvent) {
+    event.preventDefault()
+    if (!correctionDraft || !correctionDraftOrder || !correctionCalculation || !correctionReviewExpectation) {
+      setNotice('Enter a positive whole MMK amount on an eligible completed order.')
+      return
+    }
+    const balanceAfter = correctionReviewExpectation.currentBalanceMmk
+      + (correctionDraft.kind === 'debit' ? correctionCalculation.totalMmk : -correctionCalculation.totalMmk)
+    if (!Number.isSafeInteger(balanceAfter) || balanceAfter < 0) {
+      setNotice('A credit cannot exceed the order’s current corrected balance.')
+      return
+    }
+    const sourceIntent = correctionDraft.sourceIntent
+    if (sourceIntent && (correctionDraftOrder.sourceRecordId !== sourceIntent.sourceRequestId
+      || correctionDraftOrder.paymentStatus !== sourceIntent.paymentStatus
+      || correctionDraftOrder.refundStatus !== sourceIntent.refundStatus
+      || correctionReviewExpectation.sourceCalculationDigest !== sourceIntent.sourceCalculationDigest
+      || correctionReviewExpectation.correctionCount !== sourceIntent.sourceCorrectionCount
+      || correctionReviewExpectation.currentBalanceMmk !== sourceIntent.originalBalanceMmk
+      || correctionDraft.kind !== sourceIntent.requestedKind
+      || correctionDraft.reasonCode !== sourceIntent.reasonCode
+      || correctionCalculation.listedAmountMmk !== sourceIntent.listedAmountMmk)) {
+      setCorrectionDraft(null)
+      setNotice(`${sourceIntent.id} no longer matches the current Shop correction review. Nothing was prepared.`)
+      return
+    }
+    const input = {
+      orderId: correctionDraft.orderId,
+      kind: correctionDraft.kind,
+      reasonCode: correctionDraft.reasonCode,
+      listedAmountMmk: correctionCalculation.listedAmountMmk,
+    } as const
+    queueAction({
+      kind: 'order_correction',
+      subjectId: input.orderId,
+      summary: `Record ${input.kind} note for ${input.orderId}`,
+      ...(sourceIntent ? {
+        reasonSuggestion: sourceIntent.reason.slice(0, 180),
+        evidenceReferenceSuggestion: sourceIntent.evidenceReference,
+        evidenceReferenceLocked: true,
+      } : {}),
+      before: `Original invoice preserved · corrected balance ${formatMoney(correctionReviewExpectation.currentBalanceMmk)}`,
+      after: `${input.kind} ${formatMoney(correctionCalculation.totalMmk)} · corrected balance ${formatMoney(balanceAfter)} · external posting not performed`,
+      apply: async (action) => {
+        if (sourceIntent) {
+          const { readEcommerceBuyingState } = await import('../products/ecommerce/ecommerce-buying-lifecycle')
+          const recovered = await readEcommerceBuyingState(ecommerceBuyingScope)
+          const storedIntent = recovered.state?.correctionIntents.find((candidate) => candidate.id === sourceIntent.id)
+          if (recovered.status !== 'ready' || !storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(sourceIntent)) {
+            throw new ShopReviewRequiredError(`${sourceIntent.id} recovery changed during review. No correction was recorded.`)
+          }
+        }
+        const proof = commerceActionProof(action)
+        await mutateCommerce(
+          'commerce.order.correction_recorded',
+          action.commandId,
+          proof,
+          (current) => recordCommerceOrderCorrection(current, input, proof, correctionReviewExpectation),
+        )
+        setCorrectionDraft(null)
+      },
+    }, correctionTriggerRefs.current.get(input.orderId))
+  }
+
+  function keepOrderFromCancellation() {
+    if (!cancellationDraft) return
+    if (!ecommerceCancellationMatchesCurrentShop(commerce, cancellationDraft)) {
+      setCancellationDraft(null)
+      setNotice(`${cancellationDraft.id} no longer matches the current Shop order. Nothing changed.`)
+      return
+    }
+    const sourceIntent = cancellationDraft
+    queueAction({
+      kind: 'order_cancellation_review',
+      subjectId: sourceIntent.orderId,
+      summary: `Decline ${sourceIntent.id} and keep ${sourceIntent.orderId}`,
+      before: `${sourceIntent.orderStatus} · cancellation waiting · ${sourceIntent.reasonCode.replaceAll('_', ' ')}`,
+      after: `${sourceIntent.orderStatus} · order and stock unchanged · customer decision receipt saved locally`,
+      reasonSuggestion: `Keep the reviewed order active: ${sourceIntent.reason}`.slice(0, 180),
+      evidenceReferenceSuggestion: sourceIntent.evidenceReference,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const currentCommerce = commerceRef.current
+        if (!ecommerceCancellationMatchesCurrentShop(currentCommerce, sourceIntent)) {
+          setCancellationDraft(null)
+          throw new ShopReviewRequiredError(`${sourceIntent.id} changed during review. No decision was saved and the order was not changed; reopen the current request.`)
+        }
+        const lifecycle = await import('../products/ecommerce/ecommerce-buying-lifecycle')
+        const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+        if (!recovered.state || recovered.status !== 'ready') {
+          throw new ShopReviewRequiredError(recovered.error || `${sourceIntent.id} recovery is unavailable. No decision was saved and the order was not changed.`)
+        }
+        const storedIntent = recovered.state.cancellationIntents.find((candidate) => candidate.id === sourceIntent.id)
+        if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(sourceIntent)) {
+          throw new ShopReviewRequiredError(`${sourceIntent.id} no longer matches its recovered Ecommerce request. No decision was saved and the order was not changed.`)
+        }
+        const decision = await lifecycle.buildEcommerceCancellationDecision({
+          scope: ecommerceBuyingScope,
+          commerceState: currentCommerce,
+          intent: storedIntent,
+          proof: commerceActionProof(action),
+        })
+        await lifecycle.saveEcommerceCancellationDecision(
+          ecommerceBuyingScope,
+          decision,
+          recovered.state.headDigest,
+        )
+        setCancellationDraft(null)
+      },
+    })
+  }
+
+  async function prepareCurrentAmendmentDraft(intent: EcommerceOrderAmendmentIntent, currentCommerce: CommerceState) {
+    const lifecycle = await import('../products/ecommerce/ecommerce-buying-lifecycle')
+    const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+    if (!recovered.state || recovered.status !== 'ready') {
+      throw new ShopReviewRequiredError(recovered.error || `${intent.id} recovery is unavailable. Nothing changed.`)
+    }
+    const storedIntent = recovered.state.amendmentIntents.find((candidate) => candidate.id === intent.id)
+    const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
+    if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent) || !replacementRequest) {
+      throw new ShopReviewRequiredError(`${intent.id} no longer matches its recovered replacement request. Nothing changed.`)
+    }
+    const draft = await lifecycle.prepareEcommerceShopDraftV2({
+      request: replacementRequest,
+      state: recovered.state,
+      currentCatalog: currentCommerce.items,
+      currentPromotionPolicies: currentCommerce.promotionPolicies ?? [],
+      currentShippingPolicies: currentCommerce.shippingPolicies ?? [],
+      currentPaymentPolicies: currentCommerce.paymentPolicies ?? [],
+      currentTaxConfigurations: currentCommerce.taxConfigurations ?? [],
+      catalogRevision: currentCommerce.catalogChanges?.length ?? 0,
+      confirmedAt: new Date().toISOString(),
+    })
+    return { draft, replacementRequest }
+  }
+
+  async function prepareCurrentRescheduleDraft(intent: EcommerceOrderRescheduleIntent, currentCommerce: CommerceState) {
+    const lifecycle = await import('../products/ecommerce/ecommerce-buying-lifecycle')
+    const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
+    if (!recovered.state || recovered.status !== 'ready') {
+      throw new ShopReviewRequiredError(recovered.error || `${intent.id} recovery is unavailable. Nothing changed.`)
+    }
+    const storedIntent = recovered.state.rescheduleIntents.find((candidate) => candidate.id === intent.id)
+    const replacementRequest = recovered.state.requests.find((candidate) => candidate.id === intent.replacementRequestId)
+    if (!storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent) || !replacementRequest) {
+      throw new ShopReviewRequiredError(`${intent.id} no longer matches its recovered reschedule request. Nothing changed.`)
+    }
+    const draft = await lifecycle.prepareEcommerceShopDraftV2({
+      request: replacementRequest,
+      state: recovered.state,
+      currentCatalog: currentCommerce.items,
+      currentPromotionPolicies: currentCommerce.promotionPolicies ?? [],
+      currentShippingPolicies: currentCommerce.shippingPolicies ?? [],
+      currentPaymentPolicies: currentCommerce.paymentPolicies ?? [],
+      currentTaxConfigurations: currentCommerce.taxConfigurations ?? [],
+      catalogRevision: currentCommerce.catalogChanges?.length ?? 0,
+      confirmedAt: new Date().toISOString(),
+    })
+    if (!ecommerceReschedulePromiseAllowed(draft, intent)) {
+      throw new ShopReviewRequiredError(`${intent.id} no longer satisfies current Shop promise policy. Nothing changed.`)
+    }
+    return { draft, replacementRequest }
+  }
+
+  function openPreparedReplacement(intent: EcommerceOrderAmendmentIntent | EcommerceOrderRescheduleIntent, draft: EcommerceShopDraftV2, promisedAt?: string) {
+    const [firstLine, ...remainingLines] = draft.lines
+    if (!firstLine) throw new ShopReviewRequiredError('The replacement request has no reviewed item. Nothing was prepared.')
+    setPreparedChannelDraft(null)
+    setPreparedEcommerceDraft(draft)
+    setCustomer(draft.customerProfile?.name ?? draft.customerReference)
+    setChannel('Ecommerce')
+    setSku(firstLine.sku)
+    setQuantity(firstLine.quantity)
+    setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
+    setPayment(draft.pricing.payment.adapter === 'kbzpay_manual' ? 'KBZPay' : draft.pricing.payment.adapter === 'cash_on_delivery' ? 'Cash on delivery' : 'Pay on pickup')
+    setFulfilment(draft.fulfilment)
+    setFulfilmentReference(draft.deliveryAddress
+      ? `${draft.deliveryAddress.line1} · ${draft.deliveryAddress.township} · ${draft.deliveryAddress.city}${draft.deliveryAddress.instructions ? ` · ${draft.deliveryAddress.instructions}` : ''}`
+      : draft.sourceRequestId)
+    setPromisedAt(promisedAt ? localDateTimeInputValue(new Date(promisedAt)) : defaultOrderPromiseInput())
+    setOrderEntryMode('manual')
+    setOrderDraftActive(true)
+    setResumedOrderDraft(null)
+    setOrderDraftConflict(false)
+    setOrderAmendmentReview(null)
+    setOrderRescheduleReview(null)
+    setNotice(`${intent.orderId} is retained as cancelled evidence. Replacement ${draft.sourceRequestId} is repriced${promisedAt ? ` for ${formatTime(promisedAt)}` : ''} and ready for a separate accountable order confirmation.`)
+    requestAnimationFrame(() => {
+      const dialog = orderComposerRef.current
+      if (dialog && !dialog.open) dialog.showModal()
+      orderPaymentRef.current?.focus({ preventScroll: true })
+    })
+  }
+
+  async function prepareOrderAmendmentReplacement() {
+    if (!orderAmendmentReview) return
+    const { intent } = orderAmendmentReview
+    const currentCommerce = commerceRef.current
+    const currentState = ecommerceOrderAmendmentShopState(currentCommerce, intent)
+    if (currentState === 'stale') {
+      setOrderAmendmentReview(null)
+      setNotice(`${intent.id} no longer matches the current Shop order. Nothing changed.`)
+      return
+    }
+    if (currentState === 'replacement_needed') {
+      try {
+        const { draft } = await prepareCurrentAmendmentDraft(intent, currentCommerce)
+        openPreparedReplacement(intent, draft)
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'The replacement draft could not be recovered. Nothing changed.')
+      }
+      return
+    }
+    queueAction({
+      kind: 'order_cancel',
+      subjectId: intent.orderId,
+      summary: `Cancel ${intent.orderId} and prepare replacement ${intent.replacementRequestId}`,
+      before: `${intent.orderStatus} · ${formatMoney(intent.originalTotalMmk)} · ${ecommerceOrderAmendmentSummary(intent)}`,
+      after: `original cancelled · exact stock released · replacement repriced for separate confirmation · no message or provider call`,
+      reasonSuggestion: intent.reason.slice(0, 180),
+      evidenceReferenceSuggestion: intent.evidenceReference,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const latestCommerce = commerceRef.current
+        if (ecommerceOrderAmendmentShopState(latestCommerce, intent) !== 'active') {
+          setOrderAmendmentReview(null)
+          throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+        }
+        const { draft } = await prepareCurrentAmendmentDraft(intent, latestCommerce)
+        const proof = commerceActionProof(action)
+        let reviewRequired = false
+        try {
+          await mutateCommerce('commerce.order.cancelled', action.commandId, proof, (current) => {
+            if (ecommerceOrderAmendmentShopState(current, intent) !== 'active') {
+              reviewRequired = true
+              return null
+            }
+            return cancelCommerceOrder(current, intent.orderId, proof)
+          })
+        } catch (error) {
+          if (reviewRequired) throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+          throw error
+        }
+        if (reviewRequired) throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+        openPreparedReplacement(intent, draft)
+      },
+    })
+  }
+
+  async function prepareOrderRescheduleReplacement() {
+    if (!orderRescheduleReview) return
+    const { intent } = orderRescheduleReview
+    const currentCommerce = commerceRef.current
+    const currentState = ecommerceOrderRescheduleShopState(currentCommerce, intent)
+    if (currentState === 'stale') {
+      setOrderRescheduleReview(null)
+      setNotice(`${intent.id} no longer matches the current Shop order. Nothing changed.`)
+      return
+    }
+    if (currentState === 'replacement_needed') {
+      try {
+        const { draft } = await prepareCurrentRescheduleDraft(intent, currentCommerce)
+        openPreparedReplacement(intent, draft, intent.requestedPromisedAt)
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'The rescheduled replacement draft could not be recovered. Nothing changed.')
+      }
+      return
+    }
+    queueAction({
+      kind: 'order_cancel',
+      subjectId: intent.orderId,
+      summary: `Cancel ${intent.orderId} and prepare rescheduled replacement ${intent.replacementRequestId}`,
+      before: `${intent.orderStatus} · ${formatMoney(intent.originalTotalMmk)} · promised ${formatTime(intent.originalPromisedAt)}`,
+      after: `original cancelled · exact stock released · replacement repriced for ${formatTime(intent.requestedPromisedAt)} · separate confirmation · no rider, message, or provider call`,
+      reasonSuggestion: intent.reason.slice(0, 180),
+      evidenceReferenceSuggestion: intent.evidenceReference,
+      evidenceReferenceLocked: true,
+      apply: async (action) => {
+        const latestCommerce = commerceRef.current
+        if (ecommerceOrderRescheduleShopState(latestCommerce, intent) !== 'active') {
+          setOrderRescheduleReview(null)
+          throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+        }
+        const { draft } = await prepareCurrentRescheduleDraft(intent, latestCommerce)
+        const proof = commerceActionProof(action)
+        let reviewRequired = false
+        try {
+          await mutateCommerce('commerce.order.cancelled', action.commandId, proof, (current) => {
+            if (ecommerceOrderRescheduleShopState(current, intent) !== 'active') {
+              reviewRequired = true
+              return null
+            }
+            return cancelCommerceOrder(current, intent.orderId, proof)
+          })
+        } catch (error) {
+          if (reviewRequired) throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+          throw error
+        }
+        if (reviewRequired) throw new ShopReviewRequiredError(`${intent.id} changed during review. Nothing was cancelled; reopen the request.`)
+        openPreparedReplacement(intent, draft, intent.requestedPromisedAt)
+      },
+    })
+  }
+
+  function cancelOrder(orderId: string, sourceIntent?: EcommerceCancellationIntent) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
+    if (sourceIntent && !ecommerceCancellationMatchesCurrentShop(commerce, sourceIntent)) {
+      setCancellationDraft(null)
+      setNotice(`${sourceIntent.id} no longer matches the current Shop order. Nothing changed.`)
+      return
+    }
     if (!commerceOrderHasReleasableReservation(commerce, orderId)) return setNotice(`${order.id} has no unmatched, attributable reservation. Cancellation failed closed without changing stock.`)
     const lines = order.lines ?? (order.itemSku ? [{ sku: order.itemSku, quantity: order.quantity }] : [])
     const stockLines = lines.map((line) => {
@@ -4369,10 +5242,34 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     queueAction({
       kind: 'order_cancel',
       subjectId: orderId,
-      summary: `Cancel ${order.id} and release ${lines.length} stock ${lines.length === 1 ? 'line' : 'lines'}`,
-      before: `${order.status} · ${order.paymentStatus} · ${stockLines.map((line) => `${line?.sku} ${line?.onHand}`).join(', ')}`,
-      after: `cancelled · ${paymentAfter} · ${stockLines.map((line) => `${line?.sku} ${(line?.onHand ?? 0) + (line?.quantity ?? 0)}`).join(', ')}`,
-      apply: (action) => mutateCommerce('commerce.order.cancelled', action.commandId, commerceActionProof(action), (current) => cancelCommerceOrder(current, orderId, commerceActionProof(action))),
+      summary: sourceIntent ? `Approve ${sourceIntent.id} and cancel ${order.id}` : `Cancel ${order.id} and release ${lines.length} stock ${lines.length === 1 ? 'line' : 'lines'}`,
+      before: `${order.status} · ${order.paymentStatus} · ${stockLines.map((line) => `${line?.sku} ${line?.onHand}`).join(', ')}${sourceIntent ? ` · request ${sourceIntent.reasonCode.replaceAll('_', ' ')}` : ''}`,
+      after: `cancelled · ${paymentAfter} · ${stockLines.map((line) => `${line?.sku} ${(line?.onHand ?? 0) + (line?.quantity ?? 0)}`).join(', ')} · no customer message or provider call`,
+      ...(sourceIntent ? {
+        reasonSuggestion: `${sourceIntent.reasonCode.replaceAll('_', ' ')}: ${sourceIntent.reason}`.slice(0, 180),
+        evidenceReferenceSuggestion: sourceIntent.evidenceReference,
+        evidenceReferenceLocked: true,
+      } : {}),
+      apply: async (action) => {
+        let reviewRequired = false
+        const proof = commerceActionProof(action)
+        try {
+          await mutateCommerce('commerce.order.cancelled', action.commandId, proof, (current) => {
+            if (sourceIntent) {
+              if (!ecommerceCancellationMatchesCurrentShop(current, sourceIntent)) {
+                reviewRequired = true
+                return null
+              }
+            }
+            return cancelCommerceOrder(current, orderId, proof)
+          })
+        } catch (error) {
+          if (reviewRequired) throw new ShopReviewRequiredError(`${sourceIntent?.id ?? order.id} changed during review. Nothing was cancelled; reopen the current request.`)
+          throw error
+        }
+        if (reviewRequired) throw new ShopReviewRequiredError(`${sourceIntent?.id ?? order.id} changed during review. Nothing was cancelled; reopen the current request.`)
+        if (sourceIntent) setCancellationDraft(null)
+      },
     })
   }
 
@@ -4403,17 +5300,155 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }
     const receiptDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date()).replaceAll('-', '')
     setPurchaseOrderDraft(active
-      ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
-      : { mode: 'create', sku: itemSku, supplier: '', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: '' })
+      ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', rejectedQuantity: '0', discrepancyCode: 'damaged', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
+      : { mode: 'create', sku: itemSku, supplier: '', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: '', unitCostMmk: '' })
     setNotice(active
       ? `Record only units counted against ${active.purchaseOrder.id}. Nothing changes until confirmation.`
       : `Create an internal order for ${item.name}. This does not contact a supplier or create a payment.`)
   }
 
+  function openPurchaseBudgetEditor() {
+    setPurchaseOrderDraft(null)
+    setPurchaseBudgetDraft({
+      budgetCode: `SHOP-STOCK-${new Date(purchaseOrderClock).getUTCFullYear()}`,
+      label: 'Stock replenishment',
+      periodEnd: localDateTimeInputValue(new Date(purchaseOrderClock + 365 * 24 * 60 * 60 * 1000)),
+      ceilingMmk: '5000000',
+      perRequisitionLimitMmk: '1000000',
+    })
+    setNotice('Set the maximum approved buying commitment. This creates internal authority only; it does not order or pay for anything.')
+  }
+
+  function reviewPurchaseBudget(event: FormEvent) {
+    event.preventDefault()
+    if (!purchaseBudgetDraft) return
+    const budgetCode = purchaseBudgetDraft.budgetCode.trim().toUpperCase()
+    const label = purchaseBudgetDraft.label.trim()
+    const ceilingValue = Number(purchaseBudgetDraft.ceilingMmk)
+    const perRequisitionValue = Number(purchaseBudgetDraft.perRequisitionLimitMmk)
+    const ceilingMmk = Number.isSafeInteger(ceilingValue) && ceilingValue > 0 ? ceilingValue : null
+    const perRequisitionLimitMmk = Number.isSafeInteger(perRequisitionValue) && perRequisitionValue > 0 ? perRequisitionValue : null
+    const periodEndTime = Date.parse(purchaseBudgetDraft.periodEnd)
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,39}$/.test(budgetCode) || !label || label.length > 120) {
+      setNotice('Use a 3–40 character budget code and a short budget name.')
+      return
+    }
+    if (ceilingMmk === null || perRequisitionLimitMmk === null || perRequisitionLimitMmk > ceilingMmk) {
+      setNotice('Enter whole-MMK limits with the per-request limit no higher than the total ceiling.')
+      return
+    }
+    if (!Number.isFinite(periodEndTime) || periodEndTime <= purchaseOrderClock) {
+      setNotice('Choose a budget end later than the current time.')
+      return
+    }
+    const envelopeId = uid('PBE')
+    queueAction({
+      kind: 'purchase_budget_approve',
+      subjectId: envelopeId,
+      summary: `Approve ${budgetCode} purchasing limits`,
+      before: 'No active purchase authority · requisitions blocked',
+      after: `${label} · ${formatMoney(ceilingMmk)} ceiling · ${formatMoney(perRequisitionLimitMmk)} per request · no order or payment created`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.purchase_budget.approved', action.commandId, proof, (current) => approveCommercePurchaseBudgetEnvelope(current, {
+          id: envelopeId,
+          budgetCode,
+          label,
+          periodStart: proof.capturedAt,
+          periodEnd: new Date(periodEndTime).toISOString(),
+          ceilingMmk,
+          perRequisitionLimitMmk,
+        }, proof))
+        setPurchaseBudgetDraft(null)
+      },
+    })
+  }
+
+  function updateSupplierQuote(index: 0 | 1, field: keyof SupplierQuoteDraft, value: string) {
+    setSupplierSourcingDraft((current) => {
+      if (!current) return current
+      const quotes: [SupplierQuoteDraft, SupplierQuoteDraft] = [{ ...current.quotes[0] }, { ...current.quotes[1] }]
+      quotes[index][field] = value
+      return { ...current, quotes }
+    })
+  }
+
+  function reviewSupplierSourcing(event: FormEvent) {
+    event.preventDefault()
+    if (!supplierSourcingDraft) return
+    const validUntilTime = Date.parse(supplierSourcingDraft.validUntil)
+    const tolerancePercent = Number(supplierSourcingDraft.unitCostTolerancePercent)
+    const deliveryToleranceDays = Number(supplierSourcingDraft.deliveryToleranceDays)
+    const unitCostToleranceBasisPoints = Math.round(tolerancePercent * 100)
+    const enteredQuotes = supplierSourcingDraft.quotes
+      .map((quote, index) => ({ quote, index }))
+      .filter(({ quote, index }) => index === 0 || [
+        quote.supplier,
+        quote.quoteReference,
+        quote.vendorApprovalReference,
+        quote.unitCostMmk,
+      ].some((value) => value.trim()))
+    if (!Number.isFinite(validUntilTime) || validUntilTime < purchaseOrderClock
+      || !Number.isFinite(tolerancePercent) || tolerancePercent < 0 || tolerancePercent > 20
+      || !Number.isSafeInteger(unitCostToleranceBasisPoints)
+      || !Number.isSafeInteger(deliveryToleranceDays) || deliveryToleranceDays < 0 || deliveryToleranceDays > 30
+      || !enteredQuotes.length || !enteredQuotes.some(({ index }) => index === supplierSourcingDraft.selectedIndex)) {
+      setNotice('Enter a current quote, selected award, cost tolerance up to 20%, and delivery tolerance up to 30 days.')
+      return
+    }
+    const quotes = enteredQuotes.map(({ quote }) => {
+      const unitCostMmk = Number(quote.unitCostMmk)
+      const deliveryTime = Date.parse(quote.deliveryAt)
+      if (!quote.supplier.trim() || quote.supplier.trim().length > 120
+        || !quote.quoteReference.trim() || quote.quoteReference.trim().length > 80
+        || !quote.vendorApprovalReference.trim() || quote.vendorApprovalReference.trim().length > 120
+        || !Number.isSafeInteger(unitCostMmk) || unitCostMmk < 1
+        || !Number.isFinite(deliveryTime) || deliveryTime <= purchaseOrderClock) return null
+      return {
+        supplier: quote.supplier.trim(), quoteReference: quote.quoteReference.trim(),
+        vendorApprovalReference: quote.vendorApprovalReference.trim(), unitCostMmk,
+        deliveryAt: new Date(deliveryTime).toISOString(), validUntil: new Date(validUntilTime).toISOString(),
+      }
+    })
+    if (quotes.some((quote) => quote === null)) {
+      setNotice('Each entered quote needs supplier, quote reference, approved-vendor reference, whole-MMK cost, and future delivery.')
+      return
+    }
+    const selectedQuoteReference = supplierSourcingDraft.quotes[supplierSourcingDraft.selectedIndex].quoteReference.trim()
+    const sourcingId = uid('SSD')
+    queueAction({
+      kind: 'supplier_sourcing_approve',
+      subjectId: sourcingId,
+      summary: `Approve supplier award for ${supplierSourcingDraft.quantity.toLocaleString()} units of ${supplierSourcingDraft.itemName}`,
+      before: `${quotes.length} retained ${quotes.length === 1 ? 'quote' : 'quotes'} · no supplier award or purchase authority`,
+      after: `${sourcingId} · award ${selectedQuoteReference} · ${formatTaxRate(unitCostToleranceBasisPoints)} cost tolerance · ${deliveryToleranceDays}d delivery tolerance · no requisition or order created`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_sourcing.approved', action.commandId, proof, (current) => approveCommerceSupplierSourcingDecision(current, {
+          id: sourcingId,
+          sku: supplierSourcingDraft.sku,
+          quantity: supplierSourcingDraft.quantity,
+          quotes: quotes as NonNullable<(typeof quotes)[number]>[],
+          selectedQuoteReference,
+          unitCostToleranceBasisPoints,
+          deliveryToleranceDays,
+        }, proof))
+        setSupplierSourcingDraft(null)
+      },
+    })
+  }
+
   function startSupplierRequest() {
-    const item = uncoveredReorderItems[0]
-    if (!item) {
-      setNotice('Supplier request is clear. No uncovered reorder item needs a draft.')
+    const approved = openPurchaseRequisitions[0]
+    if (!approved && !activePurchaseBudget) {
+      openPurchaseBudgetEditor()
+      return
+    }
+    const decision = procurementReviews.find((row) => row.sku === approved?.sku) ?? procurementReviews[0]
+    const recommendation = decision ? purchaseRecommendations.find((row) => row.sku === decision.sku) : null
+    const item = commerce.items.find((candidate) => candidate.sku === (approved?.sku ?? recommendation?.sku))
+    if ((!approved && (!decision || !recommendation)) || !item) {
+      setNotice('Replenishment is clear. Shop stock, open purchase orders, and current Plant demand are covered.')
       return
     }
     if (catalogEditDraft) {
@@ -4427,9 +5462,51 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice('Finish or cancel the stock count before starting a supplier request. Your count draft was preserved.')
       return
     }
-    const reorderQuantity = Math.max(item.reorderAt * 2 - item.onHand, 1)
-    setPurchaseOrderDraft({ mode: 'create', sku: item.sku, supplier: 'Preferred supplier', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: String(reorderQuantity) })
-    setNotice(`Supplier request drafted for ${item.name}. Review supplier, arrival, and quantity; no RFQ, message, payment, payable, costing, or stock write is created.`)
+    const recommendedOption = decision?.supplierOptions.find((option) => option.supplier === decision.recommendedSupplier)
+    const policyArrivalAt = purchaseOrderClock + (recommendedOption?.leadTimeDays ?? 7) * 24 * 60 * 60 * 1000
+    const earliestSafeArrival = recommendation?.earliestNeedAt
+      ? new Date(Math.max(policyArrivalAt, Date.parse(recommendation.earliestNeedAt) - 24 * 60 * 60 * 1000))
+      : new Date(policyArrivalAt)
+    const sourcingDecision = !approved ? openSupplierSourcingDecisions.find((candidate) => (
+      candidate.sku === item.sku && candidate.quantity === recommendation?.recommendedOrderUnits
+    )) : null
+    const selectedQuote = sourcingDecision ? commerceSupplierSourcingSelectedQuote(sourcingDecision) : null
+    if (!approved && !selectedQuote) {
+      const primary = recommendedOption ?? decision?.supplierOptions[0]
+      const alternate = decision?.supplierOptions.find((option) => option.supplier !== primary?.supplier)
+      const deliveryAt = earliestSafeArrival && Number.isFinite(earliestSafeArrival.getTime())
+        ? localDateTimeInputValue(earliestSafeArrival)
+        : defaultPurchaseOrderExpectedInput()
+      setPurchaseOrderDraft(null)
+      setSupplierSourcingDraft({
+        sku: item.sku,
+        itemName: item.name,
+        quantity: recommendation!.recommendedOrderUnits,
+        validUntil: localDateTimeInputValue(new Date(purchaseOrderClock + 30 * 24 * 60 * 60 * 1000)),
+        quotes: [
+          { supplier: primary?.supplier ?? '', quoteReference: '', vendorApprovalReference: primary?.supplierPolicyCommandId ?? '', unitCostMmk: String(primary?.unitCostMmk ?? ''), deliveryAt },
+          { supplier: alternate?.supplier ?? '', quoteReference: '', vendorApprovalReference: alternate?.supplierPolicyCommandId ?? '', unitCostMmk: String(alternate?.unitCostMmk ?? ''), deliveryAt },
+        ],
+        selectedIndex: 0,
+        unitCostTolerancePercent: '0',
+        deliveryToleranceDays: '0',
+      })
+      setNotice(`Compare retained quotes for ${recommendation!.recommendedOrderUnits} ${item.name} units. Recording the award creates no requisition, order, message, or payment.`)
+      return
+    }
+    const sourcedExpectedAt = selectedQuote?.deliveryAt
+    setPurchaseOrderDraft({
+      mode: 'create',
+      ...(approved ? { requisitionId: approved.id } : {}),
+      sku: item.sku,
+      supplier: approved?.supplier ?? selectedQuote?.supplier ?? '',
+      expectedAt: approved ? localDateTimeInputValue(new Date(approved.expectedAt)) : sourcedExpectedAt ? localDateTimeInputValue(new Date(sourcedExpectedAt)) : defaultPurchaseOrderExpectedInput(),
+      quantity: String(approved?.quantityRequested ?? recommendation!.recommendedOrderUnits),
+      unitCostMmk: String(approved?.unitCostMmk ?? selectedQuote?.unitCostMmk ?? ''),
+    })
+    setNotice(approved
+      ? `${approved.id} is approved and ready to become one internal purchase order. A different operator must confirm the unchanged terms; nothing was sent or purchased.`
+      : `${sourcingDecision!.id} awarded ${selectedQuote!.quoteReference} to ${selectedQuote!.supplier}. Review the bound terms; approval records a requisition only.`)
     requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 
@@ -4446,7 +5523,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   function reviewPurchaseOrder(event: FormEvent) {
     event.preventDefault()
-    if (!purchaseOrderDraft || !purchaseOrderDraftItem || purchaseOrderQuantityResult === null) {
+    if (!purchaseOrderDraft || !purchaseOrderDraftItem || purchaseOrderQuantityResult === null || !purchaseReceiptDiscrepancyReady) {
       setNotice('Enter a positive whole-unit quantity within the available order balance.')
       return
     }
@@ -4462,21 +5539,73 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         setNotice('Choose an expected arrival later than the current time.')
         return
       }
+      if (purchaseOrderUnitCostResult === null || purchaseOrderDraftTotal === null) {
+        setNotice('Enter a positive whole-MMK unit cost within the supported total range.')
+        return
+      }
       const expectedAt = new Date(expectedAtTime).toISOString()
       const item = purchaseOrderDraftItem
       const quantityOrdered = purchaseOrderQuantityResult
+      if (!purchaseOrderDraft.requisitionId) {
+        const sourcingDecision = openSupplierSourcingDecisions.find((candidate) => (
+          candidate.sku === item.sku && candidate.quantity === quantityOrdered
+        ))
+        const selectedQuote = sourcingDecision ? commerceSupplierSourcingSelectedQuote(sourcingDecision) : null
+        if (!sourcingDecision || !selectedQuote) {
+          setNotice('Approve a current supplier quote comparison before approving this requisition.')
+          startSupplierRequest()
+          return
+        }
+        if (!activePurchaseBudget || !activePurchaseBudgetCommitment) {
+          setNotice('Approve an active buying limit before approving a new requisition.')
+          openPurchaseBudgetEditor()
+          return
+        }
+        if (purchaseOrderDraftTotal > activePurchaseBudget.perRequisitionLimitMmk || purchaseOrderDraftTotal > activePurchaseBudgetCommitment.availableMmk) {
+          setNotice(`This request exceeds ${activePurchaseBudget.budgetCode}. Reduce it or approve a later non-overlapping budget.`)
+          return
+        }
+        const decision = procurementReviews.find((row) => row.sku === item.sku)
+        if (!decision) {
+          setNotice('The procurement decision changed. Reopen the requisition before approval.')
+          return
+        }
+        const requisitionId = uid('PR')
+        queueAction({
+          kind: 'purchase_requisition_approve',
+          subjectId: requisitionId,
+          summary: `Approve requisition for ${quantityOrdered.toLocaleString()} units of ${item.name}`,
+          before: `${item.onHand.toLocaleString()} on hand · recommendation only · no purchase authority`,
+          after: `${requisitionId} · ${sourcingDecision.id}/${selectedQuote.quoteReference} · ${supplier} · ${quantityOrdered.toLocaleString()} at ${formatMoney(purchaseOrderUnitCostResult)} each · ${formatMoney(purchaseOrderDraftTotal)} exposure · purchase order not created`,
+          apply: async (action) => {
+            const proof = commerceActionProof(action)
+            await mutateCommerce('commerce.purchase_requisition.approved', action.commandId, proof, (current) => approveCommercePurchaseRequisition(current, {
+              id: requisitionId, expectedAt, supplier, sku: item.sku, quantityRequested: quantityOrdered,
+              unitCostMmk: purchaseOrderUnitCostResult, sourceDecisionDigest: shopProcurementDecision.digest,
+              sourceReplenishmentDigest: shopReplenishment.digest, budgetEnvelopeId: activePurchaseBudget.id,
+              sourceSourcingDecisionId: sourcingDecision.id,
+            }, proof))
+            setPurchaseOrderDraft((current) => current?.mode === 'create' && current.sku === item.sku ? null : current)
+          },
+        }, purchaseOrderTriggerRefs.current.get(item.sku))
+        return
+      }
       const purchaseOrderId = uid('PO')
       queueAction({
         kind: 'purchase_order_create',
         subjectId: purchaseOrderId,
-        summary: `Create internal order for ${quantityOrdered.toLocaleString()} units of ${item.name}`,
-        before: `${item.onHand.toLocaleString()} on hand · no active stock order · supplier not contacted`,
-        after: `${purchaseOrderId} · ${supplier} · ${quantityOrdered.toLocaleString()} ordered internally · expected ${formatIssueDue(expectedAt)} · no message or payment created`,
+        summary: `Second operator converts ${purchaseOrderDraft.requisitionId} into one internal purchase order`,
+        before: `${purchaseOrderDraft.requisitionId} approved · different operator required · purchase order not created · supplier not contacted`,
+        after: `${purchaseOrderId} · independent operator confirmed · ${supplier} · ${quantityOrdered.toLocaleString()} ordered at ${formatMoney(purchaseOrderUnitCostResult)} each · ${formatMoney(purchaseOrderDraftTotal)} total · expected ${formatIssueDue(expectedAt)} · no message or payment created`,
         apply: async (action) => {
           const proof = commerceActionProof(action)
+          const approvedRequisition = commercePurchaseRequisitions(commerce).find((candidate) => candidate.id === purchaseOrderDraft.requisitionId)
+          if (approvedRequisition && approvedRequisition.approval.actor.trim().toLowerCase() === proof.actor.trim().toLowerCase()) {
+            throw new Error(`Use a different operator from ${approvedRequisition.approval.actor} to create this purchase order. Nothing was written.`)
+          }
           await mutateCommerce('commerce.purchase_order.created', action.commandId, proof, (current) => createCommercePurchaseOrder(
             current,
-            { id: purchaseOrderId, expectedAt, supplier, sku: item.sku, quantityOrdered },
+            { id: purchaseOrderId, requisitionId: purchaseOrderDraft.requisitionId, expectedAt, supplier, sku: item.sku, quantityOrdered, unitCostMmk: purchaseOrderUnitCostResult },
             proof,
           ))
           setPurchaseOrderDraft((current) => current?.mode === 'create' && current.sku === item.sku ? null : current)
@@ -4492,6 +5621,10 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }
     const { purchaseOrder, progress, item } = purchaseOrderRow
     const receiptQuantity = purchaseOrderQuantityResult
+    const rejectedQuantity = purchaseOrderRejectedResult ?? 0
+    const discrepancy = rejectedQuantity > 0
+      ? { quantityRejected: rejectedQuantity, reasonCode: purchaseOrderDraft.discrepancyCode, disposition: 'return_to_vendor' as const }
+      : undefined
     const expectedOnHand = item.onHand
     const expectedRemaining = progress.remaining
     if (!purchaseReceiptAllocationReady) {
@@ -4510,9 +5643,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     queueAction({
       kind: 'purchase_order_receive',
       subjectId: purchaseOrder.id,
-      summary: `Receive ${receiptQuantity.toLocaleString()} units against ${purchaseOrder.id}`,
-      before: `${progress.received.toLocaleString()} of ${purchaseOrder.quantityOrdered.toLocaleString()} received · ${expectedOnHand.toLocaleString()} on hand`,
-      after: `${(progress.received + receiptQuantity).toLocaleString()} of ${purchaseOrder.quantityOrdered.toLocaleString()} received · ${(expectedOnHand + receiptQuantity).toLocaleString()} on hand${locationReceipt ? ` · ${purchaseReceiptLocation?.name ?? locationReceipt.locationId} · lot ${locationReceipt.trackingCode}` : ''}`,
+      summary: `Receive ${receiptQuantity.toLocaleString()} accepted${rejectedQuantity ? ` and reject ${rejectedQuantity.toLocaleString()}` : ''} against ${purchaseOrder.id}`,
+      before: `${progress.received.toLocaleString()} accepted · ${progress.rejected.toLocaleString()} rejected · ${progress.remaining.toLocaleString()} due · ${expectedOnHand.toLocaleString()} on hand`,
+      after: `${(progress.received + receiptQuantity).toLocaleString()} accepted · ${(progress.rejected + rejectedQuantity).toLocaleString()} rejected${rejectedQuantity ? ` for ${purchaseOrderDraft.discrepancyCode.replace('_', ' ')} / return to vendor` : ''} · ${(expectedOnHand + receiptQuantity).toLocaleString()} on hand${locationReceipt ? ` · ${purchaseReceiptLocation?.name ?? locationReceipt.locationId} · lot ${locationReceipt.trackingCode}` : ''}`,
       apply: async (action) => {
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.purchase_order.received', action.commandId, proof, (current) => {
@@ -4522,7 +5655,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
             || !currentItem
             || currentItem.onHand !== expectedOnHand
             || commercePurchaseOrderProgress(current, currentPurchaseOrder).remaining !== expectedRemaining) return null
-          return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof, locationReceipt)
+          return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof, locationReceipt, discrepancy)
         })
         setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrder.id ? null : current)
       },
@@ -4546,11 +5679,26 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice('Finish or cancel the catalog edit before starting a count. Your catalog draft was preserved.')
       return
     }
-    setStockCountDraft({ sku: '', stockUnitId: '', locationId: '', quantity: '' })
+    const suggestedItem = lowStock[0] ?? commerce.items[0]
+    const suggestedBalance = commerce.inventoryFoundation
+      ? managedInventoryProjection?.balances.find((balance) => balance.sku === suggestedItem?.sku)
+        ?? managedInventoryProjection?.balances[0]
+      : undefined
+    const suggestedDraft: StockCountDraft = {
+      sku: suggestedBalance?.sku ?? suggestedItem?.sku ?? '',
+      stockUnitId: suggestedBalance?.stockUnitId ?? '',
+      locationId: suggestedBalance?.locationId ?? '',
+      quantity: '',
+    }
+    setStockCountDraft(suggestedDraft)
     setNotice(commerce.inventoryFoundation
-      ? 'Choose one location and lot, then count every physical unit there. Nothing changes until confirmation.'
-      : 'Count sellable units after excluding anything already set aside for open orders. Nothing changes until confirmation.')
-    requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLSelectElement>('#stock-count-sku')?.focus())
+      ? suggestedBalance
+        ? 'Enter the physical count for the suggested location and lot. Choose another target if needed; nothing changes until confirmation.'
+        : 'Choose one location and lot, then count every physical unit there. Nothing changes until confirmation.'
+      : suggestedItem
+        ? `Enter counted sellable units for ${suggestedItem.name}. Choose another item if needed; nothing changes until confirmation.`
+        : 'Choose one item, then enter counted sellable units. Nothing changes until confirmation.')
+    requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(suggestedDraft.sku ? '#stock-count-quantity' : '#stock-count-sku')?.focus())
   }
 
   function cancelStockCount() {
@@ -4685,6 +5833,455 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     }, purchaseOrderTriggerRefs.current.get(row.purchaseOrder.sku))
   }
 
+  function openSupplierInvoice(purchaseOrderId: string) {
+    const row = purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderId)
+    const purchaseOrder = row?.purchaseOrder
+    if (!purchaseOrder || purchaseOrder.supplierInvoice || purchaseOrder.unitCostMmk === undefined) return
+    const issuedAt = new Date(Math.max(purchaseOrderClock, Date.parse(purchaseOrder.createdAt)))
+    setSupplierInvoiceDraft({
+      purchaseOrderId,
+      supplierReference: '',
+      issuedAt: localDateTimeInputValue(issuedAt),
+      dueAt: localDateTimeInputValue(new Date(issuedAt.getTime() + 30 * 24 * 60 * 60 * 1000)),
+      quantity: String(purchaseOrder.quantityOrdered),
+      unitCostMmk: String(purchaseOrder.unitCostMmk),
+    })
+    setNotice(`Enter the supplier's invoice reference and confirm the billed terms for ${purchaseOrderId}. No payable or payment is created.`)
+  }
+
+  function openSupplierReturn(purchaseOrderId: string, receiptMovementId: string) {
+    const row = purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderId)
+    const receipt = commerce.movements.find((movement) => movement.id === receiptMovementId)
+    if (!row?.purchaseOrder.unitCostMmk || receipt?.kind !== 'receipt' || !receipt.rejectedQuantity
+      || row.purchaseOrder.supplierReturns?.some((claim) => claim.receiptMovementId === receiptMovementId)) return
+    setSupplierReturnDraft({
+      purchaseOrderId,
+      receiptMovementId,
+      internalReturnReference: uid('RET'),
+    })
+    setNotice(`Review the ${receipt.rejectedQuantity.toLocaleString()} rejected unit return claim. This records internal evidence only; it does not contact the supplier or dispatch goods.`)
+  }
+
+  function reviewSupplierReturn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supplierReturnDraft || !supplierReturnDraftRow || !supplierReturnDraftReceipt || !supplierReturnDraftReady) {
+      setNotice('Choose one rejected receipt and enter a unique internal return reference.')
+      return
+    }
+    const purchaseOrder = supplierReturnDraftRow.purchaseOrder
+    const receipt = supplierReturnDraftReceipt
+    const internalReturnReference = supplierReturnDraft.internalReturnReference.trim()
+    const claimAmountMmk = (receipt.rejectedQuantity ?? 0) * (purchaseOrder.unitCostMmk ?? 0)
+    const input = { id: uid('SRET'), receiptMovementId: receipt.id, internalReturnReference }
+    queueAction({
+      kind: 'supplier_return_authorize',
+      subjectId: purchaseOrder.id,
+      summary: `Authorize supplier return claim ${internalReturnReference}`,
+      before: `${receipt.rejectedQuantity?.toLocaleString()} rejected unit${receipt.rejectedQuantity === 1 ? '' : 's'} on ${receipt.id} · no return claim`,
+      after: `${formatMoney(claimAmountMmk)} claim retained · physical return not dispatched · supplier not contacted · accounting not posted`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_return.authorized', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrder.id)
+          if (!currentPurchaseOrder || currentPurchaseOrder.supplierReturns?.some((claim) => claim.receiptMovementId === receipt.id)) return null
+          return authorizeCommerceSupplierReturn(current, purchaseOrder.id, input, proof)
+        })
+        setSupplierReturnDraft((current) => current?.receiptMovementId === receipt.id ? null : current)
+      },
+    }, purchaseOrderTriggerRefs.current.get(purchaseOrder.sku))
+  }
+
+  function openSupplierCredit(purchaseOrderId: string, claim: CommerceSupplierReturnClaim) {
+    const remainingMmk = commerceSupplierReturnClaimBalance(claim)
+    if (remainingMmk < 1) return
+    const issuedAtBasis = Math.max(purchaseOrderClock, Date.parse(claim.createdAt))
+    const issuedAt = new Date(Math.ceil(issuedAtBasis / 60_000) * 60_000)
+    setSupplierCreditDraft({
+      purchaseOrderId,
+      supplierReturnId: claim.id,
+      supplierReference: '',
+      issuedAt: localDateTimeInputValue(issuedAt),
+      amountMmk: String(remainingMmk),
+    })
+    setNotice(`Record supplier credit evidence up to ${formatMoney(remainingMmk)}. This does not post to accounting or initiate payment.`)
+  }
+
+  function reviewSupplierCredit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supplierCreditDraft || !supplierCreditDraftRow || !supplierCreditDraftClaim || !supplierCreditDraftReady) {
+      setNotice('Enter a unique supplier credit reference, valid issue time, and an amount within the outstanding claim.')
+      return
+    }
+    const purchaseOrder = supplierCreditDraftRow.purchaseOrder
+    const claim = supplierCreditDraftClaim
+    const supplierReference = supplierCreditDraft.supplierReference.trim()
+    const input = {
+      id: uid('SCN'),
+      supplierReference,
+      issuedAt: new Date(supplierCreditIssuedAt).toISOString(),
+      amountMmk: supplierCreditAmount,
+    }
+    const balanceAfter = commerceSupplierReturnClaimBalance(claim) - supplierCreditAmount
+    queueAction({
+      kind: 'supplier_credit_record',
+      subjectId: claim.id,
+      summary: `Record supplier credit ${supplierReference}`,
+      before: `${formatMoney(commerceSupplierReturnClaimBalance(claim))} outstanding on ${claim.internalReturnReference}`,
+      after: `${formatMoney(supplierCreditAmount)} credit evidence retained · ${formatMoney(balanceAfter)} outstanding · accounting not posted`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_credit.recorded', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrder.id)
+          const currentClaim = currentPurchaseOrder?.supplierReturns?.find((candidate) => candidate.id === claim.id)
+          if (!currentClaim || supplierCreditAmount > commerceSupplierReturnClaimBalance(currentClaim)) return null
+          return recordCommerceSupplierCreditNote(current, purchaseOrder.id, claim.id, input, proof)
+        })
+        setSupplierCreditDraft((current) => current?.supplierReturnId === claim.id ? null : current)
+      },
+    }, purchaseOrderTriggerRefs.current.get(purchaseOrder.sku))
+  }
+
+  function reviewSupplierInvoice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supplierInvoiceDraft || !supplierInvoiceDraftRow || !supplierInvoiceDraftReady || supplierInvoiceTotal === null) {
+      setNotice('Enter one supplier reference, valid invoice and due dates, quantity, and whole-MMK unit cost.')
+      return
+    }
+    const purchaseOrder = supplierInvoiceDraftRow.purchaseOrder
+    const supplierReference = supplierInvoiceDraft.supplierReference.trim()
+    const input = {
+      id: uid('PINV'),
+      supplierReference,
+      issuedAt: new Date(supplierInvoiceIssuedAt).toISOString(),
+      dueAt: new Date(supplierInvoiceDueAt).toISOString(),
+      quantityInvoiced: supplierInvoiceQuantity,
+      unitCostMmk: supplierInvoiceUnitCost,
+    }
+    queueAction({
+      kind: 'purchase_order_receive',
+      subjectId: purchaseOrder.id,
+      summary: `Record supplier invoice ${supplierReference} against ${purchaseOrder.id}`,
+      before: `${purchaseOrder.quantityOrdered.toLocaleString()} ordered at ${formatMoney(purchaseOrder.unitCostMmk ?? 0)} · invoice not recorded`,
+      after: `${input.quantityInvoiced.toLocaleString()} billed at ${formatMoney(input.unitCostMmk)} · ${formatMoney(supplierInvoiceTotal)} retained for three-way review · no payable or payment created`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_invoice.recorded', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrder.id)
+          if (!currentPurchaseOrder || currentPurchaseOrder.supplierInvoice) return null
+          return recordCommerceSupplierInvoice(current, purchaseOrder.id, input, proof)
+        })
+        setSupplierInvoiceDraft((current) => current?.purchaseOrderId === purchaseOrder.id ? null : current)
+      },
+    }, purchaseOrderTriggerRefs.current.get(purchaseOrder.sku))
+  }
+
+  function reviewSupplierInvoicePayable(purchaseOrderId: string) {
+    const row = purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === purchaseOrderId)
+    const invoice = row?.purchaseOrder.supplierInvoice
+    if (!row || !invoice || invoice.payableReview) return
+    const match = commerceSupplierInvoiceMatch(commerce, row.purchaseOrder)
+    if (match.status !== 'matched') return
+    queueAction({
+      kind: 'purchase_order_receive',
+      subjectId: purchaseOrderId,
+      summary: `Mark supplier invoice ${invoice.supplierReference} payable-ready`,
+      before: `${match.orderedQuantity.toLocaleString()} ordered · ${match.acceptedQuantity.toLocaleString()} accepted${match.rejectedQuantity ? ` · ${match.rejectedQuantity.toLocaleString()} rejected` : ''} · ${match.invoicedQuantity.toLocaleString()} invoiced${match.supplierCreditMmk ? ` · ${formatMoney(match.supplierCreditMmk)} supplier credit` : ''} · ${formatMoney(match.netInvoiceTotalMmk)} net · exact match pending review`,
+      after: `${formatMoney(match.netInvoiceTotalMmk)} payable-ready evidence retained for accountant handoff · no ledger post, bank instruction, or supplier payment created`,
+      apply: async (action) => {
+        const proof = commerceActionProof(action)
+        await mutateCommerce('commerce.supplier_invoice.payable_ready', action.commandId, proof, (current) => {
+          const currentPurchaseOrder = commercePurchaseOrders(current).find((candidate) => candidate.id === purchaseOrderId)
+          if (!currentPurchaseOrder?.supplierInvoice
+            || currentPurchaseOrder.supplierInvoice.id !== invoice.id
+            || commerceSupplierInvoiceMatch(current, currentPurchaseOrder).status !== 'matched') return null
+          return markCommerceSupplierInvoicePayableReady(current, purchaseOrderId, proof)
+        })
+      },
+    }, purchaseOrderTriggerRefs.current.get(row.purchaseOrder.sku))
+  }
+
+  function reviewTaxConfiguration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const code = effectiveTaxDraft.code.trim().toUpperCase()
+    const label = effectiveTaxDraft.label.trim()
+    const jurisdictionCode = effectiveTaxDraft.jurisdictionCode.trim().toUpperCase()
+    const rateBasisPoints = parseTaxRateBasisPoints(effectiveTaxDraft.ratePercent)
+    const effectiveFromDate = new Date(effectiveTaxDraft.effectiveFrom)
+    if (!/^[A-Z0-9][A-Z0-9_-]{0,11}$/.test(code)
+      || !/^[A-Z0-9][A-Z0-9_-]{1,15}$/.test(jurisdictionCode)
+      || !label
+      || label.length > 80
+      || rateBasisPoints === null
+      || Number.isNaN(effectiveFromDate.getTime())
+      || effectiveFromDate.getTime() < purchaseOrderClock + 60_000) {
+      setNotice('Enter reviewed tax and jurisdiction codes, a short label, a valid rate, and an effective time at least one minute ahead.')
+      return
+    }
+    const expectedRevision = currentTaxConfiguration?.revision ?? 0
+    const effectiveFrom = effectiveFromDate.toISOString()
+    const input = { code, label, rateBasisPoints, mode: effectiveTaxDraft.mode, jurisdictionCode, effectiveFrom }
+    const previous = currentTaxConfiguration
+      ? `${currentTaxConfiguration.code} · ${currentTaxConfiguration.jurisdictionCode ?? 'legacy scope'} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)} · ${currentTaxConfiguration.mode} · revision ${currentTaxConfiguration.revision}`
+      : 'No Shop tax configuration'
+    queueAction({
+      kind: 'tax_configuration',
+      subjectId: `SHOP-TAX-R${expectedRevision + 1}`,
+      summary: `Set Shop tax code ${code}`,
+      before: previous,
+      after: `${code} · ${label} · ${jurisdictionCode} · ${formatTaxRate(rateBasisPoints)} · ${effectiveTaxDraft.mode} · effective ${formatTime(effectiveFrom)} · future orders only`,
+      reasonSuggestion: 'Reviewed the Shop tax setup for future orders.',
+      apply: async (action) => {
+        await mutateCommerce(
+          'commerce.tax_configuration.saved',
+          action.commandId,
+          commerceActionProof(action),
+          (current) => {
+            if ((commerceCurrentTaxConfiguration(current)?.revision ?? 0) !== expectedRevision) return null
+            return configureCommerceTax(current, input, commerceActionProof(action))
+          },
+        )
+        setTaxDraft(null)
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
+  function reviewAccountMapping(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const values = {
+      paymentClearing: effectiveAccountMapping.paymentClearing.trim(),
+      salesRevenue: effectiveAccountMapping.salesRevenue.trim(),
+      taxPayable: effectiveAccountMapping.taxPayable.trim(),
+      legacyRevenue: effectiveAccountMapping.legacyRevenue.trim(),
+      salesAdjustment: effectiveAccountMapping.salesAdjustment.trim(),
+      correctionReceivable: effectiveAccountMapping.correctionReceivable.trim(),
+      correctionPayable: effectiveAccountMapping.correctionPayable.trim(),
+    }
+    if (Object.values(values).some((value) => !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/.test(value))) {
+      setNotice('Enter all seven reviewed account codes using letters, numbers, dot, underscore, slash, or hyphen.')
+      return
+    }
+    const expectedRevision = currentAccountMappingConfiguration?.revision ?? 0
+    const mappings = [
+      { accountRole: 'payment_clearing' as const, externalAccountCode: values.paymentClearing },
+      { accountRole: 'sales_revenue' as const, externalAccountCode: values.salesRevenue },
+      { accountRole: 'sales_revenue_unverified' as const, externalAccountCode: values.legacyRevenue },
+      { accountRole: 'tax_payable' as const, externalAccountCode: values.taxPayable },
+      { accountRole: 'sales_adjustment' as const, externalAccountCode: values.salesAdjustment },
+      { accountRole: 'correction_receivable' as const, externalAccountCode: values.correctionReceivable },
+      { accountRole: 'correction_payable' as const, externalAccountCode: values.correctionPayable },
+    ]
+    const previous = currentAccountMappingConfiguration
+      ? `Account mapping revision ${currentAccountMappingConfiguration.revision}`
+      : 'No Shop account mapping'
+    queueAction({
+      kind: 'account_mapping',
+      subjectId: `SHOP-ACCOUNTS-R${expectedRevision + 1}`,
+      summary: 'Set Shop accounting handoff mapping',
+      before: previous,
+      after: `clearing ${values.paymentClearing} · revenue ${values.salesRevenue} · tax ${values.taxPayable} · adjustment ${values.salesAdjustment} · correction receivable/payable ${values.correctionReceivable}/${values.correctionPayable} · future closes only`,
+      reasonSuggestion: 'Reviewed the Shop account mapping for future closes.',
+      apply: async (action) => {
+        await mutateCommerce(
+          'commerce.account_mapping.saved',
+          action.commandId,
+          commerceActionProof(action),
+          (current) => {
+            if ((commerceCurrentAccountMappingConfiguration(current)?.revision ?? 0) !== expectedRevision) return null
+            return configureCommerceAccountMapping(current, { mappings }, commerceActionProof(action))
+          },
+        )
+        setAccountMapping(null)
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
+  function reviewCustomerCreditPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const customer = creditPolicyDraft.customer.trim()
+    const limitText = creditPolicyDraft.creditLimitMmk.trim()
+    const creditLimitMmk = /^(?:0|[1-9]\d*)$/.test(limitText) ? Number(limitText) : Number.NaN
+    if (!customer
+      || customer.length > 120
+      || !Number.isSafeInteger(creditLimitMmk)
+      || creditLimitMmk < 0) {
+      setNotice('Enter a customer name and a non-negative whole-MMK credit limit.')
+      return
+    }
+    const input = {
+      customer,
+      creditLimitMmk,
+      maxPaymentTermsDays: creditPolicyDraft.maxPaymentTermsDays,
+      status: creditPolicyDraft.status,
+    }
+    const expectedRevision = commerce.customerCreditPolicies?.length ?? 0
+    const previous = commerceCurrentCustomerCreditPolicy(commerce, customer)
+    queueAction({
+      kind: 'customer_credit_policy',
+      subjectId: `SHOP-CREDIT-${customer}-R${expectedRevision + 1}`,
+      summary: `${input.status === 'hold' ? 'Hold' : 'Set'} credit for ${customer}`,
+      before: previous
+        ? `${formatMoney(previous.creditLimitMmk)} limit · ${previous.maxPaymentTermsDays}-day terms · ${previous.status}`
+        : 'No customer credit policy',
+      after: `${formatMoney(input.creditLimitMmk)} limit · ${input.maxPaymentTermsDays}-day maximum · ${input.status} · future credit orders only`,
+      reasonSuggestion: 'Reviewed the customer credit boundary for future Shop orders.',
+      apply: async (action) => {
+        await mutateCommerce(
+          'commerce.customer_credit_policy.saved',
+          action.commandId,
+          commerceActionProof(action),
+          (current) => {
+            if ((current.customerCreditPolicies?.length ?? 0) !== expectedRevision) return null
+            return configureCommerceCustomerCreditPolicy(current, input, commerceActionProof(action))
+          },
+        )
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
+  function reviewPromotionPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const code = promotionPolicyDraft.code.trim().toUpperCase()
+    const discountBasisPoints = parseTaxRateBasisPoints(promotionPolicyDraft.discountPercent)
+    const minimumText = promotionPolicyDraft.minimumSubtotalMmk.trim()
+    const maximumText = promotionPolicyDraft.maximumDiscountMmk.trim()
+    const minimumSubtotalMmk = /^(?:0|[1-9]\d*)$/.test(minimumText) ? Number(minimumText) : Number.NaN
+    const maximumDiscountMmk = /^[1-9]\d*$/.test(maximumText) ? Number(maximumText) : Number.NaN
+    const effectiveFromDate = new Date(promotionPolicyDraft.effectiveFrom)
+    const effectiveUntilDate = promotionPolicyDraft.effectiveUntil ? new Date(promotionPolicyDraft.effectiveUntil) : null
+    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(code)
+      || discountBasisPoints === null
+      || discountBasisPoints < 1
+      || !Number.isSafeInteger(minimumSubtotalMmk)
+      || minimumSubtotalMmk < 0
+      || !Number.isSafeInteger(maximumDiscountMmk)
+      || maximumDiscountMmk < 1
+      || Number.isNaN(effectiveFromDate.getTime())
+      || effectiveFromDate.getTime() < purchaseOrderClock + 60_000
+      || (effectiveUntilDate && (Number.isNaN(effectiveUntilDate.getTime()) || effectiveUntilDate <= effectiveFromDate))) {
+      setNotice('Enter an uppercase code, discount from 0.01% to 100%, whole-MMK limits, and an effective start at least one minute ahead. End time must be later or blank.')
+      return
+    }
+    const expectedRevision = commerce.promotionPolicies?.length ?? 0
+    const input = {
+      code,
+      discountBasisPoints,
+      minimumSubtotalMmk,
+      maximumDiscountMmk,
+      status: promotionPolicyDraft.status,
+      effectiveFrom: effectiveFromDate.toISOString(),
+      effectiveUntil: effectiveUntilDate?.toISOString() ?? null,
+    }
+    const previous = commerceCurrentPromotionPolicy(commerce, code)
+    queueAction({
+      kind: 'promotion_policy',
+      subjectId: `SHOP-PROMOTION-${code}-R${expectedRevision + 1}`,
+      summary: `${input.status === 'active' ? 'Set' : 'Stop'} promotion ${code}`,
+      before: previous
+        ? `${formatTaxRate(previous.discountBasisPoints)} · minimum ${formatMoney(previous.minimumSubtotalMmk)} · cap ${formatMoney(previous.maximumDiscountMmk)} · ${previous.status} · revision ${previous.revision}`
+        : 'No Shop promotion policy for this code',
+      after: `${formatTaxRate(input.discountBasisPoints)} · minimum ${formatMoney(input.minimumSubtotalMmk)} · cap ${formatMoney(input.maximumDiscountMmk)} · ${input.status} · effective ${formatTime(input.effectiveFrom)}${input.effectiveUntil ? ` to ${formatTime(input.effectiveUntil)}` : ' until changed'} · future Shop reviews only`,
+      reasonSuggestion: 'Reviewed the Shop promotion boundary for future Ecommerce orders.',
+      apply: async (action) => {
+        await mutateCommerce(
+          'commerce.promotion_policy.saved',
+          action.commandId,
+          commerceActionProof(action),
+          (current) => {
+            if ((current.promotionPolicies?.length ?? 0) !== expectedRevision) return null
+            return configureCommercePromotionPolicy(current, input, commerceActionProof(action))
+          },
+        )
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
+  function reviewShippingPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const zoneCode = shippingPolicyDraft.zoneCode.trim().toUpperCase()
+    const townships = [...new Set(shippingPolicyDraft.townships.split(',').map((value) => value.trim()).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right, 'en', { sensitivity: 'base' }))
+    const feeMmk = /^\d+$/.test(shippingPolicyDraft.feeMmk.trim()) ? Number(shippingPolicyDraft.feeMmk) : Number.NaN
+    const promiseMinutes = /^\d+$/.test(shippingPolicyDraft.promiseMinutes.trim()) ? Number(shippingPolicyDraft.promiseMinutes) : Number.NaN
+    const effectiveFromDate = new Date(shippingPolicyDraft.effectiveFrom)
+    const effectiveUntilDate = shippingPolicyDraft.effectiveUntil ? new Date(shippingPolicyDraft.effectiveUntil) : null
+    if (!/^[A-Z0-9][A-Z0-9-]{2,39}$/.test(zoneCode)
+      || townships.length < 1 || townships.length > 50 || townships.some((township) => township.length > 80)
+      || !Number.isSafeInteger(feeMmk) || feeMmk < 0
+      || !Number.isSafeInteger(promiseMinutes) || promiseMinutes < 15 || promiseMinutes > 10_080
+      || Number.isNaN(effectiveFromDate.getTime()) || effectiveFromDate.getTime() < purchaseOrderClock + 60_000
+      || (effectiveUntilDate && (Number.isNaN(effectiveUntilDate.getTime()) || effectiveUntilDate <= effectiveFromDate))) {
+      setNotice('Enter a zone, 1 to 50 comma-separated townships, a whole-MMK fee, a 15-minute to 7-day promise, and a valid future effective window.')
+      return
+    }
+    const expectedRevision = commerce.shippingPolicies?.length ?? 0
+    const input = {
+      zoneCode, townships, feeMmk, promiseMinutes, status: shippingPolicyDraft.status,
+      effectiveFrom: effectiveFromDate.toISOString(), effectiveUntil: effectiveUntilDate?.toISOString() ?? null,
+    }
+    queueAction({
+      kind: 'shipping_policy',
+      subjectId: `SHOP-SHIPPING-${zoneCode}-R${expectedRevision + 1}`,
+      summary: `${input.status === 'active' ? 'Set' : 'Stop'} delivery zone ${zoneCode}`,
+      before: currentShippingPolicy
+        ? `${currentShippingPolicy.townships.join(', ')} · ${formatMoney(currentShippingPolicy.feeMmk)} · ${currentShippingPolicy.promiseMinutes} minutes · ${currentShippingPolicy.status}`
+        : 'No Shop delivery policy for this zone',
+      after: `${townships.join(', ')} · ${formatMoney(feeMmk)} · ${promiseMinutes} minutes · ${input.status} · future Shop reviews only`,
+      reasonSuggestion: 'Reviewed the Shop delivery boundary for future Ecommerce orders.',
+      apply: async (action) => {
+        await mutateCommerce('commerce.shipping_policy.saved', action.commandId, commerceActionProof(action), (current) => {
+          if ((current.shippingPolicies?.length ?? 0) !== expectedRevision) return null
+          return configureCommerceShippingPolicy(current, input, commerceActionProof(action))
+        })
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
+  function reviewPaymentPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const maximumOrderMmk = paymentPolicyDraft.maximumOrderMmk.trim()
+      ? /^\d+$/.test(paymentPolicyDraft.maximumOrderMmk.trim()) ? Number(paymentPolicyDraft.maximumOrderMmk) : Number.NaN
+      : null
+    const instructions = paymentPolicyDraft.instructions.trim()
+    const allowedFulfilments = paymentPolicyDraft.allowedFulfilments === 'both'
+      ? ['delivery', 'pickup'] as const
+      : [paymentPolicyDraft.allowedFulfilments] as const
+    const effectiveFromDate = new Date(paymentPolicyDraft.effectiveFrom)
+    const effectiveUntilDate = paymentPolicyDraft.effectiveUntil ? new Date(paymentPolicyDraft.effectiveUntil) : null
+    if ((maximumOrderMmk !== null && (!Number.isSafeInteger(maximumOrderMmk) || maximumOrderMmk < 1))
+      || !instructions || instructions.length > 240
+      || Number.isNaN(effectiveFromDate.getTime()) || effectiveFromDate.getTime() < purchaseOrderClock + 60_000
+      || (effectiveUntilDate && (Number.isNaN(effectiveUntilDate.getTime()) || effectiveUntilDate <= effectiveFromDate))) {
+      setNotice('Enter concise staff instructions, an optional positive whole-MMK limit, and an effective start at least one minute ahead. End time must be later or blank.')
+      return
+    }
+    const expectedRevision = commerce.paymentPolicies?.length ?? 0
+    const input = {
+      adapter: paymentPolicyDraft.adapter,
+      allowedFulfilments: [...allowedFulfilments],
+      maximumOrderMmk,
+      instructions,
+      status: paymentPolicyDraft.status,
+      effectiveFrom: effectiveFromDate.toISOString(),
+      effectiveUntil: effectiveUntilDate?.toISOString() ?? null,
+    }
+    queueAction({
+      kind: 'payment_policy',
+      subjectId: `SHOP-PAYMENT-${input.adapter.toUpperCase()}-R${expectedRevision + 1}`,
+      summary: `${input.status === 'active' ? 'Set' : 'Stop'} ${input.adapter.replaceAll('_', ' ')} policy`,
+      before: currentPaymentPolicy
+        ? `${currentPaymentPolicy.allowedFulfilments.join(' + ')} · ${currentPaymentPolicy.maximumOrderMmk === null ? 'no order limit' : formatMoney(currentPaymentPolicy.maximumOrderMmk)} · ${currentPaymentPolicy.status} · revision ${currentPaymentPolicy.revision}`
+        : 'No Shop payment policy for this method',
+      after: `${input.allowedFulfilments.join(' + ')} · ${input.maximumOrderMmk === null ? 'no order limit' : formatMoney(input.maximumOrderMmk)} · ${input.status} · future Shop reviews only`,
+      reasonSuggestion: 'Reviewed the Shop payment-method boundary for future Ecommerce orders.',
+      apply: async (action) => {
+        await mutateCommerce('commerce.payment_policy.saved', action.commandId, commerceActionProof(action), (current) => {
+          if ((current.paymentPolicies?.length ?? 0) !== expectedRevision) return null
+          return configureCommercePaymentPolicy(current, input, commerceActionProof(action))
+        })
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
   function closeDay() {
     const queuedAt = new Date().toISOString()
     const expected = commerceCloseExpectation(commerce, queuedAt)
@@ -4692,6 +6289,14 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       setNotice(legacyCloseNeedsMigration
         ? 'Legacy close history must be migrated before another daily close can be saved.'
         : 'This business date already has a close. Review the latest snapshot instead of closing it again.')
+      return
+    }
+    const settlementInput = closeSettlementInput.every((line) => line !== null)
+      ? closeSettlementInput as CommerceCloseSettlementInputLine[]
+      : null
+    const settlement = settlementInput ? commerceCloseSettlementReview(commerce, expected, settlementInput) : null
+    if (!settlement) {
+      setNotice('Count every payment method. Any variance needs a responsible owner and a clear review reason before close.')
       return
     }
     const closeId = uid('CLOSE')
@@ -4702,12 +6307,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       subjectId: closeId,
       summary: `Close ${expected.businessDate}`,
       before: `${commerce.closes.length} snapshots`,
-      after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · ${formatMoney(expected.total)} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
+      after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · expected ${formatMoney(expected.total)} · counted ${formatMoney(settlement.totalCountedMmk)} · settlement ${settlement.status.replace('_', ' ')} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
       apply: (action) => mutateCommerce(
         'commerce.close.saved',
         action.commandId,
         commerceActionProof(action),
-        (current) => saveCommerceClose(current, closeId, commerceActionProof(action), expected),
+        (current) => saveCommerceClose(current, closeId, commerceActionProof(action), expected, settlementInput ?? undefined),
       ),
     })
   }
@@ -4756,7 +6361,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
     ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
     ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
-    ['Write gate', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
+    ['Write status', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
   const shopOrderControlBoundary = 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.'
   const shopOrderLifecycleRows = [
@@ -4770,6 +6375,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   const pendingPaymentOrders = commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending')
   const refundExposureOrders = commerce.orders.filter((order) => order.refundStatus === 'due')
   const supplierReceiptExposure = overduePurchaseOrders.length + dueSoonPurchaseOrders.length + partiallyReceivedPurchaseOrders.length
+  const supplierInvoiceMatches = purchaseOrderRows.flatMap(({ purchaseOrder }) => (
+    purchaseOrder.supplierInvoice ? [commerceSupplierInvoiceMatch(commerce, purchaseOrder)] : []
+  ))
+  const supplierInvoiceExceptions = supplierInvoiceMatches.filter((match) => match.status !== 'matched')
+  const supplierInvoicesPendingReview = supplierInvoiceMatches.filter((match) => match.status === 'matched' && !match.payableReady)
+  const supplierInvoicesPayableReady = supplierInvoiceMatches.filter((match) => match.payableReady)
   const shopAccountingNext = !commerceCanWrite
     ? 'Restore accounting readiness'
     : pendingAction
@@ -4778,6 +6389,12 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         ? 'Review payment exceptions'
         : refundExposureOrders.length
           ? 'Review refund exposure'
+          : supplierInvoiceExceptions.length
+            ? 'Resolve invoice variance'
+            : supplierInvoicesPendingReview.length
+              ? 'Review matched invoice'
+              : supplierPayablesAging.overdueInvoiceCount
+                ? 'Review overdue supplier invoice'
           : supplierReceiptExposure
             ? 'Receive supplier evidence'
             : lowStock.length
@@ -4790,52 +6407,63 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
     ['Payments', pendingPaymentOrders.length ? `${pendingPaymentOrders.length} exception` : 'Clear'],
     ['Refunds', refundExposureOrders.length ? `${refundExposureOrders.length} due` : commerce.orders.some((order) => order.refundStatus === 'settled') ? 'Settled evidence' : 'Clear'],
     ['Receipts', supplierReceiptExposure ? `${supplierReceiptExposure} review` : activePurchaseOrders.length ? 'Open supply' : 'Clear'],
+    ['Invoices', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} variance` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} review` : supplierPayablesAging.overdueInvoiceCount ? `${supplierPayablesAging.overdueInvoiceCount} overdue` : supplierInvoicesPayableReady.length ? `${supplierInvoicesPayableReady.length} ready` : 'None'],
     ['Inventory', lowStock.length ? `${lowStock.length} reconcile` : managedInventoryProjection ? 'ATP evidence' : 'Catalog evidence'],
     ['Export gate', commerceCanWrite && !pendingAction ? 'Review only' : 'Locked'],
   ] as const
   const shopAccountingReadiness = <section className="shop-order-control" aria-label="Shop accounting readiness">
-    <div><span className="core-eyebrow">Accounting readiness</span><strong>{shopAccountingNext}</strong><small>AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and owner approval before any accounting export is reviewed. No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Accounting readiness</span><strong>{shopAccountingNext}</strong><small>AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and manager review before any accounting export is reviewed. No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.</small></div>
     <div className="shop-order-control-rows">{shopAccountingRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const shopAccountingPacketRows = [
     ['Close', latestCloseDownload ? 'CSV ready' : closePreview ? `${closableOrders.length} ready` : 'Close first'],
     ['Ledger', latestCloseDownload ? 'Review import' : 'Not posted'],
     ['Tax', 'Not configured'],
-    ['Payables', activePurchaseOrders.length ? `${activePurchaseOrders.length} supplier review` : 'None created'],
+    ['Payables', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} blocked` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} match review` : supplierPayablesAging.overdueInvoiceCount ? `${supplierPayablesAging.overdueInvoiceCount} overdue` : supplierPayablesAging.dueWithin7DaysInvoiceCount ? `${supplierPayablesAging.dueWithin7DaysInvoiceCount} due this week` : supplierPayablesDownload ? `${supplierPayablesDownload.artifact.readyInvoiceCount} CSV ready` : 'None created'],
     ['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only'],
     ['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence'],
   ] as const
   const shopAccountingPacket = <section className="shop-order-control" aria-label="Shop accounting export packet">
-    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages the reviewed daily close, payment proof, refund evidence, stock exceptions, supplier receipt exposure, and tax status for accounting review. No ledger post, tax filing, payable creation, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small></div>
+    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload || supplierPayablesDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages reviewed sales and exact supplier payables with source evidence for accounting review. No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small>{supplierPayablesDownload ? <small><a className="text-link" data-supplier-payables-handoff="review-required" download={supplierPayablesDownload.filename} href={supplierPayablesDownload.href}>Download supplier payables CSV</a> · {formatMoney(supplierPayablesDownload.artifact.netPayableTotalMmk)} net · {supplierPayablesAging.overdueInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.overdue)} overdue` : supplierPayablesAging.dueWithin7DaysInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.due_7_days)} due within 7 days` : 'nothing due within 7 days'} · {formatMoney(supplierPayablesDownload.artifact.supplierCreditTotalMmk)} supplier credit · no payment initiated</small> : null}</div>
     <div className="shop-order-control-rows">{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
 
+  const afterSalesCount = commerce.orders.reduce((total, order) => (
+    total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
+  ), 0)
+  const incomingRequestCount = pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
+  const shopTodayMetrics = [
+    { label: 'Open orders', value: String(openOrders.length), tone: actionOrders.length ? 'attention' as const : 'ready' as const },
+    { label: 'Catalog items', value: String(commerce.items.length) },
+    { label: 'Stock alerts', value: String(lowStock.length), tone: lowStock.length ? 'attention' as const : 'ready' as const },
+    { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
+  ]
+  const shopTodayModules = [
+    { label: 'Sell & POS', detail: 'Counter, cart, payment choice, tax and receipt evidence', status: `${commerce.items.length} items`, to: '/shop/?tab=counter' },
+    { label: 'Orders & fulfilment', detail: 'Channel intake, allocation, promise, delivery and returns', status: actionOrders.length ? `${actionOrders.length} need action` : `${openOrders.length} open`, to: '/shop/?tab=orders', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
+    { label: 'Inventory & purchasing', detail: 'Locations, lots, ATP, counts, suppliers and receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
+    { label: 'Customers & after-sales', detail: 'Credit, receivables, appointments, support and warranty trail', status: afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history' },
+    { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length ? 'attention' as const : 'ready' as const },
+    { label: 'Online channels', detail: 'Website and Ecommerce requests enter one Shop authority', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
+  ]
+
+  if (tab === 'today') return <div className="operation-module shop-today-module">
+    {commerceBoundary}
+    <Suspense fallback={null}><ShopToday metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} /></Suspense>
+    {actionGate}
+  </div>
+
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    {shopCommandCenter}
-    {shopSetupGuide}
-    {shopAgentQueue}
     <ShopCounter disabled={commerceControlsDisabled} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
     {actionGate}
   </div>
 
-  if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine ? ' has-return-draft' : ''}`}>
+  if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
-    {shopCommandCenter}
-    {shopSetupGuide}
-    {shopAgentQueue}
-    <section className="core-panel order-queue-panel order-workspace">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={openOrderComposer} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
-      <section className="shop-order-control" aria-label="Shop order control">
-        <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
-        <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-      </section>
-      <section className="shop-order-control" aria-label="Shop order lifecycle">
-        <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
-        <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-      </section>
-      {shopAccountingReadiness}
-      {shopAccountingPacket}
+    {shopGuidance}
+    <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
@@ -4857,8 +6485,81 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
           {orderDraftRead.status !== 'unavailable' ? <button className="text-link danger-text" disabled={orderDraftSaving} onClick={() => void discardSavedOrderDraft()} type="button">{orderDraftRead.status === 'ready' ? 'Discard' : 'Discard unreadable draft'}</button> : null}
         </div>
       </div> : null}
-      <OrderList canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
+      {orderRescheduleReview ? <section aria-label="Customer order reschedule review" className="order-draft-recovery" id="shop-order-reschedule-review" tabIndex={-1}>
+        <div>
+          <strong>Customer asks to change the promise for {orderRescheduleReview.intent.orderId}</strong>
+          <small>{formatTime(orderRescheduleReview.intent.originalPromisedAt)} → {formatTime(orderRescheduleReview.intent.requestedPromisedAt)} · {orderRescheduleReview.intent.reason}</small>
+          <small>{formatMoney(orderRescheduleReview.intent.originalTotalMmk)} original → {formatMoney(orderRescheduleReview.draft.totalMmk)} currently repriced · replacement {orderRescheduleReview.intent.replacementRequestId}</small>
+          <small>{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'The original is already cancelled with this exact evidence. Resume the recovered replacement at the requested promise.' : 'Step 1 rechecks current promise policy, cancels, and releases the original. Step 2 separately confirms the repriced replacement and requested time.'}</small>
+        </div>
+        <div className="order-draft-recovery-actions">
+          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => void prepareOrderRescheduleReplacement()} type="button">{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'Resume reschedule' : 'Review reschedule'}</button>
+          <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={() => { setOrderRescheduleReview(null); setNotice('Reschedule review closed. Nothing changed.') }} type="button">Close review</button>
+        </div>
+      </section> : null}
+      {orderAmendmentReview ? <section aria-label="Customer order change review" className="order-draft-recovery" id="shop-order-amendment-review" tabIndex={-1}>
+        <div>
+          <strong>Customer asks to replace {orderAmendmentReview.intent.orderId}</strong>
+          <small>{ecommerceOrderAmendmentSummary(orderAmendmentReview.intent)} · {orderAmendmentReview.intent.reason}</small>
+          <small>{formatMoney(orderAmendmentReview.intent.originalTotalMmk)} original → {formatMoney(orderAmendmentReview.draft.totalMmk)} repriced · replacement {orderAmendmentReview.intent.replacementRequestId}</small>
+          <small>{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'The original is already cancelled with this exact evidence. Resume the recovered replacement draft.' : 'Step 1 cancels and releases the original under accountable review. Step 2 separately confirms the repriced replacement order.'}</small>
+        </div>
+        <div className="order-draft-recovery-actions">
+          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => void prepareOrderAmendmentReplacement()} type="button">{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'Resume replacement' : 'Review replacement'}</button>
+          <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={() => { setOrderAmendmentReview(null); setNotice('Order change review closed. Nothing changed.') }} type="button">Close review</button>
+        </div>
+      </section> : null}
+      {cancellationDraft ? <section aria-label="Customer cancellation review" className="order-draft-recovery" id="shop-cancellation-review" tabIndex={-1}>
+        <div>
+          <strong>Customer asks to cancel {cancellationDraft.orderId}</strong>
+          <small>{cancellationDraft.reasonCode.replaceAll('_', ' ')} · {cancellationDraft.reason}</small>
+          <small>{cancellationDraft.id} · requested {new Date(cancellationDraft.createdAt).toLocaleString()} · {formatMoney(cancellationDraft.totalMmk)} · payment {cancellationDraft.paymentStatus}</small>
+          <small>Shop rechecked the exact acknowledgement, active order, reserved stock, payment, and refund state. No message, refund, provider call, or cancellation has run.</small>
+        </div>
+        <div className="order-draft-recovery-actions">
+          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => cancelOrder(cancellationDraft.orderId, cancellationDraft)} type="button">Review cancellation</button>
+          <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
+        </div>
+      </section> : null}
+      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
+      <details className="shop-business-controls">
+        <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
+        <div className="shop-business-controls-content">
+          {shopCommandCenter}
+          {shopSetupGuide}
+          <section className="shop-order-control" aria-label="Shop order control">
+            <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
+            <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+          </section>
+          <section className="shop-order-control" aria-label="Shop order lifecycle">
+            <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
+            <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+          </section>
+          {shopAccountingReadiness}
+          {shopAccountingPacket}
+        </div>
+      </details>
     </section>
+    <details className="core-panel today-more order-workflow-controls">
+      <summary><span>Order overview</span><small>{actionOrders.length} active · {receivablesAging.overdueOrders} payment overdue</small></summary>
+      <div className="today-more-content">
+        <Suspense fallback={null}><ShopOperatingFlow
+          closeReady={closableOrders.length}
+          confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
+          disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
+          incomingOnline={pendingStorefrontRequests.length}
+          incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === 'pending_confirmation').length : Number(legacyWebsiteWorkWaiting)}
+          onOpenOrder={openOrderComposer}
+          overdue={actionOrders.filter((order) => commerceOrderPromiseUrgency(order, purchaseOrderClock) === 'late').length}
+          paymentPending={commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending').length}
+          preparing={commerce.orders.filter((order) => order.status === 'preparing').length}
+          ready={commerce.orders.filter((order) => order.status === 'ready').length}
+          refundDue={commerce.orders.filter((order) => order.refundStatus === 'due').length}
+        /></Suspense>
+        <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
+      </div>
+    </details>
+    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
@@ -4899,7 +6600,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
               <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
               <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
             </div>
-          }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Connect a managed workspace to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
+          }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Ecommerce</Link>
         </section>
         {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></details> : null}
@@ -4907,7 +6608,7 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
-          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.fulfilment} · price locked · no stock reserved</small></div>
+          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
@@ -4916,7 +6617,8 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         </div> : null}
         <form className="core-form compact-form commerce-order-form" id="commerce-manual-order-form" onSubmit={recordOrder}>
           <div className="order-essential-fields">
-            <label>Customer<input disabled={commerceControlsDisabled} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); detachPreparedOrderSources() }} placeholder="Name or reference" /></label>
+            <label>Customer<input disabled={commerceControlsDisabled} list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); detachPreparedOrderSources() }} placeholder="Name or reference" /></label>
+            {managedInventoryProjection?.clients.length ? <datalist id="shop-client-master-options">{managedInventoryProjection.clients.map((client) => <option key={client.id} value={client.name} />)}</datalist> : null}
             <label>Fulfilment<select disabled={commerceControlsDisabled} required value={fulfilment} onChange={(event) => {
               setFulfilment(event.target.value as '' | 'pickup' | 'delivery')
               if (preparedEcommerceDraft) {
@@ -4925,11 +6627,23 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
               }
             }}><option value="">Choose pickup or delivery</option><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>
             <label>Promised for<input autoComplete="off" disabled={commerceControlsDisabled} id="commerce-order-promise" min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} ref={orderPromiseRef} required type="datetime-local" value={promisedAt} /></label>
+            <label>Payment due<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentTermsDays(Number(event.target.value) as 0 | 7 | 30)} value={paymentTermsDays}><option value="0">At handoff</option><option value="7">7 days after order</option><option value="30">30 days after order</option></select></label>
             <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
             <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); detachPreparedOrderSources() }}>{!commerce.items.some((item) => item.sku === selectedSku) && selectedSku ? <option disabled value={selectedSku}>{selectedSku} · no longer in Shop</option> : null}{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
-            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units</span><strong>{formatMoney(manualOrderTotal)}</strong></div>
+            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.promotion.status === 'approved' ? ` · ${preparedEcommerceDraft.pricing.promotion.code} -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)}` : ''}{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.shipping.feeMmk ? ` · delivery ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)}` : ''}{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.tax.taxMmk ? ` · tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)}` : ''}</span><strong>{formatMoney(manualOrderPricedTotal)}</strong></div>
           </div>
+          {paymentTermsDays !== 0 ? <p className="form-notice" data-customer-credit-review={orderCreditReview?.reason ?? 'calculation_unavailable'}>
+            {orderCreditReview?.allowed
+              ? `Credit ready · ${formatMoney(orderCreditReview.exposureBeforeMmk)} → ${formatMoney(orderCreditReview.exposureAfterMmk)} exposure · ${formatMoney(orderCreditReview.policy?.creditLimitMmk ?? 0)} limit`
+              : orderCreditReview?.reason === 'customer_hold'
+                ? 'Credit blocked · this customer is on hold. Choose payment at handoff or review the policy.'
+                : orderCreditReview?.reason === 'terms_exceeded'
+                  ? `Credit blocked · the current policy does not allow ${paymentTermsDays}-day terms.`
+                  : orderCreditReview?.reason === 'limit_exceeded'
+                    ? `Credit blocked · this order would exceed the ${formatMoney(orderCreditReview.policy?.creditLimitMmk ?? 0)} limit.`
+                    : 'Credit blocked · set a policy for this exact customer under Close and exceptions.'}
+          </p> : null}
           {extraOrderLines.map((line, index) => {
             const item = commerce.items.find((candidate) => candidate.sku === line.sku)
             const lineNumber = index + 2
@@ -4950,40 +6664,228 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         </form>
         </div>
         <div className="order-submit-bar" data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}>
-          {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment</span><select disabled={commerceControlsDisabled} form="commerce-manual-order-form" ref={orderPaymentRef} required value={payment} onChange={(event) => { setPayment(event.target.value); setPreparedChannelDraft(null) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label> : null}
-          <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
+          {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment policy</span><select aria-readonly="true" disabled form="commerce-manual-order-form" ref={orderPaymentRef} value={payment}><option>{payment}</option></select></label> : null}
+          <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : 'Review order'}</button>
         </div>
       </> : null}
     </dialog>
   <ClosedOrderHistory
+    canCorrect={canCorrectOrder}
     canReturn={canReturnOrder}
+    correctionCalculation={correctionCalculation}
+    correctionDraft={correctionDraft}
     disabled={commerceControlsDisabled}
+    onCancelCorrection={cancelCorrectionEditor}
     onCancelReturn={cancelReturnEditor}
-    onChangeReturn={(patch) => setReturnDraft((current) => current ? { ...current, ...patch } : current)}
+    onChangeCorrection={(patch) => setCorrectionDraft((current) => current ? { ...current, ...patch } : current)}
+    onChangeReturn={(patch) => setReturnDraft((current) => {
+      if (!current) return current
+      const next = { ...current, ...patch }
+      if (!current.sourceIntent) return next
+      const remainsExact = next.sku === current.sourceIntent.sku
+        && next.quantity === String(current.sourceIntent.quantity)
+      if (remainsExact) return next
+      return { orderId: next.orderId, sku: next.sku, quantity: next.quantity, disposition: next.disposition }
+    })}
+    onOpenCorrection={openCorrectionEditor}
     onOpenReturn={openReturnEditor}
+    onReviewCorrection={reviewOrderCorrection}
     onReviewReturn={reviewOrderReturn}
+    onReviewSupportOpen={reviewSupportCaseOpen}
+    onReviewSupportReopen={reviewSupportReopen}
+    onReviewSupportService={reviewSupportService}
+    onReviewSupportResolution={reviewSupportCaseResolution}
+    onOpenSupportService={openSupportService}
+    onOpenSupportResolution={openSupportResolution}
+    onOpenSupportReopen={openSupportReopen}
+    onCancelSupportOpen={() => { setSupportDraft(null); setNotice('Support review closed. Nothing changed.') }}
+    onChangeSupportOpen={(patch) => setSupportDraft((current) => current ? { ...current, ...patch } : current)}
+    onCancelSupportReopen={() => { setSupportReopenDraft(null); setNotice('Support follow-up review closed. Nothing changed.') }}
+    onChangeSupportReopen={(patch) => setSupportReopenDraft((current) => current ? { ...current, ...patch } : current)}
+    onCancelSupportService={() => { setSupportServiceDraft(null); setNotice('Support service review closed. Nothing changed.') }}
+    onChangeSupportService={(patch) => setSupportServiceDraft((current) => current ? { ...current, ...patch } : current)}
+    onCancelSupportResolution={() => { setSupportResolutionDraft(null); setNotice('Support resolution closed. Nothing changed.') }}
+    onChangeSupportResolution={(patch) => setSupportResolutionDraft((current) => current ? { ...current, ...patch } : current)}
+    onCorrectionEditor={(node) => { correctionEditorRef.current = node }}
+    onCorrectionTrigger={(orderId, node) => {
+      if (node) correctionTriggerRefs.current.set(orderId, node)
+      else correctionTriggerRefs.current.delete(orderId)
+    }}
     onReturnEditor={(node) => { returnEditorRef.current = node }}
     onReturnTrigger={(orderId, node) => {
       if (node) returnTriggerRefs.current.set(orderId, node)
       else returnTriggerRefs.current.delete(orderId)
     }}
+    acknowledgementDownloads={orderAcknowledgementDownloads}
     orders={closedOrders}
     returnDraft={returnDraft}
     returnLocationPreview={returnLocationPreview}
+    supportDraft={supportDraft}
+    supportReopenDraft={supportReopenDraft}
+    supportServiceDraft={supportServiceDraft}
+    supportResolutionDraft={supportResolutionDraft}
+    supportWorkloadDownload={supportWorkloadDownload}
   />
-  <details className="core-panel today-more order-daily-controls">
-    <summary><span>Close and exceptions</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
+  <details className="core-panel today-more order-daily-controls" id="shop-close-controls">
+    <summary><span>Pricing, credit, and close</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
       <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
       <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
-      <button className="core-button" disabled={commerceControlsDisabled || !closePreview} onClick={closeDay} type="button">{closePreview ? 'Save daily close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
+      <details className="compact-disclosure" data-promotion-policy="versioned">
+        <summary><span>Promotions</span><small>{currentPromotionPolicy ? `${currentPromotionPolicy.code} · ${formatTaxRate(currentPromotionPolicy.discountBasisPoints)} · ${currentPromotionPolicy.status}` : 'No policy for this code'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewPromotionPolicy}>
+          <div className="form-row">
+            <label>Customer code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="WELCOME" required value={promotionPolicyDraft.code} /></label>
+            <label>Discount (%)<input disabled={commerceControlsDisabled} inputMode="decimal" max="100" min="0.01" onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, discountPercent: event.target.value }))} required step="0.01" type="number" value={promotionPolicyDraft.discountPercent} /></label>
+          </div>
+          <div className="form-row">
+            <label>Minimum order (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, minimumSubtotalMmk: event.target.value }))} required step="1" type="number" value={promotionPolicyDraft.minimumSubtotalMmk} /></label>
+            <label>Maximum discount (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, maximumDiscountMmk: event.target.value }))} required step="1" type="number" value={promotionPolicyDraft.maximumDiscountMmk} /></label>
+          </div>
+          <div className="form-row">
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={promotionPolicyDraft.effectiveFrom} /></label>
+            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={promotionPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={promotionPolicyDraft.effectiveUntil} /></label>
+          </div>
+          <label>Policy status<select disabled={commerceControlsDisabled} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, status: event.target.value as 'active' | 'inactive' }))} value={promotionPolicyDraft.status}><option value="active">Active · approve when limits match</option><option value="inactive">Inactive · reject this code safely</option></select></label>
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review promotion</button></div>
+          <p className="panel-copy">Shop remains the only price authority. Saving creates a new reviewed revision; inactive safely stops the code without deleting history. Quotes, orders, payments, and customer messages do not run from this setup.</p>
+          {currentPromotionPolicy ? <p className="form-notice">Revision {currentPromotionPolicy.revision} · effective {formatTime(currentPromotionPolicy.effectiveFrom)}{currentPromotionPolicy.effectiveUntil ? ` to ${formatTime(currentPromotionPolicy.effectiveUntil)}` : ''} · saved by {currentPromotionPolicy.proof.actor} · evidence {currentPromotionPolicy.proof.evidenceReference}</p> : null}
+        </form>
+      </details>
+      <details className="compact-disclosure" data-shipping-policy="versioned">
+        <summary><span>Delivery zones</span><small>{currentShippingPolicy ? `${currentShippingPolicy.zoneCode} · ${formatMoney(currentShippingPolicy.feeMmk)} · ${currentShippingPolicy.promiseMinutes} min` : 'No policy for this zone'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewShippingPolicy}>
+          <div className="form-row">
+            <label>Zone code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, zoneCode: event.target.value.toUpperCase() }))} required value={shippingPolicyDraft.zoneCode} /></label>
+            <label>Fee (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, feeMmk: event.target.value }))} required step="1" type="number" value={shippingPolicyDraft.feeMmk} /></label>
+          </div>
+          <label>Townships<input disabled={commerceControlsDisabled} maxLength={2000} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, townships: event.target.value }))} placeholder="Bahan, Kamayut, Sanchaung" required value={shippingPolicyDraft.townships} /></label>
+          <div className="form-row">
+            <label>Promise (minutes)<input disabled={commerceControlsDisabled} max="10080" min="15" onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, promiseMinutes: event.target.value }))} required step="1" type="number" value={shippingPolicyDraft.promiseMinutes} /></label>
+            <label>Status<select disabled={commerceControlsDisabled} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, status: event.target.value as 'active' | 'inactive' }))} value={shippingPolicyDraft.status}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+          </div>
+          <div className="form-row">
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={shippingPolicyDraft.effectiveFrom} /></label>
+            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={shippingPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={shippingPolicyDraft.effectiveUntil} /></label>
+          </div>
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review delivery zone</button></div>
+          <p className="panel-copy">Shop owns delivery eligibility, fee, and promise. Saving creates a reviewed revision for future Ecommerce handoffs; it never books a courier or contacts a customer.</p>
+        </form>
+      </details>
+      <details className="compact-disclosure" data-payment-policy="versioned">
+        <summary><span>Payment methods</span><small>{currentPaymentPolicy ? `${paymentPolicyDraft.adapter.replaceAll('_', ' ')} · ${currentPaymentPolicy.allowedFulfilments.join(' + ')} · revision ${currentPaymentPolicy.revision}` : 'No policy for this method'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewPaymentPolicy}>
+          <div className="form-row">
+            <label>Method<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, adapter: event.target.value as PaymentPolicyDraft['adapter'] }))} value={paymentPolicyDraft.adapter}><option value="cash_on_delivery">Cash on delivery</option><option value="pay_on_pickup">Pay on pickup</option><option value="kbzpay_manual">KBZPay · manual proof</option></select></label>
+            <label>Allowed handoff<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, allowedFulfilments: event.target.value as PaymentPolicyDraft['allowedFulfilments'] }))} value={paymentPolicyDraft.allowedFulfilments}><option value="delivery">Delivery only</option><option value="pickup">Pickup only</option><option value="both">Delivery and pickup</option></select></label>
+          </div>
+          <div className="form-row">
+            <label>Maximum order (MMK, optional)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, maximumOrderMmk: event.target.value }))} placeholder="No limit" step="1" type="number" value={paymentPolicyDraft.maximumOrderMmk} /></label>
+            <label>Status<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, status: event.target.value as 'active' | 'inactive' }))} value={paymentPolicyDraft.status}><option value="active">Active</option><option value="inactive">Inactive · block future use</option></select></label>
+          </div>
+          <label>Staff instructions<input disabled={commerceControlsDisabled} maxLength={240} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, instructions: event.target.value }))} required value={paymentPolicyDraft.instructions} /></label>
+          <div className="form-row">
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={paymentPolicyDraft.effectiveFrom} /></label>
+            <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={paymentPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={paymentPolicyDraft.effectiveUntil} /></label>
+          </div>
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review payment method</button></div>
+          <p className="panel-copy">Shop approves only the method, fulfilment fit, order limit, and staff instructions for future Ecommerce handoffs. It never charges, transfers money, contacts a customer, or marks payment received.</p>
+          {currentPaymentPolicy ? <p className="form-notice">Revision {currentPaymentPolicy.revision} · {currentPaymentPolicy.status} · effective {formatTime(currentPaymentPolicy.effectiveFrom)}{currentPaymentPolicy.effectiveUntil ? ` to ${formatTime(currentPaymentPolicy.effectiveUntil)}` : ''} · {currentPaymentPolicy.instructions} · evidence {currentPaymentPolicy.proof.evidenceReference}</p> : null}
+        </form>
+      </details>
+      <details className="compact-disclosure" data-customer-credit-policy="versioned">
+        <summary><span>Customer credit</span><small>{commerce.customerCreditPolicies?.length ? `${commerce.customerCreditPolicies.length} reviewed ${commerce.customerCreditPolicies.length === 1 ? 'policy' : 'revisions'}` : 'Cash terms only'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewCustomerCreditPolicy}>
+          <label>Customer<input disabled={commerceControlsDisabled} list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined} maxLength={120} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, customer: event.target.value }))} placeholder="Exact customer name or reference" required value={creditPolicyDraft.customer} /></label>
+          <div className="form-row">
+            <label>Credit limit (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, creditLimitMmk: event.target.value }))} placeholder="500000" required step="1" type="number" value={creditPolicyDraft.creditLimitMmk} /></label>
+            <label>Maximum terms<select disabled={commerceControlsDisabled} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, maxPaymentTermsDays: Number(event.target.value) as 0 | 7 | 30 }))} value={creditPolicyDraft.maxPaymentTermsDays}><option value="0">Payment at handoff</option><option value="7">Up to 7 days</option><option value="30">Up to 30 days</option></select></label>
+          </div>
+          <label>Account status<select disabled={commerceControlsDisabled} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, status: event.target.value as CommerceCustomerCreditPolicyStatus }))} value={creditPolicyDraft.status}><option value="active">Active · allow within boundary</option><option value="hold">Hold · block new credit</option></select></label>
+          {currentCreditPolicy ? <p className="form-notice"><strong>Current revision {currentCreditPolicy.revision}</strong> · {formatMoney(currentCreditPolicy.creditLimitMmk)} limit · {currentCreditPolicy.maxPaymentTermsDays}-day maximum · {currentCreditPolicy.status} · evidence {currentCreditPolicy.proof.evidenceReference}</p> : creditPolicyCustomer ? <p className="form-notice">No policy exists for this exact customer. New 7/30-day orders remain blocked.</p> : null}
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review credit policy</button></div>
+          <p className="panel-copy">Future credit orders must fit the active limit and terms. A hold stops new credit. This records an internal approval boundary only; it never collects, lends, charges, or contacts the customer.</p>
+        </form>
+      </details>
+      <details className="compact-disclosure" data-tax-configuration="versioned">
+        <summary><span>Tax schedule</span><small>{currentTaxConfiguration ? `${currentTaxConfiguration.code} · ${currentTaxConfiguration.jurisdictionCode ?? 'legacy scope'} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)}` : 'Not configured'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewTaxConfiguration}>
+          <div className="form-row">
+            <label>Tax code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={12} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, code: event.target.value.toUpperCase() })} placeholder="Your configured code" required value={effectiveTaxDraft.code} /></label>
+            <label>Rate (%)<input disabled={commerceControlsDisabled} inputMode="decimal" max="100" min="0" onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, ratePercent: event.target.value })} placeholder="Enter reviewed rate" required step="0.01" type="number" value={effectiveTaxDraft.ratePercent} /></label>
+          </div>
+          <label>Label<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, label: event.target.value })} placeholder="How staff recognize this code" required value={effectiveTaxDraft.label} /></label>
+          <div className="form-row">
+            <label>Jurisdiction code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={16} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, jurisdictionCode: event.target.value.toUpperCase() })} placeholder="Reviewed scope, e.g. MM" required value={effectiveTaxDraft.jurisdictionCode} /></label>
+            <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, effectiveFrom: event.target.value })} required type="datetime-local" value={effectiveTaxDraft.effectiveFrom} /></label>
+          </div>
+          <label>Price treatment<select disabled={commerceControlsDisabled} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, mode: event.target.value as CommerceTaxMode })} value={effectiveTaxDraft.mode}><option value="exclusive">Add tax to listed price</option><option value="inclusive">Tax included in listed price</option></select></label>
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review tax setup</button></div>
+          <p className="panel-copy">Takes effect only at the reviewed time. Earlier orders keep their original calculation. This does not choose a legal rate, determine branch tax, file, or post externally.</p>
+          {currentTaxConfiguration ? <p className="form-notice">Revision {currentTaxConfiguration.revision} · {currentTaxConfiguration.effectiveFrom ? `effective ${formatTime(currentTaxConfiguration.effectiveFrom)} · ` : ''}saved by {currentTaxConfiguration.proof.actor} · evidence {currentTaxConfiguration.proof.evidenceReference}</p> : null}
+        </form>
+      </details>
+      <details className="compact-disclosure" data-account-mapping="versioned">
+        <summary><span>Account mapping</span><small>{currentAccountMappingConfiguration ? `Revision ${currentAccountMappingConfiguration.revision} · ${currentAccountMappingConfiguration.mappings.length}/7 roles mapped` : 'Required for mapped exports'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewAccountMapping}>
+          <div className="form-row">
+            <label>Payment clearing<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, paymentClearing: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.paymentClearing} /></label>
+            <label>Sales revenue<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, salesRevenue: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.salesRevenue} /></label>
+          </div>
+          <div className="form-row">
+            <label>Tax payable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, taxPayable: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.taxPayable} /></label>
+            <label>Legacy / unverified revenue<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, legacyRevenue: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.legacyRevenue} /></label>
+          </div>
+          <div className="form-row">
+            <label>Sales adjustment<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, salesAdjustment: event.target.value })} placeholder="Credit/debit adjustment account" required value={effectiveAccountMapping.salesAdjustment} /></label>
+            <label>Correction receivable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, correctionReceivable: event.target.value })} placeholder="Customer amount due" required value={effectiveAccountMapping.correctionReceivable} /></label>
+          </div>
+          <label>Correction payable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, correctionPayable: event.target.value })} placeholder="Customer refund or credit due" required value={effectiveAccountMapping.correctionPayable} /></label>
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review account mapping</button></div>
+          <p className="panel-copy">Applies only to closes saved after this mapping. Corrections retain their source order and document, and split reviewed receivable, payable, tax, and sales adjustment lines. Historical exports do not change. Every accounting CSV remains review-only and never posts externally.</p>
+          {currentAccountMappingConfiguration ? <p className="form-notice">Revision {currentAccountMappingConfiguration.revision} · saved by {currentAccountMappingConfiguration.proof.actor} · evidence {currentAccountMappingConfiguration.proof.evidenceReference}</p> : null}
+        </form>
+      </details>
+      <details className="compact-disclosure" data-close-settlement={closeSettlement?.status ?? 'incomplete'} open={Boolean(closePreview)}>
+        <summary><span>Settlement count</span><small>{closePreview ? `${closeExpectedByPayment.size} payment method${closeExpectedByPayment.size === 1 ? '' : 's'} · ${closeSettlement?.status === 'matched' ? 'matched' : closeSettlement?.status === 'variance_review' ? 'variance needs review' : 'complete the count'}` : 'No open close'}</small></summary>
+        <section aria-label="Daily settlement count" className="core-form compact-form">
+          {effectiveCloseSettlementDraft.length ? effectiveCloseSettlementDraft.map((line) => {
+            const expectedMmk = closeExpectedByPayment.get(line.paymentMethod) ?? 0
+            const countedMmk = /^(?:0|[1-9]\d*)$/.test(line.countedMmk) ? Number(line.countedMmk) : null
+            const varianceMmk = countedMmk !== null && Number.isSafeInteger(countedMmk) ? countedMmk - expectedMmk : null
+            const update = (changes: Partial<CloseSettlementDraftLine>) => setCloseSettlementDraft(
+              effectiveCloseSettlementDraft.map((candidate) => candidate.paymentMethod === line.paymentMethod ? { ...candidate, ...changes } : candidate),
+            )
+            return <div className="settlement-method" data-variance={varianceMmk === 0 ? 'matched' : 'review'} key={line.paymentMethod}>
+              <div className="form-row">
+                <label>{line.paymentMethod} counted<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => {
+                  const countedMmk = event.target.value
+                  update({ countedMmk, ...(Number(countedMmk) === expectedMmk ? { varianceOwner: '', varianceReason: '' } : {}) })
+                }} required step="1" type="number" value={line.countedMmk} /></label>
+                <div className="form-notice"><strong>Expected {formatMoney(expectedMmk)}</strong><br />{varianceMmk === null ? 'Enter whole MMK' : varianceMmk === 0 ? 'Matched' : `Variance ${varianceMmk > 0 ? '+' : ''}${formatMoney(varianceMmk)}`}</div>
+              </div>
+              {varianceMmk !== null && varianceMmk !== 0 ? <div className="form-row">
+                <label>Variance owner<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => update({ varianceOwner: event.target.value })} placeholder="Responsible person" required value={line.varianceOwner} /></label>
+                <label>Review reason<input disabled={commerceControlsDisabled} maxLength={240} onChange={(event) => update({ varianceReason: event.target.value })} placeholder="Why the count differs and what happens next" required value={line.varianceReason} /></label>
+              </div> : null}
+            </div>
+          }) : <p className="form-notice">No reconciled payments are waiting. Save a zero-value close only if the business date still needs an accountable snapshot.</p>}
+          <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
+        </section>
+      </details>
+      <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
       <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
       {latestClose?.operator ? <details className="compact-disclosure">
         <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
         <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
         <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
+        {latestClose.settlement ? <p className="form-notice" data-close-settlement-status={latestClose.settlement.status}><strong>Settlement {latestClose.settlement.status === 'matched' ? 'matched' : 'variance under review'}</strong> · expected {formatMoney(latestClose.settlement.totalExpectedMmk)} · counted {formatMoney(latestClose.settlement.totalCountedMmk)} · variance {latestClose.settlement.totalVarianceMmk > 0 ? '+' : ''}{formatMoney(latestClose.settlement.totalVarianceMmk)}</p> : <p className="form-notice">Legacy close · settlement count not recorded</p>}
         {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
+        {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
+          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
+          <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href}>Download accounting CSV</a>
+        </div> : null}
       </details> : null}
       {actionHistory}
     </div>
@@ -4992,13 +6894,9 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
 
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
-    {shopCommandCenter}
-    {shopSetupGuide}
-    {shopAgentQueue}
+    {shopGuidance}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
-      {shopProcurement}
-      {supplierControl}
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
@@ -5028,7 +6926,6 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required step="1" type="number" value={stockCountDraft.quantity} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockCountQuantityResult === null || Boolean(commerce.inventoryFoundation && !stockCountBalance)} type="submit">Review count</button></div>
       </form> : null}
-      <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} scope={orderDraftScope} /></Suspense>
       <div className="data-table" role="table" aria-label="Shop stock">
         <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
         {stockRows.map(({ item }) => {
@@ -5065,41 +6962,116 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
         <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
       </form> : null}
+      <details className="inventory-tools-disclosure">
+        <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
+        <div className="inventory-tools-content">
+          {supplierControl}
+          <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} production={relatedProduction} scope={orderDraftScope} /></Suspense>
+        </div>
+      </details>
+      {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierSourcing}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier sourcing</span><h3 id="supplier-sourcing-title">Compare quotes for {supplierSourcingDraft.itemName}</h3><small>{supplierSourcingDraft.quantity.toLocaleString()} units · immutable award evidence · no supplier contact</small></div>
+        {supplierSourcingDraft.quotes.map((quote, index) => <fieldset className="form-row" key={index}><legend><label><input checked={supplierSourcingDraft.selectedIndex === index} disabled={commerceControlsDisabled || (index === 1 && !quote.supplier.trim())} name="selected-supplier-quote" onChange={() => setSupplierSourcingDraft((current) => current ? { ...current, selectedIndex: index as 0 | 1 } : current)} type="radio" /> {index === 0 ? 'Primary quote' : 'Alternate quote (optional)'}</label></legend><label>Supplier<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'supplier', event.target.value)} required={index === 0} value={quote.supplier} /></label><label>Quote reference<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'quoteReference', event.target.value)} required={index === 0} value={quote.quoteReference} /></label><label>Approved-vendor reference<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'vendorApprovalReference', event.target.value)} required={index === 0} value={quote.vendorApprovalReference} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => updateSupplierQuote(index as 0 | 1, 'unitCostMmk', event.target.value)} required={index === 0} step="1" type="number" value={quote.unitCostMmk} /></label><label>Delivery<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'deliveryAt', event.target.value)} required={index === 0} type="datetime-local" value={quote.deliveryAt} /></label></fieldset>)}
+        <div className="form-row"><label>Quotes valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, validUntil: event.target.value } : current)} required type="datetime-local" value={supplierSourcingDraft.validUntil} /></label><label>Cost tolerance (%)<input disabled={commerceControlsDisabled} max="20" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, unitCostTolerancePercent: event.target.value } : current)} required step="0.1" type="number" value={supplierSourcingDraft.unitCostTolerancePercent} /></label><label>Delivery tolerance (days)<input disabled={commerceControlsDisabled} max="30" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, deliveryToleranceDays: event.target.value } : current)} required step="1" type="number" value={supplierSourcingDraft.deliveryToleranceDays} /></label></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierSourcingDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review supplier award</button></div>
+      </form> : null}
+      {purchaseBudgetDraft ? <form aria-labelledby="purchase-budget-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewPurchaseBudget}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Buying limits</span><h3 id="purchase-budget-title">Approve purchase budget</h3><small>Immutable commitment ceiling · internal authority only</small></div>
+        <div className="form-row"><label>Budget code<input autoFocus disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, budgetCode: event.target.value.toUpperCase() } : current)} required value={purchaseBudgetDraft.budgetCode} /></label><label>Budget name<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, label: event.target.value } : current)} required value={purchaseBudgetDraft.label} /></label></div>
+        <label>Valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, periodEnd: event.target.value } : current)} required type="datetime-local" value={purchaseBudgetDraft.periodEnd} /></label>
+        <div className="form-row"><label>Total ceiling (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, ceilingMmk: event.target.value } : current)} required step="1" type="number" value={purchaseBudgetDraft.ceilingMmk} /></label><label>Per request (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, perRequisitionLimitMmk: event.target.value } : current)} required step="1" type="number" value={purchaseBudgetDraft.perRequisitionLimitMmk} /></label></div>
+        <div className="stock-receipt-preview"><small>Authority</small><strong>{formatMoney(Number(purchaseBudgetDraft.ceilingMmk) || 0)} total · {formatMoney(Number(purchaseBudgetDraft.perRequisitionLimitMmk) || 0)} per request</strong></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setPurchaseBudgetDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review buying limits</button></div>
+      </form> : null}
       {purchaseOrderDraft && purchaseOrderDraftItem ? <form aria-labelledby="purchase-order-title" className="stock-receipt-editor purchase-order-editor" data-mode={purchaseOrderDraft.mode} onSubmit={reviewPurchaseOrder} ref={purchaseOrderEditorRef}>
         <div className="stock-receipt-copy">
-          <span className="core-eyebrow">{purchaseOrderDraft.mode === 'create' ? 'Order stock' : 'Receive order'}</span>
+          <span className="core-eyebrow">{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Second operator approval' : 'Approve requisition' : 'Receive order'}</span>
           <h3 id="purchase-order-title">{purchaseOrderDraftItem.name}</h3>
           <small>{purchaseOrderDraft.mode === 'create'
-            ? `${purchaseOrderDraftItem.sku} · internal record only`
+            ? `${purchaseOrderDraft.requisitionId ?? purchaseOrderDraftItem.sku} · internal record only`
             : `${purchaseOrderDraftOrder?.purchaseOrder.id} · ${purchaseOrderDraftOrder?.purchaseOrder.supplier} · ${purchaseOrderDraftOrder?.purchaseOrder.expectedAt ? `expected ${formatIssueDue(purchaseOrderDraftOrder.purchaseOrder.expectedAt)}` : 'arrival not recorded'}`}</small>
         </div>
-        {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference<input autoFocus disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} /></label> : null}
+        {purchaseOrderDraft.mode === 'create' ? <label>Supplier reference{managedInventoryProjection ? <select autoFocus disabled={commerceControlsDisabled} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} required value={purchaseOrderDraft.supplier}><option value="">Choose supplier</option>{managedInventoryProjection.vendors.map((vendor) => <option key={vendor.id} value={vendor.name}>{vendor.name}</option>)}</select> : <input autoFocus disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, supplier: event.target.value } : current)} placeholder="Supplier name" required value={purchaseOrderDraft.supplier} />}</label> : null}
         {purchaseOrderDraft.mode === 'create' ? <label>Expected arrival<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, expectedAt: event.target.value } : current)} required type="datetime-local" value={purchaseOrderDraft.expectedAt} /></label> : null}
-        <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Quantity received'}<input aria-describedby="stock-receipt-preview" autoFocus={purchaseOrderDraft.mode === 'receive'} disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
+        <label>{purchaseOrderDraft.mode === 'create' ? 'Quantity to order' : 'Accepted units'}<input aria-describedby="stock-receipt-preview" autoFocus={purchaseOrderDraft.mode === 'receive'} disabled={commerceControlsDisabled} inputMode="numeric" max={purchaseOrderQuantityLimit} min="1" onChange={(event) => setPurchaseOrderDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="10" required step="1" type="number" value={purchaseOrderDraft.quantity} /></label>
+        {purchaseOrderDraft.mode === 'create' ? <label>Unit cost (MMK)<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'create' ? { ...current, unitCostMmk: event.target.value } : current)} placeholder="5000" required step="1" type="number" value={purchaseOrderDraft.unitCostMmk} /></label> : null}
+        {purchaseOrderDraft.mode === 'receive' ? <div className="form-row"><label>Rejected units<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderQuantityResult ?? 0))} min="0" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, rejectedQuantity: event.target.value } : current)} required step="1" type="number" value={purchaseOrderDraft.rejectedQuantity} /></label><label>Discrepancy reason<select disabled={commerceControlsDisabled || purchaseOrderRejectedResult === 0} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, discrepancyCode: event.target.value as CommercePurchaseOrderDiscrepancyCode } : current)} required={Boolean(purchaseOrderRejectedResult)} value={purchaseOrderDraft.discrepancyCode}><option value="damaged">Damaged</option><option value="wrong_item">Wrong item</option><option value="quality_failed">Quality failed</option></select></label></div> : null}
         {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Receive into<select disabled={commerceControlsDisabled || !managedInventoryProjection} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, locationId: event.target.value } : current)} required value={purchaseOrderDraft.locationId}><option value="">Choose location</option>{managedInventoryProjection?.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label> : null}
         {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Lot or batch<input autoComplete="off" disabled={commerceControlsDisabled || !managedInventoryProjection} maxLength={80} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, trackingCode: event.target.value } : current)} placeholder="Scan or enter lot" required value={purchaseOrderDraft.trackingCode} /></label> : null}
-        <div aria-live="polite" className="stock-receipt-preview" id="stock-receipt-preview"><small>{purchaseOrderDraft.mode === 'create' ? 'Internal order' : 'New on hand'}</small><strong>{purchaseOrderQuantityResult === null
+        <div aria-live="polite" className="stock-receipt-preview" id="stock-receipt-preview"><small>{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Internal order' : 'Requisition exposure' : 'New on hand'}</small><strong>{purchaseOrderQuantityResult === null
           ? 'Enter whole units'
           : purchaseOrderDraft.mode === 'create'
-            ? `${purchaseOrderQuantityResult.toLocaleString()} units`
-            : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()}${purchaseReceiptLocation ? ` · ${purchaseReceiptLocation.name}` : ''}`}</strong></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? 'Review order' : 'Review receipt'}</button></div>
+            ? `${purchaseOrderQuantityResult.toLocaleString()} units${purchaseOrderDraftTotal === null ? ' · enter unit cost' : ` · ${formatMoney(purchaseOrderDraftTotal)} total`}`
+            : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()} accepted into stock${purchaseOrderRejectedResult ? ` · ${purchaseOrderRejectedResult.toLocaleString()} rejected / return to vendor` : ''}${purchaseReceiptLocation ? ` · ${purchaseReceiptLocation.name}` : ''}`}</strong></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || !purchaseReceiptDiscrepancyReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null || purchaseOrderUnitCostResult === null || purchaseOrderDraftTotal === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition' : 'Review receipt'}</button></div>
+      </form> : null}
+      {supplierReturnDraft && supplierReturnDraftRow && supplierReturnDraftReceipt ? <form aria-label="Supplier return review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierReturn}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Rejected supplier units</span><h3>{supplierReturnDraftRow.purchaseOrder.supplier}</h3><small>{supplierReturnDraftReceipt.rejectedQuantity} rejected · {supplierReturnDraftReceipt.discrepancyCode?.replaceAll('_', ' ')} · internal claim only</small></div>
+        <label>Internal return reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierReturnDraft((current) => current ? { ...current, internalReturnReference: event.target.value } : current)} required value={supplierReturnDraft.internalReturnReference} /></label>
+        <div className="stock-receipt-preview"><small>Claim value</small><strong>{formatMoney((supplierReturnDraftReceipt.rejectedQuantity ?? 0) * (supplierReturnDraftRow.purchaseOrder.unitCostMmk ?? 0))}</strong><small>Not dispatched · supplier not contacted · accounting not posted</small></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierReturnDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierReturnDraftReady} type="submit">Review return claim</button></div>
+      </form> : null}
+      {supplierCreditDraft && supplierCreditDraftRow && supplierCreditDraftClaim ? <form aria-label="Supplier credit review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierCredit}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier credit evidence</span><h3>{supplierCreditDraftRow.purchaseOrder.supplier}</h3><small>{supplierCreditDraftClaim.internalReturnReference} · {formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim))} outstanding</small></div>
+        <label>Supplier credit reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, supplierReference: event.target.value } : current)} placeholder="Supplier credit note number" required value={supplierCreditDraft.supplierReference} /></label>
+        <div className="form-row"><label>Credit issued<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierCreditDraftClaim.createdAt))} onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type="datetime-local" value={supplierCreditDraft.issuedAt} /></label><label>Amount (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" max={commerceSupplierReturnClaimBalance(supplierCreditDraftClaim)} min="1" onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, amountMmk: event.target.value } : current)} required step="1" type="number" value={supplierCreditDraft.amountMmk} /></label></div>
+        <div className="stock-receipt-preview"><small>Balance after</small><strong>{supplierCreditDraftReady ? formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim) - supplierCreditAmount) : 'Enter valid credit'}</strong><small>Evidence only · accounting not posted</small></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierCreditDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierCreditDraftReady} type="submit">Review supplier credit</button></div>
+      </form> : null}
+      {supplierInvoiceDraft && supplierInvoiceDraftRow ? <form aria-label="Supplier invoice review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierInvoice}>
+        <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier invoice</span><h3>{supplierInvoiceDraftRow.purchaseOrder.supplier}</h3><small>{supplierInvoiceDraftRow.purchaseOrder.id} · three-way review only</small></div>
+        <label>Invoice reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, supplierReference: event.target.value } : current)} placeholder="Supplier invoice number" required value={supplierInvoiceDraft.supplierReference} /></label>
+        <div className="form-row"><label>Invoice date<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierInvoiceDraftRow.purchaseOrder.createdAt))} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type="datetime-local" value={supplierInvoiceDraft.issuedAt} /></label><label>Due date<input disabled={commerceControlsDisabled} min={supplierInvoiceDraft.issuedAt} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type="datetime-local" value={supplierInvoiceDraft.dueAt} /></label></div>
+        <div className="form-row"><label>Invoiced units<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, quantity: event.target.value } : current)} required step="1" type="number" value={supplierInvoiceDraft.quantity} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, unitCostMmk: event.target.value } : current)} required step="1" type="number" value={supplierInvoiceDraft.unitCostMmk} /></label></div>
+        <div className="stock-receipt-preview"><small>Invoice total</small><strong>{supplierInvoiceTotal === null ? 'Enter valid terms' : formatMoney(supplierInvoiceTotal)}</strong></div>
+        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierInvoiceDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierInvoiceDraftReady} type="submit">Review invoice</button></div>
       </form> : null}
       <details className="compact-disclosure purchase-order-history" id="purchase-orders" ref={purchaseOrderHistoryRef}>
         <summary><span>Purchase orders</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} active · {purchaseOrderRows.length} total</strong></summary>
+        {supplierPerformance.length ? <section aria-label="Supplier performance" className="supplier-performance">
+          <div className="supplier-performance-heading"><span className="core-eyebrow">Supplier performance</span><small>Measured from Shop orders and receipts</small></div>
+          <div className="supplier-performance-grid">{supplierPerformance.map((supplier) => <article data-supplier-status={supplier.status} key={supplier.supplier}>
+            <div><strong>{supplier.supplier}</strong><small>{supplier.totalOrders} order{supplier.totalOrders === 1 ? '' : 's'} · {supplier.activeOrders} active</small></div>
+            <span><strong>{supplier.receivedUnits}/{supplier.orderedUnits}</strong><small>units accepted · {supplier.rejectedUnits} rejected · {supplier.openUnits} open</small></span>
+            <span><strong>{supplier.onTimeRateBasisPoints === null ? 'Collecting' : formatTaxRate(supplier.onTimeRateBasisPoints)}</strong><small>{supplier.completedDeliveries ? `${supplier.onTimeDeliveries}/${supplier.completedDeliveries} on time` : 'No completed arrival yet'} · defect {formatTaxRate(supplier.defectRateBasisPoints)}{supplier.lateOpenOrders ? ` · ${supplier.lateOpenOrders} late open` : ''}</small></span>
+          </article>)}</div>
+        </section> : null}
         {purchaseOrderRows.length ? <div className="purchase-order-list">{purchaseOrderRows.map(({ purchaseOrder, progress, item }) => {
           const arrivalUrgency = commercePurchaseOrderArrivalUrgency(purchaseOrder, progress, purchaseOrderClock)
+          const invoiceMatch = purchaseOrder.supplierInvoice ? commerceSupplierInvoiceMatch(commerce, purchaseOrder) : null
+          const unresolvedRejectedReceipt = commerce.movements.find((movement) => movement.kind === 'receipt'
+            && movement.purchaseOrderId === purchaseOrder.id && Boolean(movement.rejectedQuantity)
+            && !purchaseOrder.supplierReturns?.some((claim) => claim.receiptMovementId === movement.id))
+          const openReturnClaim = purchaseOrder.supplierReturns?.find((claim) => commerceSupplierReturnClaimBalance(claim) > 0)
+          const nextControl = unresolvedRejectedReceipt
+            ? <button aria-label={`Review rejected supplier units for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => openSupplierReturn(purchaseOrder.id, unresolvedRejectedReceipt.id)} type="button">Review return</button>
+            : openReturnClaim
+              ? <button aria-label={`Record supplier credit for ${openReturnClaim.internalReturnReference}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => openSupplierCredit(purchaseOrder.id, openReturnClaim)} type="button">Record credit</button>
+              : purchaseOrder.supplierInvoice
+            ? purchaseOrder.supplierInvoice.payableReview
+              ? <small className="purchase-order-closed">Payable ready</small>
+              : invoiceMatch?.status === 'matched'
+                ? <button aria-label={`Mark invoice payable-ready for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewSupplierInvoicePayable(purchaseOrder.id)} type="button">Review payable</button>
+                : <small className="purchase-order-closed">{invoiceMatch?.status.replaceAll('_', ' ')}</small>
+            : (progress.status === 'received' || progress.status === 'received_with_discrepancy') && purchaseOrder.unitCostMmk !== undefined
+              ? <button aria-label={`Record supplier invoice for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => openSupplierInvoice(purchaseOrder.id)} type="button">Record invoice</button>
+              : progress.remaining > 0 && progress.status !== 'cancelled'
+                ? <button aria-label={`Cancel remainder for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewPurchaseOrderCancellation(purchaseOrder.id)} type="button">Cancel remainder</button>
+                : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : progress.status === 'received_with_discrepancy' ? 'Return resolved' : 'Closed'}</small>
+          const returnSummary = purchaseOrder.supplierReturns?.length
+            ? purchaseOrder.supplierReturns.map((claim) => `${claim.internalReturnReference}: ${commerceSupplierReturnClaimStatus(claim).replaceAll('_', ' ')}`).join(' · ')
+            : null
           return <article key={purchaseOrder.id}>
-            <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small><small data-arrival-risk={arrivalUrgency}>{purchaseOrder.expectedAt
+            <div><strong>{item?.name ?? purchaseOrder.sku}</strong><small>{purchaseOrder.supplier} · {purchaseOrder.id}</small><small>{purchaseOrder.unitCostMmk === undefined ? 'Legacy PO · commercial terms not retained' : `${formatMoney(purchaseOrder.unitCostMmk)} each · ${formatMoney(purchaseOrder.unitCostMmk * purchaseOrder.quantityOrdered)}`}</small>{returnSummary ? <small>Returns · {returnSummary}</small> : null}<small data-arrival-risk={arrivalUrgency}>{purchaseOrder.expectedAt
               ? `Expected ${formatIssueDue(purchaseOrder.expectedAt)}${arrivalUrgency === 'late' ? ' · Late' : arrivalUrgency === 'due_soon' ? ' · Due soon' : ''}`
               : 'Arrival not recorded · legacy order'}</small></div>
-            <span><strong>{progress.received}/{purchaseOrder.quantityOrdered}</strong><small>{progress.status.replace('_', ' ')}</small></span>
-            {progress.remaining > 0 && progress.status !== 'cancelled' ? <button aria-label={`Cancel remainder for ${purchaseOrder.id}`} className="text-link" disabled={commerceControlsDisabled} onClick={() => reviewPurchaseOrderCancellation(purchaseOrder.id)} type="button">Cancel remainder</button> : <small className="purchase-order-closed">{progress.status === 'received' ? 'Complete' : 'Closed'}</small>}
+            <span><strong>{progress.received} accepted{progress.rejected ? ` · ${progress.rejected} rejected` : ''}/{purchaseOrder.quantityOrdered}</strong><small>{invoiceMatch ? `Invoice · ${invoiceMatch.status.replaceAll('_', ' ')}` : progress.status.replaceAll('_', ' ')}</small></span>
+            {nextControl}
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
-      <section aria-label="Shop catalog upload autopilot" className="catalog-onboarding-bridge">
-        <div><span className="core-eyebrow">Catalog upload autopilot</span><strong>Bring your catalog into the Shop trial.</strong><p>AI routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
+      <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge">
+        <div><span className="core-eyebrow">Catalog import helper</span><strong>Bring your catalog into the Shop trial.</strong><p>The assistant routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
         <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
         <button className="core-button" disabled={commerceControlsDisabled} onClick={loadSampleCatalogItem} type="button">Load sample catalog item</button>
         <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
@@ -5124,12 +7096,64 @@ function CommercePage({ ecommerceNavigationDraft, managedIdentity, requestedRequ
   return null
 }
 
-function OrderCalculationNote({ order }: { order: CommerceOrder }) {
-  if (!order.calculation) return <small data-order-calculation-note="true" data-order-calculation-status="legacy">Recorded total {formatMoney(order.total)} · Tax status not recorded</small>
-  return <small data-order-calculation-note="true">Subtotal {formatMoney(order.calculation.subtotalMmk)} · Tax not configured</small>
+function ReceivablesAging({ aging, disabled, onRecordContact }: {
+  aging: ReturnType<typeof commerceReceivablesAging>
+  disabled: boolean
+  onRecordContact: (orderId: string) => void
+}) {
+  if (!aging.rows.length) return null
+  const bucketLabels = [
+    ['current', 'Not overdue'],
+    ['1_7', '1-7 days'],
+    ['8_30', '8-30 days'],
+    ['31_60', '31-60 days'],
+    ['over_60', 'Over 60 days'],
+  ] as const
+  return <details className="core-panel receivables-aging" data-overdue-orders={aging.overdueOrders}>
+    <summary>
+      <span><span className="core-eyebrow">Payment follow-up</span><strong>{aging.overdueOrders ? `${aging.overdueOrders} overdue` : 'No overdue orders'}</strong></span>
+      <small>{formatMoney(aging.overdueMmk)} overdue · {formatMoney(aging.totalOutstandingMmk)} pending</small>
+    </summary>
+    <div className="receivables-aging-buckets" aria-label="Receivables aging buckets">
+      {bucketLabels.map(([bucket, label]) => <div key={bucket}>
+        <small>{label}</small>
+        <strong>{formatMoney(aging.totalsMmk[bucket])}</strong>
+      </div>)}
+    </div>
+    <div className="receivables-aging-list">
+      {aging.rows.slice(0, 5).map((row) => <div key={row.orderId}>
+        <span><strong>{row.customer}</strong><small>{row.orderId} · {row.paymentMethod} · due {formatTime(row.dueAt)}</small>{row.lastCollectionAction ? <small>Last contact {formatTime(row.lastCollectionAction.capturedAt)} by {row.lastCollectionAction.actor} · {row.collectionActionCount} total</small> : <small>No customer contact recorded</small>}</span>
+        <span><strong>{formatMoney(row.balanceMmk)}</strong><small>{row.daysPastDue ? `${row.daysPastDue} days overdue` : 'not overdue'}</small><button className="text-link" disabled={disabled} onClick={() => onRecordContact(row.orderId)} type="button">Record contact</button></span>
+      </div>)}
+    </div>
+    <p className="form-notice">New orders retain an immutable payment-due snapshot. Older orders fall back to their fulfilment promise. Contact notes are append-only evidence; recording one does not send a message or change payment.</p>
+  </details>
 }
 
+function OrderCalculationNote({ order }: { order: CommerceOrder }) {
+  if (!order.calculation) return <small data-order-calculation-note="true" data-order-calculation-status="legacy">Recorded total {formatMoney(order.total)} · Tax status not recorded</small>
+  return <small data-order-calculation-note="true" data-order-calculation-status={'taxCode' in order.calculation ? 'configured' : 'not-configured'}>{formatCommerceCalculation(order.calculation)}</small>
+}
+
+function orderAcknowledgementDownload(commerce: CommerceState, orderId: string) {
+  try {
+    const artifact = commerceOrderAcknowledgement(commerce, orderId)
+    if (!artifact) return null
+    const safeOrderId = artifact.orderId.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'order'
+    return {
+      artifact,
+      filename: `supermega-${safeOrderId}-acknowledgement.txt`,
+      href: `data:text/plain;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceOrderAcknowledgementText(artifact)}`)}`,
+    }
+  } catch {
+    return null
+  }
+}
+
+type OrderAcknowledgementDownload = NonNullable<ReturnType<typeof orderAcknowledgementDownload>>
+
 function OrderList({
+  acknowledgementDownloads,
   orders,
   canCancel,
   disabled,
@@ -5138,6 +7162,7 @@ function OrderList({
   onReconcilePayment,
   onSettleRefund,
 }: {
+  acknowledgementDownloads: Map<string, OrderAcknowledgementDownload>
   orders: CommerceOrder[]
   canCancel: (id: string) => boolean
   disabled: boolean
@@ -5155,6 +7180,7 @@ function OrderList({
     const reconcileIsPrimary = needsPayment && (order.status === 'ready' || order.status === 'completed')
     const canAdvance = active && !reconcileIsPrimary
     const promiseUrgency = active ? commerceOrderPromiseUrgency(order, promiseNow) : 'scheduled'
+    const acknowledgement = acknowledgementDownloads.get(order.id)
     return <article key={order.id}>
       <div>
         <div className="order-statuses">
@@ -5170,9 +7196,14 @@ function OrderList({
             ? `${order.lines[0].name} × ${order.quantity}`
             : `${order.lines.length} items · ${order.quantity} units`
           : `${order.item} × ${order.quantity}`}</strong>
-        {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
-        <OrderCalculationNote order={order} />
-        <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+        <details className="order-record-details">
+          <summary><span>{order.id} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
+          <div>
+            {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
+            <OrderCalculationNote order={order} />
+            <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+          </div>
+        </details>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
       </div>
       <div className="order-row-actions">
@@ -5180,6 +7211,7 @@ function OrderList({
         {reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
         {order.refundStatus === 'due' ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
         {canAdvance ? <button className="text-link" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
+        {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
         {active && canCancel(order.id) ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel</button> : null}
       </div>
     </article>
@@ -5187,38 +7219,128 @@ function OrderList({
 }
 
 function ClosedOrderHistory({
+  acknowledgementDownloads,
+  canCorrect,
   canReturn,
+  correctionCalculation,
+  correctionDraft,
   disabled,
+  onCancelCorrection,
   onCancelReturn,
+  onChangeCorrection,
   onChangeReturn,
+  onOpenCorrection,
   onOpenReturn,
+  onReviewCorrection,
   onReviewReturn,
+  onReviewSupportOpen,
+  onReviewSupportReopen,
+  onReviewSupportService,
+  onReviewSupportResolution,
+  onOpenSupportService,
+  onOpenSupportResolution,
+  onOpenSupportReopen,
+  onCancelSupportOpen,
+  onCancelSupportReopen,
+  onCancelSupportResolution,
+  onCancelSupportService,
+  onChangeSupportOpen,
+  onChangeSupportReopen,
+  onChangeSupportService,
+  onChangeSupportResolution,
+  onCorrectionEditor,
+  onCorrectionTrigger,
   onReturnEditor,
   onReturnTrigger,
   orders,
   returnDraft,
   returnLocationPreview,
+  supportDraft,
+  supportReopenDraft,
+  supportServiceDraft,
+  supportResolutionDraft,
+  supportWorkloadDownload,
 }: {
+  acknowledgementDownloads: Map<string, OrderAcknowledgementDownload>
+  canCorrect: (orderId: string) => boolean
   canReturn: (orderId: string) => boolean
+  correctionCalculation: ReturnType<typeof commerceCorrectionCalculation>
+  correctionDraft: CommerceCorrectionDraft | null
   disabled: boolean
+  onCancelCorrection: () => void
   onCancelReturn: () => void
+  onChangeCorrection: (patch: Partial<CommerceCorrectionDraft>) => void
   onChangeReturn: (patch: Partial<CommerceReturnDraft>) => void
+  onOpenCorrection: (orderId: string) => void
   onOpenReturn: (orderId: string) => void
+  onReviewCorrection: (event: FormEvent) => void
   onReviewReturn: (event: FormEvent) => void
+  onReviewSupportOpen: (event: FormEvent) => void
+  onReviewSupportReopen: (event: FormEvent) => void
+  onReviewSupportService: (event: FormEvent) => void
+  onReviewSupportResolution: (event: FormEvent) => void
+  onOpenSupportService: (orderId: string, caseId: string, kind: CommerceSupportServiceEventKind) => void
+  onOpenSupportResolution: (orderId: string, caseId: string) => void
+  onOpenSupportReopen: (orderId: string, caseId: string) => void
+  onCancelSupportOpen: () => void
+  onCancelSupportReopen: () => void
+  onCancelSupportResolution: () => void
+  onCancelSupportService: () => void
+  onChangeSupportOpen: (patch: Partial<Omit<CommerceSupportOpenDraft, 'intent'>>) => void
+  onChangeSupportReopen: (patch: Partial<CommerceSupportReopenDraft>) => void
+  onChangeSupportService: (patch: Partial<CommerceSupportServiceDraft>) => void
+  onChangeSupportResolution: (patch: Partial<CommerceSupportResolutionDraft>) => void
+  onCorrectionEditor: (node: HTMLFormElement | null) => void
+  onCorrectionTrigger: (orderId: string, node: HTMLButtonElement | null) => void
   onReturnEditor: (node: HTMLFormElement | null) => void
   onReturnTrigger: (orderId: string, node: HTMLButtonElement | null) => void
   orders: CommerceOrder[]
   returnDraft: CommerceReturnDraft | null
   returnLocationPreview: string
+  supportDraft: CommerceSupportOpenDraft | null
+  supportReopenDraft: CommerceSupportReopenDraft | null
+  supportServiceDraft: CommerceSupportServiceDraft | null
+  supportResolutionDraft: CommerceSupportResolutionDraft | null
+  supportWorkloadDownload: {
+    filename: string
+    href: string
+    artifact: ReturnType<typeof commerceSupportWorkloadExport>
+  } | null
 }) {
   const [page, setPage] = useState(0)
-  if (!orders.length) return null
+  const supportClock = useMinuteClock()
   const pageSize = 8
+  if (!orders.length) return null
   const pageCount = Math.ceil(orders.length / pageSize)
-  const currentPage = Math.min(page, pageCount - 1)
+  const returnOrderIndex = returnDraft ? orders.findIndex((order) => order.id === returnDraft.orderId) : -1
+  const correctionOrderIndex = correctionDraft ? orders.findIndex((order) => order.id === correctionDraft.orderId) : -1
+  const supportOrderId = supportDraft?.intent.orderId ?? supportReopenDraft?.orderId ?? supportServiceDraft?.orderId ?? supportResolutionDraft?.orderId
+  const supportOrderIndex = supportOrderId ? orders.findIndex((order) => order.id === supportOrderId) : -1
+  const focusedOrderIndex = returnOrderIndex >= 0 ? returnOrderIndex : correctionOrderIndex >= 0 ? correctionOrderIndex : supportOrderIndex
+  const currentPage = focusedOrderIndex >= 0 ? Math.floor(focusedOrderIndex / pageSize) : Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-  return <details className="order-archive">
-    <summary><span>Completed and cancelled orders</span><small>{orders.length} {orders.length === 1 ? 'record' : 'records'} · returns here</small></summary>
+  const supportWorkQueue = commerceSupportQueue(orders, supportClock)
+  const supportSla = commerceSupportSlaSummary(orders, supportClock)
+  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) || undefined}>
+    <summary><span>Completed and cancelled orders</span><small>{supportWorkQueue.length ? `${supportSla.openCases} help open · ${supportSla.overdueCases} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
+    {supportWorkloadDownload ? <section aria-label="Support workload export" className="order-return-records" data-support-workload="privacy-minimal">
+      <div><strong>Support workload record</strong><small>{supportWorkloadDownload.artifact.summary.totalCases} cases · {supportWorkloadDownload.artifact.summary.reopenedCases} repeat contacts · {supportWorkloadDownload.artifact.summary.responseTargetMisses} target misses</small></div>
+      <div><small>Case and order references, aging, ownership, lifecycle, and service counts only. Customer names, contact details, descriptions, notes, and evidence text are excluded.</small><a className="text-link" download={supportWorkloadDownload.filename} href={supportWorkloadDownload.href}>Download workload CSV</a></div>
+    </section> : null}
+    {supportWorkQueue.length ? <section aria-label="Open support queue" className="order-return-records" data-support-queue="ordered">
+      <div><strong>Support queue · next work first</strong><small>Overdue, priority, due time, request time</small></div>
+      <div data-support-sla="bounded"><strong>Service level</strong><small>{supportSla.awaitingAcknowledgement} awaiting acknowledgement · {supportSla.awaitingFirstResponse} awaiting first response · {supportSla.firstResponseReady} response ready · {supportSla.responseTargetMisses} target missed</small></div>
+      {supportWorkQueue.slice(0, 6).map((row) => <div data-support-urgency={row.urgency} key={`queue-${row.supportCase.caseId}`}>
+        <strong>{row.urgency === 'overdue' ? 'OVERDUE · ' : ''}{row.customer} · {row.supportCase.category.replaceAll('_', ' ')}</strong>
+        <small>{row.service ? `${row.service.priority} · ${row.service.owner} · due ${formatTime(row.service.dueAt)}` : 'Legacy untriaged case'} · {row.supportCase.caseId}</small>
+        {row.service ? <button className="text-link" disabled={disabled || Boolean(supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || returnDraft || correctionDraft)} onClick={() => row.checkpoints.acknowledged
+          ? row.checkpoints.firstResponseReady
+            ? onOpenSupportResolution(row.orderId, row.supportCase.caseId)
+            : onOpenSupportService(row.orderId, row.supportCase.caseId, 'first_response_ready')
+          : onOpenSupportService(row.orderId, row.supportCase.caseId, 'acknowledged')} type="button">{row.checkpoints.acknowledged ? row.checkpoints.firstResponseReady ? 'Resolve case' : 'Response ready' : 'Acknowledge'}</button> : null}
+      </div>)}
+      {supportWorkQueue.length > 6 ? <small>{supportWorkQueue.length - 6} more open cases remain in the order archive.</small> : null}
+    </section> : null}
     <div className="order-archive-list">{visibleOrders.map((order) => {
       const lines = commerceOrderReturnLines(order).map((line) => {
         const returned = (order.returns ?? [])
@@ -5232,9 +7354,18 @@ function ClosedOrderHistory({
         : undefined
       const activeReturnDraft = draftedLine && returnDraft?.orderId === order.id ? returnDraft : null
       const editing = activeReturnDraft !== null
+      const activeCorrectionDraft = correctionDraft?.orderId === order.id ? correctionDraft : null
+      const correcting = activeCorrectionDraft !== null
+      const activeSupportDraft = supportDraft?.intent.orderId === order.id ? supportDraft : null
+      const activeSupportReopen = supportReopenDraft?.orderId === order.id ? supportReopenDraft : null
+      const activeSupportService = supportServiceDraft?.orderId === order.id ? supportServiceDraft : null
+      const activeSupportResolution = supportResolutionDraft?.orderId === order.id ? supportResolutionDraft : null
       const selectedLine = draftedLine ?? availableLines[0]
       const returnable = canReturn(order.id)
-      return <article className={editing ? 'is-returning' : undefined} key={order.id}>
+      const correctable = canCorrect(order.id)
+      const adjustedTotal = commerceOrderAdjustedTotal(order) ?? order.total
+      const acknowledgement = acknowledgementDownloads.get(order.id)
+      return <article className={editing || correcting ? 'is-returning' : undefined} key={order.id}>
       <div className="order-archive-main">
         <strong>{order.customer} · {order.lines
           ? order.lines.length === 1
@@ -5250,15 +7381,25 @@ function ClosedOrderHistory({
         {order.status === 'completed' && order.completion && availableLines.length > 0 && !returnable ? <small role="note">Return unavailable: the sold quantity cannot be matched to an attributable stock reservation.</small> : null}
       </div>
       <div className="order-archive-actions">
-        <b>{formatMoney(order.total)}</b>
+        <b>{formatMoney(adjustedTotal)}</b>
+        {adjustedTotal !== order.total ? <small>original {formatMoney(order.total)}</small> : null}
+        {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
         {order.status === 'completed' && (returnable || editing) ? <button
           aria-expanded={editing}
           className="text-link"
-          disabled={disabled}
+          disabled={disabled || correcting}
           onClick={() => editing ? onCancelReturn() : onOpenReturn(order.id)}
           ref={(node) => { onReturnTrigger(order.id, node) }}
           type="button"
         >{editing ? 'Close return' : 'Record return'}</button> : null}
+        {order.status === 'completed' && (correctable || correcting) ? <button
+          aria-expanded={correcting}
+          className="text-link"
+          disabled={disabled || editing}
+          onClick={() => correcting ? onCancelCorrection() : onOpenCorrection(order.id)}
+          ref={(node) => { onCorrectionTrigger(order.id, node) }}
+          type="button"
+        >{correcting ? 'Close correction' : 'Correct invoice'}</button> : null}
       </div>
       {order.returns?.length ? <div className="order-return-records" role="list">
         {order.returns.map((record) => <div key={record.actionId} role="listitem">
@@ -5266,13 +7407,76 @@ function ClosedOrderHistory({
           <small>{record.actor} · {formatTime(record.createdAt)} · evidence {record.evidenceReference}</small>
         </div>)}
       </div> : null}
+      {order.supportCases?.length ? <div className="order-return-records" role="list">
+        {order.supportCases.map((supportCase) => {
+          const urgency = commerceSupportCaseUrgency(supportCase, supportClock)
+          const service = commerceSupportServiceState(supportCase)
+          const checkpoints = commerceSupportCheckpointState(supportCase)
+          const serviceEvents = [...(supportCase.followUpServiceEvents ?? []), ...(supportCase.serviceEvents ?? [])]
+          const finalResolution = supportCase.followUpResolution ?? supportCase.resolution
+          return <div data-support-urgency={urgency} key={supportCase.caseId} role="listitem">
+            <strong>{urgency === 'overdue' ? 'OVERDUE · ' : ''}{supportCase.status === 'resolved' ? 'Resolved help case' : 'Open help case'} · {supportCase.category.replaceAll('_', ' ')}</strong>
+            <small>{supportCase.caseId} · requested {formatTime(supportCase.customerRequestedAt)} · opened by {supportCase.opening.actor}</small>
+            {service
+              ? <small>{service.priority} priority · owner {service.owner} · {urgency === 'overdue' ? 'overdue since' : 'due'} {formatTime(service.dueAt)}</small>
+              : <small>Legacy case · priority, owner, and due time were not recorded</small>}
+            <small>{supportCase.customerDescription}</small>
+            {supportCase.reopen ? <small>Follow-up opened by {supportCase.reopen.proof.actor} · {formatTime(supportCase.reopen.proof.capturedAt)} · linked to resolution {supportCase.reopen.sourceResolutionActionId} · {supportCase.reopen.note}</small> : null}
+            {supportCase.reopen && supportCase.resolution ? <small>Original resolution retained · {supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note}</small> : null}
+            {checkpoints.acknowledged ? <small>Acknowledged by {checkpoints.acknowledged.proof.actor} · {formatTime(checkpoints.acknowledged.proof.capturedAt)}{checkpoints.firstResponseReady ? ` · first response ready ${formatTime(checkpoints.firstResponseReady.proof.capturedAt)}` : ' · first response pending'}</small> : service ? <small>Acknowledgement pending</small> : null}
+            {serviceEvents.length ? <details className="compact-disclosure"><summary><span>Service history</span><small>{serviceEvents.length} {serviceEvents.length === 1 ? 'event' : 'events'}</small></summary><div className="boundary-list">{serviceEvents.map((serviceEvent) => <div key={serviceEvent.proof.actionId}><strong>{serviceEvent.kind.replaceAll('_', ' ')} · {serviceEvent.priority} · {serviceEvent.owner}</strong><small>{formatTime(serviceEvent.proof.capturedAt)} · due {formatTime(serviceEvent.dueAt)} · {serviceEvent.note}</small></div>)}</div></details> : null}
+            {supportCase.status === 'resolved' && finalResolution ? <><small>{finalResolution.outcome.replaceAll('_', ' ')} · {finalResolution.note} · {finalResolution.proof.actor}</small>{!supportCase.reopen ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportReopen(order.id, supportCase.caseId)} type="button">Reopen case</button> : null}</> : service ? <div className="form-actions">{!checkpoints.acknowledged ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')} type="button">Acknowledge</button> : !checkpoints.firstResponseReady ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')} type="button">Response ready</button> : <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}<button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'reassigned')} type="button">Reassign</button><button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'escalated')} type="button">Escalate</button></div> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve legacy case</button>}
+            <small>No external message or refund performed</small>
+          </div>
+        })}
+      </div> : null}
+      {order.corrections?.length ? <div className="order-return-records" role="list">
+        {order.corrections.map((record) => <div key={record.documentId} role="listitem">
+          <strong>{record.kind} note · {formatMoney(record.calculation.totalMmk)} · balance {formatMoney(record.balanceAfterMmk)}</strong>
+          <small>{record.reasonCode.replaceAll('_', ' ')} · {record.actor} · {formatTime(record.createdAt)} · evidence {record.evidenceReference}</small>
+          <small>Review required · no external posting performed</small>
+        </div>)}
+      </div> : null}
       {activeReturnDraft && selectedLine ? <form aria-label={`Return items from ${order.id}`} className="order-return-editor" onSubmit={onReviewReturn} ref={onReturnEditor}>
-        <div className="order-return-copy"><span className="core-eyebrow">Return</span><strong>{order.id}</strong><small>Record received goods only. Payment and order totals do not change.</small></div>
+        <div className="order-return-copy"><span className="core-eyebrow">Return</span><strong>{order.id}</strong><small>{activeReturnDraft.sourceIntent ? `Prepared from customer request ${activeReturnDraft.sourceIntent.id}. Confirm what Shop actually received.` : 'Record received goods only.'} Payment and order totals do not change.</small></div>
         <label>Item<select disabled={disabled || availableLines.length === 1} onChange={(event) => onChangeReturn({ sku: event.target.value, quantity: '1' })} value={selectedLine.sku}>{availableLines.map((line) => <option key={line.sku} value={line.sku}>{line.name} · {line.remaining} left</option>)}</select></label>
         <label>Quantity<input disabled={disabled} id="order-return-quantity" max={selectedLine.remaining} min="1" onChange={(event) => onChangeReturn({ quantity: event.target.value })} required step="1" type="number" value={activeReturnDraft.quantity} /></label>
         <label>Stock result<select disabled={disabled} onChange={(event) => onChangeReturn({ disposition: event.target.value as CommerceReturnDisposition })} value={activeReturnDraft.disposition}><option value="restock">Sellable · add to stock</option><option value="not_restocked">Not sellable · stock unchanged</option></select></label>
         {activeReturnDraft.disposition === 'restock' && returnLocationPreview ? <small role="note">Restock to {returnLocationPreview}</small> : null}
         <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
+      </form> : null}
+      {activeSupportDraft ? <form aria-label={`Open support case for ${order.id}`} className="order-return-editor" onSubmit={onReviewSupportOpen}>
+        <div className="order-return-copy"><span className="core-eyebrow">Customer help</span><strong>{activeSupportDraft.intent.category.replaceAll('_', ' ')}</strong><small>{activeSupportDraft.intent.description}</small><small>Assign service responsibility before opening. This does not send a message or start a refund.</small></div>
+        <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportOpen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportDraft.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} maxLength={120} onChange={(event) => onChangeSupportOpen({ owner: event.target.value })} required value={activeSupportDraft.owner} /></label></div>
+        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportOpen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportDraft.dueAt} /></label>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
+      </form> : null}
+      {activeSupportReopen ? <form aria-label={`Reopen support case ${activeSupportReopen.caseId}`} className="order-return-editor" onSubmit={onReviewSupportReopen}>
+        <div className="order-return-copy"><span className="core-eyebrow">Follow-up</span><strong>{activeSupportReopen.caseId}</strong><small>Retain resolution {activeSupportReopen.sourceResolutionActionId} and start one linked service cycle. This does not send a message or start a refund.</small></div>
+        <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportReopen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportReopen.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} id={`support-reopen-${activeSupportReopen.caseId}`} maxLength={120} onChange={(event) => onChangeSupportReopen({ owner: event.target.value })} required value={activeSupportReopen.owner} /></label></div>
+        <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportReopen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportReopen.dueAt} /></label>
+        <label>Follow-up reason<textarea disabled={disabled} maxLength={300} onChange={(event) => onChangeSupportReopen({ note: event.target.value })} required rows={2} value={activeSupportReopen.note} /></label>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review follow-up</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportReopen} type="button">Cancel</button></div>
+      </form> : null}
+      {activeSupportService ? <form aria-label={`${commerceSupportServiceActionLabels[activeSupportService.kind]} ${activeSupportService.caseId}`} className="order-return-editor" onSubmit={onReviewSupportService}>
+        <div className="order-return-copy"><span className="core-eyebrow">{commerceSupportServiceActionLabels[activeSupportService.kind]}</span><strong>{activeSupportService.caseId}</strong><small>{activeSupportService.kind === 'reassigned' ? 'Change only the accountable owner. Priority and due time stay immutable.' : activeSupportService.kind === 'escalated' ? 'Keep the owner and raise priority or bring a future due time forward.' : activeSupportService.kind === 'acknowledged' ? 'Record that the accountable owner accepted this case internally.' : 'Record that a first response is ready for independent delivery.'} No message, refund, or payment action runs.</small></div>
+        {activeSupportService.kind === 'reassigned' ? <label>New owner<input disabled={disabled} id={`support-service-${activeSupportService.caseId}`} maxLength={120} onChange={(event) => onChangeSupportService({ owner: event.target.value })} required value={activeSupportService.owner} /></label> : activeSupportService.kind === 'escalated' ? <><div className="form-row"><label>Owner<input disabled value={activeSupportService.owner} /></label><label>Priority<select disabled={disabled} id={`support-service-${activeSupportService.caseId}`} onChange={(event) => onChangeSupportService({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportService.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label></div><label>Earlier due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportService({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportService.dueAt} /></label></> : <small role="note">{activeSupportService.priority} priority · owner {activeSupportService.owner} · target {formatTime(new Date(activeSupportService.dueAt).toISOString())}</small>}
+        <label>{activeSupportService.kind === 'first_response_ready' ? 'Response preparation note' : activeSupportService.kind === 'acknowledged' ? 'Acknowledgement note' : 'Reason'}<textarea disabled={disabled} id={activeSupportService.kind === 'acknowledged' || activeSupportService.kind === 'first_response_ready' ? `support-service-${activeSupportService.caseId}` : undefined} maxLength={300} onChange={(event) => onChangeSupportService({ note: event.target.value })} required rows={2} value={activeSupportService.note} /></label>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review {activeSupportService.kind === 'acknowledged' ? 'acknowledgement' : activeSupportService.kind === 'first_response_ready' ? 'response readiness' : 'service change'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportService} type="button">Cancel</button></div>
+      </form> : null}
+      {activeSupportResolution ? <form aria-label={`Resolve support case ${activeSupportResolution.caseId}`} className="order-return-editor" onSubmit={onReviewSupportResolution}>
+        <div className="order-return-copy"><span className="core-eyebrow">Resolve help case</span><strong>{activeSupportResolution.caseId}</strong><small>Record the reviewed outcome only. External communication and financial action remain separate.</small></div>
+        <label>Outcome<select disabled={disabled} onChange={(event) => onChangeSupportResolution({ outcome: event.target.value as CommerceSupportResolutionOutcome })} value={activeSupportResolution.outcome}><option value="information_provided">Information provided</option><option value="replacement_review_required">Replacement review required</option><option value="refund_review_required">Refund review required</option><option value="no_action">No action</option></select></label>
+        <label>Resolution note<textarea disabled={disabled} id={`support-resolution-${activeSupportResolution.caseId}`} maxLength={300} onChange={(event) => onChangeSupportResolution({ note: event.target.value })} required rows={2} value={activeSupportResolution.note} /></label>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review resolution</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
+      </form> : null}
+      {activeCorrectionDraft ? <form aria-label={`Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
+        <div className="order-return-copy"><span className="core-eyebrow">Correction note</span><strong>{order.id}</strong><small>{activeCorrectionDraft.sourceIntent ? `Prepared from customer request ${activeCorrectionDraft.sourceIntent.id}. Recheck the calculation; request details stay locked.` : 'The original invoice stays unchanged.'} This records review evidence; it does not post externally.</small></div>
+        <label>Type<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ kind: event.target.value as CommerceCorrectionKind })} value={activeCorrectionDraft.kind}><option value="credit">Credit · reduce balance</option><option value="debit">Debit · increase balance</option></select></label>
+        <label>Reason<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ reasonCode: event.target.value as CommerceCorrectionReasonCode })} value={activeCorrectionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
+        <label>Amount before tax<input disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} id="order-correction-amount" inputMode="numeric" min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
+        {correctionCalculation ? <small role="note">Tax {formatMoney(correctionCalculation.taxMmk)} · note total {formatMoney(correctionCalculation.totalMmk)} · same tax snapshot as the original invoice</small> : null}
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled || !correctionCalculation} type="submit">Review correction</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
       </form> : null}
     </article>})}</div>
     {pageCount > 1 ? <nav aria-label="Closed order pages" className="order-archive-pagination">
@@ -5310,6 +7514,9 @@ const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   quality_hold_placed: 'Quality hold placed',
   quality_hold_released: 'Quality hold released',
   machine_state_changed: 'Machine state changed',
+  equipment_master_imported: 'Equipment master imported',
+  equipment_commissioned: 'Equipment commissioned',
+  equipment_maintenance_strategy_saved: 'Maintenance strategy saved',
   downtime_started: 'Downtime started',
   downtime_ended: 'Downtime ended',
   maintenance_started: 'Maintenance started',
@@ -5371,16 +7578,27 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const navigate = useNavigate()
   const [production, mutateProduction, productionStorageError, workspaceMode, managedVersion, managedWorkspaceId, productionCanWrite] = useProductionWorkspace(managedIdentity)
   const [relatedCommerce] = useCommerceWorkspace(managedIdentity)
+  const relatedCommerceRef = useRef(relatedCommerce)
+  const productionRef = useRef(production)
+  useEffect(() => { relatedCommerceRef.current = relatedCommerce }, [relatedCommerce])
+  useEffect(() => { productionRef.current = production }, [production])
+  const [localPlantIndustryPackId] = useState(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+  const plantIndustryPackId = production.openingPlan?.industryPackId ?? localPlantIndustryPackId
+  const plantOrderScopeWorkspaceId = managedIdentity
+    ? managedWorkspaceId || managedIdentity.workspaceId
+    : 'local-sample'
   const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
-  const [jobId, setJobId] = useState(production.jobs[0]?.id ?? '')
+  const [jobId, setJobId] = useState('')
   const [holdJobId, setHoldJobId] = useState(production.jobs.find((job) => !job.qualityHold && !job.closure)?.id ?? '')
   const [handoffShiftRef, setHandoffShiftRef] = useState('')
   const [shiftHandoff, setShiftHandoff] = useState<ProductionShiftHandoff | null>(null)
+  const [genealogyJobId, setGenealogyJobId] = useState(production.jobs[0]?.id ?? '')
   const [quantity, setQuantity] = useState(1)
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState('')
   const [outputOpen, setOutputOpen] = useState(false)
+  const [plantBatchOpen, setPlantBatchOpen] = useState(false)
   const [materialDraft, setMaterialDraft] = useState({
     jobId: production.jobs.find((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)?.id ?? '',
     materialRef: '',
@@ -5397,12 +7615,26 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [summary, setSummary] = useState('')
   const [issueClock, setIssueClock] = useState(Date.now)
   const [issueDialogOpen, setIssueDialogOpen] = useState(false)
+  const [issueMaintenanceFindingSource, setIssueMaintenanceFindingSource] = useState<ProductionMaintenanceFindingSource | null>(null)
+  const [maintenanceCorrectiveDraft, setMaintenanceCorrectiveDraft] = useState<{
+    issueId: string
+    correctiveAction: string
+    verificationResult: string
+    finalDisposition: ProductionMaintenanceReturnToService
+  } | null>(null)
   const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
   const [downtimeDialogOpen, setDowntimeDialogOpen] = useState(false)
   const [downtimeMachineId, setDowntimeMachineId] = useState(production.machines[0]?.id ?? '')
   const [maintenanceDialogOpen, setMaintenanceDialogOpen] = useState(false)
   const [maintenanceMachineId, setMaintenanceMachineId] = useState(production.machines[0]?.id ?? '')
   const [maintenanceOwner, setMaintenanceOwner] = useState('')
+  const [maintenanceCompletionDraft, setMaintenanceCompletionDraft] = useState<{
+    startActionId: string
+    outcome: ProductionMaintenanceOutcome
+    findings: string
+    procedureCompleted: boolean
+    returnToService: ProductionMaintenanceReturnToService
+  } | null>(null)
   const [jobDraft, setJobDraft] = useState<{ id: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string }>({
     id: '',
     line: '',
@@ -5412,6 +7644,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     priority: 'normal',
     dueAt: defaultJobDueInput(),
   })
+  const [shopDemandSignals, setShopDemandSignals] = useState<ShopProductionDemandSignal[]>([])
+  const [shopDemandIssue, setShopDemandIssue] = useState('')
+  const [selectedShopDemandDigest, setSelectedShopDemandDigest] = useState('')
+  const jobDisclosureRef = useRef<HTMLDetailsElement>(null)
   const [plantJobImportReview, setPlantJobImportReview] = useState<PlantJobImportReview | null>(null)
   const [plantJobImportSourceName, setPlantJobImportSourceName] = useState('')
   const [scheduleDraft, setScheduleDraft] = useState<{ jobId: string; owner: string; priority: ProductionJobPriority; dueAt: string } | null>(null)
@@ -5433,6 +7669,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [planBusy, setPlanBusy] = useState(false)
   const [planError, setPlanError] = useState('')
   const issueDialogRef = useRef<HTMLDialogElement>(null)
+  const maintenanceCorrectiveDialogRef = useRef<HTMLDialogElement>(null)
   const issueTriggerRef = useRef<HTMLButtonElement>(null)
   const machineDialogRef = useRef<HTMLDialogElement>(null)
   const machineTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -5440,6 +7677,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const downtimeTriggerRef = useRef<HTMLButtonElement>(null)
   const maintenanceDialogRef = useRef<HTMLDialogElement>(null)
   const maintenanceTriggerRef = useRef<HTMLButtonElement>(null)
+  const maintenanceMachineSelectRef = useRef<HTMLSelectElement>(null)
+  const maintenanceOutcomeRef = useRef<HTMLSelectElement>(null)
   const scheduleDialogRef = useRef<HTMLDialogElement>(null)
   const scheduleTriggerRef = useRef<HTMLButtonElement | null>(null)
   const outputJobSelectRef = useRef<HTMLSelectElement>(null)
@@ -5488,7 +7727,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Material', shiftHandoff.materialEntries.length > 0 ? `${shiftHandoff.materialEntries.length} traced` : 'Need same-shift trace'],
     ['Quality', shiftHandoff.activeHolds.length + shiftHandoff.openQualityIssues.length === 0 ? 'Clear' : `${shiftHandoff.activeHolds.length + shiftHandoff.openQualityIssues.length} blockers`],
     ['Urgent', shiftHandoff.priorityProblems.length === 0 ? 'Clear' : `${shiftHandoff.priorityProblems.length} open`],
-    ['WCM', shiftHandoff.activeDowntime.length + shiftHandoff.activeMaintenance.length === 0 ? 'Clear' : `${shiftHandoff.activeDowntime.length + shiftHandoff.activeMaintenance.length} open`],
+    ['Maintenance', shiftHandoff.activeDowntime.length + shiftHandoff.activeMaintenance.length === 0 ? 'Clear' : `${shiftHandoff.activeDowntime.length + shiftHandoff.activeMaintenance.length} open`],
   ] as const : []
   const shiftCloseReady = Boolean(shiftHandoffIsCurrent
     && shiftHandoff
@@ -5500,6 +7739,19 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     && shiftHandoff.priorityProblems.length === 0
     && shiftHandoff.activeDowntime.length === 0
     && shiftHandoff.activeMaintenance.length === 0)
+  const selectedGenealogyJobId = production.jobs.some((job) => job.id === genealogyJobId)
+    ? genealogyJobId
+    : production.jobs[0]?.id ?? ''
+  const batchGenealogyDownload = useMemo(() => {
+    if (!selectedGenealogyJobId) return null
+    const report = buildProductionBatchGenealogy(production, selectedGenealogyJobId)
+    if (!report) return null
+    return {
+      report,
+      filename: `supermega-plant-genealogy-${report.job.id}-${report.digest.slice(7, 15)}.json`,
+      href: `data:application/json;charset=utf-8,${encodeURIComponent(formatProductionBatchGenealogy(report))}`,
+    }
+  }, [production, selectedGenealogyJobId])
   const observedMachine = machineObservation
     ? production.machines.find((machine) => machine.id === machineObservation.machineId)
     : undefined
@@ -5518,20 +7770,33 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const maintenanceRecords = productionMaintenanceRecords(production)
   const openMaintenanceRecords = maintenanceRecords.filter((record) => !record.completion)
   const recentMaintenanceRecords = maintenanceRecords.filter((record) => record.completion).slice(0, 3)
+  const maintenanceFindingSources = new Map(recentMaintenanceRecords.flatMap((record) => {
+    const source = record.completion ? productionMaintenanceFindingSource(production, record.completion.actionId) : null
+    return source ? [[record.completion?.actionId ?? '', source] as const] : []
+  }))
+  const selectedMaintenanceCompletionRecord = maintenanceCompletionDraft
+    ? openMaintenanceRecords.find((record) => record.startActionId === maintenanceCompletionDraft.startActionId)
+    : undefined
+  const maintenanceCompletionFindings = maintenanceCompletionDraft?.findings.trim() ?? ''
+  const maintenanceCompletionIsValid = Boolean(maintenanceCompletionDraft
+    && selectedMaintenanceCompletionRecord?.strategy
+    && maintenanceCompletionFindings
+    && maintenanceCompletionFindings.length <= 360
+    && maintenanceCompletionDraft.procedureCompleted
+    && (maintenanceCompletionDraft.outcome !== 'completed' || maintenanceCompletionDraft.returnToService === 'recommended'))
   const maintenanceMachineIds = new Set(openMaintenanceRecords.map((record) => record.machineId))
+  const maintenanceDueQueue = productionMaintenanceDueQueue(production, new Date(issueClock).toISOString())
+  const readyMaintenanceDueItems = maintenanceDueQueue.items.filter((item) => !maintenanceMachineIds.has(item.assetId)).slice(0, 6)
+  const overdueMaintenanceCount = readyMaintenanceDueItems.filter((item) => item.status === 'overdue').length
   const availableMaintenanceMachines = production.machines.filter((machine) => !maintenanceMachineIds.has(machine.id))
   const selectedMaintenanceMachineId = availableMaintenanceMachines.some((machine) => machine.id === maintenanceMachineId)
     ? maintenanceMachineId
     : availableMaintenanceMachines[0]?.id ?? ''
   const selectedMaintenanceMachine = availableMaintenanceMachines.find((machine) => machine.id === selectedMaintenanceMachineId)
-  const plantRows = [
-    ['Jobs', `${activeJobs.length} active`],
-    ['Output', `${production.jobs.reduce((total, job) => total + job.output, 0).toLocaleString()} good`],
-    ['Quality', `${heldJobs.length} held`],
-    ['WCM', `${openDowntimeIntervals.length + openMaintenanceRecords.length} open`],
-    ['Trace', `${materialEntries.length} material`],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
-  ] as const
+  const selectedMaintenanceStrategy = production.equipmentMaster?.assets.find((asset) => asset.id === selectedMaintenanceMachineId)?.maintenanceStrategy
+  const selectedMaintenanceOwner = selectedMaintenanceStrategy?.maintenanceOwner ?? maintenanceOwner.trim()
+  const selectedShopDemand = shopDemandSignals.find((signal) => signal.sourceDigest === selectedShopDemandDigest)
+  const nextShopDemand = shopDemandSignals.find((signal) => !signal.existingActiveJobIds.length) ?? shopDemandSignals[0]
   const plantAgentJob = !productionCanWrite
     ? 'Restore Plant write readiness'
     : urgentIssueCount
@@ -5539,48 +7804,25 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : heldJobs.length
         ? 'Review quality holds'
         : openDowntimeIntervals.length + openMaintenanceRecords.length
-          ? 'Close WCM records'
+          ? 'Close maintenance records'
           : activeJobs.length
             ? 'Record next job output'
             : !plantHandoffReady
-              ? 'Build shift handoff'
+              ? 'Prepare shift close'
               : 'Add next Plant job'
   const plantAgentReason = !productionCanWrite
-    ? 'The workspace must confirm durable storage or managed writes before records can change.'
+    ? 'Company data must confirm durable storage before records can change.'
     : urgentIssueCount
       ? `${urgentIssueCount} urgent issue${urgentIssueCount === 1 ? '' : 's'} need owner-reviewed containment.`
       : heldJobs.length
         ? `${heldJobs.length} job${heldJobs.length === 1 ? '' : 's'} held by quality need evidence review.`
         : openDowntimeIntervals.length + openMaintenanceRecords.length
-          ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} WCM record${openDowntimeIntervals.length + openMaintenanceRecords.length === 1 ? '' : 's'} remain open.`
+          ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} maintenance record${openDowntimeIntervals.length + openMaintenanceRecords.length === 1 ? '' : 's'} remain open.`
           : activeJobs.length
             ? `${activeJobs[0].id} is the next active job by priority and due time.`
             : !plantHandoffReady
-              ? 'The latest Plant revision needs a shift handoff before the next operator relies on it.'
+              ? 'The latest Plant revision needs a shift close file before the next operator relies on it.'
               : 'No active production job is waiting, so the next controlled step is planning.'
-  const plantOwnerGate = !productionCanWrite
-    ? 'Owner opens Settings or reloads before retrying.'
-    : urgentIssueCount
-      ? 'Human confirms problem, containment, reason, and evidence.'
-      : heldJobs.length
-        ? 'Quality owner releases or keeps the hold with evidence.'
-        : openDowntimeIntervals.length + openMaintenanceRecords.length
-          ? 'Maintenance owner records outcome; no equipment command is sent.'
-          : activeJobs.length
-            ? 'Operator reviews output, shift, reason, and evidence before posting.'
-            : !plantHandoffReady
-              ? 'Supervisor reviews the read-only handoff before use.'
-              : 'Owner approves the job plan before Plant records change.'
-  const plantAgentAction = !productionCanWrite
-    ? { label: 'Open Settings', to: '/settings/#controls' }
-    : urgentIssueCount || heldJobs.length || openDowntimeIntervals.length + openMaintenanceRecords.length || !plantHandoffReady
-      ? { label: 'Open control', to: '/plant/?tab=control' }
-      : { label: activeJobs.length ? 'Open jobs' : 'Plan job', to: '/plant/?tab=production' }
-  const plantAgentRows = [
-    ['Agent job', plantAgentJob],
-    ['Reason', plantAgentReason],
-    ['Owner gate', plantOwnerGate],
-  ] as const
   const plantControlNext = !productionCanWrite
     ? 'Restore write readiness'
     : urgentIssueCount
@@ -5588,29 +7830,29 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : heldJobs.length
         ? 'Clear quality holds'
         : openDowntimeIntervals.length + openMaintenanceRecords.length
-          ? 'Close WCM work'
+          ? 'Close maintenance work'
           : activeJobs.length
             ? 'Record next output'
             : !plantHandoffReady
-              ? 'Build shift handoff'
+              ? 'Prepare shift close'
               : 'Plan next job'
   const plantControlRows = [
     ['Jobs', activeJobs.length ? `${activeJobs.length} active` : 'Plan'],
     ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
-    ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
+    ['Maintenance', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
     ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'No trace'],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
-    ['Write gate', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
+    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+    ['Write status', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
   const plantLifecycleRows = [
     ['Plan', activeJobs.length ? `${activeJobs.length} active` : 'Add job'],
     ['Execute', activeJobs[0] ? `${activeJobs[0].id} next` : 'No active job'],
     ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
-    ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
+    ['Maintenance', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace'],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
   ] as const
-  const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and handoff writes.'
+  const plantControlBoundary = 'Manager reviews production, quality, maintenance, material, and shift-close changes.'
   const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
   const plantAutopilotStage = !productionCanWrite
     ? 'Restore Plant readiness'
@@ -5621,34 +7863,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : heldJobs.length
           ? 'Review quality hold'
           : openWcmCount
-            ? 'Close WCM record'
+            ? 'Close maintenance record'
             : activeJobs.length
               ? 'Record production evidence'
               : !plantHandoffReady
-                ? 'Build shift handoff'
+                ? 'Prepare shift close'
                 : 'Plan next job'
-  const plantAutopilotNextAction = !productionCanWrite
-    ? 'Open managed activation controls'
-    : pendingAction
-      ? 'Finish owner approval'
-      : urgentIssueCount
-        ? 'Open quality or safety containment'
-        : heldJobs.length
-          ? 'Open quality review'
-          : openWcmCount
-            ? 'Open WCM controls'
-            : activeJobs.length
-              ? 'Open next job output'
-              : !plantHandoffReady
-                ? 'Open handoff builder'
-                : 'Open job planning'
-  const plantAutopilotRows = [
-    ['Track', pendingAction ? 'Owner review' : urgentIssueCount || heldJobs.length ? 'Quality' : openWcmCount ? 'WCM' : activeJobs.length ? 'Execution' : !plantHandoffReady ? 'Handoff' : 'Planning'],
-    ['Stage', plantAutopilotStage],
-    ['Next', plantAutopilotNextAction],
-    ['Learning', 'Records behavior only'],
-    ['Boundary', 'No equipment write'],
-  ] as const
   const mesDispatchStation = activeJobs[0]?.line ?? selectedDowntimeMachine?.name ?? selectedMaintenanceMachine?.name ?? 'Plant floor'
   const mesDispatchTarget = urgentIssueCount
     ? `${urgentIssueCount} urgent issue${urgentIssueCount === 1 ? '' : 's'}`
@@ -5658,7 +7878,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         ? `${activeJobs[0].id} / ${(activeJobs[0].target - activeJobs[0].output - (activeJobs[0].scrap ?? 0)).toLocaleString()} left`
         : plantHandoffReady
           ? 'Next plan'
-          : 'Shift handoff'
+          : 'Shift close'
   const mesDispatchBlocker = !productionCanWrite
     ? 'Write readiness'
     : pendingAction
@@ -5668,16 +7888,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : heldJobs.length
           ? 'Quality hold'
           : openWcmCount
-            ? 'WCM close'
+            ? 'Maintenance close'
             : activeJobs.length && !materialEntries.length
               ? 'Trace start'
               : !plantHandoffReady
-                ? 'Handoff'
+                ? 'Shift close'
                 : 'None'
   const mesDispatchEvidence = materialEntries.length
     ? `${materialEntries.length} material trace`
     : plantHandoffReady
-      ? 'Handoff current'
+      ? 'Shift close current'
       : activeJobs.length
         ? 'Need trace'
         : 'Plan evidence'
@@ -5686,30 +7906,37 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Target', mesDispatchTarget],
     ['Blocker', mesDispatchBlocker],
     ['Evidence', mesDispatchEvidence],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Build'],
-    ['Boundary', 'No equipment write'],
+    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Build'],
+    ['Safety', 'Review first'],
   ] as const
   const openMaterialIssues = openIssues.filter((issue) => issue.kind === 'materials')
-  const shopLowStock = relatedCommerce.items.filter((item) => item.onHand <= item.reorderAt)
-  const orderExecutionProjection = production.orderExecution ? projectPlantOrder(production.orderExecution) : null
+  const primaryOrderExecution = productionOrderPortfolioEntries(production)[0]?.execution ?? null
+  const orderExecutionProjection = primaryOrderExecution ? projectPlantOrder(primaryOrderExecution) : null
+  const materialRequirements = primaryOrderExecution ? projectProductionMaterialRequirements(primaryOrderExecution, relatedCommerce) : null
   const plantMrpNext = !productionCanWrite
     ? 'Restore Plant readiness'
     : openMaterialIssues.length
       ? 'Resolve material blockers'
-      : orderExecutionProjection?.latestAvailability?.shortfalls.length
-        ? 'Check BOM shortfalls'
-        : shopLowStock.length
-          ? 'Review Shop supply'
-          : activeJobs.length && !materialEntries.length
-            ? 'Record first material use'
-            : 'Materials ready for review'
+      : !materialRequirements
+        ? 'Set up the reviewed BOM'
+        : materialRequirements.status === 'mapping_required'
+          ? 'Map BOM materials to Shop stock'
+          : materialRequirements.status === 'shortage'
+            ? 'Review purchase quantities'
+            : materialRequirements.status === 'supply_at_risk'
+              ? 'Expedite or re-date incoming supply'
+            : materialRequirements.status === 'covered_by_open_po'
+              ? 'Monitor incoming purchase orders'
+              : materialRequirements.status === 'ready_to_issue'
+                ? 'Issue reviewed Shop stock'
+                : 'Material supply fulfilled'
   const plantMrpRows = [
-    ['Demand', activeJobs.length ? `${activeJobs.length} active jobs` : 'No active job'],
-    ['BOM', orderExecutionProjection?.plan ? `${orderExecutionProjection.materials.length} materials` : 'Use order plan'],
+    ['Demand', materialRequirements ? `${materialRequirements.job.targetQuantity} ${materialRequirements.job.product}` : activeJobs.length ? `${activeJobs.length} active jobs` : 'No active job'],
+    ['BOM', materialRequirements ? `${materialRequirements.summary.materials} materials` : orderExecutionProjection?.plan ? `${orderExecutionProjection.materials.length} materials` : 'Use order plan'],
     ['Availability', orderExecutionProjection?.latestAvailability ? orderExecutionProjection.latestAvailability.passed ? 'Checked clear' : `${orderExecutionProjection.latestAvailability.shortfalls.length} short` : 'Needs check'],
-    ['Shop supply', shopLowStock.length ? `${shopLowStock.length} low SKU` : 'Clear'],
+    ['Shop mapping', materialRequirements?.summary.mappingRequired ? `${materialRequirements.summary.mappingRequired} required` : materialRequirements ? 'Complete' : 'Not planned'],
+    ['Supply', materialRequirements?.summary.shortages ? `${materialRequirements.summary.shortages} shortage` : materialRequirements?.summary.supplyAtRisk ? `${materialRequirements.summary.supplyAtRisk} at risk` : materialRequirements?.summary.coveredByOpenPo ? `${materialRequirements.summary.coveredByOpenPo} on PO` : materialRequirements?.summary.readyToIssue ? `${materialRequirements.summary.readyToIssue} ready` : materialRequirements?.summary.fulfilled ? 'Fulfilled' : 'Not planned'],
     ['Issue gate', openMaterialIssues.length ? `${openMaterialIssues.length} open` : 'Clear'],
-    ['Trace', materialEntries.length ? `${materialEntries.length} consumed` : 'Not started'],
   ] as const
   const openQualityIssues = openIssues.filter((issue) => issue.kind === 'quality')
   const productionGoodUnits = production.jobs.reduce((total, job) => total + job.output, 0)
@@ -5723,9 +7950,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : heldJobs.length || openQualityIssues.length
           ? 'Resolve quality before cost'
           : openWcmCount
-            ? 'Close WCM before cost'
+            ? 'Close maintenance before cost'
             : !plantHandoffReady
-              ? 'Build cost handoff'
+              ? 'Prepare cost review'
               : completedJobs.length
                 ? 'Cost package ready for review'
                 : 'Run evidence ready'
@@ -5734,7 +7961,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} units` : 'None'],
     ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'Missing'],
     ['Quality', heldJobs.length || openQualityIssues.length ? 'Blocked' : 'Clear'],
-    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Maintenance', openWcmCount ? `${openWcmCount} open` : 'Closed'],
     ['Cost gate', plantHandoffReady && materialEntries.length && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked'],
   ] as const
   const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && materialEntries.length && plantHandoffReady && !heldJobs.length && !openQualityIssues.length && !openWcmCount)
@@ -5743,8 +7970,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
     ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} scrap` : 'None'],
     ['Materials', materialEntries.length ? `${materialEntries.length} trace rows` : 'Need trace'],
-    ['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantHandoffReady ? 'Evidence ready' : 'Need handoff'],
-    ['ERP handoff', plantCostPacketReady ? 'Review package' : 'Blocked'],
+    ['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantHandoffReady ? 'Evidence ready' : 'Need shift close'],
+    ['Cost file', plantCostPacketReady ? 'Review package' : 'Blocked'],
   ] as const
   const plantQualityReleaseNext = !productionCanWrite
     ? 'Restore Plant readiness'
@@ -5753,18 +7980,18 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : heldJobs.length || openQualityIssues.length
         ? 'Resolve quality holds'
         : openWcmCount
-          ? 'Close WCM work'
+          ? 'Close maintenance work'
           : openMaterialIssues.length || !materialEntries.length
             ? 'Complete trace evidence'
             : !plantHandoffReady
-              ? 'Build release handoff'
+              ? 'Prepare release review'
               : 'Release package ready'
   const plantQualityReleaseRows = [
     ['Holds', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
     ['Quality', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
-    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Maintenance', openWcmCount ? `${openWcmCount} open` : 'Closed'],
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Needed'],
+    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Needed'],
     ['Gate', productionCanWrite && !pendingAction ? 'Owner release' : 'Locked'],
   ] as const
   const qualityIssuesWithContainment = openQualityIssues.filter((issue) => Boolean(issue.owner && issue.dueAt && issue.containment))
@@ -5794,9 +8021,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     : pendingAction
       ? 'Approve pending Plant action'
       : openQualityIssues.length || heldJobs.length
-        ? 'Resolve ISO evidence'
+        ? 'Resolve audit quality'
         : openWcmCount
-          ? 'Close WCM evidence'
+          ? 'Close maintenance evidence'
           : !materialEntries.length
             ? 'Record traceability'
             : !plantHandoffReady
@@ -5805,13 +8032,66 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 ? 'Audit dossier ready'
                 : 'Prepare cost dossier'
   const plantComplianceDossierRows = [
-    ['ISO', openQualityIssues.length || heldJobs.length ? `${openQualityIssues.length + heldJobs.length} blocked` : 'Clear'],
-    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Audit quality', openQualityIssues.length || heldJobs.length ? `${openQualityIssues.length + heldJobs.length} blocked` : 'Clear'],
+    ['Maintenance', openWcmCount ? `${openWcmCount} open` : 'Closed'],
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
     ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
     ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Build'],
-    ['Boundary', 'No auto release'],
+    ['Safety', 'Review first'],
   ] as const
+  const plantTodayState = !productionCanWrite
+    ? 'blocked'
+    : pendingAction || urgentIssueCount || heldJobs.length || openIssues.length || openWcmCount
+      ? 'attention'
+      : 'ready'
+  const plantTodayHeadline = pendingAction
+    ? 'One Plant change needs approval'
+    : plantAgentJob
+  const plantTodayAction = !productionCanWrite
+    ? 'Restore write access'
+    : pendingAction
+      ? 'Finish approval'
+      : urgentIssueCount || heldJobs.length || openWcmCount
+        ? 'Open Plant control'
+        : activeJobs.length
+          ? 'Record next output'
+          : !shiftHandoffIsCurrent
+            ? 'Prepare shift close'
+            : 'Plan next job'
+  const plantTodayMetrics = [
+    ['Active jobs', activeJobs.length ? `${activeJobs.length} running` : 'None'],
+    ['Good output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} units` : 'None yet'],
+    ['Problems & quality', openIssues.length + heldJobs.length ? `${openIssues.length + heldJobs.length} open` : 'Clear'],
+    ['Maintenance', openWcmCount ? `${openWcmCount} open` : overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : 'Clear'],
+    ['Material trace', materialEntries.length ? `${materialEntries.length} records` : 'Not started'],
+    ['Shift close', shiftHandoffIsCurrent ? 'Current' : 'Needs update'],
+  ] as const
+  const plantTodaySource = managedIdentity
+    ? `Company Plant · revision ${managedVersion ?? production.revision}`
+    : 'Local sample records on this device'
+  const plantTodayNotice = productionStorageError
+    ? `Writes paused: ${productionStorageError}`
+    : notice || (productionCanWrite
+      ? 'Every production, quality, material, maintenance, and equipment-status change still requires accountable review.'
+      : 'Writes are paused until durable storage and write locking are confirmed.')
+
+  useEffect(() => {
+    let current = true
+    void projectShopProductionDemand(relatedCommerce, production.jobs)
+      .then((signals) => {
+        if (!current) return
+        setShopDemandSignals(signals)
+        setShopDemandIssue('')
+        setSelectedShopDemandDigest((digest) => digest && signals.some((signal) => signal.sourceDigest === digest) ? digest : '')
+      })
+      .catch((error) => {
+        if (!current) return
+        setShopDemandSignals([])
+        setShopDemandIssue(error instanceof Error ? error.message : 'Shop demand could not be verified.')
+        setSelectedShopDemandDigest('')
+      })
+    return () => { current = false }
+  }, [production.jobs, relatedCommerce])
 
   useEffect(() => {
     const timer = window.setInterval(() => setIssueClock(Date.now()), 60_000)
@@ -5827,6 +8107,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     if (!issueDialogOpen && dialog.open) dialog.close()
   }, [issueDialogOpen, tab])
+
+  useEffect(() => {
+    const dialog = maintenanceCorrectiveDialogRef.current
+    if (!dialog) return
+    if (maintenanceCorrectiveDraft && !dialog.open) dialog.showModal()
+    if (!maintenanceCorrectiveDraft && dialog.open) dialog.close()
+  }, [maintenanceCorrectiveDraft, tab])
 
   useEffect(() => {
     const dialog = machineDialogRef.current
@@ -5910,7 +8197,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         machines: [{ id: machineId, name: machineName, state: 'running' }],
       }))
       setJobId(firstJobId)
-      setNotice(`Managed Plant initialized with ${firstJobId}.`)
+      setNotice(`Company Plant initialized with ${firstJobId}.`)
     } catch (error) {
       setPlanError(error instanceof Error ? error.message : 'The managed Plant plan was not initialized.')
     } finally {
@@ -5922,7 +8209,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (managedIdentity && effectiveMode !== 'managed-ready') {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Plant setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Company Plant setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">Start with one real job and one machine. No browser demo jobs, issues, equipment, or output are copied into this workspace.</p>
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedProduction(formEvent)}>
         <div className="form-row"><label>Job ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, jobId: inputEvent.target.value }))} placeholder="JOB-001" required value={planDraft.jobId} /></label><label>Line or team<input maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, line: inputEvent.target.value }))} placeholder="Line 01" required value={planDraft.line} /></label></div>
@@ -5933,11 +8220,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <label>Opening plan reason<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How this job and target were confirmed" required value={planDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Shift plan, work order, or count sheet" required value={planDraft.evidenceReference} /></label>
         <div className="form-actions"><Link className="text-link" to="/settings/">Workspace settings</Link><button className="core-button primary" disabled={planBusy} type="submit">{planBusy ? 'Creating…' : 'Create managed plan'}</button></div>
-        <p className="form-notice" role="status">{planError || productionStorageError || `Authenticated as ${managedIdentity.email}. The tenant API records this initialization.`}</p>
+        <p className="form-notice" role="status">{planError || productionStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
       </form>
     </section>
     return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Plant</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Company Plant</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{productionStorageError || 'Plant remains read-only until the authenticated tenant state is confirmed.'}</p>
       <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
     </section>
@@ -5980,7 +8267,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       throw error
     }
     if (!managedIdentity) setActions((current) => [record, ...current])
-    setNotice(managedIdentity ? `${record.id} confirmed by the managed Plant API.` : `${record.id} persisted with attributed Plant evidence.`)
+    setNotice(managedIdentity ? `${record.id} confirmed in Company Plant. ${pendingAction.summary}`
+      : `${pendingAction.summary} completed. It was persisted with attributed Plant evidence.`)
     setPendingAction(null)
   }
 
@@ -6008,6 +8296,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       summary: `Record ${recordedQuantity} ${resultLabel} for ${recordedJobId} · ${recordedShiftRef}`,
       before: `${selectedJob.output} good · ${recordedScrap} scrap · ${recordedShiftOutput.goodUnits} good / ${recordedShiftOutput.scrapUnits} scrap this shift`,
       after: `${nextGood} good · ${nextScrap} scrap · ${recordedShiftOutput.goodUnits + (recordedOutputKind === 'good' ? recordedQuantity : 0)} good / ${recordedShiftOutput.scrapUnits + (recordedOutputKind === 'scrap' ? recordedQuantity : 0)} scrap this shift`,
+      actorSuggestion: managedIdentity ? undefined : 'Plant operator',
+      reasonSuggestion: `${recordedOutputKind === 'scrap' ? 'Scrap' : 'Good output'} reviewed for ${recordedJobId} during ${recordedShiftRef}.`,
+      evidenceReferenceSuggestion: `Plant shift ${recordedShiftRef} · ${recordedJobId}`,
+      evidenceReferenceLocked: true,
       apply: async (record) => {
         await mutateProduction('production.output.recorded', record.commandId, productionActionProof(record), (current) => recordedOutputKind === 'scrap'
           ? recordProductionScrap(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record))
@@ -6019,6 +8311,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   function openJobOutput(job: ProductionJob, trigger: HTMLButtonElement) {
     outputTriggerRef.current = trigger
     setJobId(job.id)
+    if (!managedIdentity && !shiftRef.trim()) {
+      const suggestedShiftRef = shiftReferencePlaceholder()
+      setShiftRef(suggestedShiftRef)
+      setHandoffShiftRef(suggestedShiftRef)
+    }
     setOutputOpen(true)
     requestAnimationFrame(() => {
       outputJobSelectRef.current?.scrollIntoView({ block: 'center' })
@@ -6111,24 +8408,79 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const owner = jobDraft.owner.trim()
     const jobTarget = Number(jobDraft.target)
     const dueAt = new Date(jobDraft.dueAt)
-    if (!id || !line || !product || !owner || owner.length > 120 || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
+    if (selectedShopDemandDigest && !selectedShopDemand) {
+      setNotice('Shop demand changed after selection. Choose the current signal again before review.')
+      return
+    }
+    if (selectedShopDemand && (product !== selectedShopDemand.productName
+      || jobTarget !== selectedShopDemand.recommendedBatchUnits
+      || selectedShopDemand.existingActiveJobIds.length)) {
+      setNotice('The Shop-bound product, quantity, or existing Plant coverage changed. Reopen the current demand signal.')
+      return
+    }
+    if (!id || !line || !product || !owner || owner.length > 120 || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= issueClock) {
       setNotice('Enter a unique job ID, line or team, product or batch, responsible owner, whole-number target, and future due time.')
       return
     }
     const canonicalDueAt = dueAt.toISOString()
-    const job: ProductionJob = { id, line, product, target: jobTarget, output: 0, owner, priority: jobDraft.priority, dueAt: canonicalDueAt }
+    const demandSignal = selectedShopDemand
+    const job: ProductionJob = {
+      id,
+      line,
+      product,
+      target: jobTarget,
+      output: 0,
+      owner,
+      priority: jobDraft.priority,
+      dueAt: canonicalDueAt,
+      ...(demandSignal ? { shopDemandSource: productionShopDemandSource(demandSignal) } : {}),
+    }
     queueAction({
       kind: 'production_job',
       subjectId: id,
       summary: `Create ${id} for ${product}`,
-      before: 'No production job',
-      after: `${line} · owner ${owner} · ${productionJobPriorityLabels[jobDraft.priority]} · due ${formatIssueDue(canonicalDueAt)} · target ${jobTarget.toLocaleString()}`,
+      before: demandSignal ? `Shop ${demandSignal.operatingContext.operatingUnitLocationId} · ${demandSignal.activeDemandUnits} active demand · ${demandSignal.replenishmentGapUnits} replenishment gap · ${demandSignal.sourceOrderIds.length || 'reorder'} source ${demandSignal.sourceOrderIds.length === 1 ? 'order' : 'orders'}` : 'No production job',
+      after: `${line} · owner ${owner} · ${productionJobPriorityLabels[jobDraft.priority]} · due ${formatIssueDue(canonicalDueAt)} · target ${jobTarget.toLocaleString()}${demandSignal ? ' · governed Shop demand' : ''}`,
       apply: async (record) => {
-        await mutateProduction('production.job.created', record.commandId, productionActionProof(record), (current) => registerProductionJob(current, job, productionActionProof(record)))
+        if (demandSignal && !await shopProductionDemandIsCurrent(demandSignal, relatedCommerceRef.current, productionRef.current.jobs)) {
+          throw new PlantReviewRequiredError('Shop orders, stock, reorder level, or Plant coverage changed. Nothing was written; review the current demand again.')
+        }
+        const confirmedProof = productionActionProof(record)
+        const boundProof = demandSignal ? { ...confirmedProof, evidenceReference: demandSignal.evidenceReference } : confirmedProof
+        await mutateProduction('production.job.created', record.commandId, boundProof, (current) => {
+          if (demandSignal && current.jobs.some((candidate) => !candidate.closure
+            && !candidate.qualityHold
+            && candidate.output + (candidate.scrap ?? 0) < candidate.target
+            && (candidate.product.toLocaleLowerCase('en-US') === demandSignal.productName.toLocaleLowerCase('en-US')
+              || candidate.product.toLocaleUpperCase('en-US') === demandSignal.sku.toLocaleUpperCase('en-US')))) return null
+          return registerProductionJob(current, job, boundProof)
+        })
         setJobId(id)
         setJobDraft({ id: '', line: '', product: '', target: '', owner: '', priority: 'normal', dueAt: defaultJobDueInput() })
+        setSelectedShopDemandDigest('')
       },
     })
+  }
+
+  function selectShopDemand(signal: ShopProductionDemandSignal) {
+    if (signal.existingActiveJobIds.length) {
+      setJobId(signal.existingActiveJobIds[0])
+      setNotice(`${signal.productName} is already covered by ${signal.existingActiveJobIds.join(', ')}.`)
+      return
+    }
+    setSelectedShopDemandDigest(signal.sourceDigest)
+    setJobDraft({
+      id: signal.suggestedJobId,
+      line: production.jobs[0]?.line ?? 'Line 01',
+      product: signal.productName,
+      target: String(signal.recommendedBatchUnits),
+      owner: production.jobs.find((job) => job.owner)?.owner ?? managedIdentity?.email ?? '',
+      priority: signal.activeDemandUnits ? 'urgent' : 'normal',
+      dueAt: defaultJobDueInput(),
+    })
+    if (jobDisclosureRef.current) jobDisclosureRef.current.open = true
+    requestAnimationFrame(() => jobDisclosureRef.current?.querySelector<HTMLInputElement>('input')?.focus())
+    setNotice('Shop demand is bound to this draft. Review the owner, line, due time, and accountable action before creating the job.')
   }
 
   function buildPlantJobImportReview(csvText: string): PlantJobImportReview {
@@ -6202,7 +8554,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const rows = [
       ['job_id', 'line', 'product', 'target', 'owner', 'priority', 'due_at'],
       ['JOB-AI-101', 'Line A', 'First production run', 120, 'Plant supervisor', 'urgent', localDateTimeInputValue(new Date(Date.now() + 10 * 60 * 60 * 1000))],
-      ['JOB-AI-102', 'Quality Lab', 'ISO release sample', 1, 'Quality owner', 'normal', localDateTimeInputValue(new Date(Date.now() + 12 * 60 * 60 * 1000))],
+      ['JOB-SAMPLE-102', 'Quality Lab', 'Quality release sample', 1, 'Quality owner', 'normal', localDateTimeInputValue(new Date(Date.now() + 12 * 60 * 60 * 1000))],
     ]
     return rows.map((row) => row.map(plantJobImportCsvCell).join(',')).join('\r\n')
   }
@@ -6254,7 +8606,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         event: 'agent_job_chosen',
         product: 'production',
         route: productionLocation.pathname + productionLocation.search,
-        detail: 'Upload Plant job CSV for local MES review',
+        detail: 'Upload Plant job CSV for local production review',
       })
     } catch (error) {
       setPlantJobImportReview(null)
@@ -6338,14 +8690,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const canonicalOwner = issueOwner.trim()
     const canonicalContainment = containment.trim()
     const canonicalSummary = summary.trim()
-    if (!canonicalSummary || !canonicalOwner || !canonicalContainment || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= createdAt.getTime()) {
-      setNotice('Add an owner, a future due time, and the next containment action before review.')
+    const canonicalArea = area.trim()
+    if (!canonicalArea || canonicalArea.length > 120 || !canonicalSummary || !canonicalOwner || !canonicalContainment || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= createdAt.getTime()) {
+      setNotice('Add an area, an owner, a future due time, and the next containment action before review.')
       return
     }
     const issue: ProductionIssue = {
       id: uid('ISS'),
       createdAt: createdAt.toISOString(),
-      area,
+      area: canonicalArea,
       kind,
       summary: canonicalSummary,
       status: 'open',
@@ -6353,6 +8706,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       owner: canonicalOwner,
       dueAt: dueAt.toISOString(),
       containment: canonicalContainment,
+      ...(issueMaintenanceFindingSource ? { maintenanceFindingSource: issueMaintenanceFindingSource } : {}),
     }
     issueDialogRef.current?.close()
     setIssueDialogOpen(false)
@@ -6369,11 +8723,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         setContainment('')
         setSeverity('medium')
         setIssueDueInput(defaultIssueDueInput())
+        setIssueMaintenanceFindingSource(null)
       },
     }, issueTriggerRef.current)
   }
 
   function startInspectionNcr() {
+    setIssueMaintenanceFindingSource(null)
     setKind('quality')
     setArea('Quality')
     setSeverity('high')
@@ -6384,17 +8740,88 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setIssueDialogOpen(true)
   }
 
+  function openManualIssueDialog() {
+    setIssueMaintenanceFindingSource(null)
+    setIssueDialogOpen(true)
+  }
+
+  function closeIssueDialog() {
+    setIssueDialogOpen(false)
+    setIssueMaintenanceFindingSource(null)
+    requestAnimationFrame(() => issueTriggerRef.current?.focus())
+  }
+
+  function startMaintenanceFindingProblem(record: ProductionMaintenanceRecord) {
+    const completionActionId = record.completion?.actionId
+    const source = completionActionId ? productionMaintenanceFindingSource(production, completionActionId) : null
+    if (!source) {
+      setNotice('This maintenance result is already linked or no longer eligible for a problem review.')
+      return
+    }
+    setIssueMaintenanceFindingSource(source)
+    setKind('maintenance')
+    setArea(source.equipmentName)
+    setSeverity(source.returnToService === 'not_recommended' ? 'high' : 'medium')
+    setIssueOwner(source.maintenanceOwner)
+    setSummary(`Maintenance finding: ${source.findings}`.slice(0, 240).trim())
+    setContainment(source.returnToService === 'not_recommended'
+      ? 'Keep the asset out of service pending reviewed corrective action.'
+      : 'Define restricted-service controls and corrective action before normal operation.')
+    setIssueDueInput(defaultIssueDueInput())
+    maintenanceDialogRef.current?.close()
+    setMaintenanceDialogOpen(false)
+    setMaintenanceCompletionDraft(null)
+    setIssueDialogOpen(true)
+  }
+
   function resolveIssue(issueId: string) {
     const issue = production.issues.find((candidate) => candidate.id === issueId)
     if (!issue || issue.status === 'resolved') return
+    if (issue.maintenanceFindingSource) {
+      setMaintenanceCorrectiveDraft({
+        issueId,
+        correctiveAction: '',
+        verificationResult: '',
+        finalDisposition: issue.maintenanceFindingSource.returnToService,
+      })
+      return
+    }
+    queueIssueResolution(issue)
+  }
+
+  function reviewMaintenanceCorrectiveResolution(event: FormEvent) {
+    event.preventDefault()
+    if (!maintenanceCorrectiveDraft) return
+    const issue = production.issues.find((candidate) => candidate.id === maintenanceCorrectiveDraft.issueId)
+    const correctiveAction = maintenanceCorrectiveDraft.correctiveAction.trim()
+    const verificationResult = maintenanceCorrectiveDraft.verificationResult.trim()
+    if (!issue?.maintenanceFindingSource || !correctiveAction || !verificationResult) {
+      setNotice('Record the corrective action and verification result before review.')
+      return
+    }
+    const result: ProductionMaintenanceCorrectiveAction = {
+      contract: 'supermega.production.maintenance-corrective-action.v1',
+      correctiveAction,
+      verificationResult,
+      finalDisposition: maintenanceCorrectiveDraft.finalDisposition,
+    }
+    maintenanceCorrectiveDialogRef.current?.close()
+    setMaintenanceCorrectiveDraft(null)
+    queueIssueResolution(issue, result)
+  }
+
+  function queueIssueResolution(issue: ProductionIssue, maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction) {
+    const issueId = issue.id
     queueAction({
       kind: 'issue_resolution',
       subjectId: issueId,
       summary: `Resolve ${issueId}`,
       before: issue.owner && issue.containment ? `${issue.status} · owner ${issue.owner} · containment: ${issue.containment}` : `${issue.status} · legacy issue without assigned owner`,
-      after: 'resolved with operator evidence',
+      after: maintenanceCorrectiveAction
+        ? `resolved with corrective action and ${maintenanceCorrectiveAction.finalDisposition.replaceAll('_', ' ')} disposition; machine status unchanged`
+        : 'resolved with operator evidence',
       apply: async (record) => {
-        await mutateProduction('production.issue.resolved', record.commandId, productionActionProof(record), (current) => resolveProductionIssue(current, issueId, productionActionProof(record)))
+        await mutateProduction('production.issue.resolved', record.commandId, productionActionProof(record), (current) => resolveProductionIssue(current, issueId, productionActionProof(record), maintenanceCorrectiveAction))
       },
     })
   }
@@ -6473,11 +8900,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   }
 
   async function copyShiftHandoff() {
-    if (!shiftHandoff || !shiftHandoffIsCurrent) return setNotice('Plant records or the shift reference changed. Build the handoff again before copying it.')
+    if (!shiftHandoff || !shiftHandoffIsCurrent) return setNotice('Plant records or the shift reference changed. Prepare the shift close file again before copying it.')
     if (!navigator.clipboard?.writeText) return setNotice('Clipboard copy is unavailable in this browser. No Plant record changed.')
     try {
       await navigator.clipboard.writeText(formatProductionShiftHandoff(shiftHandoff))
-      setNotice('Shift handoff copied. No Plant record changed.')
+      setNotice('Shift close file copied. No Plant record changed.')
     } catch {
       setNotice('Clipboard copy was not permitted. No Plant record changed.')
     }
@@ -6567,7 +8994,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   function reviewMaintenanceStart(event: FormEvent) {
     event.preventDefault()
-    const owner = maintenanceOwner.trim()
+    const owner = selectedMaintenanceOwner
     if (!selectedMaintenanceMachine || !owner || owner.length > 120) {
       setNotice('Choose one recorded machine and a named maintenance owner.')
       return
@@ -6580,7 +9007,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       subjectId: machine.id,
       summary: `Start maintenance for ${machine.name}`,
       before: `${machine.name} · no open maintenance work · machine status and downtime records unchanged`,
-      after: `${machine.name} · maintenance owned by ${owner} with scope and evidence · no equipment command`,
+      after: selectedMaintenanceStrategy
+        ? `${machine.name} · strategy R${selectedMaintenanceStrategy.revision} procedure bound to ${owner} with evidence · no equipment command`
+        : `${machine.name} · maintenance owned by ${owner} with scope and evidence · no equipment command`,
       apply: async (record) => {
         await mutateProduction('production.maintenance.started', record.commandId, productionActionProof(record), (current) => startProductionMaintenance(current, machine.id, owner, productionActionProof(record)))
         setMaintenanceMachineId('')
@@ -6589,45 +9018,68 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }, maintenanceTriggerRef.current)
   }
 
-  function reviewMaintenanceCompletion(record: ProductionMaintenanceRecord) {
+  function beginMaintenanceCompletion(record: ProductionMaintenanceRecord) {
+    if (record.completion) return
+    if (!record.strategy) {
+      queueMaintenanceCompletion(record)
+      return
+    }
+    setMaintenanceCompletionDraft({
+      startActionId: record.startActionId,
+      outcome: 'completed',
+      findings: '',
+      procedureCompleted: false,
+      returnToService: 'recommended',
+    })
+    requestAnimationFrame(() => maintenanceOutcomeRef.current?.focus())
+  }
+
+  function reviewMaintenanceCompletion(event: FormEvent) {
+    event.preventDefault()
+    if (!maintenanceCompletionDraft || !selectedMaintenanceCompletionRecord || !maintenanceCompletionIsValid) {
+      setNotice('Confirm the procedure and record one valid maintenance result before review.')
+      return
+    }
+    const result: ProductionMaintenanceResult = {
+      outcome: maintenanceCompletionDraft.outcome,
+      findings: maintenanceCompletionFindings,
+      procedureCompleted: true,
+      returnToService: maintenanceCompletionDraft.returnToService,
+    }
+    queueMaintenanceCompletion(selectedMaintenanceCompletionRecord, result)
+  }
+
+  function queueMaintenanceCompletion(record: ProductionMaintenanceRecord, result?: ProductionMaintenanceResult) {
     const machine = production.machines.find((candidate) => candidate.id === record.machineId)
     if (!machine || record.completion) return
     maintenanceDialogRef.current?.close()
     setMaintenanceDialogOpen(false)
+    setMaintenanceCompletionDraft(null)
     queueAction({
       kind: 'maintenance_complete',
       subjectId: machine.id,
       summary: `Complete maintenance for ${machine.name}`,
       before: `${machine.name} · open maintenance owned by ${record.owner} since ${formatTime(record.startedAt)}`,
-      after: `${machine.name} · maintenance completed with outcome and evidence · machine status and downtime records unchanged`,
+      after: record.strategy
+        ? `${machine.name} · ${result?.outcome === 'completed_with_findings' ? 'completed with findings' : 'completed'} · ${result?.returnToService.replaceAll('_', ' ')} · next due advances · machine status unchanged`
+        : `${machine.name} · maintenance completed with outcome and evidence · machine status and downtime records unchanged`,
       apply: async (action) => {
-        await mutateProduction('production.maintenance.completed', action.commandId, productionActionProof(action), (current) => completeProductionMaintenance(current, machine.id, record.startActionId, productionActionProof(action)))
+        await mutateProduction('production.maintenance.completed', action.commandId, productionActionProof(action), (current) => completeProductionMaintenance(current, machine.id, record.startActionId, productionActionProof(action), result))
       },
     }, maintenanceTriggerRef.current)
   }
 
   function closeMaintenanceDialog() {
     setMaintenanceDialogOpen(false)
+    setMaintenanceCompletionDraft(null)
     requestAnimationFrame(() => maintenanceTriggerRef.current?.focus())
   }
-
-  const productionBoundary = <div className="production-mode-banner" data-write={productionCanWrite ? 'ready' : 'blocked'} role={productionCanWrite ? 'status' : 'alert'}>
-    <span className={`status-pill ${productionCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Local sample'}</span>
-    <p>{productionStorageError
-      ? `Writes paused: ${productionStorageError}`
-      : !productionCanWrite
-        ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
-        : notice || (managedIdentity
-          ? `Company records - revision ${managedVersion ?? 0}. Records are confirmed by the tenant API; no equipment control is connected.`
-          : 'Sample records saved on this device. Status changes record operator observations only; they do not control equipment.')}</p>
-    {!productionCanWrite ? <Link to="/settings/#controls">Open Settings</Link> : null}
-  </div>
 
   const actionControls = <>
     <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'production-idle'} action={pendingAction} onCancel={() => { setPendingAction(null); setNotice('Change cancelled. Plant data was not modified.') }} onConfirm={confirmAction} returnFocus={actionTrigger} />
     <ProductionEventHistory events={production.events} />
   </>
-  function runPlantAutopilot() {
+  function runPlantAutopilot(trigger: HTMLButtonElement) {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
       product: 'production',
@@ -6642,59 +9094,87 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       navigate('/settings/#controls')
       return
     }
-    if (urgentIssueCount || heldJobs.length || openWcmCount || !plantHandoffReady) {
-      navigate('/plant/?tab=control')
+    if (urgentIssueCount || heldJobs.length || openWcmCount) {
+      if (tab !== 'control') {
+        navigate('/plant/?tab=control')
+        return
+      }
+      document.querySelector('.control-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
-    navigate('/plant/?tab=production')
+    if (activeJobs[0]) {
+      if (tab !== 'production') {
+        navigate('/plant/?tab=production')
+        return
+      }
+      openJobOutput(activeJobs[0], trigger)
+      return
+    }
+    if (!shiftHandoffIsCurrent) {
+      if (tab !== 'control') {
+        navigate('/plant/?tab=control')
+        return
+      }
+      document.querySelector('.control-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    if (tab !== 'production') {
+      navigate('/plant/?tab=production')
+      return
+    }
+    if (jobDisclosureRef.current) {
+      jobDisclosureRef.current.open = true
+      jobDisclosureRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      requestAnimationFrame(() => jobDisclosureRef.current?.querySelector<HTMLInputElement>('input')?.focus())
+    }
   }
-  const plantStatus = <div aria-label="Plant MES status" className="readiness-list plant-mes-strip">{plantRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-  const plantCommandCenter = <section aria-label="Plant Autopilot" className="plant-command-center">
-    <div><span className="core-eyebrow">Plant Autopilot</span><h2>{plantAutopilotStage}</h2><p>One button chooses the next safe owner action from jobs, quality, WCM, material trace, handoff, and write-readiness state. AI may prepare records and packets; it does not command equipment, release quality, consume materials, close maintenance, or write Plant records here.</p></div>
-    <div className="plant-command-center-rows">{plantAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <button className="core-button primary compact" onClick={runPlantAutopilot} type="button">Run next step</button>
+  const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState}>
+    <div className="plant-today-priority"><span className="core-eyebrow">Today</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantAgentReason}</p><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} type="button">{plantTodayAction}</button></div>
+    <div aria-label="Plant today status" className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>
-  const plantAgentQueue = <section aria-label="Recommended Plant agent job" className="plant-agent-queue">
-    <div><span className="core-eyebrow">Plant agent queue</span><h2>{plantAgentJob}</h2><p>AI prepares the next Plant record from live jobs, quality, WCM, trace, and handoff state. Humans still approve every consequential action.</p></div>
-    <div>{plantAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <Link className="core-button primary compact" onClick={() => {
-      recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'production', route: productionLocation.pathname + productionLocation.search, detail: plantAgentJob })
-    }} to={plantAgentAction.to}>{plantAgentAction.label}</Link>
+  const plantStartGuide = <section className="plant-start-guide" aria-label="Plant guided jobs">
+    <header><span className="core-eyebrow">Start here</span><h2>Use Plant in 3 steps.</h2><p>Choose a job, record output, then fix blockers.</p></header>
+    <div>
+      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>1</b><span><strong>Choose job</strong><small>Open the active batch before changing anything.</small></span></button>
+      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>2</b><span><strong>Record output</strong><small>Enter good units, waste, material use, and the operator note.</small></span></button>
+      <button onClick={() => navigate('/plant/?tab=control')} type="button"><b>3</b><span><strong>Fix blockers</strong><small>Open quality, machine, material, and daily work problems.</small></span></button>
+    </div>
   </section>
   const plantControl = <section aria-label="Plant control" className="plant-control">
     <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const mesDispatch = <section aria-label="MES dispatch autopilot" className="plant-control mes-dispatch-control">
-    <div><span className="core-eyebrow">MES dispatch</span><strong>{plantAgentJob}</strong><small>AI chooses the next station, blocker, evidence need, and handoff route from live Plant state. No equipment command or production write runs from this panel.</small></div>
+  const mesDispatch = <section aria-label="Plant dispatch helper" className="plant-control mes-dispatch-control">
+    <div><span className="core-eyebrow">Daily dispatch</span><strong>{plantAgentJob}</strong><small>SuperMega shows the next station, blocker, evidence need, and shift route from live Plant state. The manager reviews equipment and production changes before anything is saved.</small></div>
     <div className="plant-control-rows">{mesDispatchRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
-    <div><span className="core-eyebrow">MES lifecycle</span><strong>Plan to handoff</strong><small>AI guides plan, execution, quality, WCM, trace, and handoff. No equipment or production write runs without owner approval.</small></div>
+    <div><span className="core-eyebrow">Production lifecycle</span><strong>Plan to shift close</strong><small>Follow planning, output, quality, maintenance, material trace, and shift close in one place. No equipment or production write runs without manager review.</small></div>
     <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const plantMrp = <section aria-label="Plant MRP readiness" className="plant-control">
-    <div><span className="core-eyebrow">MRP readiness</span><strong>{plantMrpNext}</strong><small>AI reviews job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
+  const plantMrp = <section aria-label="Plant material readiness" className="plant-control">
+    <div><span className="core-eyebrow">Material readiness</span><strong>{plantMrpNext}</strong><small>Review job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const plantCostReadiness = <section aria-label="Plant ERP cost readiness" className="plant-control">
-    <div><span className="core-eyebrow">ERP cost readiness</span><strong>{plantCostReadinessNext}</strong><small>AI checks good output, scrap, material trace, quality release, WCM closure, and shift handoff before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
+  const plantCostReadiness = <section aria-label="Plant cost readiness" className="plant-control">
+    <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check good output, waste, material trace, quality release, maintenance closure, and shift close before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const plantCostPacket = <section aria-label="Plant ERP cost package packet" className="plant-control">
-    <div><span className="core-eyebrow">Cost package packet</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>AI packages finished batch output, scrap, material trace, quality release state, WCM closure, and handoff evidence for ERP cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
+  const plantCostPacket = <section aria-label="Plant cost review file" className="plant-control">
+    <div><span className="core-eyebrow">Cost review file</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>Package finished batch output, waste, material trace, quality release state, maintenance closure, and shift evidence for cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
     <div className="plant-control-rows">{plantCostPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantQualityRelease = <section aria-label="Plant quality release" className="plant-control">
-    <div><span className="core-eyebrow">ISO release</span><strong>{plantQualityReleaseNext}</strong><small>AI checks quality holds, WCM closure, material trace, shift handoff, and owner release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Quality release</span><strong>{plantQualityReleaseNext}</strong><small>Check quality holds, maintenance closure, material trace, shift close, and manager release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantInspectionControl = <section aria-label="Plant inspection and CAPA" className="plant-control">
-    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
+    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>Keep sampling, NCR containment, corrective action, evidence, and release review in one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
     <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantComplianceDossier = <section aria-label="Plant compliance dossier" className="plant-control plant-compliance-dossier">
-    <div><span className="core-eyebrow">Compliance dossier</span><strong>{plantComplianceDossierNext}</strong><small>AI summarizes ISO quality release, WCM closure, material traceability, output evidence, shift handoff, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this dossier.</small></div>
+    <div><span className="core-eyebrow">Compliance file</span><strong>{plantComplianceDossierNext}</strong><small>Summarize quality release, maintenance closure, material traceability, output evidence, shift close, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this file.</small></div>
     <div className="plant-control-rows">{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantJobRepairRows = plantJobImportReview
@@ -6705,13 +9185,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ] as const
     : [
         ['Step 1', 'Load sample or upload CSV'],
-        ['Step 2', 'AI checks MES fields locally'],
+        ['Step 2', 'Checks job fields locally'],
         ['Step 3', 'Review one copied job'],
       ] as const
-  const plantEnterpriseContext = <details aria-label="Plant enterprise evidence" className="plant-execution-disclosure plant-enterprise-disclosure">
-    <summary><span><strong>MES, MRP, ERP &amp; ISO evidence</strong><small>Open detailed status, readiness, trace, quality, costing, and audit context</small></span><b>Open</b></summary>
-    <div className="plant-enterprise-stack">
-      {plantAgentQueue}
+  const plantBusinessControls = <details className="product-guidance-disclosure plant-business-controls">
+    <summary><span>Advanced Plant controls</span><small>Planning, MRP, quality, maintenance, traceability, compliance, and costing</small></summary>
+    <div className="product-guidance-content">
       {mesDispatch}
       {plantControl}
       {plantLifecycle}
@@ -6723,33 +9202,35 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       {plantComplianceDossier}
     </div>
   </details>
+  const plantControlBusinessControls = plantBusinessControls
 
-  if (tab === 'production') return <div className="operation-module plant-production-module">
-    {productionBoundary}
-    {plantStatus}
-    {plantCommandCenter}
+  if (tab === 'production') return <div className="operation-module production-operation-module">
+    {plantToday}
+    {plantStartGuide}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
+        {nextShopDemand ? <section aria-label="Shop demand to Plant" className="stock-receipt-preview" data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>Shop demand · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} suggested</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} active order units · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} below reorder · {nextShopDemand.sourceOrderIds.length || 'no'} source {nextShopDemand.sourceOrderIds.length === 1 ? 'order' : 'orders'}</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'Shop demand selected' : 'Use Shop demand'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
         <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />
         <CompletedJobHistory jobs={completedJobs} now={issueClock} />
-        <details className="compact-disclosure catalog-disclosure">
-          <summary>Add job</summary>
-          <section aria-label="Plant job CSV autopilot" className="plant-job-import">
-            <div><span className="core-eyebrow">Job CSV autopilot</span><strong>Upload job list</strong><small>AI checks job ID, line, product, target, owner, priority, due time, and duplicates before copying one ready job into review. No production job, equipment command, material movement, accounting post, or managed write runs from this importer.</small></div>
+        <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
+          <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
+          <section aria-label="Plant job CSV import" className="plant-job-import">
+            <div><span className="core-eyebrow">Job CSV import</span><strong>Upload job list</strong><small>Check job ID, line, product, target, owner, priority, due time, and duplicates before copying one ready job into review. No production job, equipment command, material movement, accounting post, or managed write runs from this importer.</small></div>
             <div className="plant-job-import-actions">
               <button className="core-button" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Load sample job batch</button>
               <label className="plant-job-import-upload">Upload Plant job CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
-              <div aria-label="AI Plant job repair checklist" className="plant-job-import-repair">{plantJobRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-              {plantJobImportReview ? <div className={`plant-job-import-review ${plantJobImportReview.status}`} role="status"><strong>{plantJobImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before Plant review'}</strong><span>{plantJobImportReview.summary}</span><small>{plantJobImportReview.readyRows} ready / {plantJobImportReview.blockedRows} blocked / no Plant write</small></div> : null}
+              <div aria-label="Plant job repair checklist" className="plant-job-import-repair">{plantJobRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+              {plantJobImportReview ? <div className={`plant-job-import-review ${plantJobImportReview.status}`} role="status"><strong>{plantJobImportReview.status === 'ready' ? 'Ready for review' : 'Repair before Plant review'}</strong><span>{plantJobImportReview.summary}</span><small>{plantJobImportReview.readyRows} ready / {plantJobImportReview.blockedRows} blocked / no Plant write</small></div> : null}
               {plantJobImportSourceName ? <p className="plant-job-import-source">Local file: {plantJobImportSourceName}</p> : null}
             </div>
           </section>
           <form className="core-form compact-form" onSubmit={createJob}>
             <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
-            <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
+            <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
             <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setJobDraft((current) => ({ ...current, priority: event.target.value as ProductionJobPriority }))} value={jobDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setJobDraft((current) => ({ ...current, dueAt: event.target.value }))} required type="datetime-local" value={jobDraft.dueAt} /></label></div>
             <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, owner: event.target.value }))} placeholder="Named person or role" required value={jobDraft.owner} /></label>
+            {selectedShopDemand ? <div className="form-notice" role="status"><strong>Governed Shop source.</strong> {selectedShopDemand.evidenceReference} · {selectedShopDemand.sourceOrderIds.join(', ') || 'reorder threshold'}<button className="text-link" disabled={Boolean(pendingAction)} onClick={() => setSelectedShopDemandDigest('')} type="button">Remove source</button></div> : null}
             <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review job</button>
             <p className="panel-copy">Owner, priority, and due time make responsibility and run order visible. The accountable operator, reason, and source record are confirmed in the next step.</p>
           </form>
@@ -6761,9 +9242,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <form autoComplete="off" className="core-form compact-form" id="plant-output-form" onSubmit={recordOutput}>
           <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
-          <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={shiftReferencePlaceholder()} required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
+          <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
           {selectedJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · Held by {selectedJob.qualityHold.heldBy}. Recording a result does not release this hold; verify the hold and evidence before review.</p> : null}
-          <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `This shift: ${currentShiftOutput.goodUnits.toLocaleString()} good · ${currentShiftOutput.scrapUnits.toLocaleString()} scrap across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter a shift reference to see its recorded subtotal.'}</p>
+          <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `This shift: ${currentShiftOutput.goodUnits.toLocaleString()} good · ${currentShiftOutput.scrapUnits.toLocaleString()} scrap across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter the shift name or date to continue.'}</p>
           <div className="form-actions">
             <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > selectedRemaining || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
             <button aria-describedby="plant-short-close-boundary" className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} onClick={(event) => closeSelectedJobShort(event.currentTarget)} type="button">Review short close</button>
@@ -6806,11 +9287,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </details>
       </section>
     </div>
-    <details className="plant-execution-disclosure">
-      <summary><span><strong>Batch control</strong><small>BOM, routing, materials, inspection, and release</small></span><b>Open</b></summary>
-      <Suspense fallback={<p className="form-notice" role="status">Loading batch control…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} jobs={production.jobs} key={`plant-order:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}:${production.orderExecution?.headDigest ?? 'empty'}`} managedState={managedIdentity ? production.orderExecution ?? null : undefined} onManagedCommand={managedIdentity ? mutateProduction : undefined} scope={`plant:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}`} /></Suspense>
+    <details className="plant-batch-disclosure" onToggle={(event) => setPlantBatchOpen(event.currentTarget.open)} open={plantBatchOpen}>
+      <summary><span>Controlled batch execution</span><small>BOM, routing, material, quality, and release</small></summary>
+      <div className="plant-batch-content">
+        {plantBatchOpen ? <Suspense fallback={<p className="form-notice" role="status">Loading batch execution…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} industryPackId={plantIndustryPackId} jobs={production.jobs} key={`plant-order:${plantOrderScopeWorkspaceId}:${plantIndustryPackId}`} onProductionCommand={mutateProduction} productionState={production} scope={`plant:${plantOrderScopeWorkspaceId}`} /></Suspense> : null}
+      </div>
     </details>
-    {plantEnterpriseContext}
+    {plantBusinessControls}
     <dialog aria-labelledby="job-schedule-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeJobSchedule() }} ref={scheduleDialogRef}>
       {scheduleDraft ? <>
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={closeJobSchedule} type="button">Close</button></div>
@@ -6827,16 +9310,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   </div>
 
   if (tab === 'control') return <div className="operation-module">
-    {productionBoundary}
-    {plantStatus}
-    {plantCommandCenter}
+    {plantToday}
+    {plantControlBusinessControls}
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">
           <div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Open problems</h2></div><span className="panel-note">{urgentIssueCount ? `${urgentIssueCount} urgent · ` : ''}{openIssues.length} open</span></div>
           <IssueList disabled={!productionCanWrite || Boolean(pendingAction)} issues={openIssues} now={issueClock} onResolve={resolveIssue} />
           <ResolvedIssueHistory issues={resolvedIssues} now={issueClock} />
-          <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => setIssueDialogOpen(true)} ref={issueTriggerRef} type="button">Record problem</button>
+          <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={openManualIssueDialog} ref={issueTriggerRef} type="button">Record problem</button>
           <details className="compact-disclosure production-history" open={heldJobs.length ? true : undefined}>
             <summary>Quality holds <span>{heldJobs.length}</span></summary>
             <QualityHoldList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={heldJobs} onRelease={releaseQualityHold} />
@@ -6846,16 +9328,28 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               <p className="panel-copy">The next review records who placed the hold, why, and the source evidence. It does not change output or control equipment.</p>
             </form> : <p className="panel-copy">Every recorded job is currently held. Release one with evidence before placing another hold.</p>}
           </details>
+          <details className="compact-disclosure production-history" data-plant-genealogy="versioned">
+            <summary>Batch trace <span>{batchGenealogyDownload ? 'Ready' : 'None'}</span></summary>
+            {production.jobs.length ? <div className="core-form compact-form">
+              <label>Job or batch<select onChange={(event) => setGenealogyJobId(event.target.value)} value={selectedGenealogyJobId}>{production.jobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product}</option>)}</select></label>
+              {batchGenealogyDownload ? <>
+                <p className="panel-copy"><strong>{batchGenealogyDownload.report.job.product}</strong> · {batchGenealogyDownload.report.job.goodUnits.toLocaleString()} good · {batchGenealogyDownload.report.job.scrapUnits.toLocaleString()} scrap · {batchGenealogyDownload.report.materialEntries.length} material records · {batchGenealogyDownload.report.qualityEvents.length} quality events.</p>
+                <p className="panel-copy">{batchGenealogyDownload.report.shopDemandSource ? `${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length || 'Reorder'} Shop source ${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length === 1 ? 'order' : 'orders'} retained without customer details.` : 'No retained Shop-demand source exists for this legacy or manual job.'}</p>
+                <a className="core-button" download={batchGenealogyDownload.filename} href={batchGenealogyDownload.href}>Download batch genealogy</a>
+                <p className="panel-copy">Read-only evidence. It does not issue inventory, control equipment, post costs, issue a certificate, or contact another system.</p>
+              </> : null}
+            </div> : <p className="panel-copy">Create a production job before building a batch trace.</p>}
+          </details>
           <details className="compact-disclosure production-history" open={shiftHandoff || currentShiftClose ? true : undefined}>
             <summary>Shift close <span>{currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? shiftCloseReady ? 'Ready' : 'Blocked' : 'Build'}</span></summary>
             <form autoComplete="off" className="core-form compact-form" onSubmit={buildShiftHandoff}>
               <label>Shift reference<input maxLength={80} onChange={(event) => setHandoffShiftRef(event.target.value)} placeholder={shiftReferencePlaceholder()} required value={handoffShiftRef} /></label>
-              <button className="core-button" disabled={!handoffShiftRef.trim() && !shiftRef.trim()} type="submit">Prepare shift packet</button>
-              <p className="panel-copy">AI assembles current output, material, quality, WCM, maintenance, and carry-forward work. Preparing changes nothing; closing requires a named owner, reason, and evidence.</p>
+              <button className="core-button" disabled={!handoffShiftRef.trim() && !shiftRef.trim()} type="submit">Prepare shift close file</button>
+              <p className="panel-copy">Review current output, material, quality, WCM, maintenance, and carry-forward work. Preparing changes nothing; closing requires a named owner, reason, and evidence.</p>
             </form>
-            {shiftCloseRows.length ? <div aria-label="AI shift close checklist" className="plant-command-center-rows">{shiftCloseRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div> : null}
+            {shiftCloseRows.length ? <div aria-label="Shift close checklist" className="plant-command-center-rows">{shiftCloseRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div> : null}
             {currentShiftClose ? <div className="form-notice" role="status"><strong>Shift closed by {currentShiftClose.actor}</strong><br />{currentShiftClose.shiftRef} | revision {currentShiftClose.sourceRevision} | {currentShiftClose.goodUnits} good | {currentShiftClose.materialEntryCount} material entries | quality clear | WCM clear<br />Evidence: {currentShiftClose.evidenceReference}</div> : null}
-            {shiftHandoff && !shiftHandoffIsCurrent && !currentShiftClose ? <p className="form-notice" role="alert">Plant records or the shift reference changed after this packet was prepared. Prepare it again before use.</p> : null}
+            {shiftHandoff && !shiftHandoffIsCurrent && !currentShiftClose ? <p className="form-notice" role="alert">Plant records or the shift reference changed after this close file was prepared. Prepare it again before use.</p> : null}
             {shiftHandoff && shiftHandoffIsCurrent ? <ShiftHandoffView handoff={shiftHandoff} onCopy={copyShiftHandoff} /> : null}
             {shiftHandoff && shiftHandoffIsCurrent ? <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !shiftCloseReady} onClick={(event) => reviewShiftClose(event.currentTarget)} type="button">Review shift close</button> : null}
             {shiftHandoff && shiftHandoffIsCurrent && !shiftCloseReady ? <p className="panel-copy">The owner close remains locked until this exact shift has good output and material trace and the current Plant record has no quality or WCM blocker.</p> : null}
@@ -6870,7 +9364,6 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </section>
       </div>
     </div>
-    {plantEnterpriseContext}
     <dialog aria-labelledby="downtime-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeDowntimeDialog() }} ref={downtimeDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Equipment record</span><h2 id="downtime-dialog-title">Machine downtime</h2></div><button aria-label="Close downtime records" className="text-link" onClick={closeDowntimeDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
       {openDowntimeIntervals.length ? <div className="issue-list">{openDowntimeIntervals.map((interval, index) => <article key={interval.startActionId}>
@@ -6887,18 +9380,31 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </dialog>
     <dialog aria-labelledby="maintenance-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMaintenanceDialog() }} ref={maintenanceDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
+      {readyMaintenanceDueItems.length ? <><p className="panel-copy"><strong>Preventive work</strong> · {overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : `${readyMaintenanceDueItems.length} planned`}</p><div className="action-history-list">{readyMaintenanceDueItems.map((item, index) => <article key={item.assetId}><div><strong>{item.assetName} · {item.status === 'overdue' ? (item.daysUntilDue === 0 ? 'Due now' : `${Math.abs(item.daysUntilDue)}d overdue`) : item.status === 'due_soon' ? `Due in ${item.daysUntilDue}d` : formatIssueDue(item.dueAt)}</strong><small style={wrappedIssueDetail}>{item.criticality} · {item.owner} · Strategy R{item.strategyRevision}</small><small style={wrappedIssueDetail}>{item.procedureReference}</small></div>{index === 0 ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => { setMaintenanceCompletionDraft(null); setMaintenanceMachineId(item.assetId); requestAnimationFrame(() => maintenanceMachineSelectRef.current?.focus()) }} type="button">Review next</button> : null}</article>)}</div></> : null}
       {openMaintenanceRecords.length ? <div className="issue-list">{openMaintenanceRecords.map((record, index) => <article key={record.startActionId}>
         <span aria-hidden="true" className="issue-mark">MX</span>
-        <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started {formatTime(record.startedAt)} by {record.startedBy}</small><small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
-        <button className="core-button" data-maintenance-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => reviewMaintenanceCompletion(record)} type="button">Review complete</button>
+        <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started {formatTime(record.startedAt)} by {record.startedBy}</small>{record.strategy ? <small style={wrappedIssueDetail}>Strategy R{record.strategy.revision} · Due {formatIssueDue(record.strategy.plannedDueAt)} · {record.strategy.procedureReference}</small> : null}<small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
+        <button className="core-button" data-maintenance-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => beginMaintenanceCompletion(record)} type="button">{record.strategy ? 'Add result' : 'Review complete'}</button>
       </article>)}</div> : <p className="panel-copy">No machine has open maintenance work.</p>}
-      {availableMaintenanceMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceStart}>
-        <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name} · {machine.id} · recorded {productionMachineStateLabels[machine.state]}</option>)}</select></label>
-        <label>Owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" required value={maintenanceOwner} /></label>
-        <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !maintenanceOwner.trim() || maintenanceOwner.trim().length > 120} type="submit">Review start</button>
+      {maintenanceCompletionDraft && selectedMaintenanceCompletionRecord ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceCompletion}>
+        <p className="panel-copy"><strong>Completion result · {selectedMaintenanceCompletionRecord.machineName}</strong><br />Strategy R{selectedMaintenanceCompletionRecord.strategy?.revision} · {selectedMaintenanceCompletionRecord.strategy?.procedureReference}</p>
+        <label>Outcome<select onChange={(event) => { const outcome = event.target.value as ProductionMaintenanceOutcome; setMaintenanceCompletionDraft((current) => current ? { ...current, outcome, returnToService: outcome === 'completed' ? 'recommended' : current.returnToService } : current) }} ref={maintenanceOutcomeRef} value={maintenanceCompletionDraft.outcome}><option value="completed">Completed · no limiting finding</option><option value="completed_with_findings">Completed with findings</option></select></label>
+        <label>Findings<textarea maxLength={360} onChange={(event) => setMaintenanceCompletionDraft((current) => current ? { ...current, findings: event.target.value } : current)} placeholder="Record inspected condition and findings; use 'No findings' only when confirmed." required value={maintenanceCompletionDraft.findings} /></label>
+        <label className="website-intake-confirm"><input checked={maintenanceCompletionDraft.procedureCompleted} onChange={(event) => setMaintenanceCompletionDraft((current) => current ? { ...current, procedureCompleted: event.target.checked } : current)} type="checkbox" /><span>Reviewed procedure completed</span></label>
+        <label>Return-to-service recommendation<select disabled={maintenanceCompletionDraft.outcome === 'completed'} onChange={(event) => setMaintenanceCompletionDraft((current) => current ? { ...current, returnToService: event.target.value as ProductionMaintenanceReturnToService } : current)} value={maintenanceCompletionDraft.returnToService}><option value="recommended">Recommended</option><option value="restricted">Restricted service</option><option value="not_recommended">Not recommended</option></select></label>
+        <p className="panel-copy">This recommendation does not change recorded machine status. Record any status observation or problem separately.</p>
+        <div className="form-actions"><button className="core-button" onClick={() => setMaintenanceCompletionDraft(null)} type="button">Cancel result</button><button className="core-button primary" disabled={!maintenanceCompletionIsValid || Boolean(pendingAction)} type="submit">Review completion</button></div>
+      </form> : availableMaintenanceMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceStart}>
+        <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} ref={maintenanceMachineSelectRef} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => { const strategy = production.equipmentMaster?.assets.find((asset) => asset.id === machine.id)?.maintenanceStrategy; return <option key={machine.id} value={machine.id}>{machine.name} · {strategy ? `planned R${strategy.revision}` : `recorded ${productionMachineStateLabels[machine.state]}`}</option> })}</select></label>
+        {selectedMaintenanceStrategy ? <p className="panel-copy"><strong>Strategy R{selectedMaintenanceStrategy.revision}</strong> · Due {formatIssueDue(selectedMaintenanceStrategy.nextDueAt)}<br />Procedure: {selectedMaintenanceStrategy.procedureReference}</p> : null}
+        <label>{selectedMaintenanceStrategy ? 'Strategy owner' : 'Owner'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" readOnly={Boolean(selectedMaintenanceStrategy)} required value={selectedMaintenanceStrategy ? selectedMaintenanceOwner : maintenanceOwner} /></label>
+        <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !selectedMaintenanceOwner || selectedMaintenanceOwner.length > 120} type="submit">Review start</button>
       </form> : <p className="panel-copy">Every recorded machine already has open maintenance work.</p>}
-      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small><small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div></article>)}</div></> : null}
-      <p className="panel-copy">The accountable review records work scope or completion outcome. It does not control equipment, change machine status, open downtime, buy parts, or change jobs.</p>
+      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => {
+        const findingSource = record.completion ? maintenanceFindingSources.get(record.completion.actionId) : undefined
+        return <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.result ? <small style={wrappedIssueDetail}>{record.completion.result.outcome.replaceAll('_', ' ')} · Return: {record.completion.result.returnToService.replaceAll('_', ' ')} · {record.completion.result.findings}</small> : null}{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div>{findingSource ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => startMaintenanceFindingProblem(record)} type="button">Review problem</button> : null}</article>
+      })}</div></> : null}
+      <p className="panel-copy">Strategy-bound completion retains outcome, findings, procedure confirmation, recommendation, and next due. It performs no equipment command, telemetry, parts purchase, status change, downtime, or job change.</p>
     </dialog>
     <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
       {observedMachine && machineObservation ? <>
@@ -6911,17 +9417,30 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </form>
       </> : null}
     </dialog>
-    <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} ref={issueDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">Record an observation</h2></div><button aria-label="Close problem form" className="text-link" onClick={() => { setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} type="button">Close</button></div>
+    <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeIssueDialog() }} ref={issueDialogRef}>
+      <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">{issueMaintenanceFindingSource ? 'Review maintenance finding' : 'Record an observation'}</h2></div><button aria-label="Close problem form" className="text-link" onClick={closeIssueDialog} type="button">Close</button></div>
       <form autoComplete="off" className="core-form" onSubmit={createIssue}>
-        <div className="form-row"><label>Type<select value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<select value={area} onChange={(event) => setArea(event.target.value)}><option>Line 01</option><option>Line 02</option><option>Line 03</option><option>Materials</option><option>Quality</option></select></label></div>
+        {issueMaintenanceFindingSource ? <p className="form-notice" role="status"><strong>Linked completion</strong><br />{issueMaintenanceFindingSource.equipmentName} · Strategy R{issueMaintenanceFindingSource.strategyRevision} · {issueMaintenanceFindingSource.returnToService.replaceAll('_', ' ')}<br />Owner: {issueMaintenanceFindingSource.maintenanceOwner} · Evidence: {issueMaintenanceFindingSource.evidenceReference}</p> : null}
+        <div className="form-row"><label>Type<select disabled={Boolean(issueMaintenanceFindingSource)} value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<input maxLength={120} onChange={(event) => setArea(event.target.value)} placeholder="Line, machine, or work centre" required value={area} /></label></div>
         <label>Observation<textarea autoFocus maxLength={240} required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Describe what happened, not the assumption." /></label>
         <div className="form-row"><label>Priority<select value={severity} onChange={(event) => setSeverity(event.target.value as ProductionIssueSeverity)}>{productionIssueSeverities.map((candidate) => <option key={candidate} value={candidate}>{productionIssueSeverityLabels[candidate]}</option>)}</select></label><label>Owner<input autoComplete="off" maxLength={120} name="plant-issue-owner" onChange={(event) => setIssueOwner(event.target.value)} placeholder="Named person or role" required value={issueOwner} /></label></div>
         <label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} name="plant-issue-due" onChange={(event) => setIssueDueInput(event.target.value)} required type="datetime-local" value={issueDueInput} /></label>
         <label>Containment / next action<textarea maxLength={240} onChange={(event) => setContainment(event.target.value)} placeholder="What happens next, and what stays on hold?" required value={containment} /></label>
-        <p className="panel-copy">Nothing is saved until the next accountable review is confirmed.</p>
-        <div className="form-actions"><button className="core-button" onClick={() => { setIssueDialogOpen(false); requestAnimationFrame(() => issueTriggerRef.current?.focus()) }} type="button">Cancel</button><button className="core-button primary" type="submit">Review problem</button></div>
+        <p className="panel-copy">{issueMaintenanceFindingSource ? 'The completion link is immutable. This review opens one problem only; it does not change machine status, dispatch work, buy parts, or control equipment.' : 'Nothing is saved until the next accountable review is confirmed.'}</p>
+        <div className="form-actions"><button className="core-button" onClick={closeIssueDialog} type="button">Cancel</button><button className="core-button primary" type="submit">Review problem</button></div>
       </form>
+    </dialog>
+    <dialog aria-labelledby="maintenance-corrective-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setMaintenanceCorrectiveDraft(null) }} ref={maintenanceCorrectiveDialogRef}>
+      {maintenanceCorrectiveDraft ? <>
+        <div className="panel-head"><div><span className="core-eyebrow">Maintenance closeout</span><h2 id="maintenance-corrective-title">Review corrective action</h2></div><button aria-label="Close corrective action form" className="text-link" onClick={() => setMaintenanceCorrectiveDraft(null)} type="button">Close</button></div>
+        <form autoComplete="off" className="core-form" onSubmit={reviewMaintenanceCorrectiveResolution}>
+          <label>Corrective action<textarea autoFocus maxLength={360} onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, correctiveAction: event.target.value } : current)} placeholder="What was corrected or controlled?" required value={maintenanceCorrectiveDraft.correctiveAction} /></label>
+          <label>Verification result<textarea maxLength={360} onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What evidence shows the action was effective?" required value={maintenanceCorrectiveDraft.verificationResult} /></label>
+          <label>Final return-to-service disposition<select onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, finalDisposition: event.target.value as ProductionMaintenanceReturnToService } : current)} value={maintenanceCorrectiveDraft.finalDisposition}><option value="recommended">Recommended</option><option value="restricted">Restricted service</option><option value="not_recommended">Not recommended</option></select></label>
+          <p className="panel-copy">This closes the problem record only. It does not change machine status, dispatch work, buy parts, or control equipment.</p>
+          <div className="form-actions"><button className="core-button" onClick={() => setMaintenanceCorrectiveDraft(null)} type="button">Cancel</button><button className="core-button primary" type="submit">Review closeout</button></div>
+        </form>
+      </> : null}
     </dialog>
     {actionControls}
   </div>
@@ -6969,7 +9488,9 @@ function IssueList({ disabled = false, issues, now, onResolve }: { disabled?: bo
           <small style={wrappedIssueDetail}>{overdue ? 'OVERDUE' : `Due ${formatIssueDue(issue.dueAt ?? '')}`} · Owner {issue.owner}</small>
           <small style={wrappedIssueDetail}>Next: {issue.containment}</small>
         </> : <small style={wrappedIssueDetail}>Legacy problem · owner, due time, and containment were not recorded</small>}
+        {issue.maintenanceFindingSource ? <small style={wrappedIssueDetail}>Maintenance finding · {issue.maintenanceFindingSource.equipmentName} · Strategy R{issue.maintenanceFindingSource.strategyRevision} · Source {issue.maintenanceFindingSource.completionActionId}</small> : null}
         {issue.status === 'resolved' ? <small style={wrappedIssueDetail}>{issue.resolution ? `Resolved by ${issue.resolution.resolvedBy} · Evidence: ${issue.resolution.evidenceReference}` : 'Legacy resolution · no attributed proof was available'}</small> : null}
+        {issue.resolution?.maintenanceCorrectiveAction ? <small style={wrappedIssueDetail}>Corrective action: {issue.resolution.maintenanceCorrectiveAction.correctiveAction} · Verified: {issue.resolution.maintenanceCorrectiveAction.verificationResult} · Final disposition: {issue.resolution.maintenanceCorrectiveAction.finalDisposition.replaceAll('_', ' ')}</small> : null}
       </div>
       {issue.status === 'open' ? <button className="text-link" disabled={disabled} onClick={() => onResolve(issue.id)} type="button">Review close</button> : <b>Resolved</b>}
     </article>
@@ -7032,7 +9553,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         <span aria-hidden="true" className="issue-mark resolved">M</span>
         <div><strong>{entry.quantity.toLocaleString(undefined, { maximumFractionDigits: 3 })} {entry.materialUnit} · {entry.materialRef}{entry.materialLot ? ` · lot ${entry.materialLot}` : ''}</strong><small style={wrappedIssueDetail}>{entry.jobId} · {entry.product} · {formatIssueDue(entry.recordedAt)} · {entry.recordedBy}</small><small style={wrappedIssueDetail}>Reason: {entry.reason}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
       </article>)}</div></> : null}
-      {handoff.materialEntries.length > visibleMaterialEntries.length ? <p className="panel-copy">Showing the latest {visibleMaterialEntries.length} of {handoff.materialEntries.length} entries. Copy handoff retains every attributed entry.</p> : null}
+      {handoff.materialEntries.length > visibleMaterialEntries.length ? <p className="panel-copy">Showing the latest {visibleMaterialEntries.length} of {handoff.materialEntries.length} entries. Copy keeps every attributed entry.</p> : null}
     </details>
     <details className="compact-disclosure production-history">
       <summary>Closed short <span>{handoff.shortCloses.length}</span></summary>
@@ -7114,6 +9635,6 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.machineObservations.length ? <Empty>No machine record exists.</Empty> : null}
       </div>
     </details>
-    <button className="core-button" onClick={onCopy} type="button">Copy handoff</button>
+    <button className="core-button" onClick={onCopy} type="button">Copy close file</button>
   </div>
 }

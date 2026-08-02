@@ -19,8 +19,10 @@ from supermega_runtime.client_import_runtime import (  # noqa: E402
 
 
 BATCH_CONTRACT = "supermega.client_launch_validation_batch.v1"
+SELECTED_BATCH_CONTRACT = "supermega.client_demo_preparation_validation.v1"
 RESULT_CONTRACT = "supermega.client_launch_server_validation.v1"
 EXPECTED_PACKAGE_COUNT = 12
+PRODUCT_ORDER = ("commerce", "production", "website", "ecommerce")
 MAX_INPUT_BYTES = EXPECTED_PACKAGE_COUNT * CLIENT_IMPORT_MAX_PACKAGE_BYTES + 16_384
 EXPECTED_PROFILES = tuple(
     (product, profile_id)
@@ -48,21 +50,34 @@ def _read_payload() -> dict[str, Any]:
         raise ValueError("The client launch validation batch must be UTF-8 JSON.") from exc
     if not isinstance(value, dict) or set(value) != {"contract", "packages"}:
         raise ValueError("The client launch validation batch fields are invalid.")
-    if value["contract"] != BATCH_CONTRACT:
+    if value["contract"] not in {BATCH_CONTRACT, SELECTED_BATCH_CONTRACT}:
         raise ValueError("The client launch validation batch contract is unsupported.")
     packages = value["packages"]
-    if not isinstance(packages, list) or len(packages) != EXPECTED_PACKAGE_COUNT:
+    if not isinstance(packages, list):
+        raise ValueError("The client launch validation batch packages are invalid.")
+    if value["contract"] == BATCH_CONTRACT and len(packages) != EXPECTED_PACKAGE_COUNT:
         raise ValueError(f"The client launch rehearsal requires exactly {EXPECTED_PACKAGE_COUNT} packages.")
+    if value["contract"] == SELECTED_BATCH_CONTRACT and not 1 <= len(packages) <= len(PRODUCT_ORDER):
+        raise ValueError("Client demo preparation requires between one and four selected product packages.")
     return value
 
 
-def validate_batch_context(packages: list[dict[str, Any]], results: list[dict[str, Any]]) -> None:
+def validate_batch_context(
+    packages: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+    contract: str = BATCH_CONTRACT,
+) -> None:
     actual_profiles = tuple(
         (result["product"], result["workflow_template_id"])
         for result in results
     )
-    if actual_profiles != EXPECTED_PROFILES:
+    if contract == BATCH_CONTRACT and actual_profiles != EXPECTED_PROFILES:
         raise ValueError("The validation batch must contain every workflow profile exactly once in canonical order.")
+    if contract == SELECTED_BATCH_CONTRACT:
+        actual_products = tuple(result["product"] for result in results)
+        canonical_products = tuple(product for product in PRODUCT_ORDER if product in actual_products)
+        if actual_products != canonical_products or len(set(actual_products)) != len(actual_products):
+            raise ValueError("Selected client demo packages must use unique products in canonical order.")
     workspace_contexts = {
         (package["workspace"], package["owner"])
         for package in packages
@@ -78,13 +93,14 @@ def main() -> int:
             validate_client_import_staging_package(package).to_dict()
             for package in payload["packages"]
         ]
-        validate_batch_context(payload["packages"], results)
+        validate_batch_context(payload["packages"], results, payload["contract"])
         response = {
             "ok": True,
             "contract": RESULT_CONTRACT,
             "package_count": len(results),
             "results": results,
-            "profile_coverage_complete": True,
+            "profile_coverage_complete": payload["contract"] == BATCH_CONTRACT,
+            "selected_product_coverage_complete": payload["contract"] == SELECTED_BATCH_CONTRACT,
             "single_workspace_context": True,
             "external_writes_performed": False,
         }

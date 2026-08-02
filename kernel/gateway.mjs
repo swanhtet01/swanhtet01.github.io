@@ -1,5 +1,5 @@
 // SUPERMEGA AI gateway — one interface in front of every model call.
-// Zero-dependency (native fetch). Reads ANTHROPIC_API_KEY from env. See ../PLATFORM.md.
+// Zero-dependency (native fetch). Supports guarded local Ollama plus paid failover providers.
 //
 // Why this exists: swapping a model, adding caching, or capping a client's spend should touch
 // ONE file, not every caller. Every build agent, the Deal Desk, and the per-client operator
@@ -9,6 +9,9 @@ import { randomUUID } from 'node:crypto'
 
 const API_URL = 'https://api.anthropic.com/v1/messages'
 const API_VERSION = '2023-06-01'
+const OLLAMA_API_URL = 'http://127.0.0.1:11434/api/chat'
+const OLLAMA_RESPONSE_MAX_BYTES = 1024 * 1024
+const OLLAMA_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
 
 // Model tiers — change the model here, every caller follows. Claude primary, with a cross-PROVIDER
 // fallback model (routed via OpenRouter) used only when Anthropic itself is unreachable, so a Claude
@@ -268,9 +271,116 @@ function providerError(name, status, detail) {
   return err
 }
 
+function localOllamaModel() {
+  const model = String(process.env.SUPERMEGA_OLLAMA_MODEL || '').trim()
+  return OLLAMA_MODEL_RE.test(model) ? model : ''
+}
+
+function localOllamaAvailable() {
+  return process.env.SUPERMEGA_OLLAMA_ENABLED === '1' && !hostedRuntime() && Boolean(localOllamaModel())
+}
+
+function boundedUsageCount(value) {
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= 10_000_000 ? parsed : 0
+}
+
+async function readBoundedResponseText(response, maxBytes) {
+  if (!response?.body?.getReader) {
+    const text = await response.text().catch(() => '')
+    if (new TextEncoder().encode(text).byteLength > maxBytes) throw new Error('ollama_local_response_too_large')
+    return text
+  }
+  const reader = response.body.getReader()
+  const chunks = []
+  let total = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!(value instanceof Uint8Array)) throw new Error('ollama_local_response_invalid')
+      total += value.byteLength
+      if (total > maxBytes) throw new Error('ollama_local_response_too_large')
+      chunks.push(value)
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => null)
+    throw error
+  }
+  const bytes = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(bytes)
+}
+
 // --- Provider adapters ----------------------------------------------------------------------------
 // Each adapter takes a normalized request and returns { text?, data?, usage:{input_tokens,output_tokens}, model }
 // or throws (err.status set for retry/failover classification; err.noKey=true → provider unavailable).
+
+const OLLAMA = {
+  name: 'ollama-local',
+  maxAttempts: 1,
+  available: localOllamaAvailable,
+  async call({ system, messages, tool, maxTokens }, signal) {
+    const model = localOllamaModel()
+    if (!localOllamaAvailable() || !model) {
+      const error = new Error('ollama_local_unavailable')
+      error.providerUnavailable = true
+      throw error
+    }
+    const body = {
+      model,
+      stream: false,
+      think: false,
+      keep_alive: 0,
+      messages: [
+        ...(system ? [{ role: 'system', content: String(system) }] : []),
+        ...messages.map((message) => ({ role: message.role, content: flattenContent(message.content) })),
+      ],
+      options: { num_predict: maxTokens, temperature: 0 },
+      ...(tool ? { format: tool.input_schema } : {}),
+    }
+    let response
+    try {
+      response = await fetch(OLLAMA_API_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        redirect: 'error',
+        signal,
+      })
+    } catch {
+      const error = new Error('ollama_local_unavailable')
+      error.providerUnavailable = true
+      throw error
+    }
+    const responseText = await readBoundedResponseText(response, OLLAMA_RESPONSE_MAX_BYTES)
+    if (!response.ok) {
+      const error = providerError('ollama-local', response.status, '')
+      if (response.status === 404) error.providerUnavailable = true
+      throw error
+    }
+    let json
+    try { json = JSON.parse(responseText) } catch { throw new Error('ollama_local_response_invalid') }
+    if (json?.done !== true || typeof json?.message?.content !== 'string') throw new Error('ollama_local_response_invalid')
+    const content = json.message.content.trim()
+    if (!content) throw new Error('ollama_local_response_empty')
+    const usage = {
+      input_tokens: boundedUsageCount(json.prompt_eval_count),
+      output_tokens: boundedUsageCount(json.eval_count),
+    }
+    if (tool) {
+      let data
+      try { data = JSON.parse(content) } catch { throw new Error('gateway_bad_tool_json') }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('gateway_bad_tool_json')
+      return { data, usage, model }
+    }
+    return { text: content, usage, model }
+  },
+}
 
 const ANTHROPIC = {
   name: 'anthropic',
@@ -335,10 +445,10 @@ const OPENROUTER = {
   },
 }
 
-// Ordered provider chain — Anthropic primary, OpenRouter failover. Only providers with a key configured
-// are included, so with no OPENROUTER_API_KEY the behavior is identical to before (Anthropic-only).
+// Ordered provider chain: explicitly enabled local Ollama first, then Anthropic and OpenRouter.
+// Only available providers are attempted; local inference is denied in hosted runtimes.
 export function providerChain() {
-  return [ANTHROPIC, OPENROUTER].filter((p) => p.available())
+  return [OLLAMA, ANTHROPIC, OPENROUTER].filter((provider) => provider.available())
 }
 
 /**
@@ -411,13 +521,13 @@ export async function complete(o) {
   const providers = providerChain()
   if (!providers.length) throw new Error('gateway_missing_api_key')
 
-  // Try each provider in turn (Anthropic, then OpenRouter failover). Within a provider, retry with
-  // exponential backoff + jitter on transient errors and drop a tier on a later attempt. When a
-  // provider is exhausted (or its auth is broken), fall over to the next provider in the chain.
+  // Try each provider in turn (local when enabled, then paid failover). Provider-specific retry
+  // ceilings apply; paid providers retain backoff and tier fallback while local inference attempts once.
   let lastErr
   for (const provider of providers) {
     let curTier = startTier
-    for (let attempt = 0; attempt < 4; attempt++) {
+    const maxAttempts = provider.maxAttempts || 4
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const tierDef = TIERS[curTier]
       const attemptMaxTokens = boundedMaxTokens(maxTokens, curTier)
       const reservation = await reserveProviderBudget({
@@ -447,10 +557,12 @@ export async function complete(o) {
         clearTimeout(timer)
         await settleProviderBudget(reservation, 'failed', reservation.reservedUnits)
         lastErr = err
+        if (err.providerUnavailable) break
         if (err.noKey) break // provider unusable → next provider
         if (err.status === 401 || err.status === 403) break // this provider's auth is broken → next provider
         // Other 4xx (bad request) is a request problem — failing over won't help.
         if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) throw err
+        if (attempt + 1 >= maxAttempts) break
         // Retriable (429 / 5xx / timeout / network): back off with jitter, drop a tier on a later try.
         await sleep(400 * (attempt + 1) ** 2 + Math.floor(Math.random() * 250))
         if (attempt === 2 && FALLBACK[curTier]) curTier = FALLBACK[curTier]

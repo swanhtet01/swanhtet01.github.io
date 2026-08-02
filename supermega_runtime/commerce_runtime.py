@@ -17,12 +17,22 @@ from supermega_runtime.client_import_runtime import (
 )
 from supermega_runtime.ecommerce_buying_lifecycle import (
     EcommerceLifecycleValidationError,
+    review_ecommerce_payment,
+    review_ecommerce_promotion,
+    review_ecommerce_shipping,
+    validate_ecommerce_tax_decision,
+    validate_ecommerce_payment_policy,
+    validate_ecommerce_promotion_policy,
+    validate_ecommerce_shipping_policy,
     validate_ecommerce_order_request,
 )
 from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
+    reserve_shop_inventory_order,
     shop_inventory_available_balances,
     shop_inventory_balances,
+    shop_inventory_business_partners,
+    shop_inventory_supplier_policies,
     shop_inventory_sku_available_to_promise,
     shop_inventory_sku_totals,
     validate_shop_inventory_state,
@@ -31,32 +41,61 @@ from supermega_runtime.trial_store import TrialValidationError
 
 
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
-COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v1"
+COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v3"
+COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v3"
+COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"
+COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v1"
+COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = "supermega.commerce.order-acknowledgement.v1"
 COMMERCE_EVENTS = frozenset(
     {
         "commerce.workspace.initialized",
         "commerce.item.created",
         "commerce.item.updated",
+        "commerce.tax_configuration.saved",
+        "commerce.account_mapping.saved",
+        "commerce.customer_credit_policy.saved",
+        "commerce.promotion_policy.saved",
+        "commerce.shipping_policy.saved",
+        "commerce.payment_policy.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
+        "commerce.order.support_case_opened",
+        "commerce.order.support_case_reopened",
+        "commerce.order.support_case_service_recorded",
+        "commerce.order.support_case_resolved",
+        "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
+        "commerce.collection_action.recorded",
         "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
+        "commerce.production_batch.received",
         "commerce.inventory.initialized",
+        "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
+        "commerce.purchase_budget.approved",
+        "commerce.supplier_sourcing.approved",
+        "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
+        "commerce.supplier_return.authorized",
+        "commerce.supplier_credit.recorded",
         "commerce.close.saved",
         "commerce.website_intake.created",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
         "commerce.storefront_request.received",
+        "commerce.service_schedule.initialized",
+        "commerce.service_schedule.saved",
     }
 )
 COMMERCE_HUMAN_EVENTS = frozenset(
@@ -64,24 +103,49 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.workspace.initialized",
         "commerce.item.created",
         "commerce.item.updated",
+        "commerce.tax_configuration.saved",
+        "commerce.account_mapping.saved",
+        "commerce.customer_credit_policy.saved",
+        "commerce.promotion_policy.saved",
+        "commerce.shipping_policy.saved",
+        "commerce.payment_policy.saved",
         "commerce.order.created",
         "commerce.order.advanced",
         "commerce.order.cancelled",
         "commerce.order.return_recorded",
+        "commerce.order.support_case_opened",
+        "commerce.order.support_case_reopened",
+        "commerce.order.support_case_service_recorded",
+        "commerce.order.support_case_resolved",
+        "commerce.order.correction_recorded",
         "commerce.payment.reconciled",
+        "commerce.collection_action.recorded",
         "commerce.refund.settled",
         "commerce.stock.received",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
+        "commerce.production_batch.received",
         "commerce.inventory.initialized",
+        "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
+        "commerce.purchase_budget.approved",
+        "commerce.supplier_sourcing.approved",
+        "commerce.purchase_requisition.approved",
         "commerce.purchase_order.created",
         "commerce.purchase_order.received",
         "commerce.purchase_order.cancelled",
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
+        "commerce.supplier_return.authorized",
+        "commerce.supplier_credit.recorded",
         "commerce.close.saved",
         "commerce.website_intake.converted",
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
+        "commerce.service_schedule.initialized",
+        "commerce.service_schedule.saved",
     }
 )
 _ORDER_STATUSES = ("confirmed", "preparing", "ready", "completed", "cancelled")
@@ -96,11 +160,30 @@ _MOVEMENT_KINDS = (
     "count",
     "return",
     "production_issue",
+    "production_return",
+    "production_receipt",
 )
 _PRODUCTION_MATERIAL_UNITS = frozenset(
     {"kg", "g", "l", "ml", "pcs", "pack", "bag", "roll", "sheet", "m", "cm"}
 )
 _RETURN_DISPOSITIONS = ("restock", "not_restocked")
+_SUPPORT_CATEGORIES = frozenset(
+    {"order_status", "delivery_issue", "payment_question", "item_issue", "other"}
+)
+_SUPPORT_RESOLUTION_OUTCOMES = frozenset(
+    {"information_provided", "replacement_review_required", "refund_review_required", "no_action"}
+)
+_SUPPORT_PRIORITIES = frozenset({"urgent", "high", "normal", "low"})
+_SUPPORT_PRIORITY_ORDER = ("urgent", "high", "normal", "low")
+_SUPPORT_SERVICE_EVENT_KINDS = frozenset(
+    {"reassigned", "escalated", "acknowledged", "first_response_ready"}
+)
+_PURCHASE_DISCREPANCY_CODES = frozenset({"damaged", "wrong_item", "quality_failed"})
+_PURCHASE_DISCREPANCY_FIELDS = frozenset(
+    {"rejectedQuantity", "discrepancyCode", "discrepancyDisposition"}
+)
+_CORRECTION_KINDS = ("credit", "debit")
+_CORRECTION_REASON_CODES = ("pricing_error", "service_recovery", "fee_adjustment", "other")
 _WEBSITE_INTAKE_STATUSES = ("pending_confirmation", "converted")
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _WEBSITE_FINGERPRINT_PATTERN = re.compile(r"web-[a-f0-9]{8}")
@@ -117,14 +200,77 @@ _COMMAND_ID_PATTERN = re.compile(
 )
 _STOREFRONT_PREVIEW_SCHEMA = "supermega.ecommerce.storefront_preview.v1"
 _MAX_STOREFRONT_REQUESTS = 100
+_MAX_PURCHASE_BUDGET_ENVELOPES = 200
+_MAX_SUPPLIER_SOURCING_DECISIONS = 200
+_MAX_PURCHASE_REQUISITIONS = 100
 _MAX_PURCHASE_ORDERS = 100
+_MAX_SUPPLIER_RETURNS_PER_PURCHASE_ORDER = 50
+_MAX_SUPPLIER_CREDITS_PER_RETURN = 50
 _MAX_CATALOG_BASELINES = 500
 _MAX_CATALOG_CHANGES = 500
+_MAX_TAX_CONFIGURATIONS = 100
+_MAX_ACCOUNT_MAPPING_CONFIGURATIONS = 100
+_MAX_CUSTOMER_CREDIT_POLICIES = 500
+_MAX_PROMOTION_POLICIES = 200
+_MAX_SHIPPING_POLICIES = 200
+_MAX_PAYMENT_POLICIES = 200
 _MAX_ORDER_LINES = 20
 _MAX_RETURNS_PER_ORDER = 100
+_MAX_SUPPORT_CASES_PER_ORDER = 100
+_MAX_SUPPORT_SERVICE_EVENTS_PER_CASE = 100
+_MAX_CORRECTIONS_PER_ORDER = 100
+_MAX_COLLECTION_ACTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
+_SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
+_SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
+_SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
+    {"service_registered", "resource_registered", "booking_scheduled", "booking_advanced", "booking_cancelled"}
+)
+_SUPPORT_INTENT_ID_PATTERN = re.compile(
+    r"ESR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SUPPORT_CASE_ID_PATTERN = re.compile(
+    r"CASE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SERVICE_SCHEDULE_BOOKING_STATUSES = frozenset(
+    {"held", "confirmed", "checked_in", "completed", "cancelled"}
+)
 _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_PURCHASE_REQUISITION_ID_PATTERN = re.compile(
+    r"PR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_PURCHASE_BUDGET_ENVELOPE_ID_PATTERN = re.compile(
+    r"PBE-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_PURCHASE_BUDGET_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{2,39}")
+_SUPPLIER_SOURCING_DECISION_ID_PATTERN = re.compile(
+    r"SSD-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SUPPLIER_INVOICE_ID_PATTERN = re.compile(
+    r"PINV-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SUPPLIER_RETURN_ID_PATTERN = re.compile(
+    r"SRET-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_SUPPLIER_CREDIT_ID_PATTERN = re.compile(
+    r"SCN-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
+)
+_TAX_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,11}")
+_TAX_JURISDICTION_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{1,15}")
+_EXTERNAL_ACCOUNT_CODE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,39}")
+_LEGACY_ACCOUNT_ROLES = (
+    "payment_clearing",
+    "sales_revenue",
+    "sales_revenue_unverified",
+    "tax_payable",
+)
+_ACCOUNT_ROLES = (
+    *_LEGACY_ACCOUNT_ROLES,
+    "sales_adjustment",
+    "correction_receivable",
+    "correction_payable",
 )
 _ISO_TIMESTAMP_PATTERN = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}"
@@ -132,6 +278,9 @@ _ISO_TIMESTAMP_PATTERN = re.compile(
 )
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
+_SERVICE_SCHEDULE_FIELDS = frozenset(
+    {"schema", "industryPackId", "revision", "services", "resources", "bookings", "events"}
+)
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
 _CATALOG_CHANGE_FIELDS = frozenset(
     {
@@ -146,6 +295,29 @@ _CATALOG_CHANGE_FIELDS = frozenset(
 _CATALOG_BASELINE_FIELDS = frozenset(
     {"sku", "price", "reorderAt", "proof", "anchorDigest"}
 )
+_TAX_CONFIGURATION_FIELDS = frozenset(
+    {"revision", "code", "label", "rateBasisPoints", "mode", "proof"}
+)
+_TAX_CONFIGURATION_SCHEDULE_FIELDS = frozenset({"jurisdictionCode", "effectiveFrom"})
+_ACCOUNT_MAPPING_CONFIGURATION_FIELDS = frozenset({"revision", "mappings", "proof"})
+_ACCOUNT_MAPPING_FIELDS = frozenset({"accountRole", "externalAccountCode"})
+_CUSTOMER_CREDIT_POLICY_FIELDS = frozenset(
+    {"revision", "customer", "creditLimitMmk", "maxPaymentTermsDays", "status", "proof"}
+)
+_ORDER_CREDIT_DECISION_FIELDS = frozenset(
+    {
+        "policyRevision",
+        "policyActionId",
+        "creditLimitMmk",
+        "exposureBeforeMmk",
+        "orderAmountMmk",
+        "exposureAfterMmk",
+        "maxPaymentTermsDays",
+        "paymentTermsDays",
+        "status",
+    }
+)
+_CUSTOMER_CREDIT_TERMS = frozenset({0, 7, 30})
 _ORDER_REQUIRED_FIELDS = frozenset(
     {
         "id",
@@ -177,6 +349,13 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "fulfilment",
         "fulfilmentReference",
         "promisedAt",
+        "paymentDueAt",
+        "collectionActions",
+        "creditDecision",
+        "promotionDecision",
+        "shippingDecision",
+        "paymentDecision",
+        "taxDecision",
         "owner",
         "sourceRecordId",
         "evidenceReference",
@@ -184,12 +363,16 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "advancementActionIds",
         "completion",
         "returns",
+        "supportCases",
+        "corrections",
         "calculation",
     }
 )
 _ORDER_LINE_REQUIRED_FIELDS = frozenset({"sku", "name", "quantity", "unitPriceMmk"})
 _ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant"})
+_COLLECTION_ACTION_FIELDS = frozenset({"kind", "proof"})
 _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
+_ORDER_CALCULATION_V2_SCHEMA = "supermega.commerce.order-calculation.v2"
 _ORDER_CALCULATION_FIELDS = frozenset(
     {
         "schema",
@@ -200,6 +383,24 @@ _ORDER_CALCULATION_FIELDS = frozenset(
         "taxMmk",
         "totalMmk",
     }
+)
+_ORDER_CALCULATION_V2_FIELDS = frozenset(
+    {
+        "schema",
+        "currency",
+        "catalogRevision",
+        "taxConfigurationRevision",
+        "taxCode",
+        "taxRateBasisPoints",
+        "taxMode",
+        "listedSubtotalMmk",
+        "subtotalMmk",
+        "taxMmk",
+        "totalMmk",
+    }
+)
+_ORDER_CALCULATION_V2_SCHEDULE_FIELDS = frozenset(
+    {"taxJurisdictionCode", "taxEffectiveFrom"}
 )
 _ORDER_RETURN_FIELDS = frozenset(
     {
@@ -212,6 +413,60 @@ _ORDER_RETURN_FIELDS = frozenset(
         "quantity",
         "disposition",
     }
+)
+_ORDER_SUPPORT_CASE_REQUIRED_FIELDS = frozenset(
+    {
+        "caseId", "sourceIntentId", "sourceRequestId", "customerRequestedAt",
+        "category", "customerDescription", "status", "opening",
+        "externalMessageSent", "refundStarted",
+    }
+)
+_ORDER_SUPPORT_CASE_OPTIONAL_FIELDS = frozenset(
+    {
+        "resolution", "serviceEvents", "priority", "owner", "dueAt",
+        "reopen", "followUpServiceEvents", "followUpResolution",
+    }
+)
+_ORDER_SUPPORT_SERVICE_EVENT_FIELDS = frozenset(
+    {"kind", "owner", "priority", "dueAt", "note", "proof"}
+)
+_ORDER_SUPPORT_RESOLUTION_FIELDS = frozenset({"outcome", "note", "proof"})
+_ORDER_SUPPORT_REOPEN_FIELDS = frozenset(
+    {"sourceResolutionActionId", "owner", "priority", "dueAt", "note", "proof"}
+)
+_ORDER_CORRECTION_FIELDS = frozenset(
+    {
+        "documentId",
+        "actionId",
+        "createdAt",
+        "actor",
+        "reason",
+        "evidenceReference",
+        "kind",
+        "reasonCode",
+        "sourceCalculationDigest",
+        "calculation",
+        "balanceAfterMmk",
+        "financialStatus",
+        "postingAuthority",
+        "externalPostingPerformed",
+    }
+)
+_CORRECTION_CALCULATION_FIELDS = frozenset(
+    {
+        "currency",
+        "taxConfigurationRevision",
+        "taxCode",
+        "taxRateBasisPoints",
+        "taxMode",
+        "listedAmountMmk",
+        "subtotalMmk",
+        "taxMmk",
+        "totalMmk",
+    }
+)
+_CORRECTION_CALCULATION_SCHEDULE_FIELDS = frozenset(
+    {"taxJurisdictionCode", "taxEffectiveFrom"}
 )
 _RECONCILIATION_FIELDS = frozenset(
     {
@@ -235,6 +490,9 @@ _MOVEMENT_FIELDS = frozenset(
         "quantityDelta",
         "orderId",
         "purchaseOrderId",
+        "rejectedQuantity",
+        "discrepancyCode",
+        "discrepancyDisposition",
         "expectedQuantity",
         "countedQuantity",
         "productionRequestId",
@@ -245,6 +503,14 @@ _MOVEMENT_FIELDS = frozenset(
         "productionQuantityMilli",
         "productionUnit",
         "conversionNote",
+        "productionIssueActionId",
+        "productionReturnedQuantityMilli",
+        "productionReturnStockUnitId",
+        "productionReturnLocationId",
+        "productionReleaseId",
+        "productionOutputBatchId",
+        "productionReleasedAt",
+        "productionSourceProduct",
     }
 )
 _PRODUCTION_ISSUE_FIELDS = frozenset(
@@ -262,7 +528,51 @@ _PRODUCTION_ISSUE_FIELDS = frozenset(
 _PURCHASE_ORDER_REQUIRED_FIELDS = frozenset(
     {"id", "createdAt", "supplier", "sku", "quantityOrdered", "creation"}
 )
-_PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset({"expectedAt", "cancellation"})
+_PURCHASE_ORDER_OPTIONAL_FIELDS = frozenset(
+    {"requisitionId", "expectedAt", "unitCostMmk", "cancellation", "supplierInvoice", "supplierReturns"}
+)
+_PURCHASE_REQUISITION_REQUIRED_FIELDS = frozenset(
+    {
+        "id", "createdAt", "expectedAt", "supplier", "sku", "quantityRequested",
+        "unitCostMmk", "totalMmk", "sourceDecisionDigest",
+        "sourceReplenishmentDigest", "approval",
+    }
+)
+_PURCHASE_REQUISITION_OPTIONAL_FIELDS = frozenset(
+    {"budgetEnvelopeId", "sourceSourcingDecisionId"}
+)
+_PURCHASE_BUDGET_ENVELOPE_FIELDS = frozenset(
+    {
+        "id", "createdAt", "budgetCode", "label", "periodStart", "periodEnd",
+        "ceilingMmk", "perRequisitionLimitMmk", "approval",
+    }
+)
+_SUPPLIER_SOURCING_DECISION_FIELDS = frozenset(
+    {
+        "id", "createdAt", "sku", "quantity", "quotes", "selectedQuoteReference",
+        "unitCostToleranceBasisPoints", "deliveryToleranceDays", "approval",
+    }
+)
+_SUPPLIER_QUOTE_FIELDS = frozenset(
+    {"supplier", "quoteReference", "vendorApprovalReference", "unitCostMmk", "deliveryAt", "validUntil"}
+)
+_SUPPLIER_INVOICE_REQUIRED_FIELDS = frozenset(
+    {
+        "id", "supplierReference", "issuedAt", "dueAt", "quantityInvoiced",
+        "unitCostMmk", "totalMmk", "recording",
+    }
+)
+_SUPPLIER_INVOICE_OPTIONAL_FIELDS = frozenset({"payableReview"})
+_SUPPLIER_RETURN_FIELDS = frozenset(
+    {
+        "id", "createdAt", "receiptMovementId", "quantityRejected", "reasonCode",
+        "claimAmountMmk", "internalReturnReference", "physicalReturnStatus",
+        "supplierContacted", "accountingPosted", "authorization", "creditNotes",
+    }
+)
+_SUPPLIER_CREDIT_FIELDS = frozenset(
+    {"id", "supplierReference", "issuedAt", "amountMmk", "accountingPosted", "recording"}
+)
 _CLOSE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "total", "orders"})
 _CLOSE_SNAPSHOT_FIELDS = frozenset(
     {
@@ -335,9 +645,57 @@ _STOREFRONT_CONFIGURATION_FIELDS = frozenset(
         "saved",
     }
 )
-_STOREFRONT_CONFIGURATION_OPTIONAL_FIELDS = frozenset({"merchandising"})
+_STOREFRONT_CONFIGURATION_OPTIONAL_FIELDS = frozenset({"activation", "merchandising"})
 _STOREFRONT_MERCHANDISING_FIELDS = frozenset(
     {"sku", "featured", "collection", "displayName", "note"}
+)
+_PRODUCTION_RETURN_EXCLUSIVE_FIELDS = frozenset(
+    {
+        "productionIssueActionId",
+        "productionReturnedQuantityMilli",
+        "productionReturnStockUnitId",
+        "productionReturnLocationId",
+    }
+)
+_CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"settlement"}
+_CLOSE_SETTLEMENT_FIELDS = frozenset(
+    {"schema", "status", "totalExpectedMmk", "totalCountedMmk", "totalVarianceMmk", "lines"}
+)
+_CLOSE_SETTLEMENT_LINE_FIELDS = frozenset(
+    {"paymentMethod", "expectedMmk", "countedMmk", "varianceMmk", "status", "varianceOwner", "varianceReason"}
+)
+_PRODUCTION_RECEIPT_FIELDS = frozenset(
+    {
+        "productionReleaseId",
+        "productionCommandDigest",
+        "productionJobId",
+        "productionOutputBatchId",
+        "productionReleasedAt",
+    }
+)
+_PRODUCTION_ISSUE_EXCLUSIVE_FIELDS = frozenset(
+    {
+        "productionRequestId",
+        "productionMaterialId",
+        "productionInputLotId",
+        "productionQuantityMilli",
+        "productionUnit",
+        "conversionNote",
+    }
+)
+_PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS = frozenset(
+    {
+        "productionReleaseId",
+        "productionOutputBatchId",
+        "productionReleasedAt",
+        "productionSourceProduct",
+    }
+)
+_STOREFRONT_ACTIVATION_FIELDS = frozenset(
+    {"contract", "packageDigest", "workflowTemplateId", "confirmedAt", "skus"}
+)
+_ECOMMERCE_TEMPLATE_IDS = frozenset(
+    {"social-storefront", "pickup-preorder", "wholesale-request"}
 )
 
 
@@ -450,6 +808,132 @@ def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> 
     return proof
 
 
+def _same_accountable_actor(left: str, right: str) -> bool:
+    return left.strip().casefold() == right.strip().casefold()
+
+
+def _validate_support_service_timeline(
+    value: object,
+    field: str,
+    case_id: str,
+    initial_service: Mapping[str, Any],
+    initial_at: datetime,
+    support_action_ids: list[str],
+) -> tuple[dict[str, Any], datetime, bool, bool]:
+    service_events = _list(value, field)
+    if not 1 <= len(service_events) <= _MAX_SUPPORT_SERVICE_EVENTS_PER_CASE:
+        raise TrialValidationError(
+            f"{field} requires 1 to {_MAX_SUPPORT_SERVICE_EVENTS_PER_CASE} records."
+        )
+    effective_service = dict(initial_service)
+    latest_service_at = initial_at
+    acknowledged = False
+    first_response_ready = False
+    for reverse_index, service_candidate in enumerate(reversed(service_events)):
+        service_index = len(service_events) - reverse_index - 1
+        service_field = f"{field}[{service_index}]"
+        service_event = _object(service_candidate, service_field)
+        _exact_fields(
+            service_event,
+            service_field,
+            required=_ORDER_SUPPORT_SERVICE_EVENT_FIELDS,
+        )
+        if (
+            service_event["kind"] not in _SUPPORT_SERVICE_EVENT_KINDS
+            or service_event["priority"] not in _SUPPORT_PRIORITIES
+        ):
+            raise TrialValidationError(f"{service_field} is invalid.")
+        owner = _text(service_event["owner"], f"{service_field}.owner", maximum=120)
+        _text(service_event["note"], f"{service_field}.note", maximum=300)
+        service_proof = _action_proof(service_event["proof"], f"{service_field}.proof")
+        service_at = datetime.fromisoformat(service_proof["capturedAt"].replace("Z", "+00:00"))
+        service_due_at = datetime.fromisoformat(
+            _timestamp(service_event["dueAt"], f"{service_field}.dueAt").replace("Z", "+00:00")
+        )
+        previous_due_at = datetime.fromisoformat(str(effective_service["dueAt"]).replace("Z", "+00:00"))
+        previous_priority = _SUPPORT_PRIORITY_ORDER.index(str(effective_service["priority"]))
+        next_priority = _SUPPORT_PRIORITY_ORDER.index(str(service_event["priority"]))
+        if (
+            service_proof["evidenceReference"] != f"SUPPORT-SERVICE:{case_id}"
+            or service_at < latest_service_at
+        ):
+            raise TrialValidationError(f"{service_field} chronology is invalid.")
+        if service_event["kind"] == "reassigned":
+            if (
+                owner == effective_service["owner"]
+                or service_event["priority"] != effective_service["priority"]
+                or service_event["dueAt"] != effective_service["dueAt"]
+            ):
+                raise TrialValidationError(f"{service_field} must change only the accountable owner.")
+        elif service_event["kind"] == "escalated":
+            if (
+                owner != effective_service["owner"]
+                or next_priority > previous_priority
+                or service_due_at > previous_due_at
+                or (next_priority == previous_priority and service_due_at == previous_due_at)
+                or (
+                    service_event["dueAt"] != effective_service["dueAt"]
+                    and service_due_at <= service_at
+                )
+            ):
+                raise TrialValidationError(
+                    f"{service_field} must increase priority or bring a future due time forward "
+                    "without changing owner."
+                )
+        elif service_event["kind"] == "acknowledged":
+            if (
+                acknowledged
+                or first_response_ready
+                or owner != effective_service["owner"]
+                or service_event["priority"] != effective_service["priority"]
+                or service_event["dueAt"] != effective_service["dueAt"]
+            ):
+                raise TrialValidationError(
+                    f"{service_field} must acknowledge the current service state exactly once."
+                )
+            acknowledged = True
+        else:
+            if (
+                not acknowledged
+                or first_response_ready
+                or owner != effective_service["owner"]
+                or service_event["priority"] != effective_service["priority"]
+                or service_event["dueAt"] != effective_service["dueAt"]
+            ):
+                raise TrialValidationError(
+                    f"{service_field} must record one first response after acknowledgement "
+                    "without changing service state."
+                )
+            first_response_ready = True
+        effective_service = {
+            "priority": service_event["priority"],
+            "owner": owner,
+            "dueAt": service_event["dueAt"],
+        }
+        latest_service_at = service_at
+        support_action_ids.append(service_proof["actionId"])
+    return effective_service, latest_service_at, acknowledged, first_response_ready
+
+
+def _validate_support_resolution(
+    value: object,
+    field: str,
+    minimum_at: datetime,
+    support_action_ids: list[str],
+) -> tuple[dict[str, Any], datetime]:
+    resolution = _object(value, field)
+    _exact_fields(resolution, field, required=_ORDER_SUPPORT_RESOLUTION_FIELDS)
+    if resolution["outcome"] not in _SUPPORT_RESOLUTION_OUTCOMES:
+        raise TrialValidationError(f"{field}.outcome is invalid.")
+    _text(resolution["note"], f"{field}.note", maximum=300)
+    resolution_proof = _action_proof(resolution["proof"], f"{field}.proof")
+    resolution_at = datetime.fromisoformat(resolution_proof["capturedAt"].replace("Z", "+00:00"))
+    if resolution_at < minimum_at:
+        raise TrialValidationError(f"{field} predates its latest service event.")
+    support_action_ids.append(resolution_proof["actionId"])
+    return resolution, resolution_at
+
+
 def _storefront_request(value: object, field: str) -> dict[str, Any]:
     request = _object(value, field)
     if request.get("schema") == "supermega.ecommerce.order_request.v2":
@@ -509,6 +993,141 @@ def _storefront_request(value: object, field: str) -> dict[str, Any]:
     return request
 
 
+def _validate_service_schedule(value: object) -> dict[str, Any]:
+    schedule = _object(value, "commerce state.serviceSchedule")
+    _exact_fields(
+        schedule,
+        "commerce state.serviceSchedule",
+        required=_SERVICE_SCHEDULE_FIELDS,
+    )
+    if schedule.get("schema") != _SERVICE_SCHEDULE_SCHEMA:
+        raise TrialValidationError(
+            f"commerce state.serviceSchedule.schema must be {_SERVICE_SCHEDULE_SCHEMA}."
+        )
+    if schedule.get("industryPackId") not in _SERVICE_SCHEDULE_PACKS:
+        raise TrialValidationError("commerce state.serviceSchedule industry pack is unsupported.")
+    revision = _integer(
+        schedule.get("revision"),
+        "commerce state.serviceSchedule.revision",
+    )
+    services = _list(schedule.get("services"), "commerce state.serviceSchedule.services")
+    resources = _list(schedule.get("resources"), "commerce state.serviceSchedule.resources")
+    bookings = _list(schedule.get("bookings"), "commerce state.serviceSchedule.bookings")
+    events = _list(schedule.get("events"), "commerce state.serviceSchedule.events")
+    if len(services) > 100 or len(resources) > 100 or len(bookings) > 500 or len(events) > 1000:
+        raise TrialValidationError("commerce state.serviceSchedule exceeds managed workspace limits.")
+
+    service_ids: list[str] = []
+    for index, candidate in enumerate(services):
+        field = f"commerce state.serviceSchedule.services[{index}]"
+        service = _object(candidate, field)
+        _exact_fields(
+            service,
+            field,
+            required=frozenset({"id", "name", "durationMinutes", "priceMmk", "active"}),
+        )
+        service_ids.append(_text(service.get("id"), f"{field}.id", maximum=80))
+        _text(service.get("name"), f"{field}.name", maximum=160)
+        duration = _integer(service.get("durationMinutes"), f"{field}.durationMinutes", minimum=1)
+        _integer(service.get("priceMmk"), f"{field}.priceMmk", minimum=1)
+        if duration > 1440 or not isinstance(service.get("active"), bool):
+            raise TrialValidationError(f"{field} duration or active state is invalid.")
+    _unique(service_ids, "commerce state.serviceSchedule service ID")
+    service_by_id = {service["id"]: service for service in services}
+
+    resource_ids: list[str] = []
+    for index, candidate in enumerate(resources):
+        field = f"commerce state.serviceSchedule.resources[{index}]"
+        resource = _object(candidate, field)
+        _exact_fields(
+            resource,
+            field,
+            required=frozenset({"id", "name", "kind", "active"}),
+        )
+        resource_ids.append(_text(resource.get("id"), f"{field}.id", maximum=80))
+        _text(resource.get("name"), f"{field}.name", maximum=160)
+        if resource.get("kind") not in {"staff", "room", "equipment"} or not isinstance(
+            resource.get("active"), bool
+        ):
+            raise TrialValidationError(f"{field} kind or active state is invalid.")
+    _unique(resource_ids, "commerce state.serviceSchedule resource ID")
+
+    booking_ids: list[str] = []
+    normalized_bookings: list[dict[str, Any]] = []
+    for index, candidate in enumerate(bookings):
+        field = f"commerce state.serviceSchedule.bookings[{index}]"
+        booking = _object(candidate, field)
+        _exact_fields(
+            booking,
+            field,
+            required=frozenset(
+                {
+                    "id", "customerName", "contact", "serviceId", "resourceId", "startsAt",
+                    "endsAt", "status", "note", "createdAt", "updatedAt",
+                }
+            ),
+        )
+        booking_id = _text(booking.get("id"), f"{field}.id", maximum=80)
+        booking_ids.append(booking_id)
+        _text(booking.get("customerName"), f"{field}.customerName", maximum=160)
+        _text(booking.get("contact"), f"{field}.contact", maximum=160)
+        if booking.get("serviceId") not in service_ids or booking.get("resourceId") not in resource_ids:
+            raise TrialValidationError(f"{field} references an unknown service or resource.")
+        starts_at = _timestamp(booking.get("startsAt"), f"{field}.startsAt")
+        ends_at = _timestamp(booking.get("endsAt"), f"{field}.endsAt")
+        if datetime.fromisoformat(ends_at.replace("Z", "+00:00")) <= datetime.fromisoformat(
+            starts_at.replace("Z", "+00:00")
+        ):
+            raise TrialValidationError(f"{field} must end after it starts.")
+        expected_end = datetime.fromisoformat(starts_at.replace("Z", "+00:00")) + timedelta(
+            minutes=service_by_id[booking["serviceId"]]["durationMinutes"]
+        )
+        if datetime.fromisoformat(ends_at.replace("Z", "+00:00")) != expected_end:
+            raise TrialValidationError(f"{field} duration must match its service.")
+        if booking.get("status") not in _SERVICE_SCHEDULE_BOOKING_STATUSES:
+            raise TrialValidationError(f"{field}.status is invalid.")
+        _blankable_text(booking.get("note"), f"{field}.note", maximum=300)
+        _timestamp(booking.get("createdAt"), f"{field}.createdAt")
+        _timestamp(booking.get("updatedAt"), f"{field}.updatedAt")
+        normalized_bookings.append(booking)
+    _unique(booking_ids, "commerce state.serviceSchedule booking ID")
+    blocking = [booking for booking in normalized_bookings if booking["status"] != "cancelled"]
+    for left, first in enumerate(blocking):
+        for second in blocking[left + 1 :]:
+            if (
+                first["resourceId"] == second["resourceId"]
+                and datetime.fromisoformat(first["startsAt"].replace("Z", "+00:00"))
+                < datetime.fromisoformat(second["endsAt"].replace("Z", "+00:00"))
+                and datetime.fromisoformat(second["startsAt"].replace("Z", "+00:00"))
+                < datetime.fromisoformat(first["endsAt"].replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError("commerce state.serviceSchedule contains overlapping bookings.")
+
+    if len(events) != revision:
+        raise TrialValidationError("commerce state.serviceSchedule evidence is incomplete.")
+    for index, candidate in enumerate(events):
+        field = f"commerce state.serviceSchedule.events[{index}]"
+        event = _object(candidate, field)
+        _exact_fields(
+            event,
+            field,
+            required=frozenset({"revision", "type", "subjectId", "actor", "reason", "happenedAt"}),
+        )
+        if event.get("revision") != index + 1 or event.get("type") not in _SERVICE_SCHEDULE_EVENT_TYPES:
+            raise TrialValidationError(f"{field} revision or type is invalid.")
+        subject_id = _text(event.get("subjectId"), f"{field}.subjectId", maximum=80)
+        if (
+            (event["type"] == "service_registered" and subject_id not in service_ids)
+            or (event["type"] == "resource_registered" and subject_id not in resource_ids)
+            or (event["type"].startswith("booking_") and subject_id not in booking_ids)
+        ):
+            raise TrialValidationError(f"{field} references an unknown subject.")
+        _text(event.get("actor"), f"{field}.actor", maximum=120)
+        _text(event.get("reason"), f"{field}.reason", maximum=240)
+        _timestamp(event.get("happenedAt"), f"{field}.happenedAt")
+    return schedule
+
+
 def validate_commerce_state(value: object) -> dict[str, Any]:
     """Validate the complete managed Commerce snapshot without repairing it."""
 
@@ -522,10 +1141,20 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "websiteIntakes",
                 "storefrontRequests",
                 "storefrontConfiguration",
+                "purchaseBudgetEnvelopes",
+                "supplierSourcingDecisions",
+                "purchaseRequisitions",
                 "purchaseOrders",
                 "catalogBaselines",
                 "catalogChanges",
+                "taxConfigurations",
+                "accountMappingConfigurations",
+                "customerCreditPolicies",
+                "promotionPolicies",
+                "shippingPolicies",
+                "paymentPolicies",
                 "inventoryFoundation",
+                "serviceSchedule",
             }
         ),
     )
@@ -545,6 +1174,18 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("purchaseOrders", []),
         "commerce state.purchaseOrders",
     )
+    purchase_budget_envelopes = _list(
+        state.get("purchaseBudgetEnvelopes", []),
+        "commerce state.purchaseBudgetEnvelopes",
+    )
+    supplier_sourcing_decisions = _list(
+        state.get("supplierSourcingDecisions", []),
+        "commerce state.supplierSourcingDecisions",
+    )
+    purchase_requisitions = _list(
+        state.get("purchaseRequisitions", []),
+        "commerce state.purchaseRequisitions",
+    )
     catalog_baselines = _list(
         state.get("catalogBaselines", []),
         "commerce state.catalogBaselines",
@@ -553,6 +1194,32 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         state.get("catalogChanges", []),
         "commerce state.catalogChanges",
     )
+    tax_configurations = _list(
+        state.get("taxConfigurations", []),
+        "commerce state.taxConfigurations",
+    )
+    account_mapping_configurations = _list(
+        state.get("accountMappingConfigurations", []),
+        "commerce state.accountMappingConfigurations",
+    )
+    customer_credit_policies = _list(
+        state.get("customerCreditPolicies", []),
+        "commerce state.customerCreditPolicies",
+    )
+    promotion_policies = _list(
+        state.get("promotionPolicies", []),
+        "commerce state.promotionPolicies",
+    )
+    shipping_policies = _list(
+        state.get("shippingPolicies", []),
+        "commerce state.shippingPolicies",
+    )
+    payment_policies = _list(
+        state.get("paymentPolicies", []),
+        "commerce state.paymentPolicies",
+    )
+    if "serviceSchedule" in state:
+        _validate_service_schedule(state["serviceSchedule"])
     if "storefrontConfiguration" in state and state["storefrontConfiguration"] is None:
         raise TrialValidationError(
             "commerce state.storefrontConfiguration must be an object when present."
@@ -573,6 +1240,49 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     if len(catalog_changes) > _MAX_CATALOG_CHANGES:
         raise TrialValidationError(
             f"commerce state.catalogChanges cannot exceed {_MAX_CATALOG_CHANGES}."
+        )
+    if len(purchase_budget_envelopes) > _MAX_PURCHASE_BUDGET_ENVELOPES:
+        raise TrialValidationError(
+            "commerce state.purchaseBudgetEnvelopes cannot exceed "
+            f"{_MAX_PURCHASE_BUDGET_ENVELOPES}."
+        )
+    if len(supplier_sourcing_decisions) > _MAX_SUPPLIER_SOURCING_DECISIONS:
+        raise TrialValidationError(
+            "commerce state.supplierSourcingDecisions cannot exceed "
+            f"{_MAX_SUPPLIER_SOURCING_DECISIONS}."
+        )
+    if len(purchase_requisitions) > _MAX_PURCHASE_REQUISITIONS:
+        raise TrialValidationError(
+            f"commerce state.purchaseRequisitions cannot exceed {_MAX_PURCHASE_REQUISITIONS}."
+        )
+    if len(tax_configurations) > _MAX_TAX_CONFIGURATIONS:
+        raise TrialValidationError(
+            f"commerce state.taxConfigurations cannot exceed {_MAX_TAX_CONFIGURATIONS}."
+        )
+    if len(account_mapping_configurations) > _MAX_ACCOUNT_MAPPING_CONFIGURATIONS:
+        raise TrialValidationError(
+            "commerce state.accountMappingConfigurations cannot exceed "
+            f"{_MAX_ACCOUNT_MAPPING_CONFIGURATIONS}."
+        )
+    if len(customer_credit_policies) > _MAX_CUSTOMER_CREDIT_POLICIES:
+        raise TrialValidationError(
+            "commerce state.customerCreditPolicies cannot exceed "
+            f"{_MAX_CUSTOMER_CREDIT_POLICIES}."
+        )
+    if len(promotion_policies) > _MAX_PROMOTION_POLICIES:
+        raise TrialValidationError(
+            "commerce state.promotionPolicies cannot exceed "
+            f"{_MAX_PROMOTION_POLICIES}."
+        )
+    if len(shipping_policies) > _MAX_SHIPPING_POLICIES:
+        raise TrialValidationError(
+            "commerce state.shippingPolicies cannot exceed "
+            f"{_MAX_SHIPPING_POLICIES}."
+        )
+    if len(payment_policies) > _MAX_PAYMENT_POLICIES:
+        raise TrialValidationError(
+            "commerce state.paymentPolicies cannot exceed "
+            f"{_MAX_PAYMENT_POLICIES}."
         )
 
     item_skus: list[str] = []
@@ -727,9 +1437,506 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 f"Catalog baseline for {sku} does not match the unchanged catalog item."
             )
 
+    tax_configuration_action_ids: list[str] = []
+    newer_tax_configuration: dict[str, Any] | None = None
+    for index, candidate in enumerate(tax_configurations):
+        field = f"taxConfigurations[{index}]"
+        configuration = _object(candidate, field)
+        _exact_fields(
+            configuration,
+            field,
+            required=_TAX_CONFIGURATION_FIELDS,
+            optional=_TAX_CONFIGURATION_SCHEDULE_FIELDS,
+        )
+        revision = _integer(configuration["revision"], f"{field}.revision", minimum=1)
+        if revision != len(tax_configurations) - index:
+            raise TrialValidationError(
+                f"{field}.revision breaks the newest-first sequence."
+            )
+        code = _text(configuration["code"], f"{field}.code", maximum=12)
+        if _TAX_CODE_PATTERN.fullmatch(code) is None:
+            raise TrialValidationError(f"{field}.code is invalid.")
+        _text(configuration["label"], f"{field}.label", maximum=80)
+        rate_basis_points = _integer(
+            configuration["rateBasisPoints"],
+            f"{field}.rateBasisPoints",
+        )
+        if rate_basis_points > 10_000:
+            raise TrialValidationError(
+                f"{field}.rateBasisPoints must be at most 10000."
+            )
+        if configuration["mode"] not in {"exclusive", "inclusive"}:
+            raise TrialValidationError(f"{field}.mode is invalid.")
+        proof = _action_proof(configuration["proof"], f"{field}.proof")
+        schedule_fields = _TAX_CONFIGURATION_SCHEDULE_FIELDS.intersection(configuration)
+        if schedule_fields and schedule_fields != _TAX_CONFIGURATION_SCHEDULE_FIELDS:
+            raise TrialValidationError(
+                f"{field} must include jurisdictionCode and effectiveFrom together."
+            )
+        effective_at = datetime.fromisoformat(
+            proof["capturedAt"].replace("Z", "+00:00")
+        )
+        if schedule_fields:
+            jurisdiction_code = _text(
+                configuration["jurisdictionCode"],
+                f"{field}.jurisdictionCode",
+                maximum=16,
+            )
+            if _TAX_JURISDICTION_CODE_PATTERN.fullmatch(jurisdiction_code) is None:
+                raise TrialValidationError(f"{field}.jurisdictionCode is invalid.")
+            effective_at = datetime.fromisoformat(
+                _timestamp(
+                    configuration["effectiveFrom"],
+                    f"{field}.effectiveFrom",
+                ).replace("Z", "+00:00")
+            )
+            if effective_at < datetime.fromisoformat(
+                proof["capturedAt"].replace("Z", "+00:00")
+            ):
+                raise TrialValidationError(
+                    f"{field}.effectiveFrom must be at or after its review proof."
+                )
+        if newer_tax_configuration is not None:
+            newer_captured_at = datetime.fromisoformat(
+                str(newer_tax_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            captured_at = datetime.fromisoformat(
+                proof["capturedAt"].replace("Z", "+00:00")
+            )
+            if captured_at > newer_captured_at:
+                raise TrialValidationError(
+                    f"{field} tax configurations must be newest first."
+                )
+            newer_effective_at = datetime.fromisoformat(
+                str(
+                    newer_tax_configuration.get(
+                        "effectiveFrom",
+                        newer_tax_configuration["proof"]["capturedAt"],
+                    )
+                ).replace("Z", "+00:00")
+            )
+            if effective_at > newer_effective_at:
+                raise TrialValidationError(
+                    f"{field} tax configurations must be newest first by effective time."
+                )
+        newer_tax_configuration = configuration
+        tax_configuration_action_ids.append(proof["actionId"])
+
+    account_mapping_configuration_action_ids: list[str] = []
+    newer_account_mapping_configuration: dict[str, Any] | None = None
+    for index, candidate in enumerate(account_mapping_configurations):
+        field = f"accountMappingConfigurations[{index}]"
+        configuration = _object(candidate, field)
+        _exact_fields(
+            configuration,
+            field,
+            required=_ACCOUNT_MAPPING_CONFIGURATION_FIELDS,
+        )
+        revision = _integer(configuration["revision"], f"{field}.revision", minimum=1)
+        if revision != len(account_mapping_configurations) - index:
+            raise TrialValidationError(
+                f"{field}.revision breaks the newest-first sequence."
+            )
+        mappings = _list(configuration["mappings"], f"{field}.mappings")
+        if len(mappings) not in {len(_LEGACY_ACCOUNT_ROLES), len(_ACCOUNT_ROLES)}:
+            raise TrialValidationError(
+                f"{field}.mappings must cover every account role exactly once."
+            )
+        expected_account_roles = (
+            _LEGACY_ACCOUNT_ROLES
+            if len(mappings) == len(_LEGACY_ACCOUNT_ROLES)
+            else _ACCOUNT_ROLES
+        )
+        for mapping_index, account_role in enumerate(expected_account_roles):
+            mapping_field = f"{field}.mappings[{mapping_index}]"
+            mapping = _object(mappings[mapping_index], mapping_field)
+            _exact_fields(mapping, mapping_field, required=_ACCOUNT_MAPPING_FIELDS)
+            if mapping["accountRole"] != account_role:
+                raise TrialValidationError(
+                    f"{mapping_field} must use the canonical account role order."
+                )
+            code = _text(
+                mapping["externalAccountCode"],
+                f"{mapping_field}.externalAccountCode",
+                maximum=40,
+            )
+            if _EXTERNAL_ACCOUNT_CODE_PATTERN.fullmatch(code) is None:
+                raise TrialValidationError(
+                    f"{mapping_field}.externalAccountCode is invalid."
+                )
+        proof = _action_proof(configuration["proof"], f"{field}.proof")
+        if newer_account_mapping_configuration is not None:
+            newer_captured_at = datetime.fromisoformat(
+                str(newer_account_mapping_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            captured_at = datetime.fromisoformat(proof["capturedAt"].replace("Z", "+00:00"))
+            if captured_at > newer_captured_at:
+                raise TrialValidationError(
+                    f"{field} account mapping configurations must be newest first."
+                )
+        newer_account_mapping_configuration = configuration
+        account_mapping_configuration_action_ids.append(proof["actionId"])
+
+    customer_credit_policy_action_ids: list[str] = []
+    newer_customer_credit_policy: dict[str, Any] | None = None
+    for index, candidate in enumerate(customer_credit_policies):
+        field = f"customerCreditPolicies[{index}]"
+        policy = _object(candidate, field)
+        _exact_fields(policy, field, required=_CUSTOMER_CREDIT_POLICY_FIELDS)
+        revision = _integer(policy["revision"], f"{field}.revision", minimum=1)
+        if revision != len(customer_credit_policies) - index:
+            raise TrialValidationError(
+                f"{field}.revision breaks the newest-first sequence."
+            )
+        _text(policy["customer"], f"{field}.customer", maximum=120)
+        _integer(policy["creditLimitMmk"], f"{field}.creditLimitMmk")
+        if policy["maxPaymentTermsDays"] not in _CUSTOMER_CREDIT_TERMS:
+            raise TrialValidationError(f"{field}.maxPaymentTermsDays is invalid.")
+        if policy["status"] not in {"active", "hold"}:
+            raise TrialValidationError(f"{field}.status is invalid.")
+        proof = _action_proof(policy["proof"], f"{field}.proof")
+        if newer_customer_credit_policy is not None:
+            newer_captured_at = datetime.fromisoformat(
+                str(newer_customer_credit_policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            captured_at = datetime.fromisoformat(proof["capturedAt"].replace("Z", "+00:00"))
+            if captured_at > newer_captured_at:
+                raise TrialValidationError(
+                    f"{field} customer credit policies must be newest first."
+                )
+        newer_customer_credit_policy = policy
+        customer_credit_policy_action_ids.append(proof["actionId"])
+
+    promotion_policy_action_ids: list[str] = []
+    validated_promotion_policies: list[dict[str, Any]] = []
+    newer_promotion_policy: dict[str, Any] | None = None
+    for index, candidate in enumerate(promotion_policies):
+        field = f"promotionPolicies[{index}]"
+        try:
+            policy = validate_ecommerce_promotion_policy(candidate, field)
+        except EcommerceLifecycleValidationError as exc:
+            raise TrialValidationError(
+                f"commerce state.{field} is invalid: {exc}"
+            ) from exc
+        if policy["revision"] != len(promotion_policies) - index:
+            raise TrialValidationError(
+                f"{field}.revision breaks the newest-first sequence."
+            )
+        if newer_promotion_policy is not None and datetime.fromisoformat(
+            str(newer_promotion_policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+        ) < datetime.fromisoformat(
+            str(policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+        ):
+            raise TrialValidationError(
+                f"{field} promotion policies must be newest first."
+            )
+        newer_promotion_policy = policy
+        validated_promotion_policies.append(policy)
+        promotion_policy_action_ids.append(policy["proof"]["actionId"])
+
+    shipping_policy_action_ids: list[str] = []
+    validated_shipping_policies: list[dict[str, Any]] = []
+    newer_shipping_policy: dict[str, Any] | None = None
+    for index, candidate in enumerate(shipping_policies):
+        field = f"shippingPolicies[{index}]"
+        try:
+            policy = validate_ecommerce_shipping_policy(candidate, field)
+        except EcommerceLifecycleValidationError as exc:
+            raise TrialValidationError(f"commerce state.{field} is invalid: {exc}") from exc
+        if policy["revision"] != len(shipping_policies) - index:
+            raise TrialValidationError(f"{field}.revision breaks the newest-first sequence.")
+        if newer_shipping_policy is not None and datetime.fromisoformat(
+            str(newer_shipping_policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+        ) < datetime.fromisoformat(str(policy["proof"]["capturedAt"]).replace("Z", "+00:00")):
+            raise TrialValidationError(f"{field} shipping policies must be newest first.")
+        newer_shipping_policy = policy
+        validated_shipping_policies.append(policy)
+        shipping_policy_action_ids.append(policy["proof"]["actionId"])
+
+    payment_policy_action_ids: list[str] = []
+    validated_payment_policies: list[dict[str, Any]] = []
+    newer_payment_policy: dict[str, Any] | None = None
+    for index, candidate in enumerate(payment_policies):
+        field = f"paymentPolicies[{index}]"
+        try:
+            policy = validate_ecommerce_payment_policy(candidate, field)
+        except EcommerceLifecycleValidationError as exc:
+            raise TrialValidationError(f"commerce state.{field} is invalid: {exc}") from exc
+        if policy["revision"] != len(payment_policies) - index:
+            raise TrialValidationError(f"{field}.revision breaks the newest-first sequence.")
+        if newer_payment_policy is not None and datetime.fromisoformat(
+            str(newer_payment_policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+        ) < datetime.fromisoformat(str(policy["proof"]["capturedAt"]).replace("Z", "+00:00")):
+            raise TrialValidationError(f"{field} payment policies must be newest first.")
+        newer_payment_policy = policy
+        validated_payment_policies.append(policy)
+        payment_policy_action_ids.append(policy["proof"]["actionId"])
+
+    purchase_budget_envelope_ids: list[str] = []
+    purchase_budget_action_ids: list[str] = []
+    purchase_budget_by_id: dict[str, dict[str, Any]] = {}
+    newer_purchase_budget: dict[str, Any] | None = None
+    for index, candidate in enumerate(purchase_budget_envelopes):
+        field = f"purchaseBudgetEnvelopes[{index}]"
+        envelope = _object(candidate, field)
+        _exact_fields(envelope, field, required=_PURCHASE_BUDGET_ENVELOPE_FIELDS)
+        envelope_id = _text(envelope["id"], f"{field}.id", maximum=80)
+        if _PURCHASE_BUDGET_ENVELOPE_ID_PATTERN.fullmatch(envelope_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        created_at = _timestamp(envelope["createdAt"], f"{field}.createdAt")
+        budget_code = _text(envelope["budgetCode"], f"{field}.budgetCode", maximum=40)
+        if _PURCHASE_BUDGET_CODE_PATTERN.fullmatch(budget_code) is None:
+            raise TrialValidationError(f"{field}.budgetCode is invalid.")
+        _text(envelope["label"], f"{field}.label", maximum=120)
+        period_start = _timestamp(envelope["periodStart"], f"{field}.periodStart")
+        period_end = _timestamp(envelope["periodEnd"], f"{field}.periodEnd")
+        created_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        start_time = datetime.fromisoformat(period_start.replace("Z", "+00:00"))
+        end_time = datetime.fromisoformat(period_end.replace("Z", "+00:00"))
+        if start_time > created_time or end_time <= created_time:
+            raise TrialValidationError(f"{field} period must contain its approval time.")
+        ceiling = _integer(envelope["ceilingMmk"], f"{field}.ceilingMmk", minimum=1)
+        per_requisition = _integer(
+            envelope["perRequisitionLimitMmk"],
+            f"{field}.perRequisitionLimitMmk",
+            minimum=1,
+        )
+        if per_requisition > ceiling:
+            raise TrialValidationError(f"{field} per-requisition limit exceeds its ceiling.")
+        approval = _action_proof(envelope["approval"], f"{field}.approval")
+        if approval["capturedAt"] != created_at:
+            raise TrialValidationError(f"{field}.approval must be captured at creation.")
+        if newer_purchase_budget is not None and datetime.fromisoformat(
+            str(newer_purchase_budget["createdAt"]).replace("Z", "+00:00")
+        ) < created_time:
+            raise TrialValidationError("purchase budget envelopes must be newest first.")
+        for existing in purchase_budget_by_id.values():
+            if existing["budgetCode"] != budget_code:
+                continue
+            existing_start = datetime.fromisoformat(str(existing["periodStart"]).replace("Z", "+00:00"))
+            existing_end = datetime.fromisoformat(str(existing["periodEnd"]).replace("Z", "+00:00"))
+            if start_time < existing_end and existing_start < end_time:
+                raise TrialValidationError(f"{field} overlaps another {budget_code} envelope.")
+        purchase_budget_envelope_ids.append(envelope_id)
+        purchase_budget_action_ids.append(approval["actionId"])
+        purchase_budget_by_id[envelope_id] = envelope
+        newer_purchase_budget = envelope
+    _unique(purchase_budget_envelope_ids, "Purchase budget envelope ID")
+
+    supplier_sourcing_ids: list[str] = []
+    supplier_sourcing_action_ids: list[str] = []
+    supplier_quote_sources: list[str] = []
+    supplier_sourcing_by_id: dict[str, dict[str, Any]] = {}
+    newer_supplier_sourcing: dict[str, Any] | None = None
+    inventory_vendor_ids: dict[str, str] = {}
+    inventory_supplier_policies: list[dict[str, Any]] = []
+    if "inventoryFoundation" in state:
+        partners = shop_inventory_business_partners(state["inventoryFoundation"], item_skus)
+        inventory_vendor_ids = {str(vendor["name"]): str(vendor["id"]) for vendor in partners["vendors"]}
+        inventory_supplier_policies = shop_inventory_supplier_policies(state["inventoryFoundation"], item_skus)
+    for index, candidate in enumerate(supplier_sourcing_decisions):
+        field = f"supplierSourcingDecisions[{index}]"
+        decision = _object(candidate, field)
+        _exact_fields(decision, field, required=_SUPPLIER_SOURCING_DECISION_FIELDS)
+        decision_id = _text(decision["id"], f"{field}.id", maximum=80)
+        if _SUPPLIER_SOURCING_DECISION_ID_PATTERN.fullmatch(decision_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        created_at = _timestamp(decision["createdAt"], f"{field}.createdAt")
+        sku = _text(decision["sku"], f"{field}.sku", maximum=80)
+        if sku not in item_by_sku:
+            raise TrialValidationError(f"{field}.sku is unknown.")
+        _integer(decision["quantity"], f"{field}.quantity", minimum=1)
+        cost_tolerance = _integer(
+            decision["unitCostToleranceBasisPoints"],
+            f"{field}.unitCostToleranceBasisPoints",
+            minimum=0,
+        )
+        delivery_tolerance = _integer(
+            decision["deliveryToleranceDays"],
+            f"{field}.deliveryToleranceDays",
+            minimum=0,
+        )
+        if cost_tolerance > 2_000 or delivery_tolerance > 30:
+            raise TrialValidationError(f"{field} tolerance is invalid.")
+        quotes = _list(decision["quotes"], f"{field}.quotes")
+        if not 1 <= len(quotes) <= 5:
+            raise TrialValidationError(f"{field}.quotes must contain 1 to 5 quotes.")
+        quote_references: list[str] = []
+        quote_suppliers: list[str] = []
+        for quote_index, quote_candidate in enumerate(quotes):
+            quote_field = f"{field}.quotes[{quote_index}]"
+            quote_record = _object(quote_candidate, quote_field)
+            _exact_fields(quote_record, quote_field, required=_SUPPLIER_QUOTE_FIELDS)
+            supplier = _text(quote_record["supplier"], f"{quote_field}.supplier", maximum=120)
+            quote_reference = _text(quote_record["quoteReference"], f"{quote_field}.quoteReference", maximum=80)
+            approval_reference = _text(
+                quote_record["vendorApprovalReference"],
+                f"{quote_field}.vendorApprovalReference",
+                maximum=120,
+            )
+            unit_cost = _integer(quote_record["unitCostMmk"], f"{quote_field}.unitCostMmk", minimum=1)
+            if unit_cost * (10_000 + cost_tolerance) // 10_000 > _MAX_SAFE_INTEGER:
+                raise TrialValidationError(f"{quote_field}.unitCostMmk exceeds the supported tolerance range.")
+            delivery_at = _timestamp(quote_record["deliveryAt"], f"{quote_field}.deliveryAt")
+            valid_until = _timestamp(quote_record["validUntil"], f"{quote_field}.validUntil")
+            if (
+                datetime.fromisoformat(delivery_at.replace("Z", "+00:00"))
+                <= datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                or datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
+                < datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(f"{quote_field} dates are invalid.")
+            if inventory_vendor_ids:
+                vendor_id = inventory_vendor_ids.get(supplier)
+                policy = next(
+                    (
+                        policy for policy in inventory_supplier_policies
+                        if str(policy["vendorId"]) == vendor_id
+                        and policy["sku"] == sku
+                        and policy["status"] == "active"
+                    ),
+                    None,
+                )
+                if policy is None or str(policy["commandId"]) != approval_reference:
+                    raise TrialValidationError(f"{quote_field} is not bound to an active approved-vendor policy.")
+            quote_references.append(quote_reference)
+            quote_suppliers.append(supplier)
+            supplier_quote_sources.append(f"{supplier}\0{quote_reference}")
+        _unique(quote_references, f"{field} quote reference")
+        _unique(quote_suppliers, f"{field} supplier")
+        selected_quote_reference = _text(
+            decision["selectedQuoteReference"],
+            f"{field}.selectedQuoteReference",
+            maximum=80,
+        )
+        if selected_quote_reference not in quote_references:
+            raise TrialValidationError(f"{field}.selectedQuoteReference is unknown.")
+        approval = _action_proof(decision["approval"], f"{field}.approval")
+        if approval["capturedAt"] != created_at:
+            raise TrialValidationError(f"{field}.approval must be captured at creation.")
+        if newer_supplier_sourcing is not None and datetime.fromisoformat(
+            str(newer_supplier_sourcing["createdAt"]).replace("Z", "+00:00")
+        ) < datetime.fromisoformat(created_at.replace("Z", "+00:00")):
+            raise TrialValidationError("supplier sourcing decisions must be newest first.")
+        supplier_sourcing_ids.append(decision_id)
+        supplier_sourcing_action_ids.append(approval["actionId"])
+        supplier_sourcing_by_id[decision_id] = decision
+        newer_supplier_sourcing = decision
+    _unique(supplier_sourcing_ids, "Supplier sourcing decision ID")
+    _unique(supplier_quote_sources, "Supplier quote source")
+
+    purchase_requisition_ids: list[str] = []
+    purchase_requisition_action_ids: list[str] = []
+    purchase_requisition_by_id: dict[str, dict[str, Any]] = {}
+    for index, candidate in enumerate(purchase_requisitions):
+        field = f"purchaseRequisitions[{index}]"
+        requisition = _object(candidate, field)
+        _exact_fields(
+            requisition,
+            field,
+            required=_PURCHASE_REQUISITION_REQUIRED_FIELDS,
+            optional=_PURCHASE_REQUISITION_OPTIONAL_FIELDS,
+        )
+        requisition_id = _text(requisition["id"], f"{field}.id", maximum=80)
+        if _PURCHASE_REQUISITION_ID_PATTERN.fullmatch(requisition_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        created_at = _timestamp(requisition["createdAt"], f"{field}.createdAt")
+        expected_at = _timestamp(requisition["expectedAt"], f"{field}.expectedAt")
+        if datetime.fromisoformat(expected_at.replace("Z", "+00:00")) <= datetime.fromisoformat(created_at.replace("Z", "+00:00")):
+            raise TrialValidationError(f"{field}.expectedAt must be later than approval.")
+        _text(requisition["supplier"], f"{field}.supplier", maximum=120)
+        sku = _text(requisition["sku"], f"{field}.sku", maximum=80)
+        if sku not in item_by_sku:
+            raise TrialValidationError(f"{field}.sku is unknown.")
+        quantity = _integer(requisition["quantityRequested"], f"{field}.quantityRequested", minimum=1)
+        unit_cost = _integer(requisition["unitCostMmk"], f"{field}.unitCostMmk", minimum=1)
+        total = _integer(requisition["totalMmk"], f"{field}.totalMmk", minimum=1)
+        if quantity * unit_cost > _MAX_SAFE_INTEGER or total != quantity * unit_cost:
+            raise TrialValidationError(f"{field}.totalMmk must equal quantity times unit cost.")
+        if "budgetEnvelopeId" in requisition:
+            budget_envelope_id = _text(
+                requisition["budgetEnvelopeId"],
+                f"{field}.budgetEnvelopeId",
+                maximum=80,
+            )
+            envelope = purchase_budget_by_id.get(budget_envelope_id)
+            if envelope is None:
+                raise TrialValidationError(f"{field}.budgetEnvelopeId is unknown.")
+            approval_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            if not (
+                datetime.fromisoformat(str(envelope["periodStart"]).replace("Z", "+00:00"))
+                <= approval_time
+                < datetime.fromisoformat(str(envelope["periodEnd"]).replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(f"{field} approval is outside its budget period.")
+            if total > int(envelope["perRequisitionLimitMmk"]):
+                raise TrialValidationError(f"{field} exceeds its per-requisition budget limit.")
+        if "sourceSourcingDecisionId" in requisition:
+            source_id = _text(
+                requisition["sourceSourcingDecisionId"],
+                f"{field}.sourceSourcingDecisionId",
+                maximum=80,
+            )
+            decision = supplier_sourcing_by_id.get(source_id)
+            selected = next(
+                (
+                    quote for quote in decision["quotes"]
+                    if quote["quoteReference"] == decision["selectedQuoteReference"]
+                ),
+                None,
+            ) if decision else None
+            maximum_unit_cost = (
+                int(selected["unitCostMmk"])
+                * (10_000 + int(decision["unitCostToleranceBasisPoints"]))
+                // 10_000
+            ) if decision and selected else 0
+            latest_delivery = (
+                datetime.fromisoformat(str(selected["deliveryAt"]).replace("Z", "+00:00"))
+                + timedelta(days=int(decision["deliveryToleranceDays"]))
+            ) if decision and selected else datetime.min.replace(tzinfo=timezone.utc)
+            if (
+                decision is None
+                or selected is None
+                or decision["sku"] != sku
+                or decision["quantity"] != quantity
+                or selected["supplier"] != requisition["supplier"]
+                or unit_cost > maximum_unit_cost
+                or datetime.fromisoformat(expected_at.replace("Z", "+00:00")) > latest_delivery
+                or datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                > datetime.fromisoformat(str(selected["validUntil"]).replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(f"{field} does not match its approved sourcing decision.")
+        for digest_field in ("sourceDecisionDigest", "sourceReplenishmentDigest"):
+            digest = _text(requisition[digest_field], f"{field}.{digest_field}", maximum=71)
+            if _SHA256_DIGEST_PATTERN.fullmatch(digest) is None:
+                raise TrialValidationError(f"{field}.{digest_field} is invalid.")
+        approval = _action_proof(requisition["approval"], f"{field}.approval")
+        if approval["capturedAt"] != created_at:
+            raise TrialValidationError(f"{field}.approval must be captured at creation.")
+        purchase_requisition_ids.append(requisition_id)
+        purchase_requisition_action_ids.append(approval["actionId"])
+        purchase_requisition_by_id[requisition_id] = requisition
+    _unique(purchase_requisition_ids, "Purchase requisition ID")
+    _unique(
+        [
+            str(requisition["sourceSourcingDecisionId"])
+            for requisition in purchase_requisition_by_id.values()
+            if "sourceSourcingDecisionId" in requisition
+        ],
+        "Consumed supplier sourcing decision ID",
+    )
+
     purchase_order_ids: list[str] = []
     purchase_order_action_ids: list[str] = []
+    supplier_invoice_ids: list[str] = []
+    supplier_invoice_references: list[str] = []
+    supplier_return_ids: list[str] = []
+    supplier_return_receipt_ids: list[str] = []
+    supplier_return_references: list[str] = []
+    supplier_credit_ids: list[str] = []
+    supplier_credit_references: list[str] = []
     purchase_order_by_id: dict[str, dict[str, Any]] = {}
+    converted_requisition_ids: list[str] = []
     for index, candidate in enumerate(purchase_orders):
         field = f"purchaseOrders[{index}]"
         purchase_order = _object(candidate, field)
@@ -767,10 +1974,44 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             f"{field}.quantityOrdered",
             minimum=1,
         )
+        if "unitCostMmk" in purchase_order:
+            unit_cost_mmk = _integer(
+                purchase_order["unitCostMmk"],
+                f"{field}.unitCostMmk",
+                minimum=1,
+            )
+            if purchase_order["quantityOrdered"] * unit_cost_mmk > _MAX_SAFE_INTEGER:
+                raise TrialValidationError(f"{field} total exceeds the safe integer range.")
+        linked_requisition: dict[str, Any] | None = None
+        if "requisitionId" in purchase_order:
+            requisition_id = _text(purchase_order["requisitionId"], f"{field}.requisitionId", maximum=80)
+            requisition = purchase_requisition_by_id.get(requisition_id)
+            if (
+                requisition is None
+                or requisition["sku"] != sku
+                or requisition["supplier"] != purchase_order["supplier"]
+                or requisition["expectedAt"] != purchase_order.get("expectedAt")
+                or requisition["quantityRequested"] != purchase_order["quantityOrdered"]
+                or requisition["unitCostMmk"] != purchase_order.get("unitCostMmk")
+            ):
+                raise TrialValidationError(f"{field} does not match its approved requisition.")
+            linked_requisition = requisition
+            converted_requisition_ids.append(requisition_id)
         creation = _action_proof(purchase_order["creation"], f"{field}.creation")
         if creation["capturedAt"] != created_at:
             raise TrialValidationError(
                 f"{field}.creation must be captured when the purchase order was created."
+            )
+        if linked_requisition is not None and (
+            datetime.fromisoformat(creation["capturedAt"].replace("Z", "+00:00"))
+            < datetime.fromisoformat(str(linked_requisition["createdAt"]).replace("Z", "+00:00"))
+            or _same_accountable_actor(
+                str(creation["actor"]),
+                str(linked_requisition["approval"]["actor"]),
+            )
+        ):
+            raise TrialValidationError(
+                f"{field} requires a later confirmation by a different operator."
             )
         purchase_order_action_ids.append(creation["actionId"])
         if "cancellation" in purchase_order:
@@ -785,9 +2026,166 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"{field}.cancellation cannot precede creation."
                 )
             purchase_order_action_ids.append(cancellation["actionId"])
+        if "supplierReturns" in purchase_order:
+            return_records = _list(purchase_order["supplierReturns"], f"{field}.supplierReturns")
+            if "unitCostMmk" not in purchase_order or not 1 <= len(return_records) <= _MAX_SUPPLIER_RETURNS_PER_PURCHASE_ORDER:
+                raise TrialValidationError(f"{field}.supplierReturns is invalid.")
+            newer_return_at: datetime | None = None
+            for return_index, return_candidate in enumerate(return_records):
+                return_field = f"{field}.supplierReturns[{return_index}]"
+                return_record = _object(return_candidate, return_field)
+                _exact_fields(return_record, return_field, required=_SUPPLIER_RETURN_FIELDS)
+                return_id = _text(return_record["id"], f"{return_field}.id", maximum=80)
+                if _SUPPLIER_RETURN_ID_PATTERN.fullmatch(return_id) is None:
+                    raise TrialValidationError(f"{return_field}.id is invalid.")
+                return_created_at = _timestamp(return_record["createdAt"], f"{return_field}.createdAt")
+                return_created_time = datetime.fromisoformat(return_created_at.replace("Z", "+00:00"))
+                if return_created_time < datetime.fromisoformat(created_at.replace("Z", "+00:00")) or newer_return_at is not None and return_created_time > newer_return_at:
+                    raise TrialValidationError(f"{return_field}.createdAt is outside the purchase chronology.")
+                newer_return_at = return_created_time
+                receipt_movement_id = _text(return_record["receiptMovementId"], f"{return_field}.receiptMovementId", maximum=_MAX_MOVEMENT_ID_LENGTH)
+                _integer(return_record["quantityRejected"], f"{return_field}.quantityRejected", minimum=1)
+                if return_record["reasonCode"] not in _PURCHASE_DISCREPANCY_CODES:
+                    raise TrialValidationError(f"{return_field}.reasonCode is invalid.")
+                claim_amount = _integer(return_record["claimAmountMmk"], f"{return_field}.claimAmountMmk", minimum=1)
+                internal_reference = _text(return_record["internalReturnReference"], f"{return_field}.internalReturnReference", maximum=80)
+                authorization = _action_proof(return_record["authorization"], f"{return_field}.authorization")
+                if authorization["capturedAt"] != return_created_at or return_record["physicalReturnStatus"] != "not_dispatched" or return_record["supplierContacted"] is not False or return_record["accountingPosted"] is not False:
+                    raise TrialValidationError(f"{return_field} overclaims return execution or has invalid authorization.")
+                credits = _list(return_record["creditNotes"], f"{return_field}.creditNotes")
+                if len(credits) > _MAX_SUPPLIER_CREDITS_PER_RETURN:
+                    raise TrialValidationError(f"{return_field}.creditNotes exceeds the supported limit.")
+                credited_amount = 0
+                newer_credit_at: datetime | None = None
+                for credit_index, credit_candidate in enumerate(credits):
+                    credit_field = f"{return_field}.creditNotes[{credit_index}]"
+                    credit = _object(credit_candidate, credit_field)
+                    _exact_fields(credit, credit_field, required=_SUPPLIER_CREDIT_FIELDS)
+                    credit_id = _text(credit["id"], f"{credit_field}.id", maximum=80)
+                    if _SUPPLIER_CREDIT_ID_PATTERN.fullmatch(credit_id) is None:
+                        raise TrialValidationError(f"{credit_field}.id is invalid.")
+                    supplier_reference = _text(credit["supplierReference"], f"{credit_field}.supplierReference", maximum=80)
+                    issued_at = _timestamp(credit["issuedAt"], f"{credit_field}.issuedAt")
+                    issued_time = datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+                    amount = _integer(credit["amountMmk"], f"{credit_field}.amountMmk", minimum=1)
+                    recording = _action_proof(credit["recording"], f"{credit_field}.recording")
+                    recording_time = datetime.fromisoformat(recording["capturedAt"].replace("Z", "+00:00"))
+                    if issued_time < return_created_time or recording_time < issued_time or newer_credit_at is not None and recording_time > newer_credit_at or credit["accountingPosted"] is not False:
+                        raise TrialValidationError(f"{credit_field} is outside the claim chronology or overclaims posting.")
+                    newer_credit_at = recording_time
+                    credited_amount += amount
+                    if credited_amount > _MAX_SAFE_INTEGER or credited_amount > claim_amount:
+                        raise TrialValidationError(f"{return_field} supplier credits exceed the authorized claim.")
+                    purchase_order_action_ids.append(recording["actionId"])
+                    supplier_credit_ids.append(credit_id)
+                    supplier_credit_references.append(f"{purchase_order['supplier']}\0{supplier_reference}")
+                purchase_order_action_ids.append(authorization["actionId"])
+                supplier_return_ids.append(return_id)
+                supplier_return_receipt_ids.append(receipt_movement_id)
+                supplier_return_references.append(f"{purchase_order['supplier']}\0{internal_reference}")
+        if "supplierInvoice" in purchase_order:
+            invoice_field = f"{field}.supplierInvoice"
+            if "unitCostMmk" not in purchase_order:
+                raise TrialValidationError(
+                    f"{invoice_field} requires retained purchase order commercial terms."
+                )
+            invoice = _object(purchase_order["supplierInvoice"], invoice_field)
+            _exact_fields(
+                invoice,
+                invoice_field,
+                required=_SUPPLIER_INVOICE_REQUIRED_FIELDS,
+                optional=_SUPPLIER_INVOICE_OPTIONAL_FIELDS,
+            )
+            invoice_id = _text(invoice["id"], f"{invoice_field}.id", maximum=80)
+            if _SUPPLIER_INVOICE_ID_PATTERN.fullmatch(invoice_id) is None:
+                raise TrialValidationError(f"{invoice_field}.id is invalid.")
+            supplier_reference = _text(
+                invoice["supplierReference"],
+                f"{invoice_field}.supplierReference",
+                maximum=80,
+            )
+            issued_at = _timestamp(invoice["issuedAt"], f"{invoice_field}.issuedAt")
+            due_at = _timestamp(invoice["dueAt"], f"{invoice_field}.dueAt")
+            if (
+                datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+                < datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                or datetime.fromisoformat(due_at.replace("Z", "+00:00"))
+                < datetime.fromisoformat(issued_at.replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(f"{invoice_field} invoice dates are invalid.")
+            quantity_invoiced = _integer(
+                invoice["quantityInvoiced"],
+                f"{invoice_field}.quantityInvoiced",
+                minimum=1,
+            )
+            invoice_unit_cost = _integer(
+                invoice["unitCostMmk"],
+                f"{invoice_field}.unitCostMmk",
+                minimum=1,
+            )
+            total_mmk = _integer(
+                invoice["totalMmk"],
+                f"{invoice_field}.totalMmk",
+                minimum=1,
+            )
+            if (
+                quantity_invoiced * invoice_unit_cost > _MAX_SAFE_INTEGER
+                or total_mmk != quantity_invoiced * invoice_unit_cost
+            ):
+                raise TrialValidationError(
+                    f"{invoice_field}.totalMmk must equal quantity times unit cost."
+                )
+            recording = _action_proof(invoice["recording"], f"{invoice_field}.recording")
+            if datetime.fromisoformat(
+                recording["capturedAt"].replace("Z", "+00:00")
+            ) < datetime.fromisoformat(issued_at.replace("Z", "+00:00")):
+                raise TrialValidationError(f"{invoice_field}.recording is invalid.")
+            purchase_order_action_ids.append(recording["actionId"])
+            if "payableReview" in invoice:
+                payable_review = _action_proof(
+                    invoice["payableReview"],
+                    f"{invoice_field}.payableReview",
+                )
+                if datetime.fromisoformat(
+                    payable_review["capturedAt"].replace("Z", "+00:00")
+                ) < datetime.fromisoformat(recording["capturedAt"].replace("Z", "+00:00")):
+                    raise TrialValidationError(f"{invoice_field}.payableReview is invalid.")
+                purchase_order_action_ids.append(payable_review["actionId"])
+            supplier_invoice_ids.append(invoice_id)
+            supplier_invoice_references.append(
+                f"{purchase_order['supplier']}\0{supplier_reference}"
+            )
         purchase_order_ids.append(purchase_order_id)
         purchase_order_by_id[purchase_order_id] = purchase_order
     _unique(purchase_order_ids, "Purchase order ID")
+    _unique(converted_requisition_ids, "Converted purchase requisition ID")
+    _unique(
+        [purchase_requisition_by_id[requisition_id]["sku"] for requisition_id in purchase_requisition_ids if requisition_id not in converted_requisition_ids],
+        "Open purchase requisition SKU",
+    )
+    _unique(supplier_invoice_ids, "Supplier invoice ID")
+    _unique(supplier_invoice_references, "Supplier invoice reference")
+    _unique(supplier_return_ids, "Supplier return ID")
+    _unique(supplier_return_receipt_ids, "Supplier return receipt movement ID")
+    _unique(supplier_return_references, "Supplier return reference")
+    _unique(supplier_credit_ids, "Supplier credit note ID")
+    _unique(supplier_credit_references, "Supplier credit note reference")
+    for envelope_id, envelope in purchase_budget_by_id.items():
+        committed = sum(
+            int(requisition["totalMmk"])
+            for requisition in purchase_requisition_by_id.values()
+            if requisition.get("budgetEnvelopeId") == envelope_id
+            and not any(
+                purchase_order.get("requisitionId") == requisition["id"]
+                and "cancellation" in purchase_order
+                for purchase_order in purchase_orders
+                if isinstance(purchase_order, Mapping)
+            )
+        )
+        if committed > int(envelope["ceilingMmk"]):
+            raise TrialValidationError(
+                f"Purchase budget {envelope['budgetCode']} exceeds its approved ceiling."
+            )
 
     storefront_configuration_action_id = ""
     if storefront_configuration is not None:
@@ -906,6 +2304,50 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     "commerce state.storefrontConfiguration.merchandising must follow the canonical selected SKU order."
                 )
+        if "activation" in configuration:
+            activation = _object(
+                configuration["activation"],
+                "commerce state.storefrontConfiguration.activation",
+            )
+            _exact_fields(
+                activation,
+                "commerce state.storefrontConfiguration.activation",
+                required=_STOREFRONT_ACTIVATION_FIELDS,
+            )
+            if activation["contract"] != "supermega.ecommerce.activation.v1":
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.activation.contract is invalid."
+                )
+            package_digest = _text(
+                activation["packageDigest"],
+                "commerce state.storefrontConfiguration.activation.packageDigest",
+                maximum=71,
+            )
+            if _SHA256_DIGEST_PATTERN.fullmatch(package_digest) is None:
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.activation.packageDigest is invalid."
+                )
+            template_id = _text(
+                activation["workflowTemplateId"],
+                "commerce state.storefrontConfiguration.activation.workflowTemplateId",
+                maximum=60,
+            )
+            if template_id not in _ECOMMERCE_TEMPLATE_IDS:
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.activation.workflowTemplateId is invalid."
+                )
+            _timestamp(
+                activation["confirmedAt"],
+                "commerce state.storefrontConfiguration.activation.confirmedAt",
+            )
+            activation_skus = _list(
+                activation["skus"],
+                "commerce state.storefrontConfiguration.activation.skus",
+            )
+            if activation_skus != normalized_selected_skus:
+                raise TrialValidationError(
+                    "commerce state.storefrontConfiguration.activation.skus must match the current imported storefront."
+                )
         saved = _action_proof(
             configuration["saved"],
             "commerce state.storefrontConfiguration.saved",
@@ -928,13 +2370,19 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     advancement_action_ids: list[str] = []
     completion_action_ids: list[str] = []
     return_action_ids: list[str] = []
+    support_action_ids: list[str] = []
+    support_source_intent_ids: list[str] = []
+    correction_action_ids: list[str] = []
+    collection_action_ids: list[str] = []
     order_returns: list[tuple[str, dict[str, Any]]] = []
     order_by_id: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(orders):
         order = _object(candidate, f"orders[{index}]")
         _exact_fields(order, f"orders[{index}]", required=_ORDER_REQUIRED_FIELDS, optional=_ORDER_OPTIONAL_FIELDS)
         order_id = _text(order["id"], f"orders[{index}].id", maximum=160)
-        _timestamp(order["createdAt"], f"orders[{index}].createdAt")
+        order_created_at = datetime.fromisoformat(
+            _timestamp(order["createdAt"], f"orders[{index}].createdAt").replace("Z", "+00:00")
+        )
         for field in ("customer", "channel", "item", "payment"):
             _text(order[field], f"orders[{index}].{field}")
         if "owner" in order:
@@ -1001,22 +2449,173 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 order["item"] != _order_item_summary(validated_lines)
                 or order.get("itemSku") != expected_item_sku
                 or order["quantity"] != captured_quantity
-                or order["total"] != captured_total
             ):
                 raise TrialValidationError(
                     f"orders[{index}] does not match its immutable line snapshots."
                 )
+        priced_total = captured_total
+        if "promotionDecision" in order:
+            decision_field = f"orders[{index}].promotionDecision"
+            decision = _object(order["promotionDecision"], decision_field)
+            _exact_fields(
+                decision,
+                decision_field,
+                required=frozenset(
+                    {
+                        "schema",
+                        "status",
+                        "code",
+                        "policyRevision",
+                        "policyActionId",
+                        "discountBasisPoints",
+                        "grossSubtotalMmk",
+                        "discountMmk",
+                        "netSubtotalMmk",
+                        "reviewedAt",
+                        "reason",
+                    }
+                ),
+            )
+            if captured_total is None or not str(order.get("sourceRecordId", "")).startswith("ECR-"):
+                raise TrialValidationError(
+                    f"{decision_field} requires immutable Ecommerce lines and an ECR source."
+                )
+            reviewed_at = _timestamp(decision["reviewedAt"], f"{decision_field}.reviewedAt")
+            if datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) > order_created_at:
+                raise TrialValidationError(
+                    f"{decision_field}.reviewedAt cannot be later than order creation."
+                )
+            try:
+                expected_decision = review_ecommerce_promotion(
+                    validated_promotion_policies,
+                    decision["code"],
+                    captured_total,
+                    reviewed_at,
+                )
+            except EcommerceLifecycleValidationError as exc:
+                raise TrialValidationError(
+                    f"{decision_field} is invalid: {exc}"
+                ) from exc
+            if dict(decision) != expected_decision:
+                raise TrialValidationError(
+                    f"{decision_field} does not match the versioned Shop policy."
+                )
+            priced_total = expected_decision["netSubtotalMmk"]
+        if "shippingDecision" in order:
+            decision_field = f"orders[{index}].shippingDecision"
+            decision = _object(order["shippingDecision"], decision_field)
+            _exact_fields(decision, decision_field, required=frozenset({
+                "schema", "status", "reason", "township", "zoneCode", "policyRevision",
+                "policyActionId", "feeMmk", "promiseMinutes", "reviewedAt",
+            }))
+            if priced_total is None or not str(order.get("sourceRecordId", "")).startswith("ECR-"):
+                raise TrialValidationError(f"{decision_field} requires immutable Ecommerce lines and an ECR source.")
+            reviewed_at = _timestamp(decision["reviewedAt"], f"{decision_field}.reviewedAt")
+            if datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) > order_created_at:
+                raise TrialValidationError(f"{decision_field}.reviewedAt cannot be later than order creation.")
+            try:
+                expected_shipping = review_ecommerce_shipping(
+                    validated_shipping_policies,
+                    str(order.get("fulfilment", "")),
+                    decision.get("township"),
+                    reviewed_at,
+                )
+            except EcommerceLifecycleValidationError as exc:
+                raise TrialValidationError(f"{decision_field} is invalid: {exc}") from exc
+            if dict(decision) != expected_shipping or expected_shipping["status"] == "rejected":
+                raise TrialValidationError(f"{decision_field} does not match the versioned Shop policy.")
+            if expected_shipping["promiseMinutes"] is not None:
+                promised = datetime.fromisoformat(str(order.get("promisedAt", "")).replace("Z", "+00:00"))
+                minimum_promise = datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) + timedelta(minutes=expected_shipping["promiseMinutes"])
+                if promised < minimum_promise:
+                    raise TrialValidationError(f"{decision_field} promise is earlier than the Shop policy.")
+            priced_total += expected_shipping["feeMmk"]
+        payable_total = priced_total
+        if "taxDecision" in order:
+            decision_field = f"orders[{index}].taxDecision"
+            decision = _object(order["taxDecision"], decision_field)
+            if priced_total is None or not str(order.get("sourceRecordId", "")).startswith("ECR-"):
+                raise TrialValidationError(f"{decision_field} requires immutable Ecommerce lines and an ECR source.")
+            try:
+                expected_tax = validate_ecommerce_tax_decision(decision, tax_configurations)
+            except EcommerceLifecycleValidationError as exc:
+                raise TrialValidationError(f"{decision_field} is invalid: {exc}") from exc
+            reviewed_at = _timestamp(expected_tax["reviewedAt"], f"{decision_field}.reviewedAt")
+            if (
+                expected_tax["listedSubtotalMmk"] != priced_total
+                or datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) > order_created_at
+            ):
+                raise TrialValidationError(f"{decision_field} does not match the Shop tax schedule.")
+            payable_total = expected_tax["totalMmk"]
+        if "paymentDecision" in order:
+            decision_field = f"orders[{index}].paymentDecision"
+            decision = _object(order["paymentDecision"], decision_field)
+            _exact_fields(decision, decision_field, required=frozenset({
+                "schema", "status", "reason", "adapter", "policyRevision",
+                "policyActionId", "maximumOrderMmk", "instructions", "reviewedAt", "authorized",
+            }))
+            if priced_total is None or not str(order.get("sourceRecordId", "")).startswith("ECR-"):
+                raise TrialValidationError(f"{decision_field} requires immutable Ecommerce lines and an ECR source.")
+            reviewed_at = _timestamp(decision["reviewedAt"], f"{decision_field}.reviewedAt")
+            if datetime.fromisoformat(reviewed_at.replace("Z", "+00:00")) > order_created_at:
+                raise TrialValidationError(f"{decision_field}.reviewedAt cannot be later than order creation.")
+            reviewed_amount = payable_total
+            tax_configuration = None if "taxDecision" in order else _effective_tax_configuration(state, reviewed_at)
+            if tax_configuration is not None and priced_total is not None:
+                reviewed_calculation = _configured_order_calculation(
+                    tax_configuration,
+                    priced_total,
+                    len(catalog_changes),
+                )
+                if reviewed_calculation is None:
+                    raise TrialValidationError(f"{decision_field} tax-inclusive amount is invalid.")
+                reviewed_amount = reviewed_calculation["totalMmk"]
+            try:
+                expected_payment = review_ecommerce_payment(
+                    validated_payment_policies,
+                    decision["adapter"],
+                    str(order.get("fulfilment", "")),
+                    reviewed_amount,
+                    reviewed_at,
+                )
+            except EcommerceLifecycleValidationError as exc:
+                raise TrialValidationError(f"{decision_field} is invalid: {exc}") from exc
+            payment_label = {
+                "cash_on_delivery": "Cash on delivery",
+                "kbzpay_manual": "KBZPay",
+                "pay_on_pickup": "Cash",
+            }.get(str(decision.get("adapter")))
+            if dict(decision) != expected_payment or expected_payment["status"] != "approved" or decision["authorized"] is not False or order["payment"] != payment_label:
+                raise TrialValidationError(f"{decision_field} does not match the versioned Shop policy.")
         calculation_candidate = order.get("calculation")
         if calculation_candidate is not None:
             calculation = _object(
                 calculation_candidate,
                 f"orders[{index}].calculation",
             )
-            _exact_fields(
-                calculation,
-                f"orders[{index}].calculation",
-                required=_ORDER_CALCULATION_FIELDS,
-            )
+            calculation_schema = calculation.get("schema")
+            if calculation_schema == _ORDER_CALCULATION_SCHEMA:
+                _exact_fields(
+                    calculation,
+                    f"orders[{index}].calculation",
+                    required=_ORDER_CALCULATION_FIELDS,
+                )
+            elif calculation_schema == _ORDER_CALCULATION_V2_SCHEMA:
+                _exact_fields(
+                    calculation,
+                    f"orders[{index}].calculation",
+                    required=_ORDER_CALCULATION_V2_FIELDS,
+                    optional=_ORDER_CALCULATION_V2_SCHEDULE_FIELDS,
+                )
+                schedule_fields = _ORDER_CALCULATION_V2_SCHEDULE_FIELDS.intersection(calculation)
+                if schedule_fields and schedule_fields != _ORDER_CALCULATION_V2_SCHEDULE_FIELDS:
+                    raise TrialValidationError(
+                        f"orders[{index}].calculation must retain jurisdiction and effective time together."
+                    )
+            else:
+                raise TrialValidationError(
+                    f"orders[{index}].calculation schema is invalid."
+                )
             catalog_revision = _integer(
                 calculation["catalogRevision"],
                 f"orders[{index}].calculation.catalogRevision",
@@ -1024,7 +2623,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             subtotal_mmk = _integer(
                 calculation["subtotalMmk"],
                 f"orders[{index}].calculation.subtotalMmk",
-                minimum=1,
+                minimum=1 if calculation_schema == _ORDER_CALCULATION_SCHEMA else 0,
             )
             tax_mmk = _integer(
                 calculation["taxMmk"],
@@ -1035,22 +2634,84 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 f"orders[{index}].calculation.totalMmk",
                 minimum=1,
             )
-            if (
-                calculation["schema"] != _ORDER_CALCULATION_SCHEMA
-                or calculation["currency"] != "MMK"
-                or catalog_revision > len(catalog_changes)
-                or calculation["taxMode"] != "not_configured"
-                or tax_mmk != 0
-                or total_mmk != subtotal_mmk
-                or order["total"] != total_mmk
-                or (
-                    captured_total is not None
-                    and subtotal_mmk != captured_total
-                )
-            ):
+            if calculation["currency"] != "MMK" or catalog_revision > len(catalog_changes) or order["total"] != total_mmk:
                 raise TrialValidationError(
-                    f"orders[{index}].calculation must be a deterministic MMK subtotal with tax explicitly not configured."
+                    f"orders[{index}].calculation totals are invalid."
                 )
+            if calculation_schema == _ORDER_CALCULATION_SCHEMA:
+                if (
+                    calculation["taxMode"] != "not_configured"
+                    or tax_mmk != 0
+                    or total_mmk != subtotal_mmk
+                    or (
+                        priced_total is not None
+                        and subtotal_mmk != priced_total
+                    )
+                ):
+                    raise TrialValidationError(
+                        f"orders[{index}].calculation must preserve its deterministic untaxed MMK subtotal."
+                    )
+            else:
+                tax_revision = _integer(
+                    calculation["taxConfigurationRevision"],
+                    f"orders[{index}].calculation.taxConfigurationRevision",
+                    minimum=1,
+                )
+                _integer(
+                    calculation["taxRateBasisPoints"],
+                    f"orders[{index}].calculation.taxRateBasisPoints",
+                )
+                _integer(
+                    calculation["listedSubtotalMmk"],
+                    f"orders[{index}].calculation.listedSubtotalMmk",
+                    minimum=1,
+                )
+                configuration = next(
+                    (
+                        row
+                        for row in tax_configurations
+                        if isinstance(row, Mapping)
+                        and row.get("revision") == tax_revision
+                    ),
+                    None,
+                )
+                expected = (
+                    _configured_order_calculation(
+                        configuration,
+                        priced_total,
+                        catalog_revision,
+                    )
+                    if configuration is not None and priced_total is not None
+                    else None
+                )
+                if (
+                    expected is None
+                    or datetime.fromisoformat(
+                        str(configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+                    )
+                    > datetime.fromisoformat(
+                        str(order["createdAt"]).replace("Z", "+00:00")
+                    )
+                    or datetime.fromisoformat(
+                        str(
+                            configuration.get(
+                                "effectiveFrom",
+                                configuration["proof"]["capturedAt"],
+                            )
+                        ).replace("Z", "+00:00")
+                    )
+                    > datetime.fromisoformat(
+                        str(order["createdAt"]).replace("Z", "+00:00")
+                    )
+                    or calculation != expected
+                ):
+                    raise TrialValidationError(
+                        f"orders[{index}].calculation does not match its immutable tax configuration."
+                    )
+        elif priced_total is not None and order["total"] != priced_total:
+            raise TrialValidationError(
+                f"orders[{index}] legacy total does not match its immutable line snapshots."
+            )
         if order["status"] not in _ORDER_STATUSES:
             raise TrialValidationError(f"orders[{index}].status is invalid.")
         if order["paymentStatus"] not in _PAYMENT_STATUSES:
@@ -1111,6 +2772,118 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"orders[{index}].promisedAt must be after its creation time."
                 )
+        payment_terms_days = 0
+        if "paymentDueAt" in order:
+            payment_due_at = datetime.fromisoformat(
+                _timestamp(
+                    order["paymentDueAt"],
+                    f"orders[{index}].paymentDueAt",
+                ).replace("Z", "+00:00")
+            )
+            if payment_due_at < order_created_at:
+                raise TrialValidationError(
+                    f"orders[{index}].paymentDueAt cannot be before its creation time."
+                )
+            payment_delta = payment_due_at - order_created_at
+            supported_terms = {
+                timedelta(days=days): days for days in _CUSTOMER_CREDIT_TERMS
+            }
+            if payment_delta not in supported_terms:
+                raise TrialValidationError(
+                    f"orders[{index}].paymentDueAt must use a supported customer credit term."
+                )
+            payment_terms_days = supported_terms[payment_delta]
+        if "creditDecision" in order:
+            field = f"orders[{index}].creditDecision"
+            decision = _object(order["creditDecision"], field)
+            _exact_fields(decision, field, required=_ORDER_CREDIT_DECISION_FIELDS)
+            policy_revision = _integer(
+                decision["policyRevision"], f"{field}.policyRevision", minimum=1
+            )
+            policy_action_id = _text(
+                decision["policyActionId"], f"{field}.policyActionId", maximum=160
+            )
+            for number_field in (
+                "creditLimitMmk",
+                "exposureBeforeMmk",
+                "orderAmountMmk",
+                "exposureAfterMmk",
+            ):
+                _integer(decision[number_field], f"{field}.{number_field}")
+            if (
+                decision["paymentTermsDays"] not in {7, 30}
+                or decision["maxPaymentTermsDays"] not in _CUSTOMER_CREDIT_TERMS
+                or decision["status"] != "approved"
+                or payment_terms_days != decision["paymentTermsDays"]
+                or decision["orderAmountMmk"] != order["total"]
+                or decision["exposureAfterMmk"]
+                != decision["exposureBeforeMmk"] + decision["orderAmountMmk"]
+            ):
+                raise TrialValidationError(
+                    f"{field} arithmetic or payment terms are invalid."
+                )
+            policy = next(
+                (
+                    row
+                    for row in customer_credit_policies
+                    if isinstance(row, Mapping)
+                    and row.get("revision") == policy_revision
+                    and row.get("proof", {}).get("actionId") == policy_action_id
+                ),
+                None,
+            )
+            if (
+                policy is None
+                or policy["customer"] != order["customer"]
+                or policy["status"] != "active"
+                or policy["creditLimitMmk"] != decision["creditLimitMmk"]
+                or policy["maxPaymentTermsDays"] != decision["maxPaymentTermsDays"]
+                or decision["paymentTermsDays"] > policy["maxPaymentTermsDays"]
+                or decision["exposureAfterMmk"] > policy["creditLimitMmk"]
+                or datetime.fromisoformat(
+                    str(policy["proof"]["capturedAt"]).replace("Z", "+00:00")
+                )
+                > order_created_at
+            ):
+                raise TrialValidationError(
+                    f"{field} does not match an effective approved customer policy."
+                )
+        if "collectionActions" in order:
+            collection_actions = _list(
+                order["collectionActions"],
+                f"orders[{index}].collectionActions",
+            )
+            if not 1 <= len(collection_actions) <= _MAX_COLLECTION_ACTIONS_PER_ORDER:
+                raise TrialValidationError(
+                    f"orders[{index}].collectionActions requires 1 to "
+                    f"{_MAX_COLLECTION_ACTIONS_PER_ORDER} records."
+                )
+            newer_collection_at: datetime | None = None
+            for action_index, action_candidate in enumerate(collection_actions):
+                field = f"orders[{index}].collectionActions[{action_index}]"
+                collection_action = _object(action_candidate, field)
+                _exact_fields(collection_action, field, required=_COLLECTION_ACTION_FIELDS)
+                if collection_action["kind"] != "customer_contact":
+                    raise TrialValidationError(f"{field}.kind is invalid.")
+                action_proof = _action_proof(
+                    collection_action["proof"],
+                    f"{field}.proof",
+                )
+                captured_at = datetime.fromisoformat(
+                    action_proof["capturedAt"].replace("Z", "+00:00")
+                )
+                if (
+                    captured_at < order_created_at
+                    or (
+                        newer_collection_at is not None
+                        and captured_at > newer_collection_at
+                    )
+                ):
+                    raise TrialValidationError(
+                        f"{field} is outside the order chronology."
+                    )
+                newer_collection_at = captured_at
+                collection_action_ids.append(action_proof["actionId"])
 
         present_reconciliation_fields = _RECONCILIATION_FIELDS & set(order)
         if order["paymentStatus"] == "reconciled":
@@ -1250,6 +3023,251 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 returned_by_sku[sku] = returned
                 return_action_ids.append(action_id)
                 order_returns.append((order_id, return_record))
+        if "supportCases" in order:
+            cases = _list(order["supportCases"], f"orders[{index}].supportCases")
+            if (
+                not 1 <= len(cases) <= _MAX_SUPPORT_CASES_PER_ORDER
+                or order["status"] != "completed"
+                or completion is None
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}].supportCases requires 1 to "
+                    f"{_MAX_SUPPORT_CASES_PER_ORDER} records and completion proof."
+                )
+            newer_opening_at: datetime | None = None
+            completion_at = datetime.fromisoformat(completion["capturedAt"].replace("Z", "+00:00"))
+            for case_index, case_candidate in enumerate(cases):
+                field = f"orders[{index}].supportCases[{case_index}]"
+                support_case = _object(case_candidate, field)
+                _exact_fields(
+                    support_case,
+                    field,
+                    required=_ORDER_SUPPORT_CASE_REQUIRED_FIELDS,
+                    optional=_ORDER_SUPPORT_CASE_OPTIONAL_FIELDS,
+                )
+                case_id = _text(support_case["caseId"], f"{field}.caseId", maximum=41)
+                source_intent_id = _text(
+                    support_case["sourceIntentId"], f"{field}.sourceIntentId", maximum=40
+                )
+                source_request_id = _text(
+                    support_case["sourceRequestId"], f"{field}.sourceRequestId", maximum=40
+                )
+                expected_case_id = f"CASE-{source_intent_id[4:]}"
+                expected_evidence = (
+                    f"ECOMMERCE-SUPPORT:{source_intent_id[4:]}:{order_id}:{source_request_id}"
+                )
+                opening = _action_proof(support_case["opening"], f"{field}.opening")
+                requested_at = datetime.fromisoformat(
+                    _timestamp(
+                        support_case["customerRequestedAt"],
+                        f"{field}.customerRequestedAt",
+                    ).replace("Z", "+00:00")
+                )
+                opening_at = datetime.fromisoformat(opening["capturedAt"].replace("Z", "+00:00"))
+                triage_fields = tuple(
+                    field_name in support_case
+                    for field_name in ("priority", "owner", "dueAt")
+                )
+                if any(triage_fields) and not all(triage_fields):
+                    raise TrialValidationError(
+                        f"{field} service triage must include priority, owner, and due time together."
+                    )
+                if all(triage_fields):
+                    due_at = datetime.fromisoformat(
+                        _timestamp(support_case["dueAt"], f"{field}.dueAt").replace("Z", "+00:00")
+                    )
+                    _text(support_case["owner"], f"{field}.owner", maximum=120)
+                    if support_case["priority"] not in _SUPPORT_PRIORITIES or due_at <= opening_at:
+                        raise TrialValidationError(f"{field} service triage is invalid.")
+                if (
+                    _SUPPORT_CASE_ID_PATTERN.fullmatch(case_id) is None
+                    or _SUPPORT_INTENT_ID_PATTERN.fullmatch(source_intent_id) is None
+                    or case_id != expected_case_id
+                    or _STOREFRONT_REQUEST_ID_PATTERN.fullmatch(source_request_id) is None
+                    or source_request_id != order.get("sourceRecordId")
+                    or support_case["category"] not in _SUPPORT_CATEGORIES
+                    or support_case["externalMessageSent"] is not False
+                    or support_case["refundStarted"] is not False
+                    or opening["evidenceReference"] != expected_evidence
+                    or opening_at < max(requested_at, completion_at)
+                    or (newer_opening_at is not None and opening_at > newer_opening_at)
+                ):
+                    raise TrialValidationError(f"{field} boundary or chronology is invalid.")
+                _text(
+                    support_case["customerDescription"],
+                    f"{field}.customerDescription",
+                    maximum=300,
+                )
+                newer_opening_at = opening_at
+                initial_service = (
+                    {
+                        "priority": support_case["priority"],
+                        "owner": support_case["owner"],
+                        "dueAt": support_case["dueAt"],
+                    }
+                    if all(triage_fields)
+                    else None
+                )
+                if "serviceEvents" in support_case:
+                    if initial_service is None:
+                        raise TrialValidationError(
+                            f"{field}.serviceEvents requires attributable opening triage."
+                        )
+                    _, original_latest_at, _, _ = _validate_support_service_timeline(
+                        support_case["serviceEvents"],
+                        f"{field}.serviceEvents",
+                        case_id,
+                        initial_service,
+                        opening_at,
+                        support_action_ids,
+                    )
+                else:
+                    original_latest_at = opening_at
+                original_resolution = None
+                original_resolution_at = None
+                if "resolution" in support_case:
+                    original_resolution, original_resolution_at = _validate_support_resolution(
+                        support_case["resolution"],
+                        f"{field}.resolution",
+                        original_latest_at,
+                        support_action_ids,
+                    )
+                if "reopen" in support_case:
+                    if original_resolution is None or original_resolution_at is None or initial_service is None:
+                        raise TrialValidationError(f"{field}.reopen requires a retained triaged resolution.")
+                    reopen = _object(support_case["reopen"], f"{field}.reopen")
+                    _exact_fields(reopen, f"{field}.reopen", required=_ORDER_SUPPORT_REOPEN_FIELDS)
+                    reopen_proof = _action_proof(reopen["proof"], f"{field}.reopen.proof")
+                    reopen_at = datetime.fromisoformat(reopen_proof["capturedAt"].replace("Z", "+00:00"))
+                    reopen_due_at = datetime.fromisoformat(
+                        _timestamp(reopen["dueAt"], f"{field}.reopen.dueAt").replace("Z", "+00:00")
+                    )
+                    owner = _text(reopen["owner"], f"{field}.reopen.owner", maximum=120)
+                    _text(reopen["note"], f"{field}.reopen.note", maximum=300)
+                    if (
+                        reopen["sourceResolutionActionId"] != original_resolution["proof"]["actionId"]
+                        or reopen["priority"] not in _SUPPORT_PRIORITIES
+                        or reopen_proof["evidenceReference"]
+                        != f"SUPPORT-REOPEN:{case_id}:{original_resolution['proof']['actionId']}"
+                        or reopen_at <= original_resolution_at
+                        or reopen_due_at <= reopen_at
+                    ):
+                        raise TrialValidationError(f"{field}.reopen chronology or linkage is invalid.")
+                    support_action_ids.append(reopen_proof["actionId"])
+                    follow_up_latest_at = reopen_at
+                    if "followUpServiceEvents" in support_case:
+                        _, follow_up_latest_at, _, _ = _validate_support_service_timeline(
+                            support_case["followUpServiceEvents"],
+                            f"{field}.followUpServiceEvents",
+                            case_id,
+                            {"priority": reopen["priority"], "owner": owner, "dueAt": reopen["dueAt"]},
+                            reopen_at,
+                            support_action_ids,
+                        )
+                    follow_up_resolution = None
+                    if "followUpResolution" in support_case:
+                        follow_up_resolution, _ = _validate_support_resolution(
+                            support_case["followUpResolution"],
+                            f"{field}.followUpResolution",
+                            follow_up_latest_at,
+                            support_action_ids,
+                        )
+                    if (
+                        (support_case["status"] == "open" and follow_up_resolution is not None)
+                        or (support_case["status"] == "resolved" and follow_up_resolution is None)
+                        or support_case["status"] not in {"open", "resolved"}
+                    ):
+                        raise TrialValidationError(f"{field} follow-up status is invalid.")
+                elif "followUpServiceEvents" in support_case or "followUpResolution" in support_case:
+                    raise TrialValidationError(f"{field} follow-up evidence requires a retained reopen.")
+                elif (
+                    (support_case["status"] == "open" and original_resolution is not None)
+                    or (support_case["status"] == "resolved" and original_resolution is None)
+                    or support_case["status"] not in {"open", "resolved"}
+                ):
+                    raise TrialValidationError(f"{field} status is invalid.")
+                support_source_intent_ids.append(source_intent_id)
+                support_action_ids.append(opening["actionId"])
+        if "corrections" in order:
+            corrections = _list(order["corrections"], f"orders[{index}].corrections")
+            if (
+                not 1 <= len(corrections) <= _MAX_CORRECTIONS_PER_ORDER
+                or order["status"] != "completed"
+                or order["paymentStatus"] != "reconciled"
+                or completion is None
+                or not isinstance(order.get("calculation"), Mapping)
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}].corrections requires 1 to "
+                    f"{_MAX_CORRECTIONS_PER_ORDER} records on a calculated, "
+                    "reconciled, completed order."
+                )
+            source_digest = commerce_order_calculation_digest(order)
+            expected_balance = int(order["total"])
+            previous_created_at = datetime.fromisoformat(
+                completion["capturedAt"].replace("Z", "+00:00")
+            )
+            for reverse_index, correction_candidate in enumerate(reversed(corrections)):
+                correction_index = len(corrections) - reverse_index - 1
+                field = f"orders[{index}].corrections[{correction_index}]"
+                correction = _object(correction_candidate, field)
+                _exact_fields(correction, field, required=_ORDER_CORRECTION_FIELDS)
+                action_id = _text(correction["actionId"], f"{field}.actionId", maximum=160)
+                if correction["documentId"] != f"COR2:{quote(action_id, safe='')}" :
+                    raise TrialValidationError(f"{field}.documentId is invalid.")
+                created_at = datetime.fromisoformat(
+                    _timestamp(correction["createdAt"], f"{field}.createdAt").replace("Z", "+00:00")
+                )
+                if created_at < previous_created_at:
+                    raise TrialValidationError(f"{field}.createdAt is outside the order chronology.")
+                previous_created_at = created_at
+                for proof_field in ("actor", "reason", "evidenceReference"):
+                    _text(correction[proof_field], f"{field}.{proof_field}")
+                if correction["kind"] not in _CORRECTION_KINDS or correction["reasonCode"] not in _CORRECTION_REASON_CODES:
+                    raise TrialValidationError(f"{field} classification is invalid.")
+                if correction["sourceCalculationDigest"] != source_digest:
+                    raise TrialValidationError(
+                        f"{field}.sourceCalculationDigest does not bind the original order calculation."
+                    )
+                calculation = _object(correction["calculation"], f"{field}.calculation")
+                _exact_fields(
+                    calculation,
+                    f"{field}.calculation",
+                    required=_CORRECTION_CALCULATION_FIELDS,
+                    optional=_CORRECTION_CALCULATION_SCHEDULE_FIELDS,
+                )
+                schedule_fields = _CORRECTION_CALCULATION_SCHEDULE_FIELDS.intersection(calculation)
+                if schedule_fields and schedule_fields != _CORRECTION_CALCULATION_SCHEDULE_FIELDS:
+                    raise TrialValidationError(
+                        f"{field}.calculation must retain jurisdiction and effective time together."
+                    )
+                listed_amount = _integer(
+                    calculation["listedAmountMmk"],
+                    f"{field}.calculation.listedAmountMmk",
+                    minimum=1,
+                )
+                expected_calculation = _correction_calculation(order, listed_amount)
+                if calculation != expected_calculation:
+                    raise TrialValidationError(
+                        f"{field}.calculation is not deterministic from the original tax snapshot."
+                    )
+                expected_balance += (
+                    int(calculation["totalMmk"])
+                    if correction["kind"] == "debit"
+                    else -int(calculation["totalMmk"])
+                )
+                if (
+                    not 0 <= expected_balance <= _MAX_SAFE_INTEGER
+                    or correction["balanceAfterMmk"] != expected_balance
+                ):
+                    raise TrialValidationError(f"{field}.balanceAfterMmk is invalid.")
+                if (
+                    correction["financialStatus"] != "review_required"
+                    or correction["postingAuthority"] != "none"
+                    or correction["externalPostingPerformed"] is not False
+                ):
+                    raise TrialValidationError(f"{field} overclaims posting authority.")
+                correction_action_ids.append(action_id)
         order_ids.append(order_id)
         order_by_id[order_id] = order
     _unique(order_ids, "Order ID")
@@ -1259,6 +3277,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     _unique(advancement_action_ids, "Order advancement action ID")
     _unique(completion_action_ids, "Order completion action ID")
     _unique(return_action_ids, "Order return action ID")
+    _unique(support_action_ids, "Order support action ID")
+    _unique(support_source_intent_ids, "Order support source intent ID")
+    _unique(correction_action_ids, "Order correction action ID")
+    _unique(collection_action_ids, "Collection action ID")
 
     movement_ids: list[str] = []
     movement_action_ids: list[str] = []
@@ -1269,8 +3291,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     reserve_movement_by_order: dict[str, dict[str, Any]] = {}
     movements_by_action: dict[str, list[dict[str, Any]]] = {}
     receipt_quantity_by_purchase_order: dict[str, int] = {}
+    rejected_quantity_by_purchase_order: dict[str, int] = {}
     latest_receipt_at_by_purchase_order: dict[str, datetime] = {}
     production_request_ids: list[str] = []
+    production_release_ids: list[str] = []
+    production_sku_by_source_product: dict[str, str] = {}
     for index, candidate in enumerate(movements):
         movement = _object(candidate, f"movements[{index}]")
         _exact_fields(
@@ -1284,7 +3309,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     "expectedQuantity",
                     "countedQuantity",
                 }
+                | _PURCHASE_DISCREPANCY_FIELDS
                 | _PRODUCTION_ISSUE_FIELDS
+                | _PRODUCTION_RETURN_EXCLUSIVE_FIELDS
+                | _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS
             ),
             optional=frozenset(
                 {
@@ -1294,7 +3322,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     "countedQuantity",
                 }
             )
-            | _PRODUCTION_ISSUE_FIELDS,
+            | _PURCHASE_DISCREPANCY_FIELDS
+            | _PRODUCTION_ISSUE_FIELDS
+            | _PRODUCTION_RETURN_EXCLUSIVE_FIELDS
+            | _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS,
         )
         movement_id = _text(
             movement["id"],
@@ -1312,9 +3343,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         if kind not in _MOVEMENT_KINDS:
             raise TrialValidationError(f"movements[{index}].kind is invalid.")
         retained_production_fields = _PRODUCTION_ISSUE_FIELDS.intersection(movement)
+        retained_production_return_fields = _PRODUCTION_RETURN_EXCLUSIVE_FIELDS.intersection(movement)
+        retained_production_receipt_fields = _PRODUCTION_RECEIPT_FIELDS.intersection(movement)
+        retained_purchase_discrepancy_fields = _PURCHASE_DISCREPANCY_FIELDS.intersection(movement)
         if kind == "production_issue":
             if (
                 retained_production_fields != _PRODUCTION_ISSUE_FIELDS
+                or retained_production_return_fields
+                or _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS.intersection(movement)
                 or "orderId" in movement
                 or "purchaseOrderId" in movement
                 or "expectedQuantity" in movement
@@ -1359,9 +3395,151 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 f"movements[{index}].conversionNote",
                 maximum=240,
             )
-        elif retained_production_fields:
+        elif kind == "production_return":
+            if (
+                retained_production_fields != _PRODUCTION_ISSUE_FIELDS
+                or retained_production_return_fields
+                != _PRODUCTION_RETURN_EXCLUSIVE_FIELDS
+                or _PRODUCTION_RECEIPT_EXCLUSIVE_FIELDS.intersection(movement)
+                or "orderId" in movement
+                or "purchaseOrderId" in movement
+                or "expectedQuantity" in movement
+                or "countedQuantity" in movement
+            ):
+                raise TrialValidationError(
+                    f"movements[{index}] production return fields are incomplete."
+                )
+            _text(
+                movement["productionRequestId"],
+                f"movements[{index}].productionRequestId",
+                maximum=80,
+            )
+            production_command_digest = _text(
+                movement["productionCommandDigest"],
+                f"movements[{index}].productionCommandDigest",
+                maximum=71,
+            )
+            if _SHA256_DIGEST_PATTERN.fullmatch(production_command_digest) is None:
+                raise TrialValidationError(
+                    f"movements[{index}].productionCommandDigest is invalid."
+                )
+            for field in (
+                "productionJobId",
+                "productionMaterialId",
+                "productionInputLotId",
+            ):
+                _text(movement[field], f"movements[{index}].{field}", maximum=80)
+            _integer(
+                movement["productionQuantityMilli"],
+                f"movements[{index}].productionQuantityMilli",
+                minimum=1,
+            )
+            if movement["productionUnit"] not in _PRODUCTION_MATERIAL_UNITS:
+                raise TrialValidationError(
+                    f"movements[{index}].productionUnit is invalid."
+                )
+            _text(
+                movement["conversionNote"],
+                f"movements[{index}].conversionNote",
+                maximum=240,
+            )
+            _text(
+                movement["productionIssueActionId"],
+                f"movements[{index}].productionIssueActionId",
+                maximum=160,
+            )
+            _integer(
+                movement["productionReturnedQuantityMilli"],
+                f"movements[{index}].productionReturnedQuantityMilli",
+                minimum=1,
+            )
+            _text(
+                movement["productionReturnStockUnitId"],
+                f"movements[{index}].productionReturnStockUnitId",
+                maximum=80,
+            )
+            _text(
+                movement["productionReturnLocationId"],
+                f"movements[{index}].productionReturnLocationId",
+                maximum=80,
+            )
+        elif kind == "production_receipt":
+            if (
+                retained_production_receipt_fields != _PRODUCTION_RECEIPT_FIELDS
+                or _PRODUCTION_ISSUE_EXCLUSIVE_FIELDS.intersection(movement)
+                or retained_production_return_fields
+                or "orderId" in movement
+                or "purchaseOrderId" in movement
+                or "expectedQuantity" in movement
+                or "countedQuantity" in movement
+            ):
+                raise TrialValidationError(
+                    f"movements[{index}] production receipt fields are incomplete."
+                )
+            production_release_ids.append(
+                _text(
+                    movement["productionReleaseId"],
+                    f"movements[{index}].productionReleaseId",
+                    maximum=80,
+                )
+            )
+            production_command_digest = _text(
+                movement["productionCommandDigest"],
+                f"movements[{index}].productionCommandDigest",
+                maximum=71,
+            )
+            if _SHA256_DIGEST_PATTERN.fullmatch(production_command_digest) is None:
+                raise TrialValidationError(
+                    f"movements[{index}].productionCommandDigest is invalid."
+                )
+            _text(
+                movement["productionJobId"],
+                f"movements[{index}].productionJobId",
+                maximum=80,
+            )
+            _text(
+                movement["productionOutputBatchId"],
+                f"movements[{index}].productionOutputBatchId",
+                maximum=80,
+            )
+            production_source_product = _text(
+                movement["productionSourceProduct"],
+                f"movements[{index}].productionSourceProduct",
+                maximum=180,
+            )
+            source_product_key = production_source_product.casefold()
+            mapped_sku = production_sku_by_source_product.get(source_product_key)
+            if mapped_sku is not None and mapped_sku != sku:
+                raise TrialValidationError(
+                    f"movements[{index}] conflicts with the retained Plant product mapping."
+                )
+            production_sku_by_source_product[source_product_key] = sku
+            released_at = datetime.fromisoformat(
+                _timestamp(
+                    movement["productionReleasedAt"],
+                    f"movements[{index}].productionReleasedAt",
+                ).replace("Z", "+00:00")
+            )
+            received_at = datetime.fromisoformat(
+                _timestamp(
+                    movement["createdAt"], f"movements[{index}].createdAt"
+                ).replace("Z", "+00:00")
+            )
+            if received_at < released_at:
+                raise TrialValidationError(
+                    f"movements[{index}] predates its Plant release."
+                )
+        elif (
+            retained_production_fields
+            or retained_production_return_fields
+            or retained_production_receipt_fields
+        ):
             raise TrialValidationError(
-                f"movements[{index}] production issue fields are unsupported for {kind}."
+                f"movements[{index}] production fields are unsupported for {kind}."
+            )
+        if kind != "receipt" and retained_purchase_discrepancy_fields:
+            raise TrialValidationError(
+                f"movements[{index}] purchase discrepancy fields are unsupported for {kind}."
             )
         movements_by_action.setdefault(action_id, []).append(movement)
         if kind == "count":
@@ -1405,13 +3583,35 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"movements[{index}] release, receipt, or return must be positive."
                 )
-        if kind == "production_issue":
+        if kind in {"production_issue", "production_return", "production_receipt"}:
             movement_ids.append(movement_id)
             movement_action_ids.append(action_id)
             continue
         if kind in {"opening", "receipt", "count"}:
             if "orderId" in movement:
                 raise TrialValidationError(f"movements[{index}] {kind} cannot reference an order.")
+            rejected_quantity = 0
+            if kind == "receipt" and retained_purchase_discrepancy_fields:
+                if retained_purchase_discrepancy_fields != _PURCHASE_DISCREPANCY_FIELDS:
+                    raise TrialValidationError(
+                        f"movements[{index}] purchase discrepancy fields are incomplete."
+                    )
+                rejected_quantity = _integer(
+                    movement["rejectedQuantity"],
+                    f"movements[{index}].rejectedQuantity",
+                    minimum=1,
+                )
+                if (
+                    movement["discrepancyCode"] not in _PURCHASE_DISCREPANCY_CODES
+                    or movement["discrepancyDisposition"] != "return_to_vendor"
+                ):
+                    raise TrialValidationError(
+                        f"movements[{index}] purchase discrepancy is invalid."
+                    )
+                if "purchaseOrderId" not in movement:
+                    raise TrialValidationError(
+                        f"movements[{index}] purchase discrepancy requires a purchase order."
+                    )
             if kind == "opening" and "purchaseOrderId" in movement:
                 raise TrialValidationError(
                     f"movements[{index}] opening cannot reference a purchase order."
@@ -1450,14 +3650,22 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     receipt_quantity_by_purchase_order.get(purchase_order_id, 0)
                     + quantity_delta
                 )
+                rejected = (
+                    rejected_quantity_by_purchase_order.get(purchase_order_id, 0)
+                    + rejected_quantity
+                )
+                delivered = received + rejected
                 if (
-                    received > purchase_order["quantityOrdered"]
+                    delivered > purchase_order["quantityOrdered"]
                     or received > _MAX_SAFE_INTEGER
+                    or rejected > _MAX_SAFE_INTEGER
+                    or delivered > _MAX_SAFE_INTEGER
                 ):
                     raise TrialValidationError(
                         f"movements[{index}] exceeds its purchase order quantity."
                     )
                 receipt_quantity_by_purchase_order[purchase_order_id] = received
+                rejected_quantity_by_purchase_order[purchase_order_id] = rejected
                 latest_receipt_at_by_purchase_order[purchase_order_id] = max(
                     latest_receipt_at_by_purchase_order.get(
                         purchase_order_id,
@@ -1522,6 +3730,74 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         movement_action_ids.append(action_id)
     _unique(movement_ids, "Stock movement ID")
     _unique(production_request_ids, "Production material request ID")
+    _unique(production_release_ids, "Production batch release ID")
+    production_issues_by_action = {
+        str(movement["actionId"]): movement
+        for movement in movements
+        if movement.get("kind") == "production_issue"
+    }
+    production_returned_by_issue: dict[str, dict[str, int]] = {}
+    for movement in movements:
+        if movement.get("kind") != "production_return":
+            continue
+        source_issue_action_id = str(movement["productionIssueActionId"])
+        issue = production_issues_by_action.get(source_issue_action_id)
+        if issue is None:
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} does not reference one retained Plant issue."
+            )
+        identity_fields = (
+            "sku",
+            "productionRequestId",
+            "productionCommandDigest",
+            "productionJobId",
+            "productionMaterialId",
+            "productionInputLotId",
+            "productionQuantityMilli",
+            "productionUnit",
+            "conversionNote",
+        )
+        if any(movement[field] != issue[field] for field in identity_fields):
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} does not match its immutable Plant issue."
+            )
+        if datetime.fromisoformat(
+            str(movement["createdAt"]).replace("Z", "+00:00")
+        ) < datetime.fromisoformat(str(issue["createdAt"]).replace("Z", "+00:00")):
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} predates its Plant issue."
+            )
+        returned_production_quantity_milli = int(
+            movement["productionReturnedQuantityMilli"]
+        )
+        returned_stock_quantity = int(movement["quantityDelta"])
+        if (
+            returned_production_quantity_milli * -int(issue["quantityDelta"])
+            != returned_stock_quantity * int(issue["productionQuantityMilli"])
+        ):
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} does not preserve its reviewed conversion ratio."
+            )
+        returned = production_returned_by_issue.get(
+            source_issue_action_id,
+            {"productionQuantityMilli": 0, "stockQuantity": 0},
+        )
+        next_production_quantity_milli = (
+            returned["productionQuantityMilli"]
+            + returned_production_quantity_milli
+        )
+        next_stock_quantity = returned["stockQuantity"] + returned_stock_quantity
+        if (
+            next_production_quantity_milli > int(issue["productionQuantityMilli"])
+            or next_stock_quantity > -int(issue["quantityDelta"])
+        ):
+            raise TrialValidationError(
+                f"Production return {movement['actionId']} exceeds its Plant issue."
+            )
+        production_returned_by_issue[source_issue_action_id] = {
+            "productionQuantityMilli": next_production_quantity_milli,
+            "stockQuantity": next_stock_quantity,
+        }
     for order_id, return_record in order_returns:
         order = order_by_id.get(order_id)
         lines = _reservation_lines(order) if order else []
@@ -1703,6 +3979,33 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     active_purchase_order_skus: list[str] = []
     for purchase_order_id, purchase_order in purchase_order_by_id.items():
         received = receipt_quantity_by_purchase_order.get(purchase_order_id, 0)
+        rejected = rejected_quantity_by_purchase_order.get(purchase_order_id, 0)
+        delivered = received + rejected
+        for claim in purchase_order.get("supplierReturns", []):
+            receipt = next(
+                (
+                    movement for movement in movements
+                    if isinstance(movement, Mapping)
+                    and movement.get("id") == claim["receiptMovementId"]
+                ),
+                None,
+            )
+            if (
+                receipt is None
+                or receipt.get("kind") != "receipt"
+                or receipt.get("purchaseOrderId") != purchase_order_id
+                or receipt.get("rejectedQuantity") != claim["quantityRejected"]
+                or receipt.get("discrepancyCode") != claim["reasonCode"]
+                or receipt.get("discrepancyDisposition") != "return_to_vendor"
+                or "unitCostMmk" not in purchase_order
+                or claim["quantityRejected"] * purchase_order["unitCostMmk"] > _MAX_SAFE_INTEGER
+                or claim["claimAmountMmk"] != claim["quantityRejected"] * purchase_order["unitCostMmk"]
+                or datetime.fromisoformat(str(claim["createdAt"]).replace("Z", "+00:00"))
+                < datetime.fromisoformat(str(receipt["createdAt"]).replace("Z", "+00:00"))
+            ):
+                raise TrialValidationError(
+                    f"{claim['id']} does not bind one exact rejected supplier receipt."
+                )
         if "cancellation" in purchase_order:
             cancellation_at = datetime.fromisoformat(
                 str(purchase_order["cancellation"]["capturedAt"]).replace(
@@ -1711,7 +4014,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 )
             )
             if (
-                received >= purchase_order["quantityOrdered"]
+                "supplierInvoice" in purchase_order
+                or delivered >= purchase_order["quantityOrdered"]
                 or cancellation_at
                 < latest_receipt_at_by_purchase_order.get(
                     purchase_order_id,
@@ -1723,8 +4027,27 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"{purchase_order_id} has an invalid cancellation boundary."
                 )
-        elif received < purchase_order["quantityOrdered"]:
+        elif delivered < purchase_order["quantityOrdered"]:
             active_purchase_order_skus.append(purchase_order["sku"])
+        invoice = purchase_order.get("supplierInvoice")
+        if isinstance(invoice, Mapping) and "payableReview" in invoice:
+            match = commerce_supplier_invoice_match(state, purchase_order)
+            review_at = datetime.fromisoformat(
+                str(invoice["payableReview"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            if (
+                match["status"] != "matched"
+                or review_at
+                < latest_receipt_at_by_purchase_order.get(
+                    purchase_order_id,
+                    datetime.fromisoformat(
+                        str(invoice["recording"]["capturedAt"]).replace("Z", "+00:00")
+                    ),
+                )
+            ):
+                raise TrialValidationError(
+                    f"{purchase_order_id} has an invalid payable-ready review."
+                )
     _unique(active_purchase_order_skus, "Active purchase order SKU")
 
     close_ids: list[str] = []
@@ -1737,7 +4060,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             close,
             f"closes[{index}]",
             required=_CLOSE_REQUIRED_FIELDS,
-            optional=_CLOSE_SNAPSHOT_FIELDS,
+            optional=_CLOSE_OPTIONAL_FIELDS,
         )
         close_ids.append(_text(close["id"], f"closes[{index}].id", maximum=160))
         _timestamp(close["createdAt"], f"closes[{index}].createdAt")
@@ -1801,14 +4124,16 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             if any(sku not in item_by_sku for sku in stock_exception_skus):
                 raise TrialValidationError(f"closes[{index}] references an unknown stock exception SKU.")
             member_orders = [order_by_id[order_id] for order_id in order_ids_for_close]
+            member_adjusted_totals = [_order_adjusted_total(order) for order in member_orders]
             if (
                 any(
                     order["status"] != "completed"
                     or order["paymentStatus"] != "reconciled"
                     for order in member_orders
                 )
+                or any(total is None for total in member_adjusted_totals)
                 or close["orders"] != len(order_ids_for_close)
-                or close["total"] != sum(order["total"] for order in member_orders)
+                or close["total"] != sum(total or 0 for total in member_adjusted_totals)
             ):
                 raise TrialValidationError(
                     f"closes[{index}] totals must match its completed, reconciled order membership."
@@ -1828,6 +4153,57 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             _text(close["operator"], f"closes[{index}].operator")
             _text(close["reason"], f"closes[{index}].reason")
             _text(close["evidenceReference"], f"closes[{index}].evidenceReference")
+            if "settlement" in close:
+                settlement = _object(close["settlement"], f"closes[{index}].settlement")
+                _exact_fields(
+                    settlement,
+                    f"closes[{index}].settlement",
+                    required=_CLOSE_SETTLEMENT_FIELDS,
+                )
+                if settlement["schema"] != COMMERCE_CLOSE_SETTLEMENT_SCHEMA or settlement["status"] not in {"matched", "variance_review"}:
+                    raise TrialValidationError(f"closes[{index}].settlement contract is invalid.")
+                expected_by_payment: dict[str, int] = {}
+                for order, adjusted_total in zip(member_orders, member_adjusted_totals, strict=True):
+                    assert adjusted_total is not None
+                    payment_method = str(order["payment"])
+                    expected_by_payment[payment_method] = expected_by_payment.get(payment_method, 0) + adjusted_total
+                settlement_lines: list[dict[str, Any]] = []
+                for line_index, candidate_line in enumerate(_list(settlement["lines"], f"closes[{index}].settlement.lines")):
+                    field = f"closes[{index}].settlement.lines[{line_index}]"
+                    line = _object(candidate_line, field)
+                    _exact_fields(line, field, required=_CLOSE_SETTLEMENT_LINE_FIELDS)
+                    payment_method = _text(line["paymentMethod"], f"{field}.paymentMethod", maximum=80)
+                    expected_mmk = _integer(line["expectedMmk"], f"{field}.expectedMmk")
+                    counted_mmk = _integer(line["countedMmk"], f"{field}.countedMmk")
+                    variance_mmk = line["varianceMmk"]
+                    if isinstance(variance_mmk, bool) or not isinstance(variance_mmk, int) or abs(variance_mmk) > _MAX_SAFE_INTEGER:
+                        raise TrialValidationError(f"{field}.varianceMmk must be a safe integer.")
+                    if expected_by_payment.get(payment_method) != expected_mmk or counted_mmk - expected_mmk != variance_mmk:
+                        raise TrialValidationError(f"{field} does not match the closed orders.")
+                    if variance_mmk == 0:
+                        if line["status"] != "matched" or line["varianceOwner"] is not None or line["varianceReason"] is not None:
+                            raise TrialValidationError(f"{field} matched evidence is invalid.")
+                    else:
+                        if line["status"] != "variance_review":
+                            raise TrialValidationError(f"{field} variance status is invalid.")
+                        _text(line["varianceOwner"], f"{field}.varianceOwner", maximum=80)
+                        _text(line["varianceReason"], f"{field}.varianceReason", maximum=240)
+                    settlement_lines.append(line)
+                methods = [line["paymentMethod"] for line in settlement_lines]
+                if methods != sorted(expected_by_payment):
+                    raise TrialValidationError(f"closes[{index}].settlement payment methods are invalid.")
+                total_expected = sum(line["expectedMmk"] for line in settlement_lines)
+                total_counted = sum(line["countedMmk"] for line in settlement_lines)
+                total_variance = sum(line["varianceMmk"] for line in settlement_lines)
+                if (
+                    any(abs(value) > _MAX_SAFE_INTEGER for value in (total_expected, total_counted, total_variance))
+                    or settlement["totalExpectedMmk"] != total_expected
+                    or settlement["totalCountedMmk"] != total_counted
+                    or settlement["totalVarianceMmk"] != total_variance
+                    or total_expected != close["total"]
+                    or settlement["status"] != ("variance_review" if any(line["status"] == "variance_review" for line in settlement_lines) else "matched")
+                ):
+                    raise TrialValidationError(f"closes[{index}].settlement totals are invalid.")
     _unique(close_ids, "Daily close ID")
     _unique(close_business_dates, "Daily close business date")
     _unique(closed_order_ids, "Closed order ID")
@@ -2025,8 +4401,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *advancement_action_ids,
             *completion_action_ids,
             *return_action_ids,
+            *support_action_ids,
+            *correction_action_ids,
+            *collection_action_ids,
             *intake_action_ids,
             *close_action_ids,
+            *purchase_budget_action_ids,
+            *supplier_sourcing_action_ids,
+            *purchase_requisition_action_ids,
             *purchase_order_action_ids,
             *(
                 action_id
@@ -2034,6 +4416,12 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 if action_id not in catalog_baseline_action_set
             ),
             *catalog_baseline_action_set,
+            *tax_configuration_action_ids,
+            *account_mapping_configuration_action_ids,
+            *customer_credit_policy_action_ids,
+            *promotion_policy_action_ids,
+            *shipping_policy_action_ids,
+            *payment_policy_action_ids,
             *storefront_action_ids,
             *(
                 [storefront_configuration_action_id]
@@ -2159,6 +4547,13 @@ def _apply_storefront_merchandising_import(
         "summary": configuration["summary"],
         "selectedSkus": selected_skus,
         "merchandising": merchandising,
+        "activation": {
+            "contract": "supermega.ecommerce.activation.v1",
+            "packageDigest": validation.package_digest,
+            "workflowTemplateId": validation.workflow_template_id,
+            "confirmedAt": validated_evidence["capturedAt"],
+            "skus": selected_skus,
+        },
         "saved": {
             "actionId": _storefront_configuration_action_id(revision, catalog_digest),
             "capturedAt": validated_evidence["capturedAt"],
@@ -2221,11 +4616,24 @@ def _validate_event_evidence(
             raise TrialValidationError("command evidence must match the Website intake conversion proof.")
     elif event_type == "commerce.storefront_request.received":
         request = next_state["storefrontRequests"][0]
+        requested_at = datetime.fromisoformat(
+            request["createdAt"].replace("Z", "+00:00")
+        )
+        received_at = datetime.fromisoformat(
+            evidence["capturedAt"].replace("Z", "+00:00")
+        )
         if (
             evidence["actionId"] != f"ACT-{request['id'][4:]}"
-            or evidence["capturedAt"] != request["createdAt"]
             or evidence["evidenceReference"]
             != f"ECOMMERCE:{request['id']}:{request['sourcePreviewDigest']}"
+            or received_at < requested_at
+            or (
+                request["schema"] == "supermega.ecommerce.order_request.v2"
+                and received_at
+                > datetime.fromisoformat(
+                    request["quote"]["expiresAt"].replace("Z", "+00:00")
+                )
+            )
         ):
             raise TrialValidationError("command evidence must match the retained Ecommerce request receipt.")
     elif event_type == "commerce.storefront.configuration.saved":
@@ -2233,6 +4641,85 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(saved, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved Ecommerce storefront configuration."
+            )
+    elif event_type == "commerce.tax_configuration.saved":
+        proof = next_state["taxConfigurations"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved tax configuration proof."
+            )
+    elif event_type == "commerce.account_mapping.saved":
+        proof = next_state["accountMappingConfigurations"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved account mapping proof."
+            )
+    elif event_type == "commerce.customer_credit_policy.saved":
+        proof = next_state["customerCreditPolicies"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved customer credit policy proof."
+            )
+    elif event_type == "commerce.promotion_policy.saved":
+        proof = next_state["promotionPolicies"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved promotion policy proof."
+            )
+    elif event_type == "commerce.shipping_policy.saved":
+        proof = next_state["shippingPolicies"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved shipping policy proof."
+            )
+    elif event_type == "commerce.payment_policy.saved":
+        proof = next_state["paymentPolicies"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved payment policy proof."
+            )
+    elif event_type == "commerce.service_schedule.initialized":
+        schedule = next_state["serviceSchedule"]
+        pack_id = schedule["industryPackId"]
+        if (
+            evidence["actionId"] != f"ACT-SERVICE-SCHEDULE-INIT-{pack_id.upper()}"
+            or evidence["reason"] != f"Initialize the reviewed {pack_id} Shop industry pack."
+            or evidence["evidenceReference"] != f"SHOP-SERVICE-SCHEDULE:{pack_id}:R0"
+        ):
+            raise TrialValidationError(
+                "command evidence must match the initialized service schedule pack."
+            )
+    elif event_type == "commerce.service_schedule.saved":
+        schedule = next_state["serviceSchedule"]
+        latest = schedule["events"][-1]
+        revision = schedule["revision"]
+        if (
+            latest["actor"] != evidence["actor"]
+            or latest["reason"] != evidence["reason"]
+            or latest["happenedAt"] != evidence["capturedAt"]
+            or evidence["actionId"] != f"ACT-SERVICE-SCHEDULE-R{revision}"
+            or evidence["evidenceReference"] != f"SHOP-SERVICE-SCHEDULE:R{revision}"
+        ):
+            raise TrialValidationError(
+                "command evidence must match the saved service schedule revision."
+            )
+    elif event_type == "commerce.purchase_budget.approved":
+        approval = next_state["purchaseBudgetEnvelopes"][0]["approval"]
+        if not _proof_matches_evidence(approval, evidence):
+            raise TrialValidationError(
+                "command evidence must match the purchase budget approval proof."
+            )
+    elif event_type == "commerce.supplier_sourcing.approved":
+        approval = next_state["supplierSourcingDecisions"][0]["approval"]
+        if not _proof_matches_evidence(approval, evidence):
+            raise TrialValidationError(
+                "command evidence must match the supplier sourcing approval proof."
+            )
+    elif event_type == "commerce.purchase_requisition.approved":
+        approval = next_state["purchaseRequisitions"][0]["approval"]
+        if not _proof_matches_evidence(approval, evidence):
+            raise TrialValidationError(
+                "command evidence must match the purchase requisition approval proof."
             )
     elif event_type == "commerce.purchase_order.created":
         creation = next_state["purchaseOrders"][0]["creation"]
@@ -2253,6 +4740,61 @@ def _validate_event_evidence(
         ):
             raise TrialValidationError(
                 "command evidence must match the purchase order cancellation proof."
+            )
+    elif event_type == "commerce.supplier_invoice.recorded":
+        _, changed_purchase_order = _one_changed(
+            _purchase_orders(current),
+            _purchase_orders(next_state),
+            "purchaseOrders",
+        )
+        invoice = changed_purchase_order.get("supplierInvoice")
+        recording = invoice.get("recording") if isinstance(invoice, Mapping) else None
+        if not isinstance(recording, Mapping) or not _proof_matches_evidence(
+            recording, evidence
+        ):
+            raise TrialValidationError(
+                "command evidence must match the supplier invoice recording proof."
+            )
+    elif event_type == "commerce.supplier_invoice.payable_ready":
+        _, changed_purchase_order = _one_changed(
+            _purchase_orders(current),
+            _purchase_orders(next_state),
+            "purchaseOrders",
+        )
+        invoice = changed_purchase_order.get("supplierInvoice")
+        review = invoice.get("payableReview") if isinstance(invoice, Mapping) else None
+        if not isinstance(review, Mapping) or not _proof_matches_evidence(
+            review, evidence
+        ):
+            raise TrialValidationError(
+                "command evidence must match the supplier invoice payable-ready review proof."
+            )
+    elif event_type == "commerce.supplier_return.authorized":
+        _, changed_purchase_order = _one_changed(
+            _purchase_orders(current), _purchase_orders(next_state), "purchaseOrders"
+        )
+        returns = changed_purchase_order.get("supplierReturns")
+        authorization = returns[0].get("authorization") if isinstance(returns, list) and returns and isinstance(returns[0], Mapping) else None
+        if not isinstance(authorization, Mapping) or not _proof_matches_evidence(authorization, evidence):
+            raise TrialValidationError(
+                "command evidence must match the supplier return authorization proof."
+            )
+    elif event_type == "commerce.supplier_credit.recorded":
+        _, changed_purchase_order = _one_changed(
+            _purchase_orders(current), _purchase_orders(next_state), "purchaseOrders"
+        )
+        recordings = [
+            credit["recording"]
+            for claim in changed_purchase_order.get("supplierReturns", [])
+            if isinstance(claim, Mapping)
+            for credit in claim.get("creditNotes", [])
+            if isinstance(credit, Mapping)
+            and isinstance(credit.get("recording"), Mapping)
+            and credit["recording"].get("actionId") == evidence["actionId"]
+        ]
+        if len(recordings) != 1 or not _proof_matches_evidence(recordings[0], evidence):
+            raise TrialValidationError(
+                "command evidence must match the supplier credit recording proof."
             )
     elif event_type == "commerce.order.advanced":
         _, advanced_order = _one_changed(
@@ -2302,8 +4844,125 @@ def _validate_event_evidence(
             raise TrialValidationError(
                 "command evidence must match the order return proof."
             )
+    elif event_type == "commerce.order.support_case_opened":
+        _, changed_order = _one_changed(current["orders"], next_state["orders"], "orders")
+        cases = changed_order.get("supportCases")
+        opening = cases[0].get("opening") if isinstance(cases, list) and cases else None
+        if not isinstance(opening, Mapping) or not _proof_matches_evidence(opening, evidence):
+            raise TrialValidationError(
+                "command evidence must match the support case opening proof."
+            )
+    elif event_type == "commerce.order.support_case_reopened":
+        before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+        before_by_id = {
+            case.get("caseId"): case
+            for case in before_order.get("supportCases", [])
+            if isinstance(case, Mapping)
+        }
+        changed = [
+            case
+            for case in after_order.get("supportCases", [])
+            if isinstance(case, Mapping) and case != before_by_id.get(case.get("caseId"))
+        ]
+        reopen = changed[0].get("reopen") if len(changed) == 1 else None
+        proof = reopen.get("proof") if isinstance(reopen, Mapping) else None
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the support case reopen proof."
+            )
+    elif event_type == "commerce.order.support_case_service_recorded":
+        before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+        before_by_id = {
+            case.get("caseId"): case
+            for case in before_order.get("supportCases", [])
+            if isinstance(case, Mapping)
+        }
+        changed = [
+            case
+            for case in after_order.get("supportCases", [])
+            if isinstance(case, Mapping) and case != before_by_id.get(case.get("caseId"))
+        ]
+        event_field = (
+            "followUpServiceEvents"
+            if len(changed) == 1 and isinstance(changed[0].get("reopen"), Mapping)
+            else "serviceEvents"
+        )
+        service_events = changed[0].get(event_field) if len(changed) == 1 else None
+        proof = (
+            service_events[0].get("proof")
+            if isinstance(service_events, list)
+            and service_events
+            and isinstance(service_events[0], Mapping)
+            else None
+        )
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the support service event proof."
+            )
+    elif event_type == "commerce.order.support_case_resolved":
+        before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+        before_by_id = {
+            case.get("caseId"): case
+            for case in before_order.get("supportCases", [])
+            if isinstance(case, Mapping)
+        }
+        changed = [
+            case
+            for case in after_order.get("supportCases", [])
+            if isinstance(case, Mapping) and case != before_by_id.get(case.get("caseId"))
+        ]
+        resolution_field = (
+            "followUpResolution"
+            if len(changed) == 1 and isinstance(changed[0].get("reopen"), Mapping)
+            else "resolution"
+        )
+        resolution = changed[0].get(resolution_field) if len(changed) == 1 else None
+        proof = resolution.get("proof") if isinstance(resolution, Mapping) else None
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the support case resolution proof."
+            )
+    elif event_type == "commerce.order.correction_recorded":
+        _, corrected_order = _one_changed(
+            current["orders"],
+            next_state["orders"],
+            "orders",
+        )
+        corrections = corrected_order.get("corrections")
+        record = corrections[0] if isinstance(corrections, list) and corrections else {}
+        if any(
+            record.get(record_field) != evidence[evidence_field]
+            for record_field, evidence_field in (
+                ("actionId", "actionId"),
+                ("createdAt", "capturedAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        ):
+            raise TrialValidationError(
+                "command evidence must match the order correction proof."
+            )
+    elif event_type == "commerce.collection_action.recorded":
+        _, contacted_order = _one_changed(
+            current["orders"],
+            next_state["orders"],
+            "orders",
+        )
+        actions = contacted_order.get("collectionActions")
+        record = actions[0] if isinstance(actions, list) and actions else {}
+        proof = record.get("proof", {}) if isinstance(record, Mapping) else {}
+        if not isinstance(proof, Mapping) or not _proof_matches_evidence(
+            proof,
+            evidence,
+        ):
+            raise TrialValidationError(
+                "command evidence must match the collection contact proof."
+            )
     elif event_type in {
         "commerce.inventory.initialized",
+        "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
         "commerce.stock.counted",
     } and (
@@ -2314,6 +4973,8 @@ def _validate_event_evidence(
         commands = foundation.get("commands") if foundation is not None else None
         expected_location_kind = {
             "commerce.inventory.initialized": "import",
+            "commerce.inventory.master_created": "master_create",
+            "commerce.inventory.supplier_policy_saved": "supplier_policy_set",
             "commerce.inventory.transferred": "transfer",
             "commerce.stock.counted": "count",
         }[event_type]
@@ -2378,6 +5039,8 @@ def _validate_event_evidence(
         "commerce.stock.received": "receipt",
         "commerce.stock.counted": "count",
         "commerce.production_material.issued": "production_issue",
+        "commerce.production_material.returned": "production_return",
+        "commerce.production_batch.received": "production_receipt",
         "commerce.purchase_order.received": "receipt",
         "commerce.website_intake.converted": "reserve",
     }.get(event_type)
@@ -2502,8 +5165,908 @@ def _purchase_orders(state: Mapping[str, Any]) -> list[Any]:
     return state.get("purchaseOrders", [])
 
 
+def _purchase_budget_envelopes(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("purchaseBudgetEnvelopes", [])
+
+
+def _supplier_sourcing_decisions(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("supplierSourcingDecisions", [])
+
+
+def _purchase_requisitions(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("purchaseRequisitions", [])
+
+
+def commerce_supplier_invoice_match(
+    state: Mapping[str, Any],
+    purchase_order: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Project a fail-closed three-way match without posting or paying externally."""
+
+    invoice = purchase_order.get("supplierInvoice")
+    ordered_unit_cost = purchase_order.get("unitCostMmk")
+    if not isinstance(invoice, Mapping) or not isinstance(ordered_unit_cost, int):
+        raise TrialValidationError(
+            "Supplier invoice matching requires retained PO commercial terms and an invoice."
+        )
+    received = sum(
+        movement["quantityDelta"]
+        for movement in state.get("movements", [])
+        if isinstance(movement, Mapping)
+        and movement.get("kind") == "receipt"
+        and movement.get("purchaseOrderId") == purchase_order.get("id")
+    )
+    rejected = sum(
+        movement.get("rejectedQuantity", 0)
+        for movement in state.get("movements", [])
+        if isinstance(movement, Mapping)
+        and movement.get("kind") == "receipt"
+        and movement.get("purchaseOrderId") == purchase_order.get("id")
+    )
+    invoiced_quantity = int(invoice["quantityInvoiced"])
+    supplier_claim_mmk = sum(
+        claim["claimAmountMmk"]
+        for claim in purchase_order.get("supplierReturns", [])
+        if isinstance(claim, Mapping)
+    )
+    supplier_credit_mmk = sum(
+        credit["amountMmk"]
+        for claim in purchase_order.get("supplierReturns", [])
+        if isinstance(claim, Mapping)
+        for credit in claim.get("creditNotes", [])
+        if isinstance(credit, Mapping)
+    )
+    expected_supplier_return_mmk = rejected * ordered_unit_cost
+    supplier_return_balance_mmk = expected_supplier_return_mmk - supplier_credit_mmk
+    net_invoice_total_mmk = invoice["totalMmk"] - supplier_credit_mmk
+    accepted_total_mmk = received * ordered_unit_cost
+    if received + rejected < invoiced_quantity:
+        status = "awaiting_receipt"
+    elif rejected > 0 and (
+        supplier_claim_mmk != expected_supplier_return_mmk
+        or supplier_return_balance_mmk > 0
+    ):
+        status = "supplier_credit_pending"
+    elif (
+        invoiced_quantity != purchase_order["quantityOrdered"]
+    ):
+        status = "quantity_variance"
+    elif (
+        invoice["unitCostMmk"] != ordered_unit_cost
+        or net_invoice_total_mmk != accepted_total_mmk
+    ):
+        status = "price_variance"
+    else:
+        status = "matched"
+    return {
+        "status": status,
+        "orderedQuantity": purchase_order["quantityOrdered"],
+        "acceptedQuantity": received,
+        "rejectedQuantity": rejected,
+        "invoicedQuantity": invoiced_quantity,
+        "orderedUnitCostMmk": ordered_unit_cost,
+        "invoicedUnitCostMmk": invoice["unitCostMmk"],
+        "orderedTotalMmk": purchase_order["quantityOrdered"] * ordered_unit_cost,
+        "invoicedTotalMmk": invoice["totalMmk"],
+        "supplierClaimMmk": supplier_claim_mmk,
+        "supplierCreditMmk": supplier_credit_mmk,
+        "supplierReturnBalanceMmk": supplier_return_balance_mmk,
+        "netInvoiceTotalMmk": net_invoice_total_mmk,
+        "acceptedTotalMmk": accepted_total_mmk,
+        "payableReady": status == "matched" and "payableReview" in invoice,
+    }
+
+
+def commerce_shop_demand_intelligence(
+    value: Mapping[str, Any],
+    as_of: str,
+) -> dict[str, Any]:
+    """Project explainable 28-day Shop demand without changing operational state."""
+
+    state = validate_commerce_state(value)
+    canonical_as_of = _timestamp(as_of, "Shop demand asOf")
+    as_of_time = datetime.fromisoformat(canonical_as_of.replace("Z", "+00:00"))
+    lookback_days = 28
+    window_start = as_of_time - timedelta(days=lookback_days)
+
+    def safe_add(left: int, right: int, field: str) -> int:
+        result = left + right
+        if abs(result) > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(f"{field} exceeds the supported quantity range.")
+        return result
+
+    def safe_multiply(left: int, right: int, field: str) -> int:
+        result = left * right
+        if abs(result) > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(f"{field} exceeds the supported quantity range.")
+        return result
+
+    def order_lines(order: Mapping[str, Any]) -> list[dict[str, Any]]:
+        lines = order.get("lines")
+        if isinstance(lines, list) and lines:
+            return [
+                {"sku": str(line["sku"]), "quantity": int(line["quantity"])}
+                for line in lines
+                if isinstance(line, Mapping)
+            ]
+        sku = order.get("itemSku")
+        return [{"sku": str(sku), "quantity": int(order["quantity"])}] if sku else []
+
+    completed_orders: list[Mapping[str, Any]] = []
+    for order_value in state["orders"]:
+        order = order_value if isinstance(order_value, Mapping) else {}
+        completion = order.get("completion")
+        if order.get("status") != "completed" or not isinstance(completion, Mapping):
+            continue
+        completed_at = datetime.fromisoformat(
+            str(completion["capturedAt"]).replace("Z", "+00:00")
+        )
+        if window_start < completed_at <= as_of_time:
+            completed_orders.append(order)
+
+    purchase_orders = [
+        order for order in state.get("purchaseOrders", []) if isinstance(order, Mapping)
+    ]
+
+    def purchase_progress(order: Mapping[str, Any]) -> tuple[int, bool]:
+        delivered = sum(
+            int(movement["quantityDelta"]) + int(movement.get("rejectedQuantity", 0))
+            for movement in state["movements"]
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == order.get("id")
+        )
+        remaining = int(order["quantityOrdered"]) - delivered
+        active = "cancellation" not in order and remaining > 0
+        return remaining, active
+
+    active_purchase_orders = [
+        order for order in purchase_orders if purchase_progress(order)[1]
+    ]
+    catalog_skus = sorted(str(item["sku"]) for item in state["items"])
+    policies: list[dict[str, Any]] = []
+    vendor_names: dict[str, str] = {}
+    inventory = state.get("inventoryFoundation")
+    if inventory is not None:
+        partners = shop_inventory_business_partners(inventory, catalog_skus)
+        vendor_names = {vendor["id"]: vendor["name"] for vendor in partners["vendors"]}
+        policies = shop_inventory_supplier_policies(inventory, catalog_skus)
+
+    def select_policy(sku: str, recent_supplier: str | None) -> Mapping[str, Any] | None:
+        active = [
+            policy
+            for policy in policies
+            if policy["sku"] == sku and policy["status"] == "active"
+        ]
+        if recent_supplier:
+            return next(
+                (
+                    policy
+                    for policy in active
+                    if vendor_names.get(str(policy["vendorId"])) == recent_supplier
+                ),
+                None,
+            )
+        return active[0] if len(active) == 1 else None
+
+    rows: list[dict[str, Any]] = []
+    for item in state["items"]:
+        sku = str(item["sku"])
+        weekly = [0, 0, 0, 0]
+        source_order_ids: list[str] = []
+        source_return_action_ids: list[str] = []
+        gross_units = 0
+        returned_units = 0
+        for order in completed_orders:
+            quantity = sum(
+                int(line["quantity"]) for line in order_lines(order) if line["sku"] == sku
+            )
+            if quantity == 0:
+                continue
+            source_order_ids.append(str(order["id"]))
+            gross_units = safe_add(gross_units, quantity, f"Gross demand for {sku}")
+            completion = order["completion"]
+            completed_at = datetime.fromisoformat(
+                str(completion["capturedAt"]).replace("Z", "+00:00")
+            )
+            bucket = min(3, int((as_of_time - completed_at).total_seconds() // (7 * 86_400)))
+            weekly[bucket] = safe_add(weekly[bucket], quantity, f"Weekly demand for {sku}")
+            for returned in order.get("returns", []):
+                if not isinstance(returned, Mapping) or returned.get("sku") != sku:
+                    continue
+                returned_at = datetime.fromisoformat(
+                    str(returned["createdAt"]).replace("Z", "+00:00")
+                )
+                if returned_at > as_of_time:
+                    continue
+                returned_quantity = int(returned["quantity"])
+                returned_units = safe_add(
+                    returned_units, returned_quantity, f"Returns for {sku}"
+                )
+                source_return_action_ids.append(str(returned["actionId"]))
+                return_bucket = min(
+                    3,
+                    max(0, int((as_of_time - returned_at).total_seconds() // (7 * 86_400))),
+                )
+                weekly[return_bucket] = safe_add(
+                    weekly[return_bucket], -returned_quantity, f"Weekly demand for {sku}"
+                )
+        net_units = max(0, gross_units - returned_units)
+        forecast_weekly = (net_units + 3) // 4
+        peak_weekly = max([0, *weekly])
+        average_daily_basis_points = (
+            safe_multiply(net_units, 10_000, f"Average demand for {sku}")
+            + lookback_days // 2
+        ) // lookback_days
+        completed_order_count = len(source_order_ids)
+        confidence = (
+            "established"
+            if completed_order_count >= 6
+            else "emerging" if completed_order_count >= 2 else "insufficient"
+        )
+        recent_orders = sorted(
+            [
+                order
+                for order in purchase_orders
+                if order.get("sku") == sku and "cancellation" not in order
+            ],
+            key=lambda order: (
+                -datetime.fromisoformat(str(order["createdAt"]).replace("Z", "+00:00")).timestamp(),
+                str(order["id"]),
+            ),
+        )
+        recent_supplier = str(recent_orders[0]["supplier"]) if recent_orders else None
+        policy = select_policy(sku, recent_supplier)
+        horizon_days = int(policy["leadTimeDays"]) if policy else 7
+        horizon_source = "supplier_policy" if policy else "planning_default"
+        horizon_demand = (
+            safe_multiply(net_units, horizon_days, f"Planning demand for {sku}")
+            + lookback_days - 1
+        ) // lookback_days
+        open_purchase_units = sum(
+            purchase_progress(order)[0]
+            for order in active_purchase_orders
+            if order.get("sku") == sku
+        )
+        projected_supply = safe_add(
+            int(item["onHand"]), open_purchase_units, f"Projected supply for {sku}"
+        )
+        projected_cover = (
+            safe_multiply(projected_supply, lookback_days, f"Projected cover for {sku}")
+            // net_units
+            if net_units
+            else None
+        )
+        suggested_safety = (
+            None if confidence == "insufficient" else max(0, peak_weekly - forecast_weekly)
+        )
+        if net_units > 0 and projected_supply < horizon_demand:
+            status = "stockout_risk"
+            reason = f"Projected supply is below {horizon_days}-day demand."
+        elif net_units > 0 and projected_supply < safe_add(
+            horizon_demand, forecast_weekly, f"Demand threshold for {sku}"
+        ):
+            status = "reorder_soon"
+            reason = "Projected supply covers the planning horizon but not one additional forecast week."
+        elif confidence == "insufficient":
+            status = "insufficient_history"
+            reason = "Fewer than two completed orders are available in the 28-day window."
+        else:
+            status = "monitor"
+            reason = "Projected supply covers the planning horizon and one additional forecast week."
+        rows.append(
+            {
+                "sku": sku,
+                "itemName": item["name"],
+                "completedOrderCount": completed_order_count,
+                "sourceOrderIds": sorted(source_order_ids),
+                "sourceReturnActionIds": sorted(source_return_action_ids),
+                "grossDemandUnits": gross_units,
+                "returnedUnits": returned_units,
+                "netDemandUnits": net_units,
+                "weeklyNetDemandUnits": weekly,
+                "forecastWeeklyUnits": forecast_weekly,
+                "peakWeeklyDemandUnits": peak_weekly,
+                "averageDailyDemandBasisPoints": average_daily_basis_points,
+                "planningHorizonDays": horizon_days,
+                "planningHorizonSource": horizon_source,
+                "horizonDemandUnits": horizon_demand,
+                "onHandUnits": item["onHand"],
+                "openPurchaseUnits": open_purchase_units,
+                "projectedSupplyUnits": projected_supply,
+                "projectedDaysOfCover": projected_cover,
+                "existingSafetyStockUnits": policy["safetyStockUnits"] if policy else None,
+                "recommendedSafetyStockUnits": suggested_safety,
+                "confidence": confidence,
+                "status": status,
+                "reason": reason,
+            }
+        )
+
+    status_rank = {
+        "stockout_risk": 0,
+        "reorder_soon": 1,
+        "insufficient_history": 2,
+        "monitor": 3,
+    }
+    rows.sort(key=lambda row: (status_rank[row["status"]], -row["netDemandUnits"], row["sku"]))
+    completed_order_ids = sorted(str(order["id"]) for order in completed_orders)
+    return_action_ids = sorted(
+        str(returned["actionId"])
+        for order in completed_orders
+        for returned in order.get("returns", [])
+        if isinstance(returned, Mapping)
+        and datetime.fromisoformat(str(returned["createdAt"]).replace("Z", "+00:00")) <= as_of_time
+    )
+    source = {
+        "commerceDigest": _order_inventory_digest(
+            {"asOf": canonical_as_of, "state": state}
+        ),
+        "completedOrderIds": completed_order_ids,
+        "returnActionIds": return_action_ids,
+    }
+    summary = {
+        "reviewedSkus": len(rows),
+        "demandSkus": sum(1 for row in rows if row["netDemandUnits"] > 0),
+        "stockoutRisks": sum(1 for row in rows if row["status"] == "stockout_risk"),
+        "reorderSoon": sum(1 for row in rows if row["status"] == "reorder_soon"),
+        "insufficientHistory": sum(1 for row in rows if row["confidence"] == "insufficient"),
+        "netDemandUnits": sum(row["netDemandUnits"] for row in rows),
+        "forecastWeeklyUnits": sum(row["forecastWeeklyUnits"] for row in rows),
+    }
+    body = {
+        "contract": "supermega.shop.demand-intelligence.v1",
+        "asOf": canonical_as_of,
+        "lookbackDays": lookback_days,
+        "rows": rows,
+        "summary": summary,
+        "source": source,
+        "authority": {
+            "recommendationOnly": True,
+            "purchaseCreated": False,
+            "supplierContacted": False,
+            "inventoryChanged": False,
+            "policyChanged": False,
+            "providerCalled": False,
+        },
+    }
+    return {**body, "digest": _order_inventory_digest(body)}
+
+
+def commerce_shop_procurement_decision(
+    value: Mapping[str, Any],
+    replenishment_value: Mapping[str, Any],
+    as_of: str,
+) -> dict[str, Any]:
+    """Rank retained supplier evidence for owner review without creating a requisition or purchase."""
+
+    state = validate_commerce_state(value)
+    canonical_as_of = _timestamp(as_of, "Shop procurement asOf")
+    as_of_time = datetime.fromisoformat(canonical_as_of.replace("Z", "+00:00"))
+    plan = _object(replenishment_value, "Shop replenishment plan")
+    if plan.get("contract") != "supermega.shop.replenishment_plan.v1":
+        raise TrialValidationError("Shop procurement requires a v1 replenishment plan.")
+    plan_digest = _text(plan.get("digest"), "Shop replenishment plan.digest", maximum=71)
+    plan_body = {key: item for key, item in plan.items() if key != "digest"}
+    if plan_digest != _order_inventory_digest(plan_body):
+        raise TrialValidationError("Shop procurement requires an untampered replenishment plan.")
+    plan_rows = plan.get("rows")
+    if not isinstance(plan_rows, list) or len(plan_rows) > 2_000:
+        raise TrialValidationError("Shop replenishment plan.rows is invalid.")
+    plan_source = _object(plan.get("source"), "Shop replenishment plan.source")
+    commerce_digest = _text(plan_source.get("commerceDigest"), "Shop replenishment plan.source.commerceDigest", maximum=71)
+    purchase_orders = [order for order in state.get("purchaseOrders", []) if isinstance(order, Mapping)]
+
+    def safe_add(left: int, right: int, field: str) -> int:
+        result = left + right
+        if abs(result) > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(f"{field} exceeds the supported safe integer range.")
+        return result
+
+    def purchase_progress(order: Mapping[str, Any]) -> tuple[int, int, int, bool]:
+        receipts = [
+            movement for movement in state["movements"]
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == order.get("id")
+        ]
+        received = sum(int(movement["quantityDelta"]) for movement in receipts)
+        rejected = sum(int(movement.get("rejectedQuantity", 0)) for movement in receipts)
+        remaining = int(order["quantityOrdered"]) - received - rejected
+        return received, rejected, remaining, "cancellation" not in order and remaining > 0
+
+    supplier_performance: dict[str, dict[str, Any]] = {}
+    for order in purchase_orders:
+        supplier = str(order["supplier"])
+        received, rejected, remaining, active = purchase_progress(order)
+        receipts = [
+            movement for movement in state["movements"]
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == order.get("id")
+        ]
+        completed_at = max(
+            (datetime.fromisoformat(str(receipt["createdAt"]).replace("Z", "+00:00")) for receipt in receipts),
+            default=None,
+        )
+        promised_at = datetime.fromisoformat(str(order["expectedAt"]).replace("Z", "+00:00")) if order.get("expectedAt") else None
+        completed = remaining == 0 and completed_at is not None and promised_at is not None and "cancellation" not in order
+        on_time = completed and completed_at <= promised_at
+        late_delivery = completed and not on_time
+        late_open = active and promised_at is not None and promised_at <= as_of_time
+        measured = supplier_performance.setdefault(supplier, {
+            "orderedUnits": 0, "rejectedUnits": 0, "lateOpenOrders": 0,
+            "completedDeliveries": 0, "onTimeDeliveries": 0, "lateDeliveries": 0,
+        })
+        measured["orderedUnits"] = safe_add(measured["orderedUnits"], int(order["quantityOrdered"]), "Supplier ordered units")
+        measured["rejectedUnits"] = safe_add(measured["rejectedUnits"], rejected, "Supplier rejected units")
+        measured["lateOpenOrders"] += int(late_open)
+        measured["completedDeliveries"] += int(completed)
+        measured["onTimeDeliveries"] += int(on_time)
+        measured["lateDeliveries"] += int(late_delivery)
+
+    catalog_skus = sorted(str(item["sku"]) for item in state["items"])
+    inventory = state.get("inventoryFoundation")
+    vendors: list[Mapping[str, Any]] = []
+    policies: list[Mapping[str, Any]] = []
+    if inventory is not None:
+        partners = shop_inventory_business_partners(inventory, catalog_skus)
+        vendors = [vendor for vendor in partners["vendors"] if isinstance(vendor, Mapping)]
+        policies = shop_inventory_supplier_policies(inventory, catalog_skus)
+    vendor_ids = {str(vendor["name"]): str(vendor["id"]) for vendor in vendors}
+    vendor_names = {str(vendor["id"]): str(vendor["name"]) for vendor in vendors}
+    status_rank = {"on_track": 0, "collecting": 1, "attention": 2}
+    rows: list[dict[str, Any]] = []
+    for raw_row in plan_rows:
+        row = _object(raw_row, "Shop replenishment plan row")
+        quantity = _integer(row.get("recommendedOrderUnits"), "Shop replenishment recommendedOrderUnits", minimum=0)
+        if quantity == 0:
+            continue
+        sku = _text(row.get("sku"), "Shop replenishment sku", maximum=80)
+        item_name = _text(row.get("itemName"), "Shop replenishment itemName", maximum=180)
+        suppliers = sorted({
+            *[str(order["supplier"]) for order in purchase_orders if order.get("sku") == sku and "cancellation" not in order],
+            *[vendor_names[str(policy["vendorId"])] for policy in policies if policy["sku"] == sku and policy["status"] == "active" and str(policy["vendorId"]) in vendor_names],
+            *([str(row["suggestedSupplier"])] if row.get("suggestedSupplier") else []),
+        })
+        options: list[dict[str, Any]] = []
+        for supplier in suppliers:
+            source_orders = sorted(
+                [order for order in purchase_orders if order.get("sku") == sku and order.get("supplier") == supplier and "cancellation" not in order],
+                key=lambda order: (-datetime.fromisoformat(str(order["createdAt"]).replace("Z", "+00:00")).timestamp(), str(order["id"])),
+            )
+            commercial_order = next((order for order in source_orders if isinstance(order.get("unitCostMmk"), int)), None)
+            policy = next((candidate for candidate in policies if candidate["sku"] == sku and candidate["vendorId"] == vendor_ids.get(supplier) and candidate["status"] == "active"), None)
+            measured = supplier_performance.get(supplier)
+            unit_cost = int(commercial_order["unitCostMmk"]) if commercial_order else None
+            estimated_total = safe_add(0, quantity * unit_cost, f"Procurement exposure for {sku}") if unit_cost is not None else None
+            completed = int(measured["completedDeliveries"]) if measured else 0
+            on_time_rate = ((int(measured["onTimeDeliveries"]) * 10_000 + completed // 2) // completed) if measured and completed else None
+            ordered = int(measured["orderedUnits"]) if measured else 0
+            defect_rate = ((int(measured["rejectedUnits"]) * 10_000 + ordered // 2) // ordered) if measured and ordered else 0
+            performance_status = "attention" if measured and (measured["rejectedUnits"] or measured["lateOpenOrders"] or measured["lateDeliveries"]) else "on_track" if completed else "collecting"
+            options.append({
+                "supplier": supplier,
+                "unitCostMmk": unit_cost,
+                "estimatedTotalMmk": estimated_total,
+                "leadTimeDays": int(policy["leadTimeDays"]) if policy else None,
+                "serviceLevelBasisPoints": int(policy["serviceLevelBasisPoints"]) if policy else None,
+                "completedDeliveries": completed,
+                "onTimeRateBasisPoints": on_time_rate,
+                "defectRateBasisPoints": defect_rate,
+                "performanceStatus": performance_status,
+                "termsStatus": "comparable" if unit_cost is not None else "cost_required",
+                "sourcePurchaseOrderIds": [str(order["id"]) for order in source_orders],
+                "supplierPolicyCommandId": str(policy["commandId"]) if policy else None,
+            })
+        options.sort(key=lambda option: (
+            0 if option["termsStatus"] == "comparable" else 1,
+            status_rank[option["performanceStatus"]],
+            0 if option["supplierPolicyCommandId"] else 1,
+            -option["completedDeliveries"],
+            -(option["onTimeRateBasisPoints"] if option["onTimeRateBasisPoints"] is not None else -1),
+            option["defectRateBasisPoints"],
+            option["estimatedTotalMmk"] if option["estimatedTotalMmk"] is not None else _MAX_SAFE_INTEGER,
+            option["supplier"],
+        ))
+        recommended = next((option for option in options if option["termsStatus"] == "comparable"), None)
+        status = "terms_required" if recommended is None else "risk_review_required" if recommended["performanceStatus"] == "attention" else "ready_for_owner_review"
+        selection_reason = (
+            "Retain supplier cost terms before owner review." if recommended is None
+            else "Best retained commercial option has delivery or quality risk requiring owner review." if status == "risk_review_required"
+            else "Ranked by retained terms, delivery evidence, quality, then estimated exposure." if recommended["completedDeliveries"]
+            else "Commercial terms are retained; delivery evidence is still collecting."
+        )
+        rows.append({
+            "requisitionReference": f"REQ-{plan_digest[7:19].upper()}-{sku}",
+            "sku": sku,
+            "itemName": item_name,
+            "quantity": quantity,
+            "desiredAt": row.get("earliestNeedAt"),
+            "plantJobIds": list(row.get("jobIds", [])),
+            "recommendedSupplier": recommended["supplier"] if recommended else None,
+            "recommendedUnitCostMmk": recommended["unitCostMmk"] if recommended else None,
+            "estimatedTotalMmk": recommended["estimatedTotalMmk"] if recommended else None,
+            "status": status,
+            "selectionReason": selection_reason,
+            "supplierOptions": options,
+        })
+    summary = {
+        "requisitions": len(rows),
+        "readyForReview": sum(row["status"] == "ready_for_owner_review" for row in rows),
+        "riskReviews": sum(row["status"] == "risk_review_required" for row in rows),
+        "termsRequired": sum(row["status"] == "terms_required" for row in rows),
+        "comparedSuppliers": sum(len(row["supplierOptions"]) for row in rows),
+        "knownExposureMmk": sum(row["estimatedTotalMmk"] or 0 for row in rows),
+        "unknownExposure": sum(row["estimatedTotalMmk"] is None for row in rows),
+    }
+    body = {
+        "contract": "supermega.shop.procurement-decision.v1",
+        "asOf": canonical_as_of,
+        "rows": rows,
+        "summary": summary,
+        "source": {
+            "commerceDigest": commerce_digest,
+            "replenishmentDigest": plan_digest,
+            "purchaseOrderIds": sorted(str(order["id"]) for order in purchase_orders),
+        },
+        "authority": {
+            "recommendationOnly": True,
+            "requisitionRecorded": False,
+            "purchaseCreated": False,
+            "supplierContacted": False,
+            "paymentCreated": False,
+            "inventoryChanged": False,
+            "providerCalled": False,
+        },
+    }
+    return {**body, "digest": _order_inventory_digest(body)}
+
+
 def _catalog_changes(state: Mapping[str, Any]) -> list[Any]:
     return state.get("catalogChanges", [])
+
+
+def _tax_configurations(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("taxConfigurations", [])
+
+
+def _effective_tax_configuration(
+    state: Mapping[str, Any],
+    at_time: str,
+) -> Mapping[str, Any] | None:
+    at = datetime.fromisoformat(at_time.replace("Z", "+00:00"))
+    for candidate in _tax_configurations(state):
+        if not isinstance(candidate, Mapping):
+            continue
+        effective_at = datetime.fromisoformat(
+            str(
+                candidate.get(
+                    "effectiveFrom",
+                    candidate["proof"]["capturedAt"],
+                )
+            ).replace("Z", "+00:00")
+        )
+        if effective_at <= at:
+            return candidate
+    return None
+
+
+def _account_mapping_configurations(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("accountMappingConfigurations", [])
+
+
+def _customer_credit_policies(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("customerCreditPolicies", [])
+
+
+def _promotion_policies(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("promotionPolicies", [])
+
+
+def _shipping_policies(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("shippingPolicies", [])
+
+
+def _payment_policies(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("paymentPolicies", [])
+
+
+def _effective_customer_credit_policy(
+    state: Mapping[str, Any],
+    customer: str,
+    at_time: str,
+) -> Mapping[str, Any] | None:
+    at = datetime.fromisoformat(at_time.replace("Z", "+00:00"))
+    for candidate in _customer_credit_policies(state):
+        if not isinstance(candidate, Mapping) or candidate.get("customer") != customer:
+            continue
+        proof = candidate.get("proof")
+        if isinstance(proof, Mapping) and datetime.fromisoformat(
+            str(proof["capturedAt"]).replace("Z", "+00:00")
+        ) <= at:
+            return candidate
+    return None
+
+
+def _order_payment_terms_days(order: Mapping[str, Any]) -> int | None:
+    if "paymentDueAt" not in order:
+        return 0
+    created_at = datetime.fromisoformat(str(order["createdAt"]).replace("Z", "+00:00"))
+    payment_due_at = datetime.fromisoformat(str(order["paymentDueAt"]).replace("Z", "+00:00"))
+    delta = payment_due_at - created_at
+    return next(
+        (days for days in _CUSTOMER_CREDIT_TERMS if delta == timedelta(days=days)),
+        None,
+    )
+
+
+def _customer_credit_exposure(state: Mapping[str, Any], customer: str) -> int:
+    exposure = sum(
+        int(order["total"])
+        for order in state["orders"]
+        if order.get("customer") == customer
+        and order.get("status") != "cancelled"
+        and order.get("paymentStatus") == "pending"
+    )
+    if exposure > _MAX_SAFE_INTEGER:
+        raise TrialValidationError("customer credit exposure exceeds the safe integer limit.")
+    return exposure
+
+
+def _round_tax(numerator: int, denominator: int) -> int:
+    return (numerator * 2 + denominator) // (denominator * 2)
+
+
+def _configured_order_calculation(
+    configuration: Mapping[str, Any],
+    listed_subtotal_mmk: int,
+    catalog_revision: int,
+) -> dict[str, Any] | None:
+    if not 1 <= listed_subtotal_mmk <= _MAX_SAFE_INTEGER:
+        return None
+    rate = int(configuration["rateBasisPoints"])
+    mode = str(configuration["mode"])
+    tax_mmk = (
+        _round_tax(listed_subtotal_mmk * rate, 10_000)
+        if mode == "exclusive"
+        else _round_tax(listed_subtotal_mmk * rate, 10_000 + rate)
+    )
+    subtotal_mmk = listed_subtotal_mmk if mode == "exclusive" else listed_subtotal_mmk - tax_mmk
+    total_mmk = listed_subtotal_mmk + tax_mmk if mode == "exclusive" else listed_subtotal_mmk
+    if subtotal_mmk < 0 or tax_mmk < 0 or not 1 <= total_mmk <= _MAX_SAFE_INTEGER:
+        return None
+    calculation = {
+        "schema": _ORDER_CALCULATION_V2_SCHEMA,
+        "currency": "MMK",
+        "catalogRevision": catalog_revision,
+        "taxConfigurationRevision": configuration["revision"],
+        "taxCode": configuration["code"],
+        "taxRateBasisPoints": rate,
+        "taxMode": mode,
+        "listedSubtotalMmk": listed_subtotal_mmk,
+        "subtotalMmk": subtotal_mmk,
+        "taxMmk": tax_mmk,
+        "totalMmk": total_mmk,
+    }
+    if "jurisdictionCode" in configuration and "effectiveFrom" in configuration:
+        calculation["taxJurisdictionCode"] = configuration["jurisdictionCode"]
+        calculation["taxEffectiveFrom"] = configuration["effectiveFrom"]
+    return calculation
+
+
+def create_commerce_order_from_intent(
+    current_value: Mapping[str, Any],
+    intent_value: Mapping[str, Any],
+    evidence_value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build a priced, attributable order and reservation inside the state lock."""
+
+    current = validate_commerce_state(current_value)
+    intent = _object(intent_value, "order intent")
+    _exact_fields(
+        intent,
+        "order intent",
+        required=frozenset(
+            {
+                "orderId",
+                "customer",
+                "channel",
+                "payment",
+                "fulfilment",
+                "fulfilmentReference",
+                "promisedAt",
+                "paymentTermsDays",
+                "lines",
+            }
+        ),
+    )
+    evidence = _action_proof(evidence_value, "evidence")
+    order_id = _text(intent["orderId"], "order intent.orderId", maximum=160)
+    customer = _text(intent["customer"], "order intent.customer", maximum=180)
+    channel = _text(intent["channel"], "order intent.channel", maximum=180)
+    payment = _text(intent["payment"], "order intent.payment", maximum=180)
+    fulfilment = _text(intent["fulfilment"], "order intent.fulfilment", maximum=32)
+    if fulfilment not in {"pickup", "delivery"}:
+        raise TrialValidationError("order intent.fulfilment must be pickup or delivery.")
+    fulfilment_reference = _text(
+        intent["fulfilmentReference"],
+        "order intent.fulfilmentReference",
+        maximum=160,
+    )
+    promised_at = _timestamp(intent["promisedAt"], "order intent.promisedAt")
+    created_at = evidence["capturedAt"]
+    if datetime.fromisoformat(promised_at.replace("Z", "+00:00")) <= datetime.fromisoformat(
+        created_at.replace("Z", "+00:00")
+    ):
+        raise TrialValidationError("order intent.promisedAt must remain in the future.")
+    payment_terms_days = _integer(
+        intent["paymentTermsDays"],
+        "order intent.paymentTermsDays",
+    )
+    if payment_terms_days not in _CUSTOMER_CREDIT_TERMS:
+        raise TrialValidationError("order intent.paymentTermsDays is unsupported.")
+
+    item_by_sku = {item["sku"]: item for item in current["items"]}
+    raw_lines = _list(intent["lines"], "order intent.lines")
+    if not 1 <= len(raw_lines) <= _MAX_ORDER_LINES:
+        raise TrialValidationError(
+            f"order intent.lines must contain 1 to {_MAX_ORDER_LINES} entries."
+        )
+    lines: list[dict[str, Any]] = []
+    skus: list[str] = []
+    quantity = 0
+    listed_subtotal = 0
+    next_balances: dict[str, int] = {}
+    for index, candidate in enumerate(raw_lines):
+        field = f"order intent.lines[{index}]"
+        row = _object(candidate, field)
+        _exact_fields(row, field, required=frozenset({"sku", "quantity"}))
+        sku = _text(row["sku"], f"{field}.sku", maximum=80)
+        line_quantity = _integer(row["quantity"], f"{field}.quantity", minimum=1)
+        item = item_by_sku.get(sku)
+        if item is None:
+            raise TrialValidationError(f"{field}.sku is not in the current Shop catalog.")
+        if item["onHand"] < line_quantity:
+            raise TrialValidationError(f"{field}.quantity exceeds available Shop stock.")
+        line_total = item["price"] * line_quantity
+        quantity += line_quantity
+        listed_subtotal += line_total
+        if quantity > _MAX_SAFE_INTEGER or listed_subtotal > _MAX_SAFE_INTEGER:
+            raise TrialValidationError("order intent totals exceed the safe integer limit.")
+        lines.append(
+            {
+                "sku": sku,
+                "name": item["name"],
+                **({"variant": item["variant"]} if "variant" in item else {}),
+                "quantity": line_quantity,
+                "unitPriceMmk": item["price"],
+            }
+        )
+        skus.append(sku)
+        next_balances[sku] = item["onHand"] - line_quantity
+    _unique(skus, "order intent line SKU")
+
+    tax_configuration = _effective_tax_configuration(current, created_at)
+    calculation = (
+        _configured_order_calculation(
+            tax_configuration,
+            listed_subtotal,
+            len(_catalog_changes(current)),
+        )
+        if tax_configuration is not None
+        else {
+            "schema": _ORDER_CALCULATION_SCHEMA,
+            "currency": "MMK",
+            "catalogRevision": len(_catalog_changes(current)),
+            "subtotalMmk": listed_subtotal,
+            "taxMode": "not_configured",
+            "taxMmk": 0,
+            "totalMmk": listed_subtotal,
+        }
+    )
+    if calculation is None:
+        raise TrialValidationError("order intent cannot produce a safe pricing calculation.")
+    total = calculation["totalMmk"]
+    payment_due_at = (
+        None
+        if payment_terms_days == 0
+        else (
+            datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            + timedelta(days=payment_terms_days)
+        ).isoformat()
+    )
+    credit_decision: dict[str, Any] | None = None
+    if payment_terms_days:
+        policy = _effective_customer_credit_policy(current, customer, created_at)
+        exposure_before = _customer_credit_exposure(current, customer)
+        exposure_after = exposure_before + total
+        if (
+            policy is None
+            or policy["status"] != "active"
+            or payment_terms_days > policy["maxPaymentTermsDays"]
+            or exposure_after > policy["creditLimitMmk"]
+            or exposure_after > _MAX_SAFE_INTEGER
+        ):
+            raise TrialValidationError(
+                "order intent requires an active customer credit policy with available limit."
+            )
+        credit_decision = {
+            "policyRevision": policy["revision"],
+            "policyActionId": policy["proof"]["actionId"],
+            "creditLimitMmk": policy["creditLimitMmk"],
+            "exposureBeforeMmk": exposure_before,
+            "orderAmountMmk": total,
+            "exposureAfterMmk": exposure_after,
+            "maxPaymentTermsDays": policy["maxPaymentTermsDays"],
+            "paymentTermsDays": payment_terms_days,
+            "status": "approved",
+        }
+    order = {
+        "id": order_id,
+        "createdAt": created_at,
+        "customer": customer,
+        "owner": evidence["actor"],
+        "channel": channel,
+        "item": _order_item_summary(lines),
+        **({"itemSku": lines[0]["sku"]} if len(lines) == 1 else {}),
+        "quantity": quantity,
+        "payment": payment,
+        "paymentStatus": "pending",
+        "refundStatus": "none",
+        "fulfilment": fulfilment,
+        "fulfilmentReference": fulfilment_reference,
+        "promisedAt": promised_at,
+        **({"paymentDueAt": payment_due_at} if payment_due_at is not None else {}),
+        **({"creditDecision": credit_decision} if credit_decision is not None else {}),
+        "lines": lines,
+        "calculation": calculation,
+        "total": total,
+        "status": "confirmed",
+    }
+    movements = [
+        {
+            "id": _movement_id(
+                evidence["actionId"],
+                f"L{index + 1}" if len(lines) > 1 else None,
+            ),
+            "actionId": evidence["actionId"],
+            "createdAt": created_at,
+            "actor": evidence["actor"],
+            "reason": evidence["reason"],
+            "evidenceReference": evidence["evidenceReference"],
+            "kind": "reserve",
+            "sku": line["sku"],
+            "quantityDelta": -line["quantity"],
+            "orderId": order_id,
+        }
+        for index, line in enumerate(lines)
+    ]
+    next_state = {
+        **current,
+        "items": [
+            {**item, "onHand": next_balances[item["sku"]]}
+            if item["sku"] in next_balances
+            else item
+            for item in current["items"]
+        ],
+        "orders": [order, *current["orders"]],
+        "movements": [*movements, *current["movements"]],
+    }
+    foundation = current.get("inventoryFoundation")
+    if foundation is not None:
+        try:
+            next_state["inventoryFoundation"] = reserve_shop_inventory_order(
+                foundation,
+                order_id=order_id,
+                customer_reference=customer,
+                lines=[{"sku": line["sku"], "quantity": line["quantity"]} for line in lines],
+                proof=evidence,
+                catalog_skus=[item["sku"] for item in current["items"]],
+            )
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(str(exc)) from exc
+    return validate_commerce_state(next_state)
 
 
 def _catalog_baselines(state: Mapping[str, Any]) -> list[Any]:
@@ -2531,6 +6094,324 @@ def _projection_digest(projection: Sequence[Any]) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return f"sha256:{sha256(encoded).hexdigest()}"
+
+
+def commerce_order_calculation_digest(order: Mapping[str, Any]) -> str | None:
+    calculation = order.get("calculation")
+    if not isinstance(calculation, Mapping):
+        return None
+    return _projection_digest(
+        [
+            "supermega.commerce.order-calculation.snapshot.v1",
+            order["id"],
+            calculation,
+        ]
+    )
+
+
+def commerce_order_acknowledgement(
+    state: Mapping[str, Any],
+    order_id: str,
+) -> dict[str, Any] | None:
+    """Build a deterministic customer-safe acknowledgement without external side effects."""
+
+    current = validate_commerce_state(state)
+    order = next(
+        (candidate for candidate in current["orders"] if candidate["id"] == order_id),
+        None,
+    )
+    if (
+        order is None
+        or not isinstance(order.get("calculation"), Mapping)
+        or not isinstance(order.get("lines"), list)
+        or not order["lines"]
+        or not order.get("fulfilment")
+        or not order.get("fulfilmentReference")
+        or not order.get("promisedAt")
+    ):
+        return None
+    calculation = order["calculation"]
+    calculation_digest = commerce_order_calculation_digest(order)
+    if calculation_digest is None:
+        return None
+    lines = [
+        {
+            "sku": line["sku"],
+            "name": line["name"],
+            **({"variant": line["variant"]} if "variant" in line else {}),
+            "quantity": line["quantity"],
+            "unitPriceMmk": line["unitPriceMmk"],
+            "lineTotalMmk": line["quantity"] * line["unitPriceMmk"],
+        }
+        for line in order["lines"]
+    ]
+    reserves = [
+        movement
+        for movement in current["movements"]
+        if movement.get("kind") == "reserve" and movement.get("orderId") == order_id
+    ]
+    if len(reserves) != len(lines):
+        return None
+    confirmation = reserves[0]
+    if any(
+        movement["actionId"] != confirmation["actionId"]
+        or movement["createdAt"] != confirmation["createdAt"]
+        or movement["evidenceReference"] != confirmation["evidenceReference"]
+        for movement in reserves
+    ):
+        return None
+    releases = [
+        movement
+        for movement in current["movements"]
+        if movement.get("kind") == "release" and movement.get("orderId") == order_id
+    ]
+    cancelled = order["status"] == "cancelled"
+    if (cancelled and len(releases) != len(lines)) or (not cancelled and releases):
+        return None
+    cancellation = releases[0] if cancelled else None
+    if cancellation is not None and any(
+        movement["actionId"] != cancellation["actionId"]
+        or movement["createdAt"] != cancellation["createdAt"]
+        or movement["evidenceReference"] != cancellation["evidenceReference"]
+        for movement in releases
+    ):
+        return None
+
+    promotion = order.get("promotionDecision")
+    shipping = order.get("shippingDecision")
+    configured_tax = (
+        calculation
+        if calculation.get("schema") == "supermega.commerce.order-calculation.v2"
+        else None
+    )
+    gross_subtotal = sum(line["lineTotalMmk"] for line in lines)
+    artifact: dict[str, Any] = {
+        "schema": COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA,
+        "documentType": "order_acknowledgement",
+        "notice": "Not a tax invoice, receipt, or payment confirmation.",
+        "orderId": order["id"],
+        "createdAt": order["createdAt"],
+        "customer": order["customer"],
+        "channel": order["channel"],
+        "status": order["status"],
+        "currency": "MMK",
+        "lines": lines,
+        "grossSubtotalMmk": gross_subtotal,
+        "promotion": {
+            "status": (
+                "applied"
+                if isinstance(promotion, Mapping) and promotion["status"] == "approved"
+                else "not_applied"
+                if isinstance(promotion, Mapping)
+                else "not_recorded"
+            ),
+            "code": promotion.get("code") if isinstance(promotion, Mapping) else None,
+            "reason": promotion.get("reason") if isinstance(promotion, Mapping) else None,
+            "discountMmk": promotion.get("discountMmk", 0) if isinstance(promotion, Mapping) else 0,
+            "netSubtotalMmk": promotion.get("netSubtotalMmk", gross_subtotal) if isinstance(promotion, Mapping) else gross_subtotal,
+        },
+        "delivery": {
+            "fulfilment": order["fulfilment"],
+            "reference": order["fulfilmentReference"],
+            "township": shipping.get("township") if isinstance(shipping, Mapping) else None,
+            "status": shipping.get("status", "not_recorded") if isinstance(shipping, Mapping) else "not_recorded",
+            "feeMmk": shipping.get("feeMmk", 0) if isinstance(shipping, Mapping) else 0,
+            "promisedAt": order["promisedAt"],
+        },
+        "tax": {
+            "status": "configured" if configured_tax is not None else "not_configured",
+            "code": configured_tax.get("taxCode") if configured_tax is not None else None,
+            "jurisdictionCode": configured_tax.get("taxJurisdictionCode") if configured_tax is not None else None,
+            "rateBasisPoints": configured_tax.get("taxRateBasisPoints", 0) if configured_tax is not None else 0,
+            "mode": configured_tax.get("taxMode", "not_configured") if configured_tax is not None else "not_configured",
+            "subtotalMmk": calculation["subtotalMmk"],
+            "taxMmk": calculation["taxMmk"],
+        },
+        "totalMmk": calculation["totalMmk"],
+        "payment": {
+            "method": order["payment"],
+            "status": order["paymentStatus"],
+            "dueAt": order.get("paymentDueAt"),
+            "reconciledAt": order.get("paymentReconciledAt"),
+            "refundStatus": order["refundStatus"],
+        },
+        "cancellation": {
+            "state": "cancelled" if cancelled else "not_cancelled",
+            "cancelledAt": cancellation.get("createdAt") if cancellation else None,
+            "actionId": cancellation.get("actionId") if cancellation else None,
+            "evidenceReference": cancellation.get("evidenceReference") if cancellation else None,
+        },
+        "evidence": {
+            "confirmationActionId": confirmation["actionId"],
+            "confirmationCapturedAt": confirmation["createdAt"],
+            "confirmationEvidenceReference": confirmation["evidenceReference"],
+            "sourceRecordId": order.get("sourceRecordId"),
+            "sourceEvidenceReference": order.get("evidenceReference"),
+            "calculationDigest": calculation_digest,
+        },
+        "controls": {
+            "customerMessageSent": False,
+            "taxInvoiceIssued": False,
+            "paymentProviderCalled": False,
+            "externalWritePerformed": False,
+        },
+    }
+    artifact["digest"] = _projection_digest(
+        [
+            artifact["schema"], artifact["documentType"], artifact["notice"],
+            artifact["orderId"], artifact["createdAt"], artifact["customer"],
+            artifact["channel"], artifact["status"], artifact["currency"],
+            [[line["sku"], line["name"], line.get("variant"), line["quantity"], line["unitPriceMmk"], line["lineTotalMmk"]] for line in artifact["lines"]],
+            artifact["grossSubtotalMmk"],
+            [artifact["promotion"][field] for field in ("status", "code", "reason", "discountMmk", "netSubtotalMmk")],
+            [artifact["delivery"][field] for field in ("fulfilment", "reference", "township", "status", "feeMmk", "promisedAt")],
+            [artifact["tax"][field] for field in ("status", "code", "jurisdictionCode", "rateBasisPoints", "mode", "subtotalMmk", "taxMmk")],
+            artifact["totalMmk"],
+            [artifact["payment"][field] for field in ("method", "status", "dueAt", "reconciledAt", "refundStatus")],
+            [artifact["cancellation"][field] for field in ("state", "cancelledAt", "actionId", "evidenceReference")],
+            [artifact["evidence"][field] for field in ("confirmationActionId", "confirmationCapturedAt", "confirmationEvidenceReference", "sourceRecordId", "sourceEvidenceReference", "calculationDigest")],
+            [artifact["controls"][field] for field in ("customerMessageSent", "taxInvoiceIssued", "paymentProviderCalled", "externalWritePerformed")],
+        ]
+    )
+    return artifact
+
+
+def commerce_order_acknowledgement_text(artifact: Mapping[str, Any]) -> str:
+    """Format a customer-readable local download from a validated acknowledgement."""
+
+    def one_line(value: Any) -> str:
+        return " ".join(str(value).splitlines()).strip()
+
+    promotion = artifact["promotion"]
+    promotion_text = (
+        f"{promotion.get('code') or 'Promotion'} - {promotion['discountMmk']} MMK discount"
+        if promotion["status"] == "applied"
+        else f"{promotion.get('code') or 'Promotion'} - not applied ({promotion.get('reason') or 'not approved'})"
+        if promotion["status"] == "not_applied"
+        else "No promotion recorded"
+    )
+    cancellation = artifact["cancellation"]
+    cancellation_text = (
+        f"Cancelled at {cancellation['cancelledAt']} - evidence {cancellation['evidenceReference']}"
+        if cancellation["state"] == "cancelled"
+        else "Not cancelled"
+    )
+    rows = [
+        "SUPERMEGA ORDER ACKNOWLEDGEMENT",
+        artifact["notice"],
+        "",
+        f"Order: {one_line(artifact['orderId'])}",
+        f"Created: {artifact['createdAt']}",
+        f"Customer: {one_line(artifact['customer'])}",
+        f"Channel: {one_line(artifact['channel'])}",
+        f"Status: {artifact['status']}",
+        "",
+        "ITEMS",
+    ]
+    for line in artifact["lines"]:
+        variant = f" ({one_line(line['variant'])})" if line.get("variant") else ""
+        rows.append(
+            f"- {line['quantity']} x {one_line(line['name'])}{variant} "
+            f"[{one_line(line['sku'])}] @ {line['unitPriceMmk']} MMK = "
+            f"{line['lineTotalMmk']} MMK"
+        )
+    tax_code = (
+        f" - {one_line(artifact['tax']['code'])}"
+        if artifact["tax"].get("code")
+        else ""
+    )
+    rows.extend(
+        [
+            "",
+            f"Gross subtotal: {artifact['grossSubtotalMmk']} MMK",
+            f"Promotion: {promotion_text}",
+            f"Delivery: {one_line(artifact['delivery']['fulfilment'])} - {one_line(artifact['delivery']['reference'])} - fee {artifact['delivery']['feeMmk']} MMK",
+            f"Promise: {artifact['delivery']['promisedAt']}",
+            f"Tax: {artifact['tax']['status']}{tax_code} - {artifact['tax']['taxMmk']} MMK",
+            f"Total: {artifact['totalMmk']} MMK",
+            f"Payment: {one_line(artifact['payment']['method'])} - {artifact['payment']['status']} - refund {artifact['payment']['refundStatus']}",
+            f"Cancellation: {cancellation_text}",
+            "",
+            f"Confirmation evidence: {one_line(artifact['evidence']['confirmationActionId'])} - {one_line(artifact['evidence']['confirmationEvidenceReference'])}",
+            f"Calculation evidence: {artifact['evidence']['calculationDigest']}",
+            f"Document digest: {artifact['digest']}",
+            "",
+            "No customer message was sent. No tax invoice was issued. No payment provider or external system was called.",
+        ]
+    )
+    return "\r\n".join(rows)
+
+
+def _correction_calculation(
+    order: Mapping[str, Any],
+    listed_amount_mmk: int,
+) -> dict[str, Any] | None:
+    calculation = order.get("calculation")
+    if (
+        not isinstance(calculation, Mapping)
+        or isinstance(listed_amount_mmk, bool)
+        or not isinstance(listed_amount_mmk, int)
+        or not 1 <= listed_amount_mmk <= _MAX_SAFE_INTEGER
+    ):
+        return None
+    if calculation.get("schema") == _ORDER_CALCULATION_SCHEMA:
+        return {
+            "currency": "MMK",
+            "taxConfigurationRevision": None,
+            "taxCode": None,
+            "taxRateBasisPoints": None,
+            "taxMode": "not_configured",
+            "listedAmountMmk": listed_amount_mmk,
+            "subtotalMmk": listed_amount_mmk,
+            "taxMmk": 0,
+            "totalMmk": listed_amount_mmk,
+        }
+    configured = _configured_order_calculation(
+        {
+            "revision": calculation["taxConfigurationRevision"],
+            "code": calculation["taxCode"],
+            "rateBasisPoints": calculation["taxRateBasisPoints"],
+            "mode": calculation["taxMode"],
+            **(
+                {
+                    "jurisdictionCode": calculation["taxJurisdictionCode"],
+                    "effectiveFrom": calculation["taxEffectiveFrom"],
+                }
+                if "taxJurisdictionCode" in calculation
+                and "taxEffectiveFrom" in calculation
+                else {}
+            ),
+        },
+        listed_amount_mmk,
+        int(calculation["catalogRevision"]),
+    )
+    if configured is None:
+        return None
+    result = {
+        "currency": configured["currency"],
+        "taxConfigurationRevision": configured["taxConfigurationRevision"],
+        "taxCode": configured["taxCode"],
+        "taxRateBasisPoints": configured["taxRateBasisPoints"],
+        "taxMode": configured["taxMode"],
+        "listedAmountMmk": configured["listedSubtotalMmk"],
+        "subtotalMmk": configured["subtotalMmk"],
+        "taxMmk": configured["taxMmk"],
+        "totalMmk": configured["totalMmk"],
+    }
+    if "taxJurisdictionCode" in configured and "taxEffectiveFrom" in configured:
+        result["taxJurisdictionCode"] = configured["taxJurisdictionCode"]
+        result["taxEffectiveFrom"] = configured["taxEffectiveFrom"]
+    return result
+
+
+def _order_adjusted_total(order: Mapping[str, Any]) -> int | None:
+    total = int(order["total"])
+    for correction in order.get("corrections", []):
+        amount = int(correction["calculation"]["totalMmk"])
+        total += amount if correction["kind"] == "debit" else -amount
+        if not 0 <= total <= _MAX_SAFE_INTEGER:
+            return None
+    return total
 
 
 def commerce_catalog_baseline_digest(baseline: Mapping[str, Any]) -> str:
@@ -2618,6 +6499,29 @@ def commerce_daily_close_export(
         order = order_by_id[order_id]
         calculation = order.get("calculation")
         accepted_calculation = isinstance(calculation, Mapping)
+        corrections = [
+            {
+                "documentId": correction["documentId"],
+                "kind": correction["kind"],
+                "reasonCode": correction["reasonCode"],
+                "createdAt": correction["createdAt"],
+                "actor": correction["actor"],
+                "evidenceReference": correction["evidenceReference"],
+                "sourceCalculationDigest": correction["sourceCalculationDigest"],
+                "listedAmountMmk": correction["calculation"]["listedAmountMmk"],
+                "subtotalMmk": correction["calculation"]["subtotalMmk"],
+                "taxMmk": correction["calculation"]["taxMmk"],
+                "totalMmk": correction["calculation"]["totalMmk"],
+                "balanceAfterMmk": correction["balanceAfterMmk"],
+                "financialStatus": correction["financialStatus"],
+                "postingAuthority": correction["postingAuthority"],
+                "externalPostingPerformed": correction["externalPostingPerformed"],
+            }
+            for correction in order.get("corrections", [])
+        ]
+        adjusted_total = _order_adjusted_total(order)
+        if adjusted_total is None:
+            return None
         rows.append(
             {
                 "orderId": order["id"],
@@ -2627,10 +6531,38 @@ def commerce_daily_close_export(
                 "paymentEvidenceReference": order.get("paymentEvidenceReference"),
                 "currency": calculation["currency"] if accepted_calculation else "MMK",
                 "catalogRevision": calculation["catalogRevision"] if accepted_calculation else None,
+                "taxConfigurationRevision": (
+                    calculation.get("taxConfigurationRevision")
+                    if accepted_calculation
+                    else None
+                ),
+                "taxCode": calculation.get("taxCode") if accepted_calculation else None,
+                "taxJurisdictionCode": (
+                    calculation.get("taxJurisdictionCode")
+                    if accepted_calculation
+                    else None
+                ),
+                "taxEffectiveFrom": (
+                    calculation.get("taxEffectiveFrom")
+                    if accepted_calculation
+                    else None
+                ),
+                "taxRateBasisPoints": (
+                    calculation.get("taxRateBasisPoints")
+                    if accepted_calculation
+                    else None
+                ),
+                "listedSubtotalMmk": (
+                    calculation.get("listedSubtotalMmk")
+                    if accepted_calculation
+                    else None
+                ),
                 "subtotalMmk": calculation["subtotalMmk"] if accepted_calculation else None,
                 "taxMode": calculation["taxMode"] if accepted_calculation else "not_recorded",
                 "taxMmk": calculation["taxMmk"] if accepted_calculation else None,
-                "totalMmk": order["total"],
+                "originalTotalMmk": order["total"],
+                "totalMmk": adjusted_total,
+                "corrections": corrections,
                 "calculationStatus": "accepted" if accepted_calculation else "legacy_unverified",
             }
         )
@@ -2672,10 +6604,37 @@ def commerce_daily_close_export(
                     row["paymentEvidenceReference"],
                     row["currency"],
                     row["catalogRevision"],
+                    row["taxConfigurationRevision"],
+                    row["taxCode"],
+                    row["taxJurisdictionCode"],
+                    row["taxEffectiveFrom"],
+                    row["taxRateBasisPoints"],
+                    row["listedSubtotalMmk"],
                     row["subtotalMmk"],
                     row["taxMode"],
                     row["taxMmk"],
+                    row["originalTotalMmk"],
                     row["totalMmk"],
+                    [
+                        [
+                            correction["documentId"],
+                            correction["kind"],
+                            correction["reasonCode"],
+                            correction["createdAt"],
+                            correction["actor"],
+                            correction["evidenceReference"],
+                            correction["sourceCalculationDigest"],
+                            correction["listedAmountMmk"],
+                            correction["subtotalMmk"],
+                            correction["taxMmk"],
+                            correction["totalMmk"],
+                            correction["balanceAfterMmk"],
+                            correction["financialStatus"],
+                            correction["postingAuthority"],
+                            correction["externalPostingPerformed"],
+                        ]
+                        for correction in row["corrections"]
+                    ],
                     row["calculationStatus"],
                 ]
                 for row in rows
@@ -2721,10 +6680,18 @@ def commerce_daily_close_csv(
         "payment_evidence_reference",
         "currency",
         "catalog_revision",
+        "tax_configuration_revision",
+        "tax_code",
+        "tax_jurisdiction_code",
+        "tax_effective_from",
+        "tax_rate_basis_points",
+        "listed_subtotal_mmk",
         "subtotal_mmk",
         "tax_mode",
         "tax_mmk",
+        "original_total_mmk",
         "total_mmk",
+        "corrections_json",
         "calculation_status",
         "payment_exception_order_ids",
         "stock_exception_skus",
@@ -2749,7 +6716,15 @@ def commerce_daily_close_csv(
             None,
             None,
             None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
             artifact["totalMmk"],
+            None,
             None,
             artifact["paymentExceptionOrderIds"],
             artifact["stockExceptionSkus"],
@@ -2772,10 +6747,18 @@ def commerce_daily_close_csv(
             row["paymentEvidenceReference"],
             row["currency"],
             row["catalogRevision"],
+            row["taxConfigurationRevision"],
+            row["taxCode"],
+            row["taxJurisdictionCode"],
+            row["taxEffectiveFrom"],
+            row["taxRateBasisPoints"],
+            row["listedSubtotalMmk"],
             row["subtotalMmk"],
             row["taxMode"],
             row["taxMmk"],
+            row["originalTotalMmk"],
             row["totalMmk"],
+            json.dumps(row["corrections"], ensure_ascii=False, separators=(",", ":")),
             row["calculationStatus"],
             None,
             None,
@@ -2787,6 +6770,487 @@ def commerce_daily_close_csv(
         ",".join(_commerce_csv_cell(cell) for cell in row)
         for row in [header, *rows]
     ) + "\r\n"
+
+
+def commerce_accounting_handoff(
+    state: Mapping[str, Any],
+    close_id: str,
+) -> dict[str, Any] | None:
+    """Create a balanced, review-only handoff with correction settlement traceability."""
+
+    current = validate_commerce_state(state)
+    close_export = commerce_daily_close_export(current, close_id)
+    if close_export is None:
+        return None
+    closed_at = datetime.fromisoformat(close_export["closedAt"].replace("Z", "+00:00"))
+    account_mapping = next(
+        (
+            configuration
+            for configuration in _account_mapping_configurations(current)
+            if datetime.fromisoformat(
+                configuration["proof"]["capturedAt"].replace("Z", "+00:00")
+            ) <= closed_at
+        ),
+        None,
+    )
+    account_code_by_role = {
+        mapping["accountRole"]: mapping["externalAccountCode"]
+        for mapping in account_mapping["mappings"]
+    } if account_mapping is not None else {}
+
+    def mapping_for(account_role: str) -> dict[str, Any]:
+        code = account_code_by_role.get(account_role)
+        return {
+            "externalAccountCode": code,
+            "mappingStatus": "mapped" if code else "unmapped",
+        }
+
+    payment_groups: dict[str, dict[str, Any]] = {}
+    accepted_subtotal_mmk = 0
+    accepted_tax_mmk = 0
+    legacy_unverified_mmk = 0
+    accepted_order_count = 0
+    legacy_unverified_order_count = 0
+    tax_configured_order_count = 0
+    original_order_total_mmk = 0
+    for order in close_export["orders"]:
+        payment = payment_groups.setdefault(
+            order["paymentMethod"], {"amountMmk": 0, "statuses": set()}
+        )
+        payment["amountMmk"] += order["originalTotalMmk"]
+        payment["statuses"].add(order["calculationStatus"])
+        original_order_total_mmk += order["originalTotalMmk"]
+        if (
+            order["calculationStatus"] == "accepted"
+            and order["subtotalMmk"] is not None
+            and order["taxMmk"] is not None
+        ):
+            accepted_order_count += 1
+            accepted_subtotal_mmk += order["subtotalMmk"]
+            accepted_tax_mmk += order["taxMmk"]
+            if order["taxMode"] != "not_configured":
+                tax_configured_order_count += 1
+        else:
+            legacy_unverified_order_count += 1
+            legacy_unverified_mmk += order["originalTotalMmk"]
+
+    entries: list[dict[str, Any]] = []
+    for index, payment_method in enumerate(sorted(payment_groups), start=1):
+        group = payment_groups[payment_method]
+        statuses = group["statuses"]
+        entries.append({
+            "lineId": f"DEBIT-{index:03d}",
+            "side": "debit",
+            "accountRole": "payment_clearing",
+            **mapping_for("payment_clearing"),
+            "paymentMethod": payment_method,
+            "sourceOrderId": None,
+            "sourceDocumentId": None,
+            "calculationStatus": "mixed" if len(statuses) > 1 else next(iter(statuses)),
+            "amountMmk": group["amountMmk"],
+        })
+    credits: list[dict[str, Any]] = []
+    for account_role, amount_mmk, status in (
+        ("sales_revenue", accepted_subtotal_mmk, "accepted"),
+        ("tax_payable", accepted_tax_mmk, "accepted"),
+        ("sales_revenue_unverified", legacy_unverified_mmk, "legacy_unverified"),
+    ):
+        if amount_mmk:
+            credits.append({
+                "side": "credit",
+                "accountRole": account_role,
+                **mapping_for(account_role),
+                "paymentMethod": None,
+                "sourceOrderId": None,
+                "sourceDocumentId": None,
+                "calculationStatus": status,
+                "amountMmk": amount_mmk,
+            })
+    entries.extend(
+        {**entry, "lineId": f"CREDIT-{index:03d}"}
+        for index, entry in enumerate(credits, start=1)
+    )
+
+    corrections = sorted(
+        (
+            (order, correction)
+            for order in close_export["orders"]
+            for correction in order["corrections"]
+        ),
+        key=lambda pair: (
+            pair[1]["createdAt"], pair[0]["orderId"], pair[1]["documentId"]
+        ),
+    )
+    credit_correction_mmk = 0
+    debit_correction_mmk = 0
+    for index, (order, correction) in enumerate(corrections, start=1):
+        suffix = f"{index:03d}"
+        base = {
+            "paymentMethod": None,
+            "sourceOrderId": order["orderId"],
+            "sourceDocumentId": correction["documentId"],
+            "calculationStatus": order["calculationStatus"],
+        }
+        if correction["kind"] == "credit":
+            credit_correction_mmk += correction["totalMmk"]
+            if correction["subtotalMmk"]:
+                entries.append({
+                    "lineId": f"CORR-{suffix}-ADJ-D", "side": "debit",
+                    "accountRole": "sales_adjustment", **mapping_for("sales_adjustment"),
+                    **base, "amountMmk": correction["subtotalMmk"],
+                })
+            if correction["taxMmk"]:
+                entries.append({
+                    "lineId": f"CORR-{suffix}-TAX-D", "side": "debit",
+                    "accountRole": "tax_payable", **mapping_for("tax_payable"),
+                    **base, "amountMmk": correction["taxMmk"],
+                })
+            entries.append({
+                "lineId": f"CORR-{suffix}-PAY-C", "side": "credit",
+                "accountRole": "correction_payable", **mapping_for("correction_payable"),
+                **base, "amountMmk": correction["totalMmk"],
+            })
+        else:
+            debit_correction_mmk += correction["totalMmk"]
+            entries.append({
+                "lineId": f"CORR-{suffix}-REC-D", "side": "debit",
+                "accountRole": "correction_receivable", **mapping_for("correction_receivable"),
+                **base, "amountMmk": correction["totalMmk"],
+            })
+            if correction["subtotalMmk"]:
+                entries.append({
+                    "lineId": f"CORR-{suffix}-ADJ-C", "side": "credit",
+                    "accountRole": "sales_adjustment", **mapping_for("sales_adjustment"),
+                    **base, "amountMmk": correction["subtotalMmk"],
+                })
+            if correction["taxMmk"]:
+                entries.append({
+                    "lineId": f"CORR-{suffix}-TAX-C", "side": "credit",
+                    "accountRole": "tax_payable", **mapping_for("tax_payable"),
+                    **base, "amountMmk": correction["taxMmk"],
+                })
+
+    total_debit_mmk = sum(
+        entry["amountMmk"] for entry in entries if entry["side"] == "debit"
+    )
+    total_credit_mmk = sum(
+        entry["amountMmk"] for entry in entries if entry["side"] == "credit"
+    )
+    expected_control_total_mmk = (
+        original_order_total_mmk + credit_correction_mmk + debit_correction_mmk
+    )
+    if total_debit_mmk != expected_control_total_mmk or total_credit_mmk != expected_control_total_mmk:
+        return None
+    artifact: dict[str, Any] = {
+        "schema": COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
+        "status": "review_required",
+        "postingAuthority": "none",
+        "externalPostingPerformed": False,
+        "currency": "MMK",
+        "closeId": close_export["closeId"],
+        "businessDate": close_export["businessDate"],
+        "closedAt": close_export["closedAt"],
+        "sourceCloseDigest": close_export["digest"],
+        "accountMappingRevision": account_mapping["revision"] if account_mapping else None,
+        "accountMappingEvidenceReference": account_mapping["proof"]["evidenceReference"] if account_mapping else None,
+        "originalOrderTotalMmk": original_order_total_mmk,
+        "netOrderTotalMmk": close_export["totalMmk"],
+        "correctionCount": len(corrections),
+        "creditCorrectionMmk": credit_correction_mmk,
+        "debitCorrectionMmk": debit_correction_mmk,
+        "totalDebitMmk": total_debit_mmk,
+        "totalCreditMmk": total_credit_mmk,
+        "acceptedOrderCount": accepted_order_count,
+        "legacyUnverifiedOrderCount": legacy_unverified_order_count,
+        "taxConfiguredOrderCount": tax_configured_order_count,
+        "paymentExceptionOrderIds": list(close_export["paymentExceptionOrderIds"]),
+        "stockExceptionSkus": list(close_export["stockExceptionSkus"]),
+        "entries": entries,
+    }
+    artifact["digest"] = _projection_digest([
+        artifact["schema"], artifact["status"], artifact["postingAuthority"],
+        artifact["externalPostingPerformed"], artifact["currency"], artifact["closeId"],
+        artifact["businessDate"], artifact["closedAt"], artifact["sourceCloseDigest"],
+        artifact["accountMappingRevision"], artifact["accountMappingEvidenceReference"],
+        artifact["originalOrderTotalMmk"], artifact["netOrderTotalMmk"],
+        artifact["correctionCount"], artifact["creditCorrectionMmk"],
+        artifact["debitCorrectionMmk"], artifact["totalDebitMmk"],
+        artifact["totalCreditMmk"], artifact["acceptedOrderCount"],
+        artifact["legacyUnverifiedOrderCount"], artifact["taxConfiguredOrderCount"],
+        artifact["paymentExceptionOrderIds"], artifact["stockExceptionSkus"],
+        [[
+            entry["lineId"], entry["side"], entry["accountRole"],
+            entry["externalAccountCode"], entry["paymentMethod"],
+            entry["sourceOrderId"], entry["sourceDocumentId"],
+            entry["calculationStatus"], entry["amountMmk"], entry["mappingStatus"],
+        ] for entry in entries],
+    ])
+    return artifact
+
+
+def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
+    """Render one derived accounting handoff as a formula-safe deterministic CSV."""
+
+    header = [
+        "schema", "status", "posting_authority", "external_posting_performed",
+        "close_id", "business_date", "closed_at", "currency", "source_close_digest",
+        "account_mapping_revision", "account_mapping_evidence_reference",
+        "original_order_total_mmk", "net_order_total_mmk", "correction_count",
+        "credit_correction_mmk", "debit_correction_mmk", "line_id",
+        "side", "account_role", "external_account_code", "payment_method",
+        "source_order_id", "source_document_id", "calculation_status", "amount_mmk",
+        "mapping_status", "accepted_order_count",
+        "legacy_unverified_order_count", "tax_configured_order_count",
+        "payment_exception_order_ids", "stock_exception_skus", "artifact_digest",
+    ]
+    rows = [
+        [
+            artifact["schema"], artifact["status"], artifact["postingAuthority"],
+            str(artifact["externalPostingPerformed"]).lower(), artifact["closeId"],
+            artifact["businessDate"], artifact["closedAt"], artifact["currency"],
+            artifact["sourceCloseDigest"], artifact["accountMappingRevision"],
+            artifact["accountMappingEvidenceReference"], artifact["originalOrderTotalMmk"],
+            artifact["netOrderTotalMmk"], artifact["correctionCount"],
+            artifact["creditCorrectionMmk"], artifact["debitCorrectionMmk"],
+            entry["lineId"], entry["side"],
+            entry["accountRole"], entry["externalAccountCode"], entry["paymentMethod"],
+            entry["sourceOrderId"], entry["sourceDocumentId"], entry["calculationStatus"],
+            entry["amountMmk"], entry["mappingStatus"],
+            artifact["acceptedOrderCount"], artifact["legacyUnverifiedOrderCount"],
+            artifact["taxConfiguredOrderCount"], artifact["paymentExceptionOrderIds"],
+            artifact["stockExceptionSkus"], artifact["digest"],
+        ]
+        for entry in artifact["entries"]
+    ]
+    return "\r\n".join(
+        ",".join(_commerce_csv_cell(cell) for cell in row)
+        for row in [header, *rows]
+    ) + "\r\n"
+
+
+def _supplier_payables_handoff_projection(artifact: Mapping[str, Any]) -> list[Any]:
+    return [
+        artifact["schema"], artifact["status"], artifact["paymentAuthority"],
+        artifact["paymentInitiated"], artifact["accountingPosted"], artifact["currency"],
+        artifact["generatedAt"], artifact["readyInvoiceCount"], artifact["excludedInvoiceCount"],
+        artifact["excludedInvoiceIds"], artifact["grossInvoiceTotalMmk"],
+        artifact["supplierCreditTotalMmk"], artifact["netPayableTotalMmk"],
+        [[
+            row["purchaseOrderId"], row["requisitionId"], row["supplier"], row["sku"],
+            row["invoiceId"], row["supplierInvoiceReference"], row["invoiceIssuedAt"],
+            row["dueAt"], row["orderedQuantity"], row["acceptedQuantity"],
+            row["rejectedQuantity"], row["invoicedQuantity"], row["unitCostMmk"],
+            row["grossInvoiceMmk"], row["supplierClaimMmk"], row["supplierCreditMmk"],
+            row["netPayableMmk"], row["payableReviewActionId"], row["payableReviewedAt"],
+            row["payableReviewedBy"], row["payableEvidenceReference"],
+            row["receiptMovementIds"], row["supplierReturnClaimIds"],
+            row["supplierCreditNoteIds"], row["physicalReturnStatus"],
+            row["supplierContacted"], row["accountingPosted"], row["paymentInitiated"],
+        ] for row in artifact["rows"]],
+    ]
+
+
+def commerce_supplier_payables_handoff(
+    state: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Create a deterministic AP review packet without posting or initiating payment."""
+
+    current = validate_commerce_state(state)
+    invoiced_orders = sorted(
+        (
+            purchase_order for purchase_order in _purchase_orders(current)
+            if isinstance(purchase_order.get("supplierInvoice"), Mapping)
+        ),
+        key=lambda purchase_order: (
+            purchase_order["supplierInvoice"]["dueAt"],
+            purchase_order["supplier"],
+            purchase_order["supplierInvoice"]["id"],
+        ),
+    )
+    excluded_invoice_ids: list[str] = []
+    rows: list[dict[str, Any]] = []
+    for purchase_order in invoiced_orders:
+        invoice = purchase_order["supplierInvoice"]
+        match = commerce_supplier_invoice_match(current, purchase_order)
+        payable_review = invoice.get("payableReview")
+        if not match["payableReady"] or not isinstance(payable_review, Mapping):
+            excluded_invoice_ids.append(invoice["id"])
+            continue
+        claims = purchase_order.get("supplierReturns", [])
+        rows.append({
+            "purchaseOrderId": purchase_order["id"],
+            "requisitionId": purchase_order.get("requisitionId"),
+            "supplier": purchase_order["supplier"],
+            "sku": purchase_order["sku"],
+            "invoiceId": invoice["id"],
+            "supplierInvoiceReference": invoice["supplierReference"],
+            "invoiceIssuedAt": invoice["issuedAt"],
+            "dueAt": invoice["dueAt"],
+            "orderedQuantity": match["orderedQuantity"],
+            "acceptedQuantity": match["acceptedQuantity"],
+            "rejectedQuantity": match["rejectedQuantity"],
+            "invoicedQuantity": match["invoicedQuantity"],
+            "unitCostMmk": match["invoicedUnitCostMmk"],
+            "grossInvoiceMmk": match["invoicedTotalMmk"],
+            "supplierClaimMmk": match["supplierClaimMmk"],
+            "supplierCreditMmk": match["supplierCreditMmk"],
+            "netPayableMmk": match["netInvoiceTotalMmk"],
+            "payableReviewActionId": payable_review["actionId"],
+            "payableReviewedAt": payable_review["capturedAt"],
+            "payableReviewedBy": payable_review["actor"],
+            "payableEvidenceReference": payable_review["evidenceReference"],
+            "receiptMovementIds": sorted(
+                movement["id"] for movement in current["movements"]
+                if movement.get("kind") == "receipt"
+                and movement.get("purchaseOrderId") == purchase_order["id"]
+            ),
+            "supplierReturnClaimIds": sorted(claim["id"] for claim in claims),
+            "supplierCreditNoteIds": sorted(
+                credit["id"] for claim in claims for credit in claim["creditNotes"]
+            ),
+            "physicalReturnStatus": "not_dispatched" if match["rejectedQuantity"] else "not_required",
+            "supplierContacted": False,
+            "accountingPosted": False,
+            "paymentInitiated": False,
+        })
+    if not rows:
+        return None
+    gross_invoice_total_mmk = sum(row["grossInvoiceMmk"] for row in rows)
+    supplier_credit_total_mmk = sum(row["supplierCreditMmk"] for row in rows)
+    net_payable_total_mmk = sum(row["netPayableMmk"] for row in rows)
+    if (
+        any(abs(total) > _MAX_SAFE_INTEGER for total in (
+            gross_invoice_total_mmk, supplier_credit_total_mmk, net_payable_total_mmk
+        ))
+        or gross_invoice_total_mmk - supplier_credit_total_mmk != net_payable_total_mmk
+    ):
+        raise TrialValidationError(
+            "Supplier payables handoff totals exceed the supported safe integer range or do not balance."
+        )
+    artifact: dict[str, Any] = {
+        "schema": COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA,
+        "status": "review_required",
+        "paymentAuthority": "none",
+        "paymentInitiated": False,
+        "accountingPosted": False,
+        "currency": "MMK",
+        "generatedAt": max(row["payableReviewedAt"] for row in rows),
+        "readyInvoiceCount": len(rows),
+        "excludedInvoiceCount": len(excluded_invoice_ids),
+        "excludedInvoiceIds": excluded_invoice_ids,
+        "grossInvoiceTotalMmk": gross_invoice_total_mmk,
+        "supplierCreditTotalMmk": supplier_credit_total_mmk,
+        "netPayableTotalMmk": net_payable_total_mmk,
+        "rows": rows,
+    }
+    artifact["digest"] = _projection_digest(_supplier_payables_handoff_projection(artifact))
+    return artifact
+
+
+def commerce_supplier_payables_handoff_csv(artifact: Mapping[str, Any]) -> str:
+    """Render a formula-safe supplier-payables packet after verifying its digest."""
+
+    if (
+        artifact.get("schema") != COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA
+        or artifact.get("digest") != _projection_digest(_supplier_payables_handoff_projection(artifact))
+    ):
+        raise TrialValidationError("Supplier payables handoff integrity check failed.")
+    header = [
+        "schema", "status", "payment_authority", "payment_initiated", "accounting_posted",
+        "currency", "generated_at", "ready_invoice_count", "excluded_invoice_count",
+        "excluded_invoice_ids", "gross_invoice_total_mmk", "supplier_credit_total_mmk",
+        "net_payable_total_mmk", "purchase_order_id", "requisition_id", "supplier", "sku",
+        "invoice_id", "supplier_invoice_reference", "invoice_issued_at", "due_at",
+        "ordered_quantity", "accepted_quantity", "rejected_quantity", "invoiced_quantity",
+        "unit_cost_mmk", "gross_invoice_mmk", "supplier_claim_mmk", "supplier_credit_mmk",
+        "net_payable_mmk", "payable_review_action_id", "payable_reviewed_at",
+        "payable_reviewed_by", "payable_evidence_reference", "receipt_movement_ids",
+        "supplier_return_claim_ids", "supplier_credit_note_ids", "physical_return_status",
+        "supplier_contacted", "row_accounting_posted", "row_payment_initiated", "artifact_digest",
+    ]
+    rows = [[
+        artifact["schema"], artifact["status"], artifact["paymentAuthority"],
+        str(artifact["paymentInitiated"]).lower(), str(artifact["accountingPosted"]).lower(),
+        artifact["currency"], artifact["generatedAt"], artifact["readyInvoiceCount"],
+        artifact["excludedInvoiceCount"], artifact["excludedInvoiceIds"],
+        artifact["grossInvoiceTotalMmk"], artifact["supplierCreditTotalMmk"],
+        artifact["netPayableTotalMmk"], row["purchaseOrderId"], row["requisitionId"],
+        row["supplier"], row["sku"], row["invoiceId"], row["supplierInvoiceReference"],
+        row["invoiceIssuedAt"], row["dueAt"], row["orderedQuantity"], row["acceptedQuantity"],
+        row["rejectedQuantity"], row["invoicedQuantity"], row["unitCostMmk"],
+        row["grossInvoiceMmk"], row["supplierClaimMmk"], row["supplierCreditMmk"],
+        row["netPayableMmk"], row["payableReviewActionId"], row["payableReviewedAt"],
+        row["payableReviewedBy"], row["payableEvidenceReference"], row["receiptMovementIds"],
+        row["supplierReturnClaimIds"], row["supplierCreditNoteIds"], row["physicalReturnStatus"],
+        str(row["supplierContacted"]).lower(), str(row["accountingPosted"]).lower(),
+        str(row["paymentInitiated"]).lower(), artifact["digest"],
+    ] for row in artifact["rows"]]
+    return "\r\n".join(
+        ",".join(_commerce_csv_cell(cell) for cell in row)
+        for row in [header, *rows]
+    ) + "\r\n"
+
+
+def commerce_supplier_payables_aging(
+    state: Mapping[str, Any],
+    as_of: str,
+) -> dict[str, Any]:
+    """Prioritize reviewed supplier payables without creating payment authority."""
+
+    current = validate_commerce_state(state)
+    canonical_as_of = _timestamp(as_of, "Supplier payables aging asOf")
+    as_of_time = datetime.fromisoformat(canonical_as_of.replace("Z", "+00:00"))
+    blocked_invoice_count = 0
+    rows: list[dict[str, Any]] = []
+    for purchase_order in _purchase_orders(current):
+        invoice = purchase_order.get("supplierInvoice")
+        if not isinstance(invoice, Mapping):
+            continue
+        match = commerce_supplier_invoice_match(current, purchase_order)
+        if not match["payableReady"]:
+            blocked_invoice_count += 1
+            continue
+        due_time = datetime.fromisoformat(invoice["dueAt"].replace("Z", "+00:00"))
+        if as_of_time > due_time:
+            days_past_due = max(1, (as_of_time - due_time + timedelta(days=1) - timedelta.resolution).days)
+            days_until_due = 0
+            bucket = "overdue"
+        else:
+            days_past_due = 0
+            days_until_due = max(0, (due_time - as_of_time + timedelta(days=1) - timedelta.resolution).days)
+            bucket = "due_7_days" if days_until_due <= 7 else "scheduled"
+        rows.append({
+            "purchaseOrderId": purchase_order["id"],
+            "invoiceId": invoice["id"],
+            "supplier": purchase_order["supplier"],
+            "dueAt": invoice["dueAt"],
+            "netPayableMmk": match["netInvoiceTotalMmk"],
+            "daysPastDue": days_past_due,
+            "daysUntilDue": days_until_due,
+            "bucket": bucket,
+        })
+    rank = {"overdue": 0, "due_7_days": 1, "scheduled": 2}
+    rows.sort(key=lambda row: (rank[row["bucket"]], row["dueAt"], row["invoiceId"]))
+    totals_mmk = {
+        bucket: sum(row["netPayableMmk"] for row in rows if row["bucket"] == bucket)
+        for bucket in ("overdue", "due_7_days", "scheduled")
+    }
+    total_net_payable_mmk = sum(row["netPayableMmk"] for row in rows)
+    if any(abs(value) > _MAX_SAFE_INTEGER for value in (*totals_mmk.values(), total_net_payable_mmk)):
+        raise TrialValidationError(
+            "Supplier payables aging totals exceed the supported safe integer range."
+        )
+    return {
+        "asOf": canonical_as_of,
+        "rows": rows,
+        "totalsMmk": totals_mmk,
+        "totalNetPayableMmk": total_net_payable_mmk,
+        "overdueInvoiceCount": sum(row["bucket"] == "overdue" for row in rows),
+        "dueWithin7DaysInvoiceCount": sum(row["bucket"] == "due_7_days" for row in rows),
+        "blockedInvoiceCount": blocked_invoice_count,
+        "paymentAuthority": "none",
+        "paymentInitiated": False,
+    }
 
 
 def _configured_storefront_preview_digest(
@@ -2876,6 +7340,30 @@ def _require_purchase_orders_unchanged(
         raise TrialValidationError("event cannot change: purchaseOrders.")
 
 
+def _require_purchase_budget_envelopes_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _purchase_budget_envelopes(current) != _purchase_budget_envelopes(next_state):
+        raise TrialValidationError("event cannot change: purchaseBudgetEnvelopes.")
+
+
+def _require_supplier_sourcing_decisions_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _supplier_sourcing_decisions(current) != _supplier_sourcing_decisions(next_state):
+        raise TrialValidationError("event cannot change: supplierSourcingDecisions.")
+
+
+def _require_purchase_requisitions_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _purchase_requisitions(current) != _purchase_requisitions(next_state):
+        raise TrialValidationError("event cannot change: purchaseRequisitions.")
+
+
 def _require_catalog_changes_unchanged(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -2890,6 +7378,34 @@ def _require_catalog_baselines_unchanged(
 ) -> None:
     if _catalog_baselines(current) != _catalog_baselines(next_state):
         raise TrialValidationError("event cannot change: catalogBaselines.")
+
+
+def _require_tax_configurations_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _tax_configurations(current) != _tax_configurations(next_state):
+        raise TrialValidationError("event cannot change: taxConfigurations.")
+
+
+def _require_account_mapping_configurations_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _account_mapping_configurations(current) != _account_mapping_configurations(next_state):
+        raise TrialValidationError(
+            "event cannot change: accountMappingConfigurations."
+        )
+
+
+def _require_customer_credit_policies_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _customer_credit_policies(current) != _customer_credit_policies(next_state):
+        raise TrialValidationError(
+            "event cannot change: customerCreditPolicies."
+        )
 
 
 def _inventory_foundation(state: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -2939,6 +7455,29 @@ def _production_inventory_command_id(request_id: str) -> str:
         }
     )
     return f"PIS-{identity[7:39].upper()}"
+
+
+def _production_return_command_id(
+    production_issue_id: str, action_id: str
+) -> str:
+    identity = _order_inventory_digest(
+        {
+            "contract": "supermega.shop.production-return-inventory-command.v1",
+            "productionIssueId": production_issue_id,
+            "actionId": action_id,
+        }
+    )
+    return f"PRT-{identity[7:39].upper()}"
+
+
+def _production_receipt_command_id(release_id: str) -> str:
+    identity = _order_inventory_digest(
+        {
+            "contract": "supermega.shop.production-receipt-inventory-command.v1",
+            "releaseId": release_id,
+        }
+    )
+    return f"PRC-{identity[7:39].upper()}"
 
 
 def _order_return_inventory_command_id(
@@ -3317,6 +7856,126 @@ def _validate_inventory_transferred(
         )
 
 
+def _require_promotion_policies_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _promotion_policies(current) != _promotion_policies(next_state):
+        raise TrialValidationError(
+            "event cannot change: promotionPolicies."
+        )
+
+
+def _require_shipping_policies_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _shipping_policies(current) != _shipping_policies(next_state):
+        raise TrialValidationError("event cannot change: shippingPolicies.")
+
+
+def _require_payment_policies_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _payment_policies(current) != _payment_policies(next_state):
+        raise TrialValidationError("event cannot change: paymentPolicies.")
+
+
+def _validate_inventory_master_created(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _without(current, frozenset({"inventoryFoundation"})) != _without(
+        next_state, frozenset({"inventoryFoundation"})
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.master_created may change only inventoryFoundation."
+        )
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None or next_foundation is None:
+        raise TrialValidationError("Shop location inventory must be initialized first.")
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_totals = shop_inventory_sku_totals(before, catalog_skus)
+        after_totals = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        after["revision"] != before["revision"] + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"]["kind"] != "master_create"
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.master_created must append exactly one master-create command."
+        )
+    expected = _inventory_item_totals(current)
+    if (
+        before_totals != after_totals
+        or before_available != after_available
+        or after_available != expected
+    ):
+        raise TrialValidationError(
+            "business-partner creation cannot change Shop stock or ATP."
+        )
+
+
+def _validate_inventory_supplier_policy_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _without(current, frozenset({"inventoryFoundation"})) != _without(
+        next_state, frozenset({"inventoryFoundation"})
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.supplier_policy_saved may change only inventoryFoundation."
+        )
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None or next_foundation is None:
+        raise TrialValidationError("Shop location inventory must be initialized first.")
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_totals = shop_inventory_sku_totals(before, catalog_skus)
+        after_totals = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        after["revision"] != before["revision"] + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"]["kind"] != "supplier_policy_set"
+    ):
+        raise TrialValidationError(
+            "commerce.inventory.supplier_policy_saved must append exactly one supplier-policy command."
+        )
+    expected = _inventory_item_totals(current)
+    if (
+        before_totals != after_totals
+        or before_available != after_available
+        or after_available != expected
+    ):
+        raise TrialValidationError(
+            "supplier-policy changes cannot change Shop stock or ATP."
+        )
+
+
 def _validate_new_order_and_reservation(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -3328,15 +7987,68 @@ def _validate_new_order_and_reservation(
     _require_unchanged(current, next_state, "closes")
     order = next_state["orders"][0]
     calculation = order.get("calculation")
+    effective_tax_configuration = _effective_tax_configuration(
+        current,
+        str(order["createdAt"]),
+    )
+    expected_calculation_schema = (
+        _ORDER_CALCULATION_V2_SCHEMA
+        if effective_tax_configuration is not None
+        else _ORDER_CALCULATION_SCHEMA
+    )
     if (
         not isinstance(calculation, Mapping)
         or calculation.get("catalogRevision") != len(_catalog_changes(current))
+        or calculation.get("schema") != expected_calculation_schema
+        or (
+            effective_tax_configuration is not None
+            and calculation.get("taxConfigurationRevision")
+            != effective_tax_configuration.get("revision")
+        )
     ):
         raise TrialValidationError(
             "a new order requires the current deterministic pricing calculation."
         )
     if order.get("status") != "confirmed" or order.get("paymentStatus") != "pending" or order.get("refundStatus") != "none":
         raise TrialValidationError("a new order must start confirmed with pending payment and no refund exception.")
+    payment_terms_days = _order_payment_terms_days(order)
+    if payment_terms_days is None:
+        raise TrialValidationError("a new order requires a supported customer credit term.")
+    credit_decision = order.get("creditDecision")
+    if payment_terms_days == 0:
+        if credit_decision is not None:
+            raise TrialValidationError("cash-term orders cannot carry a customer credit decision.")
+    else:
+        policy = _effective_customer_credit_policy(
+            current,
+            str(order["customer"]),
+            str(order["createdAt"]),
+        )
+        exposure_before = _customer_credit_exposure(current, str(order["customer"]))
+        exposure_after = exposure_before + int(order["total"])
+        expected_decision = (
+            {
+                "policyRevision": policy["revision"],
+                "policyActionId": policy["proof"]["actionId"],
+                "creditLimitMmk": policy["creditLimitMmk"],
+                "exposureBeforeMmk": exposure_before,
+                "orderAmountMmk": order["total"],
+                "exposureAfterMmk": exposure_after,
+                "maxPaymentTermsDays": policy["maxPaymentTermsDays"],
+                "paymentTermsDays": payment_terms_days,
+                "status": "approved",
+            }
+            if policy is not None
+            and policy["status"] == "active"
+            and payment_terms_days <= policy["maxPaymentTermsDays"]
+            and exposure_after <= _MAX_SAFE_INTEGER
+            and exposure_after <= policy["creditLimitMmk"]
+            else None
+        )
+        if expected_decision is None or credit_decision != expected_decision:
+            raise TrialValidationError(
+                "a new credit order requires the exact active customer policy, terms, and exposure decision."
+            )
     if order.get("fulfilment") not in {"pickup", "delivery"}:
         raise TrialValidationError("a new order requires pickup or delivery fulfilment.")
     _text(order.get("owner"), "new order.owner", maximum=120)
@@ -3788,6 +8500,237 @@ def _validate_return_recorded(
         raise TrialValidationError("return disposition is invalid.")
 
 
+def _validate_support_case_opened(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_cases = before_order.get("supportCases", [])
+    after_cases = after_order.get("supportCases")
+    if (
+        before_order.get("status") != "completed"
+        or "completion" not in before_order
+        or not isinstance(after_cases, list)
+        or len(after_cases) != len(before_cases) + 1
+        or after_cases[1:] != before_cases
+        or _without(before_order, frozenset({"supportCases"}))
+        != _without(after_order, frozenset({"supportCases"}))
+        or after_cases[0].get("status") != "open"
+        or not all(field in after_cases[0] for field in ("priority", "owner", "dueAt"))
+        or "resolution" in after_cases[0]
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_opened must prepend one immutable open case."
+        )
+
+
+def _validate_support_case_resolved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_cases = before_order.get("supportCases")
+    after_cases = after_order.get("supportCases")
+    if (
+        not isinstance(before_cases, list)
+        or not isinstance(after_cases, list)
+        or len(after_cases) != len(before_cases)
+        or _without(before_order, frozenset({"supportCases"}))
+        != _without(after_order, frozenset({"supportCases"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_resolved may change only one existing support case."
+        )
+    changed = [
+        (before, after)
+        for before, after in zip(before_cases, after_cases, strict=True)
+        if before != after
+    ]
+    if len(changed) != 1:
+        raise TrialValidationError(
+            "commerce.order.support_case_resolved must resolve exactly one case."
+        )
+    before_case, after_case = changed[0]
+    reopened = isinstance(before_case.get("reopen"), Mapping)
+    triaged = all(field in before_case for field in ("priority", "owner", "dueAt"))
+    response_ready = any(
+        isinstance(event, Mapping) and event.get("kind") == "first_response_ready"
+        for event in before_case.get(
+            "followUpServiceEvents" if reopened else "serviceEvents", []
+        )
+    )
+    invalid_resolution = (
+        not isinstance(after_case.get("followUpResolution"), Mapping)
+        or _without(before_case, frozenset({"status"}))
+        != _without(after_case, frozenset({"status", "followUpResolution"}))
+    ) if reopened else (
+        "resolution" in before_case
+        or not isinstance(after_case.get("resolution"), Mapping)
+        or _without(before_case, frozenset({"status", "resolution"}))
+        != _without(after_case, frozenset({"status", "resolution"}))
+    )
+    if (
+        before_case.get("status") != "open"
+        or (triaged and not response_ready)
+        or after_case.get("status") != "resolved"
+        or invalid_resolution
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_resolved must preserve the immutable opened case."
+        )
+
+
+def _validate_support_case_reopened(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_cases = before_order.get("supportCases")
+    after_cases = after_order.get("supportCases")
+    if (
+        not isinstance(before_cases, list)
+        or not isinstance(after_cases, list)
+        or len(after_cases) != len(before_cases)
+        or _without(before_order, frozenset({"supportCases"}))
+        != _without(after_order, frozenset({"supportCases"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_reopened may change only one existing support case."
+        )
+    changed = [
+        (before, after)
+        for before, after in zip(before_cases, after_cases, strict=True)
+        if before != after
+    ]
+    if len(changed) != 1:
+        raise TrialValidationError(
+            "commerce.order.support_case_reopened must reopen exactly one case."
+        )
+    before_case, after_case = changed[0]
+    if (
+        before_case.get("status") != "resolved"
+        or not isinstance(before_case.get("resolution"), Mapping)
+        or "reopen" in before_case
+        or "followUpServiceEvents" in before_case
+        or "followUpResolution" in before_case
+        or after_case.get("status") != "open"
+        or not isinstance(after_case.get("reopen"), Mapping)
+        or _without(before_case, frozenset({"status"}))
+        != _without(after_case, frozenset({"status", "reopen"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_reopened must retain the original resolution and add one linked reopen."
+        )
+
+
+def _validate_support_case_service_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_cases = before_order.get("supportCases")
+    after_cases = after_order.get("supportCases")
+    if (
+        not isinstance(before_cases, list)
+        or not isinstance(after_cases, list)
+        or len(after_cases) != len(before_cases)
+        or _without(before_order, frozenset({"supportCases"}))
+        != _without(after_order, frozenset({"supportCases"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_service_recorded may change only one support case."
+        )
+    changed = [
+        (before, after)
+        for before, after in zip(before_cases, after_cases, strict=True)
+        if before != after
+    ]
+    if len(changed) != 1:
+        raise TrialValidationError(
+            "commerce.order.support_case_service_recorded must append exactly one event."
+        )
+    before_case, after_case = changed[0]
+    event_field = "followUpServiceEvents" if isinstance(before_case.get("reopen"), Mapping) else "serviceEvents"
+    before_events = before_case.get(event_field, [])
+    after_events = after_case.get(event_field)
+    if (
+        before_case.get("status") != "open"
+        or not isinstance(before_events, list)
+        or not isinstance(after_events, list)
+        or len(after_events) != len(before_events) + 1
+        or after_events[1:] != before_events
+        or _without(before_case, frozenset({event_field}))
+        != _without(after_case, frozenset({event_field}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.support_case_service_recorded must prepend one immutable service event."
+        )
+
+
+def _validate_correction_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before_order, after_order = _one_changed(
+        current["orders"],
+        next_state["orders"],
+        "orders",
+    )
+    closed_order_ids = {
+        order_id
+        for close in current["closes"]
+        if isinstance(close, Mapping)
+        for order_id in close.get("orderIds", [])
+    }
+    if (
+        before_order["status"] != "completed"
+        or before_order["paymentStatus"] != "reconciled"
+        or "completion" not in before_order
+        or "calculation" not in before_order
+        or before_order["id"] in closed_order_ids
+    ):
+        raise TrialValidationError(
+            "corrections require an unclosed, calculated, reconciled, completed order."
+        )
+    before_corrections = before_order.get("corrections", [])
+    after_corrections = after_order.get("corrections")
+    if (
+        not isinstance(after_corrections, list)
+        or len(after_corrections) != len(before_corrections) + 1
+        or after_corrections[1:] != before_corrections
+        or _without(before_order, frozenset({"corrections"}))
+        != _without(after_order, frozenset({"corrections"}))
+    ):
+        raise TrialValidationError(
+            "commerce.order.correction_recorded must prepend exactly one immutable correction."
+        )
+
+
 def _validate_reconciled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
     _require_unchanged(current, next_state, "items", "movements", "closes")
     _require_website_intakes_unchanged(current, next_state)
@@ -3798,6 +8741,34 @@ def _validate_reconciled(current: Mapping[str, Any], next_state: Mapping[str, An
         raise TrialValidationError("payment reconciliation may change only payment status and evidence.")
     if after["paymentStatus"] != "reconciled" or not _RECONCILIATION_FIELDS.issubset(after):
         raise TrialValidationError("payment reconciliation requires complete evidence.")
+
+
+def _validate_collection_action_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    before, after = _one_changed(current["orders"], next_state["orders"], "orders")
+    before_actions = before.get("collectionActions", [])
+    after_actions = after.get("collectionActions")
+    if before["status"] == "cancelled" or before["paymentStatus"] != "pending":
+        raise TrialValidationError(
+            "collection contact requires a pending payment on an active order."
+        )
+    if (
+        not isinstance(after_actions, list)
+        or len(after_actions) != len(before_actions) + 1
+        or after_actions[1:] != before_actions
+        or _without(before, frozenset({"collectionActions"}))
+        != _without(after, frozenset({"collectionActions"}))
+    ):
+        raise TrialValidationError(
+            "commerce.collection_action.recorded must prepend exactly one immutable contact proof."
+        )
 
 
 def _validate_refund_settled(current: Mapping[str, Any], next_state: Mapping[str, Any]) -> None:
@@ -4128,6 +9099,359 @@ def _validate_production_material_issued(
         )
 
 
+def _validate_production_return_inventory_transition(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    movement: Mapping[str, Any],
+) -> None:
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None or next_foundation is None:
+        raise TrialValidationError(
+            "a Plant material return requires retained exact location inventory."
+        )
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_physical = shop_inventory_sku_totals(before, catalog_skus)
+        after_physical = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        len(after["commands"]) != len(before["commands"]) + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"].get("kind") != "production_return"
+    ):
+        raise TrialValidationError(
+            "the Plant material return must append exactly one production return location command."
+        )
+    source_commands = [
+        envelope["payload"]
+        for envelope in before["commands"]
+        if envelope["payload"].get("kind") == "production_issue"
+        and envelope["payload"].get("proof", {}).get("actionId")
+        == movement["productionIssueActionId"]
+    ]
+    if len(source_commands) != 1:
+        raise TrialValidationError(
+            "the Plant material return source issue is not retained in location inventory."
+        )
+    source = source_commands[0]
+    command = after["commands"][-1]["payload"]
+    if (
+        command.get("id")
+        != _production_return_command_id(
+            str(source["id"]), str(movement["actionId"])
+        )
+        or command.get("productionIssueId") != source["id"]
+        or command.get("productionRequestId") != movement["productionRequestId"]
+        or command.get("productionCommandDigest")
+        != movement["productionCommandDigest"]
+        or command.get("productionJobId") != movement["productionJobId"]
+        or command.get("productionMaterialId") != movement["productionMaterialId"]
+        or command.get("productionInputLotId")
+        != movement["productionInputLotId"]
+        or command.get("productionQuantityMilli")
+        != movement["productionReturnedQuantityMilli"]
+        or command.get("productionUnit") != movement["productionUnit"]
+        or command.get("sku") != movement["sku"]
+        or command.get("stockQuantity") != movement["quantityDelta"]
+        or command.get("conversionNote") != movement["conversionNote"]
+        or command.get("stockUnitId")
+        != movement["productionReturnStockUnitId"]
+        or command.get("locationId")
+        != movement["productionReturnLocationId"]
+        or any(
+            command["proof"].get(proof_field) != movement[movement_field]
+            for proof_field, movement_field in (
+                ("actionId", "actionId"),
+                ("capturedAt", "createdAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        )
+    ):
+        raise TrialValidationError(
+            "the production return location command must match the exact Shop and Plant evidence."
+        )
+
+    def increased(source_totals: Mapping[str, int]) -> dict[str, int]:
+        retained = dict(source_totals)
+        sku = str(movement["sku"])
+        retained[sku] = retained.get(sku, 0) + int(movement["quantityDelta"])
+        return retained
+
+    if after_physical != increased(before_physical):
+        raise TrialValidationError(
+            "the Plant material return must restore exact physical location stock."
+        )
+    if after_available != increased(before_available):
+        raise TrialValidationError(
+            "the Plant material return must restore exact location available-to-promise."
+        )
+
+
+def _validate_production_material_returned(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "orders", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    if (
+        len(next_state["movements"]) != len(current["movements"]) + 1
+        or next_state["movements"][1:] != current["movements"]
+    ):
+        raise TrialValidationError(
+            "commerce.production_material.returned must prepend exactly one stock return."
+        )
+    movement = next_state["movements"][0]
+    if (
+        movement.get("kind") != "production_return"
+        or movement.get("quantityDelta", 0) <= 0
+        or movement.get("id") != _movement_id(str(movement.get("actionId")))
+    ):
+        raise TrialValidationError(
+            "production material return requires one attributable positive stock movement."
+        )
+    _validate_production_return_inventory_transition(current, next_state, movement)
+    before_item, after_item = _one_changed(
+        current["items"], next_state["items"], "items"
+    )
+    if (
+        before_item["sku"] != movement["sku"]
+        or after_item
+        != {
+            **before_item,
+            "onHand": before_item["onHand"] + movement["quantityDelta"],
+        }
+    ):
+        raise TrialValidationError(
+            "production material return must increase only its matching Shop item."
+        )
+
+
+def _validate_production_receipt_inventory_transition(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    movement: Mapping[str, Any],
+) -> None:
+    current_foundation = _inventory_foundation(current)
+    next_foundation = _inventory_foundation(next_state)
+    if current_foundation is None:
+        if next_foundation is not None:
+            raise TrialValidationError(
+                "a Plant batch receipt cannot create location inventory implicitly."
+            )
+        return
+    if next_foundation is None:
+        raise TrialValidationError(
+            "a Plant batch receipt cannot remove the location inventory record."
+        )
+    catalog_skus = [str(item["sku"]) for item in current["items"]]
+    try:
+        before = validate_shop_inventory_state(current_foundation, catalog_skus)
+        after = validate_shop_inventory_state(next_foundation, catalog_skus)
+        before_physical = shop_inventory_sku_totals(before, catalog_skus)
+        after_physical = shop_inventory_sku_totals(after, catalog_skus)
+        before_available = shop_inventory_sku_available_to_promise(
+            before, catalog_skus
+        )
+        after_available = shop_inventory_sku_available_to_promise(
+            after, catalog_skus
+        )
+    except ShopInventoryValidationError as exc:
+        raise TrialValidationError(str(exc)) from exc
+    if (
+        len(after["commands"]) != len(before["commands"]) + 1
+        or after["commands"][:-1] != before["commands"]
+        or after["commands"][-1]["payload"].get("kind")
+        != "production_receipt"
+    ):
+        raise TrialValidationError(
+            "the Plant batch receipt must append exactly one location receipt command."
+        )
+    command = after["commands"][-1]["payload"]
+    release_id = str(movement["productionReleaseId"])
+    if (
+        command.get("id") != _production_receipt_command_id(release_id)
+        or command.get("productionReleaseId") != release_id
+        or command.get("productionCommandDigest")
+        != movement["productionCommandDigest"]
+        or command.get("productionJobId") != movement["productionJobId"]
+        or command.get("productionOutputBatchId")
+        != movement["productionOutputBatchId"]
+        or command.get("productionReleasedAt")
+        != movement["productionReleasedAt"]
+        or command.get("sku") != movement["sku"]
+        or command.get("quantity") != movement["quantityDelta"]
+        or any(
+            command["proof"].get(proof_field) != movement[movement_field]
+            for proof_field, movement_field in (
+                ("actionId", "actionId"),
+                ("capturedAt", "createdAt"),
+                ("actor", "actor"),
+                ("reason", "reason"),
+                ("evidenceReference", "evidenceReference"),
+            )
+        )
+    ):
+        raise TrialValidationError(
+            "the Plant receipt location command must match the exact release evidence."
+        )
+
+    def increased(source: Mapping[str, int]) -> dict[str, int]:
+        retained = dict(source)
+        sku = str(movement["sku"])
+        retained[sku] = retained.get(sku, 0) + int(movement["quantityDelta"])
+        return retained
+
+    if after_physical != increased(before_physical):
+        raise TrialValidationError(
+            "the Plant batch receipt must increase exact physical location stock."
+        )
+    if after_available != increased(before_available):
+        raise TrialValidationError(
+            "the Plant batch receipt must increase exact location available-to-promise."
+        )
+
+
+def _validate_production_batch_received(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "orders", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    if (
+        len(next_state["movements"]) != len(current["movements"]) + 1
+        or next_state["movements"][1:] != current["movements"]
+    ):
+        raise TrialValidationError(
+            "commerce.production_batch.received must prepend exactly one stock receipt."
+        )
+    movement = next_state["movements"][0]
+    if (
+        movement.get("kind") != "production_receipt"
+        or movement.get("quantityDelta", 0) <= 0
+        or movement.get("id") != _movement_id(str(movement.get("actionId")))
+    ):
+        raise TrialValidationError(
+            "Plant batch receipt requires one attributable positive stock movement."
+        )
+    _validate_production_receipt_inventory_transition(current, next_state, movement)
+    before_item, after_item = _one_changed(
+        current["items"], next_state["items"], "items"
+    )
+    if (
+        before_item["sku"] != movement["sku"]
+        or after_item
+        != {
+            **before_item,
+            "onHand": before_item["onHand"] + movement["quantityDelta"],
+        }
+    ):
+        raise TrialValidationError(
+            "Plant batch receipt must increase only its matching Shop item."
+        )
+
+
+def _validate_purchase_requisition_approved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    current_requisitions = _purchase_requisitions(current)
+    next_requisitions = _purchase_requisitions(next_state)
+    if len(next_requisitions) != len(current_requisitions) + 1 or next_requisitions[1:] != current_requisitions:
+        raise TrialValidationError(
+            "commerce.purchase_requisition.approved must prepend exactly one requisition."
+        )
+    requisition = next_requisitions[0]
+    if "budgetEnvelopeId" not in requisition:
+        raise TrialValidationError(
+            "a new purchase requisition requires an active purchase budget envelope."
+        )
+    if "sourceSourcingDecisionId" not in requisition:
+        raise TrialValidationError(
+            "a new purchase requisition requires an approved supplier sourcing decision."
+        )
+    if any(
+        purchase_order.get("sku") == requisition["sku"]
+        and "cancellation" not in purchase_order
+        and int(purchase_order["quantityOrdered"]) > sum(
+            int(movement["quantityDelta"]) + int(movement.get("rejectedQuantity", 0))
+            for movement in current["movements"]
+            if isinstance(movement, Mapping)
+            and movement.get("kind") == "receipt"
+            and movement.get("purchaseOrderId") == purchase_order.get("id")
+        )
+        for purchase_order in _purchase_orders(current)
+        if isinstance(purchase_order, Mapping)
+    ):
+        raise TrialValidationError(
+            "a purchase requisition cannot duplicate an active purchase order."
+        )
+
+
+def _validate_purchase_budget_approved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_requisitions_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    current_envelopes = _purchase_budget_envelopes(current)
+    next_envelopes = _purchase_budget_envelopes(next_state)
+    if (
+        len(next_envelopes) != len(current_envelopes) + 1
+        or next_envelopes[1:] != current_envelopes
+    ):
+        raise TrialValidationError(
+            "commerce.purchase_budget.approved must prepend exactly one budget envelope."
+        )
+
+
+def _validate_supplier_sourcing_approved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_budget_envelopes_unchanged(current, next_state)
+    _require_purchase_requisitions_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    current_decisions = _supplier_sourcing_decisions(current)
+    next_decisions = _supplier_sourcing_decisions(next_state)
+    if (
+        len(next_decisions) != len(current_decisions) + 1
+        or next_decisions[1:] != current_decisions
+    ):
+        raise TrialValidationError(
+            "commerce.supplier_sourcing.approved must prepend exactly one sourcing decision."
+        )
+
+
 def _validate_purchase_order_created(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -4142,12 +9466,49 @@ def _validate_purchase_order_created(
         raise TrialValidationError(
             "commerce.purchase_order.created must prepend exactly one purchase order."
         )
-    if "expectedAt" not in next_orders[0]:
+    purchase_order = next_orders[0]
+    if "expectedAt" not in purchase_order:
         raise TrialValidationError(
             "a new purchase order requires an expected arrival."
         )
-    if "cancellation" in next_orders[0]:
+    if "unitCostMmk" not in purchase_order:
+        raise TrialValidationError(
+            "a new purchase order requires retained whole-MMK unit cost terms."
+        )
+    if "cancellation" in purchase_order:
         raise TrialValidationError("a new purchase order cannot start cancelled.")
+    requisition_id = purchase_order.get("requisitionId")
+    if requisition_id is not None:
+        requisition = next(
+            (
+                candidate
+                for candidate in _purchase_requisitions(current)
+                if candidate.get("id") == requisition_id
+            ),
+            None,
+        )
+        if requisition is None or _same_accountable_actor(
+            str(purchase_order["creation"]["actor"]),
+            str(requisition["approval"]["actor"]),
+        ):
+            raise TrialValidationError(
+                "a requisition-backed purchase order requires a different operator."
+            )
+    foundation = _inventory_foundation(current)
+    if foundation is not None:
+        catalog_skus = [str(item["sku"]) for item in current["items"]]
+        try:
+            partners = shop_inventory_business_partners(foundation, catalog_skus)
+        except ShopInventoryValidationError as exc:
+            raise TrialValidationError(str(exc)) from exc
+        supplier = str(next_orders[0]["supplier"])
+        matching_vendors = [
+            vendor for vendor in partners["vendors"] if vendor["name"] == supplier
+        ]
+        if len(matching_vendors) != 1:
+            raise TrialValidationError(
+                "a location-managed purchase order must use one retained supplier master."
+            )
 
 
 def _validate_purchase_order_received(
@@ -4193,13 +9554,15 @@ def _validate_purchase_order_received(
         raise TrialValidationError(
             "purchase receipt requires one open matching purchase order."
         )
-    previously_received = sum(
-        prior["quantityDelta"]
+    previously_delivered = sum(
+        prior["quantityDelta"] + prior.get("rejectedQuantity", 0)
         for prior in current["movements"]
         if prior.get("purchaseOrderId") == purchase_order_id
     )
+    rejected_quantity = movement.get("rejectedQuantity", 0)
     if (
-        movement["quantityDelta"] > purchase_order["quantityOrdered"] - previously_received
+        movement["quantityDelta"] + rejected_quantity
+        > purchase_order["quantityOrdered"] - previously_delivered
         or after_item
         != {
             **before_item,
@@ -4323,6 +9686,129 @@ def _validate_purchase_order_cancelled(
         )
 
 
+def _validate_supplier_invoice_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    before, after = _one_changed(
+        _purchase_orders(current),
+        _purchase_orders(next_state),
+        "purchaseOrders",
+    )
+    if (
+        "supplierInvoice" in before
+        or "supplierInvoice" not in after
+        or "cancellation" in before
+        or "unitCostMmk" not in before
+        or _without(before, frozenset())
+        != _without(after, frozenset({"supplierInvoice"}))
+    ):
+        raise TrialValidationError(
+            "supplier invoice recording may only add one immutable invoice to one open commercial purchase order."
+        )
+
+
+def _validate_supplier_invoice_payable_ready(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    before, after = _one_changed(
+        _purchase_orders(current),
+        _purchase_orders(next_state),
+        "purchaseOrders",
+    )
+    before_invoice = before.get("supplierInvoice")
+    after_invoice = after.get("supplierInvoice")
+    if (
+        not isinstance(before_invoice, Mapping)
+        or not isinstance(after_invoice, Mapping)
+        or "payableReview" in before_invoice
+        or "payableReview" not in after_invoice
+        or _without(before, frozenset({"supplierInvoice"}))
+        != _without(after, frozenset({"supplierInvoice"}))
+        or _without(before_invoice, frozenset())
+        != _without(after_invoice, frozenset({"payableReview"}))
+        or commerce_supplier_invoice_match(current, before)["status"] != "matched"
+    ):
+        raise TrialValidationError(
+            "payable-ready review requires one exact PO, receipt, and supplier invoice match."
+        )
+
+
+def _validate_supplier_return_authorized(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    before, after = _one_changed(_purchase_orders(current), _purchase_orders(next_state), "purchaseOrders")
+    before_returns = before.get("supplierReturns", [])
+    after_returns = after.get("supplierReturns", [])
+    if (
+        not isinstance(before_returns, list)
+        or not isinstance(after_returns, list)
+        or len(after_returns) != len(before_returns) + 1
+        or after_returns[1:] != before_returns
+        or _without(before, frozenset({"supplierReturns"}))
+        != _without(after, frozenset({"supplierReturns"}))
+    ):
+        raise TrialValidationError(
+            "supplier return authorization must prepend exactly one immutable claim to one purchase order."
+        )
+
+
+def _validate_supplier_credit_recorded(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    before, after = _one_changed(_purchase_orders(current), _purchase_orders(next_state), "purchaseOrders")
+    before_returns = before.get("supplierReturns", [])
+    after_returns = after.get("supplierReturns", [])
+    if (
+        not isinstance(before_returns, list)
+        or not isinstance(after_returns, list)
+        or len(after_returns) != len(before_returns)
+        or _without(before, frozenset({"supplierReturns"}))
+        != _without(after, frozenset({"supplierReturns"}))
+    ):
+        raise TrialValidationError("supplier credit recording may change only one existing return claim.")
+    changed = [
+        (before_claim, after_claim)
+        for before_claim, after_claim in zip(before_returns, after_returns, strict=True)
+        if before_claim != after_claim
+    ]
+    if len(changed) != 1:
+        raise TrialValidationError("supplier credit recording must change exactly one return claim.")
+    before_claim, after_claim = changed[0]
+    before_credits = before_claim.get("creditNotes", [])
+    after_credits = after_claim.get("creditNotes", [])
+    if (
+        not isinstance(before_credits, list)
+        or not isinstance(after_credits, list)
+        or len(after_credits) != len(before_credits) + 1
+        or after_credits[1:] != before_credits
+        or _without(before_claim, frozenset({"creditNotes"}))
+        != _without(after_claim, frozenset({"creditNotes"}))
+    ):
+        raise TrialValidationError(
+            "supplier credit recording must prepend exactly one immutable credit note."
+        )
+
+
 def _commerce_order_close_basis(order: Mapping[str, Any]) -> datetime:
     timestamps = [str(order["createdAt"])]
     if order.get("paymentReconciledAt"):
@@ -4330,6 +9816,11 @@ def _commerce_order_close_basis(order: Mapping[str, Any]) -> datetime:
     completion = order.get("completion")
     if isinstance(completion, Mapping):
         timestamps.append(str(completion["capturedAt"]))
+    timestamps.extend(
+        str(correction["createdAt"])
+        for correction in order.get("corrections", [])
+        if isinstance(correction, Mapping)
+    )
     return max(
         datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         for timestamp in timestamps
@@ -4371,7 +9862,12 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
     close_at = datetime.fromisoformat(str(close["createdAt"]).replace("Z", "+00:00"))
     if any(_commerce_order_close_basis(order) > close_at for order in eligible):
         raise TrialValidationError("daily close cannot predate included order evidence.")
-    if close["orders"] != len(eligible) or close["total"] != sum(order["total"] for order in eligible):
+    adjusted_totals = [_order_adjusted_total(order) for order in eligible]
+    if (
+        any(total is None for total in adjusted_totals)
+        or close["orders"] != len(eligible)
+        or close["total"] != sum(total or 0 for total in adjusted_totals)
+    ):
         raise TrialValidationError("daily close totals must match completed, reconciled orders.")
     if close["businessDate"] != _myanmar_business_date(close["createdAt"]) or any(
         prior_close.get("businessDate") == close["businessDate"]
@@ -4534,6 +10030,47 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
         )
 
 
+def create_commerce_storefront_request_from_intent(
+    current_value: Mapping[str, Any],
+    intent_value: Mapping[str, Any],
+    evidence_value: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Retain one customer checkout request without accepting browser-built Shop state."""
+
+    current = validate_commerce_state(current_value)
+    intent = _object(intent_value, "storefront request intent")
+    _exact_fields(
+        intent,
+        "storefront request intent",
+        required=frozenset({"request"}),
+    )
+    request = _storefront_request(
+        intent["request"],
+        "storefront request intent.request",
+    )
+    evidence = _action_proof(evidence_value, "evidence")
+    requested_at = datetime.fromisoformat(request["createdAt"].replace("Z", "+00:00"))
+    received_at = datetime.fromisoformat(evidence["capturedAt"].replace("Z", "+00:00"))
+    if received_at < requested_at:
+        raise TrialValidationError(
+            "the Ecommerce request receipt cannot predate its customer quote."
+        )
+    if (
+        request["schema"] == "supermega.ecommerce.order_request.v2"
+        and received_at
+        > datetime.fromisoformat(request["quote"]["expiresAt"].replace("Z", "+00:00"))
+    ):
+        raise TrialValidationError(
+            "the Ecommerce request quote expired before Shop received it."
+        )
+    return validate_commerce_state(
+        {
+            **current,
+            "storefrontRequests": [request, *_storefront_requests(current)],
+        }
+    )
+
+
 def _validate_storefront_configuration_saved(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -4571,6 +10108,369 @@ def _validate_storefront_configuration_saved(
         raise TrialValidationError(
             "Shop catalog snapshot revision must advance only when its digest changes."
         )
+    same_imported_content = (
+        before["selectedSkus"] == after["selectedSkus"]
+        and before.get("merchandising") == after.get("merchandising")
+    )
+    if same_imported_content and before.get("activation") != after.get("activation"):
+        raise TrialValidationError(
+            "Ecommerce activation provenance is immutable while imported content is retained."
+        )
+    if not same_imported_content and "activation" in after:
+        raise TrialValidationError(
+            "Ecommerce activation provenance must be cleared when imported content changes."
+        )
+
+
+def _validate_tax_configuration_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    _require_catalog_changes_unchanged(current, next_state)
+    _require_catalog_baselines_unchanged(current, next_state)
+    _require_inventory_foundation_unchanged(current, next_state)
+    before = _tax_configurations(current)
+    after = _tax_configurations(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError(
+            "commerce.tax_configuration.saved must prepend exactly one tax configuration."
+        )
+    configuration = after[0]
+    if configuration["revision"] != len(before) + 1:
+        raise TrialValidationError("tax configuration revision must advance exactly once.")
+    if not _TAX_CONFIGURATION_SCHEDULE_FIELDS.issubset(configuration):
+        raise TrialValidationError(
+            "new tax configurations require reviewed jurisdiction and effective time."
+        )
+    if before and all(
+        configuration.get(field) == before[0].get(field)
+        for field in (
+            "code",
+            "label",
+            "rateBasisPoints",
+            "mode",
+            "jurisdictionCode",
+            "effectiveFrom",
+        )
+    ):
+        raise TrialValidationError("an unchanged tax configuration cannot advance.")
+
+
+def _validate_account_mapping_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "items", "orders", "movements", "closes")
+    _require_website_intakes_unchanged(current, next_state)
+    _require_storefront_requests_unchanged(current, next_state)
+    _require_storefront_configuration_unchanged(current, next_state)
+    _require_purchase_orders_unchanged(current, next_state)
+    _require_catalog_changes_unchanged(current, next_state)
+    _require_catalog_baselines_unchanged(current, next_state)
+    _require_tax_configurations_unchanged(current, next_state)
+    _require_inventory_foundation_unchanged(current, next_state)
+    before = _account_mapping_configurations(current)
+    after = _account_mapping_configurations(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError(
+            "commerce.account_mapping.saved must prepend exactly one account mapping configuration."
+        )
+    configuration = after[0]
+    if configuration["revision"] != len(before) + 1:
+        raise TrialValidationError(
+            "account mapping configuration revision must advance exactly once."
+        )
+    if before and configuration["mappings"] == before[0]["mappings"]:
+        raise TrialValidationError(
+            "an unchanged account mapping configuration cannot advance."
+        )
+
+
+def _validate_customer_credit_policy_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without_policies = dict(current)
+    current_without_policies.pop("customerCreditPolicies", None)
+    next_without_policies = dict(next_state)
+    next_without_policies.pop("customerCreditPolicies", None)
+    if current_without_policies != next_without_policies:
+        raise TrialValidationError(
+            "commerce.customer_credit_policy.saved may change only customerCreditPolicies."
+        )
+    before = _customer_credit_policies(current)
+    after = _customer_credit_policies(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError(
+            "commerce.customer_credit_policy.saved must prepend exactly one customer credit policy."
+        )
+    policy = after[0]
+    if policy["revision"] != len(before) + 1:
+        raise TrialValidationError(
+            "customer credit policy revision must advance exactly once."
+        )
+    prior = next(
+        (
+            candidate
+            for candidate in before
+            if candidate.get("customer") == policy["customer"]
+        ),
+        None,
+    )
+    if prior is not None and all(
+        prior[field] == policy[field]
+        for field in (
+            "customer",
+            "creditLimitMmk",
+            "maxPaymentTermsDays",
+            "status",
+        )
+    ):
+        raise TrialValidationError(
+            "an unchanged customer credit policy cannot advance."
+        )
+
+
+def _validate_promotion_policy_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without_policies = dict(current)
+    current_without_policies.pop("promotionPolicies", None)
+    next_without_policies = dict(next_state)
+    next_without_policies.pop("promotionPolicies", None)
+    if current_without_policies != next_without_policies:
+        raise TrialValidationError(
+            "commerce.promotion_policy.saved may change only promotionPolicies."
+        )
+    before = _promotion_policies(current)
+    after = _promotion_policies(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError(
+            "commerce.promotion_policy.saved must prepend exactly one promotion policy."
+        )
+    policy = after[0]
+    if policy["revision"] != len(before) + 1:
+        raise TrialValidationError(
+            "promotion policy revision must advance exactly once."
+        )
+    prior = next(
+        (
+            candidate
+            for candidate in before
+            if candidate.get("code") == policy["code"]
+        ),
+        None,
+    )
+    if prior is not None and all(
+        prior[field] == policy[field]
+        for field in (
+            "code",
+            "discountBasisPoints",
+            "minimumSubtotalMmk",
+            "maximumDiscountMmk",
+            "status",
+            "effectiveFrom",
+            "effectiveUntil",
+        )
+    ):
+        raise TrialValidationError(
+            "an unchanged promotion policy cannot advance."
+        )
+
+
+def _validate_shipping_policy_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without = dict(current)
+    current_without.pop("shippingPolicies", None)
+    next_without = dict(next_state)
+    next_without.pop("shippingPolicies", None)
+    if current_without != next_without:
+        raise TrialValidationError("commerce.shipping_policy.saved may change only shippingPolicies.")
+    before = _shipping_policies(current)
+    after = _shipping_policies(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError("commerce.shipping_policy.saved must prepend exactly one shipping policy.")
+    policy = after[0]
+    if policy["revision"] != len(before) + 1:
+        raise TrialValidationError("shipping policy revision must advance exactly once.")
+    prior = next((candidate for candidate in before if candidate.get("zoneCode") == policy["zoneCode"]), None)
+    if prior is not None and all(prior[field] == policy[field] for field in (
+        "zoneCode", "townships", "feeMmk", "promiseMinutes", "status", "effectiveFrom", "effectiveUntil",
+    )):
+        raise TrialValidationError("an unchanged shipping policy cannot advance.")
+
+
+def _validate_payment_policy_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without = dict(current)
+    current_without.pop("paymentPolicies", None)
+    next_without = dict(next_state)
+    next_without.pop("paymentPolicies", None)
+    if current_without != next_without:
+        raise TrialValidationError("commerce.payment_policy.saved may change only paymentPolicies.")
+    before = _payment_policies(current)
+    after = _payment_policies(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError("commerce.payment_policy.saved must prepend exactly one payment policy.")
+    policy = after[0]
+    if policy["revision"] != len(before) + 1:
+        raise TrialValidationError("payment policy revision must advance exactly once.")
+    prior = next((candidate for candidate in before if candidate.get("adapter") == policy["adapter"]), None)
+    if prior is not None and all(prior[field] == policy[field] for field in (
+        "adapter", "allowedFulfilments", "maximumOrderMmk", "instructions", "status", "effectiveFrom", "effectiveUntil",
+    )):
+        raise TrialValidationError("an unchanged payment policy cannot advance.")
+
+
+def _service_schedule(state: Mapping[str, Any]) -> dict[str, Any] | None:
+    value = state.get("serviceSchedule")
+    return _validate_service_schedule(value) if value is not None else None
+
+
+def _require_service_schedule_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if current.get("serviceSchedule") != next_state.get("serviceSchedule"):
+        raise TrialValidationError(
+            "commerce service schedule can change only through commerce.service_schedule.saved."
+        )
+
+
+def _validate_service_schedule_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without_schedule = dict(current)
+    current_without_schedule.pop("serviceSchedule", None)
+    next_without_schedule = dict(next_state)
+    next_without_schedule.pop("serviceSchedule", None)
+    if current_without_schedule != next_without_schedule:
+        raise TrialValidationError(
+            "commerce.service_schedule.saved cannot change other Commerce records."
+        )
+    before = _service_schedule(current)
+    after = _service_schedule(next_state)
+    if after is None or after["revision"] < 1:
+        raise TrialValidationError(
+            "commerce.service_schedule.saved requires a reviewed schedule change."
+        )
+    if before is None:
+        return
+    if after["industryPackId"] != before["industryPackId"]:
+        raise TrialValidationError("an active service schedule cannot change industry pack.")
+    if after["revision"] != before["revision"] + 1:
+        raise TrialValidationError("service schedule revision must advance exactly once.")
+    if after["events"][:-1] != before["events"]:
+        raise TrialValidationError("service schedule evidence history is immutable.")
+    latest = after["events"][-1]
+    event_type = latest["type"]
+    if event_type == "service_registered":
+        valid_change = (
+            len(after["services"]) == len(before["services"]) + 1
+            and after["services"][:-1] == before["services"]
+            and latest["subjectId"] == after["services"][-1]["id"]
+            and after["services"][-1]["active"] is True
+            and after["resources"] == before["resources"]
+            and after["bookings"] == before["bookings"]
+        )
+    elif event_type == "resource_registered":
+        valid_change = (
+            len(after["resources"]) == len(before["resources"]) + 1
+            and after["resources"][:-1] == before["resources"]
+            and latest["subjectId"] == after["resources"][-1]["id"]
+            and after["resources"][-1]["active"] is True
+            and after["services"] == before["services"]
+            and after["bookings"] == before["bookings"]
+        )
+    elif event_type == "booking_scheduled":
+        valid_change = (
+            len(after["bookings"]) == len(before["bookings"]) + 1
+            and after["bookings"][:-1] == before["bookings"]
+            and latest["subjectId"] == after["bookings"][-1]["id"]
+            and after["bookings"][-1]["status"] == "held"
+            and after["bookings"][-1]["createdAt"] == latest["happenedAt"]
+            and after["bookings"][-1]["updatedAt"] == latest["happenedAt"]
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+        )
+    else:
+        before_by_id = {booking["id"]: booking for booking in before["bookings"]}
+        changed_bookings = [
+            booking
+            for booking in after["bookings"]
+            if before_by_id.get(booking["id"]) != booking
+        ]
+        changed = changed_bookings[0] if len(changed_bookings) == 1 else None
+        prior = before_by_id.get(changed["id"]) if changed else None
+        expected_status = (
+            {"held": "confirmed", "confirmed": "checked_in", "checked_in": "completed"}.get(
+                prior["status"]
+            )
+            if prior and event_type == "booking_advanced"
+            else (
+                "cancelled"
+                if prior and prior["status"] not in {"completed", "cancelled"}
+                else None
+            )
+        )
+        expected_booking = (
+            {
+                **prior,
+                "status": expected_status,
+                "updatedAt": latest["happenedAt"],
+            }
+            if prior and expected_status
+            else None
+        )
+        valid_change = (
+            len(after["bookings"]) == len(before["bookings"])
+            and {booking["id"] for booking in after["bookings"]} == set(before_by_id)
+            and len(changed_bookings) == 1
+            and changed == expected_booking
+            and changed["id"] == latest["subjectId"]
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+        )
+    if not valid_change:
+        raise TrialValidationError(
+            "service schedule change does not match its latest evidence event."
+        )
+
+
+def _validate_service_schedule_initialized(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _service_schedule(current) is not None:
+        raise TrialValidationError("managed Commerce already has a service schedule.")
+    current_without_schedule = dict(current)
+    current_without_schedule.pop("serviceSchedule", None)
+    next_without_schedule = dict(next_state)
+    next_without_schedule.pop("serviceSchedule", None)
+    if current_without_schedule != next_without_schedule:
+        raise TrialValidationError(
+            "commerce.service_schedule.initialized cannot change other Commerce records."
+        )
+    schedule = _service_schedule(next_state)
+    if schedule is None or schedule["revision"] != 0 or schedule["events"]:
+        raise TrialValidationError(
+            "service schedule initialization requires a clean industry pack without operating evidence."
+        )
+    if not schedule["services"] or not schedule["resources"] or schedule["bookings"]:
+        raise TrialValidationError(
+            "service schedule initialization requires services and resources but no bookings."
+        )
 
 
 _TRANSITION_VALIDATORS = {
@@ -4580,21 +10480,46 @@ _TRANSITION_VALIDATORS = {
     "commerce.order.advanced": _validate_advanced,
     "commerce.order.cancelled": _validate_cancelled,
     "commerce.order.return_recorded": _validate_return_recorded,
+    "commerce.order.support_case_opened": _validate_support_case_opened,
+    "commerce.order.support_case_reopened": _validate_support_case_reopened,
+    "commerce.order.support_case_service_recorded": _validate_support_case_service_recorded,
+    "commerce.order.support_case_resolved": _validate_support_case_resolved,
+    "commerce.order.correction_recorded": _validate_correction_recorded,
     "commerce.payment.reconciled": _validate_reconciled,
+    "commerce.collection_action.recorded": _validate_collection_action_recorded,
     "commerce.refund.settled": _validate_refund_settled,
     "commerce.stock.received": _validate_received,
     "commerce.stock.counted": _validate_counted,
     "commerce.production_material.issued": _validate_production_material_issued,
+    "commerce.production_material.returned": _validate_production_material_returned,
+    "commerce.production_batch.received": _validate_production_batch_received,
     "commerce.inventory.initialized": _validate_inventory_initialized,
+    "commerce.inventory.master_created": _validate_inventory_master_created,
+    "commerce.inventory.supplier_policy_saved": _validate_inventory_supplier_policy_saved,
     "commerce.inventory.transferred": _validate_inventory_transferred,
+    "commerce.purchase_budget.approved": _validate_purchase_budget_approved,
+    "commerce.supplier_sourcing.approved": _validate_supplier_sourcing_approved,
+    "commerce.purchase_requisition.approved": _validate_purchase_requisition_approved,
     "commerce.purchase_order.created": _validate_purchase_order_created,
     "commerce.purchase_order.received": _validate_purchase_order_received,
     "commerce.purchase_order.cancelled": _validate_purchase_order_cancelled,
+    "commerce.supplier_invoice.recorded": _validate_supplier_invoice_recorded,
+    "commerce.supplier_invoice.payable_ready": _validate_supplier_invoice_payable_ready,
+    "commerce.supplier_return.authorized": _validate_supplier_return_authorized,
+    "commerce.supplier_credit.recorded": _validate_supplier_credit_recorded,
     "commerce.close.saved": _validate_close,
     "commerce.website_intake.created": _validate_website_intake_created,
     "commerce.website_intake.converted": _validate_website_intake_converted,
     "commerce.storefront.configuration.saved": _validate_storefront_configuration_saved,
     "commerce.storefront_request.received": _validate_storefront_request_received,
+    "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
+    "commerce.account_mapping.saved": _validate_account_mapping_saved,
+    "commerce.customer_credit_policy.saved": _validate_customer_credit_policy_saved,
+    "commerce.promotion_policy.saved": _validate_promotion_policy_saved,
+    "commerce.shipping_policy.saved": _validate_shipping_policy_saved,
+    "commerce.payment_policy.saved": _validate_payment_policy_saved,
+    "commerce.service_schedule.initialized": _validate_service_schedule_initialized,
+    "commerce.service_schedule.saved": _validate_service_schedule_saved,
 }
 
 
@@ -4609,6 +10534,32 @@ def reduce_commerce_state(
         raise TrialValidationError("event_type must be a supported Commerce lifecycle event.")
     if event_type == "commerce.storefront.merchandising.imported":
         return _apply_storefront_merchandising_import(current, payload)
+    if event_type == "commerce.order.created" and isinstance(payload.get("intent"), Mapping):
+        payload = {
+            "state": create_commerce_order_from_intent(
+                current,
+                payload["intent"],
+                payload.get("evidence", {}),
+            ),
+            "evidence": payload.get("evidence"),
+        }
+    if (
+        event_type == "commerce.storefront_request.received"
+        and isinstance(payload.get("intent"), Mapping)
+    ):
+        _exact_fields(
+            payload,
+            "payload",
+            required=frozenset({"intent", "evidence"}),
+        )
+        payload = {
+            "state": create_commerce_storefront_request_from_intent(
+                current,
+                payload["intent"],
+                payload.get("evidence", {}),
+            ),
+            "evidence": payload.get("evidence"),
+        }
     next_state, evidence = _payload(payload)
     if event_type == "commerce.workspace.initialized":
         if dict(current):
@@ -4621,8 +10572,17 @@ def reduce_commerce_state(
             or _website_intakes(next_state)
             or _storefront_requests(next_state)
             or _storefront_configuration(next_state)
+            or _purchase_budget_envelopes(next_state)
+            or _supplier_sourcing_decisions(next_state)
+            or _purchase_requisitions(next_state)
             or _purchase_orders(next_state)
             or _catalog_changes(next_state)
+            or _tax_configurations(next_state)
+            or _account_mapping_configurations(next_state)
+            or _customer_credit_policies(next_state)
+            or _promotion_policies(next_state)
+            or _shipping_policies(next_state)
+            or _payment_policies(next_state)
         ):
             raise TrialValidationError("Commerce initialization requires a non-empty catalog and no operating history.")
         return next_state
@@ -4636,16 +10596,47 @@ def reduce_commerce_state(
         _require_storefront_requests_unchanged(current_state, next_state)
     if event_type != "commerce.storefront.configuration.saved":
         _require_storefront_configuration_unchanged(current_state, next_state)
+    if event_type != "commerce.tax_configuration.saved":
+        _require_tax_configurations_unchanged(current_state, next_state)
+    if event_type != "commerce.account_mapping.saved":
+        _require_account_mapping_configurations_unchanged(current_state, next_state)
+    if event_type != "commerce.customer_credit_policy.saved":
+        _require_customer_credit_policies_unchanged(current_state, next_state)
+    if event_type != "commerce.promotion_policy.saved":
+        _require_promotion_policies_unchanged(current_state, next_state)
+    if event_type != "commerce.shipping_policy.saved":
+        _require_shipping_policies_unchanged(current_state, next_state)
+    if event_type != "commerce.payment_policy.saved":
+        _require_payment_policies_unchanged(current_state, next_state)
+    if event_type not in {
+        "commerce.service_schedule.initialized",
+        "commerce.service_schedule.saved",
+    }:
+        _require_service_schedule_unchanged(current_state, next_state)
+    if event_type != "commerce.purchase_budget.approved":
+        _require_purchase_budget_envelopes_unchanged(current_state, next_state)
+    if event_type != "commerce.supplier_sourcing.approved":
+        _require_supplier_sourcing_decisions_unchanged(current_state, next_state)
+    if event_type != "commerce.purchase_requisition.approved":
+        _require_purchase_requisitions_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.purchase_order.created",
         "commerce.purchase_order.cancelled",
+        "commerce.supplier_invoice.recorded",
+        "commerce.supplier_invoice.payable_ready",
+        "commerce.supplier_return.authorized",
+        "commerce.supplier_credit.recorded",
     }:
         _require_purchase_orders_unchanged(current_state, next_state)
     if event_type not in {
         "commerce.inventory.initialized",
+        "commerce.inventory.master_created",
+        "commerce.inventory.supplier_policy_saved",
         "commerce.inventory.transferred",
         "commerce.stock.counted",
         "commerce.production_material.issued",
+        "commerce.production_material.returned",
+        "commerce.production_batch.received",
         "commerce.purchase_order.received",
         "commerce.order.created",
         "commerce.order.cancelled",
@@ -4660,15 +10651,29 @@ def reduce_commerce_state(
 
 
 __all__ = [
+    "COMMERCE_ACCOUNTING_HANDOFF_SCHEMA",
+    "COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA",
     "COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA",
     "COMMERCE_EVENTS",
     "COMMERCE_HUMAN_EVENTS",
+    "COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA",
     "COMMERCE_SCHEMA",
+    "COMMERCE_CLOSE_SETTLEMENT_SCHEMA",
     "commerce_catalog_baseline_digest",
     "commerce_catalog_digest",
+    "commerce_order_calculation_digest",
+    "commerce_order_acknowledgement",
+    "commerce_order_acknowledgement_text",
+    "create_commerce_order_from_intent",
+    "commerce_accounting_handoff",
+    "commerce_accounting_handoff_csv",
     "commerce_daily_close_csv",
     "commerce_daily_close_export",
     "commerce_storefront_preview_digest",
+    "commerce_supplier_invoice_match",
+    "commerce_supplier_payables_handoff",
+    "commerce_supplier_payables_handoff_csv",
+    "commerce_supplier_payables_aging",
     "commerce_website_intake_snapshot_digest",
     "reduce_commerce_state",
     "validate_commerce_state",

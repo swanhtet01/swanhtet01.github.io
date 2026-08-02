@@ -33,6 +33,7 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "VITE_SUPABASE_URL": "",
             "VITE_SUPABASE_PUBLISHABLE_KEY": "",
             "VITE_SUPABASE_ANON_KEY": "",
+            "SUPERMEGA_CORS_ORIGINS": "",
             **environment,
         }
         with patch.dict(os.environ, controlled, clear=False):
@@ -51,6 +52,10 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertFalse(body["security_ready"])
         self.assertFalse(body["authentication"]["supabase_user_tokens_ready"])
         self.assertFalse(body["authentication"]["anonymous_users_allowed"])
+        self.assertTrue(body["browser_origin_policy"]["strict_exact_origins"])
+        self.assertEqual(body["browser_origin_policy"]["configured_origin_count"], 3)
+        self.assertFalse(body["browser_origin_policy"]["wildcards_allowed"])
+        self.assertFalse(body["browser_origin_policy"]["insecure_remote_origins_allowed"])
         self.assertFalse(body["trial_backend"]["browser_service_role_exposed"])
         self.assertGreater(len(body["enterprise_activation"]["requirements"]), 0)
         manifest = body["enterprise_activation"]["manifest"]
@@ -64,6 +69,39 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertIn("postgres17_rehearsal", manifest["proof_commands"])
         self.assertFalse(manifest["secret_values_exposed"])
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+
+    def test_cors_accepts_only_exact_https_or_explicit_loopback_origins(self) -> None:
+        configured = "https://tenant.example.com,http://127.0.0.1:5173"
+        with self._client(SUPERMEGA_CORS_ORIGINS=configured) as client:
+            response = client.options(
+                "/api/health",
+                headers={
+                    "origin": "https://tenant.example.com",
+                    "access-control-request-method": "GET",
+                },
+            )
+            health = client.get("/api/health").json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["access-control-allow-origin"], "https://tenant.example.com")
+        self.assertEqual(health["browser_origin_policy"]["configured_origin_count"], 2)
+
+    def test_cors_configuration_fails_closed_before_startup(self) -> None:
+        invalid_values = (
+            "*",
+            "null",
+            "http://tenant.example.com",
+            "https://user:password@tenant.example.com",
+            "https://tenant.example.com/path",
+            "https://tenant.example.com?workspace=a",
+            "https://tenant.example.com#fragment",
+            "https://tenant.example.com,,https://app.supermega.dev",
+            "https://tenant..example.com",
+        )
+        for value in invalid_values:
+            with self.subTest(value=value):
+                with patch.dict(os.environ, {"SUPERMEGA_CORS_ORIGINS": value}, clear=False):
+                    with self.assertRaisesRegex(ValueError, "SUPERMEGA_CORS_ORIGINS"):
+                        create_app()
 
     def test_trial_identity_fails_closed_without_a_valid_gateway_signature(self) -> None:
         with self._client(SUPERMEGA_TRIAL_IDENTITY_SECRET=STRONG_TEST_IDENTITY_SECRET) as client:

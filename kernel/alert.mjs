@@ -25,19 +25,29 @@ export async function captureError(context, detail, meta = {}) {
 }
 
 // Plain best-effort notification (no error framing) to the owner's own Telegram. Never throws.
-export async function notify(text) {
-  const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim()
-  const chat = String(process.env.TELEGRAM_ALERT_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '').trim()
-  if (!token || !chat) return false
+// The detailed form lets guarded callers distinguish a definite rejection from an uncertain
+// transport failure and choose a safe idempotency policy.
+export async function notifyDetailed(text, options = {}) {
+  const env = options.env || process.env
+  const request = options.fetch || fetch
+  const token = String(env.TELEGRAM_BOT_TOKEN || '').trim()
+  const chat = String(env.TELEGRAM_ALERT_CHAT_ID || env.TELEGRAM_CHAT_ID || '').trim()
+  if (!token || !chat) return { ok: false, status: 'failed' }
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const response = await request(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chat_id: chat, text: String(text || '').slice(0, 3500), disable_web_page_preview: true }),
       signal: AbortSignal.timeout(6000),
     })
-    return true
-  } catch { return false }
+    return response?.ok === true
+      ? { ok: true, status: 'sent' }
+      : { ok: false, status: 'failed' }
+  } catch { return { ok: false, status: 'uncertain' } }
 }
 
-export default { captureError, notify }
+export async function notify(text) {
+  return (await notifyDetailed(text)).ok
+}
+
+export default { captureError, notify, notifyDetailed }

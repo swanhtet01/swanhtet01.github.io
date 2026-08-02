@@ -1,10 +1,10 @@
 {
-  "schemaVersion": "supermega.hq.database-rehearsal.v1",
-  "recordedAt": "2026-07-31",
+  "schemaVersion": "supermega.hq.database-rehearsal.v2",
+  "recordedAt": "2026-08-01T16:32:59.047Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "0a87a1d8fa86b4670829797e60eb283ae843a860",
+  "implementationCommit": "1cd974c971bc40d078ee440b35512037f73c66ab",
   "implementation": {
-    "digest": "sha256:2950a0442f896a65e82fe8fe0d9f8d5f00e0f0660df2ee8cb2ebf7b94787b4e4",
+    "digest": "sha256:76c49d87a3df60d653861874e1ee46ee8dbba8bd0fa7eef59ee2870525bc0482",
     "paths": [
       "supermega_runtime/managed_context.py",
       "supermega_runtime/managed_activation.py",
@@ -19,11 +19,18 @@
       "tools/verify_managed_runtime_environment_values.mjs"
     ]
   },
+  "implementationDigest": "sha256:76c49d87a3df60d653861874e1ee46ee8dbba8bd0fa7eef59ee2870525bc0482",
+  "implementationFileCount": 11,
+  "localVerification": {
+    "command": "npm run database:postgres17:record",
+    "conclusion": "success",
+    "externallyHosted": false
+  },
   "githubCi": {
     "workflow": "SuperMega App CI",
-    "run": 180,
-    "commit": "338b6fd11bc27da9b7aa42bee2c293a5c0e3a9ef",
-    "conclusion": "success",
+    "run": null,
+    "commit": null,
+    "conclusion": "not_recorded",
     "coversImplementationCommit": false
   },
   "engine": {
@@ -46,7 +53,9 @@
     "adapter": "PostgresTrialStore",
     "autocommit": false,
     "explicitTransaction": true,
-    "transactionLocalIdentity": true
+    "transactionLocalIdentity": true,
+    "databaseAuthenticatesIndividualActors": false,
+    "runtimeCredentialsServerOnly": true
   },
   "checks": {
     "approvalAgentRowSpoofDenied": true,
@@ -102,6 +111,17 @@
     "v1UpgradePreserved": true,
     "writeCapabilityImpliesRead": true
   },
+  "recovery": {
+    "backupNonempty": true,
+    "format": "pg_dump_custom",
+    "restoredSchemaVersion": 7
+  },
+  "storage": {
+    "catalogMode": "local_private_fixture",
+    "hostedStoragePrivacyProofRequired": true,
+    "policyCount": 0,
+    "publicBucketCount": 0
+  },
   "safety": {
     "cleanupComplete": true,
     "secretValuesExposed": false,
@@ -113,6 +133,7 @@
     "Repeat the complete migration and product-journey rehearsal on an isolated Supabase non-production target.",
     "Run Supabase Security Advisor and resolve applicable findings.",
     "Exercise the provider transaction-mode pooler and hosted backup/restore process.",
+    "Prove private Storage bucket inventory plus anonymous and cross-tenant listing denial.",
     "Keep production writes disabled until founder approval."
   ]
 }

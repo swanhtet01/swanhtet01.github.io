@@ -160,6 +160,34 @@ function accountableTransition(
       },
     }
   }
+  if ((next.leadLedger?.revision ?? 0) === (current.leadLedger?.revision ?? 0) + 1) {
+    const currentLeads = current.leadLedger?.leads ?? []
+    const nextLeads = next.leadLedger?.leads ?? []
+    if (nextLeads.length === currentLeads.length + 1) {
+      const lead = nextLeads[0]
+      return {
+        eventType: 'website.inquiry.received',
+        evidence: {
+          actionId: fallbackActionId,
+          capturedAt: lead.createdAt,
+          reason: 'Website inquiry received with recorded contact consent',
+          evidenceReference: `website:inquiry:${lead.id}:received`,
+        },
+      }
+    }
+    const changed = nextLeads.find((lead, index) => JSON.stringify(lead) !== JSON.stringify(currentLeads[index]))
+    if (changed && nextLeads.length === currentLeads.length) {
+      return {
+        eventType: 'website.inquiry.reviewed',
+        evidence: {
+          actionId: fallbackActionId,
+          capturedAt: changed.updatedAt,
+          reason: `Website inquiry ${changed.status}`,
+          evidenceReference: `website:inquiry:${changed.id}:reviewed`,
+        },
+      }
+    }
+  }
   if (next.selectedPageId !== current.selectedPageId) {
     const capturedAt = new Date().toISOString()
     return {
@@ -177,7 +205,7 @@ function accountableTransition(
 
 function managedFailure(error: unknown) {
   if (error instanceof ManagedTrialError) return error.message
-  return error instanceof Error ? error.message : 'unknown managed workspace error'
+  return error instanceof Error ? error.message : 'unknown company account error'
 }
 
 async function requireCurrentManagedIdentity(expected: ManagedIdentity) {
@@ -459,7 +487,7 @@ export function useWebsiteWorkspace(): {
                 managedVersionRef.current = record.version
                 workspaceRef.current = refreshed
                 setWorkspace(refreshed)
-                setStorageIssue('Website changed in another session. The managed workspace was refreshed; review before retrying.')
+                setStorageIssue('Website changed in another session. The company account was refreshed; review before retrying.')
                 resolve({ ok: false, error: 'Website changed in another session. Review the refreshed workspace before retrying.' })
                 return
               } catch (refreshError) {
