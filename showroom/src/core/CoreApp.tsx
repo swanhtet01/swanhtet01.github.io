@@ -3129,7 +3129,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const managedCommerceBoundary: ReactNode = managedIdentity && effectiveMode !== 'managed-ready' ? (() => {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Company Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">Start with the first real inventory item. No browser demo orders, customers, or stock records are copied into this workspace.</p>
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
         <div className="form-row"><label>SKU<input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
@@ -3138,11 +3138,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet, stocktake, or source record" required value={catalogDraft.evidenceReference} /></label>
         <div className="form-actions"><Link className="text-link" to="/settings/">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : 'Create managed catalog'}</button></div>
-        <p className="form-notice" role="status">{catalogError || commerceStorageError || `Authenticated as ${managedIdentity.email}. The tenant API records this initialization.`}</p>
+        <p className="form-notice" role="status">{catalogError || commerceStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
       </form>
     </section>
     return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Shop</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Company Shop</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{commerceStorageError || 'Shop remains read-only until the authenticated tenant state is confirmed.'}</p>
       <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
     </section>
@@ -3155,7 +3155,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       : !commerceCanWrite
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
         : notice || (managedIdentity
-          ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the tenant API.`
+          ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the company account.`
           : 'Sample data on this device. Sign in for team data.')}</p>
     {!commerceCanWrite ? <Link to="/settings/#controls">Open Settings</Link> : null}
   </div>
@@ -8071,7 +8071,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Shift close', shiftHandoffIsCurrent ? 'Current' : 'Needs update'],
   ] as const
   const plantTodaySource = managedIdentity
-    ? `Managed Plant · revision ${managedVersion ?? production.revision}`
+    ? `Company Plant · revision ${managedVersion ?? production.revision}`
     : 'Local sample records on this device'
   const plantTodayNotice = productionStorageError
     ? `Writes paused: ${productionStorageError}`
@@ -8201,7 +8201,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         machines: [{ id: machineId, name: machineName, state: 'running' }],
       }))
       setJobId(firstJobId)
-      setNotice(`Managed Plant initialized with ${firstJobId}.`)
+      setNotice(`Company Plant initialized with ${firstJobId}.`)
     } catch (error) {
       setPlanError(error instanceof Error ? error.message : 'The managed Plant plan was not initialized.')
     } finally {
@@ -8213,7 +8213,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (managedIdentity && effectiveMode !== 'managed-ready') {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Plant setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Company Plant setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">Start with one real job and one machine. No browser demo jobs, issues, equipment, or output are copied into this workspace.</p>
       <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedProduction(formEvent)}>
         <div className="form-row"><label>Job ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, jobId: inputEvent.target.value }))} placeholder="JOB-001" required value={planDraft.jobId} /></label><label>Line or team<input maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, line: inputEvent.target.value }))} placeholder="Line 01" required value={planDraft.line} /></label></div>
@@ -8224,11 +8224,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <label>Opening plan reason<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How this job and target were confirmed" required value={planDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Shift plan, work order, or count sheet" required value={planDraft.evidenceReference} /></label>
         <div className="form-actions"><Link className="text-link" to="/settings/">Workspace settings</Link><button className="core-button primary" disabled={planBusy} type="submit">{planBusy ? 'Creating…' : 'Create managed plan'}</button></div>
-        <p className="form-notice" role="status">{planError || productionStorageError || `Authenticated as ${managedIdentity.email}. The tenant API records this initialization.`}</p>
+        <p className="form-notice" role="status">{planError || productionStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
       </form>
     </section>
     return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Managed Plant</span><h2>{effectiveMode === 'managed-error' ? 'Managed workspace unavailable' : 'Loading authenticated workspace'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Company Plant</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{productionStorageError || 'Plant remains read-only until the authenticated tenant state is confirmed.'}</p>
       <div className="form-actions"><Link className="core-button" to="/settings/">Open workspace settings</Link></div>
     </section>
@@ -8271,7 +8271,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       throw error
     }
     if (!managedIdentity) setActions((current) => [record, ...current])
-    setNotice(managedIdentity ? `${record.id} confirmed by the managed Plant API. ${pendingAction.summary}`
+    setNotice(managedIdentity ? `${record.id} confirmed in Company Plant. ${pendingAction.summary}`
       : `${pendingAction.summary} completed. It was persisted with attributed Plant evidence.`)
     setPendingAction(null)
   }

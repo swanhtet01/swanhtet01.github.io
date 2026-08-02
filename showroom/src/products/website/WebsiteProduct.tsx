@@ -240,7 +240,7 @@ export function WebsiteProduct() {
         }
       : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
-    ? 'Changes are saved to this managed workspace. Nothing has been deployed.'
+    ? 'Changes are saved to this company account. Nothing has been deployed.'
     : storageMode === 'browser-local'
       ? 'Changes are saved on this device. Nothing has been deployed.'
       : 'Changes last for this session only. Nothing has been deployed.'
@@ -251,7 +251,7 @@ export function WebsiteProduct() {
     : hasUnsavedChanges
       ? 'Unsaved preview'
       : storageMode === 'managed'
-        ? 'Saved to workspace'
+        ? 'Saved to company'
         : storageMode === 'browser-local'
           ? 'Saved on this device'
           : 'Session only'
@@ -971,8 +971,8 @@ export function WebsiteProduct() {
         if (!result.ok) throw new Error(result.error)
         setLeadDecisionNote('')
         setNotice(status === 'qualified'
-          ? 'Inquiry qualified and assigned in the managed Website workspace. No customer message was sent.'
-          : 'Inquiry closed in the managed Website workspace. No customer message was sent.')
+          ? 'Inquiry qualified and assigned in this company account. No customer message was sent.'
+          : 'Inquiry closed in this company account. No customer message was sent.')
         return
       }
       if (saveLeadLedger(next, status === 'qualified'
@@ -990,7 +990,7 @@ export function WebsiteProduct() {
           {noticePriority !== 'routine' ? (
             <div className="website-notice" aria-busy={repairing} aria-live="polite" data-priority={noticePriority} role="status">
               <p>{repairArmed
-                ? 'SuperMega will keep a recovery copy on this device, then restore saving with the valid Website shown here. Nothing will be published; Shop, Plant, managed data, and domains stay unchanged.'
+                ? 'SuperMega will keep a recovery copy on this device, then restore saving with the valid Website shown here. Nothing will be published; Shop, Plant, company data, and domains stay unchanged.'
                 : repairing ? 'Keeping a recovery copy and restoring Website saving…' : statusNotice}</p>
               {repairArchiveKey && !repairArmed ? (
                 <div className="website-notice-actions">

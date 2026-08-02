@@ -1516,7 +1516,7 @@ export function EcommerceProduct() {
       route: location.pathname + location.search,
       detail: 'Download Ecommerce managed store go-live file',
     })
-    setDraftNotice('Ecommerce go-live file downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.')
+    setDraftNotice('Ecommerce go-live file downloaded. No product, customer, payment, delivery, stock, Shop, or company account state changed.')
   }
   const aiDeskRows = [
     ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
@@ -2034,7 +2034,7 @@ export function EcommerceProduct() {
                 ? 'Shop catalog changed'
                 : savedDraftIsCurrent
                 ? managedIdentity
-                  ? `Saved to workspace · revision ${savedDraft?.revision}`
+                ? `Saved to company · revision ${savedDraft?.revision}`
                   : `Saved on this device · revision ${savedDraft?.revision}`
                 : savedDraft ? 'Unsaved changes' : 'Not saved yet'}</strong>
               <small>{catalogHydrating
