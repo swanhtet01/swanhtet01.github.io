@@ -349,6 +349,7 @@ a { color: inherit; }
 .operation-module > .split-workspace, .operation-module > .module-today, .operation-module > .control-workspace, .operation-module > .inventory-panel { height: auto; min-height: 0; flex: 1; }
 .production-operation-module { overflow-y: auto; padding-right: 2px; scrollbar-gutter: stable; }
 .production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; }
+.production-operation-module > .control-workspace { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; }
 .production-operation-module > .plant-batch-disclosure { flex: 0 0 auto; }
 .production-operation-module > .production-view > .output-panel { position: sticky; top: 0; height: min(620px,calc(100svh - 240px)); max-height: 620px; align-self: start; }
 .split-workspace { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(300px,.85fr) minmax(0,1.15fr); gap: 11px; }
@@ -1810,6 +1811,7 @@ textarea { min-height: 72px; resize: vertical; }
   .orders-module > .order-workspace { min-height: 0; flex: none; }
   .production-operation-module { overflow: visible; padding-right: 0; scrollbar-gutter: auto; }
   .production-operation-module > .production-view { min-height: 0; }
+  .production-operation-module > .control-workspace { min-height: 0; flex: none; }
   .production-operation-module > .production-view > .output-panel { position: fixed; top: auto; right: 6px; bottom: calc(67px + env(safe-area-inset-bottom)); z-index: 72; width: min(480px,calc(100% - 12px)); height: auto; max-height: calc(100svh - 78px - env(safe-area-inset-bottom)); overflow-y: auto; border-radius: 18px 18px 8px 8px; padding: 16px; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(24px) scale(.985); transition: opacity .18s ease, transform .18s ease, visibility .18s; }
   .operation-module > .split-workspace, .operation-module > .module-today, .operation-module > .control-workspace, .operation-module > .inventory-panel { flex: none; }
   .production-view .output-panel.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: none; }

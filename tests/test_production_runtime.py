@@ -630,6 +630,40 @@ def opened_issue_state(
     return state
 
 
+def quality_corrective_action(
+    current: dict[str, object],
+    *,
+    issue_id: str,
+    failure_mode: str = "Seal temperature drift",
+    cause_category: str = "machine",
+) -> dict[str, object]:
+    recurrence_key = f"{cause_category}:{failure_mode.lower().replace(' ', '-')}"
+    prior = sorted(
+        (
+            issue
+            for issue in current["issues"]
+            if issue["id"] != issue_id
+            and issue["status"] == "resolved"
+            and issue.get("resolution", {})
+            .get("qualityCorrectiveAction", {})
+            .get("recurrenceKey")
+            == recurrence_key
+        ),
+        key=lambda issue: (issue["resolution"]["resolvedAt"], issue["id"]),
+    )
+    return {
+        "contract": "supermega.production.quality-capa.v1",
+        "failureMode": failure_mode,
+        "causeCategory": cause_category,
+        "rootCause": "Heater feedback drifted outside the reviewed control range.",
+        "correctiveAction": "Recalibrated the feedback loop and updated the first-piece check.",
+        "verificationResult": "Three consecutive samples remained inside the approved range.",
+        "effectivenessOwner": "Quality supervisor",
+        "recurrenceKey": recurrence_key,
+        "priorIssueIds": [issue["id"] for issue in prior],
+    }
+
+
 def resolved_issue_state(
     current: dict[str, object],
     evidence: dict[str, str],
@@ -643,6 +677,11 @@ def resolved_issue_state(
         if issue["id"] == issue_id
     )
     issue = state["issues"][index]
+    quality_action = (
+        quality_corrective_action(current, issue_id=issue_id)
+        if issue["kind"] == "quality" and {"severity", "owner", "dueAt", "containment"}.issubset(issue)
+        else None
+    )
     state["issues"][index] = {
         **issue,
         "status": "resolved",
@@ -652,6 +691,11 @@ def resolved_issue_state(
             "resolvedBy": evidence["actor"],
             "reason": evidence["reason"],
             "evidenceReference": evidence["evidenceReference"],
+            **(
+                {"qualityCorrectiveAction": deepcopy(quality_action)}
+                if quality_action is not None
+                else {}
+            ),
         },
     }
     state["revision"] += 1
@@ -661,6 +705,11 @@ def resolved_issue_state(
             kind="issue_resolved",
             subject_id=issue_id,
             summary=f"Resolved {issue['kind']} issue for {issue['area']}",
+            **(
+                {"qualityCorrectiveAction": deepcopy(quality_action)}
+                if quality_action is not None
+                else {}
+            ),
         ),
         *state["events"],
     ]
@@ -3142,6 +3191,95 @@ class ProductionRuntimeTests(unittest.TestCase):
             resolved["issues"][1]["resolution"]["resolvedBy"],
             ACTOR,
         )
+        first_capa = resolved["issues"][1]["resolution"]["qualityCorrectiveAction"]
+        self.assertEqual(first_capa["contract"], "supermega.production.quality-capa.v1")
+        self.assertEqual(first_capa["priorIssueIds"], [])
+
+        myanmar_capa = quality_corrective_action(
+            two_open,
+            issue_id="ISSUE-REAL-001",
+            failure_mode="အပူချိန် လွဲ",
+        )
+        self.assertEqual(
+            myanmar_capa["recurrenceKey"],
+            "machine:အပူချိန်-လွဲ",
+        )
+        myanmar_state = resolved_issue_state(two_open, resolve_evidence)
+        myanmar_state["issues"][1]["resolution"]["qualityCorrectiveAction"] = deepcopy(
+            myanmar_capa
+        )
+        myanmar_state["events"][0]["qualityCorrectiveAction"] = deepcopy(
+            myanmar_capa
+        )
+        self.assertEqual(validate_production_state(myanmar_state), myanmar_state)
+
+        repeat_open_evidence = action_evidence(
+            "ACT-ISSUE-OPEN-003",
+            captured_at="2026-07-24T09:40:00.000Z",
+        )
+        repeat_open = apply_event(
+            resolved,
+            "production.issue.opened",
+            opened_issue_state(
+                resolved,
+                repeat_open_evidence,
+                issue_id="ISSUE-REAL-003",
+            ),
+            repeat_open_evidence,
+        )
+        repeat_resolve_evidence = action_evidence(
+            "ACT-ISSUE-RESOLVE-003",
+            captured_at="2026-07-24T09:45:00.000Z",
+        )
+        recurring = apply_event(
+            repeat_open,
+            "production.issue.resolved",
+            resolved_issue_state(
+                repeat_open,
+                repeat_resolve_evidence,
+                issue_id="ISSUE-REAL-003",
+            ),
+            repeat_resolve_evidence,
+        )
+        repeat_capa = recurring["issues"][0]["resolution"]["qualityCorrectiveAction"]
+        self.assertEqual(repeat_capa["priorIssueIds"], ["ISSUE-REAL-001"])
+
+        missing_capa = resolved_issue_state(two_open, resolve_evidence)
+        missing_capa["issues"][1]["resolution"].pop("qualityCorrectiveAction")
+        missing_capa["events"][0].pop("qualityCorrectiveAction")
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "requires structured CAPA evidence",
+        ):
+            validate_production_state(missing_capa)
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "requires structured CAPA evidence",
+        ):
+            apply_event(
+                two_open,
+                "production.issue.resolved",
+                missing_capa,
+                resolve_evidence,
+            )
+
+        forged_recurrence = resolved_issue_state(
+            repeat_open,
+            repeat_resolve_evidence,
+            issue_id="ISSUE-REAL-003",
+        )
+        forged_recurrence["issues"][0]["resolution"]["qualityCorrectiveAction"]["priorIssueIds"] = []
+        forged_recurrence["events"][0]["qualityCorrectiveAction"]["priorIssueIds"] = []
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "recurrence links",
+        ):
+            apply_event(
+                repeat_open,
+                "production.issue.resolved",
+                forged_recurrence,
+                repeat_resolve_evidence,
+            )
 
         repeat_evidence = action_evidence(
             "ACT-ISSUE-RESOLVE-AGAIN",
