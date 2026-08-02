@@ -45,7 +45,7 @@ type PublishStep = 'checks' | 'evidence' | 'approval' | 'snapshot'
 const publishSteps: Array<{ id: PublishStep; label: string }> = [
   { id: 'checks', label: 'Checks' },
   { id: 'evidence', label: 'Evidence' },
-  { id: 'approval', label: 'Approval' },
+  { id: 'approval', label: 'Review' },
   { id: 'snapshot', label: 'Site file' },
 ]
 
@@ -107,7 +107,7 @@ export function PublishWorkspace({
     : approvalIsCurrent
       ? 'Ready to record'
       : evidenceIsCurrent && contentChecksPass
-        ? 'Needs approval'
+        ? 'Needs review'
         : contentChecksPass
           ? 'Needs evidence'
           : 'Needs fixes'
@@ -161,9 +161,9 @@ export function PublishWorkspace({
     >
       <header className="website-panel-head publish-flow-header">
         <div>
-          <span className="website-eyebrow">Safe publish workflow</span>
-          <h2 id="publish-editor-title">Review and save the site</h2>
-          <p>Finish the checks once, approve the revision, then download the site file.</p>
+          <span className="website-eyebrow">Website file checklist</span>
+          <h2 id="publish-editor-title">Check and download the site</h2>
+          <p>Fix the pages, add review notes, then create one website file.</p>
         </div>
         <span className={'website-status ' + (publishIsCurrent ? 'is-ready' : 'is-pending')}>
           {workflowStatus}
@@ -191,10 +191,10 @@ export function PublishWorkspace({
       </nav>
 
       <div className="publish-flow-boundary" role="note">
-        <strong>{managedActorId ? 'Managed workspace record' : 'Device-local record'}</strong>
+        <strong>{managedActorId ? 'Company account record' : 'This device only'}</strong>
         <span>{managedActorId
-          ? 'Saved through the managed command history. No deployment, domain, payment, stock, message, or order change happens here.'
-          : 'Stored on this device, not verified by a managed service. No deployment, domain, payment, stock, message, or order change happens here.'}</span>
+          ? 'Saved in the company history. No deployment, domain, payment, stock, message, or order change happens here.'
+          : 'Stored in this browser. No deployment, domain, payment, stock, message, or order change happens here.'}</span>
       </div>
 
       <div className="website-editor-scroll publish-flow-body" ref={bodyRef}>
@@ -255,8 +255,8 @@ export function PublishWorkspace({
               <div>
                 <span className="website-step" aria-hidden="true">2</span>
                 <div>
-                  <h3 id="evidence-title">Record review evidence</h3>
-                  <p>Each record is an accountable claim for this exact revision.</p>
+                  <h3 id="evidence-title">Add review notes</h3>
+                  <p>Save proof for this exact version of the website.</p>
                 </div>
               </div>
               <span className={'website-status ' + (evidenceIsCurrent ? 'is-ready' : 'is-pending')}>
@@ -320,18 +320,18 @@ export function PublishWorkspace({
                 />
               </label>
               <label>
-                <span>{managedActorId ? 'Signed-in actor' : 'Verified by'}</span>
+                <span>{managedActorId ? 'Signed in as' : 'Checked by'}</span>
                 <input
                   disabled={Boolean(managedActorId)}
                   maxLength={80}
                   onChange={(event) => setEvidenceVerifier(event.target.value)}
-                  placeholder={managedActorId ? 'Authenticated identity' : 'Accountable person or role'}
+                  placeholder={managedActorId ? 'Signed-in account' : 'Name or role'}
                   required
                   value={managedActorId || evidenceVerifier}
                 />
               </label>
               <button className="website-button is-secondary" disabled={Boolean(submitting)} type="submit">
-                {submitting === 'evidence' ? 'Saving…' : 'Record evidence'}
+                {submitting === 'evidence' ? 'Saving…' : 'Save review note'}
               </button>
             </form>
 
@@ -340,7 +340,7 @@ export function PublishWorkspace({
                 Back to checks
               </button>
               <button className="website-button is-primary" onClick={() => selectStep('approval')} type="button">
-                Review approval
+                Final review
               </button>
             </footer>
           </section>
@@ -356,8 +356,8 @@ export function PublishWorkspace({
               <div>
                 <span className="website-step" aria-hidden="true">3</span>
                 <div>
-                  <h3 id="approval-title">Human approval</h3>
-                  <p>Approval is bound to this revision and its current evidence.</p>
+                  <h3 id="approval-title">Final review</h3>
+                  <p>This confirms the current pages and review notes.</p>
                 </div>
               </div>
               <span className={'website-status ' + (approvalIsCurrent ? 'is-ready' : 'is-pending')}>
@@ -367,14 +367,14 @@ export function PublishWorkspace({
 
             {!allChecksPass ? (
               <div className="publish-flow-gate-note" role="status">
-                <strong>Approval is locked</strong>
+                <strong>Review is locked</strong>
                 <p>{passedCount}/{checks.length} readiness checks pass. Complete the blocked website checks and evidence first.</p>
               </div>
             ) : null}
 
             {latestApproval ? (
               <div className={'website-approval-record ' + (approvalIsCurrent ? 'is-current' : 'is-stale')}>
-                <strong>{approvalIsCurrent ? 'Current approval' : latestApproval.migratedFromV1 ? 'Historical v1 approval' : 'Superseded by workspace changes'}</strong>
+                <strong>{approvalIsCurrent ? 'Current review' : latestApproval.migratedFromV1 ? 'Historical review' : 'Superseded by workspace changes'}</strong>
                 <p>{latestApproval.note}</p>
                 <small>{latestApproval.reviewer} · {formatTimestamp(latestApproval.approvedAt)} · content r{latestApproval.source.contentRevision}</small>
               </div>
@@ -383,12 +383,12 @@ export function PublishWorkspace({
             <form className="website-approval-form" onSubmit={submitApproval}>
               <div className="website-form-grid two-columns">
                 <label>
-                  <span>Human reviewer</span>
+                  <span>Reviewer</span>
                   <input
                     disabled={Boolean(managedActorId) || !allChecksPass || approvalIsCurrent}
                     maxLength={80}
                     onChange={(event) => setReviewer(event.target.value)}
-                    placeholder={managedActorId ? 'Authenticated identity' : 'Name or accountable role'}
+                    placeholder={managedActorId ? 'Signed-in account' : 'Name or role'}
                     required
                     value={managedActorId || reviewer}
                   />
@@ -412,18 +412,18 @@ export function PublishWorkspace({
                   onChange={(event) => setApprovalConfirmed(event.target.checked)}
                   type="checkbox"
                 />
-                <span>I reviewed this exact content revision and accept the recorded evidence.</span>
+                <span>I reviewed this exact website version and accept the saved notes.</span>
               </label>
               <div className="website-gate-actions">
                 <small>{approvalIsCurrent
-                  ? 'This exact evidence set already has a current human approval.'
-                  : allChecksPass ? 'Ready for a named human decision.' : 'Complete all readiness checks to unlock approval.'}</small>
+                  ? 'This exact website version is already reviewed.'
+                  : allChecksPass ? 'Ready for a named reviewer.' : 'Complete all checks before final review.'}</small>
                 <button
                   className="website-button is-primary"
                   disabled={!allChecksPass || !approvalConfirmed || approvalIsCurrent || Boolean(submitting)}
                   type="submit"
                 >
-                  {approvalIsCurrent ? 'Current revision approved' : submitting === 'approval' ? 'Saving…' : 'Record approval'}
+                  {approvalIsCurrent ? 'Website reviewed' : submitting === 'approval' ? 'Saving…' : 'Save final review'}
                 </button>
               </div>
             </form>
@@ -463,8 +463,8 @@ export function PublishWorkspace({
                 <strong>{publishIsCurrent
                   ? 'The approved site is retained and ready to download.'
                   : approvalIsCurrent
-                    ? 'Approval matches. Create the site file.'
-                    : 'A current approval is required.'}</strong>
+                    ? 'Review matches. Create the site file.'
+                    : 'A current review is required.'}</strong>
                 <p>The file contains only ready pages and public site content. It does not deploy or change a domain.</p>
               </div>
               <div className="website-local-publish-controls">
@@ -532,7 +532,7 @@ export function PublishWorkspace({
 
             <footer className="publish-flow-actions">
               <button className="website-button is-secondary" onClick={() => selectStep('approval')} type="button">
-                Back to approval
+                Back to review
               </button>
             </footer>
           </section>

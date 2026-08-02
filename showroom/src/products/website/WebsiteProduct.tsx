@@ -73,8 +73,8 @@ const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
     copy: 'Edit one section, preview it, then save or discard.',
   },
   publish: {
-    title: 'Review release',
-    copy: 'Verify the managed revision and its accountable release record.',
+    title: 'Prepare website file',
+    copy: 'Check the pages, record review notes, then download the approved website file.',
   },
 }
 
@@ -236,7 +236,7 @@ export function WebsiteProduct() {
     : view === 'publish' && storageMode !== 'managed'
       ? {
           title: 'Your website is ready',
-          copy: 'Download it now. Go live only after owner approval.',
+          copy: 'Download it now. Go live only after final review.',
         }
       : viewCopy[view]
   const savedStateNotice = storageMode === 'managed'
@@ -326,11 +326,11 @@ export function WebsiteProduct() {
 
   function openWorkspaceView(nextView: WebsiteView) {
     if (nextView === 'publish' && hasUnsavedChanges) {
-      setNotice('Save or discard the unsaved Website preview before reviewing release evidence.')
+      setNotice('Save or discard the unsaved Website preview before reviewing the file checklist.')
       return
     }
     if (nextView === 'publish' && !canReview) {
-      setNotice('Finish and save every page before reviewing release evidence.')
+      setNotice('Finish and save every page before reviewing the file checklist.')
       return
     }
     const next = new URLSearchParams(searchParams)
@@ -374,7 +374,7 @@ export function WebsiteProduct() {
         ? [...retained, nextRelease]
         : retained.map((record, recordIndex) => recordIndex === index ? nextRelease : record)
       return { ...current, releaseRecords }
-    }, 'Release record saved to this managed workspace.', true)
+    }, 'Website checklist saved to this company account.', true)
     return result.ok ? { ok: true as const } : result
   }
 
@@ -717,7 +717,7 @@ export function WebsiteProduct() {
         actionId: createId('local-snapshot'),
         capturedAt: new Date().toISOString(),
       }),
-      'Approved site file saved and confirmed. No deployment occurred.',
+      'Approved website file saved. Nothing was deployed.',
       true,
     )
   }
@@ -739,7 +739,7 @@ export function WebsiteProduct() {
       link.click()
       link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 0)
-      setNotice(`${download.filename} downloaded. No deployment or domain change occurred.`)
+      setNotice(`${download.filename} downloaded. No site or domain was changed.`)
     } catch (error) {
       setNotice('The retained site file failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
     }
@@ -784,9 +784,9 @@ export function WebsiteProduct() {
             : leadCounts.new
               ? 'Review new inquiries'
               : managedReleaseRequired && !approvalIsCurrent
-                ? 'Approve website'
+                ? 'Final review'
                 : managedReleaseRequired && !publishIsCurrent
-                  ? 'Save release file'
+                  ? 'Save website file'
                   : managedReleaseRequired
                     ? 'Review go-live plan'
                     : 'Download website'
@@ -801,33 +801,33 @@ export function WebsiteProduct() {
           : failingContentChecks.length
             ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
             : leadCounts.new
-              ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a named owner and a local decision before follow-up.`
+              ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
               : managedReleaseRequired && !approvalIsCurrent
-                ? 'Owner approval is required before a release file is saved.'
+                ? 'Final review is required before a website file is saved.'
                 : managedReleaseRequired && !publishIsCurrent
                   ? 'Save a static release file for the approved website.'
                   : managedReleaseRequired
-                    ? 'Review the launch checklist. Deployment still requires owner execution.'
+                    ? 'Review the go-live checklist. Deployment still happens separately.'
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
   const websiteOwnerGate = storageIssue || canRepairLocalStorage
-    ? 'Owner exports backup or confirms repair before continuing.'
+    ? 'Export a backup or confirm repair before continuing.'
     : starterSetupActive
-      ? 'Owner reviews the generated pages before saving.'
+      ? 'Review the generated pages before saving.'
       : starterAvailable
-        ? 'Owner chooses to reuse the sample or enter a real business brief.'
+        ? 'Choose the sample or enter a real business brief.'
         : hasUnsavedChanges
-          ? 'Owner saves or discards the preview.'
+          ? 'Save or discard the preview.'
           : failingContentChecks.length
-            ? 'Owner fixes content, navigation, proof, and CTA readiness.'
+            ? 'Fix content, navigation, proof, and contact readiness.'
             : leadCounts.new
-              ? 'Owner qualifies or closes each inquiry; no customer message is sent here.'
+              ? 'You qualify or close each inquiry; no customer message is sent here.'
               : managedReleaseRequired && !approvalIsCurrent
-                ? 'Owner records approval with evidence.'
+                ? 'You record review evidence.'
                 : managedReleaseRequired && !publishIsCurrent
-                  ? 'Owner records the release snapshot.'
+                  ? 'You create the website file.'
                   : managedReleaseRequired
-                    ? 'Owner approves release manager and reviewer before deployment planning.'
-                    : 'Owner decides where it goes live.'
+                    ? 'You review the go-live checklist before deployment planning.'
+                    : 'You decide where it goes live.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
     : starterSetupActive || starterAvailable
@@ -837,7 +837,7 @@ export function WebsiteProduct() {
         : leadCounts.new
           ? 'Review inquiries'
         : managedReleaseRequired
-          ? 'Open release'
+          ? 'Open checklist'
           : 'Get website'
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'
@@ -851,11 +851,11 @@ export function WebsiteProduct() {
     ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
     ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
     ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
-    ['Approval', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
-    ['Site package', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
+    ['Review', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
+    ['File', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
   ] as const
   const websiteTodaySource = storageMode === 'managed'
-    ? `Managed Website · ${managedActorId || 'authenticated workspace'}`
+    ? `Company account · ${managedActorId || 'signed in'}`
     : storageMode === 'browser-local'
       ? 'Saved on this device'
       : 'Available in this browser session'
@@ -1181,7 +1181,7 @@ export function WebsiteProduct() {
                   </>
                 ) : storageMode === 'managed' ? canReview ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
-                    Review release
+                    Prepare file
                   </button>
                 ) : null : surface === 'work' ? (
                   <button className="website-button is-primary" onClick={downloadTrialSite} type="button">
@@ -1194,7 +1194,7 @@ export function WebsiteProduct() {
           ) : null}
 
           {!starterSetupActive ? <details className="website-start-tools">
-            <summary><span><strong>Leads</strong><small>Capture and owner review</small></span><b>Optional</b></summary>
+            <summary><span><strong>Inquiries</strong><small>Capture and review</small></span><b>Optional</b></summary>
             <div>
           {websiteTodayState !== 'ready' ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
             <div className="website-today-priority">
@@ -1230,10 +1230,10 @@ export function WebsiteProduct() {
                   {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action before capturing inquiries.</small> : null}
                 </form>
 
-                {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible owner<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Named person or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing, or closure reason" value={leadDecisionNote} /></label></div> : null}
+                {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible person<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Name or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing, or closure reason" value={leadDecisionNote} /></label></div> : null}
                 <div className="website-lead-list">
                   {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
-                    <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Owner: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
+                    <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Person: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
                     {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
                   </article>) : <p className="website-lead-empty">No inquiry yet. Add one above to test capture, ownership, decision, persistence, and export.</p>}
                 </div>
