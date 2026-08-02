@@ -277,7 +277,7 @@ function Brand() {
 }
 
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Sample mode'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed data' : 'Sample mode'}</span>
 }
 
 export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: string; title: string; copy: string; actions?: ReactNode }) {
@@ -358,10 +358,10 @@ export function CoreLayout() {
         <nav className="core-nav" aria-label="Application">
           {navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Company sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Managed access</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Company sign in" className="account-shell-link mobile-account-link" to={companyLoginPath}>Sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Managed access" className="account-shell-link mobile-account-link" to={companyLoginPath}>Access</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} product={routeProduct} /></Suspense> : null}
@@ -386,7 +386,7 @@ export function ProductHomePage() {
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Open a working sample and do one useful task. Setup and advanced controls stay out of the way until you need them." eyebrow="SuperMega" title="Choose what you want to run." />
+      <PageHeading copy="Pick one product, open the sample, and do one useful task. Setup stays hidden until you need real data." eyebrow="SuperMega" title="Start with one product." />
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, examples, path]) => (
           <article className="product-track-card" key={name}>
@@ -403,12 +403,12 @@ export function ProductHomePage() {
         ))}
       </nav>
       <details className="product-home-setup">
-        <summary><span><strong>Business overview and setup</strong><small>Attention, imports, access, and company data</small></span><b>Open when needed</b></summary>
+        <summary><span><strong>Setup and data import</strong><small>Imports, readiness, and managed access</small></span><b>Open when needed</b></summary>
         <div>
           <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
           <section className="product-home-operating-model" aria-label="SuperMega operating model">
             <div><span className="core-eyebrow">This device</span><strong>Sample data, imports, review, and evidence.</strong></div>
-            <div><span className="core-eyebrow">Company data</span><strong>Team records, AI context, roles, audit, and controlled writes.</strong></div>
+            <div><span className="core-eyebrow">Managed workspace</span><strong>Real data, approved users, audit, and controlled writes.</strong></div>
             <Link className="core-button primary" to="/settings/">Open setup</Link>
           </section>
           <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
