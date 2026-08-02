@@ -1,14 +1,129 @@
 import { execFileSync } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { readFile, readdir } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 
 const verifyCurrentHead = process.argv.includes('--current-head')
 const selfTest = process.argv.includes('--self-test')
+const artifactSelfTest = process.argv.includes('--artifact-self-test')
 const configuredExpectedCommit = String(process.env.EXPECTED_RELEASE_COMMIT || '').trim().toLowerCase()
 
 export function extractTrialEvidenceVersion(value) {
   const match = /contract\s*:\s*['"]supermega_trial_evidence['"][\s\S]{0,160}?\bversion\s*:\s*(\d+)/.exec(String(value || ''))
   return Number(match?.[1])
+}
+
+export function verifyCurrentReleaseAssets({
+  manifest,
+  assetCorpus,
+  operationsChunk,
+  productSystemNavigatorChunk,
+  productHomeReadinessCorpus,
+  settingsChunk,
+  ecommerceProductCorpus,
+  websiteChunk,
+  clientDataOnboardingChunk,
+  managedLoginChunk,
+  managedAccountChunk,
+  companyBackupCorpus,
+  activationRunbookChunk,
+}) {
+  const groups = [
+    ['launcher', assetCorpus, ['SUPERMEGA', 'Start with one product.', 'Pick one product and use the working demo first. Add your data only after the flow makes sense.', 'Sales and inventory', 'Production and quality', 'Pages and inquiries', 'Storefront and checkout', 'Try demo', 'Add your data', 'Later', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['shop_plant', operationsChunk, ['Complete sale', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
+    ['module_drawer', productSystemNavigatorChunk, ['Modules', ' working / ', ' setup', 'Start with the working demo.', 'Use the sample workflow first. Setup and imports can wait.', 'Use now', 'Add data later', 'Advanced modules stay hidden until a real client needs them.']],
+    ['support_helper', productHomeReadinessCorpus, ['Support helper', 'Uses Shop, Plant, Website, and Ecommerce records.', 'Readiness review status', 'Mark reviewed', 'Acknowledgement confirms review only.', 'supermega.local_business_snapshot.v1', 'supermega.local_business_answer.v1']],
+    ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence']],
+    ['website', websiteChunk, ['Make this website yours', 'Download site', 'Website starter brief generated', 'Not online yet']],
+    ['ecommerce', ecommerceProductCorpus, ['Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Payment and customer messages stay locked.', 'Shop review', 'supermega.ecommerce.order_import_review_packet.v1']],
+    ['data_onboarding', clientDataOnboardingChunk, ['Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'No customer message, payment, website publish, or automation runs from this check.']],
+    ['company_login', managedLoginChunk, ['Open your company.', 'Try free demo', 'Request company account']],
+    ['account_recovery', managedAccountChunk, ['Recover your account.', 'Secure your account.', 'Save password and continue']],
+    ['company_backup', companyBackupCorpus, ['supermega.company_backup.v1', 'Customer-owned and encrypted', 'Download encrypted backup', 'Auth sessions, company account IDs, and credentials are excluded.']],
+    ['activation', activationRunbookChunk, ['Evidence to go live', 'proof gates ready']],
+  ]
+  let checks = 0
+  for (const [group, corpus, requiredValues] of groups) {
+    for (const required of requiredValues) {
+      checks += 1
+      if (!corpus.includes(required)) throw new Error(`missing_current_release_asset:${group}:${required}`)
+    }
+  }
+  const completeCorpus = groups.map(([, corpus]) => corpus).join('\n')
+  for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
+    checks += 1
+    if (completeCorpus.toLowerCase().includes(forbidden.toLowerCase())) throw new Error(`retired_current_release_asset:${forbidden}`)
+  }
+  return { contract: 'supermega.current-release-assets.v1', checks, groups: groups.length }
+}
+
+async function readArtifactChunk(assetsDir, assetNames, pattern) {
+  const name = assetNames.find((candidate) => pattern.test(candidate))
+  if (!name) throw new Error(`artifact_chunk_missing:${pattern.source}`)
+  return readFile(join(assetsDir, name), 'utf8')
+}
+
+if (artifactSelfTest) {
+  const root = resolve(import.meta.dirname, '..')
+  const distDir = resolve(root, 'showroom', 'dist')
+  const assetsDir = resolve(distDir, 'assets')
+  const [rootHtml, artifactManifest, assetNames] = await Promise.all([
+    readFile(resolve(distDir, 'index.html'), 'utf8'),
+    readFile(resolve(root, 'site-manifest.json'), 'utf8').then(JSON.parse),
+    readdir(assetsDir),
+  ])
+  const rootAssetPaths = [
+    ...rootHtml.matchAll(/<script[^>]+src="([^"]+)"/g),
+    ...rootHtml.matchAll(/<link[^>]+href="([^"]+\.(?:js|css))"/g),
+  ].map((match) => match[1].replace(/^\//, ''))
+  const assetCorpus = (await Promise.all(rootAssetPaths.map((path) => readFile(resolve(distDir, path), 'utf8')))).join('\n')
+  const [
+    operationsChunk,
+    productSystemNavigatorChunk,
+    productHomeReadinessChunk,
+    businessCommandChunk,
+    settingsChunk,
+    ecommerceChunk,
+    ecommercePacketChunk,
+    websiteChunk,
+    clientDataOnboardingChunk,
+    managedLoginChunk,
+    managedAccountChunk,
+    companyBackupChunk,
+    activationRunbookChunk,
+  ] = await Promise.all([
+    readArtifactChunk(assetsDir, assetNames, /^(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ProductSystemNavigator-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ProductHomeReadiness-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^business-command-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^SettingsPage-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^EcommerceProduct-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ecommerce-order-review-packet-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^WebsiteProduct-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ClientDataOnboarding-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ManagedLoginPage-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ManagedAccountPage-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^CompanyBackupPanel-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ManagedActivationRunbook-[A-Za-z0-9_-]+\.js$/),
+  ])
+  const evidenceVersion = extractTrialEvidenceVersion(settingsChunk)
+  if (!Number.isInteger(evidenceVersion)) throw new Error('artifact_settings_evidence_version_missing')
+  const result = verifyCurrentReleaseAssets({
+    manifest: artifactManifest,
+    assetCorpus,
+    operationsChunk,
+    productSystemNavigatorChunk,
+    productHomeReadinessCorpus: `${productHomeReadinessChunk}\n${businessCommandChunk}`,
+    settingsChunk,
+    ecommerceProductCorpus: `${ecommerceChunk}\n${ecommercePacketChunk}`,
+    websiteChunk,
+    clientDataOnboardingChunk,
+    managedLoginChunk,
+    managedAccountChunk,
+    companyBackupCorpus: `${settingsChunk}\n${companyBackupChunk}`,
+    activationRunbookChunk,
+  })
+  console.log(JSON.stringify({ ok: true, ...result, evidenceVersion }, null, 2))
+  process.exit(0)
 }
 
 if (selfTest) {
@@ -224,6 +339,9 @@ const productHomeReadinessCorpus = `${productHomeReadinessChunk}\n${businessComm
 const operationsChunkPath = /assets\/(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!operationsChunkPath) throw new Error('operations_chunk_missing')
 const operationsChunk = (await get(`/${operationsChunkPath}`)).body
+const productSystemNavigatorChunkPath = /assets\/ProductSystemNavigator-[A-Za-z0-9_-]+\.js/.exec(`${assetCorpus}\n${operationsChunk}`)?.[0]
+if (!productSystemNavigatorChunkPath) throw new Error('product_system_navigator_chunk_missing')
+const productSystemNavigatorChunk = (await get(`/${productSystemNavigatorChunkPath}`)).body
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!settingsChunkPath) throw new Error('settings_chunk_missing')
 const settingsChunk = (await get(`/${settingsChunkPath}`)).body
@@ -261,6 +379,23 @@ const websiteChunk = (await get(`/${websiteChunkPath}`)).body
 const activationRunbookChunkPath = /assets\/ManagedActivationRunbook-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!activationRunbookChunkPath) throw new Error('managed_activation_runbook_chunk_missing')
 const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).body
+const releaseAssetVerification = verifyCurrentReleaseAssets({
+  manifest,
+  assetCorpus,
+  operationsChunk,
+  productSystemNavigatorChunk,
+  productHomeReadinessCorpus,
+  settingsChunk,
+  ecommerceProductCorpus,
+  websiteChunk,
+  clientDataOnboardingChunk,
+  managedLoginChunk,
+  managedAccountChunk,
+  companyBackupCorpus,
+  activationRunbookChunk,
+})
+const legacyCopyAudit = process.env.SUPERMEGA_LEGACY_COPY_AUDIT === '1'
+if (legacyCopyAudit) {
 for (const required of ['SUPERMEGA', 'Company control', 'Start from grounded local records.', 'Free workspace', 'Premium activation', 'Managed data, AI context', 'Check readiness', 'Open product', 'Set up product', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sample mode', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_context:${required}`)
 }
@@ -600,6 +735,7 @@ for (const required of ['Managed activation evidence plan', 'Evidence to go live
 for (const forbidden of ['Pick a track. Run work.', 'Handled by SuperMega', 'Approved by owner', 'Factory MES', 'Website catalog', 'Online orders', 'Open track', 'Set up data', 'Choose what you want to run.', 'Each product opens directly to a working sample.', 'SuperMega HQ', 'One next action for the company', 'Agents prepare work', 'pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
   if (assetCorpus.toLowerCase().includes(forbidden.toLowerCase())) throw new Error(`retired_live_context:${forbidden}`)
 }
+}
 
 let deploymentFunctions = null
 if (protectedPreview) {
@@ -628,4 +764,4 @@ if (protectedPreview) {
   if (JSON.stringify(deploymentFunctions) !== JSON.stringify(['api/app'])) throw new Error(`deployment_function_surface_wrong:${deploymentFunctions.join(',')}`)
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_live', baseUrl, verificationScope, expectedCommit: expectedCommit || null, routes, release, operatingMode: health.operating_mode, agentScheduler: cloud.status, deploymentFunctions }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_live', baseUrl, verificationScope, expectedCommit: expectedCommit || null, routes, release, operatingMode: health.operating_mode, agentScheduler: cloud.status, releaseAssetVerification, legacyCopyAudit, deploymentFunctions }, null, 2))

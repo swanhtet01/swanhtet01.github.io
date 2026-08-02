@@ -173,6 +173,9 @@ jobs:
           SUPERMEGA_RELEASE_COMMIT: ${{ github.sha }}
         run: npx --yes vercel@56.1.0 build --prod --yes --token="$VERCEL_TOKEN"
 
+      - name: Verify immutable app asset contract
+        run: node tools/verify_app_release_live.mjs --artifact-self-test
+
       - name: Capture app production rollback target
         id: app-rollback-target
         env:
