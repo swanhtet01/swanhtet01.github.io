@@ -7709,7 +7709,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Material', shiftHandoff.materialEntries.length > 0 ? `${shiftHandoff.materialEntries.length} traced` : 'Need same-shift trace'],
     ['Quality', shiftHandoff.activeHolds.length + shiftHandoff.openQualityIssues.length === 0 ? 'Clear' : `${shiftHandoff.activeHolds.length + shiftHandoff.openQualityIssues.length} blockers`],
     ['Urgent', shiftHandoff.priorityProblems.length === 0 ? 'Clear' : `${shiftHandoff.priorityProblems.length} open`],
-    ['WCM', shiftHandoff.activeDowntime.length + shiftHandoff.activeMaintenance.length === 0 ? 'Clear' : `${shiftHandoff.activeDowntime.length + shiftHandoff.activeMaintenance.length} open`],
+    ['Maintenance', shiftHandoff.activeDowntime.length + shiftHandoff.activeMaintenance.length === 0 ? 'Clear' : `${shiftHandoff.activeDowntime.length + shiftHandoff.activeMaintenance.length} open`],
   ] as const : []
   const shiftCloseReady = Boolean(shiftHandoffIsCurrent
     && shiftHandoff
@@ -7786,7 +7786,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : heldJobs.length
         ? 'Review quality holds'
         : openDowntimeIntervals.length + openMaintenanceRecords.length
-          ? 'Close WCM records'
+          ? 'Close maintenance records'
           : activeJobs.length
             ? 'Record next job output'
             : !plantHandoffReady
@@ -7799,7 +7799,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : heldJobs.length
         ? `${heldJobs.length} job${heldJobs.length === 1 ? '' : 's'} held by quality need evidence review.`
         : openDowntimeIntervals.length + openMaintenanceRecords.length
-          ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} WCM record${openDowntimeIntervals.length + openMaintenanceRecords.length === 1 ? '' : 's'} remain open.`
+          ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} maintenance record${openDowntimeIntervals.length + openMaintenanceRecords.length === 1 ? '' : 's'} remain open.`
           : activeJobs.length
             ? `${activeJobs[0].id} is the next active job by priority and due time.`
             : !plantHandoffReady
@@ -7812,7 +7812,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : heldJobs.length
         ? 'Clear quality holds'
         : openDowntimeIntervals.length + openMaintenanceRecords.length
-          ? 'Close WCM work'
+          ? 'Close maintenance work'
           : activeJobs.length
             ? 'Record next output'
             : !plantHandoffReady
@@ -7821,7 +7821,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantControlRows = [
     ['Jobs', activeJobs.length ? `${activeJobs.length} active` : 'Plan'],
     ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
-    ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
+    ['Maintenance', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
     ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'No trace'],
     ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
     ['Write status', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
@@ -7830,11 +7830,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Plan', activeJobs.length ? `${activeJobs.length} active` : 'Add job'],
     ['Execute', activeJobs[0] ? `${activeJobs[0].id} next` : 'No active job'],
     ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
-    ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
+    ['Maintenance', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace'],
     ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
   ] as const
-  const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and shift-close writes.'
+  const plantControlBoundary = 'Manager reviews production, quality, maintenance, material, and shift-close changes.'
   const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
   const plantAutopilotStage = !productionCanWrite
     ? 'Restore Plant readiness'
@@ -7845,7 +7845,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : heldJobs.length
           ? 'Review quality hold'
           : openWcmCount
-            ? 'Close WCM record'
+            ? 'Close maintenance record'
             : activeJobs.length
               ? 'Record production evidence'
               : !plantHandoffReady
@@ -7870,7 +7870,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : heldJobs.length
           ? 'Quality hold'
           : openWcmCount
-            ? 'WCM close'
+            ? 'Maintenance close'
             : activeJobs.length && !materialEntries.length
               ? 'Trace start'
               : !plantHandoffReady
@@ -7889,7 +7889,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Blocker', mesDispatchBlocker],
     ['Evidence', mesDispatchEvidence],
     ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Build'],
-    ['Boundary', 'No equipment write'],
+    ['Safety', 'Review first'],
   ] as const
   const openMaterialIssues = openIssues.filter((issue) => issue.kind === 'materials')
   const primaryOrderExecution = productionOrderPortfolioEntries(production)[0]?.execution ?? null
@@ -7932,7 +7932,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : heldJobs.length || openQualityIssues.length
           ? 'Resolve quality before cost'
           : openWcmCount
-            ? 'Close WCM before cost'
+            ? 'Close maintenance before cost'
             : !plantHandoffReady
               ? 'Prepare cost review'
               : completedJobs.length
@@ -7943,7 +7943,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} units` : 'None'],
     ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'Missing'],
     ['Quality', heldJobs.length || openQualityIssues.length ? 'Blocked' : 'Clear'],
-    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Maintenance', openWcmCount ? `${openWcmCount} open` : 'Closed'],
     ['Cost gate', plantHandoffReady && materialEntries.length && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked'],
   ] as const
   const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && materialEntries.length && plantHandoffReady && !heldJobs.length && !openQualityIssues.length && !openWcmCount)
@@ -7962,7 +7962,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : heldJobs.length || openQualityIssues.length
         ? 'Resolve quality holds'
         : openWcmCount
-          ? 'Close WCM work'
+          ? 'Close maintenance work'
           : openMaterialIssues.length || !materialEntries.length
             ? 'Complete trace evidence'
             : !plantHandoffReady
@@ -7971,7 +7971,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantQualityReleaseRows = [
     ['Holds', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
     ['Quality', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
-    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Maintenance', openWcmCount ? `${openWcmCount} open` : 'Closed'],
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
     ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Needed'],
     ['Gate', productionCanWrite && !pendingAction ? 'Owner release' : 'Locked'],
@@ -8003,9 +8003,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     : pendingAction
       ? 'Approve pending Plant action'
       : openQualityIssues.length || heldJobs.length
-        ? 'Resolve ISO evidence'
+        ? 'Resolve audit quality'
         : openWcmCount
-          ? 'Close WCM evidence'
+          ? 'Close maintenance evidence'
           : !materialEntries.length
             ? 'Record traceability'
             : !plantHandoffReady
@@ -8014,12 +8014,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 ? 'Audit dossier ready'
                 : 'Prepare cost dossier'
   const plantComplianceDossierRows = [
-    ['ISO', openQualityIssues.length || heldJobs.length ? `${openQualityIssues.length + heldJobs.length} blocked` : 'Clear'],
-    ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
+    ['Audit quality', openQualityIssues.length || heldJobs.length ? `${openQualityIssues.length + heldJobs.length} blocked` : 'Clear'],
+    ['Maintenance', openWcmCount ? `${openWcmCount} open` : 'Closed'],
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
     ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
     ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Build'],
-    ['Boundary', 'No auto release'],
+    ['Safety', 'Review first'],
   ] as const
   const plantTodayState = !productionCanWrite
     ? 'blocked'
@@ -9128,11 +9128,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const mesDispatch = <section aria-label="Plant dispatch helper" className="plant-control mes-dispatch-control">
-    <div><span className="core-eyebrow">Daily dispatch</span><strong>{plantAgentJob}</strong><small>SuperMega shows the next station, blocker, evidence need, and shift route from live Plant state. No equipment command or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Daily dispatch</span><strong>{plantAgentJob}</strong><small>SuperMega shows the next station, blocker, evidence need, and shift route from live Plant state. The manager reviews equipment and production changes before anything is saved.</small></div>
     <div className="plant-control-rows">{mesDispatchRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
-    <div><span className="core-eyebrow">Production lifecycle</span><strong>Plan to shift close</strong><small>Follow planning, execution, quality, WCM, trace, and shift close in one place. No equipment or production write runs without manager review.</small></div>
+    <div><span className="core-eyebrow">Production lifecycle</span><strong>Plan to shift close</strong><small>Follow planning, output, quality, maintenance, material trace, and shift close in one place. No equipment or production write runs without manager review.</small></div>
     <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantMrp = <section aria-label="Plant material readiness" className="plant-control">
@@ -9140,15 +9140,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantCostReadiness = <section aria-label="Plant cost readiness" className="plant-control">
-    <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check good output, scrap, material trace, quality release, WCM closure, and shift close before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check good output, waste, material trace, quality release, maintenance closure, and shift close before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantCostPacket = <section aria-label="Plant cost review file" className="plant-control">
-    <div><span className="core-eyebrow">Cost review file</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>Package finished batch output, scrap, material trace, quality release state, WCM closure, and shift evidence for cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
+    <div><span className="core-eyebrow">Cost review file</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>Package finished batch output, waste, material trace, quality release state, maintenance closure, and shift evidence for cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
     <div className="plant-control-rows">{plantCostPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantQualityRelease = <section aria-label="Plant quality release" className="plant-control">
-    <div><span className="core-eyebrow">Quality release</span><strong>{plantQualityReleaseNext}</strong><small>Check quality holds, WCM closure, material trace, shift close, and owner release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Quality release</span><strong>{plantQualityReleaseNext}</strong><small>Check quality holds, maintenance closure, material trace, shift close, and manager release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantInspectionControl = <section aria-label="Plant inspection and CAPA" className="plant-control">
@@ -9156,7 +9156,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantComplianceDossier = <section aria-label="Plant compliance dossier" className="plant-control plant-compliance-dossier">
-    <div><span className="core-eyebrow">Compliance file</span><strong>{plantComplianceDossierNext}</strong><small>Summarize quality release, WCM closure, material traceability, output evidence, shift close, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this file.</small></div>
+    <div><span className="core-eyebrow">Compliance file</span><strong>{plantComplianceDossierNext}</strong><small>Summarize quality release, maintenance closure, material traceability, output evidence, shift close, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this file.</small></div>
     <div className="plant-control-rows">{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantJobRepairRows = plantJobImportReview
