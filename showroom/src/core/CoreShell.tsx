@@ -80,7 +80,7 @@ const checkingRuntime: RuntimeHealth = {
   auditReady: false,
   writesReady: false,
   coverageScore: 0,
-  requirements: ['Checking managed activation.'],
+  requirements: ['Checking company account readiness.'],
   activationSteps: [],
   evidencePlan: [],
   activationManifest: null,
@@ -259,7 +259,7 @@ function useRuntimeHealth() {
         })
       })
       .catch(() => {
-        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before managed activation.'] })
+        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before company account setup.'] })
       })
     return () => controller.abort()
   }, [])
@@ -383,7 +383,7 @@ export function ProductHomePage() {
   const runtime = useOutletContext<RuntimeHealth>()
   const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
   const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
-  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
+  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Pick one product and try the sample. Add your data only when it helps." eyebrow="SuperMega" title="Start with one product." />

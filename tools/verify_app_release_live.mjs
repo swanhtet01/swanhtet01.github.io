@@ -396,8 +396,12 @@ for (const required of ['supermega.pilot_outcome_report.v1', 'Free outcome proof
 for (const required of ['Premium pilot', 'Your business context, remembered.', 'SuperMega combines approved product data and owner patterns, then prepares one next move for review.', 'Owner pattern', 'Managed account', 'Approved sources', 'Counts only; raw source records are not shown here.', 'Managed company brief', 'AI learned', 'Reviewed next move', 'Verify this company, not a generic demo.', 'Find my company', 'Open company', 'Verify context', 'Keep learning checkpoint', 'Learning checkpoint kept in the managed audit. No external action ran.', 'Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.', 'Managed access recovery', 'Sign in and SuperMega will find the active companies assigned to you.', 'Recover managed access', 'Connect through Premium pilot after saving a trial.']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_premium_pilot_context:${required}`)
 }
+const managedLoginLiveCopyUpdates = new Map([
+  ['Request managed activation', 'Request company account'],
+])
 for (const required of ['Open your company.', 'Sign in once. SuperMega finds the companies assigned to you.', 'Use your work account.', 'No workspace code or technical setup is required.', 'Only active companies assigned to this account are shown.', 'Find my company', 'Open company', 'Open free workspace', 'Request managed activation']) {
-  if (!managedLoginChunk.includes(required)) throw new Error(`missing_live_managed_login_context:${required}`)
+  const currentRequired = managedLoginLiveCopyUpdates.get(required) ?? required
+  if (!managedLoginChunk.includes(currentRequired)) throw new Error(`missing_live_managed_login_context:${required}`)
 }
 for (const required of ['Recover your account.', 'Send a secure link.', 'For privacy, the result is the same whether or not the address has an account.', 'If this email belongs to a managed account, a recovery link is on its way.', 'Secure your account.', 'Secure link confirmed', 'Set your password.', 'Save password and continue', 'Request a new link', 'Only active companies assigned to this named account are shown.']) {
   if (!managedAccountChunk.includes(required)) throw new Error(`missing_live_managed_account_context:${required}`)

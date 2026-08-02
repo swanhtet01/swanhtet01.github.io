@@ -41,7 +41,7 @@ export function ManagedActivationRunbook({ runtime }: ManagedActivationRunbookPr
   const readyCount = activationSteps.length - blockers.length
   const next = blockers[0]
   const percent = Math.round((readyCount / activationSteps.length) * 100)
-  const nextRequirement = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? next?.[2] ?? 'Managed activation is ready for workspace sign-in.'
+  const nextRequirement = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? next?.[2] ?? 'Company account is ready for workspace sign-in.'
   const evidenceReady = runtime.evidencePlan.filter((item) => item.ready).length
 
   return <section aria-label="Go-live checklist" className="activation-runbook">
@@ -59,8 +59,8 @@ export function ManagedActivationRunbook({ runtime }: ManagedActivationRunbookPr
     {runtime.activationManifest ? <div className="activation-evidence-plan" aria-label="Go-live automation summary">
       <div><span className="core-eyebrow">Automation summary</span><strong>{runtime.activationManifest.ready_percent}% ready</strong></div>
       <span data-ready={runtime.activationManifest.blocked_gate_ids.length ? 'false' : 'true'}><small>Next action</small><b>{runtime.activationManifest.blocked_gate_ids.length ? 'Blocked' : 'Ready'}</b><em>{runtime.activationManifest.next_action}</em><code>{runtime.activationManifest.safe_enable.join(', ')}</code></span>
-      <span data-ready="false"><small>Authority boundary</small><b>Approval gated</b><em>{runtime.activationManifest.automation_boundary}</em></span>
+      <span data-ready="false"><small>Review boundary</small><b>Approval gated</b><em>{runtime.activationManifest.automation_boundary}</em></span>
     </div> : null}
-    <p className="authority-note">Mode: {runtime.operatingMode.replace('_', ' ')}. Keep client imports, AI learning, and operational writes locked until every activation gate is ready.</p>
+    <p className="authority-note">Mode: {runtime.operatingMode.replace('_', ' ')}. Keep client imports, AI learning, and operational writes locked until every go-live check is ready.</p>
   </section>
 }

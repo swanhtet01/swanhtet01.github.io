@@ -79,9 +79,9 @@ export function ManagedLoginPage() {
         </>}
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Checking...' : directory ? 'Open company' : 'Find my company'}</button>
         {notice ? <p className="form-notice" role="status">{notice}</p> : null}
-      </form> : <section className="managed-login-panel" aria-label="Managed activation unavailable">
-        <div><span className="core-eyebrow">Premium activation</span><h2>Managed access is not active in this release.</h2><p>Use the complete local workspace now, or request a managed company account.</p></div>
-        <div className="managed-login-actions"><Link className="core-button primary" to="/">Open free workspace</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request managed activation</a></div>
+      </form> : <section className="managed-login-panel" aria-label="Company account unavailable">
+        <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local workspace now, or request a managed company account.</p></div>
+        <div className="managed-login-actions"><Link className="core-button primary" to="/">Open free workspace</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
       </section>}
     </div>
   )

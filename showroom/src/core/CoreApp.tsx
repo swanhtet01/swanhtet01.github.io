@@ -1101,7 +1101,7 @@ function useRuntimeHealth() {
         })
       })
       .catch(() => {
-        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before managed activation.'] })
+        if (!controller.signal.aborted) setRuntime({ ...checkingRuntime, status: 'demo', serviceStatus: 'unavailable', operatingMode: 'isolated_demo', requirements: ['Restore health before company account setup.'] })
       })
     return () => controller.abort()
   }, [])
@@ -1227,7 +1227,7 @@ export function ProductHomePage() {
     ['Proof', proofNamed ? 'Acceptance proof named' : 'Needs acceptance proof', proofNamed ? setup.acceptanceEvidence : 'Define how you know the workflow works.'],
     ['Data access', ready ? 'Ready for import review' : 'Locked until approved', ready ? 'Approved data can use users, audit, and controlled writes.' : 'Samples stay local until the owner approves real data.'],
   ] as const
-  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Managed activation proof is still required.'
+  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Pick one product and try the sample. Add your data only when it helps." eyebrow="Products" title="Start with one product." />
