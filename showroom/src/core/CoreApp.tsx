@@ -1225,7 +1225,7 @@ export function ProductHomePage() {
     ['Track', contract.name, template.name],
     ['Data', sourceNamed ? 'First source named' : 'Needs first source', sourceNamed ? setup.currentRecord : 'Upload, paste, or describe one real record.'],
     ['Proof', proofNamed ? 'Acceptance proof named' : 'Needs acceptance proof', proofNamed ? setup.acceptanceEvidence : 'Define how you know the workflow works.'],
-    ['Data access', ready ? 'Ready for import review' : 'Locked until approved', ready ? 'Approved data can use users, audit, and controlled writes.' : 'Samples stay local until the owner approves real data.'],
+    ['Data access', ready ? 'Ready for import review' : 'Locked until approved', ready ? 'Approved data can use users, audit, and controlled writes.' : 'Samples stay local until you approve real data.'],
   ] as const
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
   return (
@@ -3340,7 +3340,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div>
       <span className="core-eyebrow">Shop next step</span>
       <h2>{shopAutopilotStage}</h2>
-      <p>Open the next safe owner action from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. SuperMega can prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
+      <p>Open the next safe review step from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. SuperMega can prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Open next step</button>
@@ -3349,7 +3349,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div>
       <span className="core-eyebrow">Shop setup guide</span>
       <strong>Import products once. Then run the daily queue.</strong>
-      <small>SuperMega prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. The owner confirms every sale, payment, stock, supplier, refund, and accounting review.</small>
+      <small>SuperMega prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. A manager confirms every sale, payment, stock, supplier, refund, and accounting review.</small>
     </div>
     <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>

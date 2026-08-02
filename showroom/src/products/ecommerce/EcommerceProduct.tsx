@@ -1905,7 +1905,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Customer follow-up</span>
           <h2>{customerFollowUpStage}</h2>
-          <p>Prepare the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status. No SMS, email, Viber, WhatsApp, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
+          <p>Prepare the next reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status. No SMS, email, Viber, WhatsApp, discount, payment, delivery, refund, stock, or Shop write runs here.</p>
           <button className="text-link" disabled={catalogHydrating || (!pendingManagedRequests.length && !buyingReady)} onClick={prepareCustomerFollowUpDraft} type="button">Prepare follow-up draft</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
@@ -1918,7 +1918,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Channel reply templates</span>
           <h2>{channelReplyStage}</h2>
-          <p>Prepare owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence. No message send, clipboard copy, discount, payment, delivery booking, refund, stock move, or Shop write runs here.</p>
+          <p>Prepare reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence. No message send, clipboard copy, discount, payment, delivery booking, refund, stock move, or Shop write runs here.</p>
           <div className="ecommerce-request-filter" role="group" aria-label="Reply channel template">
             {replyChannelButtons.map(([value, label]) => <button aria-pressed={replyChannelTemplate === value} key={value} onClick={() => setReplyChannelTemplate(value)} type="button">{label}</button>)}
           </div>

@@ -16,7 +16,7 @@ const SAMPLE_BRIEF: WebsiteStarterBrief = {
   businessName: 'Mingalar Fresh Mart',
   audience: 'families and office buyers in Yangon',
   offer: 'Daily groceries, pantry packs, and local delivery with clear pickup windows.',
-  proof: 'Owner-approved public proof: same-day neighborhood delivery, visible prices, and a reviewed phone or chat contact route.',
+  proof: 'Public proof: same-day neighborhood delivery, visible prices, and a reviewed phone or chat contact route.',
   contactHref: 'https://m.me/mingalarfreshmart',
 }
 
