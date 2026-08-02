@@ -10,6 +10,7 @@ export const LEGACY_PRODUCTION_KEYS = ['supermega.production.workspace.v1', 'sup
 export const PRODUCTION_LOCK = 'supermega-production-workspace-v2'
 export const PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop-demand-source.v1' as const
 export const PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1' as const
+export const PRODUCTION_RECALL_TRACE_SCHEMA = 'supermega.production.recall-trace.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -2525,6 +2526,154 @@ export type ProductionBatchGenealogy = NonNullable<ReturnType<typeof buildProduc
 export function formatProductionBatchGenealogy(report: ProductionBatchGenealogy) {
   const { digest, ...payload } = report
   if (digest !== plantOrderEvidenceDigest(payload)) throw new Error('Production batch genealogy digest does not match its evidence.')
+  return `${JSON.stringify(report, null, 2)}\n`
+}
+
+function recallIdentity(value: unknown) {
+  if (!validCanonicalText(value, 120)) return null
+  return String(value).toUpperCase()
+}
+
+function uniqueRecallIdentities(values: unknown[]) {
+  return [...new Set(values.map(recallIdentity).filter((value): value is string => Boolean(value)))].sort()
+}
+
+export function buildProductionRecallTrace(state: ProductionState, lotOrBatchId: string) {
+  const query = recallIdentity(lotOrBatchId)
+  if (!query) return null
+  const current = validateProductionState(state)
+  const reports = current.jobs.map((job) => buildProductionBatchGenealogy(current, job.id)).filter((report): report is ProductionBatchGenealogy => Boolean(report))
+  const records = reports.map((report) => {
+    const inputLotIds = uniqueRecallIdentities([
+      ...report.materialEntries.map((entry) => entry.materialLot),
+      ...(report.controlledExecution?.genealogy.map((entry) => entry.inputLotId) ?? []),
+    ])
+    const outputBatchId = recallIdentity(report.controlledExecution?.outputBatchId)
+    const latestInspection = report.controlledExecution?.inspections[report.controlledExecution.inspections.length - 1]
+    return {
+      report,
+      inputLotIds,
+      outputBatchId,
+      link: outputBatchId ? {
+        jobId: report.job.id,
+        product: report.job.product,
+        line: report.job.line,
+        jobStatus: report.job.status,
+        inputLotIds,
+        outputBatchId,
+        acceptedUnits: latestInspection?.acceptedQuantity ?? report.job.goodUnits,
+        qualityStatus: report.controlledExecution?.batchRelease
+          ? 'released' as const
+          : report.controlledExecution?.qualityHold
+            ? 'held' as const
+            : 'not_released' as const,
+        releaseActionId: report.controlledExecution?.batchRelease?.id ?? null,
+        linkedShopDemandOrderIds: [...(report.shopDemandSource?.snapshot.sourceOrderIds ?? [])].sort(),
+        evidenceDigest: report.digest,
+        complete: inputLotIds.length > 0,
+      } : null,
+    }
+  })
+  const matchedAsInputLot = records.some((record) => record.inputLotIds.includes(query))
+  const matchedAsOutputBatch = records.some((record) => record.outputBatchId === query)
+  if (!matchedAsInputLot && !matchedAsOutputBatch) return null
+
+  const links = records.flatMap((record) => record.link ? [record.link] : [])
+  const downstream: Array<(typeof links)[number] & { depth: number }> = []
+  const downstreamBatches = new Set([query])
+  const downstreamSeen = new Set<string>()
+  let downstreamFrontier = new Set([query])
+  for (let depth = 1; downstreamFrontier.size && depth <= links.length; depth += 1) {
+    const next = new Set<string>()
+    for (const link of links) {
+      const key = `${link.jobId}:${link.outputBatchId}`
+      if (downstreamSeen.has(key) || !link.inputLotIds.some((inputLotId) => downstreamFrontier.has(inputLotId))) continue
+      downstreamSeen.add(key)
+      downstream.push({ ...link, depth })
+      if (!downstreamBatches.has(link.outputBatchId)) {
+        downstreamBatches.add(link.outputBatchId)
+        next.add(link.outputBatchId)
+      }
+    }
+    downstreamFrontier = next
+  }
+
+  const upstream: Array<(typeof links)[number] & { depth: number }> = []
+  const upstreamBatches = new Set([query])
+  const upstreamSeen = new Set<string>()
+  let upstreamFrontier = new Set([query])
+  for (let depth = 1; upstreamFrontier.size && depth <= links.length; depth += 1) {
+    const next = new Set<string>()
+    for (const link of links) {
+      const key = `${link.jobId}:${link.outputBatchId}`
+      if (upstreamSeen.has(key) || !upstreamFrontier.has(link.outputBatchId)) continue
+      upstreamSeen.add(key)
+      upstream.push({ ...link, depth })
+      for (const inputLotId of link.inputLotIds) {
+        if (upstreamBatches.has(inputLotId)) continue
+        upstreamBatches.add(inputLotId)
+        next.add(inputLotId)
+      }
+    }
+    upstreamFrontier = next
+  }
+
+  const directJobIds = records
+    .filter((record) => record.outputBatchId === query || record.inputLotIds.includes(query))
+    .map((record) => record.report.job.id)
+    .sort()
+  const unresolvedJobIds = records
+    .filter((record) => !record.outputBatchId && record.inputLotIds.some((inputLotId) => downstreamBatches.has(inputLotId)))
+    .map((record) => record.report.job.id)
+    .sort()
+  const incompleteJobIds = [...new Set([
+    ...unresolvedJobIds,
+    ...downstream.filter((link) => !link.complete).map((link) => link.jobId),
+    ...upstream.filter((link) => !link.complete).map((link) => link.jobId),
+  ])].sort()
+  const linkedShopDemandOrderIds = [...new Set([...downstream, ...upstream].flatMap((link) => link.linkedShopDemandOrderIds))].sort()
+  const payload = {
+    schema: PRODUCTION_RECALL_TRACE_SCHEMA,
+    query,
+    sourceRevision: current.revision,
+    sourceStateDigest: plantOrderEvidenceDigest(current),
+    match: {
+      matchedAsInputLot,
+      matchedAsOutputBatch,
+      directJobIds,
+    },
+    downstream: {
+      links: downstream.sort((left, right) => left.depth - right.depth || left.jobId.localeCompare(right.jobId)),
+      outputBatchIds: [...downstreamBatches].filter((batchId) => batchId !== query).sort(),
+    },
+    upstream: {
+      links: upstream.sort((left, right) => left.depth - right.depth || left.jobId.localeCompare(right.jobId)),
+      inputLotIds: [...upstreamBatches].filter((batchId) => batchId !== query).sort(),
+    },
+    linkedShopDemandOrderIds,
+    completeness: {
+      status: incompleteJobIds.length ? 'partial' as const : 'complete' as const,
+      incompleteJobIds,
+      reason: incompleteJobIds.length
+        ? 'Some retained material use has no exact output-batch link; review those jobs before a recall decision.'
+        : 'Every retained matching path has an exact input-lot to output-batch link.',
+    },
+    controls: {
+      recallDecisionRecorded: false,
+      inventoryBlocked: false,
+      customerContacted: false,
+      customerDataIncluded: false,
+      externalActionPerformed: false,
+    },
+  }
+  return { ...payload, digest: plantOrderEvidenceDigest(payload) }
+}
+
+export type ProductionRecallTrace = NonNullable<ReturnType<typeof buildProductionRecallTrace>>
+
+export function formatProductionRecallTrace(report: ProductionRecallTrace) {
+  const { digest, ...payload } = report
+  if (digest !== plantOrderEvidenceDigest(payload)) throw new Error('Production recall trace digest does not match its evidence.')
   return `${JSON.stringify(report, null, 2)}\n`
 }
 
