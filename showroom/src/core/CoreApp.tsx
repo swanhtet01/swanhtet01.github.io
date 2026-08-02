@@ -181,6 +181,7 @@ import type {
 import {
   buildProductionShiftHandoff,
   buildProductionBatchGenealogy,
+  buildProductionRecallTrace,
   closeProductionJob,
   compareProductionJobSchedule,
   completeProductionMaintenance,
@@ -188,6 +189,7 @@ import {
   endProductionDowntime,
   formatProductionShiftHandoff,
   formatProductionBatchGenealogy,
+  formatProductionRecallTrace,
   openProductionIssue,
   parseProductionMaterialQuantity,
   placeProductionQualityHold,
@@ -7589,6 +7591,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [handoffShiftRef, setHandoffShiftRef] = useState('')
   const [shiftHandoff, setShiftHandoff] = useState<ProductionShiftHandoff | null>(null)
   const [genealogyJobId, setGenealogyJobId] = useState(production.jobs[0]?.id ?? '')
+  const [recallQuery, setRecallQuery] = useState('')
+  const [recallSearchId, setRecallSearchId] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState('')
@@ -7747,6 +7751,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       href: `data:application/json;charset=utf-8,${encodeURIComponent(formatProductionBatchGenealogy(report))}`,
     }
   }, [production, selectedGenealogyJobId])
+  const recallTraceDownload = useMemo(() => {
+    const report = buildProductionRecallTrace(production, recallSearchId)
+    if (!report) return null
+    const safeQuery = report.query.replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'trace'
+    return {
+      report,
+      filename: `supermega-plant-recall-${safeQuery}-${report.digest.slice(7, 15)}.json`,
+      href: `data:application/json;charset=utf-8,${encodeURIComponent(formatProductionRecallTrace(report))}`,
+    }
+  }, [production, recallSearchId])
   const observedMachine = machineObservation
     ? production.machines.find((machine) => machine.id === machineObservation.machineId)
     : undefined
@@ -9333,6 +9347,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 <a className="core-button" download={batchGenealogyDownload.filename} href={batchGenealogyDownload.href}>Download batch genealogy</a>
                 <p className="panel-copy">Read-only evidence. It does not issue inventory, control equipment, post costs, issue a certificate, or contact another system.</p>
               </> : null}
+              <form className="core-form compact-form" onSubmit={(event) => { event.preventDefault(); setRecallSearchId(recallQuery.trim()) }}>
+                <label>Recall lot or output batch<input autoCapitalize="characters" maxLength={120} onChange={(event) => { setRecallQuery(event.target.value); setRecallSearchId('') }} placeholder="LOT-INPUT-001 or BATCH-OUTPUT-001" required spellCheck={false} value={recallQuery} /></label>
+                <button className="core-button" type="submit">Trace batch</button>
+              </form>
+              {recallTraceDownload ? <div className="stock-receipt-preview" role="status">
+                <small>{recallTraceDownload.report.completeness.status === 'complete' ? 'Exact retained trace' : 'Partial trace · review gaps'}</small>
+                <strong>{recallTraceDownload.report.match.directJobIds.length} direct {recallTraceDownload.report.match.directJobIds.length === 1 ? 'job' : 'jobs'} · {recallTraceDownload.report.downstream.outputBatchIds.length} downstream {recallTraceDownload.report.downstream.outputBatchIds.length === 1 ? 'batch' : 'batches'} · {recallTraceDownload.report.upstream.inputLotIds.length} upstream {recallTraceDownload.report.upstream.inputLotIds.length === 1 ? 'lot' : 'lots'}</strong>
+                <span>{recallTraceDownload.report.completeness.reason}</span>
+                <a className="core-button" download={recallTraceDownload.filename} href={recallTraceDownload.href}>Download recall trace</a>
+              </div> : recallSearchId ? <p className="panel-copy">No exact retained input-lot or output-batch link matches this ID.</p> : <p className="panel-copy">Enter one exact lot or output batch to trace origins and downstream production without customer details.</p>}
+              <p className="panel-copy">Recall review only. No inventory block, customer contact, certificate, message, payment, or external action runs from this trace.</p>
             </div> : <p className="panel-copy">Create a production job before building a batch trace.</p>}
           </details>
           <details className="compact-disclosure production-history" open={shiftHandoff || currentShiftClose ? true : undefined}>

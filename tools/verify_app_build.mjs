@@ -4519,19 +4519,29 @@ if (!coreSource.includes('projectShopProductionDemand')
   || !coreSource.includes('registerProductionJob')
   || !coreSource.includes('data-plant-genealogy="versioned"')
   || !coreSource.includes('Download batch genealogy')
+  || !coreSource.includes('Recall lot or output batch')
+  || !coreSource.includes('Download recall trace')
+  || !coreSource.includes('No inventory block, customer contact, certificate, message, payment, or external action runs from this trace.')
   || !coreCssSource.includes('.production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; }')
   || !coreCssSource.includes('.production-operation-module > .production-view > .output-panel { position: sticky; top: 0; height: min(620px,calc(100svh - 240px)); max-height: 620px; align-self: start; }')
   || !coreCssSource.includes('.job-panel > .stock-receipt-preview > button { grid-column: 2; grid-row: 1 / 4; align-self: center; }')
   || !coreCssSource.includes('.job-panel > .stock-receipt-preview > button { width: 100%; grid-column: 1; grid-row: auto; margin-top: 6px; }')) fail('shop_production_demand_ui_boundary_missing')
 if (!productionSource.includes("PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop-demand-source.v1'")
   || !productionSource.includes("PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1'")
+  || !productionSource.includes("PRODUCTION_RECALL_TRACE_SCHEMA = 'supermega.production.recall-trace.v1'")
   || !productionSource.includes('validateProductionShopDemandSource')
   || !productionSource.includes('buildProductionBatchGenealogy')
   || !productionSource.includes('formatProductionBatchGenealogy')
+  || !productionSource.includes('buildProductionRecallTrace')
+  || !productionSource.includes('formatProductionRecallTrace')
   || !productionSource.includes('issuesInventory: false')
   || !productionSource.includes('changesEquipment: false')
   || !productionSource.includes('postsCosting: false')
   || !productionSource.includes('issuesCertificate: false')
+  || !productionSource.includes('recallDecisionRecorded: false')
+  || !productionSource.includes('inventoryBlocked: false')
+  || !productionSource.includes('customerContacted: false')
+  || !productionSource.includes('customerDataIncluded: false')
   || !managedProductionRuntime.includes('_SHOP_DEMAND_SOURCE_CONTRACT = "supermega.production.shop-demand-source.v1"')
   || !managedProductionRuntime.includes('plant_order_evidence_digest(snapshot)')) fail('production_batch_genealogy_contract_missing')
 if (!clientOnboardingSource.includes("CLIENT_IMPORT_SCHEMA = 'supermega.client_import_preview.v1'")
@@ -15671,6 +15681,73 @@ async function verifyProductionRuntime() {
       && embeddedGenealogy.controls.performsExternalAction === false,
     'production_batch_genealogy_controlled_execution_or_boundary_missing')
     assertThrows(() => model.formatProductionBatchGenealogy({ ...embeddedGenealogy, sourceRevision: embeddedGenealogy.sourceRevision + 1 }), 'production_batch_genealogy_digest_tamper_accepted')
+    const embeddedTraceState = model.recordProductionMaterialConsumption(
+      embeddedExecution,
+      'JOB-1',
+      'MAT-MANAGED-001',
+      'LOT-MANAGED-001',
+      1,
+      'kg',
+      'SHIFT-MANAGED-001',
+      proof('ACT-MANAGED-MATERIAL', 1_000),
+    )
+    assert(Boolean(embeddedTraceState), 'production_recall_trace_fixture_rejected')
+    const recallByInput = model.buildProductionRecallTrace(embeddedTraceState ?? embeddedExecution, 'lot-managed-001')
+    assert(recallByInput?.schema === 'supermega.production.recall-trace.v1'
+      && recallByInput.query === 'LOT-MANAGED-001'
+      && recallByInput.match.matchedAsInputLot === true
+      && recallByInput.match.matchedAsOutputBatch === false
+      && recallByInput.downstream.links.length === 1
+      && recallByInput.downstream.links[0].outputBatchId === 'BATCH-MANAGED-001'
+      && recallByInput.downstream.links[0].inputLotIds.join(',') === 'LOT-MANAGED-001'
+      && recallByInput.completeness.status === 'complete'
+      && recallByInput.controls.recallDecisionRecorded === false
+      && recallByInput.controls.inventoryBlocked === false
+      && recallByInput.controls.customerContacted === false
+      && recallByInput.controls.customerDataIncluded === false
+      && recallByInput.controls.externalActionPerformed === false,
+    'production_recall_input_to_output_trace_or_boundary_missing')
+    const recallByOutput = model.buildProductionRecallTrace(embeddedTraceState ?? embeddedExecution, 'BATCH-MANAGED-001')
+    assert(recallByOutput?.match.matchedAsOutputBatch === true
+      && recallByOutput.upstream.links.length === 1
+      && recallByOutput.upstream.inputLotIds.join(',') === 'LOT-MANAGED-001'
+      && model.formatProductionRecallTrace(recallByOutput).endsWith('\n'),
+    'production_recall_output_to_input_trace_missing')
+    const secondExecutionPlan = plantModel.buildPlantOrderPlan({
+      planId: 'PLN-MANAGED-002', sourceDigest: plantModel.plantOrderEvidenceDigest({ job: 'JOB-2' }),
+      job: { jobId: 'JOB-2', product: 'Finished test batch', targetQuantity: 50, outputBatchId: 'BATCH-MANAGED-002' },
+      materials: [{ materialId: 'MAT-MANAGED-002', name: 'Intermediate batch', unit: 'kg', quantityPerUnitMilli: 1_000 }],
+      workCentres: [{ workCentreId: 'WC-MANAGED-002', name: 'Finishing line' }],
+      routing: [{ operationId: 'OP-MANAGED-20', sequence: 1, name: 'Finish batch', workCentreId: 'WC-MANAGED-002', minutesPerUnitMilli: 1_000 }],
+    })
+    const secondExecution = plantModel.applyPlantOrderPlan(
+      plantModel.createEmptyPlantOrderState(),
+      secondExecutionPlan,
+      proof('ACT-MANAGED-EXECUTION-2'),
+      plantModel.EMPTY_PLANT_ORDER_DIGEST,
+    ).state
+    const multiLevelBase = {
+      ...model.createEmptyProduction(),
+      jobs: [
+        { id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 0 },
+        { id: 'JOB-2', line: 'Line 02', product: 'Finished test batch', target: 50, output: 0 },
+      ],
+      orderPortfolio: {
+        contract: 'supermega.production.order_portfolio.v1',
+        entries: [{ jobId: 'JOB-1', execution: orderExecution }, { jobId: 'JOB-2', execution: secondExecution }],
+      },
+    }
+    const multiLevelFirst = model.recordProductionMaterialConsumption(multiLevelBase, 'JOB-1', 'MAT-MANAGED-001', 'LOT-RAW-001', 1, 'kg', 'SHIFT-MANAGED-001', proof('ACT-MULTI-MATERIAL-1', 1_000))
+    const multiLevelState = model.recordProductionMaterialConsumption(multiLevelFirst, 'JOB-2', 'MAT-MANAGED-002', 'BATCH-MANAGED-001', 1, 'kg', 'SHIFT-MANAGED-002', proof('ACT-MULTI-MATERIAL-2', 2_000))
+    const multiLevelDownstream = model.buildProductionRecallTrace(multiLevelState, 'LOT-RAW-001')
+    const multiLevelUpstream = model.buildProductionRecallTrace(multiLevelState, 'BATCH-MANAGED-002')
+    assert(multiLevelDownstream?.downstream.links.map((link) => `${link.depth}:${link.outputBatchId}`).join(',') === '1:BATCH-MANAGED-001,2:BATCH-MANAGED-002'
+      && multiLevelDownstream.downstream.outputBatchIds.join(',') === 'BATCH-MANAGED-001,BATCH-MANAGED-002'
+      && multiLevelUpstream?.upstream.links.map((link) => `${link.depth}:${link.outputBatchId}`).join(',') === '1:BATCH-MANAGED-002,2:BATCH-MANAGED-001'
+      && multiLevelUpstream.upstream.inputLotIds.join(',') === 'BATCH-MANAGED-001,LOT-RAW-001',
+    'production_recall_multi_level_traversal_missing')
+    assert(model.buildProductionRecallTrace(embeddedTraceState ?? embeddedExecution, 'LOT-UNKNOWN-001') === null, 'production_recall_unknown_lot_fabricated')
+    assertThrows(() => model.formatProductionRecallTrace({ ...recallByInput, sourceRevision: recallByInput.sourceRevision + 1 }), 'production_recall_trace_digest_tamper_accepted')
     assertThrows(() => model.validateProductionState({ ...embeddedExecution, orderExecution: { ...orderExecution, headDigest: `sha256:${'0'.repeat(64)}` } }), 'production_managed_order_execution_head_tamper_accepted')
     const legacy = {
       jobs: [{ id: 'JOB-1', line: 'Line 01', product: 'Test batch', target: 100, output: 90 }],
@@ -15829,6 +15906,13 @@ async function verifyProductionRuntime() {
       && demandGenealogy.evidenceCoverage.materialLotEntryCount === 1
       && model.formatProductionBatchGenealogy(demandGenealogy).endsWith('\n'),
     'production_shop_demand_batch_genealogy_incomplete')
+    const partialRecallTrace = model.buildProductionRecallTrace(demandWithRelease, 'LOT-SHOP-001')
+    assert(partialRecallTrace?.match.directJobIds.join(',') === demandJob.id
+      && partialRecallTrace.downstream.links.length === 0
+      && partialRecallTrace.completeness.status === 'partial'
+      && partialRecallTrace.completeness.incompleteJobIds.join(',') === demandJob.id
+      && partialRecallTrace.controls.externalActionPerformed === false,
+    'production_recall_legacy_gap_was_hidden_or_overclaimed')
     const clientPlanDigest = `sha256:${'d'.repeat(64)}`
     const clientPlanJobs = [
       { id: 'JOB-CLIENT-1', line: 'Line A', product: 'Client batch one', target: 50, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-15T00:00:00.000Z' },
