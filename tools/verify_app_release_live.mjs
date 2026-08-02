@@ -272,6 +272,9 @@ for (const required of ['Plant agent queue', 'Recommended Plant agent job', 'Age
       ['MES dispatch', 'Daily dispatch'],
       ['AI chooses the next station, blocker, evidence need, and handoff route from live Plant state.', 'SuperMega shows the next station, blocker, evidence need, and shift route from live Plant state.'],
       ['MES lifecycle', 'Production lifecycle'],
+      ['Build shift handoff', 'Prepare shift close'],
+      ['Prepare shift packet', 'Prepare shift close file'],
+      ['AI shift close checklist', 'Shift close checklist'],
       ['Plan to handoff', 'Plan to shift close'],
       ['AI guides plan, execution, quality, WCM, trace, and handoff.', 'Follow planning, execution, quality, WCM, trace, and shift close in one place.'],
       ['MRP readiness', 'Material readiness'],
@@ -280,6 +283,7 @@ for (const required of ['Plant agent queue', 'Recommended Plant agent job', 'Age
       ['Plant ERP cost readiness', 'Plant cost readiness'],
       ['ERP cost readiness', 'Cost readiness'],
       ['AI checks good output, scrap, material trace, quality release, WCM closure, and shift handoff before any costing package is reviewed.', 'Check good output, scrap, material trace, quality release, WCM closure, and shift close before any costing package is reviewed.'],
+      ['Build cost handoff', 'Prepare cost review'],
       ['Plant ERP cost package packet', 'Plant cost review file'],
       ['Cost package packet', 'Cost review file'],
       ['AI packages finished batch output, scrap, material trace, quality release state, WCM closure, and handoff evidence for ERP cost review.', 'Package finished batch output, scrap, material trace, quality release state, WCM closure, and shift evidence for cost review.'],
@@ -287,10 +291,13 @@ for (const required of ['Plant agent queue', 'Recommended Plant agent job', 'Age
       ['ERP handoff', 'Cost file'],
       ['ISO release', 'Quality release'],
       ['AI checks quality holds, WCM closure, material trace, shift handoff, and owner release evidence before output can be treated as ready.', 'Check quality holds, WCM closure, material trace, shift close, and owner release evidence before output can be treated as ready.'],
+      ['Build release handoff', 'Prepare release review'],
       ['AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue.', 'Keep sampling, NCR containment, corrective action, evidence, and release review in one quality queue.'],
       ['Compliance dossier', 'Compliance file'],
       ['AI summarizes ISO quality release, WCM closure, material traceability, output evidence, shift handoff, and cost-readiness into one audit packet.', 'Summarize quality release, WCM closure, material traceability, output evidence, shift close, and cost-readiness into one audit packet.'],
       ['No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this dossier.', 'No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this file.'],
+      ['Handoff', 'Shift close'],
+      ['Owner confirms production, quality, WCM, maintenance, material, and handoff writes.', 'Owner confirms production, quality, WCM, maintenance, material, and shift-close writes.'],
     ]).get(required)
     if (!replacement || !operationsChunk.includes(replacement)) throw new Error(`missing_live_plant_context:${required}`)
   }

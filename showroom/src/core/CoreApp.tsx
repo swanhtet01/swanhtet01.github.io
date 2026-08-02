@@ -7792,7 +7792,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           : activeJobs.length
             ? 'Record next job output'
             : !plantHandoffReady
-              ? 'Build shift handoff'
+              ? 'Prepare shift close'
               : 'Add next Plant job'
   const plantAgentReason = !productionCanWrite
     ? 'The workspace must confirm durable storage or managed writes before records can change.'
@@ -7805,7 +7805,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           : activeJobs.length
             ? `${activeJobs[0].id} is the next active job by priority and due time.`
             : !plantHandoffReady
-              ? 'The latest Plant revision needs a shift handoff before the next operator relies on it.'
+              ? 'The latest Plant revision needs a shift close file before the next operator relies on it.'
               : 'No active production job is waiting, so the next controlled step is planning.'
   const plantControlNext = !productionCanWrite
     ? 'Restore write readiness'
@@ -7818,14 +7818,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           : activeJobs.length
             ? 'Record next output'
             : !plantHandoffReady
-              ? 'Build shift handoff'
+              ? 'Prepare shift close'
               : 'Plan next job'
   const plantControlRows = [
     ['Jobs', activeJobs.length ? `${activeJobs.length} active` : 'Plan'],
     ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
     ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
     ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'No trace'],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
     ['Write gate', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
   const plantLifecycleRows = [
@@ -7834,9 +7834,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
     ['WCM', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace'],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
   ] as const
-  const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and handoff writes.'
+  const plantControlBoundary = 'Owner confirms production, quality, WCM, maintenance, material, and shift-close writes.'
   const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
   const plantAutopilotStage = !productionCanWrite
     ? 'Restore Plant readiness'
@@ -7851,7 +7851,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             : activeJobs.length
               ? 'Record production evidence'
               : !plantHandoffReady
-                ? 'Build shift handoff'
+                ? 'Prepare shift close'
                 : 'Plan next job'
   const mesDispatchStation = activeJobs[0]?.line ?? selectedDowntimeMachine?.name ?? selectedMaintenanceMachine?.name ?? 'Plant floor'
   const mesDispatchTarget = urgentIssueCount
@@ -7862,7 +7862,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         ? `${activeJobs[0].id} / ${(activeJobs[0].target - activeJobs[0].output - (activeJobs[0].scrap ?? 0)).toLocaleString()} left`
         : plantHandoffReady
           ? 'Next plan'
-          : 'Shift handoff'
+          : 'Shift close'
   const mesDispatchBlocker = !productionCanWrite
     ? 'Write readiness'
     : pendingAction
@@ -7876,12 +7876,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             : activeJobs.length && !materialEntries.length
               ? 'Trace start'
               : !plantHandoffReady
-                ? 'Handoff'
+                ? 'Shift close'
                 : 'None'
   const mesDispatchEvidence = materialEntries.length
     ? `${materialEntries.length} material trace`
     : plantHandoffReady
-      ? 'Handoff current'
+      ? 'Shift close current'
       : activeJobs.length
         ? 'Need trace'
         : 'Plan evidence'
@@ -7890,7 +7890,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Target', mesDispatchTarget],
     ['Blocker', mesDispatchBlocker],
     ['Evidence', mesDispatchEvidence],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Build'],
+    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Build'],
     ['Boundary', 'No equipment write'],
   ] as const
   const openMaterialIssues = openIssues.filter((issue) => issue.kind === 'materials')
@@ -7936,7 +7936,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           : openWcmCount
             ? 'Close WCM before cost'
             : !plantHandoffReady
-              ? 'Build cost handoff'
+              ? 'Prepare cost review'
               : completedJobs.length
                 ? 'Cost package ready for review'
                 : 'Run evidence ready'
@@ -7968,14 +7968,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           : openMaterialIssues.length || !materialEntries.length
             ? 'Complete trace evidence'
             : !plantHandoffReady
-              ? 'Build release handoff'
+              ? 'Prepare release review'
               : 'Release package ready'
   const plantQualityReleaseRows = [
     ['Holds', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
     ['Quality', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
     ['WCM', openWcmCount ? `${openWcmCount} open` : 'Closed'],
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Needed'],
+    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Needed'],
     ['Gate', productionCanWrite && !pendingAction ? 'Owner release' : 'Locked'],
   ] as const
   const qualityIssuesWithContainment = openQualityIssues.filter((issue) => Boolean(issue.owner && issue.dueAt && issue.containment))
@@ -8040,7 +8040,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : activeJobs.length
           ? 'Record next output'
           : !shiftHandoffIsCurrent
-            ? 'Build shift handoff'
+            ? 'Prepare shift close'
             : 'Plan next job'
   const plantTodayMetrics = [
     ['Active jobs', activeJobs.length ? `${activeJobs.length} running` : 'None'],
@@ -8048,7 +8048,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Problems & quality', openIssues.length + heldJobs.length ? `${openIssues.length + heldJobs.length} open` : 'Clear'],
     ['Maintenance', openWcmCount ? `${openWcmCount} open` : overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : 'Clear'],
     ['Material trace', materialEntries.length ? `${materialEntries.length} records` : 'Not started'],
-    ['Shift handoff', shiftHandoffIsCurrent ? 'Current' : 'Needs update'],
+    ['Shift close', shiftHandoffIsCurrent ? 'Current' : 'Needs update'],
   ] as const
   const plantTodaySource = managedIdentity
     ? `Managed Plant · revision ${managedVersion ?? production.revision}`
@@ -8590,7 +8590,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         event: 'agent_job_chosen',
         product: 'production',
         route: productionLocation.pathname + productionLocation.search,
-        detail: 'Upload Plant job CSV for local MES review',
+        detail: 'Upload Plant job CSV for local production review',
       })
     } catch (error) {
       setPlantJobImportReview(null)
@@ -8884,11 +8884,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   }
 
   async function copyShiftHandoff() {
-    if (!shiftHandoff || !shiftHandoffIsCurrent) return setNotice('Plant records or the shift reference changed. Build the handoff again before copying it.')
+    if (!shiftHandoff || !shiftHandoffIsCurrent) return setNotice('Plant records or the shift reference changed. Prepare the shift close file again before copying it.')
     if (!navigator.clipboard?.writeText) return setNotice('Clipboard copy is unavailable in this browser. No Plant record changed.')
     try {
       await navigator.clipboard.writeText(formatProductionShiftHandoff(shiftHandoff))
-      setNotice('Shift handoff copied. No Plant record changed.')
+      setNotice('Shift close file copied. No Plant record changed.')
     } catch {
       setNotice('Clipboard copy was not permitted. No Plant record changed.')
     }
@@ -9328,12 +9328,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             <summary>Shift close <span>{currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? shiftCloseReady ? 'Ready' : 'Blocked' : 'Build'}</span></summary>
             <form autoComplete="off" className="core-form compact-form" onSubmit={buildShiftHandoff}>
               <label>Shift reference<input maxLength={80} onChange={(event) => setHandoffShiftRef(event.target.value)} placeholder={shiftReferencePlaceholder()} required value={handoffShiftRef} /></label>
-              <button className="core-button" disabled={!handoffShiftRef.trim() && !shiftRef.trim()} type="submit">Prepare shift packet</button>
-              <p className="panel-copy">AI assembles current output, material, quality, WCM, maintenance, and carry-forward work. Preparing changes nothing; closing requires a named owner, reason, and evidence.</p>
+              <button className="core-button" disabled={!handoffShiftRef.trim() && !shiftRef.trim()} type="submit">Prepare shift close file</button>
+              <p className="panel-copy">Review current output, material, quality, WCM, maintenance, and carry-forward work. Preparing changes nothing; closing requires a named owner, reason, and evidence.</p>
             </form>
-            {shiftCloseRows.length ? <div aria-label="AI shift close checklist" className="plant-command-center-rows">{shiftCloseRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div> : null}
+            {shiftCloseRows.length ? <div aria-label="Shift close checklist" className="plant-command-center-rows">{shiftCloseRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div> : null}
             {currentShiftClose ? <div className="form-notice" role="status"><strong>Shift closed by {currentShiftClose.actor}</strong><br />{currentShiftClose.shiftRef} | revision {currentShiftClose.sourceRevision} | {currentShiftClose.goodUnits} good | {currentShiftClose.materialEntryCount} material entries | quality clear | WCM clear<br />Evidence: {currentShiftClose.evidenceReference}</div> : null}
-            {shiftHandoff && !shiftHandoffIsCurrent && !currentShiftClose ? <p className="form-notice" role="alert">Plant records or the shift reference changed after this packet was prepared. Prepare it again before use.</p> : null}
+            {shiftHandoff && !shiftHandoffIsCurrent && !currentShiftClose ? <p className="form-notice" role="alert">Plant records or the shift reference changed after this close file was prepared. Prepare it again before use.</p> : null}
             {shiftHandoff && shiftHandoffIsCurrent ? <ShiftHandoffView handoff={shiftHandoff} onCopy={copyShiftHandoff} /> : null}
             {shiftHandoff && shiftHandoffIsCurrent ? <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !shiftCloseReady} onClick={(event) => reviewShiftClose(event.currentTarget)} type="button">Review shift close</button> : null}
             {shiftHandoff && shiftHandoffIsCurrent && !shiftCloseReady ? <p className="panel-copy">The owner close remains locked until this exact shift has good output and material trace and the current Plant record has no quality or WCM blocker.</p> : null}
@@ -9537,7 +9537,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         <span aria-hidden="true" className="issue-mark resolved">M</span>
         <div><strong>{entry.quantity.toLocaleString(undefined, { maximumFractionDigits: 3 })} {entry.materialUnit} · {entry.materialRef}{entry.materialLot ? ` · lot ${entry.materialLot}` : ''}</strong><small style={wrappedIssueDetail}>{entry.jobId} · {entry.product} · {formatIssueDue(entry.recordedAt)} · {entry.recordedBy}</small><small style={wrappedIssueDetail}>Reason: {entry.reason}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
       </article>)}</div></> : null}
-      {handoff.materialEntries.length > visibleMaterialEntries.length ? <p className="panel-copy">Showing the latest {visibleMaterialEntries.length} of {handoff.materialEntries.length} entries. Copy handoff retains every attributed entry.</p> : null}
+      {handoff.materialEntries.length > visibleMaterialEntries.length ? <p className="panel-copy">Showing the latest {visibleMaterialEntries.length} of {handoff.materialEntries.length} entries. Copy keeps every attributed entry.</p> : null}
     </details>
     <details className="compact-disclosure production-history">
       <summary>Closed short <span>{handoff.shortCloses.length}</span></summary>
@@ -9619,6 +9619,6 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.machineObservations.length ? <Empty>No machine record exists.</Empty> : null}
       </div>
     </details>
-    <button className="core-button" onClick={onCopy} type="button">Copy handoff</button>
+    <button className="core-button" onClick={onCopy} type="button">Copy close file</button>
   </div>
 }
