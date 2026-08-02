@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 const root = resolve(import.meta.dirname, '..')
 const packageState = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const projectRef = String(packageState?.supermega?.productionSupabaseProjectRef || '').trim()
+const runtimeRole = 'supermega_trial_runtime'
 
 const evaluate = (environment, expectedMode) => {
   const failures = []
@@ -22,11 +23,8 @@ const evaluate = (environment, expectedMode) => {
     const sslmode = String(parsed.searchParams.get('sslmode') || '').toLowerCase()
     const queryKeys = [...parsed.searchParams.keys()]
     const username = decodeURIComponent(parsed.username)
-    const direct = parsed.hostname === `db.${projectRef}.supabase.co`
-      && username === 'postgres'
-      && parsed.port === '5432'
     const pooled = /^[a-z0-9-]+\.pooler\.supabase\.com$/.test(parsed.hostname)
-      && username === `postgres.${projectRef}`
+      && username === `${runtimeRole}.${projectRef}`
       && parsed.port === '6543'
     databaseTargetReady = ['postgres:', 'postgresql:'].includes(parsed.protocol)
       && Boolean(parsed.password)
@@ -35,7 +33,7 @@ const evaluate = (environment, expectedMode) => {
       && queryKeys[0] === 'sslmode'
       && parsed.pathname === '/postgres'
       && !parsed.hash
-      && (direct || pooled)
+      && pooled
   } catch {
     databaseTargetReady = false
   }
@@ -76,7 +74,7 @@ const evaluate = (environment, expectedMode) => {
 
 if (process.argv.includes('--self-test')) {
   const valid = {
-    SUPERMEGA_DATABASE_URL: `postgresql://postgres.${projectRef}:hidden@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require`,
+    SUPERMEGA_DATABASE_URL: `postgresql://${runtimeRole}.${projectRef}:hidden@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require`,
     VITE_SUPABASE_URL: `https://${projectRef}.supabase.co`,
     VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_1234567890abcdef',
   }
@@ -86,11 +84,13 @@ if (process.argv.includes('--self-test')) {
   assert.equal(evaluate({ ...valid, SUPERMEGA_DATABASE_URL: valid.SUPERMEGA_DATABASE_URL.replace('sslmode=require', 'sslmode=disable') }, 'staged').ok, false)
   assert.equal(evaluate({ ...valid, SUPERMEGA_DATABASE_URL: valid.SUPERMEGA_DATABASE_URL.replace(':6543/', ':5432/') }, 'staged').ok, false)
   assert.equal(evaluate({ ...valid, SUPERMEGA_DATABASE_URL: `${valid.SUPERMEGA_DATABASE_URL}&options=unsafe` }, 'staged').ok, false)
-  assert.equal(evaluate({ ...valid, SUPERMEGA_DATABASE_URL: valid.SUPERMEGA_DATABASE_URL.replace(`postgres.${projectRef}`, `other.${projectRef}`) }, 'staged').ok, false)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_DATABASE_URL: valid.SUPERMEGA_DATABASE_URL.replace(projectRef, 'otherprojectref00000') }, 'staged').ok, false)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_DATABASE_URL: valid.SUPERMEGA_DATABASE_URL.replace(runtimeRole, 'postgres') }, 'staged').ok, false)
+  assert.equal(evaluate({ ...valid, SUPERMEGA_DATABASE_URL: valid.SUPERMEGA_DATABASE_URL.replace(runtimeRole, 'unexpected_runtime') }, 'staged').ok, false)
   assert.equal(evaluate({ ...valid, VITE_SUPABASE_PUBLISHABLE_KEY: 'service_role_secret' }, 'staged').ok, false)
   assert.equal(evaluate({}, 'isolated_demo').ok, true)
   assert.equal(evaluate(valid, 'isolated_demo').ok, false)
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_managed_runtime_environment_values_self_test.v1', checks: 10 }))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_managed_runtime_environment_values_self_test.v1', checks: 12 }))
   process.exit(0)
 }
 
