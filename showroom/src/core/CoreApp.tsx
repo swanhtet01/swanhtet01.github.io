@@ -3365,7 +3365,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }} to={shopAgentPath}>{shopAgentPath.includes('settings') ? 'Open Settings' : shopAgentPath.includes('inventory') ? 'Open Inventory' : shopAgentPath.includes('orders') ? 'Open Orders' : 'Open Counter'}</Link>
   </section>
   const shopGuidance = <details className="product-guidance-disclosure">
-    <summary><span>Next: {shopAgentJob}</span><small>Why this matters and who approves it</small></summary>
+    <summary><span>Need help choosing?</span><small>Shows the next safe Shop step</small></summary>
     <div className="product-guidance-content">{shopAgentQueue}</div>
   </details>
 
@@ -6509,7 +6509,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <div className="shop-business-controls-content">
           {shopCommandCenter}
           {shopSetupGuide}
-          {shopAgentQueue}
           <section className="shop-order-control" aria-label="Shop order control">
             <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
             <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
