@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import re
+import unicodedata
 from typing import Any, Callable
 
 from supermega_runtime.commerce_runtime import validate_commerce_state
@@ -51,6 +52,9 @@ PRODUCTION_HUMAN_EVENTS = PRODUCTION_EVENTS
 
 _ISSUE_KINDS = frozenset({"quality", "maintenance", "materials", "operations"})
 _ISSUE_SEVERITIES = frozenset({"critical", "high", "medium", "low"})
+_QUALITY_CAUSE_CATEGORIES = frozenset(
+    {"material", "method", "machine", "measurement", "people", "environment"}
+)
 _JOB_PRIORITIES = frozenset({"urgent", "normal", "low"})
 _MACHINE_STATES = frozenset({"running", "attention", "stopped"})
 _OUTPUT_KINDS = frozenset({"good", "scrap"})
@@ -217,9 +221,24 @@ _EQUIPMENT_CRITICALITIES = frozenset({"critical", "high", "medium", "low"})
 _EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._/-]{0,79}$")
 _EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
 _RESOLUTION_FIELDS = frozenset({"actionId", "resolvedAt", "resolvedBy", "reason", "evidenceReference"})
-_RESOLUTION_OPTIONAL_FIELDS = frozenset({"maintenanceCorrectiveAction"})
+_RESOLUTION_OPTIONAL_FIELDS = frozenset(
+    {"maintenanceCorrectiveAction", "qualityCorrectiveAction"}
+)
 _MAINTENANCE_CORRECTIVE_ACTION_FIELDS = frozenset(
     {"contract", "correctiveAction", "verificationResult", "finalDisposition"}
+)
+_QUALITY_CORRECTIVE_ACTION_FIELDS = frozenset(
+    {
+        "contract",
+        "failureMode",
+        "causeCategory",
+        "rootCause",
+        "correctiveAction",
+        "verificationResult",
+        "effectivenessOwner",
+        "recurrenceKey",
+        "priorIssueIds",
+    }
 )
 _EVENT_FIELDS = frozenset(
     {
@@ -288,7 +307,9 @@ _ISSUE_EVENT_FIELDS = frozenset(
     {"issueSeverity", "issueOwner", "issueDueAt", "issueContainment"}
 )
 _ISSUE_EVENT_OPTIONAL_FIELDS = _ISSUE_EVENT_FIELDS | {"maintenanceFindingSource"}
-_ISSUE_RESOLVED_EVENT_OPTIONAL_FIELDS = frozenset({"maintenanceCorrectiveAction"})
+_ISSUE_RESOLVED_EVENT_OPTIONAL_FIELDS = frozenset(
+    {"maintenanceCorrectiveAction", "qualityCorrectiveAction"}
+)
 _EQUIPMENT_COMMISSION_EVENT_FIELDS = frozenset(
     {"installedAt", "toState", "workCentreId"}
 )
@@ -480,6 +501,50 @@ def _maintenance_corrective_action(candidate: object, field: str) -> dict[str, A
     return action
 
 
+def _quality_recurrence_token(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).lower()
+    token: list[str] = []
+    separator_pending = False
+    for character in normalized:
+        if unicodedata.category(character)[0] in {"L", "M", "N"}:
+            if separator_pending and token:
+                token.append("-")
+            token.append(character)
+            separator_pending = False
+        else:
+            separator_pending = True
+    return "".join(token)
+
+
+def _quality_corrective_action(candidate: object, field: str) -> dict[str, Any]:
+    action = _object(candidate, field)
+    _exact_fields(action, field, required=_QUALITY_CORRECTIVE_ACTION_FIELDS)
+    if action["contract"] != "supermega.production.quality-capa.v1":
+        raise TrialValidationError(f"{field}.contract is unsupported.")
+    failure_mode = _text(action["failureMode"], f"{field}.failureMode", maximum=120)
+    cause_category = action["causeCategory"]
+    if cause_category not in _QUALITY_CAUSE_CATEGORIES:
+        raise TrialValidationError(f"{field}.causeCategory is unsupported.")
+    _text(action["rootCause"], f"{field}.rootCause", maximum=360)
+    _text(action["correctiveAction"], f"{field}.correctiveAction", maximum=360)
+    _text(action["verificationResult"], f"{field}.verificationResult", maximum=360)
+    _text(action["effectivenessOwner"], f"{field}.effectivenessOwner", maximum=120)
+    recurrence_key = _text(action["recurrenceKey"], f"{field}.recurrenceKey", maximum=160)
+    recurrence_token = _quality_recurrence_token(failure_mode)
+    if not recurrence_token or recurrence_key != f"{cause_category}:{recurrence_token}":
+        raise TrialValidationError(f"{field}.recurrenceKey is invalid.")
+    prior_issue_ids = action["priorIssueIds"]
+    if not isinstance(prior_issue_ids, list) or len(prior_issue_ids) > _MAX_ISSUES:
+        raise TrialValidationError(f"{field}.priorIssueIds is invalid.")
+    normalized_issue_ids = [
+        _text(issue_id, f"{field}.priorIssueIds[{index}]", maximum=80)
+        for index, issue_id in enumerate(prior_issue_ids)
+    ]
+    if len(set(normalized_issue_ids)) != len(normalized_issue_ids):
+        raise TrialValidationError(f"{field}.priorIssueIds must be unique.")
+    return action
+
+
 def _resolution(value: object, field: str) -> dict[str, Any]:
     resolution = _object(value, field)
     _exact_fields(
@@ -497,6 +562,18 @@ def _resolution(value: object, field: str) -> dict[str, Any]:
         _maintenance_corrective_action(
             resolution["maintenanceCorrectiveAction"],
             f"{field}.maintenanceCorrectiveAction",
+        )
+    if "qualityCorrectiveAction" in resolution:
+        _quality_corrective_action(
+            resolution["qualityCorrectiveAction"],
+            f"{field}.qualityCorrectiveAction",
+        )
+    if {
+        "maintenanceCorrectiveAction",
+        "qualityCorrectiveAction",
+    }.issubset(resolution):
+        raise TrialValidationError(
+            f"{field} cannot carry maintenance and quality corrective actions together."
         )
     return resolution
 
@@ -730,6 +807,18 @@ def _validate_issue(candidate: object, index: int) -> dict[str, Any]:
         ):
             raise TrialValidationError(
                 f"{field} maintenance finding resolution requires one structured corrective action only."
+            )
+        if (
+            issue["kind"] == "quality"
+            and _ISSUE_ACTION_FIELDS.issubset(issue)
+            and "qualityCorrectiveAction" not in resolution
+        ):
+            raise TrialValidationError(
+                f"{field} actionable quality resolution requires structured CAPA evidence."
+            )
+        if "qualityCorrectiveAction" in resolution and issue["kind"] != "quality":
+            raise TrialValidationError(
+                f"{field} quality corrective action requires a quality issue."
             )
     return issue
 
@@ -1519,9 +1608,58 @@ def _validate_event(
                 event["maintenanceCorrectiveAction"],
                 f"{field}.maintenanceCorrectiveAction",
             )
+        if "qualityCorrectiveAction" in event:
+            _quality_corrective_action(
+                event["qualityCorrectiveAction"],
+                f"{field}.qualityCorrectiveAction",
+            )
+        if {
+            "maintenanceCorrectiveAction",
+            "qualityCorrectiveAction",
+        }.issubset(event):
+            raise TrialValidationError(
+                f"{field} cannot carry maintenance and quality corrective actions together."
+            )
     elif subject_id not in issue_ids:
         raise TrialValidationError(f"{field} references an unknown issue.")
     return event
+
+
+def _quality_prior_issue_ids(
+    issues: Sequence[dict[str, Any]],
+    issue_id: str,
+    recurrence_key: str,
+    *,
+    resolved_before: str | None = None,
+) -> list[str]:
+    before_time = (
+        _parsed_timestamp(resolved_before, "quality CAPA resolvedAt")[1]
+        if resolved_before is not None
+        else None
+    )
+    matches: list[tuple[datetime, str]] = []
+    for candidate in issues:
+        if candidate["id"] == issue_id or candidate["status"] != "resolved":
+            continue
+        resolution = candidate.get("resolution")
+        quality_action = (
+            resolution.get("qualityCorrectiveAction")
+            if isinstance(resolution, Mapping)
+            else None
+        )
+        if (
+            not isinstance(quality_action, Mapping)
+            or quality_action.get("recurrenceKey") != recurrence_key
+        ):
+            continue
+        resolved_at = _parsed_timestamp(
+            resolution["resolvedAt"],
+            f"quality CAPA {candidate['id']} resolvedAt",
+        )[1]
+        if before_time is None or resolved_at < before_time:
+            matches.append((resolved_at, candidate["id"]))
+    matches.sort(key=lambda item: (item[0], item[1]))
+    return [issue_id for _, issue_id in matches]
 
 
 def _validate_issue_history(
@@ -1674,10 +1812,24 @@ def _validate_issue_history(
             or event["evidenceReference"] != resolution["evidenceReference"]
             or event.get("maintenanceCorrectiveAction")
             != resolution.get("maintenanceCorrectiveAction")
+            or event.get("qualityCorrectiveAction")
+            != resolution.get("qualityCorrectiveAction")
         ):
             raise TrialValidationError(
                 f"issues[{index}] resolution does not match its immutable event."
             )
+        quality_action = resolution.get("qualityCorrectiveAction")
+        if quality_action is not None:
+            expected_prior_issue_ids = _quality_prior_issue_ids(
+                issues,
+                issue["id"],
+                quality_action["recurrenceKey"],
+                resolved_before=resolution["resolvedAt"],
+            )
+            if quality_action["priorIssueIds"] != expected_prior_issue_ids:
+                raise TrialValidationError(
+                    f"issues[{index}] quality recurrence links do not match prior CAPA evidence."
+                )
         if events.index(event) >= events.index(opened[0]):
             raise TrialValidationError(
                 f"issues[{index}] resolution must follow its opening event."
@@ -3310,6 +3462,11 @@ def _validate_issue_resolved(
             if "maintenanceCorrectiveAction" in event
             else {}
         ),
+        **(
+            {"qualityCorrectiveAction": event["qualityCorrectiveAction"]}
+            if "qualityCorrectiveAction" in event
+            else {}
+        ),
     }
     if ("maintenanceFindingSource" in before) != (
         "maintenanceCorrectiveAction" in event
@@ -3317,6 +3474,32 @@ def _validate_issue_resolved(
         raise TrialValidationError(
             "maintenance finding resolution requires one structured corrective action only."
         )
+    if (
+        before["kind"] == "quality"
+        and _ISSUE_ACTION_FIELDS.issubset(before)
+        and "qualityCorrectiveAction" not in event
+    ):
+        raise TrialValidationError(
+            "an actionable quality issue requires structured CAPA evidence before resolution."
+        )
+    if before["kind"] != "quality" and "qualityCorrectiveAction" in event:
+        raise TrialValidationError(
+            "quality corrective action can resolve only a quality issue."
+        )
+    if "qualityCorrectiveAction" in event:
+        quality_action = _quality_corrective_action(
+            event["qualityCorrectiveAction"],
+            "event.qualityCorrectiveAction",
+        )
+        expected_prior_issue_ids = _quality_prior_issue_ids(
+            current["issues"],
+            before["id"],
+            quality_action["recurrenceKey"],
+        )
+        if quality_action["priorIssueIds"] != expected_prior_issue_ids:
+            raise TrialValidationError(
+                "quality CAPA recurrence links must match prior resolved evidence."
+            )
     if after != {**before, "status": "resolved", "resolution": resolution}:
         raise TrialValidationError(
             "issue resolution may change only status and exact command evidence."

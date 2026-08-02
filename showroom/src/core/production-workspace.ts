@@ -11,12 +11,14 @@ export const PRODUCTION_LOCK = 'supermega-production-workspace-v2'
 export const PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop-demand-source.v1' as const
 export const PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1' as const
 export const PRODUCTION_RECALL_TRACE_SCHEMA = 'supermega.production.recall-trace.v1' as const
+export const PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
 export type ProductionJobPriority = 'urgent' | 'normal' | 'low'
 export type ProductionMachineState = 'running' | 'attention' | 'stopped'
 export type ProductionMaterialUnit = 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'pack' | 'bag' | 'roll' | 'sheet' | 'm' | 'cm'
+export type ProductionQualityCauseCategory = 'material' | 'method' | 'machine' | 'measurement' | 'people' | 'environment'
 
 export type ProductionQualityHold = {
   actionId: string
@@ -65,6 +67,19 @@ export type ProductionIssueResolution = {
   reason: string
   evidenceReference: string
   maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction
+  qualityCorrectiveAction?: ProductionQualityCorrectiveAction
+}
+
+export type ProductionQualityCorrectiveAction = {
+  contract: typeof PRODUCTION_QUALITY_CAPA_SCHEMA
+  failureMode: string
+  causeCategory: ProductionQualityCauseCategory
+  rootCause: string
+  correctiveAction: string
+  verificationResult: string
+  effectivenessOwner: string
+  recurrenceKey: string
+  priorIssueIds: string[]
 }
 
 export type ProductionMaintenanceCorrectiveAction = {
@@ -211,6 +226,7 @@ export type ProductionEvent = {
   maintenanceReturnToService?: ProductionMaintenanceReturnToService
   maintenanceFindingSource?: ProductionMaintenanceFindingSource
   maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction
+  qualityCorrectiveAction?: ProductionQualityCorrectiveAction
   equipmentIds?: string[]
   installedAt?: string
   workCentreId?: string
@@ -456,6 +472,7 @@ export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical',
 export const productionJobPriorities: ProductionJobPriority[] = ['urgent', 'normal', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
+export const productionQualityCauseCategories: ProductionQualityCauseCategory[] = ['material', 'method', 'machine', 'measurement', 'people', 'environment']
 const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'equipment_maintenance_strategy_saved', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'shift_closed']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
 const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt', 'jobOwner']
@@ -482,7 +499,8 @@ const productionShopDemandSnapshotFields = ['schema', 'operatingUnitLocationId',
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'maintenanceFindingSource', 'resolution']
 const productionMaintenanceFindingSourceFields = ['contract', 'equipmentId', 'equipmentName', 'maintenanceOwner', 'completionActionId', 'completedAt', 'strategyActionId', 'strategyRevision', 'returnToService', 'findings', 'evidenceReference']
 const productionMaintenanceCorrectiveActionFields = ['contract', 'correctiveAction', 'verificationResult', 'finalDisposition']
-const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference', 'maintenanceCorrectiveAction']
+const productionQualityCorrectiveActionFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'recurrenceKey', 'priorIssueIds']
+const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference', 'maintenanceCorrectiveAction', 'qualityCorrectiveAction']
 const productionMachineFields = ['id', 'name', 'state']
 const productionEquipmentMasterFields = ['contract', 'assets']
 const productionEquipmentAssetFields = ['id', 'name', 'workCentreId', 'criticality', 'owner', 'commissioningStatus', 'sourceActionId', 'sourcePackageDigest', 'importedAt']
@@ -498,7 +516,7 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   output_recorded: [...baseEventFields, 'quantity', 'shiftRef', 'outputKind'],
   material_consumed: [...materialEventFields, ...materialOptionalEventFields],
   issue_opened: [...baseEventFields, 'issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment', 'maintenanceFindingSource'],
-  issue_resolved: [...baseEventFields, 'maintenanceCorrectiveAction'],
+  issue_resolved: [...baseEventFields, 'maintenanceCorrectiveAction', 'qualityCorrectiveAction'],
   quality_hold_placed: qualityHoldEventFields,
   quality_hold_released: qualityHoldEventFields,
   machine_state_changed: [...baseEventFields, 'fromState', 'toState'],
@@ -672,6 +690,77 @@ function validateProductionMaintenanceCorrectiveAction(value: unknown, field: st
   canonicalText(value.verificationResult, `${field}.verificationResult`, 360)
   if (!productionMaintenanceReturnToServiceValues.includes(value.finalDisposition as ProductionMaintenanceReturnToService)) throw new Error(`${field}.finalDisposition is invalid.`)
   return value as unknown as ProductionMaintenanceCorrectiveAction
+}
+
+function productionQualityRecurrenceToken(value: string) {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase('en-US')
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function productionQualityRecurrenceKey(failureMode: string, causeCategory: ProductionQualityCauseCategory) {
+  return `${causeCategory}:${productionQualityRecurrenceToken(failureMode)}`
+}
+
+function validateProductionQualityCorrectiveAction(value: unknown, field: string): ProductionQualityCorrectiveAction {
+  if (!isRecord(value)) throw new Error(`${field} is invalid.`)
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionQualityCorrectiveActionFields].sort())) throw new Error(`${field} fields are invalid.`)
+  if (value.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA) throw new Error(`${field}.contract is invalid.`)
+  const failureMode = canonicalText(value.failureMode, `${field}.failureMode`, 120)
+  if (!productionQualityCauseCategories.includes(value.causeCategory as ProductionQualityCauseCategory)) throw new Error(`${field}.causeCategory is invalid.`)
+  canonicalText(value.rootCause, `${field}.rootCause`, 360)
+  canonicalText(value.correctiveAction, `${field}.correctiveAction`, 360)
+  canonicalText(value.verificationResult, `${field}.verificationResult`, 360)
+  canonicalText(value.effectivenessOwner, `${field}.effectivenessOwner`, 120)
+  const recurrenceKey = canonicalText(value.recurrenceKey, `${field}.recurrenceKey`, 160)
+  if (!productionQualityRecurrenceToken(failureMode) || recurrenceKey !== productionQualityRecurrenceKey(failureMode, value.causeCategory as ProductionQualityCauseCategory)) throw new Error(`${field}.recurrenceKey is invalid.`)
+  if (!Array.isArray(value.priorIssueIds) || value.priorIssueIds.length > 500) throw new Error(`${field}.priorIssueIds is invalid.`)
+  const priorIssueIds = value.priorIssueIds.map((issueId, index) => canonicalText(issueId, `${field}.priorIssueIds[${index}]`, 80))
+  assertUnique(priorIssueIds, `${field}.priorIssueIds`)
+  return value as unknown as ProductionQualityCorrectiveAction
+}
+
+function productionQualityPriorIssueIds(issues: ProductionIssue[], issueId: string, recurrenceKey: string, resolvedBefore?: string) {
+  return issues
+    .filter((candidate) => candidate.id !== issueId
+      && candidate.kind === 'quality'
+      && candidate.status === 'resolved'
+      && candidate.resolution?.qualityCorrectiveAction?.recurrenceKey === recurrenceKey
+      && (!resolvedBefore || timestampBefore(candidate.resolution.resolvedAt, resolvedBefore)))
+    .sort((left, right) => compareTimestamps(left.resolution?.resolvedAt ?? left.createdAt, right.resolution?.resolvedAt ?? right.createdAt)
+      || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+    .map((candidate) => candidate.id)
+}
+
+export function buildProductionQualityCorrectiveAction(state: ProductionState, issueId: string, input: {
+  failureMode: string
+  causeCategory: ProductionQualityCauseCategory
+  rootCause: string
+  correctiveAction: string
+  verificationResult: string
+  effectivenessOwner: string
+}) {
+  const issue = state.issues.find((candidate) => candidate.id === issueId)
+  if (!issue || issue.kind !== 'quality' || issue.status !== 'open'
+    || !validCanonicalText(input.failureMode, 120)
+    || !productionQualityCauseCategories.includes(input.causeCategory)
+    || !validCanonicalText(input.rootCause, 360)
+    || !validCanonicalText(input.correctiveAction, 360)
+    || !validCanonicalText(input.verificationResult, 360)
+    || !validCanonicalText(input.effectivenessOwner, 120)) return null
+  const recurrenceToken = productionQualityRecurrenceToken(input.failureMode)
+  if (!recurrenceToken) return null
+  const recurrenceKey = `${input.causeCategory}:${recurrenceToken}`
+  if (recurrenceKey.length > 160) return null
+  const result: ProductionQualityCorrectiveAction = {
+    contract: PRODUCTION_QUALITY_CAPA_SCHEMA,
+    ...input,
+    recurrenceKey,
+    priorIssueIds: productionQualityPriorIssueIds(state.issues, issueId, recurrenceKey),
+  }
+  try { return validateProductionQualityCorrectiveAction(result, 'qualityCorrectiveAction') } catch { return null }
 }
 
 function validateProductionShopDemandSource(value: unknown, field: string): ProductionShopDemandSource {
@@ -915,7 +1004,11 @@ export function validateProductionState(value: unknown): ProductionState {
       canonicalText(resolution.reason, `issues[${index}].resolution.reason`)
       canonicalText(resolution.evidenceReference, `issues[${index}].resolution.evidenceReference`)
       const correctiveAction = resolution.maintenanceCorrectiveAction === undefined ? undefined : validateProductionMaintenanceCorrectiveAction(resolution.maintenanceCorrectiveAction, `issues[${index}].resolution.maintenanceCorrectiveAction`)
+      const qualityCorrectiveAction = resolution.qualityCorrectiveAction === undefined ? undefined : validateProductionQualityCorrectiveAction(resolution.qualityCorrectiveAction, `issues[${index}].resolution.qualityCorrectiveAction`)
       if (Boolean(candidate.maintenanceFindingSource) !== Boolean(correctiveAction)) throw new Error(`issues[${index}] maintenance finding resolution requires one structured corrective action only.`)
+      if (candidate.kind === 'quality' && candidate.status === 'resolved' && actionFieldCount === actionFields.length && !qualityCorrectiveAction) throw new Error(`issues[${index}] actionable quality resolution requires structured CAPA evidence.`)
+      if (qualityCorrectiveAction && candidate.kind !== 'quality') throw new Error(`issues[${index}] quality corrective action requires a quality issue.`)
+      if (correctiveAction && qualityCorrectiveAction) throw new Error(`issues[${index}] cannot carry maintenance and quality corrective actions together.`)
     }
   }
   assertUnique(issueIds, 'Production issue ID')
@@ -1209,6 +1302,8 @@ export function validateProductionState(value: unknown): ProductionState {
       if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
       if (candidate.quantity !== undefined || candidate.remainingQuantity !== undefined || candidate.shiftRef !== undefined || candidate.outputKind !== undefined || materialFieldCount || issueSnapshotFieldCount || maintenanceFieldCount || candidate.fromState !== undefined || candidate.toState !== undefined || candidate.downtimeStartActionId !== undefined) throw new Error(`events[${index}] issue event has unrelated fields.`)
       if (candidate.maintenanceCorrectiveAction !== undefined) validateProductionMaintenanceCorrectiveAction(candidate.maintenanceCorrectiveAction, `events[${index}].maintenanceCorrectiveAction`)
+      if (candidate.qualityCorrectiveAction !== undefined) validateProductionQualityCorrectiveAction(candidate.qualityCorrectiveAction, `events[${index}].qualityCorrectiveAction`)
+      if (candidate.maintenanceCorrectiveAction !== undefined && candidate.qualityCorrectiveAction !== undefined) throw new Error(`events[${index}] cannot carry maintenance and quality corrective actions together.`)
     }
   }
   assertUnique(eventIds, 'Production event ID')
@@ -1475,8 +1570,14 @@ export function validateProductionState(value: unknown): ProductionState {
       || resolutionEvent.actor !== resolution.resolvedBy
       || resolutionEvent.reason !== resolution.reason
       || resolutionEvent.evidenceReference !== resolution.evidenceReference
-      || JSON.stringify(resolutionEvent.maintenanceCorrectiveAction) !== JSON.stringify(resolution.maintenanceCorrectiveAction)) {
+      || JSON.stringify(resolutionEvent.maintenanceCorrectiveAction) !== JSON.stringify(resolution.maintenanceCorrectiveAction)
+      || JSON.stringify(resolutionEvent.qualityCorrectiveAction) !== JSON.stringify(resolution.qualityCorrectiveAction)) {
       throw new Error(`issues[${index}] resolution proof does not match its immutable event.`)
+    }
+    const qualityCorrectiveAction = resolution.qualityCorrectiveAction === undefined ? undefined : validateProductionQualityCorrectiveAction(resolution.qualityCorrectiveAction, `issues[${index}].resolution.qualityCorrectiveAction`)
+    if (qualityCorrectiveAction) {
+      const expectedPriorIssueIds = productionQualityPriorIssueIds(issues as ProductionIssue[], candidate.id as string, qualityCorrectiveAction.recurrenceKey, resolution.resolvedAt as string)
+      if (JSON.stringify(qualityCorrectiveAction.priorIssueIds) !== JSON.stringify(expectedPriorIssueIds)) throw new Error(`issues[${index}] quality recurrence links do not match prior CAPA evidence.`)
     }
     if (openingEvent && events.indexOf(resolutionEvent) >= events.indexOf(openingEvent)) {
       throw new Error(`issues[${index}] resolution must follow its opening event.`)
@@ -3083,10 +3184,20 @@ export function openProductionIssue(state: ProductionState, issue: ProductionIss
   return validateProductionState({ ...state, revision: state.revision + 1, issues: [issue, ...state.issues], events: [event, ...state.events] })
 }
 
-export function resolveProductionIssue(state: ProductionState, issueId: string, proof: ProductionActionProof, maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction) {
+export function resolveProductionIssue(
+  state: ProductionState,
+  issueId: string,
+  proof: ProductionActionProof,
+  maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction,
+  qualityCorrectiveAction?: ProductionQualityCorrectiveAction,
+) {
   if (!validProof(proof)) return null
+  if (maintenanceCorrectiveAction !== undefined && qualityCorrectiveAction !== undefined) return null
   if (maintenanceCorrectiveAction !== undefined) {
     try { validateProductionMaintenanceCorrectiveAction(maintenanceCorrectiveAction, 'maintenanceCorrectiveAction') } catch { return null }
+  }
+  if (qualityCorrectiveAction !== undefined) {
+    try { validateProductionQualityCorrectiveAction(qualityCorrectiveAction, 'qualityCorrectiveAction') } catch { return null }
   }
   const existing = state.events.find((event) => event.actionId === proof.actionId)
   if (existing) {
@@ -3101,12 +3212,17 @@ export function resolveProductionIssue(state: ProductionState, issueId: string, 
       && issue.resolution.reason === proof.reason
       && issue.resolution.evidenceReference === proof.evidenceReference
       && JSON.stringify(issue.resolution.maintenanceCorrectiveAction) === JSON.stringify(maintenanceCorrectiveAction)
-      && JSON.stringify(existing.maintenanceCorrectiveAction) === JSON.stringify(maintenanceCorrectiveAction) ? state : null
+      && JSON.stringify(existing.maintenanceCorrectiveAction) === JSON.stringify(maintenanceCorrectiveAction)
+      && JSON.stringify(issue.resolution.qualityCorrectiveAction) === JSON.stringify(qualityCorrectiveAction)
+      && JSON.stringify(existing.qualityCorrectiveAction) === JSON.stringify(qualityCorrectiveAction) ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId)) return null
   const issue = state.issues.find((candidate) => candidate.id === issueId)
   if (!issue || issue.status !== 'open'
     || Boolean(issue.maintenanceFindingSource) !== Boolean(maintenanceCorrectiveAction)
+    || (issue.kind === 'quality' && Boolean(issue.severity && issue.owner && issue.dueAt && issue.containment) && qualityCorrectiveAction === undefined)
+    || (issue.kind !== 'quality' && qualityCorrectiveAction !== undefined)
+    || (qualityCorrectiveAction !== undefined && JSON.stringify(qualityCorrectiveAction.priorIssueIds) !== JSON.stringify(productionQualityPriorIssueIds(state.issues, issueId, qualityCorrectiveAction.recurrenceKey)))
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const resolution: ProductionIssueResolution = {
     actionId: proof.actionId,
@@ -3115,8 +3231,15 @@ export function resolveProductionIssue(state: ProductionState, issueId: string, 
     reason: proof.reason,
     evidenceReference: proof.evidenceReference,
     ...(maintenanceCorrectiveAction === undefined ? {} : { maintenanceCorrectiveAction }),
+    ...(qualityCorrectiveAction === undefined ? {} : { qualityCorrectiveAction }),
   }
-  const event = eventFor(proof, { kind: 'issue_resolved', subjectId: issueId, summary: `Resolved ${issue.kind} issue for ${issue.area}`, ...(maintenanceCorrectiveAction === undefined ? {} : { maintenanceCorrectiveAction }) })
+  const event = eventFor(proof, {
+    kind: 'issue_resolved',
+    subjectId: issueId,
+    summary: `Resolved ${issue.kind} issue for ${issue.area}`,
+    ...(maintenanceCorrectiveAction === undefined ? {} : { maintenanceCorrectiveAction }),
+    ...(qualityCorrectiveAction === undefined ? {} : { qualityCorrectiveAction }),
+  })
   return validateProductionState({
     ...state,
     revision: state.revision + 1,

@@ -2105,6 +2105,17 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes('Keep sampling, NCR containment, corrective action, evidence, and release review in one quality queue.')
   || coreSource.includes('AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue.')
   || !coreSource.includes('No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.')
+  || !productionSource.includes("PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v1'")
+  || !productionSource.includes('export function buildProductionQualityCorrectiveAction')
+  || !productionSource.includes('actionable quality resolution requires structured CAPA evidence')
+  || !productionSource.includes('quality recurrence links do not match prior CAPA evidence')
+  || !managedProductionRuntime.includes('supermega.production.quality-capa.v1')
+  || !managedProductionRuntime.includes('an actionable quality issue requires structured CAPA evidence before resolution.')
+  || !managedProductionRuntime.includes('quality CAPA recurrence links must match prior resolved evidence.')
+  || !coreSource.includes('Verify corrective action')
+  || !coreSource.includes('Review CAPA closeout')
+  || !coreSource.includes('Matching prior CAPA records are linked automatically from the failure mode and cause category.')
+  || !coreSource.includes("issue.kind === 'quality' ? 'Review CAPA' : 'Review close'")
   || !coreSource.includes("'Restore inspection readiness'")
   || !coreSource.includes("'Assign NCR containment'")
   || !coreSource.includes("'Close CAPA evidence'")
@@ -5632,6 +5643,9 @@ const productionEquipmentPosition = productionControlContract.indexOf('<h2>Recor
 if (productionProblemsPosition < 0
   || productionEquipmentPosition < 0
   || productionProblemsPosition > productionEquipmentPosition
+  || !productionControlContract.includes('className="operation-module production-operation-module"')
+  || !coreCssSource.includes('.production-operation-module > .control-workspace { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; }')
+  || !coreCssSource.includes('.production-operation-module > .control-workspace { min-height: 0; flex: none; }')
   || !productionControlContract.includes('>Record problem</button>')
   || productionControlContract.includes('>Open problem form</button>')) fail('production_problems_not_task_first')
 if (!productionJobsContract.includes('This shift:')
@@ -16327,10 +16341,38 @@ async function verifyProductionRuntime() {
       issues: [{ ...opened.issues[0], status: 'resolved' }],
     }), 'production_new_issue_resolved_without_proof')
     const resolutionProof = proof('ACT-ISSUE-RESOLVE', 2_000)
-    const resolved = model.resolveProductionIssue(opened, issue.id, resolutionProof)
-    assert(resolved?.issues[0].status === 'resolved' && resolved.issues[0].resolution?.resolvedBy === resolutionProof.actor && resolved.issues[0].resolution?.evidenceReference === resolutionProof.evidenceReference && resolved.events[0].kind === 'issue_resolved', 'production_issue_resolution_lost_proof')
-    assert(model.resolveProductionIssue(resolved, issue.id, resolutionProof) === resolved, 'production_resolution_retry_not_idempotent')
-    assert(model.resolveProductionIssue(resolved, issue.id, { ...resolutionProof, reason: 'Changed' }) === null, 'production_resolution_conflicting_retry_succeeded')
+    assert(model.resolveProductionIssue(opened, issue.id, resolutionProof) === null, 'production_actionable_quality_issue_closed_without_capa')
+    const qualityCorrectiveAction = model.buildProductionQualityCorrectiveAction(opened, issue.id, {
+      failureMode: 'Temperature drift',
+      causeCategory: 'machine',
+      rootCause: 'Heater feedback drifted outside the reviewed control range.',
+      correctiveAction: 'Recalibrated the feedback loop and added a first-piece check.',
+      verificationResult: 'Three consecutive samples remained inside the approved range.',
+      effectivenessOwner: 'Quality supervisor',
+    })
+    assert(qualityCorrectiveAction?.contract === 'supermega.production.quality-capa.v1'
+      && qualityCorrectiveAction.recurrenceKey === 'machine:temperature-drift'
+      && qualityCorrectiveAction.priorIssueIds.length === 0,
+    'production_first_quality_capa_not_built')
+    const myanmarQualityCorrectiveAction = model.buildProductionQualityCorrectiveAction(opened, issue.id, {
+      failureMode: 'အပူချိန် လွဲ',
+      causeCategory: 'machine',
+      rootCause: 'Heater feedback drifted outside the reviewed control range.',
+      correctiveAction: 'Recalibrated the feedback loop and added a first-piece check.',
+      verificationResult: 'Three consecutive samples remained inside the approved range.',
+      effectivenessOwner: 'Quality supervisor',
+    })
+    assert(myanmarQualityCorrectiveAction?.recurrenceKey === 'machine:အပူချိန်-လွဲ', 'production_myanmar_quality_capa_token_lost_marks')
+    const resolved = model.resolveProductionIssue(opened, issue.id, resolutionProof, undefined, qualityCorrectiveAction)
+    assert(resolved?.issues[0].status === 'resolved'
+      && resolved.issues[0].resolution?.resolvedBy === resolutionProof.actor
+      && resolved.issues[0].resolution?.evidenceReference === resolutionProof.evidenceReference
+      && resolved.issues[0].resolution?.qualityCorrectiveAction?.recurrenceKey === 'machine:temperature-drift'
+      && resolved.events[0].kind === 'issue_resolved'
+      && resolved.events[0].qualityCorrectiveAction?.priorIssueIds.length === 0,
+    'production_issue_resolution_lost_capa_or_proof')
+    assert(model.resolveProductionIssue(resolved, issue.id, resolutionProof, undefined, qualityCorrectiveAction) === resolved, 'production_resolution_retry_not_idempotent')
+    assert(model.resolveProductionIssue(resolved, issue.id, { ...resolutionProof, reason: 'Changed' }, undefined, qualityCorrectiveAction) === null, 'production_resolution_conflicting_retry_succeeded')
     assert(model.resolveProductionIssue(resolved, issue.id, proof('ACT-RESOLVE-AGAIN')) === null, 'production_second_resolution_succeeded')
     assert(model.resolveProductionIssue(resolved, 'ISS-MISSING', proof('ACT-RESOLVE-MISSING')) === null, 'production_missing_issue_resolution_succeeded')
     const changedResolutionProof = {
@@ -16341,7 +16383,16 @@ async function verifyProductionRuntime() {
       }],
     }
     assertThrows(() => model.validateProductionState(changedResolutionProof), 'production_changed_resolution_proof_validated')
-    assert(model.resolveProductionIssue(changedResolutionProof, issue.id, resolutionProof) === null, 'production_changed_resolution_proof_replayed')
+    assert(model.resolveProductionIssue(changedResolutionProof, issue.id, resolutionProof, undefined, qualityCorrectiveAction) === null, 'production_changed_resolution_proof_replayed')
+    const capaRemovedResolution = { ...resolved.issues[0].resolution }
+    const capaRemovedEvent = { ...resolved.events[0] }
+    delete capaRemovedResolution.qualityCorrectiveAction
+    delete capaRemovedEvent.qualityCorrectiveAction
+    assertThrows(() => model.validateProductionState({
+      ...resolved,
+      issues: [{ ...resolved.issues[0], resolution: capaRemovedResolution }],
+      events: [capaRemovedEvent, ...resolved.events.slice(1)],
+    }), 'production_stored_quality_capa_was_removable')
     const legacyIssueState = model.validateProductionState({ ...base, issues: [duplicateIssue] })
     const legacyResolutionProof = proof('ACT-LEGACY-ISSUE-RESOLVE', 2_500)
     const resolvedLegacyIssue = model.resolveProductionIssue(legacyIssueState, duplicateIssue.id, legacyResolutionProof)
@@ -16349,6 +16400,35 @@ async function verifyProductionRuntime() {
       && resolvedLegacyIssue.issues[0].severity === undefined
       && resolvedLegacyIssue.issues[0].resolution?.resolvedBy === legacyResolutionProof.actor,
     'production_legacy_issue_not_readable_or_resolvable')
+
+    const recurringIssue = {
+      ...issue,
+      id: 'ISS-RECURRING',
+      createdAt: '2026-07-23T10:00:03.000Z',
+      dueAt: '2026-07-23T14:00:03.000Z',
+      summary: 'Temperature drift returned on the next controlled batch',
+    }
+    const recurringOpenProof = proof('ACT-ISSUE-RECURRING-OPEN', 3_000)
+    const recurringOpen = model.openProductionIssue(resolved, recurringIssue, recurringOpenProof)
+    const recurringCapa = model.buildProductionQualityCorrectiveAction(recurringOpen, recurringIssue.id, {
+      failureMode: 'Temperature drift',
+      causeCategory: 'machine',
+      rootCause: 'The original calibration fixture was not retained at the station.',
+      correctiveAction: 'Added the controlled fixture to the station release checklist.',
+      verificationResult: 'The next three controlled batches passed the same sample check.',
+      effectivenessOwner: 'Quality supervisor',
+    })
+    assert(recurringCapa?.priorIssueIds.join(',') === issue.id, 'production_recurrence_did_not_link_prior_capa')
+    const recurringResolutionProof = proof('ACT-ISSUE-RECURRING-RESOLVE', 4_000)
+    const recurringResolved = model.resolveProductionIssue(recurringOpen, recurringIssue.id, recurringResolutionProof, undefined, recurringCapa)
+    assert(recurringResolved?.issues[0].resolution?.qualityCorrectiveAction?.priorIssueIds.join(',') === issue.id, 'production_recurrence_resolution_lost_prior_link')
+    const forgedRecurringCapa = { ...recurringCapa, priorIssueIds: [] }
+    assert(model.resolveProductionIssue(recurringOpen, recurringIssue.id, recurringResolutionProof, undefined, forgedRecurringCapa) === null, 'production_forged_recurrence_links_succeeded')
+    assertThrows(() => model.validateProductionState({
+      ...recurringResolved,
+      issues: recurringResolved.issues.map((candidate) => candidate.id === recurringIssue.id ? { ...candidate, resolution: { ...candidate.resolution, qualityCorrectiveAction: forgedRecurringCapa } } : candidate),
+      events: recurringResolved.events.map((event) => event.actionId === recurringResolutionProof.actionId ? { ...event, qualityCorrectiveAction: forgedRecurringCapa } : event),
+    }), 'production_stored_recurrence_links_were_mutable')
 
     const holdProof = proof('ACT-QUALITY-HOLD', 2_600)
     const held = model.placeProductionQualityHold(base, 'JOB-1', holdProof)
