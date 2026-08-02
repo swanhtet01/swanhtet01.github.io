@@ -279,7 +279,7 @@ function Brand() {
 }
 
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Managed data' : 'Sample mode'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Demo mode'}</span>
 }
 
 export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: string; title: string; copy: string; actions?: ReactNode }) {
@@ -309,7 +309,7 @@ export function CoreLayout() {
       : location.pathname.startsWith('/vision/')
         ? 'Vision'
       : location.pathname.startsWith('/settings/')
-        ? 'Client setup'
+        ? 'Setup'
         : location.pathname.startsWith('/shop/')
           ? 'Shop'
           : location.pathname.startsWith('/plant/')
@@ -360,10 +360,10 @@ export function CoreLayout() {
         <nav className="core-nav" aria-label="Application">
           {navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Company login</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Sign in" className="account-shell-link mobile-account-link" to={companyLoginPath}>Sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} product={routeProduct} /></Suspense> : null}
@@ -399,7 +399,7 @@ export function ProductHomePage() {
               <small className="product-track-examples">{examples}</small>
             </div>
             <div className="product-track-actions">
-              <Link aria-label={`Open ${name}`} to={path}>Open {name}</Link>
+              <Link aria-label={`Try ${name} demo`} to={path}>Try demo</Link>
             </div>
           </article>
         ))}
