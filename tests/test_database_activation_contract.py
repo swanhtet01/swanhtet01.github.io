@@ -77,6 +77,12 @@ MIGRATION_V7 = (
     / "migrations"
     / "20260730123000_private_trial_backend_v7_workspace_discovery.sql"
 )
+MIGRATION_V8 = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260802161500_private_trial_backend_v8_rls_initplan.sql"
+)
 MIGRATIONS = (
     MIGRATION_PREFLIGHT,
     MIGRATION_V1,
@@ -86,6 +92,7 @@ MIGRATIONS = (
     MIGRATION_V5,
     MIGRATION_V6,
     MIGRATION_V7,
+    MIGRATION_V8,
 )
 
 PRIVATE_SCHEMA = "app_private"
@@ -199,7 +206,7 @@ def _first_sql_token(statement: str) -> str:
 
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
-    def test_historical_migrations_are_unchanged_and_v7_is_additive(self) -> None:
+    def test_historical_migrations_are_unchanged_and_v8_is_additive(self) -> None:
         preflight = _normalized_sql(MIGRATION_PREFLIGHT)
         v1 = _normalized_sql(MIGRATION_V1)
         v2 = _normalized_sql(MIGRATION_V2)
@@ -208,6 +215,7 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         v5 = _normalized_sql(MIGRATION_V5)
         v6 = _normalized_sql(MIGRATION_V6)
         v7 = _normalized_sql(MIGRATION_V7)
+        v8 = _normalized_sql(MIGRATION_V8)
         self.assertIn("pre-existing supermega trial backend role attributes are unsafe", preflight)
         self.assertIn("membership.roleid = backend_record.oid", preflight)
         self.assertIn("dependency.refclassid = 'pg_authid'::regclass", preflight)
@@ -250,6 +258,11 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         self.assertIn("revoke all on function app_private.actor_workspace_directory()", v7)
         self.assertIn("create index workspace_memberships_actor_directory_idx", v7)
         self.assertIn("set schema_version = 7", v7)
+        self.assertIn("private trial backend v8 requires schema version 7", v8)
+        self.assertEqual(v8.count("drop policy"), 10)
+        self.assertIn("workspace_id = (select current_setting('app.workspace_id', true))", v8)
+        self.assertNotIn("workspace_id = current_setting('app.workspace_id', true)", v8)
+        self.assertIn("set schema_version = 8", v8)
 
     def test_private_schema_and_runtime_role_are_restricted(self) -> None:
         sql = _normalized_sql()
@@ -1322,6 +1335,17 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     "((workspace_id = current_setting('app.workspace_id', true)) "
                     "and (status = 'active'))"
                 )
+                def _initplan_expression(expression):
+                    if expression is None:
+                        return None
+                    return re.sub(
+                        r"current_setting\(([^)]+)\)",
+                        r"( select current_setting(\1) as current_setting)",
+                        expression,
+                    )
+                for contract in POLICY_CONTRACTS.values():
+                    contract["qual"] = _initplan_expression(contract["qual"])
+                    contract["with_check"] = _initplan_expression(contract["with_check"])
                 POLICY_CONTRACTS.update({
                     "approval_requests_access_gate": {
                         "table": "approval_requests",
@@ -1479,7 +1503,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         schema_exists=scenario != "missing_schema",
                         schema_ready=scenario != "missing_schema",
                         component="private_trial_backend",
-                        schema_version=0 if scenario == "wrong_version" else 7,
+                        schema_version=0 if scenario == "wrong_version" else 8,
                         tables=tables,
                         table_names=tables,
                         table_count=len(tables),
@@ -1637,7 +1661,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             return []
                         return [
                             _snapshot(
-                                schema_version=0 if scenario == "wrong_version" else 7,
+                                schema_version=0 if scenario == "wrong_version" else 8,
                             )
                         ]
                     if "buckets_table_exists" in q and "objects_table_exists" in q:
@@ -2289,7 +2313,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         payload = _extract_json(result.stdout + result.stderr)
         serialized = json.dumps(payload, sort_keys=True).lower()
         self.assertTrue(payload.get("ok") is True or payload.get("status") == "ready")
-        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v7")
+        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v8")
         checks = payload.get("checks")
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
@@ -2340,7 +2364,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "name": PRIVATE_SCHEMA,
                 "component": "private_trial_backend",
-                "version": 7,
+                "version": 8,
             },
         )
         self.assertEqual(

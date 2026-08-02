@@ -15,6 +15,7 @@ const expectedMigrations = [
   '20260724204920_private_trial_backend_v5_read_capabilities.sql',
   '20260730113000_private_trial_backend_v6_managed_activation.sql',
   '20260730123000_private_trial_backend_v7_workspace_discovery.sql',
+  '20260802161500_private_trial_backend_v8_rls_initplan.sql',
 ]
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
@@ -27,24 +28,24 @@ const expectedPolicyFingerprints = {
     command: 'INSERT',
     permissive: 'PERMISSIVE',
     qual: null,
-    check: 'f47353f3c26c797e3216f3197dc2f0b10ec86632815135720719dd47bfd0151f',
+    check: 'dc2558473062987c688a49447b746d338d158df17178883ede511877b5f70841',
   },
   approval_requests_capability_update: {
     command: 'UPDATE',
     permissive: 'PERMISSIVE',
-    qual: '755a51d7490c8803959e92f46e77feeb754aa436d8ebeb788392f809c63986f8',
-    check: '33e38466ad153ad850fb4620e290dd1c78c0bae1fe18d89e4f7bbefe0ce091fd',
+    qual: '44ecbdc576a99c7e56324a4c1564bcac5c6a81c0057a2bf14a929966bbf725f6',
+    check: 'edc4e0b608fcb144beadf0ab88c9647a553f51306071851ce4afd33ad691dfca',
   },
   approval_requests_member_read: {
     command: 'SELECT',
     permissive: 'PERMISSIVE',
-    qual: '969b01b90e58965bad2d36edd64b57f331a6c7c23c335e47c28a5c84b02f148a',
+    qual: '59ee715578ea24aa2483ddaa0debdcd467fb15e23d0c39e5fd6ac9ea360e9f99',
     check: null,
   },
   workspace_access_controls_member_read: {
     command: 'SELECT',
     permissive: 'PERMISSIVE',
-    qual: 'daef66070ab4a84d31066b2e149765ce39f8a42d7e885d2224852d9759ed4461',
+    qual: '69de59bcd4afae8fbd45a1f90dbe0513d14c3b4b168ea102636f9abb6f6daadd',
     check: null,
   },
   workspace_events_access_gate: {
@@ -57,12 +58,12 @@ const expectedPolicyFingerprints = {
     command: 'INSERT',
     permissive: 'PERMISSIVE',
     qual: null,
-    check: 'c66753e2421b833b77a5b47f7248bc6fa8a7907fc7a217b520a1eb0af2b91462',
+    check: '0a293401b67ab4c0082a97e208379e2764fb9341e1b54f377b28d7781dc05085',
   },
   workspace_events_member_read: {
     command: 'SELECT',
     permissive: 'PERMISSIVE',
-    qual: 'b0a36ce4bd6d748d8f81f6329e07170a7db2bf945871b1d7f33d50c8c5b8c2e6',
+    qual: 'a8a421f4fa52e36ac3f5f97e0ac2fab27f4ba9424bd318596cd7274b05f5f669',
     check: null,
   },
   workspace_memberships_access_gate: {
@@ -74,7 +75,7 @@ const expectedPolicyFingerprints = {
   workspace_memberships_self_read: {
     command: 'SELECT',
     permissive: 'PERMISSIVE',
-    qual: '4c3f673c1afe3e423619aed98c55d2a41a7cd22c408a35542e546bc3a0dc0c21',
+    qual: 'c80e91747fc9319e19ff36d373cb2d07e01ea65c4085d8e766902b67b488b0b7',
     check: null,
   },
   workspace_state_access_gate: {
@@ -87,21 +88,33 @@ const expectedPolicyFingerprints = {
     command: 'INSERT',
     permissive: 'PERMISSIVE',
     qual: null,
-    check: '467bb07bd20d8980c3f389caf0378871d70f5018bd7af8d95c6947e14f8670d8',
+    check: 'df44792058a637c1aac27a21f11556137aa4bb494b20f9ff594d1f383c451777',
   },
   workspace_state_capability_update: {
     command: 'UPDATE',
     permissive: 'PERMISSIVE',
-    qual: '526eb69cc66c78743dc9f35f33c1c189d03b746e18706a7b3c977b907ceb15fd',
-    check: '5ba3422b3b6e3439bab09012219d76dde5e1770a47f7a35b70baee218a086d9c',
+    qual: '3630de71f046f89fac9d5166b86b9e7e894a99b3d2bd674c27bc31c2205be2eb',
+    check: '912ad42025817aac4572b645e16d22447334cb632a7fde7dceabf9831846360f',
   },
   workspace_state_member_read: {
     command: 'SELECT',
     permissive: 'PERMISSIVE',
-    qual: '8737b02ce9573202ada4159efafbabb0eb641da45361f297c456e6aa2b903b8d',
+    qual: '0fd69d13f5845335429f2bc0254d43285c74db27185502b49d71277a1b037e29',
     check: null,
   },
 }
+const initplanPolicyNames = [
+  'approval_requests_capability_insert',
+  'approval_requests_capability_update',
+  'approval_requests_member_read',
+  'workspace_access_controls_member_read',
+  'workspace_events_capability_insert',
+  'workspace_events_member_read',
+  'workspace_memberships_self_read',
+  'workspace_state_capability_insert',
+  'workspace_state_capability_update',
+  'workspace_state_member_read',
+]
 const expectedAccessFunction = {
   name: 'workspace_is_active',
   identityArguments: 'target_workspace_id text',
@@ -302,7 +315,7 @@ await applyMigrations(database)
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('schema version seven', version.rows[0]?.schema_version === 7)
+requireCheck('schema version eight', version.rows[0]?.schema_version === 8)
 
 const relations = await database.query(`
   select relation.relname as relation_name, relation.relkind::text as relation_kind,
@@ -350,6 +363,21 @@ requireCheck(
   'exact policy fingerprints',
   JSON.stringify(observedPolicyFingerprints) ===
     JSON.stringify(expectedPolicyFingerprints),
+)
+const initplanPolicyRows = policyRows.rows.filter((row) =>
+  initplanPolicyNames.includes(row.policyname),
+)
+requireCheck(
+  'request context is evaluated once per query in every flagged policy',
+  initplanPolicyRows.length === initplanPolicyNames.length &&
+    initplanPolicyRows.every((row) => {
+      const expression = `${row.qual || ''} ${row.with_check || ''}`
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+      const requestContextCalls = expression.match(/current_setting\(/g)?.length ?? 0
+      const initplanCalls = expression.match(/\(\s*select\s+current_setting\(/g)?.length ?? 0
+      return requestContextCalls > 0 && requestContextCalls === initplanCalls
+    }),
 )
 
 const accessFunctionRows = await database.query(`
@@ -592,7 +620,7 @@ const hostedVersion = await hostedDatabase.query(
 )
 requireCheck(
   'exact Supabase hosted administrative membership accepted',
-  hostedVersion.rows[0]?.schema_version === 7,
+  hostedVersion.rows[0]?.schema_version === 8,
 )
 
 const memberDatabase = new PGlite()

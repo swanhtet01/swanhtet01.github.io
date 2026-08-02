@@ -21,7 +21,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v7"
+CONTRACT = "supermega_private_trial_database_v8"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
 ACTIVATION_TARGET_CONTRACT = "supermega_supabase_activation_target_v1"
 ACTIVATION_EVIDENCE_CONTRACT = "supermega_managed_activation_evidence_v1"
@@ -29,7 +29,7 @@ SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 EXPECTED_POSTGRES_MAJOR = 17
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 UNSUPPORTED_SUPABASE_POSTGRES17_EXTENSIONS = frozenset(
@@ -515,7 +515,7 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
         "check": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
     },
     "workspace_access_controls_member_read": {
-        "qual": "daef66070ab4a84d31066b2e149765ce39f8a42d7e885d2224852d9759ed4461",
+        "qual": "69de59bcd4afae8fbd45a1f90dbe0513d14c3b4b168ea102636f9abb6f6daadd",
         "check": None,
     },
     "workspace_memberships_access_gate": {
@@ -523,11 +523,11 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
         "check": "62b06512b305b9314444df79e58ab5aa64b5d67d60e3449a110f7e1393fa0a5b",
     },
     "workspace_memberships_self_read": {
-        "qual": "4c3f673c1afe3e423619aed98c55d2a41a7cd22c408a35542e546bc3a0dc0c21",
+        "qual": "c80e91747fc9319e19ff36d373cb2d07e01ea65c4085d8e766902b67b488b0b7",
         "check": None,
     },
     "workspace_state_member_read": {
-        "qual": "8737b02ce9573202ada4159efafbabb0eb641da45361f297c456e6aa2b903b8d",
+        "qual": "0fd69d13f5845335429f2bc0254d43285c74db27185502b49d71277a1b037e29",
         "check": None,
     },
     "workspace_state_access_gate": {
@@ -536,14 +536,14 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
     },
     "workspace_state_capability_insert": {
         "qual": None,
-        "check": "467bb07bd20d8980c3f389caf0378871d70f5018bd7af8d95c6947e14f8670d8",
+        "check": "df44792058a637c1aac27a21f11556137aa4bb494b20f9ff594d1f383c451777",
     },
     "workspace_state_capability_update": {
-        "qual": "526eb69cc66c78743dc9f35f33c1c189d03b746e18706a7b3c977b907ceb15fd",
-        "check": "5ba3422b3b6e3439bab09012219d76dde5e1770a47f7a35b70baee218a086d9c",
+        "qual": "3630de71f046f89fac9d5166b86b9e7e894a99b3d2bd674c27bc31c2205be2eb",
+        "check": "912ad42025817aac4572b645e16d22447334cb632a7fde7dceabf9831846360f",
     },
     "workspace_events_member_read": {
-        "qual": "b0a36ce4bd6d748d8f81f6329e07170a7db2bf945871b1d7f33d50c8c5b8c2e6",
+        "qual": "a8a421f4fa52e36ac3f5f97e0ac2fab27f4ba9424bd318596cd7274b05f5f669",
         "check": None,
     },
     "workspace_events_access_gate": {
@@ -552,19 +552,19 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
     },
     "workspace_events_capability_insert": {
         "qual": None,
-        "check": "c66753e2421b833b77a5b47f7248bc6fa8a7907fc7a217b520a1eb0af2b91462",
+        "check": "0a293401b67ab4c0082a97e208379e2764fb9341e1b54f377b28d7781dc05085",
     },
     "approval_requests_member_read": {
-        "qual": "969b01b90e58965bad2d36edd64b57f331a6c7c23c335e47c28a5c84b02f148a",
+        "qual": "59ee715578ea24aa2483ddaa0debdcd467fb15e23d0c39e5fd6ac9ea360e9f99",
         "check": None,
     },
     "approval_requests_capability_insert": {
         "qual": None,
-        "check": "f47353f3c26c797e3216f3197dc2f0b10ec86632815135720719dd47bfd0151f",
+        "check": "dc2558473062987c688a49447b746d338d158df17178883ede511877b5f70841",
     },
     "approval_requests_capability_update": {
-        "qual": "755a51d7490c8803959e92f46e77feeb754aa436d8ebeb788392f809c63986f8",
-        "check": "33e38466ad153ad850fb4620e290dd1c78c0bae1fe18d89e4f7bbefe0ce091fd",
+        "qual": "44ecbdc576a99c7e56324a4c1564bcac5c6a81c0057a2bf14a929966bbf725f6",
+        "check": "edc4e0b608fcb144beadf0ab88c9647a553f51306071851ce4afd33ad691dfca",
     },
 }
 
@@ -677,11 +677,11 @@ def _safe_hosted_admin_membership(row: Mapping[str, Any]) -> bool:
 
 def _run_policy_self_test() -> dict[str, Any]:
     membership = (
-        "((workspace_id = current_setting('app.workspace_id', true)) "
-        "and (actor_id = current_setting('app.actor_id', true)) "
-        "and (current_setting('app.actor_kind', true) = any "
+        "((workspace_id = ( select current_setting('app.workspace_id', true) as current_setting)) "
+        "and (actor_id = ( select current_setting('app.actor_id', true) as current_setting)) "
+        "and (( select current_setting('app.actor_kind', true) as current_setting) = any "
         "(array['human', 'service', 'agent'])) "
-        "and (actor_kind = current_setting('app.actor_kind', true)) "
+        "and (actor_kind = ( select current_setting('app.actor_kind', true) as current_setting)) "
         "and (status = 'active'))"
     )
     expected = EXPECTED_POLICY_FINGERPRINTS["workspace_memberships_self_read"]["qual"]
@@ -2209,7 +2209,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v7 schema contract; this flag never applies migrations.",
+        help="Require the complete v8 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(

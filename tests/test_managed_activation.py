@@ -324,7 +324,7 @@ class FakeCursor:
                     if len(self.database.statements) > 1
                     else False,
                     "provisioning_role_privileged": self.database.provisioning_role_privileged,
-                    "schema_version": 7,
+                    "schema_version": 8,
                     "backend_role_safe": True,
                     "access_select": True,
                     "access_insert": True,
@@ -463,7 +463,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
         second = activation_plan()
         self.assertEqual(first, second)
         self.assertEqual(first["contract"], ACTIVATION_PLAN_CONTRACT)
-        self.assertEqual(first["target"]["schemaVersion"], 7)
+        self.assertEqual(first["target"]["schemaVersion"], 8)
         self.assertEqual(first["target"]["adminCaSha256"], ADMIN_CA_SHA256)
         self.assertIn("commerce.write", first["ownerCapabilities"])
         self.assertNotIn("production.write", first["ownerCapabilities"])

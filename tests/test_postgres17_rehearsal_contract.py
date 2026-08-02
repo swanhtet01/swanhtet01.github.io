@@ -90,6 +90,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 "20260724204920_private_trial_backend_v5_read_capabilities.sql",
                 "20260730113000_private_trial_backend_v6_managed_activation.sql",
                 "20260730123000_private_trial_backend_v7_workspace_discovery.sql",
+                "20260802161500_private_trial_backend_v8_rls_initplan.sql",
             ),
         )
         source = REHEARSAL.read_text(encoding="utf-8")
