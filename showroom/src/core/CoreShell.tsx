@@ -358,10 +358,10 @@ export function CoreLayout() {
         <nav className="core-nav" aria-label="Application">
           {navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Managed access</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
-        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Managed access" className="account-shell-link mobile-account-link" to={companyLoginPath}>Access</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
+        <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Sign in" className="account-shell-link mobile-account-link" to={companyLoginPath}>Sign in</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
         <nav className="mobile-nav" aria-label="Mobile application">{navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} product={routeProduct} /></Suspense> : null}
@@ -408,8 +408,8 @@ export function ProductHomePage() {
           <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
           <section className="product-home-operating-model" aria-label="SuperMega operating model">
             <div><span className="core-eyebrow">Try first</span><strong>Sample data stays on this device.</strong></div>
-            <div><span className="core-eyebrow">Use your data</span><strong>Approved users, audit, and controlled writes.</strong></div>
-            <Link className="core-button primary" to="/settings/">Open data setup</Link>
+            <div><span className="core-eyebrow">Setup later</span><strong>Import data after the demo makes sense.</strong></div>
+            <Link className="core-button primary" to="/settings/">Setup data</Link>
           </section>
           <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
             <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />

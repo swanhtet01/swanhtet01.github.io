@@ -1237,10 +1237,10 @@ export function ProductHomePage() {
           <strong>Sample data stays on this device.</strong>
         </div>
         <div>
-          <span className="core-eyebrow">Use your data</span>
-          <strong>Approved users, audit, and controlled writes.</strong>
+          <span className="core-eyebrow">Setup later</span>
+          <strong>Import data after the demo makes sense.</strong>
         </div>
-        <Link className="core-button primary" to="/settings/">Open data setup</Link>
+        <Link className="core-button primary" to="/settings/">Setup data</Link>
       </section>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path]) => (

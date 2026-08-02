@@ -45,12 +45,12 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
     <details className="product-system-navigator" onToggle={(event) => setOpen(event.currentTarget.open)} open={open}>
       <summary>
         <span><b>{details.label}</b><small>{details.summary}</small></span>
-        <strong>{open ? 'Close' : `${summary.demoReady} sample flows`}</strong>
+        <strong>{open ? 'Close' : `${summary.demoReady} ready flows`}</strong>
       </summary>
       <div className="product-system-body">
         <header>
-          <div><span className="core-eyebrow">{details.label}</span><h2>Try the sample first.</h2><p>Open the app, then add your data when you are ready.</p></div>
-          <div className="product-system-actions"><Link className="core-button compact primary" to={details.primaryPath}>Open {details.label}</Link><Link className="core-button compact" to={details.setupPath}>Use your data</Link></div>
+          <div><span className="core-eyebrow">{details.label}</span><h2>Start with the working demo.</h2><p>Use the sample workflow first. Setup and imports can wait.</p></div>
+          <div className="product-system-actions"><Link className="core-button compact primary" to={details.primaryPath}>Open {details.label}</Link><Link className="core-button compact" to={details.setupPath}>Setup later</Link></div>
         </header>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
           {workingFlows.map((capability) => <WorkflowLink capability={capability} key={capability.id} />)}
@@ -59,7 +59,7 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
           <summary><span>Add your data</span><strong>{setupModules.length}</strong></summary>
           <p>{setupModules.map((capability) => capability.label).join(' / ')}</p>
         </details>
-        <footer>{summary.scaleLater} future modules stay hidden until they are ready to use.</footer>
+        <footer>{summary.scaleLater} extra modules stay hidden until they are useful.</footer>
       </div>
     </details>
   )
