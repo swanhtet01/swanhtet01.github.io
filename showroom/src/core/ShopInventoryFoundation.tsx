@@ -186,7 +186,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   const inventoryAutopilotMessage = inventoryDrift
     ? 'Catalog available stock and location ATP disagree. Reconcile before another move, count, or production issue.'
     : state.revision
-      ? 'SuperMega can suggest the next stock move or count from available-to-promise, reservations, lots, and locations.'
+      ? 'Use available stock, reservations, lots, and locations to choose the next count or stock move.'
       : setupBlockedByOrders
         ? 'Finish or cancel open aggregate-stock orders before creating location history.'
         : 'Set up locations once so orders, returns, production issues, counts, and transfers share the same stock truth.'
@@ -578,8 +578,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     {productionReceiptReview && !receivedPlantMovement ? <div className="stock-receipt-preview" role="status"><small>{productionReceiptReview.receipt.sku} · {productionReceiptReview.locationId}</small><strong>{productionReceiptReview.receipt.quantity.toLocaleString()} units · lot {productionReceiptReview.receipt.outputBatchId}</strong></div> : null}
     {plantReceiptIssue ? <p className="form-notice warning-text" role="alert">{plantReceiptIssue}</p> : productionMappingRequired && !plantCatalogItem ? <p className="form-notice" role="status">Choose the Shop item that represents this Plant product. SuperMega will not guess the mapping.</p> : null}
   </section> : null}<ShopProductionHandoff commerce={commerce} disabled={disabled} identity={identity} onIssue={onIssue} /><section aria-labelledby="location-stock-title" className="catalog-onboarding-bridge">
-    <div aria-label="Inventory autopilot" className="inventory-autopilot">
-      <div><span className="core-eyebrow">Inventory autopilot</span><strong>{state.revision ? inventoryDrift ? 'Reconcile stock truth' : 'Location stock is active' : 'Start location stock'}</strong><small>{inventoryAutopilotMessage}</small></div>
+    <div aria-label="Stock guide" className="inventory-autopilot">
+      <div><span className="core-eyebrow">Stock guide</span><strong>{state.revision ? inventoryDrift ? 'Reconcile stock' : 'Location stock is active' : 'Start location stock'}</strong><small>{inventoryAutopilotMessage}</small></div>
       <div className="inventory-autopilot-rows">
         {inventoryAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
       </div>
