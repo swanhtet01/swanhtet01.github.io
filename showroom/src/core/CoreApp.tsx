@@ -7954,8 +7954,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
     ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} scrap` : 'None'],
     ['Materials', materialEntries.length ? `${materialEntries.length} trace rows` : 'Need trace'],
-    ['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantHandoffReady ? 'Evidence ready' : 'Need handoff'],
-    ['ERP handoff', plantCostPacketReady ? 'Review package' : 'Blocked'],
+    ['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantHandoffReady ? 'Evidence ready' : 'Need shift close'],
+    ['Cost file', plantCostPacketReady ? 'Review package' : 'Blocked'],
   ] as const
   const plantQualityReleaseNext = !productionCanWrite
     ? 'Restore Plant readiness'
@@ -9137,7 +9137,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Production lifecycle</span><strong>Plan to shift close</strong><small>Follow planning, execution, quality, WCM, trace, and shift close in one place. No equipment or production write runs without owner approval.</small></div>
     <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const plantMrp = <section aria-label="Plant MRP readiness" className="plant-control">
+  const plantMrp = <section aria-label="Plant material readiness" className="plant-control">
     <div><span className="core-eyebrow">Material readiness</span><strong>{plantMrpNext}</strong><small>Review job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
@@ -9145,7 +9145,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check good output, scrap, material trace, quality release, WCM closure, and shift close before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const plantCostPacket = <section aria-label="Plant ERP cost package packet" className="plant-control">
+  const plantCostPacket = <section aria-label="Plant cost review file" className="plant-control">
     <div><span className="core-eyebrow">Cost review file</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>Package finished batch output, scrap, material trace, quality release state, WCM closure, and shift evidence for cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
     <div className="plant-control-rows">{plantCostPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
