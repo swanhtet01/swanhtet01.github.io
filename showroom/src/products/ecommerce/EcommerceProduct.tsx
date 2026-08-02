@@ -1103,8 +1103,8 @@ export function EcommerceProduct() {
   const sourceLabel = catalog.source === 'shop-local'
     ? 'Current local Shop catalog'
     : catalog.source === 'managed-shop'
-      ? 'Managed Shop - connected company'
-      : catalog.source === 'sample'
+      ? 'Company Shop - connected'
+    : catalog.source === 'sample'
       ? 'Sample Shop catalog'
       : 'Catalog unavailable'
   const sourceStorefront = managedIdentity && managedInbox
@@ -1127,7 +1127,7 @@ export function EcommerceProduct() {
   const autopilotMatchesSelection = selectedSkus.length === autopilotSkus.length
     && autopilotSkus.every((sku) => selectedSkus.includes(sku))
   const productAutopilotRows = [
-    ['Source', catalog.source === 'sample' ? 'Sample Shop' : catalog.source === 'managed-shop' ? 'Managed Shop' : catalog.source === 'shop-local' ? 'Local Shop' : 'No catalog'],
+    ['Source', catalog.source === 'sample' ? 'Sample Shop' : catalog.source === 'managed-shop' ? 'Company Shop' : catalog.source === 'shop-local' ? 'Local Shop' : 'No catalog'],
     ['Pick', autopilotSkus.length ? `${autopilotSkus.length} in stock` : 'Needs stock'],
     ['Mode', autopilotMatchesSelection ? 'Applied' : 'Ready'],
     ['Boundary', 'Local selection'],
@@ -1669,7 +1669,7 @@ export function EcommerceProduct() {
     <div className="workspace-screen ecommerce-product">
       <header className="ecommerce-heading">
         <div>
-          <span className="core-eyebrow">{managedIdentity ? 'Managed commerce' : 'Local commerce workspace'}</span>
+          <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Sample store'}</span>
           <h1>Ecommerce</h1>
           <p>Sell online with products, cart, orders, delivery, and returns.</p>
         </div>
