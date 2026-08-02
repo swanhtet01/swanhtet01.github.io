@@ -487,6 +487,15 @@ const ecommerceLiveCopyUpdates = new Map([
   ['AI prepares stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source.', 'Prepare stale quote review, aged request recovery, and a safe cart draft from the same Shop-controlled source.'],
   ['AI prepares the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status.', 'Prepare the next owner-reviewed customer update from quote expiry, stock risk, payment state, delivery mode, and Shop review status.'],
   ['AI prepares owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence.', 'Prepare owner-reviewed Viber, LINE, WeChat, and email reply templates from the same customer request evidence.'],
+  ['Managed Shop inbox only. Stock, delivery, message, and payment still need Shop review.', 'Shop review inbox only. Stock, delivery, message, and payment still need Shop review.'],
+  ['Needs owner check', 'Needs review'],
+  ['Review the cart. Shop remains the only order, stock, delivery, refund, and payment authority.', 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'],
+  ['Managed Website order intake', 'Website order review'],
+  ['Managed intake only. Stock moves and an order is created only after the authenticated human confirmation.', 'Review only. Stock moves and orders are created only after a signed-in person confirms.'],
+  ['Approved Website revision', 'Website request'],
+  ['Operator ID', 'Staff ID'],
+  ['OP-OWNER', 'OP-STAFF'],
+  ['Accept intake', 'Accept request'],
 ])
 for (const required of ['Run next step', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Enterprise order controls', 'Inbox, payment, delivery, recovery, replies, and activation evidence.']) {
   const currentRequired = ecommerceLiveCopyUpdates.get(required) ?? required

@@ -184,7 +184,7 @@ export function WebsiteCommerceIntake({
 
   if (mode === 'managed') {
     return (
-      <section aria-label="Managed Website order intake" className="website-intake">
+      <section aria-label="Website order review" className="website-intake">
         <header className="website-intake-head">
           <div><span className="core-eyebrow">Website orders</span><strong>{pendingManaged ? `${pendingManagedIntakes.length} waiting` : 'No intake waiting'}</strong></div>
           <div><Link className="text-link" to="/website/">Open Website</Link></div>
@@ -208,7 +208,7 @@ export function WebsiteCommerceIntake({
           <div className="website-intake-ready"><div><strong>Nothing to process</strong><small>Send an approved SKU and quantity from Website when a real request is ready.</small></div></div>
         )}
 
-        <p aria-live="polite" className="form-notice">{notice || 'Managed intake only. Stock moves and an order is created only after the authenticated human confirmation.'}</p>
+        <p aria-live="polite" className="form-notice">{notice || 'Review only. Stock moves and orders are created only after a signed-in person confirms.'}</p>
       </section>
     )
   }
@@ -224,10 +224,10 @@ export function WebsiteCommerceIntake({
 
       {context?.handoff.state === 'pending_acceptance' ? (
         <form className="website-intake-form" onSubmit={acceptIntake}>
-          <div className="website-intake-record"><strong>{context.display?.siteName || 'Approved Website revision'}</strong><small>{context.handoff.intake.sku} · quantity {context.handoff.intake.quantity} · {context.handoff.id}</small></div>
-          <label>Operator ID<input autoComplete="off" disabled={disabled} maxLength={35} onChange={(event) => setOperatorId(event.target.value.toUpperCase())} pattern="OP-[A-Z0-9][A-Z0-9_-]{2,31}" placeholder="OP-OWNER" required value={operatorId} /></label>
+          <div className="website-intake-record"><strong>{context.display?.siteName || 'Website request'}</strong><small>{context.handoff.intake.sku} · quantity {context.handoff.intake.quantity} · {context.handoff.id}</small></div>
+          <label>Staff ID<input autoComplete="off" disabled={disabled} maxLength={35} onChange={(event) => setOperatorId(event.target.value.toUpperCase())} pattern="OP-[A-Z0-9][A-Z0-9_-]{2,31}" placeholder="OP-STAFF" required value={operatorId} /></label>
           <label className="website-intake-confirm"><input checked={confirmed} disabled={disabled} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" /><span>I reviewed this SKU, quantity, and Website evidence.</span></label>
-          <button className="core-button primary" disabled={disabled || !item || !operatorPattern.test(operatorId) || !confirmed} type="submit">Accept intake</button>
+          <button className="core-button primary" disabled={disabled || !item || !operatorPattern.test(operatorId) || !confirmed} type="submit">Accept request</button>
         </form>
       ) : null}
 
@@ -243,7 +243,7 @@ export function WebsiteCommerceIntake({
             <label>Payment<select disabled={disabled} onChange={(event) => setPaymentMethod(event.target.value as WebsiteOrderPaymentMethod | '')} required value={paymentMethod}><option value="">Select</option><option value="cash_on_delivery">Cash on delivery</option><option value="manual_qr">Manual QR review</option><option value="manual_bank_transfer">Manual bank transfer</option></select></label>
           </div>
           <div className="form-row">
-            <label>Operator ID<input autoComplete="off" disabled={disabled} maxLength={35} onChange={(event) => setOperatorId(event.target.value.toUpperCase())} pattern="OP-[A-Z0-9][A-Z0-9_-]{2,31}" placeholder="OP-OWNER" required value={operatorId} /></label>
+            <label>Staff ID<input autoComplete="off" disabled={disabled} maxLength={35} onChange={(event) => setOperatorId(event.target.value.toUpperCase())} pattern="OP-[A-Z0-9][A-Z0-9_-]{2,31}" placeholder="OP-STAFF" required value={operatorId} /></label>
             <label>Evidence reference<input autoComplete="off" disabled={disabled} maxLength={27} onChange={(event) => setEvidenceReference(event.target.value.toUpperCase())} pattern="EV-[A-HJ-NP-Z2-9]{8,24}" placeholder="EV-TESTAB23" required value={evidenceReference} /></label>
           </div>
           <label className="website-intake-confirm"><input checked={confirmed} disabled={disabled} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" /><span>I verified the immutable item and MMK total.</span></label>

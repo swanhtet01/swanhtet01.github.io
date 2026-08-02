@@ -482,13 +482,13 @@ export function EcommerceBuyingWorkspace({
           ? 'Confirm reviewed quote'
           : 'Continue to Shop review'
   const orderAutopilotBoundary = onRecordManagedRequest
-    ? 'Managed Shop inbox only. Stock, delivery, message, and payment still need Shop review.'
+    ? 'Shop review inbox only. Stock, delivery, message, and payment still need Shop review.'
     : 'Browser-local quote only. No stock, delivery, message, payment, or Shop record changes here.'
   const orderAutopilotRows = [
     ['Cart', cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : 'Empty'],
     ['Quote', quoteCurrent ? `${quoteMinutesRemaining} min left` : latestRequest ? 'Review again' : 'Not quoted'],
     ['Recovery', recoveryBlocked ? 'Blocked' : recoveryStatus === 'ready' ? 'Ready' : 'Local'],
-    ['Shop review', quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs owner check' : 'Locked'],
+    ['Shop review', quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs review' : 'Locked'],
     ['Payment', 'Not charged'],
   ] as const
 
@@ -1292,7 +1292,7 @@ export function EcommerceBuyingWorkspace({
           <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
             ? 'Checking saved checkout recovery…'
             : recoveryIssue || notice || (cart.length
-              ? 'Review the cart. Shop remains the only order, stock, delivery, refund, and payment authority.'
+              ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
               : 'Add a product to begin.')}</p>
         </div>
       </details>
