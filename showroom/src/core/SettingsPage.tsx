@@ -344,6 +344,8 @@ export function SettingsPage() {
   const [managedPilotBusy, setManagedPilotBusy] = useState(false)
   const [aiContextExportApproval, setAiContextExportApproval] = useState<{ key: string; reviewedAt: string } | null>(null)
   const managedPilotRequestRef = useRef(0)
+  const demoLaunchActionRef = useRef<HTMLAnchorElement>(null)
+  const demoLaunchHandoffPendingRef = useRef(false)
   const [demoWorkspaceSource, setDemoWorkspace] = useState<ClientDemoWorkspace | null>(loadClientDemoWorkspace)
   const demoWorkspace = useMemo(() => restoreClientDemoWorkspace(demoWorkspaceSource), [demoWorkspaceSource])
   const [demoPresetId, setDemoPresetId] = useState<ClientDemoPresetId>(() => demoWorkspace?.blueprint.client.presetId ?? 'social-seller')
@@ -1157,6 +1159,19 @@ export function SettingsPage() {
     return () => { if (failureNoticeTimer !== undefined) window.clearTimeout(failureNoticeTimer) }
   }, [demoWorkspace])
 
+  useEffect(() => {
+    if (!demoBlueprint || !demoLaunchHandoffPendingRef.current) return undefined
+    demoLaunchHandoffPendingRef.current = false
+    const animationFrame = window.requestAnimationFrame(() => {
+      const launchAction = demoLaunchActionRef.current
+      if (!launchAction) return
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      launchAction.focus({ preventScroll: true })
+      launchAction.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' })
+    })
+    return () => window.cancelAnimationFrame(animationFrame)
+  }, [demoBlueprint])
+
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => ({ ...current, ...patch, savedAt: undefined }))
     setDemoBlueprint(null)
@@ -1256,6 +1271,7 @@ export function SettingsPage() {
     setShopIndustryPackId(blueprint.client.shopIndustryPackId)
     setPlantIndustryPackId(blueprint.client.plantIndustryPackId)
     setDemoSelections(Object.fromEntries(blueprint.products.map((product) => [product.product, product.templateId])))
+    if (origin === 'created') demoLaunchHandoffPendingRef.current = true
     setDemoBlueprint(blueprint)
     setDemoWorkspace((currentWorkspace) => reconcileClientDemoWorkspace(blueprint, currentWorkspace, new Date().toISOString()))
     setDemoDataSetupOpen(false)
@@ -2035,7 +2051,7 @@ export function SettingsPage() {
             {demoBlueprint ? <section aria-label="Client demo kit" className="demo-kit-result">
               <div className="panel-head"><div><span className="core-eyebrow">Client workspace</span><h3>{demoBlueprint.client.workspace}</h3><p>{demoRunbook?.provenCount ?? 0} proven · {demoReadyCount} data-ready · owner {demoBlueprint.client.owner}</p></div><a className="core-button" download={demoBlueprintFilename} href={demoBlueprintHref}>Download setup kit</a></div>
               <section aria-label="Client demo launchpad" className="client-demo-launchpad">
-                <div className="client-demo-launchpad-head"><div><span className="core-eyebrow">Demo launchpad</span><strong>{nextDemoMission ? `Next: ${nextDemoMission.label}` : 'All selected demos are proven'}</strong><small>Every product below uses this client setup. Open any working sample now; add client data only when it is ready.</small></div><Link className="core-button primary" to={demoLaunchPath}>{nextDemoMission ? 'Open next demo' : 'Review demos'}</Link></div>
+                <div className="client-demo-launchpad-head"><div><span className="core-eyebrow">Demo launchpad</span><strong>{nextDemoMission ? `Next: ${nextDemoMission.label}` : 'All selected demos are proven'}</strong><small>Every product below uses this client setup. Open any working sample now; add client data only when it is ready.</small></div><Link className="core-button primary" ref={demoLaunchActionRef} to={demoLaunchPath}>{nextDemoMission ? 'Open next demo' : 'Review demos'}</Link></div>
                 <div className="client-demo-launch-grid">{demoRunbook?.products.map((mission) => {
                   const blueprintProduct = demoBlueprint.products.find((product) => product.product === mission.product)
                   const statusClass = mission.status === 'proven' ? 'approved' : mission.status === 'needs_fix' ? 'pending' : 'bounded'
