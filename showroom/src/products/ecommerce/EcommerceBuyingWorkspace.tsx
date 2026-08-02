@@ -46,6 +46,7 @@ import {
   commerceOrderCorrectionExpectation,
   commerceStorefrontOrderTimeline,
   commerceStorefrontRequests,
+  createSeedCommerce,
   type CommerceItem,
   type CommerceCorrectionKind,
   type CommerceCorrectionReasonCode,
@@ -209,6 +210,7 @@ export function EcommerceBuyingWorkspace({
   const [rescheduleDraft, setRescheduleDraft] = useState<{ orderId: string; requestedPromisedAt: string; reason: string } | null>(null)
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
   const confirmationRef = useRef<HTMLInputElement>(null)
+  const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
   const activeBuyingState = buyingState.scope === scope
@@ -453,12 +455,23 @@ export function EcommerceBuyingWorkspace({
   const cartTotal = cartItems.reduce((total, line) => (
     total + (line.item?.unitPriceMmk ?? 0) * line.quantity
   ), 0)
-  const availablePaymentAdapters = useMemo(() => ecommerceAvailablePaymentAdapters(
-    commerceState.paymentPolicies ?? [],
+  const configuredPaymentPolicies = commerceState.paymentPolicies ?? []
+  const configuredPaymentAdapters = ecommerceAvailablePaymentAdapters(
+    configuredPaymentPolicies,
     fulfilment,
     Math.max(1, cartTotal),
     new Date(quoteClock).toISOString(),
-  ), [cartTotal, commerceState.paymentPolicies, fulfilment, quoteClock])
+  )
+  const usingSamplePaymentFallback = !onRecordManagedRequest && configuredPaymentAdapters.length === 0
+  const checkoutPaymentPolicies = usingSamplePaymentFallback ? samplePaymentPolicies : configuredPaymentPolicies
+  const availablePaymentAdapters = usingSamplePaymentFallback
+    ? ecommerceAvailablePaymentAdapters(
+        checkoutPaymentPolicies,
+        fulfilment,
+        Math.max(1, cartTotal),
+        new Date(quoteClock).toISOString(),
+      )
+    : configuredPaymentAdapters
   const effectivePaymentAdapter = availablePaymentAdapters.includes(paymentAdapter)
     ? paymentAdapter
     : availablePaymentAdapters[0] ?? paymentAdapter
@@ -515,12 +528,16 @@ export function EcommerceBuyingWorkspace({
   }
 
   function changeFulfilment(next: EcommerceFulfilment) {
-    const nextPaymentAdapters = ecommerceAvailablePaymentAdapters(
-      commerceState.paymentPolicies ?? [],
+    const reviewedAt = new Date().toISOString()
+    const configuredNextPaymentAdapters = ecommerceAvailablePaymentAdapters(
+      configuredPaymentPolicies,
       next,
       Math.max(1, cartTotal),
-      new Date().toISOString(),
+      reviewedAt,
     )
+    const nextPaymentAdapters = !onRecordManagedRequest && configuredNextPaymentAdapters.length === 0
+      ? ecommerceAvailablePaymentAdapters(samplePaymentPolicies, next, Math.max(1, cartTotal), reviewedAt)
+      : configuredNextPaymentAdapters
     setFulfilment(next)
     setPaymentAdapter((current) => nextPaymentAdapters.includes(current)
       ? current
@@ -1138,7 +1155,7 @@ export function EcommerceBuyingWorkspace({
         currentCatalog,
         currentPromotionPolicies: commerceState.promotionPolicies ?? [],
         currentShippingPolicies: commerceState.shippingPolicies ?? [],
-        currentPaymentPolicies: commerceState.paymentPolicies ?? [],
+        currentPaymentPolicies: checkoutPaymentPolicies,
         currentTaxConfigurations: commerceState.taxConfigurations ?? [],
         catalogRevision: commerceState.catalogChanges?.length ?? 0,
         confirmedAt: new Date().toISOString(),
@@ -1238,7 +1255,11 @@ export function EcommerceBuyingWorkspace({
                   : <option value="">No Shop payment method</option>}
               </select>
             </label>
-            {!availablePaymentAdapters.length ? <p className="form-notice" role="status">Set up an active Shop payment method for {fulfilment} before reviewing an order.</p> : null}
+            {usingSamplePaymentFallback && availablePaymentAdapters.length
+              ? <p className="form-notice" role="status">Browser-local sample payment. No charge or payment-provider request is made.</p>
+              : !availablePaymentAdapters.length
+                ? <p className="form-notice" role="status">Set up an active Shop payment method for {fulfilment} before reviewing an order.</p>
+                : null}
             <label>
               <span>Promotion code <small>optional · Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => { setPromotionCode(event.target.value); setHandoffConfirmed(false) }} placeholder="Optional" value={promotionCode} />
