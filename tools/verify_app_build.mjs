@@ -461,11 +461,13 @@ for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'S
 if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
   || !ecommerceSource.includes('const ecommerceTodayHeadline =')
   || !ecommerceSource.includes('const ecommerceTodayCustomerCount = new Set(')
+  || !ecommerceSource.includes("order.sourceRecordId?.startsWith('ECR-')")
+  || !ecommerceSource.includes('const ecommerceActiveOrderCount = managedIdentity')
   || !ecommerceSource.includes("['Storefront', savedDraftIsCurrent ? 'Ready'")
   || !ecommerceSource.includes("['Shop requests', pendingManagedRequests.length ? `${pendingManagedRequests.length} to review` : 'Clear']")
-  || !ecommerceSource.includes("['Cart & checkout', ecommerceTodayCartUnits")
+  || !ecommerceSource.includes("['Cart & checkout', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Order confirmed'")
   || !ecommerceSource.includes("['Customers', ecommerceTodayCustomerCount")
-  || !ecommerceSource.includes("['Returns', managedReturnedUnits")
+  || !ecommerceSource.includes("['Returns', ecommerceReturnedUnits")
   || !ecommerceSource.includes('aria-labelledby="ecommerce-today-title"')
   || !ecommerceSource.includes('aria-label="Ecommerce today status"')
   || !ecommerceSource.includes('className="ecommerce-today-metrics" role="group"')
@@ -490,6 +492,7 @@ if (!ecommerceSource.includes('const aiDeskRows = [')
   || !ecommerceSource.includes('aria-label="Ecommerce next step"')
   || ecommerceSource.includes('aria-label="Recommended Ecommerce next step"')
   || !ecommerceSource.includes("'Review Ecommerce requests in Shop'")
+  || !ecommerceSource.includes("'Continue Ecommerce order in Shop'")
   || !ecommerceSource.includes("'Prepare catalog import'")
   || !ecommerceSource.includes("'Finish store'")
   || !ecommerceSource.includes("'Review cart quote'")
@@ -505,6 +508,7 @@ if (!ecommerceSource.includes('const orderAutopilotStage =')
   || !ecommerceSource.includes("'Connect products'")
   || !ecommerceSource.includes("'Package order batch'")
   || !ecommerceSource.includes("'Open Shop review'")
+  || !ecommerceSource.includes("'Continue fulfilment'")
   || !ecommerceSource.includes("'Ready for customer orders'")
   || !ecommerceSource.includes('detail: `Order autopilot: ${orderAutopilotStage}`')
   || !ecommerceSource.includes('downloadOrderImportReviewPacket()')
@@ -531,9 +535,9 @@ if (!ecommerceSource.includes('const orderOpsRows = [')
   || !ecommerceSource.includes('aria-label="Order lifecycle queue"')
   || !ecommerceSource.includes('One Shop-owned record now follows each Ecommerce request through review, fulfilment, payment, cancellation, refund, and return.')
   || !ecommerceSource.includes("['Review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'Clear']")
-  || !ecommerceSource.includes("['Fulfil', activeManagedOrders.length ? `${activeManagedOrders.length} active` : 'Clear']")
-  || !ecommerceSource.includes("['Payment', lifecyclePaymentAttention.length ? `${lifecyclePaymentAttention.length} blocking` : 'Clear']")
-  || !ecommerceSource.includes("['Refund', lifecycleRefundAttention.length ? `${lifecycleRefundAttention.length} due` : 'Clear']")
+  || !ecommerceSource.includes("['Fulfil', ecommerceActiveOrderCount ? `${ecommerceActiveOrderCount} active` : 'Clear']")
+  || !ecommerceSource.includes("['Payment', ecommercePaymentAttentionCount ? `${ecommercePaymentAttentionCount} blocking` : 'Clear']")
+  || !ecommerceSource.includes("['Refund', ecommerceRefundAttentionCount ? `${ecommerceRefundAttentionCount} due` : 'Clear']")
   || !ecommerceSource.includes('Open Shop order queue')
   || !ecommerceSource.includes('const orderImportStage =')
   || !ecommerceSource.includes('const orderImportRows = [')
@@ -4868,6 +4872,11 @@ if (!productSetupSource.includes('templateId: string')
   || settingsPageSource.indexOf('className="compact-disclosure client-system-details"') > settingsPageSource.indexOf('className="compact-disclosure client-preparation-handoff"')
   || !settingsPageSource.includes('Required proof')
   || !settingsPageSource.includes('Observed: {mission.evidenceObserved}')
+  || !settingsPageSource.includes('readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)')
+  || !settingsPageSource.includes("order.sourceRecordId?.startsWith('ECR-')")
+  || !settingsPageSource.includes('latestIsoTimestamp(reviewedEcommerceOrders.map((order) => order.createdAt))')
+  || !clientOnboardingSource.includes('request confirmed into a Shop order')
+  || !clientOnboardingSource.includes('Shop-confirmed request')
   || !settingsPageSource.includes('onProgress={recordDemoProductProgress}')
   || !settingsPageSource.includes("not_started: 'Not started'")
   || !settingsPageSource.includes('Create client demo')
@@ -8140,6 +8149,26 @@ async function verifyClientOnboardingRuntime() {
       commerce: { completedOrders: 1, reconciledOrders: 1, latestAccountableSaleAt: '2026-07-28T08:06:00.000Z' },
     })
     assert(shopProvenRunbook.provenCount === 1 && shopProvenRunbook.nextProduct === 'production' && shopProvenRunbook.products[0].status === 'proven', 'client_demo_runbook_shop_proof_not_derived')
+    const ecommerceStorefrontOnlyRunbook = model.buildClientDemoRunbook(shopReady, {
+      ...noOperationalEvidence,
+      ecommerce: { savedStorefronts: 1, reviewedRequests: 0, latestSavedStorefrontAt: '2026-07-28T08:09:00.000Z', latestReviewedRequestAt: null },
+    })
+    assert(ecommerceStorefrontOnlyRunbook.products[3].status !== 'proven', 'client_demo_saved_storefront_claimed_shop_review')
+    const ecommerceOrderOnlyRunbook = model.buildClientDemoRunbook(shopReady, {
+      ...noOperationalEvidence,
+      ecommerce: { savedStorefronts: 0, reviewedRequests: 1, latestSavedStorefrontAt: null, latestReviewedRequestAt: '2026-07-28T08:10:00.000Z' },
+    })
+    assert(ecommerceOrderOnlyRunbook.products[3].status !== 'proven', 'client_demo_shop_order_claimed_unsaved_storefront')
+    const seededEcommerceRunbook = model.buildClientDemoRunbook(shopReady, {
+      ...noOperationalEvidence,
+      ecommerce: { savedStorefronts: 1, reviewedRequests: 1, latestSavedStorefrontAt: '2026-07-28T07:58:00.000Z', latestReviewedRequestAt: '2026-07-28T08:10:00.000Z' },
+    })
+    assert(seededEcommerceRunbook.products[3].status !== 'proven', 'client_demo_seeded_storefront_claimed_current_ecommerce_proof')
+    const ecommerceProvenRunbook = model.buildClientDemoRunbook(shopReady, {
+      ...noOperationalEvidence,
+      ecommerce: { savedStorefronts: 1, reviewedRequests: 1, latestSavedStorefrontAt: '2026-07-28T08:09:00.000Z', latestReviewedRequestAt: '2026-07-28T08:10:00.000Z' },
+    })
+    assert(ecommerceProvenRunbook.products[3].status === 'proven' && ecommerceProvenRunbook.provenCount === 1, 'client_demo_shop_confirmed_ecommerce_proof_not_derived')
     const allProvenRunbook = model.buildClientDemoRunbook(shopReady, {
       commerce: { completedOrders: 1, reconciledOrders: 1, latestAccountableSaleAt: '2026-07-28T08:06:00.000Z' },
       production: { releasedBatches: 1, latestReleasedAt: '2026-07-28T08:07:00.000Z' },

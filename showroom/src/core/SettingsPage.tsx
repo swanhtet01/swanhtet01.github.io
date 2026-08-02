@@ -11,6 +11,7 @@ import { ManagedContextConsent } from './ManagedContextConsent'
 import { buildManagedAiContextExport, buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
 import { operatingChangeCopy } from './operating-baseline'
 import { getCurrentPublish, loadWebsiteWorkspace } from '../products/website/website-model'
+import { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } from '../products/ecommerce/storefront-draft'
 import {
   PageHeading,
   RuntimeBadge,
@@ -532,6 +533,21 @@ export function SettingsPage() {
     const loaded = loadWebsiteWorkspace(window.localStorage)
     return loaded.ok ? getCurrentPublish(loaded.workspace) : null
   })()
+  const ecommerceDemoEvidence = useMemo(() => {
+    const localEcommerceStorefront = managedIdentity ? null : readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE)
+    const currentEcommerceStorefrontAt = managedIdentity
+      ? commerce.storefrontConfiguration?.saved.capturedAt ?? null
+      : localEcommerceStorefront?.status === 'ready'
+        ? localEcommerceStorefront.draft?.savedAt ?? null
+        : null
+    const reviewedEcommerceOrders = commerce.orders.filter((order) => order.sourceRecordId?.startsWith('ECR-'))
+    return {
+      savedStorefronts: currentEcommerceStorefrontAt ? 1 : 0,
+      reviewedRequests: reviewedEcommerceOrders.length,
+      latestSavedStorefrontAt: currentEcommerceStorefrontAt,
+      latestReviewedRequestAt: latestIsoTimestamp(reviewedEcommerceOrders.map((order) => order.createdAt)),
+    }
+  }, [commerce, managedIdentity])
   const demoRunbook = demoWorkspace ? buildClientDemoRunbook(demoWorkspace, {
     commerce: {
       completedOrders: commerce.orders.filter((order) => order.status === 'completed').length,
@@ -546,12 +562,7 @@ export function SettingsPage() {
       approvedReleases: currentWebsitePublish ? 1 : 0,
       latestApprovedAt: currentWebsitePublish?.recordedAt ?? null,
     },
-    ecommerce: {
-      savedStorefronts: commerce.storefrontConfiguration ? 1 : 0,
-      reviewedRequests: commerce.storefrontRequests?.length ?? 0,
-      latestSavedStorefrontAt: commerce.storefrontConfiguration?.saved.capturedAt ?? null,
-      latestReviewedRequestAt: latestIsoTimestamp(commerce.storefrontRequests?.map((request) => request.createdAt) ?? []),
-    },
+    ecommerce: ecommerceDemoEvidence,
   }) : null
   const nextDemoMission = demoRunbook?.products.find((product) => product.product === demoRunbook.nextProduct) ?? null
   const demoLaunchPath = nextDemoMission?.startPath ?? demoRunbook?.products[0]?.startPath ?? '/'
