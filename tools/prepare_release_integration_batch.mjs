@@ -296,7 +296,7 @@ export const ECOMMERCE_REQUIREMENTS = [
 export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   {
     id: 'upstream-managed-activation-runbook', authority: 'upstream', file: 'docs/supermega-enterprise-activation.md', tokens: [
-      'all eight migrations as `postgres`', 'schema version 7', 'Owner approved this exact plan and release.',
+      'all nine migrations as `postgres`', 'schema version 8', 'Owner approved this exact plan and release.',
       'Activation compensation after a downstream release gate failure.', '`SUPERMEGA_TRIAL_WRITES_ENABLED=true` is written last',
     ],
   },
@@ -314,7 +314,7 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'upstream-security-and-activation-gates', authority: 'upstream', file: 'tools/verify_app_security_contract.mjs', tokens: [
-      'managed schema contract advances through additive v2 through v7 migrations',
+      'managed schema contract advances through additive v2 through v8 migrations',
       'managed recovery is non-enumerating and password setup remains named-user only',
       'managed activation requires durable named-owner authorization and encrypted admin transport',
       'managed AI context is owner-consented, summary-only, tenant-bound, and revision-bound',

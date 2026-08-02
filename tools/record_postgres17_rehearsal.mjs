@@ -22,6 +22,7 @@ const migrations = [
   '20260724204920_private_trial_backend_v5_read_capabilities.sql',
   '20260730113000_private_trial_backend_v6_managed_activation.sql',
   '20260730123000_private_trial_backend_v7_workspace_discovery.sql',
+  '20260802161500_private_trial_backend_v8_rls_initplan.sql',
 ]
 
 const implementationPaths = [
@@ -32,6 +33,7 @@ const implementationPaths = [
   'supermega_runtime/trial_store.py',
   'supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql',
   'supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql',
+  'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
   'tools/activate_supermega_database.ps1',
   'tools/rehearse_supermega_postgres17.py',
   'tools/validate_supermega_database_url.py',
@@ -140,10 +142,10 @@ function mappedChecks(rawChecks) {
 export function buildSanitizedProof(raw, context) {
   if (raw?.contract !== 'supermega_postgres17_rehearsal_v1' || raw.ok !== true || raw.ready !== true || raw.status !== 'rehearsed') fail('database_rehearsal_not_ready')
   if (raw.engine?.major !== 17 || raw.engine?.tls_active !== true || raw.engine?.loopback_only !== true) fail('database_rehearsal_engine_invalid')
-  if (raw.migrations?.count !== migrations.length || raw.migrations?.schema_version !== 7 || raw.migrations?.production_validator_ready !== true) fail('database_rehearsal_migrations_invalid')
+  if (raw.migrations?.count !== migrations.length || raw.migrations?.schema_version !== 8 || raw.migrations?.production_validator_ready !== true) fail('database_rehearsal_migrations_invalid')
   if (raw.cleanup_complete !== true || raw.secret_values_exposed !== false || raw.production_mutated !== false || raw.supabase_mutated !== false || raw.vercel_mutated !== false) fail('database_rehearsal_safety_invalid')
   if (raw.storage?.catalog_mode !== 'local_private_fixture' || raw.storage?.hosted_storage_privacy_proof_required !== true) fail('database_rehearsal_storage_boundary_invalid')
-  if (raw.recovery?.backup_nonempty !== true || raw.recovery?.restored_schema_version !== 7) fail('database_rehearsal_recovery_invalid')
+  if (raw.recovery?.backup_nonempty !== true || raw.recovery?.restored_schema_version !== 8) fail('database_rehearsal_recovery_invalid')
   if (!/^[0-9a-f]{40}$/.test(context.implementationCommit || '')) fail('database_rehearsal_commit_invalid')
   if (!/^sha256:[0-9a-f]{64}$/.test(context.implementation.digest || '') || !Number.isSafeInteger(context.implementation.fileCount) || context.implementation.fileCount < 10) fail('database_rehearsal_implementation_invalid')
   if (!/^[0-9a-f]{64}$/.test(context.archive.sha256 || '') || !Number.isSafeInteger(context.archive.bytes) || context.archive.bytes < 1) fail('database_rehearsal_archive_invalid')
@@ -229,7 +231,7 @@ export function validateSanitizedProof(proof, currentImplementation) {
   if (!Number.isFinite(Date.parse(proof.recordedAt))) fail('database_rehearsal_evidence_time_invalid')
   if (proof.implementationDigest !== currentImplementation.digest || proof.implementationFileCount !== currentImplementation.fileCount || proof.implementation?.digest !== currentImplementation.digest || JSON.stringify(proof.implementation?.paths) !== JSON.stringify(currentImplementation.paths)) fail('database_rehearsal_evidence_stale')
   if (proof.engine?.major !== 17 || proof.engine?.tlsActive !== true || proof.engine?.loopbackOnly !== true || !/^[0-9a-f]{64}$/.test(proof.engine?.observedArchiveSha256 || '')) fail('database_rehearsal_evidence_engine_invalid')
-  if (proof.migration?.count !== migrations.length || proof.migration?.schemaVersion !== 7 || proof.migration?.productionValidatorReady !== true || proof.recovery?.restoredSchemaVersion !== 7) fail('database_rehearsal_evidence_migrations_invalid')
+  if (proof.migration?.count !== migrations.length || proof.migration?.schemaVersion !== 8 || proof.migration?.productionValidatorReady !== true || proof.recovery?.restoredSchemaVersion !== 8) fail('database_rehearsal_evidence_migrations_invalid')
   if (Object.keys(proof.checks || {}).length !== rawCheckNames.length || Object.values(proof.checks || {}).some((value) => value !== true)) fail('database_rehearsal_evidence_checks_invalid')
   if (proof.storage?.hostedStoragePrivacyProofRequired !== true || proof.storage?.publicBucketCount !== 0) fail('database_rehearsal_evidence_storage_boundary_invalid')
   if (proof.safety?.cleanupComplete !== true || proof.safety?.secretValuesExposed !== false || proof.safety?.productionMutated !== false || proof.safety?.supabaseMutated !== false || proof.safety?.vercelMutated !== false) fail('database_rehearsal_evidence_safety_invalid')

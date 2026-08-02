@@ -19,7 +19,7 @@ from supermega_runtime.shop_inventory_runtime import (
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 7
+TRIAL_SCHEMA_VERSION = 8
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 HUMAN_ACTOR_KIND = "human"
