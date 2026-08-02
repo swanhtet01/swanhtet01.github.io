@@ -412,9 +412,23 @@ for (const required of ['storagePackages', 'selectedProductRecords']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_prepared_record_context:${required}`)
 }
 const clientImportLiveCopyUpdates = new Map([
+  ['Import autopilot', 'Next'],
+  ['Import coach', 'setup helper'],
+  ['Write boundary', 'Safety'],
+  ['Managed check before write', 'Company check first'],
+  ['Local/export only', 'Local file only'],
   ['Activation handoff', 'setup handoff'],
   ['Download activation package', 'Download setup file'],
+  ['Run managed check', 'Run company check'],
+  ['Server validation passed with zero records written', 'Workspace check passed with zero records written'],
   ['managed provisioning plan', 'company setup plan'],
+  ['Provisioning plan', 'company setup plan'],
+  ['Final preflight', 'Final check'],
+  ['Runs before apply', 'Runs before import'],
+  ['Verifying the named human, product capability, package digest, and current workspace revision...', 'Checking the company, product, file, and latest saved records...'],
+  ['Running final preflight...', 'Running final check...'],
+  ['authority + revision preflight retained', 'company check retained'],
+  ['No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.', 'No customer message, payment, website publish, or automation runs from this check.'],
 ])
 for (const required of ['Import autopilot', 'Import coach', 'Next action', 'Write boundary', 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'Managed check before write', 'Local/export only', 'Activation handoff', 'Download activation package', 'Run managed check', 'Free mode can export the package for support review without sending data from the browser.', 'Server validation passed with zero records written', 'Provisioning plan', 'managed provisioning plan', 'Final preflight', 'Runs before apply', 'Verifying the named human, product capability, package digest, and current workspace revision...', 'Running final preflight...', 'authority + revision preflight retained', 'No browser storage, customer message, payment, domain publish, or scheduler autopilot is allowed from this validation.']) {
   const currentRequired = clientImportLiveCopyUpdates.get(required) ?? required
