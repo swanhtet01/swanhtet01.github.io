@@ -46,13 +46,13 @@ export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: 
         <p>{nextDetail}</p>
       </div>
       <div className="shop-today-actions">
-        <Link className="core-button primary" to={nextTo}>Review orders</Link>
+        <Link className="core-button primary" to={nextTo}>Open next step</Link>
         <Link className="core-button" to="/shop/?tab=counter">New sale</Link>
       </div>
     </section>
 
     <section className="shop-today-guide" aria-label="Shop guided jobs">
-      <header><span className="core-eyebrow">Start here</span><h3>Three jobs run the shop.</h3></header>
+      <header><span className="core-eyebrow">Start here</span><h3>Run the shop in 3 steps.</h3></header>
       <div>
         {guidedJobs.map(([step, label, detail, to]) => <Link key={label} to={to}><b>{step}</b><span><strong>{label}</strong><small>{detail}</small></span></Link>)}
       </div>
