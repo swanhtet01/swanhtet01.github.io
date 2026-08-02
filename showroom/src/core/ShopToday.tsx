@@ -32,9 +32,9 @@ const capabilityGroups = [
 ] as const
 
 const guidedJobs = [
-  ['1', 'Review orders', 'Finish fulfilment, payment, returns, and cancellations.', '/shop/?tab=orders'],
-  ['2', 'Make a sale', 'Tap items, choose payment, and save a receipt.', '/shop/?tab=counter'],
-  ['3', 'Check stock', 'Review low stock, counts, receiving, and buying.', '/shop/?tab=inventory'],
+  ['1', 'Make a sale', 'Tap items, choose payment, and save a receipt.', '/shop/?tab=counter'],
+  ['2', 'Finish orders', 'Check online orders, payment, delivery, returns, and cancellations.', '/shop/?tab=orders'],
+  ['3', 'Check stock', 'See low stock, counts, receiving, and buying.', '/shop/?tab=inventory'],
 ] as const
 
 export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: ShopTodayProps) {
@@ -52,7 +52,7 @@ export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: 
     </section>
 
     <section className="shop-today-guide" aria-label="Shop guided jobs">
-      <header><span className="core-eyebrow">Start here</span><h3>Run Shop in 3 steps.</h3></header>
+      <header><span className="core-eyebrow">Start here</span><h3>Use Shop in 3 steps.</h3></header>
       <div>
         {guidedJobs.map(([step, label, detail, to]) => <Link key={label} to={to}><b>{step}</b><span><strong>{label}</strong><small>{detail}</small></span></Link>)}
       </div>

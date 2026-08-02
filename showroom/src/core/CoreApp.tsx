@@ -701,12 +701,12 @@ const productStartActions = {
   commerce: [
     { step: '1', label: 'Sell now', detail: 'Tap products and review a sale.', to: '/shop/?tab=counter' },
     { step: '2', label: 'Finish orders', detail: 'Confirm, fulfil, and follow payment.', to: '/shop/?tab=orders' },
-    { step: '3', label: 'Check stock', detail: 'Review low stock and purchasing.', to: '/shop/?tab=inventory' },
+    { step: '3', label: 'Check stock', detail: 'See low stock and purchasing.', to: '/shop/?tab=inventory' },
   ],
   production: [
-    { step: '1', label: 'Run jobs', detail: 'Record output and material use.', to: '/plant/?tab=production' },
-    { step: '2', label: 'Fix blockers', detail: 'Quality, machine, and shift problems.', to: '/plant/?tab=control' },
-    { step: '3', label: 'Use Shop demand', detail: 'Turn order demand into production.', to: '/plant/?tab=production' },
+    { step: '1', label: 'Choose job', detail: 'Open the active job first.', to: '/plant/?tab=production' },
+    { step: '2', label: 'Record output', detail: 'Add good units, waste, and material use.', to: '/plant/?tab=production' },
+    { step: '3', label: 'Fix blockers', detail: 'Open quality, machine, and shift problems.', to: '/plant/?tab=control' },
   ],
 } as const
 
@@ -1659,7 +1659,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
         inventory: 'Count stock, replenish items, and review location availability.',
       }[commerceTab]
     : {
-        production: 'Run jobs, record output, and keep material trace current.',
+        production: 'Choose jobs, record output, and keep material trace current.',
         control: 'Contain quality, equipment, downtime, and maintenance problems.',
       }[productionTab]
 
@@ -9138,11 +9138,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>
   const plantStartGuide = <section className="plant-start-guide" aria-label="Plant guided jobs">
-    <header><span className="core-eyebrow">Start here</span><h2>Run production in 3 steps.</h2><p>Record output, use materials, then fix blockers.</p></header>
+    <header><span className="core-eyebrow">Start here</span><h2>Use Plant in 3 steps.</h2><p>Choose a job, record output, then fix blockers.</p></header>
     <div>
-      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>1</b><span><strong>Record output</strong><small>Enter good units, waste, and the operator note for the active job.</small></span></button>
-      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>2</b><span><strong>Use materials</strong><small>Record which batch, lot, and quantity were used for the job.</small></span></button>
-      <button onClick={() => navigate('/plant/?tab=control')} type="button"><b>3</b><span><strong>Fix blockers</strong><small>Open quality, machine, material, and daily work issues.</small></span></button>
+      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>1</b><span><strong>Choose job</strong><small>Open the active batch before changing anything.</small></span></button>
+      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>2</b><span><strong>Record output</strong><small>Enter good units, waste, material use, and the operator note.</small></span></button>
+      <button onClick={() => navigate('/plant/?tab=control')} type="button"><b>3</b><span><strong>Fix blockers</strong><small>Open quality, machine, material, and daily work problems.</small></span></button>
     </div>
   </section>
   const plantControl = <section aria-label="Plant control" className="plant-control">
