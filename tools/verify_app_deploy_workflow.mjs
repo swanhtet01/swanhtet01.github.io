@@ -219,6 +219,11 @@ const releaseBarrierSelfTest = spawnSync(
   [resolve(root, 'tools/verify_coordinated_release_live.mjs'), '--self-test'],
   { encoding: 'utf8' },
 )
+const appVerifierSelfTest = spawnSync(
+  process.execPath,
+  [resolve(root, 'tools/verify_app_release_live.mjs'), '--self-test'],
+  { encoding: 'utf8' },
+)
 const canonicalPythonBundle = await verifyCanonicalPythonBundle()
 
 requireContract('canonical app project id', workflow.includes('APP_VERCEL_PROJECT_ID: prj_1GAMPH8qlSAXno5BhO1wkYx1jkGG'))
@@ -292,6 +297,7 @@ requireContract('candidate identity barrier selects each Vercel project', releas
 requireContract('public project switch clears app build and environment state', workflow.includes('rm -rf -- .vercel') && workflow.indexOf('rm -rf -- .vercel') < workflow.indexOf('npm run public:prebuilt'))
 requireContract('cross-domain barrier validates complete release identity', releaseBarrier.includes("identityFields = ['commit', 'brandVersion', 'contextVersion', 'catalogVersion']") && releaseBarrier.includes('cross_domain_release_identity_mismatch') && releaseBarrier.includes('release_manifest_identity_mismatch'))
 requireContract('release barrier fixtures pass', releaseBarrierSelfTest.status === 0 && releaseBarrierSelfTest.stdout.includes('"ok": true') && releaseBarrierSelfTest.stdout.includes('reject_catalog_drift'))
+requireContract('app release evidence fixtures pass', appVerifierSelfTest.status === 0 && appVerifierSelfTest.stdout.includes('"ok": true') && appVerifierSelfTest.stdout.includes('supermega_app_live_evidence_extractor.v1'))
 requireContract('cross-platform protected deployment requests', !appVerifier.includes("'--silent'") && !appVerifier.includes("'--show-error'") && !appVerifier.includes("'--location'") && !appVerifier.includes("'--token'") && appVerifier.includes('describeCliFailure'))
 requireContract('both project controls are verified', workflow.includes('verify_vercel_project_state.mjs app') && workflow.includes('verify_vercel_project_state.mjs public') && workflow.includes('verify_vercel_domain_state.mjs app') && workflow.includes('verify_vercel_domain_state.mjs public') && workflow.includes('verify_vercel_environment_state.mjs app') && workflow.includes('verify_vercel_environment_state.mjs public'))
 requireContract('canonical domains are reasserted before domain verification',
