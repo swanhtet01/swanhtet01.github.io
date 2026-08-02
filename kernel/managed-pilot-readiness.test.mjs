@@ -41,6 +41,10 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.equal(validateManagedPilotReadiness(ledger), ledger)
 })
 
+test('text evidence digests are stable across Git line-ending normalization', () => {
+  assert.equal(readinessDigest('line one\r\nline two\r\n'), readinessDigest('line one\nline two\n'))
+})
+
 test('rejects hosted overclaims and product authority drift', () => {
   const hosted = structuredClone(input)
   hosted.hqNow = hosted.hqNow.replace('`false`', '`true`')

@@ -27,7 +27,10 @@ function stableStringify(value) {
 }
 
 export function readinessDigest(value) {
-  return `sha256:${createHash('sha256').update(typeof value === 'string' ? value : stableStringify(value)).digest('hex')}`
+  const canonical = typeof value === 'string'
+    ? value.replace(/\r\n?/g, '\n')
+    : stableStringify(value)
+  return `sha256:${createHash('sha256').update(canonical).digest('hex')}`
 }
 
 function field(markdown, label) {
