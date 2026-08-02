@@ -458,7 +458,7 @@ const ecommerceLiveCopyUpdates = new Map([
   ['Finish storefront setup', 'Finish store'],
   ['Open storefront for ordering', 'Open store for ordering'],
   ['AI filters customer requests by stock risk, quote expiry, manual QR review, and delivery mode so the owner opens the right Shop review first.', 'Filter customer requests by stock risk, quote expiry, manual QR review, and delivery mode so the owner opens the right Shop review first.'],
-  ['The assistant prepares CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners review one clean Shop queue.', 'Review CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners get one clean Shop queue.'],
+  ['The assistant prepares CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners review one clean Shop queue.', 'Review CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so Shop gets one clean review queue.'],
   ['Repair before handoff', 'Repair before Shop review'],
   ['Save storefront first', 'Save store first'],
   ['AI checks catalog, storefront fingerprint, quote readiness, Shop review queue, and safety mode before a customer request can move forward.', 'Check products, prices, quote readiness, Shop review queue, and safety mode before a customer request can move forward.'],

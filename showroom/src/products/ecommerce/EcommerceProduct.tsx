@@ -1678,7 +1678,7 @@ export function EcommerceProduct() {
       <section className="ecommerce-start-guide" aria-label="Ecommerce guided jobs">
         <header>
           <span className="core-eyebrow">Start here</span>
-          <h2>Three jobs run online orders.</h2>
+          <h2>Start selling in 3 steps.</h2>
           <p>Use the store like a customer, choose what they see, then confirm real orders in Shop.</p>
         </header>
         <div>
@@ -1701,7 +1701,7 @@ export function EcommerceProduct() {
       </section>
 
       <details className="ecommerce-business-controls">
-        <summary><span><strong>Store and order controls</strong><small>Products, customer requests, imports, payment, and delivery</small></span><b>Later</b></summary>
+        <summary><span><strong>Optional order tools</strong><small>Imports, payment, delivery, customer replies, and go-live checks</small></span><b>Optional</b></summary>
         <div className="ecommerce-business-controls-content">
       <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
@@ -1743,7 +1743,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Order import helper</span>
           <h2>{orderImportStage}</h2>
-          <p>Review CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners get one clean Shop queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
+          <p>Review CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so Shop gets one clean review queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
