@@ -1,3 +1,9 @@
+.ecommerce-product,
+.ecommerce-product > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
 .ecommerce-save-bar {
   min-height: 58px;
   display: flex;
@@ -1702,6 +1708,10 @@
 }
 
 @media (max-width: 560px) {
+  .ecommerce-product {
+    overflow-x: clip;
+  }
+
   .ecommerce-business-controls > summary b { display: none; }
   .ecommerce-business-controls > summary span { width: 100%; }
   .ecommerce-save-bar {
