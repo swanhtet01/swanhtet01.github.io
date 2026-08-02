@@ -446,22 +446,6 @@ export function EcommerceBuyingWorkspace({
     return statuses
   }, [])
   const pendingRescheduleIntents = rescheduleStatuses.filter((status) => status.state !== 'replacement_created')
-  const quoteCurrent = Boolean(latestRequest
-    && latestRequest.id === freshQuoteId
-    && latestRequest.scope === scope
-    && latestRequest.sourcePreviewDigest === sourcePreviewDigest
-    && latestRequest.customerReference === customerReference
-    && (!latestRequest.customerProfile || latestRequest.customerProfile.name === customerName.trim())
-    && (!latestRequest.customerProfile || latestRequest.customerProfile.phone === customerPhone.trim())
-    && (latestRequest.fulfilment !== 'delivery' || Boolean(latestRequest.deliveryAddress
-      && latestRequest.deliveryAddress.line1 === addressLine1.trim()
-      && latestRequest.deliveryAddress.township === addressTownship.trim()
-      && latestRequest.deliveryAddress.city === addressCity.trim()
-      && (latestRequest.deliveryAddress.instructions ?? '') === deliveryInstructions.trim()))
-    && latestRequest.fulfilment === fulfilment
-    && latestRequest.quote.payment.adapter === paymentAdapter
-    && (latestRequest.quote.promotion.code ?? '') === promotionCode.trim()
-    && cartMatchesRequest(cart, latestRequest))
   const cartItems = useMemo(() => cart.map((line) => ({
     ...line,
     item: preview.items.find((item) => item.sku === line.sku),
@@ -475,12 +459,26 @@ export function EcommerceBuyingWorkspace({
     Math.max(1, cartTotal),
     new Date(quoteClock).toISOString(),
   ), [cartTotal, commerceState.paymentPolicies, fulfilment, quoteClock])
-  const paymentPolicyReady = availablePaymentAdapters.includes(paymentAdapter)
-  useEffect(() => {
-    if (paymentPolicyReady) return
-    setHandoffConfirmed(false)
-    if (availablePaymentAdapters.length) setPaymentAdapter(availablePaymentAdapters[0])
-  }, [availablePaymentAdapters, paymentPolicyReady])
+  const effectivePaymentAdapter = availablePaymentAdapters.includes(paymentAdapter)
+    ? paymentAdapter
+    : availablePaymentAdapters[0] ?? paymentAdapter
+  const paymentPolicyReady = availablePaymentAdapters.includes(effectivePaymentAdapter)
+  const quoteCurrent = Boolean(latestRequest
+    && latestRequest.id === freshQuoteId
+    && latestRequest.scope === scope
+    && latestRequest.sourcePreviewDigest === sourcePreviewDigest
+    && latestRequest.customerReference === customerReference
+    && (!latestRequest.customerProfile || latestRequest.customerProfile.name === customerName.trim())
+    && (!latestRequest.customerProfile || latestRequest.customerProfile.phone === customerPhone.trim())
+    && (latestRequest.fulfilment !== 'delivery' || Boolean(latestRequest.deliveryAddress
+      && latestRequest.deliveryAddress.line1 === addressLine1.trim()
+      && latestRequest.deliveryAddress.township === addressTownship.trim()
+      && latestRequest.deliveryAddress.city === addressCity.trim()
+      && (latestRequest.deliveryAddress.instructions ?? '') === deliveryInstructions.trim()))
+    && latestRequest.fulfilment === fulfilment
+    && latestRequest.quote.payment.adapter === effectivePaymentAdapter
+    && (latestRequest.quote.promotion.code ?? '') === promotionCode.trim()
+    && cartMatchesRequest(cart, latestRequest))
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
   const quoteMinutesRemaining = latestRequest
     ? Math.max(0, Math.ceil((Date.parse(latestRequest.quote.expiresAt) - quoteClock) / 60000))
@@ -1062,7 +1060,7 @@ export function EcommerceBuyingWorkspace({
           && retained.deliveryAddress.city === addressCity.trim()
           && (retained.deliveryAddress.instructions ?? '') === deliveryInstructions.trim()))
         && retained.fulfilment === fulfilment
-        && retained.quote.payment.adapter === paymentAdapter
+        && retained.quote.payment.adapter === effectivePaymentAdapter
         && (retained.quote.promotion.code ?? '') === promotionCode.trim()
         && retained.quote.pimDigest === pim.pimDigest
         && Date.parse(retained.quote.expiresAt) > quotedAt.getTime()
@@ -1096,7 +1094,7 @@ export function EcommerceBuyingWorkspace({
           previous: activeBuyingState.requests.find((request) => request.customerProfile?.phone === customerPhone.trim() && request.deliveryAddress)?.deliveryAddress ?? null,
         } : null,
         fulfilment,
-        paymentAdapter,
+        paymentAdapter: effectivePaymentAdapter,
         promotionCode: promotionCode.trim() || null,
         idempotencyKey: `ECI-${globalThis.crypto.randomUUID().toUpperCase()}`,
         quotedAt: quotedAt.toISOString(),
@@ -1234,7 +1232,7 @@ export function EcommerceBuyingWorkspace({
             </> : null}
             <label>
               <span>Payment</span>
-              <select disabled={!availablePaymentAdapters.length} onChange={(event) => { setPaymentAdapter(event.target.value as EcommercePaymentAdapter); setHandoffConfirmed(false) }} value={paymentPolicyReady ? paymentAdapter : ''}>
+              <select disabled={!availablePaymentAdapters.length} onChange={(event) => { setPaymentAdapter(event.target.value as EcommercePaymentAdapter); setHandoffConfirmed(false) }} value={paymentPolicyReady ? effectivePaymentAdapter : ''}>
                 {availablePaymentAdapters.length
                   ? availablePaymentAdapters.map((adapter) => <option key={adapter} value={adapter}>{paymentLabel(adapter)}</option>)
                   : <option value="">No Shop payment method</option>}

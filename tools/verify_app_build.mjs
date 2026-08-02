@@ -3056,6 +3056,8 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('nextPaymentAdapters.includes(current)')
   || !ecommerceBuyingUiSource.includes('No Shop payment method')
   || !ecommerceBuyingUiSource.includes('!paymentPolicyReady')
+  || !ecommerceBuyingUiSource.includes('latestRequest.quote.payment.adapter === effectivePaymentAdapter')
+  || !ecommerceBuyingUiSource.includes('paymentAdapter: effectivePaymentAdapter')
   || !ecommerceBuyingUiSource.includes('Quote for {latestRequest.customerReference}')
   || !ecommerceBuyingUiSource.includes('const orderAutopilotNext = recoveryBlocked')
   || !ecommerceBuyingUiSource.includes('const orderAutopilotRows = [')
