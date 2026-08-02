@@ -697,19 +697,6 @@ const productionTabs: Array<{ id: ProductionTab; label: string }> = [
   { id: 'control', label: 'Problems' },
 ]
 
-const productStartActions = {
-  commerce: [
-    { step: '1', label: 'Sell now', detail: 'Tap products and review a sale.', to: '/shop/?tab=counter' },
-    { step: '2', label: 'Finish orders', detail: 'Confirm, fulfil, and follow payment.', to: '/shop/?tab=orders' },
-    { step: '3', label: 'Check stock', detail: 'See low stock and purchasing.', to: '/shop/?tab=inventory' },
-  ],
-  production: [
-    { step: '1', label: 'Choose job', detail: 'Open the active job first.', to: '/plant/?tab=production' },
-    { step: '2', label: 'Record output', detail: 'Add good units, waste, and material use.', to: '/plant/?tab=production' },
-    { step: '3', label: 'Fix blockers', detail: 'Open quality, machine, and shift problems.', to: '/plant/?tab=control' },
-  ],
-} as const
-
 const productionMachineStateLabels: Record<ProductionMachineState, string> = {
   running: 'Running',
   attention: 'Needs attention',
@@ -1646,7 +1633,6 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   }
 
   const tabs = view === 'commerce' ? commerceTabs : productionTabs
-  const startActions = productStartActions[view]
   const productCopy = view === 'commerce'
     ? {
         today: 'See today’s next job and key numbers.',
@@ -1674,14 +1660,6 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   return (
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
-      <nav className="product-start-strip" aria-label={`${productDisplayName(view)} quick start`}>
-        {startActions.map((action) => (
-          <Link aria-current={location.pathname + location.search === action.to ? 'page' : undefined} key={action.label} to={action.to}>
-            <b>{action.step}</b>
-            <span><strong>{action.label}</strong><small>{action.detail}</small></span>
-          </Link>
-        ))}
-      </nav>
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>

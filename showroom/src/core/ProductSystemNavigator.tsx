@@ -8,11 +8,11 @@ import {
   type ClientCapability,
 } from './client-capability-plan'
 
-const productDetails: Record<ClientSolutionId, { label: string; summary: string; setupPath: string; primaryPath: string }> = {
-  commerce: { label: 'Shop', summary: 'Sell, fulfil, restock, and close the day.', setupPath: '/settings/?product=shop', primaryPath: '/shop/' },
-  production: { label: 'Plant', summary: 'Plan jobs, run output, quality, and maintenance.', setupPath: '/settings/?product=plant', primaryPath: '/plant/' },
-  website: { label: 'Website', summary: 'Edit pages, review leads, and prepare launch.', setupPath: '/settings/?product=website', primaryPath: '/website/' },
-  ecommerce: { label: 'Ecommerce', summary: 'Run storefront orders and Shop review.', setupPath: '/settings/?product=ecommerce', primaryPath: '/ecommerce/' },
+const productDetails: Record<ClientSolutionId, { label: string; setupPath: string; primaryPath: string }> = {
+  commerce: { label: 'Shop', setupPath: '/settings/?product=shop', primaryPath: '/shop/' },
+  production: { label: 'Plant', setupPath: '/settings/?product=plant', primaryPath: '/plant/' },
+  website: { label: 'Website', setupPath: '/settings/?product=website', primaryPath: '/website/' },
+  ecommerce: { label: 'Ecommerce', setupPath: '/settings/?product=ecommerce', primaryPath: '/ecommerce/' },
 }
 
 function WorkflowLink({ capability, fallbackPath }: { capability: ClientCapability; fallbackPath: string }) {
@@ -44,8 +44,8 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
   return (
     <details className="product-system-navigator" onToggle={(event) => setOpen(event.currentTarget.open)} open={open}>
       <summary>
-        <span><b>{details.label}</b><small>{details.summary}</small></span>
-        <strong>{open ? 'Close' : `${summary.demoReady} run now`}</strong>
+        <span><b>Modules</b><small>{summary.demoReady} working / {summary.configureNext} setup</small></span>
+        <strong>{open ? 'Close' : 'Open'}</strong>
       </summary>
       <div className="product-system-body">
         <header>
