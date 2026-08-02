@@ -29,7 +29,7 @@ export function verifyCurrentReleaseAssets({
 }) {
   const groups = [
     ['launcher', assetCorpus, ['SUPERMEGA', 'Start with one product.', 'Pick one product and use the working demo first. Add your data only after the flow makes sense.', 'Sales and inventory', 'Production and quality', 'Pages and inquiries', 'Storefront and checkout', 'Try demo', 'Add your data', 'Later', manifest.brand.colors.accent, manifest.brand.colors.ink]],
-    ['shop_plant', operationsChunk, ['Complete sale', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
+    ['shop_plant', operationsChunk, ['Create order', 'Finish payment and handoff in Orders.', 'Stock reserved. Finish fulfilment and reconcile payment before completion.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
     ['module_drawer', productSystemNavigatorChunk, ['Modules', ' working / ', ' setup', 'Start with the working demo.', 'Use the sample workflow first. Setup and imports can wait.', 'Use now', 'Add data later', 'Advanced modules stay hidden until a real client needs them.']],
     ['support_helper', productHomeReadinessCorpus, ['Support helper', 'Uses Shop, Plant, Website, and Ecommerce records.', 'Readiness review status', 'Mark reviewed', 'Acknowledgement confirms review only.', 'supermega.local_business_snapshot.v1', 'supermega.local_business_answer.v1']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence']],
@@ -47,6 +47,10 @@ export function verifyCurrentReleaseAssets({
       checks += 1
       if (!corpus.includes(required)) throw new Error(`missing_current_release_asset:${group}:${required}`)
     }
+  }
+  for (const forbidden of ['Complete sale', 'Stock updated. Receipt saved.']) {
+    checks += 1
+    if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
   const completeCorpus = groups.map(([, corpus]) => corpus).join('\n')
   for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
