@@ -1027,13 +1027,13 @@ export function WebsiteProduct() {
             <section className="website-start-guide" aria-label="Website setup steps">
               <header>
                 <span className="website-kicker">Start here</span>
-                <h2>Finish the website in 3 steps.</h2>
-                <p>Preview, edit, download. No deployment happens here.</p>
+                <h2>Try the sample. Then make it yours.</h2>
+                <p>Most users only need these three actions. Advanced review stays out of the way.</p>
               </header>
               <div>
-                <button onClick={() => previewPage()} type="button"><b>1</b><span><strong>Preview sample</strong><small>Check the current site before editing.</small></span></button>
-                <button onClick={() => openContentSurface('work')} type="button"><b>2</b><span><strong>Edit template</strong><small>Change pages, navigation, copy, and lead form.</small></span></button>
-                <button onClick={() => openWorkspaceView('publish')} type="button"><b>3</b><span><strong>Download file</strong><small>Export the website. Deployment stays separate.</small></span></button>
+                <button onClick={() => previewPage()} type="button"><b>1</b><span><strong>View demo</strong><small>See the finished example first.</small></span></button>
+                <button onClick={openStarterSetup} type="button"><b>2</b><span><strong>Use template</strong><small>Answer a few business questions.</small></span></button>
+                <button onClick={() => openWorkspaceView('publish')} type="button"><b>3</b><span><strong>Get website</strong><small>Download the reviewed file.</small></span></button>
               </div>
             </section>
           ) : null}

@@ -56,22 +56,22 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
     <section className="website-editor-panel website-starter-setup" aria-labelledby="website-starter-title">
       <header className="website-panel-head">
         <div>
-          <span className="website-eyebrow">Three-page starter</span>
-          <h2 id="website-starter-title">Make this website yours</h2>
-          <p>Edit the ready example, then preview it before saving. No website or domain changes happen here.</p>
+          <span className="website-eyebrow">Quick setup</span>
+          <h2 id="website-starter-title">Change the sample into your website</h2>
+          <p>Answer the basics only. SuperMega makes a three-page preview you can check before saving.</p>
         </div>
         <span className="website-status is-draft">Example ready</span>
       </header>
 
       <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit} ref={starterFormRef}>
         <footer className="website-starter-actions">
-          <button className="website-button is-secondary" onClick={onViewSample} type="button">Back to demo</button>
-          <button className="website-button is-primary" type="submit">Preview my site</button>
+          <button className="website-button is-secondary" onClick={onViewSample} type="button">View sample</button>
+          <button className="website-button is-primary" type="submit">Make preview</button>
         </footer>
 
         <div className="website-form-grid two-columns website-starter-identity-grid">
           <label>
-            <span>Website layout</span>
+            <span>Type of website</span>
             <select onChange={(event) => updateBrief('templateId', event.target.value as WebsiteStarterBrief['templateId'])} value={brief.templateId}>
               {websiteStarterTemplates.map((template) => <option key={template.id} value={template.id}>{template.label} — {template.detail}</option>)}
             </select>
@@ -91,7 +91,7 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
             {businessNameIssue ? <small className="website-field-error" id="website-starter-error-business-name">{businessNameIssue.message}</small> : null}
           </label>
           <label>
-            <span>Who is it for?</span>
+            <span>Main customers</span>
             <input
               aria-describedby={audienceIssue ? 'website-starter-error-audience' : undefined}
               aria-invalid={Boolean(audienceIssue)}
@@ -122,7 +122,7 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
 
         <div className="website-form-grid two-columns website-starter-copy-grid">
           <label>
-            <span>Main offer</span>
+            <span>What do you sell or provide?</span>
             <textarea
               aria-describedby={offerIssue ? 'website-starter-error-offer' : undefined}
               aria-invalid={Boolean(offerIssue)}
@@ -137,7 +137,7 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
           </label>
 
           <label>
-            <span>One fact you can support</span>
+            <span>Why should customers trust it?</span>
             <textarea
               aria-describedby={proofIssue ? 'website-starter-proof-help website-starter-error-proof' : 'website-starter-proof-help'}
               aria-invalid={Boolean(proofIssue)}

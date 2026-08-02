@@ -1625,9 +1625,9 @@ export function EcommerceProduct() {
     ['Returns', managedReturnedUnits ? `${managedReturnedUnits} unit${managedReturnedUnits === 1 ? '' : 's'}` : 'Clear'],
   ] as const
   const ecommerceGuidedJobs = [
-    ['1', 'Shop the sample', 'Add items and send one test order.', '#ecommerce-preview-panel'],
-    ['2', 'Edit store', 'Pick products, prices, photos, and copy.', '#ecommerce-setup-panel'],
-    ['3', 'Review orders', 'Confirm payment, fulfilment, and delivery in Shop.', '/shop/?tab=orders&source=ecommerce'],
+    ['1', 'Browse demo', 'See the customer store first.', '#ecommerce-preview-panel'],
+    ['2', 'Make store', 'Choose products, photos, and page copy.', '#ecommerce-setup-panel'],
+    ['3', 'Test order', 'Review one checkout before real customers.', '/shop/?tab=orders&source=ecommerce'],
   ] as const
 
   function runOrderAutopilot() {
@@ -1678,8 +1678,8 @@ export function EcommerceProduct() {
       <section className="ecommerce-start-guide" aria-label="Ecommerce guided jobs">
         <header>
           <span className="core-eyebrow">Start here</span>
-          <h2>Start selling in 3 steps.</h2>
-          <p>Try the storefront, edit products, then review orders in Shop.</p>
+          <h2>Open the store in 3 steps.</h2>
+          <p>Browse the demo, make the store, then test one order.</p>
         </header>
         <div>
           {ecommerceGuidedJobs.map(([step, label, detail, to]) => to.startsWith('#') ? (
@@ -1712,7 +1712,7 @@ export function EcommerceProduct() {
         </div>
         <div className="ecommerce-today-source" role="status">
           <span>{sourceLabel}</span>
-          <small>Shop controls prices, stock, payment, delivery, and the accountable order record.</small>
+          <small>Shop keeps the real stock, payment, delivery, and order record behind this store.</small>
         </div>
       </section>
 
