@@ -36,6 +36,11 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   const ledger = buildManagedPilotReadiness(input)
   assert.equal(ledger.overall.blockingGateCount, 7)
   assert.equal(ledger.gates[0].status, 'ready-local')
+  assert.equal(
+    ledger.gates.find((gate) => gate.id === 'live_product_contract')?.evidence,
+    'The exact paired release is verified, but its managed product contract remains isolated_demo.',
+  )
+  assert.doesNotMatch(JSON.stringify(ledger), /app_product_contract_drift/)
   assert.equal(ledger.products.length, 4)
   assert.equal(ledger.controls.modelCallsRequiredToBuild, 0)
   assert.equal(validateManagedPilotReadiness(ledger), ledger)

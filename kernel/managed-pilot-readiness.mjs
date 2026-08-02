@@ -90,7 +90,7 @@ export function buildManagedPilotReadiness(input = {}) {
     gate('local_postgres17', 'ready-local', '52 checks, TLS, RLS, tenant isolation, durable owner control, backup and restore.', 'Keep the digest-bound rehearsal current.'),
     gate('hosted_postgres17', 'blocked', 'Local evidence explicitly does not prove hosted activation.', 'Run the approved isolated Supabase rehearsal and validator.'),
     gate('hosted_storage_privacy', 'blocked', 'The six-request verifier is ready, but hosted proof is absent.', 'Run the verifier against an owner-approved isolated private bucket.'),
-    gate('live_product_contract', 'blocked', 'HQ records app_product_contract_drift.', 'Reconcile and verify the exact paired release before any pilot claim.'),
+    gate('live_product_contract', 'blocked', 'The exact paired release is verified, but its managed product contract remains isolated_demo.', 'Prove managed persistence and security on the approved isolated target before any managed-pilot claim.'),
     gate('managed_persistence', 'blocked', 'Live managed persistence ready is false.', 'Prove durable commands, recovery, and tenant isolation on the isolated target.'),
     gate('security', 'blocked', 'Live security ready is false.', 'Resolve hosted Security Advisor and exact policy evidence.'),
     gate('named_pilot', 'blocked', 'HQ records no named pilot customer or measured baseline.', 'Select one Shop design partner, named operator, baseline, and acceptance evidence.'),
