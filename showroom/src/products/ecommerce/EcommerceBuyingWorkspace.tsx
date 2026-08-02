@@ -265,7 +265,7 @@ export function EcommerceBuyingWorkspace({
       setFreshQuoteId(stillFresh ? latest.id : '')
       setQuoteClock(Date.now())
       setNotice(stillFresh
-        ? `${latest.id} recovered on this device. Review current Shop values before handoff.`
+        ? `${latest.id} recovered on this device. Review current Shop values before Shop review.`
         : `${latest.id} was recovered, but its quote expired. Review a new total.`)
     })
     return () => { current = false }
@@ -1283,8 +1283,8 @@ export function EcommerceBuyingWorkspace({
 
           <details className="ecommerce-checkout-help">
             <summary><span><strong>How checkout stays safe</strong><small>Quote, stock, and payment checks</small></span></summary>
-            <section className="ecommerce-order-autopilot" aria-label="Checkout safeguards">
-              <div><span>Checkout safeguards</span><strong>{orderAutopilotNext}</strong><small>{orderAutopilotBoundary}</small></div>
+            <section className="ecommerce-order-autopilot" aria-label="Checkout checks">
+              <div><span>Checkout checks</span><strong>{orderAutopilotNext}</strong><small>{orderAutopilotBoundary}</small></div>
               <div className="ecommerce-order-autopilot-rows">{orderAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
             </section>
           </details>

@@ -1226,9 +1226,9 @@ export function EcommerceProduct() {
       ] as const
   const orderIntakeGuideRows = [
     ['Channels', 'CSV, Viber, LINE, WeChat, email, form'],
-    ['Assistant prepares', 'Customer, SKU, quantity, fulfilment, payment, source proof'],
+    ['Review fields', 'Customer, SKU, quantity, fulfilment, payment, source proof'],
     ['Owner sees', 'Ready rows, blocked rows, stock risk, missing fields'],
-    ['Handoff', 'One reviewed packet for Shop queue approval'],
+    ['Output', 'One reviewed packet for Shop queue approval'],
   ] as const
   const lifecycleRows = [
     ['Capture', pendingManagedRequests.length ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'}` : buyingCart.length ? `${buyingCart.length} cart lines` : 'Ready'],
@@ -1377,16 +1377,16 @@ export function EcommerceProduct() {
         : orderImportReview?.status === 'ready'
           ? 'Package orders for Shop'
           : orderOpsStockRiskCount
-            ? 'Resolve stock before handoff'
+            ? 'Resolve stock before review'
             : orderOpsPaymentRiskCount
-              ? 'Review payment before handoff'
+              ? 'Review payment before review'
               : deliveryReviewCount
-                ? 'Review delivery before handoff'
+                ? 'Review delivery before review'
                 : pendingManagedRequests.length
                   ? 'Open Shop fulfillment queue'
                   : buyingReady
-                    ? 'Fulfillment handoff ready'
-                    : 'Fulfillment handoff locked'
+                    ? 'Fulfillment review ready'
+                    : 'Fulfillment review locked'
   const fulfillmentHandoffRows = [
     ['Source', orderImportReview ? `${orderImportReview.readyRows}/${orderImportReview.totalRows} import` : pendingManagedRequests.length ? 'Managed queue' : buyingCart.length ? 'Cart quote' : 'No request yet'],
     ['Stock', orderOpsStockRiskCount ? `${orderOpsStockRiskCount} risk` : catalog.items.length ? 'ATP check' : 'Need catalog'],
@@ -1411,7 +1411,7 @@ export function EcommerceProduct() {
   const deliveryAreaTemplateRows = [
     ['Area', deliveryZoneHint || 'No request yet'],
     ['Rule', deliveryReviewRequest ? 'Owner fee review' : savedDraftIsCurrent ? 'Template shell' : 'Locked'],
-    ['Rider', deliveryReviewRequest ? 'Handoff review' : 'Not assigned'],
+    ['Rider', deliveryReviewRequest ? 'Owner review' : 'Not assigned'],
     ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD review' : 'No charge'],
     ['Reuse', deliveryReviewRequest ? 'After approval' : 'Managed gate'],
   ] as const
@@ -1452,28 +1452,28 @@ export function EcommerceProduct() {
     ['Safety', managedIdentity ? 'Managed gate' : 'Local trial'],
   ] as const
   const managedStoreActivationStage = importNeeded
-    ? 'Import catalog for activation'
+    ? 'Import catalog for go-live'
     : !savedDraftIsCurrent
       ? 'Save store before going live'
       : !buyingReady
-        ? 'Repair checkout activation'
+        ? 'Repair checkout checks'
         : pendingManagedRequests.length
-          ? 'Clear Shop activation queue'
+          ? 'Clear Shop review queue'
           : orderOpsPaymentRiskCount
-            ? 'Review payment activation'
+            ? 'Review payment checks'
             : deliveryReviewCount
-              ? 'Review delivery activation'
+              ? 'Review delivery checks'
               : managedIdentity
-                ? 'Managed store activation ready'
-                : 'Download activation packet'
+                ? 'Managed store ready'
+                : 'Download go-live file'
   const managedStoreActivationRows = [
     ['Catalog', importNeeded ? 'Needed' : `${selectedSkus.length} sellable`],
-    ['Storefront', savedDraftIsCurrent ? 'Saved fingerprint' : 'Save required'],
+    ['Store', savedDraftIsCurrent ? 'Saved check' : 'Save required'],
     ['Checkout', buyingReady ? 'Quote controlled' : 'Locked'],
     ['Payments', orderOpsPaymentRiskCount ? `${orderOpsPaymentRiskCount} manual QR` : 'Review only'],
     ['Delivery', deliveryReviewCount ? `${deliveryReviewCount} review` : savedDraftIsCurrent ? 'Template ready' : 'Locked'],
     ['Shop gate', pendingManagedRequests.length ? `${pendingManagedRequests.length} owner review` : 'No queue'],
-    ['Activation', managedIdentity ? 'Managed controls' : 'Free local only'],
+    ['Go-live', managedIdentity ? 'Managed controls' : 'Free local only'],
   ] as const
   function downloadManagedStoreActivationPacket() {
     const packet = buildEcommerceManagedStoreActivationPacket({
@@ -1514,9 +1514,9 @@ export function EcommerceProduct() {
       event: 'agent_job_chosen',
       product: 'ecommerce',
       route: location.pathname + location.search,
-      detail: 'Download Ecommerce managed store activation packet',
+      detail: 'Download Ecommerce managed store go-live file',
     })
-    setDraftNotice('Ecommerce activation packet downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.')
+    setDraftNotice('Ecommerce go-live file downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.')
   }
   const aiDeskRows = [
     ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
@@ -1552,8 +1552,8 @@ export function EcommerceProduct() {
           ? 'Owner reviews the quote before sending to Shop.'
           : 'Owner keeps payment and customer messages locked.'
   const aiAgentQueueRows = [
-    ['Agent job', aiAgentJob],
-    ['Reason', aiAgentReason],
+    ['Next step', aiAgentJob],
+    ['Why', aiAgentReason],
     ['Owner gate', aiOwnerGate],
   ] as const
   const orderAutopilotStage = importNeeded
@@ -1736,14 +1736,14 @@ export function EcommerceProduct() {
         <div className="ecommerce-ai-agent-queue" aria-label="Recommended Ecommerce next step" role="group">
           {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
-        <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Run next step</button>
+        <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Open next step</button>
       </section>
 
       <section aria-label="Order import helper" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">
         <div>
           <span className="core-eyebrow">Order import helper</span>
           <h2>{orderImportStage}</h2>
-          <p>The assistant prepares CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners review one clean Shop queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
+          <p>Review CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners get one clean Shop queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
@@ -1765,7 +1765,7 @@ export function EcommerceProduct() {
                 setOrderImportSourceName('')
               }} placeholder="Paste customer_reference, channel, sku, quantity, fulfilment, payment, source_message rows" value={orderImportText} /></label>
               <button className="text-link" disabled={!orderImportText.trim()} onClick={reviewOrderImportBatch} type="button">Review order batch</button>
-              {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before handoff'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
+              {orderImportReview ? <div className={`ecommerce-order-import-review ${orderImportReview.status}`} role="status"><strong>{orderImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before Shop review'}</strong><span>{orderImportReview.summary}</span><small>{orderImportReview.readyRows} ready · {orderImportReview.blockedRows} blocked · no Shop write</small><button className="text-link" onClick={downloadOrderImportReviewPacket} type="button">Download review packet</button></div> : null}
               {orderImportSourceName ? <p className="ecommerce-order-import-source">Local file: {orderImportSourceName}</p> : null}
               {orderImportNotice ? <p className="ecommerce-order-import-notice" role="status">{orderImportNotice}</p> : null}
             </div>
@@ -1783,7 +1783,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Request inbox</span>
           <h2>{requestInboxStage}</h2>
-          <p>AI filters customer requests by stock risk, quote expiry, manual QR review, and delivery mode so the owner opens the right Shop review first. No customer message, payment, delivery booking, stock move, refund, or Shop write runs here.</p>
+          <p>Filter customer requests by stock risk, quote expiry, manual QR review, and delivery mode so the owner opens the right Shop review first. No customer message, payment, delivery booking, stock move, refund, or Shop write runs here.</p>
           <div className="ecommerce-request-filter" role="group" aria-label="Request inbox filter">
             {requestInboxFilterButtons.map(([value, label]) => <button aria-pressed={requestInboxFilter === value} key={value} onClick={() => setRequestInboxFilter(value)} type="button">{label}</button>)}
           </div>
@@ -1811,30 +1811,30 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Ordering readiness</span>
           <h2>{orderingReadinessStage}</h2>
-          <p>AI checks products, prices, quote readiness, Shop review queue, and safety mode before a customer request can move forward. No customer message, payment, delivery, stock, refund, or Shop write runs from this panel.</p>
+          <p>Check products, prices, quote readiness, Shop review queue, and safety mode before a customer request can move forward. No customer message, payment, delivery, stock, refund, or Shop write runs from this panel.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows">
           {orderingReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
-      <section aria-label="Ecommerce managed store activation packet" className="ecommerce-ops-cockpit ecommerce-managed-activation-cockpit">
+      <section aria-label="Ecommerce managed store go-live file" className="ecommerce-ops-cockpit ecommerce-managed-activation-cockpit">
         <div>
-          <span className="core-eyebrow">Managed store activation packet</span>
+          <span className="core-eyebrow">Managed store go-live file</span>
           <h2>{managedStoreActivationStage}</h2>
-          <p>AI packages products, prices, checkout controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for store activation. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this packet.</p>
-          <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download activation packet</button>
+          <p>Package products, prices, checkout controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for go-live review. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this file.</p>
+          <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download go-live file</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">
           {managedStoreActivationRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
       </section>
 
-      <section aria-label="Ecommerce fulfillment handoff" className="ecommerce-ops-cockpit ecommerce-fulfillment-handoff-cockpit">
+      <section aria-label="Ecommerce fulfillment review" className="ecommerce-ops-cockpit ecommerce-fulfillment-handoff-cockpit">
         <div>
-          <span className="core-eyebrow">Fulfillment handoff</span>
+          <span className="core-eyebrow">Fulfillment review</span>
           <h2>{fulfillmentHandoffStage}</h2>
-          <p>AI summarizes the exact customer/order handoff across source evidence, ATP, payment review, pickup or delivery, reply draft, and Shop queue ownership. No customer message, payment capture, wallet debit, rider booking, stock move, refund, Shop write, or fulfillment confirmation runs from this panel.</p>
+          <p>Review the exact customer order across source evidence, ATP, payment review, pickup or delivery, reply draft, and Shop queue ownership. No customer message, payment capture, wallet debit, rider booking, stock move, refund, Shop write, or fulfillment confirmation runs from this panel.</p>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-fulfillment-handoff-rows">
           {fulfillmentHandoffRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
@@ -1979,7 +1979,7 @@ export function EcommerceProduct() {
           <div aria-label="Product recommendation" className="ecommerce-product-autopilot" role="group">
             <div>
               <strong>Product recommendation</strong>
-              <small>The assistant prepares the simplest sellable set from in-stock Shop items. You only save after review.</small>
+              <small>Choose the simplest sellable set from in-stock Shop items. You only save after review.</small>
             </div>
             <div className="ecommerce-product-autopilot-rows">
               {productAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
