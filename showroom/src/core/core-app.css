@@ -2036,7 +2036,7 @@ textarea { min-height: 72px; resize: vertical; }
   .business-command-facts > span:nth-child(-n+2) { border-bottom: 1px solid var(--core-line); }
   .business-command-evidence > summary small { display: none; }
   .product-home-track-actions { grid-template-columns: 1fr; }
-  .product-track-grid { gap: 8px; }
+  .product-track-grid { grid-template-columns: 1fr; gap: 8px; }
   .product-track-card { min-height: 146px; gap: 10px; padding: 13px; }
   .product-track-card h2 { margin: 6px 0; font-size: 20px; }
   .product-track-card p { font-size: 11px; }
