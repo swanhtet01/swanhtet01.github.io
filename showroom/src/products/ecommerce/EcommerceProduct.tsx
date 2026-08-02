@@ -543,14 +543,14 @@ export function EcommerceProduct() {
   function applyProductAutopilot() {
     const nextSkus = recommendedSellableSkus()
     if (!nextSkus.length) {
-      setDraftNotice('Product autopilot needs at least one in-stock Shop item before it can prepare the storefront.')
+      setDraftNotice('Product recommendation needs at least one in-stock Shop item before it can prepare the storefront.')
       return
     }
     setSelectedSkus(nextSkus)
     setMerchandising(null)
     setBuyingCart([])
     if (missingSavedSkus.length) setMissingSelectionReviewed(true)
-    setDraftNotice(`Product autopilot selected ${nextSkus.length} in-stock products. Save to confirm the storefront; no catalog, order, payment, delivery, stock, or Shop write ran.`)
+    setDraftNotice(`Product recommendation selected ${nextSkus.length} in-stock products. Save to confirm the storefront; no catalog, order, payment, delivery, stock, or Shop write ran.`)
   }
 
   function downloadOrderImportTemplate() {
@@ -1221,12 +1221,12 @@ export function EcommerceProduct() {
       ] as const
     : [
         ['Step 1', 'Load sample or upload CSV'],
-        ['Step 2', 'AI checks fields locally'],
+        ['Step 2', 'Checks fields locally'],
         ['Step 3', 'Download reviewed packet'],
       ] as const
   const orderIntakeGuideRows = [
     ['Channels', 'CSV, Viber, LINE, WeChat, email, form'],
-    ['AI prepares', 'Customer, SKU, quantity, fulfilment, payment, source proof'],
+    ['Assistant prepares', 'Customer, SKU, quantity, fulfilment, payment, source proof'],
     ['Owner sees', 'Ready rows, blocked rows, stock risk, missing fields'],
     ['Handoff', 'One reviewed packet for Shop queue approval'],
   ] as const
@@ -1718,9 +1718,9 @@ export function EcommerceProduct() {
           <small>Shop controls prices, stock, payment, delivery, and the accountable order record.</small>
         </div>
       </section>
-      <section aria-label="AI order desk" className="ecommerce-ai-desk">
+      <section aria-label="Order desk" className="ecommerce-ai-desk">
         <div>
-          <span className="core-eyebrow">AI order desk</span>
+          <span className="core-eyebrow">Order desk</span>
           <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : !savedDraftIsCurrent ? 'Finish setup before orders' : 'Ready to take reviewed orders'}</h2>
           <p>{pendingManagedRequests.length
             ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
@@ -1733,17 +1733,17 @@ export function EcommerceProduct() {
         <div className="ecommerce-ai-desk-queue">
           {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
-        <div className="ecommerce-ai-agent-queue" aria-label="Recommended Ecommerce agent job" role="group">
+        <div className="ecommerce-ai-agent-queue" aria-label="Recommended Ecommerce next step" role="group">
           {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
         </div>
         <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Run next step</button>
       </section>
 
-      <section aria-label="Order import autopilot" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">
+      <section aria-label="Order import helper" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">
         <div>
-          <span className="core-eyebrow">Order import autopilot</span>
+          <span className="core-eyebrow">Order import helper</span>
           <h2>{orderImportStage}</h2>
-          <p>AI prepares CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners review one clean Shop queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
+          <p>The assistant prepares CSV, Viber, LINE, WeChat, email, and form order batches against the saved Shop catalog so owners review one clean Shop queue. No customer message, payment, delivery booking, stock move, refund, or Shop write runs from this importer.</p>
           <div className="ecommerce-inline-actions">
             <Link className="text-link" to="/settings/?product=ecommerce">Open import setup</Link>
             <button className="text-link" onClick={downloadOrderImportTemplate} type="button">Download order template</button>
@@ -1755,7 +1755,7 @@ export function EcommerceProduct() {
               <div aria-label="Order intake guide" className="ecommerce-order-intake-guide">
                 {orderIntakeGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
               </div>
-              <div aria-label="AI order repair checklist" className="ecommerce-order-repair-checklist">
+              <div aria-label="Order repair checklist" className="ecommerce-order-repair-checklist">
                 {orderRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
               </div>
               <label className="ecommerce-order-import-upload">Upload order CSV<input accept=".csv,text/csv,text/plain" onChange={uploadOrderImportCsv} type="file" /></label>
@@ -1976,10 +1976,10 @@ export function EcommerceProduct() {
             <strong>Shop products</strong>
             <small>Select 1–8. Price and availability stay locked.</small>
           </div>
-          <div aria-label="Product autopilot" className="ecommerce-product-autopilot" role="group">
+          <div aria-label="Product recommendation" className="ecommerce-product-autopilot" role="group">
             <div>
-              <strong>Product autopilot</strong>
-              <small>AI prepares the simplest sellable set from in-stock Shop items. You only save after review.</small>
+              <strong>Product recommendation</strong>
+              <small>The assistant prepares the simplest sellable set from in-stock Shop items. You only save after review.</small>
             </div>
             <div className="ecommerce-product-autopilot-rows">
               {productAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}

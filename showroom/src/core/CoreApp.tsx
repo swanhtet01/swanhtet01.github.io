@@ -3336,11 +3336,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     requestAnimationFrame(() => catalogCreateFormRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 
-  const shopCommandCenter = <section aria-label="Shop Autopilot" className="shop-command-center">
+  const shopCommandCenter = <section aria-label="Shop next step" className="shop-command-center">
     <div>
-      <span className="core-eyebrow">Shop Autopilot</span>
+      <span className="core-eyebrow">Shop next step</span>
       <h2>{shopAutopilotStage}</h2>
-      <p>One button chooses the next safe owner action from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. AI may prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
+      <p>One button chooses the next safe owner action from online requests, orders, payment exceptions, purchase orders, low stock, inventory foundation, and write-readiness state. The assistant may prepare records and packets; it does not send customers, charge payments, book delivery, move stock, reconcile cash, or write Shop records here.</p>
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Run next step</button>
@@ -3348,17 +3348,17 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const shopSetupGuide = <section aria-label="Shop setup guide" className="shop-order-control shop-setup-guide">
     <div>
       <span className="core-eyebrow">Shop setup guide</span>
-      <strong>Import products once. Let AI run the daily queue.</strong>
-      <small>AI prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.</small>
+      <strong>Import products once. Then run the daily queue.</strong>
+      <small>The assistant prepares catalog import, stock foundation, online order review, payment exceptions, supplier receiving, and accounting packets. The owner confirms every sale, payment, stock, supplier, refund, and accounting handoff.</small>
     </div>
     <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const shopAgentQueue = <section aria-label="Recommended Shop agent job" className="shop-agent-queue">
+  const shopAgentQueue = <section aria-label="Recommended Shop next step" className="shop-agent-queue">
     <BehaviorSignalOnRender detail={shopAgentJob} product="commerce" route={commerceLocation.pathname + commerceLocation.search} />
     <div>
-      <span className="core-eyebrow">Shop agent queue</span>
+      <span className="core-eyebrow">Recommended next step</span>
       <h2>{shopAgentJob}</h2>
-      <p>AI prepares the next Shop move. Humans approve every consequential action.</p>
+      <p>The assistant prepares the next Shop move. A named human approves every consequential action.</p>
     </div>
     <div>{shopAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <Link className="core-button compact" onClick={() => {
@@ -7054,8 +7054,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
-      <section aria-label="Shop catalog upload autopilot" className="catalog-onboarding-bridge">
-        <div><span className="core-eyebrow">Catalog upload autopilot</span><strong>Bring your catalog into the Shop trial.</strong><p>AI routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
+      <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge">
+        <div><span className="core-eyebrow">Catalog import helper</span><strong>Bring your catalog into the Shop trial.</strong><p>The assistant routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
         <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
         <button className="core-button" disabled={commerceControlsDisabled} onClick={loadSampleCatalogItem} type="button">Load sample catalog item</button>
         <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
@@ -9129,7 +9129,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const mesDispatch = <section aria-label="MES dispatch autopilot" className="plant-control mes-dispatch-control">
+  const mesDispatch = <section aria-label="Plant dispatch helper" className="plant-control mes-dispatch-control">
     <div><span className="core-eyebrow">MES dispatch</span><strong>{plantAgentJob}</strong><small>AI chooses the next station, blocker, evidence need, and handoff route from live Plant state. No equipment command or production write runs from this panel.</small></div>
     <div className="plant-control-rows">{mesDispatchRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
@@ -9169,7 +9169,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ] as const
     : [
         ['Step 1', 'Load sample or upload CSV'],
-        ['Step 2', 'AI checks MES fields locally'],
+        ['Step 2', 'Checks MES fields locally'],
         ['Step 3', 'Review one copied job'],
       ] as const
   const plantBusinessControls = <details className="product-guidance-disclosure plant-business-controls">
@@ -9204,7 +9204,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             <div className="plant-job-import-actions">
               <button className="core-button" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Load sample job batch</button>
               <label className="plant-job-import-upload">Upload Plant job CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
-              <div aria-label="AI Plant job repair checklist" className="plant-job-import-repair">{plantJobRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+              <div aria-label="Plant job repair checklist" className="plant-job-import-repair">{plantJobRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
               {plantJobImportReview ? <div className={`plant-job-import-review ${plantJobImportReview.status}`} role="status"><strong>{plantJobImportReview.status === 'ready' ? 'Ready for owner review' : 'Repair before Plant review'}</strong><span>{plantJobImportReview.summary}</span><small>{plantJobImportReview.readyRows} ready / {plantJobImportReview.blockedRows} blocked / no Plant write</small></div> : null}
               {plantJobImportSourceName ? <p className="plant-job-import-source">Local file: {plantJobImportSourceName}</p> : null}
             </div>
