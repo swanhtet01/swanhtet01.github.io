@@ -21,7 +21,7 @@ function WorkflowLink({ capability, fallbackPath }: { capability: ClientCapabili
       <span>{capability.domain.replace('-', ' ')}</span>
       <b>{capability.label}</b>
       <p>{capability.outcome}</p>
-      <strong>Open</strong>
+      <strong>Start</strong>
     </Link>
   )
 }
@@ -50,7 +50,7 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
       <div className="product-system-body">
         <header>
           <div><span className="core-eyebrow">{details.label}</span><h2>Start with the working demo.</h2><p>Use the sample workflow first. Setup and imports can wait.</p></div>
-          <div className="product-system-actions"><Link className="core-button compact primary" to={details.primaryPath}>Open {details.label}</Link><Link className="core-button compact" to={details.setupPath}>Setup later</Link></div>
+          <div className="product-system-actions"><Link className="core-button compact primary" to={details.primaryPath}>Use {details.label}</Link><Link className="core-button compact" to={details.setupPath}>Add data later</Link></div>
         </header>
         <div className="product-system-map" aria-label={`${details.label} product map`}>
           <span><small>Use now</small><strong>{summary.demoReady}</strong><em>Working demo flows</em></span>

@@ -1250,10 +1250,10 @@ export function ProductHomePage() {
           <strong>Sample data stays on this device.</strong>
         </div>
         <div>
-          <span className="core-eyebrow">Setup later</span>
+          <span className="core-eyebrow">Add data later</span>
           <strong>Import data after the demo makes sense.</strong>
         </div>
-        <Link className="core-button primary" to="/settings/">Setup data</Link>
+        <Link className="core-button primary" to="/settings/">Add data</Link>
       </section>
       <nav aria-label="Business tracks" className="product-track-grid">
         {customerTracks.map(([name, fit, outcome, path]) => (
@@ -1264,7 +1264,7 @@ export function ProductHomePage() {
               <p>{outcome}</p>
             </div>
             <div className="product-track-actions">
-              <Link to={path}>Open demo</Link>
+              <Link to={path}>Try demo</Link>
             </div>
           </article>
         ))}
@@ -1574,11 +1574,11 @@ export function OverviewPage() {
         </Link>
         <Link to="/website/">
           <span><strong>Website</strong><small>Build and review a website</small></span>
-          <b>Open</b>
+          <b>Try demo</b>
         </Link>
         <Link to="/ecommerce/">
           <span><strong>Ecommerce</strong><small>Build a Shop-backed storefront</small></span>
-          <b>Open</b>
+          <b>Try demo</b>
         </Link>
       </nav>
       <details className="home-more">
@@ -1665,12 +1665,12 @@ export function OperationsPage({ product }: { product?: ProductId }) {
 
   if (!isProductRoute && !requestedView) {
     return <div className="workspace-screen product-catalog-screen">
-      <PageHeading eyebrow="Products" title="Choose a product" copy="Open the product for the job you need to do." actions={<Link className="core-button" to="/settings/">Set up a client</Link>} />
+      <PageHeading eyebrow="Products" title="Choose a product" copy="Try the working demo first. Add client data only when the demo makes sense." actions={<Link className="core-button" to="/settings/">Add data later</Link>} />
       <nav aria-label="SuperMega apps" className="product-launcher product-catalog">
-        <Link to="/shop/?tab=counter"><span><strong>Shop</strong><small>Sell, take payment, and manage stock</small></span><b>Open</b></Link>
-        <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Open</b></Link>
-        <Link to="/website/"><span><strong>Website</strong><small>Build, preview, and review a site</small></span><b>Open</b></Link>
-        <Link to="/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Open</b></Link>
+        <Link to="/shop/?tab=counter"><span><strong>Shop</strong><small>Sell, take payment, and manage stock</small></span><b>Try demo</b></Link>
+        <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Try demo</b></Link>
+        <Link to="/website/"><span><strong>Website</strong><small>Build, preview, and review a site</small></span><b>Try demo</b></Link>
+        <Link to="/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Try demo</b></Link>
       </nav>
     </div>
   }

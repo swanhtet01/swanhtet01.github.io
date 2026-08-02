@@ -410,8 +410,8 @@ export function ProductHomePage() {
           <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
           <section className="product-home-operating-model" aria-label="SuperMega operating model">
             <div><span className="core-eyebrow">Try first</span><strong>Sample data stays on this device.</strong></div>
-            <div><span className="core-eyebrow">Setup later</span><strong>Import data after the demo makes sense.</strong></div>
-            <Link className="core-button primary" to="/settings/">Setup data</Link>
+            <div><span className="core-eyebrow">Add data later</span><strong>Import data after the demo makes sense.</strong></div>
+            <Link className="core-button primary" to="/settings/">Add data</Link>
           </section>
           <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
             <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
