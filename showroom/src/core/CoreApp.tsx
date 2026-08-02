@@ -1004,16 +1004,16 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   }
 
   return <dialog aria-labelledby="action-confirm-title" className="accountable-action-gate" onCancel={(event) => { event.preventDefault(); if (!busy && !action.confirmation) onCancel() }} ref={dialogRef}>
-    <div className="action-change"><span className="core-eyebrow">Confirm change</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
+    <div className="action-change"><span className="core-eyebrow">{isCounterConfirmation ? 'Review counter order' : 'Confirm change'}</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       {authenticatedActor
         ? <label>Your account<input readOnly value={authenticatedActor.label} /></label>
-        : <label>{isCounterConfirmation ? 'Cashier' : 'Your name'}<input maxLength={80} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.actor ?? actor} onChange={(event) => setActor(event.target.value)} placeholder={isCounterConfirmation ? 'Name on this sale' : 'Name or responsible role'} /></label>}
+        : <label>{isCounterConfirmation ? 'Cashier' : 'Your name'}<input maxLength={80} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.actor ?? actor} onChange={(event) => setActor(event.target.value)} placeholder={isCounterConfirmation ? 'Name responsible for this order' : 'Name or responsible role'} /></label>}
       {isCounterConfirmation
-        ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Receipt</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
+        ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
-      {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Completing this records a sample order and sample stock change in this browser. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
-      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Complete sale' : 'Confirm change'}</button></div>
+      {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
+      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Create order' : 'Confirm change'}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
   </dialog>
@@ -1797,7 +1797,7 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
           <label>Customer <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
           <fieldset><legend>Payment</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
         </div>
-        <footer><div><span>Total</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={!unitCount || disabled} onClick={reviewSale} type="button">{disabled ? 'Sales paused' : 'Review sale'}<span aria-hidden="true">→</span></button><small>Nothing changes until the cashier confirms.</small></footer>
+        <footer><div><span>Total</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={!unitCount || disabled} onClick={reviewSale} type="button">{disabled ? 'Sales paused' : 'Review order'}<span aria-hidden="true">→</span></button><small>Confirm to create the order. Finish payment and handoff in Orders.</small></footer>
       </aside>
     </div>
     {unitCount ? <button aria-controls="shop-current-sale" aria-expanded={cartOpen} className="shop-mobile-cart" onClick={() => setCartOpen(true)} type="button"><span><small>Current sale</small><strong>{unitCount} {unitCount === 1 ? 'item' : 'items'}</strong></span><b>{formatMoney(total)}</b></button> : null}
@@ -3773,9 +3773,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     if (!managedIdentity) setActions((current) => [record, ...current])
     setNotice(pendingAction.presentation === 'counter'
-      ? `Sale ${commerceOrderDisplayReference(pendingAction.subjectId)} complete. Stock updated. Receipt saved.`
+      ? `Order ${commerceOrderDisplayReference(pendingAction.subjectId)} created. Stock reserved. Finish fulfilment and reconcile payment before completion.`
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
     setPendingAction(null)
+    if (pendingAction.presentation === 'counter') navigate('/shop/?tab=orders#shop-order-queue')
   }
 
   function useChannelDraft(draft: ChannelOrderDraft) {
@@ -3961,14 +3962,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
-      summary: `Complete ${formatMoney(order.total)} sale`,
+      summary: `Create ${formatMoney(order.total)} counter order`,
       before: `${lineReview} · ${review.payment}`,
-      after: `Sale ${displayReference} · Stock ${stockReview}`,
+      after: `Order ${displayReference} confirmed · Reserved stock ${stockReview}`,
       presentation: 'counter',
       actorSuggestion: managedIdentity ? undefined : 'Sample cashier',
-      evidenceReferenceSuggestion: `Counter receipt ${displayReference}`,
+      evidenceReferenceSuggestion: `Counter order ${displayReference}`,
       evidenceReferenceLocked: true,
-      reasonSuggestion: 'Walk-in sale reviewed at the Shop counter.',
+      reasonSuggestion: 'Walk-in counter order reviewed.',
       apply: async (action) => {
         const ownedOrder = { ...order, owner: action.actor }
         await mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, ownedOrder, commerceActionProof(action)))
