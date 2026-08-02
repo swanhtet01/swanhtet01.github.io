@@ -1199,10 +1199,10 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 const customerTracks = [
-  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter', 'commerce'],
-  ['Plant', 'Factory, workshop, service floor.', 'Plan jobs, record output, and close shifts.', '/plant/?tab=production', 'production'],
-  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/', 'website'],
-  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop review.', '/ecommerce/', 'ecommerce'],
+  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter'],
+  ['Plant', 'Factory, workshop, service floor.', 'Plan jobs, record output, and close shifts.', '/plant/?tab=production'],
+  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/'],
+  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop review.', '/ecommerce/'],
 ] as const
 
 export function ProductHomePage() {
@@ -1242,6 +1242,20 @@ export function ProductHomePage() {
         </div>
         <Link className="core-button primary" to="/settings/">Open data setup</Link>
       </section>
+      <nav aria-label="Business tracks" className="product-track-grid">
+        {customerTracks.map(([name, fit, outcome, path]) => (
+          <article className="product-track-card" key={name}>
+            <div>
+              <span className="core-eyebrow">{fit}</span>
+              <h2>{name}</h2>
+              <p>{outcome}</p>
+            </div>
+            <div className="product-track-actions">
+              <Link to={path}>Open demo</Link>
+            </div>
+          </article>
+        ))}
+      </nav>
       <section className="product-home-autopilot" aria-label="Recommended next step">
         <div className="product-home-autopilot-head">
           <div>
@@ -1264,21 +1278,6 @@ export function ProductHomePage() {
       <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
         <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={progress} ready={ready} />
       </Suspense>
-      <nav aria-label="Business tracks" className="product-track-grid">
-        {customerTracks.map(([name, fit, outcome, path, product]) => (
-          <article className="product-track-card" key={name}>
-            <div>
-              <span className="core-eyebrow">{fit}</span>
-              <h2>{name}</h2>
-              <p>{outcome}</p>
-            </div>
-            <div className="product-track-actions">
-              <Link to={path}>Open product</Link>
-              <Link to={clientSetupPath(product)}>Set up product</Link>
-            </div>
-          </article>
-        ))}
-      </nav>
     </div>
   )
 }
