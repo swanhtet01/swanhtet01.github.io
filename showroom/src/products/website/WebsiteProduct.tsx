@@ -65,7 +65,7 @@ type WebsiteEditSessionState = {
   session: WebsiteEditSession
 }
 
-const DEFAULT_NOTICE = 'Website sample loaded. Nothing has been deployed.'
+const DEFAULT_NOTICE = 'Website example loaded. Nothing has been deployed.'
 
 const viewCopy: Record<WebsiteView, { title: string; copy: string }> = {
   content: {
@@ -216,7 +216,7 @@ export function WebsiteProduct() {
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
-        title: 'Website demo',
+        title: 'Website preview',
         copy: 'Explore the responsive site first. Edit or reuse it only when you are ready.',
       }
     : starterSetupActive
@@ -588,7 +588,7 @@ export function WebsiteProduct() {
 
   function startWithBusiness(brief: WebsiteStarterBrief) {
     if (!starterAvailable) {
-      setNotice('The Website sample has already changed. Nothing was replaced.')
+      setNotice('The Website example has already changed. Nothing was replaced.')
       return
     }
     const staged = stageWorkspace((current) => (
@@ -793,7 +793,7 @@ export function WebsiteProduct() {
   const websiteAgentReason = storageIssue || canRepairLocalStorage
     ? 'Saving or recovery needs attention before Website work can be trusted.'
     : starterSetupActive
-      ? 'Answer a short brief to replace the sample with client-specific pages.'
+      ? 'Answer a short brief to replace the example with client-specific pages.'
       : starterAvailable
         ? 'Start from a simple template instead of editing every page by hand.'
         : hasUnsavedChanges
@@ -809,12 +809,12 @@ export function WebsiteProduct() {
                   : managedReleaseRequired
                     ? 'Review the go-live checklist. Deployment still happens separately.'
                     : 'Your reviewed site is ready to download. Nothing is deployed here.'
-  const websiteOwnerGate = storageIssue || canRepairLocalStorage
+  const websiteReviewNote = storageIssue || canRepairLocalStorage
     ? 'Export a backup or confirm repair before continuing.'
     : starterSetupActive
       ? 'Review the generated pages before saving.'
       : starterAvailable
-        ? 'Choose the sample or enter a real business brief.'
+        ? 'Choose the example or enter a real business brief.'
         : hasUnsavedChanges
           ? 'Save or discard the preview.'
           : failingContentChecks.length
@@ -881,7 +881,7 @@ export function WebsiteProduct() {
       event: 'agent_job_chosen',
       product: 'website',
       route: location.pathname + location.search,
-      detail: `Website autopilot: ${websiteAgentJob}`,
+      detail: `Website next step: ${websiteAgentJob}`,
     })
     if (storageIssue || canRepairLocalStorage) {
       requestRecoveryFocus()
@@ -939,10 +939,10 @@ export function WebsiteProduct() {
         }), { durable: true })
         if (!result.ok) throw new Error(result.error)
         setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
-        setNotice('Inquiry saved to the managed Website inbox for accountable review. No message, CRM write, or external send ran.')
+        setNotice('Inquiry saved to the company Website inbox for manager review. No message, CRM write, or external send ran.')
         return
       }
-      if (saveLeadLedger(next, 'Demo inquiry saved to the local Website inbox. No message, CRM write, or external send ran.')) {
+      if (saveLeadLedger(next, 'Inquiry saved to the local Website inbox. No message, CRM write, or external send ran.')) {
         setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
       }
     } catch (error) {
@@ -1028,7 +1028,7 @@ export function WebsiteProduct() {
               <header>
                 <span className="website-kicker">Start here</span>
                 <h2>Three steps finish the website.</h2>
-                <p>Preview the real demo, edit only what matters, then download a safe website file.</p>
+                <p>Preview the example, edit only what matters, then download a safe website file.</p>
               </header>
               <div>
                 <button onClick={() => previewPage()} type="button"><b>1</b><span><strong>Preview site</strong><small>Check desktop, tablet, or mobile before editing.</small></span></button>
@@ -1205,12 +1205,12 @@ export function WebsiteProduct() {
             </div>
             <div className="website-today-source" role="status">
               <span>{websiteTodaySource}</span>
-              <small>{websiteOwnerGate}</small>
+              <small>{websiteReviewNote}</small>
             </div>
           </section> : null}
 
           {!starterSetupActive ? <details className="website-start-tools">
-            <summary><span><strong>Inquiries</strong><small>Capture and review</small></span><b>Optional</b></summary>
+            <summary><span><strong>Inquiries</strong><small>Capture customer requests</small></span><b>Extra</b></summary>
             <div>
 
           <details className="website-business-controls">
@@ -1218,7 +1218,7 @@ export function WebsiteProduct() {
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
-                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture and route inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} No message, CRM, or Shop write is sent.</p></div>
+                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} Nothing is sent to customers, CRM, or Shop from this screen.</p></div>
                   <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
                 </header>
 
@@ -1236,9 +1236,9 @@ export function WebsiteProduct() {
                   {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
                     <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Person: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
                     {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
-                  </article>) : <p className="website-lead-empty">No inquiry yet. Add one above to test capture, ownership, decision, persistence, and export.</p>}
+                  </article>) : <p className="website-lead-empty">No inquiry yet. Add one above to test capture, assignment, decision, persistence, and export.</p>}
                 </div>
-                {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export lead record</a> : null}
+                {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export inquiries</a> : null}
               </section>
             </div>
           </details>
