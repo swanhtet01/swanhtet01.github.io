@@ -62,11 +62,22 @@ begin
   if exists (
     select 1
     from pg_auth_members membership
+    join pg_roles member_role
+      on member_role.oid = membership.member
+    join pg_roles grantor_role
+      on grantor_role.oid = membership.grantor
     where membership.roleid = backend_record.oid
+      and not (
+        member_role.rolname = 'postgres'
+        and grantor_role.rolname in ('postgres', 'supabase_admin')
+        and membership.admin_option
+        and not membership.inherit_option
+        and not membership.set_option
+      )
   ) then
     raise exception using
       errcode = '55000',
-      message = 'supermega trial backend role must have no members before runtime provisioning';
+      message = 'supermega trial backend role has an unsafe member before runtime provisioning';
   end if;
 
   if exists (

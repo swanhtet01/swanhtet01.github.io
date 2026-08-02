@@ -657,6 +657,24 @@ def _policy_expression_matches(expression: Any, expected_sha256: str | None) -> 
     return _catalog_expression_fingerprint(expression) == expected_sha256
 
 
+def _safe_runtime_membership_options(row: Mapping[str, Any]) -> bool:
+    return (
+        row.get("admin_option") is False
+        and _bool(row.get("inherit_option"))
+        and row.get("set_option") is False
+    )
+
+
+def _safe_hosted_admin_membership(row: Mapping[str, Any]) -> bool:
+    return (
+        str(row.get("member_role")) == "postgres"
+        and str(row.get("grantor_role")) in {"postgres", "supabase_admin"}
+        and row.get("admin_option") is True
+        and row.get("inherit_option") is False
+        and row.get("set_option") is False
+    )
+
+
 def _run_policy_self_test() -> dict[str, Any]:
     membership = (
         "((workspace_id = current_setting('app.workspace_id', true)) "
@@ -710,6 +728,33 @@ def _run_policy_self_test() -> dict[str, Any]:
         "reject_removed_postgres17_extension": _unsupported_postgres17_extensions(
             [{"extension_name": "plv8"}, {"extension_name": "plpgsql"}]
         ) == ["plv8"],
+        "accept_non_usable_hosted_admin_membership": _safe_hosted_admin_membership(
+            {
+                "member_role": "postgres",
+                "grantor_role": "supabase_admin",
+                "admin_option": True,
+                "inherit_option": False,
+                "set_option": False,
+            }
+        ),
+        "reject_usable_hosted_admin_membership": not _safe_hosted_admin_membership(
+            {
+                "member_role": "postgres",
+                "grantor_role": "supabase_admin",
+                "admin_option": True,
+                "inherit_option": True,
+                "set_option": False,
+            }
+        ),
+        "reject_untrusted_backend_member": not _safe_hosted_admin_membership(
+            {
+                "member_role": "unexpected_login",
+                "grantor_role": "postgres",
+                "admin_option": True,
+                "inherit_option": False,
+                "set_option": False,
+            }
+        ),
         "activation_receipt_is_sanitized_and_digest_bound": (
             evidence.get("contract") == ACTIVATION_EVIDENCE_CONTRACT
             and evidence.get("report") == sample_report
@@ -1492,13 +1537,16 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
         backend_members = _execute_rows(
             cursor,
             """
-            select member_role.rolname = current_user as is_current_runtime,
+            select member_role.rolname as member_role,
+                   grantor_role.rolname as grantor_role,
+                   member_role.rolname = current_user as is_current_runtime,
                    membership.admin_option,
                    membership.inherit_option,
                    membership.set_option
             from pg_roles backend_role
             join pg_auth_members membership on membership.roleid = backend_role.oid
             join pg_roles member_role on member_role.oid = membership.member
+            join pg_roles grantor_role on grantor_role.oid = membership.grantor
             where backend_role.rolname = 'supermega_trial_backend'
             order by member_role.rolname
             """,
@@ -1894,22 +1942,21 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         == EXPECTED_BACKEND_ACL_DEPENDENCIES
     )
 
-    def safe_membership_options(row: Mapping[str, Any]) -> bool:
-        return (
-            row.get("admin_option") is False
-            and _bool(row.get("inherit_option"))
-            and row.get("set_option") is False
-        )
-
     runtime_membership_exact = (
         len(runtime_parent_rows) == 1
         and str(runtime_parent_rows[0].get("parent_role")) == BACKEND_ROLE
-        and safe_membership_options(runtime_parent_rows[0])
+        and _safe_runtime_membership_options(runtime_parent_rows[0])
     )
+    runtime_backend_members = [
+        row for row in backend_member_rows if _bool(row.get("is_current_runtime"))
+    ]
     backend_membership_exact = (
-        len(backend_member_rows) == 1
-        and _bool(backend_member_rows[0].get("is_current_runtime"))
-        and safe_membership_options(backend_member_rows[0])
+        len(runtime_backend_members) == 1
+        and _safe_runtime_membership_options(runtime_backend_members[0])
+        and all(
+            _bool(row.get("is_current_runtime")) or _safe_hosted_admin_membership(row)
+            for row in backend_member_rows
+        )
     )
     browser_names = frozenset(str(row.get("role_name")) for row in browser_rows)
     browser_roles_isolated = browser_names == BROWSER_ROLES and all(

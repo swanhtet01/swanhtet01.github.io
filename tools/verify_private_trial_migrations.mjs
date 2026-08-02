@@ -578,6 +578,23 @@ requireCheck(
   dependencyMessage.includes('must have no object dependencies'),
 )
 
+const hostedDatabase = new PGlite()
+await hostedDatabase.waitReady
+await seedSupabaseRoles(hostedDatabase)
+await applyMigrations(hostedDatabase, expectedMigrations.slice(0, 4))
+await hostedDatabase.exec(`
+  grant supermega_trial_backend to postgres
+    with admin true, inherit false, set false;
+`)
+await applyMigrations(hostedDatabase, expectedMigrations.slice(4))
+const hostedVersion = await hostedDatabase.query(
+  "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
+)
+requireCheck(
+  'exact Supabase hosted administrative membership accepted',
+  hostedVersion.rows[0]?.schema_version === 7,
+)
+
 const memberDatabase = new PGlite()
 await memberDatabase.waitReady
 await seedSupabaseRoles(memberDatabase)
@@ -591,13 +608,14 @@ const memberMessage = await rejection(() =>
 )
 requireCheck(
   'v4 rejects runtime provisioning before hardening',
-  memberMessage.includes('must have no members before runtime provisioning'),
+  memberMessage.includes('has an unsafe member before runtime provisioning'),
 )
 
 await Promise.all([
   database.close(),
   unsafeRoleDatabase.close(),
   dependencyDatabase.close(),
+  hostedDatabase.close(),
   memberDatabase.close(),
 ])
 
