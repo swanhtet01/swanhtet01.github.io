@@ -722,7 +722,7 @@ export function EcommerceProduct() {
       route: location.pathname + location.search,
       detail: 'Download Ecommerce order import review packet',
     })
-    setOrderImportNotice('Order import review packet downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or managed activation ran.')
+    setOrderImportNotice('Order import review file downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or go-live action ran.')
   }
 
   function showWorkspace(view: 'setup' | 'preview') {
@@ -1410,8 +1410,8 @@ export function EcommerceProduct() {
           : 'Delivery templates locked'
   const deliveryAreaTemplateRows = [
     ['Area', deliveryZoneHint || 'No request yet'],
-    ['Rule', deliveryReviewRequest ? 'Owner fee review' : savedDraftIsCurrent ? 'Template shell' : 'Locked'],
-    ['Rider', deliveryReviewRequest ? 'Owner review' : 'Not assigned'],
+    ['Rule', deliveryReviewRequest ? 'Fee review' : savedDraftIsCurrent ? 'Template shell' : 'Locked'],
+    ['Rider', deliveryReviewRequest ? 'Review' : 'Not assigned'],
     ['Payment', deliveryReviewRequest && 'quote' in deliveryReviewRequest ? deliveryReviewRequest.quote.payment.adapter === 'kbzpay_manual' ? 'Manual QR' : 'COD review' : 'No charge'],
     ['Reuse', deliveryReviewRequest ? 'After review' : 'Needs order'],
   ] as const
@@ -1545,12 +1545,12 @@ export function EcommerceProduct() {
   const aiOwnerGate = pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
     : importNeeded
-      ? 'Owner approves the imported catalog before managed activation.'
+      ? 'Review the imported catalog before going live.'
       : !savedDraftIsCurrent
-        ? 'Owner saves the exact customer view first.'
-        : buyingCart.length
-          ? 'Owner reviews the quote before sending to Shop.'
-          : 'Owner keeps payment and customer messages locked.'
+        ? 'Save the exact customer view first.'
+      : buyingCart.length
+          ? 'Review the quote before sending to Shop.'
+          : 'Payment and customer messages stay locked.'
   const aiAgentQueueRows = [
     ['Next step', aiAgentJob],
     ['Why', aiAgentReason],
@@ -1822,7 +1822,7 @@ export function EcommerceProduct() {
         <div>
           <span className="core-eyebrow">Managed store go-live file</span>
           <h2>{managedStoreActivationStage}</h2>
-          <p>Package products, prices, checkout controls, manual payment review, delivery templates, and Shop review queue for go-live review. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this file.</p>
+          <p>Package products, prices, checkout controls, manual payment review, delivery templates, and Shop review queue for go-live review. No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or go-live action runs from this file.</p>
           <button className="text-link" onClick={downloadManagedStoreActivationPacket} type="button">Download go-live file</button>
         </div>
         <div className="ecommerce-ops-cockpit-rows ecommerce-managed-activation-rows">

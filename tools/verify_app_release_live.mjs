@@ -456,6 +456,7 @@ const ecommerceLiveCopyUpdates = new Map([
   ['AI packages catalog, storefront fingerprint, checkout quote controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for store activation.', 'Package products, prices, checkout controls, manual payment review, delivery templates, and Shop review queue for go-live review.'],
   ['Package products, prices, checkout controls, manual payment review, delivery template readiness, Shop review queue, and managed gate for go-live review.', 'Package products, prices, checkout controls, manual payment review, delivery templates, and Shop review queue for go-live review.'],
   ['No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this packet.', 'No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this file.'],
+  ['No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or managed activation runs from this file.', 'No product publish, customer message, payment capture, wallet debit, delivery booking, stock move, refund, Shop write, or go-live action runs from this file.'],
   ['Download Ecommerce managed store activation packet', 'Download Ecommerce managed store go-live file'],
   ['Ecommerce activation packet downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.', 'Ecommerce go-live file downloaded. No product, customer, payment, delivery, stock, Shop, or managed workspace state changed.'],
   ['Import catalog for activation', 'Import catalog for go-live'],
@@ -501,6 +502,12 @@ const ecommerceLiveCopyUpdates = new Map([
   ['owner review', 'review'],
   ['Owner draft only', 'Review draft only'],
   ['Confirm stock, payment, delivery, and owner approval before any send.', 'Confirm stock, payment, delivery, and review before any send.'],
+  ['Order import review packet downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or managed activation ran.', 'Order import review file downloaded. No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or go-live action ran.'],
+  ['Owner fee review', 'Fee review'],
+  ['Owner approves the imported catalog before managed activation.', 'Review the imported catalog before going live.'],
+  ['Owner saves the exact customer view first.', 'Save the exact customer view first.'],
+  ['Owner reviews the quote before sending to Shop.', 'Review the quote before sending to Shop.'],
+  ['Owner keeps payment and customer messages locked.', 'Payment and customer messages stay locked.'],
 ])
 for (const required of ['Run next step', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Enterprise order controls', 'Inbox, payment, delivery, recovery, replies, and activation evidence.']) {
   const currentRequired = ecommerceLiveCopyUpdates.get(required) ?? required
