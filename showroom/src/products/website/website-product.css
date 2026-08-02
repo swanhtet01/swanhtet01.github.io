@@ -3314,6 +3314,7 @@
 .website-start-guide p,
 .website-start-guide small {
   color: var(--website-muted);
+  overflow-wrap: anywhere;
 }
 
 .website-start-guide > div {
@@ -3367,6 +3368,7 @@
 .website-start-guide small {
   font-size: 10px;
   line-height: 1.35;
+  white-space: normal;
 }
 
 .website-page-control {
@@ -3791,6 +3793,23 @@
 
   .website-start-guide button {
     min-height: 70px;
+  }
+
+  .website-start-guide h2 {
+    font-size: 23px;
+  }
+
+  .website-start-guide p {
+    font-size: 13px;
+    line-height: 1.42;
+  }
+
+  .website-start-guide span {
+    gap: 3px;
+  }
+
+  .website-start-guide small {
+    font-size: 9px;
   }
 
   .website-action-bar {

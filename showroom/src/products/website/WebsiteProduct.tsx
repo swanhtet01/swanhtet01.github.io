@@ -216,8 +216,8 @@ export function WebsiteProduct() {
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
-        title: 'Website preview',
-        copy: 'Explore the responsive site first. Edit or reuse it only when you are ready.',
+        title: 'Website',
+        copy: 'Preview, edit, and download the website file.',
       }
     : starterSetupActive
     ? {
@@ -775,8 +775,8 @@ export function WebsiteProduct() {
     ? 'Recover Website workspace'
     : starterSetupActive
       ? 'Answer 5 questions'
-      : starterAvailable
-        ? 'Use a template'
+    : starterAvailable
+        ? 'Create from template'
         : hasUnsavedChanges
           ? 'Save or discard edits'
           : failingContentChecks.length
@@ -795,7 +795,7 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Answer a short brief to replace the example with client-specific pages.'
       : starterAvailable
-        ? 'Start from a simple template instead of editing every page by hand.'
+        ? 'Start with the sample template and change only the business details.'
         : hasUnsavedChanges
           ? 'Save the preview or discard it before review.'
           : failingContentChecks.length
@@ -814,7 +814,7 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Review the generated pages before saving.'
       : starterAvailable
-        ? 'Choose the example or enter a real business brief.'
+        ? 'Use the sample now, or create a client-specific version.'
         : hasUnsavedChanges
           ? 'Save or discard the preview.'
           : failingContentChecks.length
@@ -831,7 +831,7 @@ export function WebsiteProduct() {
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
     : starterSetupActive || starterAvailable
-      ? 'Open brief'
+      ? 'Create from template'
       : hasUnsavedChanges || failingContentChecks.length
         ? 'Open editor'
         : leadCounts.new
@@ -1027,13 +1027,13 @@ export function WebsiteProduct() {
             <section className="website-start-guide" aria-label="Website setup steps">
               <header>
                 <span className="website-kicker">Start here</span>
-                <h2>Three steps finish the website.</h2>
-                <p>Preview the example, edit only what matters, then download a safe website file.</p>
+                <h2>Finish the website in 3 steps.</h2>
+                <p>Preview, edit, download. No deployment happens here.</p>
               </header>
               <div>
-                <button onClick={() => previewPage()} type="button"><b>1</b><span><strong>Preview site</strong><small>Check desktop, tablet, or mobile before editing.</small></span></button>
-                <button onClick={() => openContentSurface('work')} type="button"><b>2</b><span><strong>Edit site</strong><small>Update pages, navigation, copy, and lead capture.</small></span></button>
-                <button onClick={() => openWorkspaceView('publish')} type="button"><b>3</b><span><strong>Download site</strong><small>Check readiness, export the file, and keep deployment separate.</small></span></button>
+                <button onClick={() => previewPage()} type="button"><b>1</b><span><strong>Preview sample</strong><small>Check the current site before editing.</small></span></button>
+                <button onClick={() => openContentSurface('work')} type="button"><b>2</b><span><strong>Edit template</strong><small>Change pages, navigation, copy, and lead form.</small></span></button>
+                <button onClick={() => openWorkspaceView('publish')} type="button"><b>3</b><span><strong>Download file</strong><small>Export the website. Deployment stays separate.</small></span></button>
               </div>
             </section>
           ) : null}
