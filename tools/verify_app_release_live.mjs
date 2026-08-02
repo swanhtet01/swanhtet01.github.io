@@ -33,7 +33,7 @@ export function verifyCurrentReleaseAssets({
     ['module_drawer', productSystemNavigatorChunk, ['Modules', ' working / ', ' setup', 'Start with the working demo.', 'Use the sample workflow first. Setup and imports can wait.', 'Use now', 'Add data later', 'Advanced modules stay hidden until a real client needs them.']],
     ['support_helper', productHomeReadinessCorpus, ['Support helper', 'Uses Shop, Plant, Website, and Ecommerce records.', 'Readiness review status', 'Mark reviewed', 'Acknowledgement confirms review only.', 'supermega.local_business_snapshot.v1', 'supermega.local_business_answer.v1']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence']],
-    ['website', websiteChunk, ['Make this website yours', 'Download site', 'Website starter brief generated', 'Not online yet']],
+    ['website', websiteChunk, ['Make this website yours', 'Download site', 'Website starter brief generated', 'Not online yet', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
     ['ecommerce', ecommerceProductCorpus, ['Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Payment and customer messages stay locked.', 'Shop review', 'supermega.ecommerce.order_import_review_packet.v1']],
     ['data_onboarding', clientDataOnboardingChunk, ['Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'No customer message, payment, website publish, or automation runs from this check.']],
     ['company_login', managedLoginChunk, ['Open your company.', 'Try free demo', 'Request company account']],
@@ -51,6 +51,10 @@ export function verifyCurrentReleaseAssets({
   for (const forbidden of ['Complete sale', 'Stock updated. Receipt saved.']) {
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
+  }
+  for (const forbidden of ['Turn accountable work into visible progress.', 'Focused workspaces for the work that matters.', 'Bring one real workflow.']) {
+    checks += 1
+    if (websiteChunk.includes(forbidden)) throw new Error(`generic_website_sample_release_asset:${forbidden}`)
   }
   const completeCorpus = groups.map(([, corpus]) => corpus).join('\n')
   for (const forbidden of ['pos.supermega.dev', 'ytf.supermega.dev', 'Yangon Tyre', 'ytf-plant-a']) {
@@ -89,6 +93,7 @@ if (artifactSelfTest) {
     ecommerceChunk,
     ecommercePacketChunk,
     websiteChunk,
+    websiteModelChunk,
     clientDataOnboardingChunk,
     managedLoginChunk,
     managedAccountChunk,
@@ -103,6 +108,7 @@ if (artifactSelfTest) {
     readArtifactChunk(assetsDir, assetNames, /^EcommerceProduct-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ecommerce-order-review-packet-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^WebsiteProduct-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^website-model-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ClientDataOnboarding-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedLoginPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedAccountPage-[A-Za-z0-9_-]+\.js$/),
@@ -119,7 +125,7 @@ if (artifactSelfTest) {
     productHomeReadinessCorpus: `${productHomeReadinessChunk}\n${businessCommandChunk}`,
     settingsChunk,
     ecommerceProductCorpus: `${ecommerceChunk}\n${ecommercePacketChunk}`,
-    websiteChunk,
+    websiteChunk: `${websiteChunk}\n${websiteModelChunk}`,
     clientDataOnboardingChunk,
     managedLoginChunk,
     managedAccountChunk,
@@ -379,7 +385,11 @@ const ecommercePacketChunk = (await get(`/${ecommercePacketChunkPath}`)).body
 const ecommerceProductCorpus = `${ecommerceChunk}\n${ecommercePacketChunk}`
 const websiteChunkPath = /assets\/WebsiteProduct-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!websiteChunkPath) throw new Error('website_chunk_missing')
-const websiteChunk = (await get(`/${websiteChunkPath}`)).body
+const websiteProductChunk = (await get(`/${websiteChunkPath}`)).body
+const websiteModelChunkPath = /assets\/website-model-[A-Za-z0-9_-]+\.js/.exec(`${assetCorpus}\n${websiteProductChunk}`)?.[0]
+if (!websiteModelChunkPath) throw new Error('website_model_chunk_missing')
+const websiteModelChunk = (await get(`/${websiteModelChunkPath}`)).body
+const websiteChunk = `${websiteProductChunk}\n${websiteModelChunk}`
 const activationRunbookChunkPath = /assets\/ManagedActivationRunbook-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!activationRunbookChunkPath) throw new Error('managed_activation_runbook_chunk_missing')
 const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).body

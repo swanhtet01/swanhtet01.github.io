@@ -104,7 +104,7 @@ export function applyWebsiteStarterBrief(
     || !isCanonicalTimestamp(capturedAt)) return workspace
 
   const home = workspace.pages.find((page) => page.slug.trim() === '/')
-  const secondary = workspace.pages.find((page) => page.slug.trim() === '/products')
+  const secondary = workspace.pages.find((page) => page.id === 'page-products')
   const contact = workspace.pages.find((page) => page.slug.trim() === '/contact')
   if (!home || home.sections.length < 2 || !secondary?.sections.length || !contact?.sections.length) return workspace
 
