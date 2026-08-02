@@ -234,7 +234,7 @@ requireContract('app build contract',
   config.buildCommand === 'npm run app:build'
   && generator.includes("buildCommand: 'npm run app:build'")
   && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
-  && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify'
+  && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
   && ciWorkflow.includes('run: npm run app:build:checked'))
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
@@ -282,6 +282,14 @@ requireContract('real migration proof precedes every production candidate',
   && migrationVerifier.includes('hosted_postgres_17_proof_required: true'))
 requireContract('app guard remains non-mutating but runs API tests', appWorkflow.includes("- 'supermega_runtime/**'") && appWorkflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && !/vercel@56\.1\.0\s+(?:deploy|promote|rollback)\b/.test(appWorkflow) && !appWorkflow.includes('VERCEL_TOKEN') && !/environment:\s*production/.test(appWorkflow))
 requireContract('protected app candidate verification', workflow.includes("VERCEL_PROTECTED_PREVIEW: '1'") && appVerifier.includes("'curl', path, '--deployment'") && appVerifier.includes('deploymentFunctions') && appVerifier.includes("JSON.stringify(['api/app'])") && appVerifier.includes('hosted_agent_runtime_contract_wrong'))
+requireContract('current app asset contract gates local build and protected candidate',
+  packageJson.scripts['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
+  && workflow.includes('Verify immutable app asset contract')
+  && workflow.includes('node tools/verify_app_release_live.mjs --artifact-self-test')
+  && workflow.indexOf('Verify immutable app asset contract') < workflow.indexOf('Deploy isolated app production candidate')
+  && appVerifier.includes("contract: 'supermega.current-release-assets.v1'")
+  && appVerifier.includes("const legacyCopyAudit = process.env.SUPERMEGA_LEGACY_COPY_AUDIT === '1'")
+  && appVerifier.includes('releaseAssetVerification = verifyCurrentReleaseAssets({'))
 requireContract('app live identity validates brand context and catalog', appVerifier.includes('release.brandVersion !== manifest.brand.version') && appVerifier.includes('release.contextVersion !== manifest.contextVersion') && appVerifier.includes('release.catalogVersion !== manifest.catalogVersion'))
 requireContract('operators can verify the exact checked-out release',
   packageJson.scripts['app:verify:live:current'] === 'node tools/verify_app_release_live.mjs --current-head'
