@@ -1,3 +1,5 @@
+import { isLocalWorkspaceKey } from './local-workspace-storage.ts'
+
 export const COMPANY_BACKUP_CONTRACT = 'supermega.company_backup.v1'
 export const COMPANY_SNAPSHOT_CONTRACT = 'supermega.local_company_snapshot.v1'
 export const COMPANY_BACKUP_KDF_ITERATIONS = 600_000
@@ -32,25 +34,6 @@ const portablePrefixes = [
   'supermega.website.release-foundation.v1:',
   'supermega.ecommerce.storefront_draft.v2.',
   'supermega.ecommerce.buying_lifecycle.v1.',
-]
-
-const resetOnlyExactKeys = new Set([
-  'supermega.shop.order_draft_reset.v1',
-  'supermega.ecommerce.storefront_draft_reset.v1',
-  'supermega.website.workspace.v1',
-  'supermega.commerce.workspace.v1',
-  'supermega.shop.workspace.v2',
-  'supermega.production.workspace.v1',
-  'supermega.plant.workspace.v2',
-  'supermega.approvals.v2',
-  'supermega.setup.v2',
-  'supermega.team.workspace.v3',
-  'supermega.team.workspace.v2',
-])
-
-const resetOnlyPrefixes = [
-  'supermega.website.workspace.recovery.v1.',
-  'supermega.ecommerce.storefront_draft.v1.',
 ]
 
 const categoryMatchers: Array<[string, (key: string) => boolean]> = [
@@ -200,9 +183,7 @@ export function isPortableCompanyStorageKey(key: string): boolean {
 }
 
 export function isResettableCompanyStorageKey(key: string): boolean {
-  return isPortableCompanyStorageKey(key)
-    || resetOnlyExactKeys.has(key)
-    || resetOnlyPrefixes.some((prefix) => key.startsWith(prefix))
+  return isLocalWorkspaceKey(key)
 }
 
 export function listPortableCompanyStorageKeys(storage: CompanyStorage): string[] {

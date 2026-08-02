@@ -128,6 +128,7 @@ const managedAccountPageSource = await readFile(resolve(root, 'showroom', 'src',
 const managedTrialProofSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'managed-trial-proof.ts'), 'utf8')
 const operationsPageRouteSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'OperationsPageRoute.tsx'), 'utf8')
 const localWorkspaceBackupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-workspace-backup.ts'), 'utf8')
+const localWorkspaceStorageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-workspace-storage.ts'), 'utf8')
 const productSetupSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-setup.ts'), 'utf8')
 const workspaceRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'workspace-runtime.ts'), 'utf8')
 const operationalReportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'operational-report.ts'), 'utf8')
@@ -264,8 +265,8 @@ if (coreSource.includes('const productStartActions =')
 if (!coreSource.includes("'Use Shop demand'")
   || !coreSource.includes('className="workspace-toolbar view-tabs product-task-tabs"')) fail('product_task_navigation_missing')
 if (!coreCssSource.includes('.production-operation-module > .plant-batch-disclosure { flex: 0 0 auto; }')) fail('plant_execution_panel_can_shrink_out_of_view')
-if (!localWorkspaceBackupSource.includes("key.startsWith(PLANT_ORDER_STORAGE_PREFIX)")
-  || !settingsPageSource.includes('listResettableCompanyStorageKeys(window.localStorage)')) fail('plant_execution_evidence_not_reset_or_restored_with_workspace')
+if (!localWorkspaceStorageSource.includes("'supermega.plant.order-foundation.v1:'")
+  || !settingsPageSource.includes('listLocalWorkspaceStorageKeys(window.localStorage)')) fail('plant_execution_evidence_not_reset_or_restored_with_workspace')
 if (!plantOrderUiSource.includes('<details className="compact-disclosure production-history" open>')) fail('plant_required_batch_fields_hidden_by_default')
 if (!websiteSource.includes("const managedReleaseRequired = storageMode === 'managed'")
   || !websiteSource.includes("['Review', hasUnsavedChanges ? 'Blocked by draft' : managedReleaseRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required']")
@@ -2452,7 +2453,8 @@ if (!shopReplenishmentSource.includes("SHOP_REPLENISHMENT_PLAN_CONTRACT = 'super
   || !coreCssSource.includes('.shop-order-control.supplier-control')
   || !coreCssSource.includes('.shop-replenishment-list')) fail('shop_replenishment_plan_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopReplenishmentSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_replenishment_side_effect_added')
-if (!localWorkspaceBackupSource.includes('LEGACY_TEAM_WORK_KEYS') || !localWorkspaceBackupSource.includes('LEGACY_COMMERCE_KEYS') || !localWorkspaceBackupSource.includes('LEGACY_PRODUCTION_KEYS') || !localWorkspaceBackupSource.includes('LEGACY_APPROVAL_KEYS') || !localWorkspaceBackupSource.includes('LEGACY_SETUP_KEYS')) fail('legacy_local_workspace_not_migrated')
+if (!['supermega.team.workspace.v3', 'supermega.team.workspace.v2', 'supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2', 'supermega.production.workspace.v1', 'supermega.plant.workspace.v2', 'supermega.approvals.v2', 'supermega.setup.v2']
+  .every((key) => localWorkspaceStorageSource.includes(`'${key}'`))) fail('legacy_local_workspace_not_migrated')
 if (!workspaceRuntimeSource.includes('decisionPacketFingerprint') || !coreSource.includes("status: 'superseded' as const")) fail('stale_approval_packet_not_superseded')
 if (!workspaceRuntimeSource.includes('toManagedDecisionPacket') || !settingsPageSource.includes('managedApprovalRequests')) fail('managed_decision_packet_serializer_missing')
 if (!teamSource.includes('Accept and record') || !teamSource.includes("acceptedActorKind: 'human'") || !teamModel.includes('acceptanceEvidenceReference')) fail('product_decision_not_human_attributed')
@@ -2718,18 +2720,20 @@ if (!storefrontDraftStoragePrefix
   || !localProductExportBlock.includes('key.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)')
   || !localProductResetBlock.includes("const { resetCommerceOrderDraftRecovery } = await import('./commerce-order-draft')")
   || !localProductResetBlock.includes('await resetCommerceOrderDraftRecovery()')
-  || !localProductResetBlock.includes('listResettableCompanyStorageKeys(window.localStorage)')
+  || !localProductResetBlock.includes('listLocalWorkspaceStorageKeys(window.localStorage)')
   || !localProductResetBlock.includes('resettableKeys.forEach')
-  || !companyBackupSource.includes("'supermega.shop.order_draft.v1.'")
-  || !companyBackupSource.includes("'supermega.ecommerce.storefront_draft.v2.'")
-  || !companyBackupSource.includes("'supermega.ecommerce.storefront_draft.v1.'")
-  || !companyBackupSource.includes("'supermega.shop.order_draft_reset.v1'")
+  || !localWorkspaceStorageSource.includes("'supermega.shop.order_draft.v1.'")
+  || !localWorkspaceStorageSource.includes("'supermega.ecommerce.storefront_draft.v2.'")
+  || !localWorkspaceStorageSource.includes("'supermega.ecommerce.storefront_draft.v1.'")
+  || !localWorkspaceStorageSource.includes("'supermega.shop.order_draft_reset.v1'")
   || !settingsPageSource.includes('owner-control, outcome, setup, unfinished order drafts, and local AI-memory records')
   || coreSource.includes("from '../products/ecommerce/storefront-draft'")) fail('ecommerce_storefront_draft_not_in_deliberate_reset_or_broke_lazy_boundary')
 if (!localWorkspaceBackupSource.includes("LOCAL_WORKSPACE_BACKUP_CONTRACT = 'supermega.local_workspace_backup.v1'")
   || !localWorkspaceBackupSource.includes('LOCAL_WORKSPACE_BACKUP_MAX_BYTES = 5 * 1024 * 1024')
-  || !localWorkspaceBackupSource.includes('export function isLocalWorkspaceKey(')
+  || !localWorkspaceBackupSource.includes("from './local-workspace-storage.ts'")
   || !localWorkspaceBackupSource.includes('export function collectLocalWorkspaceBackup(')
+  || !localWorkspaceStorageSource.includes('export function isLocalWorkspaceKey(')
+  || !localWorkspaceStorageSource.includes('export function listLocalWorkspaceStorageKeys(')
   || !localWorkspaceBackupSource.includes('export function restoreLocalWorkspaceBackupFromEvidence(')
   || !localWorkspaceBackupSource.includes("evidence.version !== 24")
   || !localWorkspaceBackupSource.includes('export function applyLocalWorkspaceBackup(')
@@ -17815,7 +17819,12 @@ if (!companyBackupSource.includes("COMPANY_BACKUP_CONTRACT = 'supermega.company_
   || !appLiveVerifierSource.includes('supermega.company_backup.v1')
   || !appLiveVerifierSource.includes('company_backup_chunk_missing')
   || !settingsPageSource.includes("import('./CompanyBackupPanel')")
-  || !settingsPageSource.includes('listResettableCompanyStorageKeys(window.localStorage)')
+  || !settingsPageSource.includes('listLocalWorkspaceStorageKeys(window.localStorage)')
+  || !companyBackupSource.includes('return isLocalWorkspaceKey(key)')
+  || !localWorkspaceStorageSource.includes("'supermega.client-demo-workspace.v1'")
+  || !localWorkspaceStorageSource.includes("'supermega.website.leads.v1'")
+  || !localWorkspaceStorageSource.includes("'supermega.shop.service-schedule.v1'")
+  || !localWorkspaceStorageSource.includes("'supermega.plant.industry-pack.v1'")
   || !settingsPageSource.includes('Reset clears current Shop, Plant, Website, Ecommerce, owner-control, outcome, setup, unfinished order drafts, and local AI-memory records.')
   || !coreCssSource.includes('.company-backup-panel')
   || !coreCssSource.includes('.company-backup-fields input { min-height: 44px; }')
@@ -17823,6 +17832,7 @@ if (!companyBackupSource.includes("COMPANY_BACKUP_CONTRACT = 'supermega.company_
 
 try {
   const backup = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'company-backup.ts')).href}?company-backup=${Date.now()}`)
+  const localBackup = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'local-workspace-backup.ts')).href}?local-workspace-backup=${Date.now()}`)
   class MemoryStorage {
     constructor(entries = []) { this.values = new Map(entries) }
     get length() { return this.values.size }
@@ -17924,6 +17934,36 @@ try {
     || legacyResetKeys.some((key) => !backup.isResettableCompanyStorageKey(key))
     || backup.isResettableCompanyStorageKey('supermega.auth.session.v1')
     || backup.isResettableCompanyStorageKey('supermega.managed.workspace.v1')) fail('company_backup_reset_classifier_invalid')
+  companyBackupRuntimeChecks += 1
+  const recoverableRows = [
+    ['supermega.client-demo-workspace.v1', JSON.stringify({ workspace: 'Demo Workspace' })],
+    ['supermega.website.leads.v1', JSON.stringify({ leads: 2 })],
+    ['supermega.shop.service-schedule.v1', JSON.stringify({ appointments: 1 })],
+    ['supermega.plant.industry-pack.v1', JSON.stringify({ pack: 'manufacturing' })],
+    ['supermega.pilot-outcome.v1', JSON.stringify({ status: 'measuring' })],
+    ['supermega.owner-control-acknowledgements.v1', JSON.stringify([{ itemId: 'shop-1' }])],
+    ['supermega.website.release-foundation.v1:main', JSON.stringify({ releases: 1 })],
+    ['supermega.ecommerce.buying_lifecycle.v1.main', JSON.stringify({ requests: 1 })],
+  ]
+  const recoveryTarget = new MemoryStorage([
+    ...recoverableRows,
+    ['supermega.auth.session.v1', 'auth-kept'],
+    ['unrelated.browser.state', 'unrelated-kept'],
+  ])
+  const recoveryPoint = localBackup.collectLocalWorkspaceBackup(recoveryTarget, new Date('2026-08-03T00:00:00.000Z').toISOString())
+  const recoveryKeys = localBackup.listLocalWorkspaceStorageKeys(recoveryTarget)
+  if (!recoveryPoint
+    || Object.keys(recoveryPoint.records).length !== recoverableRows.length
+    || recoverableRows.some(([key]) => !recoveryKeys.includes(key) || !backup.isResettableCompanyStorageKey(key))) fail('local_workspace_reset_backup_scope_drifted')
+  companyBackupRuntimeChecks += 1
+  recoveryKeys.forEach((key) => recoveryTarget.removeItem(key))
+  if (recoverableRows.some(([key]) => recoveryTarget.getItem(key) !== null)
+    || recoveryTarget.getItem('supermega.auth.session.v1') !== 'auth-kept'
+    || recoveryTarget.getItem('unrelated.browser.state') !== 'unrelated-kept') fail('local_workspace_reset_boundary_invalid')
+  localBackup.applyLocalWorkspaceBackup(recoveryTarget, recoveryPoint)
+  if (recoverableRows.some(([key, value]) => recoveryTarget.getItem(key) !== value)
+    || recoveryTarget.getItem('supermega.auth.session.v1') !== 'auth-kept'
+    || recoveryTarget.getItem('unrelated.browser.state') !== 'unrelated-kept') fail('local_workspace_restore_round_trip_invalid')
   companyBackupRuntimeChecks += 1
 } catch (error) {
   fail(`company_backup_runtime_failed:${error instanceof Error ? error.message : String(error)}`)

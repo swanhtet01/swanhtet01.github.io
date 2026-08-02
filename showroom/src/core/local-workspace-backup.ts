@@ -1,30 +1,6 @@
-import {
-  LEGACY_WEBSITE_STORAGE_KEY,
-  WEBSITE_ECOMMERCE_HANDOFF_KEY,
-  WEBSITE_STORAGE_KEY,
-} from '../products/product-handoff'
-import { WEBSITE_LEAD_LEDGER_KEY } from '../products/website/website-leads'
-import { BEHAVIOR_TRAIL_KEY } from './behavior-trail'
-import { COMMERCE_KEY, LEGACY_COMMERCE_KEYS } from './commerce-workspace'
-import { CLIENT_DEMO_WORKSPACE_STORAGE_KEY } from './client-onboarding'
-import { PLANT_INDUSTRY_PACK_STORAGE_KEY } from './plant-industry-packs'
-import { PLANT_ORDER_STORAGE_PREFIX } from './plant-order-foundation'
-import {
-  ACTION_KEY,
-  APPROVAL_KEY,
-  LEGACY_APPROVAL_KEYS,
-  LEGACY_SETUP_KEYS,
-  LEGACY_STOREFRONT_DRAFT_RESET_KEY,
-  LEGACY_STOREFRONT_DRAFT_RESET_PREFIX,
-  SETUP_KEY,
-  SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
-  SHOP_ORDER_DRAFT_RESET_PREFIX,
-  STOREFRONT_DRAFT_RESET_PREFIX,
-  WEBSITE_RECOVERY_EXPORT_PREFIX,
-} from './product-setup'
-import { LEGACY_PRODUCTION_KEYS, PRODUCTION_KEY } from './production-workspace'
-import { SHOP_SERVICE_SCHEDULE_STORAGE_KEY } from './shop-service-scheduling'
-import { LEGACY_TEAM_WORK_KEYS, TEAM_WORK_KEY } from './team-work'
+import { isLocalWorkspaceKey, listLocalWorkspaceStorageKeys } from './local-workspace-storage.ts'
+
+export { isLocalWorkspaceKey, listLocalWorkspaceStorageKeys }
 
 export const LOCAL_WORKSPACE_BACKUP_CONTRACT = 'supermega.local_workspace_backup.v1'
 export const LOCAL_WORKSPACE_BACKUP_MAX_BYTES = 5 * 1024 * 1024
@@ -39,39 +15,6 @@ export type LocalWorkspaceBackup = {
 
 type StorageReader = Pick<Storage, 'getItem' | 'key' | 'length'>
 type StorageWriter = StorageReader & Pick<Storage, 'removeItem' | 'setItem'>
-
-const exactWorkspaceKeys = new Set([
-  COMMERCE_KEY,
-  PRODUCTION_KEY,
-  APPROVAL_KEY,
-  SETUP_KEY,
-  ACTION_KEY,
-  BEHAVIOR_TRAIL_KEY,
-  SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
-  TEAM_WORK_KEY,
-  WEBSITE_STORAGE_KEY,
-  LEGACY_WEBSITE_STORAGE_KEY,
-  WEBSITE_LEAD_LEDGER_KEY,
-  WEBSITE_ECOMMERCE_HANDOFF_KEY,
-  CLIENT_DEMO_WORKSPACE_STORAGE_KEY,
-  LEGACY_STOREFRONT_DRAFT_RESET_KEY,
-  SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
-  PLANT_INDUSTRY_PACK_STORAGE_KEY,
-  ...LEGACY_TEAM_WORK_KEYS,
-  ...LEGACY_COMMERCE_KEYS,
-  ...LEGACY_PRODUCTION_KEYS,
-  ...LEGACY_APPROVAL_KEYS,
-  ...LEGACY_SETUP_KEYS,
-])
-
-export function isLocalWorkspaceKey(key: string) {
-  return exactWorkspaceKeys.has(key)
-    || key.startsWith(PLANT_ORDER_STORAGE_PREFIX)
-    || key.startsWith(STOREFRONT_DRAFT_RESET_PREFIX)
-    || key.startsWith(LEGACY_STOREFRONT_DRAFT_RESET_PREFIX)
-    || key.startsWith(SHOP_ORDER_DRAFT_RESET_PREFIX)
-    || key.startsWith(WEBSITE_RECOVERY_EXPORT_PREFIX)
-}
 
 function checkedBackup(value: unknown): LocalWorkspaceBackup | null {
   if (!value || typeof value !== 'object') return null
@@ -101,9 +44,7 @@ function checkedBackup(value: unknown): LocalWorkspaceBackup | null {
 
 export function collectLocalWorkspaceBackup(storage: StorageReader, createdAt = new Date().toISOString()) {
   const records: Record<string, string> = {}
-  for (let index = 0; index < storage.length; index += 1) {
-    const key = storage.key(index)
-    if (!key || !isLocalWorkspaceKey(key)) continue
+  for (const key of listLocalWorkspaceStorageKeys(storage)) {
     const value = storage.getItem(key)
     if (value !== null) records[key] = value
   }
@@ -124,9 +65,7 @@ export function restoreLocalWorkspaceBackupFromEvidence(value: unknown) {
 }
 
 function removeLocalWorkspaceRecords(storage: StorageWriter) {
-  const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index))
-    .filter((key): key is string => Boolean(key && isLocalWorkspaceKey(key)))
-  keys.forEach((key) => storage.removeItem(key))
+  listLocalWorkspaceStorageKeys(storage).forEach((key) => storage.removeItem(key))
 }
 
 export function applyLocalWorkspaceBackup(storage: StorageWriter, value: LocalWorkspaceBackup) {
