@@ -257,7 +257,28 @@ for (const required of ['AI learned', 'Managed company brief', 'Keep approved co
 }
 const productHomeLiveCopyUpdates = new Map([
   ['Export evidence', 'Export setup'],
-  ['AI prepares the setup and keeps business changes behind owner approval.', 'Setup stays behind owner review before business changes are saved.'],
+  ['Ask SuperMega', 'Business helper'],
+  ['Ask what needs attention.', 'See what needs attention.'],
+  ['Free mode answers from validated local Shop, Plant, Website, and Ecommerce records.', 'Uses reviewed Shop, Plant, Website, and Ecommerce records.'],
+  ['Premium can add approved managed history and cross-workflow context.', 'Managed company history is used only after approval.'],
+  ['Business question', 'Ask about today'],
+  ['Ask a business question', 'Ask about today'],
+  ['Raw questions stay in this field and are not written to behavior memory.', 'Your question stays on this screen unless you choose a saved managed review.'],
+  ['Owner Control run', 'Daily review status'],
+  ['Free local control', 'Local review'],
+  ['Premium managed control', 'Managed review'],
+  ['AI learned', 'Saved learning'],
+  ['Why this answer', 'Why this result'],
+  ['Owner pattern', 'Recent product'],
+  ['Operate products', 'Product coverage'],
+  ['Package setup, imports, behavior, decisions, and go-live proof before premium starts.', 'Package setup, imports, decisions, and go-live proof before support starts.'],
+  ['Starter paths', 'Choose a product'],
+  ['Start one product in 2 clicks.', 'Start one product.'],
+  ['Choose a local template, then open the working app.', 'Pick a template or open the working sample.'],
+  ['AI prepares the setup and keeps business changes behind owner approval.', 'Setup stays behind review before business records change.'],
+  ['Product starter paths', 'Product start paths'],
+  ['Product starter actions', 'Product start actions'],
+  ['Open setup hub', 'Set up data'],
 ])
 for (const required of ['Ask SuperMega', 'Ask what needs attention.', 'Free mode answers from validated local Shop, Plant, Website, and Ecommerce records.', 'Premium can add approved managed history and cross-workflow context.', 'Business question', 'Ask a business question', 'What needs attention?', 'What stock is low?', 'What blocks production?', 'Is the website ready?', 'Are online orders ready?', 'Raw questions stay in this field and are not written to behavior memory.', 'supermega.local_business_snapshot.v1', 'supermega.local_business_answer.v1', 'supermega.local_owner_control_run.v1', 'supermega.local_owner_control_acknowledgement.v1', 'sourceFingerprint', 'Owner Control run', 'Free local control', 'Premium managed control', 'Acknowledge review', 'Acknowledgement confirms review only.', 'Missing evidence cannot be acknowledged. Open a working sample or import records first.', 'Changed records will reopen the run.', 'Owner control refreshed from current managed evidence.', 'Keep learning checkpoint', 'Checkpoint retained', 'AI learned', 'Reading approved managed context...', 'Managed context is unavailable. The validated local answer remains on screen.', 'validated product sources', 'This answer reads validated local records only.', 'It does not send messages, publish, charge, move stock, write production, or train models.', 'Why this answer', 'Finish setup', 'Export evidence', 'Continue ', 'Owner pattern', 'Operate products', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.', 'Starter paths', 'Start one product in 2 clicks.', 'Choose a local template, then open the working app.', 'AI prepares the setup and keeps business changes behind owner approval.', 'Product starter paths', 'Product starter actions', 'Prepare catalog', 'Prepare jobs', 'Prepare brand brief', 'Prepare orders', 'Open setup hub', 'Open Shop', 'Open Plant', 'Open Website', 'Open Ecommerce', 'Open Shop sample', 'agent_job_chosen']) {
   const currentRequired = productHomeLiveCopyUpdates.get(required) ?? required
