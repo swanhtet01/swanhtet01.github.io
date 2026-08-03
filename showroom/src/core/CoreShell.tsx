@@ -284,6 +284,10 @@ export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: strin
   return <header className="page-heading"><div>{eyebrow ? <span className="core-eyebrow">{eyebrow}</span> : null}<h1>{title}</h1><p>{copy}</p></div>{actions ? <div className="heading-actions">{actions}</div> : null}</header>
 }
 
+export function Empty({ children }: { children: ReactNode }) {
+  return <div className="empty-state"><span>&gt;_</span><p>{children}</p></div>
+}
+
 export function CoreLayout() {
   const location = useLocation()
   const runtime = useRuntimeHealth()

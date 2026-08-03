@@ -12,12 +12,8 @@ import { buildManagedAiContextExport, buildManagedContextProfileRequest, managed
 import { operatingChangeCopy } from './operating-baseline'
 import { getCurrentPublish, loadWebsiteWorkspace } from '../products/website/website-model'
 import { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } from '../products/ecommerce/storefront-draft'
-import {
-  PageHeading,
-  RuntimeBadge,
-  managedTrialRequestUrl,
-  type RuntimeHealth,
-} from './CoreApp'
+import { managedTrialRequestUrl } from './CoreApp'
+import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
 import {
   mergeManagedApprovals,
   toManagedApprovalRequest,
