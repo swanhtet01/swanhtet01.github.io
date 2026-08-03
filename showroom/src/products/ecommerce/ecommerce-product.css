@@ -123,7 +123,7 @@
 .ecommerce-today-metrics {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   overflow: hidden;
   border: 1px solid rgba(31, 68, 51, .12);
   border-radius: 11px;
@@ -137,13 +137,10 @@
   align-content: center;
   gap: 4px;
   border-right: 1px solid rgba(31, 68, 51, .09);
-  border-bottom: 1px solid rgba(31, 68, 51, .09);
   padding: 10px 12px;
 }
 
-.ecommerce-today-metrics span:nth-child(2n) { border-right: 0; }
-.ecommerce-today-metrics span:nth-last-child(-n+2) { border-bottom: 0; }
-.ecommerce-today-metrics span:last-child { grid-column: 1 / -1; border-right: 0; }
+.ecommerce-today-metrics span:last-child { border-right: 0; }
 
 .ecommerce-today-metrics small,
 .ecommerce-today-source small {
@@ -1660,6 +1657,11 @@
   }
 
   .ecommerce-today-priority .core-button { width: 100%; }
+
+  .ecommerce-today-metrics span {
+    min-height: 58px;
+    padding: 8px;
+  }
 
   .ecommerce-today-source {
     align-items: flex-start;

@@ -1168,7 +1168,7 @@ export function EcommerceProduct() {
   const ecommerceReturnedUnits = managedIdentity
     ? managedReturnedUnits
     : localEcommerceOrders.reduce((total, order) => total + (order.returns ?? []).reduce((returned, record) => returned + record.quantity, 0), 0)
-  const importNeeded = catalog.source === 'sample' || catalog.source === 'unavailable' || catalog.items.length === 0
+  const importNeeded = catalog.source === 'unavailable' || catalog.items.length === 0
   const orderOpsNow = Date.now()
   const orderOpsAgingCount = pendingManagedRequests.filter((request) => Date.parse(request.createdAt) <= orderOpsNow - 30 * 60 * 1000).length
   const orderOpsExpiringCount = pendingManagedRequests.filter((request) => {
@@ -1603,13 +1603,6 @@ export function EcommerceProduct() {
             : buyingReady
               ? 'Ready for customer orders'
               : 'Check setup'
-  const ecommerceTodayCustomerCount = new Set(
-    (managedIdentity
-      ? managedOrderTimeline.map((entry) => entry.request.customerReference)
-      : localEcommerceOrders.map((order) => order.customer))
-      .map((customer) => customer.trim())
-      .filter(Boolean),
-  ).size
   const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
   const ecommerceTodayState = importNeeded || storefrontSetupRequired
     ? 'setup'
@@ -1662,11 +1655,15 @@ export function EcommerceProduct() {
                 ? 'Prepare next order'
                 : 'Start sample order'
   const ecommerceTodayMetrics = [
-    ['Storefront', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Sample ready'],
-    ['Shop requests', pendingManagedRequests.length ? `${pendingManagedRequests.length} to review` : 'Clear'],
-    ['Cart & checkout', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Order confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
-    ['Customers', ecommerceTodayCustomerCount ? `${ecommerceTodayCustomerCount} known` : 'No orders yet'],
-    ['Returns', ecommerceReturnedUnits ? `${ecommerceReturnedUnits} unit${ecommerceReturnedUnits === 1 ? '' : 's'}` : 'Clear'],
+    ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Sample ready'],
+    ['2. Cart', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
+    ['3. Shop', pendingManagedRequests.length
+      ? `${pendingManagedRequests.length} to review`
+      : ecommerceActiveOrderCount
+        ? `${ecommerceActiveOrderCount} in progress`
+        : ecommerceCompletedOrderCount
+          ? `${ecommerceCompletedOrderCount} completed`
+          : 'No order yet'],
   ] as const
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
