@@ -53,6 +53,8 @@
     "readiness:managed:write": "node tools/manage_managed_pilot_readiness.mjs",
     "readiness:managed:verify": "node tools/manage_managed_pilot_readiness.mjs --verify",
     "readiness:managed:self-test": "node --test kernel/managed-pilot-readiness.test.mjs",
+    "readiness:supabase-security:verify": "node tools/verify_supabase_security_advisor_audit.mjs",
+    "readiness:supabase-security:self-test": "node tools/verify_supabase_security_advisor_audit.mjs --self-test",
     "database:migrations:verify": "node tools/verify_private_trial_migrations.mjs",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "npm run public:prebuilt",
@@ -100,7 +102,7 @@
     "release:integration:batch:check": "node tools/prepare_release_integration_batch.mjs --tree",
     "release:integration:batch:self-test": "node --test tools/prepare_release_integration_batch.test.mjs",
     "verify:app-deploy-workflow": "node tools/verify_app_deploy_workflow.mjs",
-    "hq:verify": "node tools/record_postgres17_rehearsal.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/verify_hq_contract.mjs",
+    "hq:verify": "node tools/record_postgres17_rehearsal.mjs --verify && node tools/manage_managed_pilot_readiness.mjs --verify && npm run readiness:supabase-security:verify && node tools/verify_hq_contract.mjs",
     "hq:verify:live": "node tools/verify_hq_live_state.mjs",
     "hq:verify:live:self-test": "node tools/verify_hq_live_state.mjs --self-test"
   },
