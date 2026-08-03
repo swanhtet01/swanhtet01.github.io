@@ -60,7 +60,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Checks: 106 Ecommerce, 342 Commerce, 327 Production, 95 security, 241 onboarding, 11 backup, 85 managed import, and 52 PostgreSQL 17 checks across nine migrations.
 - The deterministic 12-profile rehearsal passes 24 rows. Live Shop reaches the counter; Plant mobile passes output through next output; Website mobile passes edit through standalone file; Ecommerce mobile passes sample start, cart, quote, review, Shop order, return, and reload. All four product missions are overflow-free on desktop. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
-- Both domains serve deployed `e15d4a585b608a10a00b0dcd8a6842818d763bb4`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Both Vercel deployments are READY with zero one-hour runtime errors.
+- Both domains serve deployed `e15d4a585b608a10a00b0dcd8a6842818d763bb4`; paired brand, context, and catalog identities match. Accepted-commit checks pass; current-head checks report drift.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating and stops no process. The Ally remains under `memory_pressure_critical` with zero run admission, zero loaded models, and local subagents disabled. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -74,7 +74,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - `supermegabase` remains private schema v7 with no active workspace. Reviewed v8 RLS is code-only; writes stay off until backup, exact target binding, hosted advisors, tenant proof, and owner-authorized migration. The 27 legacy public tables remain outside app and browser-role access.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `e15d4a58`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
+- Both domains remain on accepted live `e15d4a58`; exact current-head verification reports release drift. Seven gates block activation; external handoffs require `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 

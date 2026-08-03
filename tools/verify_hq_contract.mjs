@@ -752,7 +752,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.')
   && now.includes('The deterministic 12-profile rehearsal passes 24 rows')
   && now.includes('The active delivery focus is:')
-  && now.includes(`Live HQ and both domains agree on \`${hqLiveReleaseCommit.slice(0, 8)}\`; no release drift is present.`)
+  && now.includes(`Both domains remain on accepted live \`${hqLiveReleaseCommit.slice(0, 8)}\`; exact current-head verification reports release drift.`)
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
   && now.includes('Controlled batches bind reviewed productive time and closed downtime')
@@ -1431,13 +1431,13 @@ requireContract('live HQ state is machine-verifiable and read-only',
   && workboard.includes('Checkpoint `bc19dac2` adds `supermega.hq-live-state.v1`')
   && workboard.includes('A one-off non-terminating working-set trim released 2,084.8 MB'))
 
-requireContract('hosted one-job release drift is resolved',
+requireContract('hosted one-job release stays accepted while candidate drift is explicit',
   workboard.includes('| OPS-123 | CEO + Hosted Agent Release Integrity Codex | done-local |')
   && workboard.includes('production remains `isolated_demo`, scheduler-disabled, and scale-to-zero, but still reports the superseded two-job ceiling')
   && workboard.includes('24 conflicts across five bounded batches')
   && workboard.includes('zero merge, push, deployment, or provider authority')
   && workboard.includes('| CEO-012 | CEO / Codex integrator | done-live |')
-  && now.includes('scheduler ceiling is one job, and exact live verification passes.'))
+  && now.includes('Accepted-commit checks pass; current-head checks report drift'))
 
 requireContract('identity data integration authority follows the owning module',
   workboard.includes('| OPS-124 | CEO + Identity/Data Integration Contract Codex | done-local |')

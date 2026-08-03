@@ -62,7 +62,7 @@ export function buildManagedPilotReadiness(input = {}) {
   const managedPersistence = field(now, 'Live managed persistence ready')
   const securityReady = field(now, 'Live security ready')
   if (liveMode !== 'isolated_demo' || managedPersistence !== 'false' || securityReady !== 'false') fail('managed_pilot_readiness_live_boundary_invalid')
-  if (!now.includes('no release drift is present') || !now.includes('No named pilot customer')) fail('managed_pilot_readiness_live_blockers_missing')
+  if (!now.includes('exact current-head verification reports release drift') || !now.includes('No named pilot customer')) fail('managed_pilot_readiness_live_blockers_missing')
 
   const products = portfolio.products.map((product) => {
     const automation = product?.localAutomation
