@@ -120,6 +120,7 @@ import {
   commerceStorefrontRequestLines,
   commerceStorefrontRequests,
   commerceWebsiteIntakes,
+  commerceWorkingSampleCatalogId,
   convertCommerceWebsiteIntake,
   configureCommerceTax,
   configureCommerceAccountMapping,
@@ -1702,13 +1703,14 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount }: {
+function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount, sampleCatalogActive }: {
   disabled: boolean
   industryPack: ShopIndustryPack | null
   items: CommerceItem[]
   lowStockCount: number
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
+  sampleCatalogActive: boolean
 }) {
   const [cart, setCart] = useState<Record<string, number>>({})
   const [customer, setCustomer] = useState('')
@@ -1777,7 +1779,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
-          <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} working sample` : 'Counter open'}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} The catalog stays as sample data until you import client items.</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
+          <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} working sample` : 'Counter open'}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
           <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label>
         </header>
         {visibleItems.length ? <div className="shop-item-grid">
@@ -1897,6 +1899,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
+  const shopSampleCatalogActive = Boolean(shopPack && commerceWorkingSampleCatalogId(commerce) === shopPack.id)
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
@@ -6462,7 +6465,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
+    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} sampleCatalogActive={shopSampleCatalogActive} />
     {actionGate}
   </div>
 

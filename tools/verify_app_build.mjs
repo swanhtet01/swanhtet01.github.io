@@ -4274,8 +4274,15 @@ if (!workspaceRuntimeSource.includes('confirmation?: AccountableAction') || !wor
 if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || managedCommerceRuntime.includes('commerce.snapshot.saved') || !managedCommerceRuntime.includes('_one_changed') || !managedCommerceRuntime.includes('_validate_event_evidence') || !managedCommerceRuntime.includes('daily close totals must match completed, reconciled orders')) fail('managed_commerce_server_transition_contract_missing')
 if (!commerceSource.includes('registerCommerceItem')
   || !commerceSource.includes('export function importCommerceCatalog')
+  || !commerceSource.includes('export function installCommerceWorkingSampleCatalog')
+  || !commerceSource.includes('export function commerceWorkingSampleCatalogId')
   || !commerceSource.includes('ACT-CLIENT-IMPORT-')
+  || !commerceSource.includes('ACT-DEMO-WORKING-SAMPLE-')
   || !commerceSource.includes('alreadyPresent')
+  || !settingsPageSource.includes('provisionLocalShopWorkingSample')
+  || !settingsPageSource.includes('function readLocalShopIndustryPackId()')
+  || !settingsPageSource.includes('demoWorkspace?.blueprint.client.shopIndustryPackId ?? readLocalShopIndustryPackId()')
+  || !settingsPageSource.includes("clientImportTemplate('commerce', workflowTemplateId, { shopIndustryPackId: industryPackId })")
   || !coreSource.includes('Add catalog item')
   || !coreSource.includes('Review catalog item')
   || !coreSource.includes('The opening balance may be zero.')
@@ -5011,7 +5018,7 @@ if (!productSetupSource.includes('templateId: string')
   || productSetupClientFields < 0
   || productSetupPrimaryAction < productSetupClientFields
   || productSetupReview < productSetupPrimaryAction
-  || !settingsPageSource.includes('<div className="setup-action-group"><button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Open working sample</button><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep(\'success\')} type="button">Add success criteria</button></div>')
+  || !settingsPageSource.includes('<div className="setup-action-group"><button className="core-button primary" disabled={!workflowReady || guidedTrialBusy} onClick={() => void startGuidedTrial()} type="button">{guidedTrialBusy ? \'Opening sample\' : \'Open working sample\'}</button><button className="text-link" disabled={!workflowReady || guidedTrialBusy} onClick={() => chooseSettingsStep(\'success\')} type="button">Add success criteria</button></div>')
   || !settingsPageSource.includes('<summary><span>Review workflow and data</span><small>{selectedTemplate.name}</small></summary>')
   || !settingsPageSource.includes('Download setup kit')
   || !settingsPageSource.includes('Load setup kit')
@@ -5241,7 +5248,9 @@ const shopCounterContract = coreSource.slice(coreSource.indexOf('function ShopCo
 const shopCounterRouteContract = coreSource.slice(coreSource.indexOf("if (tab === 'counter')"), coreSource.indexOf("if (tab === 'orders')"))
 if (!shopCounterContract.includes('Tap an item to add it')
   || !shopCounterContract.includes('industryPack.firstWorkflow')
-  || !shopCounterContract.includes('The catalog stays as sample data until you import client items.')
+  || !shopCounterContract.includes('sampleCatalogActive')
+  || !shopCounterContract.includes('sample items are loaded.')
+  || !shopCounterContract.includes('Existing Shop catalog data was preserved.')
   || !shopCounterContract.includes('to="/shop/?tab=orders#shop-service-schedule"')
   || !shopCounterContract.includes("['Cash', 'KBZPay', 'WavePay']")
   || !shopCounterContract.includes('function addSearchMatch(event: KeyboardEvent<HTMLInputElement>)')
@@ -10796,6 +10805,53 @@ async function verifyCommerceRuntime() {
       capturedAt: '2026-07-23T09:00:00.000Z',
       actor: 'Client owner',
     }) === null, 'client_catalog_import_unbound_source_accepted')
+    const cafeSampleItems = [
+      { sku: 'MENU-MOHINGA', name: 'Mohinga', onHand: 80, reorderAt: 20, price: 3500 },
+      { sku: 'MENU-TEA', name: 'Myanmar milk tea', onHand: 120, reorderAt: 30, price: 1800 },
+    ]
+    const cafeWorkingSample = model.installCommerceWorkingSampleCatalog(model.createSeedCommerce(), {
+      sampleId: 'cafe',
+      sampleName: 'Cafe',
+      items: cafeSampleItems,
+      capturedAt: '2026-07-23T09:00:00.000Z',
+    })
+    assert(cafeWorkingSample?.items.length === model.createSeedCommerce().items.length + 2
+      && cafeWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
+      && model.commerceWorkingSampleCatalogId(cafeWorkingSample) === 'cafe',
+    'commerce_working_sample_was_not_installed_or_identified')
+    const replayedCafeWorkingSample = model.installCommerceWorkingSampleCatalog(cafeWorkingSample, {
+      sampleId: 'cafe',
+      sampleName: 'Cafe',
+      items: cafeSampleItems,
+      capturedAt: '2026-07-23T10:00:00.000Z',
+    })
+    assert(replayedCafeWorkingSample === cafeWorkingSample, 'commerce_working_sample_retry_was_not_idempotent')
+    const spaWorkingSample = model.installCommerceWorkingSampleCatalog(cafeWorkingSample, {
+      sampleId: 'spa',
+      sampleName: 'Spa',
+      items: [{ sku: 'SPA-MASSAGE', name: 'Traditional massage 60 min', onHand: 20, reorderAt: 4, price: 45000 }],
+      capturedAt: '2026-07-23T10:00:00.000Z',
+    })
+    assert(spaWorkingSample?.items.some((item) => item.sku === 'SPA-MASSAGE')
+      && !spaWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
+      && model.commerceWorkingSampleCatalogId(spaWorkingSample) === 'spa',
+    'commerce_working_sample_could_not_replace_an_untouched_prior_pack')
+    const cafeWithOperatorData = model.registerCommerceItem(cafeWorkingSample, {
+      sku: 'OWNER-ITEM', name: 'Owner item', onHand: 1, reorderAt: 0, price: 1000,
+    }, proof('ACT-OWNER-ITEM'))
+    assert(cafeWithOperatorData && model.installCommerceWorkingSampleCatalog(cafeWithOperatorData, {
+      sampleId: 'spa',
+      sampleName: 'Spa',
+      items: [{ sku: 'SPA-MASSAGE', name: 'Traditional massage 60 min', onHand: 20, reorderAt: 4, price: 45000 }],
+      capturedAt: '2026-07-23T10:00:00.000Z',
+    }) === null, 'commerce_working_sample_replaced_operator_catalog_data')
+    const countedSeed = model.countCommerceStock(model.createSeedCommerce(), 'SM-1001', 33, proof('ACT-SEED-COUNT'))
+    assert(countedSeed && model.installCommerceWorkingSampleCatalog(countedSeed, {
+      sampleId: 'cafe',
+      sampleName: 'Cafe',
+      items: cafeSampleItems,
+      capturedAt: '2026-07-23T10:00:00.000Z',
+    }) === null, 'commerce_working_sample_replaced_changed_seed_evidence')
     const productionRequest = {
       requestId: 'ISSUE-MANAGED-001',
       sourceCommandDigest: `sha256:${'a'.repeat(64)}`,

@@ -101,7 +101,9 @@ import {
   clientDemoPreparationConfirmationMatches,
   clientDemoPresets,
   clientCsvStarterPackHref,
+  clientImportTemplate,
   clientImportWorkflowTemplateIds,
+  createClientImportPreview,
   prepareClientDemoInBrowser,
   reconcileClientDemoWorkspace,
   restoreClientDemoWorkspace,
@@ -116,6 +118,11 @@ import {
   type ClientDemoWorkspace,
   type ClientSolutionId,
 } from './client-onboarding'
+import {
+  installCommerceWorkingSampleCatalog,
+  mutateCommerceWorkspace,
+  type CommerceItem,
+} from './commerce-workspace'
 import { projectPlantOrder } from './plant-order-foundation'
 import { productionOrderPortfolioEntries } from './production-order-portfolio'
 import {
@@ -168,6 +175,16 @@ function loadLocalWorkspaceRestorePoint() {
   try { return restoreLocalWorkspaceBackup(JSON.parse(window.sessionStorage.getItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY) || 'null')) } catch { return null }
 }
 
+function readLocalShopIndustryPackId() {
+  if (typeof window === 'undefined') return clientDemoPresets[0].shopIndustryPackId
+  try {
+    const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
+    return stored ? readShopServiceSchedule(stored).industryPackId : clientDemoPresets[0].shopIndustryPackId
+  } catch {
+    return clientDemoPresets[0].shopIndustryPackId
+  }
+}
+
 function provisionLocalShopIndustryPack(industryPackId: ShopIndustryPackId) {
   const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
   const next = stored
@@ -175,6 +192,41 @@ function provisionLocalShopIndustryPack(industryPackId: ShopIndustryPackId) {
     : createShopServiceSchedule(industryPackId)
   window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
   return next
+}
+
+async function provisionLocalShopWorkingSample(industryPackId: ShopIndustryPackId, workflowTemplateId: string) {
+  const pack = shopIndustryPack(industryPackId)
+  const preview = await createClientImportPreview(
+    clientImportTemplate('commerce', workflowTemplateId, { shopIndustryPackId: industryPackId }),
+    'commerce',
+    undefined,
+    `sample-${industryPackId}.csv`,
+    workflowTemplateId,
+  )
+  if (!preview.readyForStaging || preview.rows.some((row) => row.status !== 'ready')) {
+    throw new Error(`The ${pack.name} working sample did not pass its local data checks.`)
+  }
+  const items: CommerceItem[] = preview.rows.map((row) => ({
+    sku: row.values.sku,
+    name: row.values.name,
+    onHand: Number(row.values.onHand),
+    reorderAt: Number(row.values.reorderAt),
+    price: Number(row.values.price),
+  }))
+  let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
+  const result = await mutateCommerceWorkspace((current) => {
+    const next = installCommerceWorkingSampleCatalog(current, {
+      sampleId: pack.id,
+      sampleName: pack.name,
+      items,
+      capturedAt: new Date().toISOString(),
+    })
+    if (!next) return current
+    disposition = next === current ? 'current' : 'installed'
+    return next
+  })
+  if (!result.ok) throw new Error(result.error)
+  return disposition
 }
 
 const demoProgressLabels: Record<ClientDemoProductProgress['status'], string> = {
@@ -331,6 +383,7 @@ export function SettingsPage() {
   const [approvals, setApprovals] = useApprovalWorkspace()
   const [teamWorkspace] = useTeamWorkspace()
   const [notice, setNotice] = useState('')
+  const [guidedTrialBusy, setGuidedTrialBusy] = useState(false)
   const [resetArmed, setResetArmed] = useState(false)
   const [resetBusy, setResetBusy] = useState(false)
   const [restorePoint, setRestorePoint] = useState<LocalWorkspaceBackup | null>(loadLocalWorkspaceRestorePoint)
@@ -357,7 +410,7 @@ export function SettingsPage() {
   const [demoWorkspaceSource, setDemoWorkspace] = useState<ClientDemoWorkspace | null>(loadClientDemoWorkspace)
   const demoWorkspace = useMemo(() => restoreClientDemoWorkspace(demoWorkspaceSource), [demoWorkspaceSource])
   const [demoPresetId, setDemoPresetId] = useState<ClientDemoPresetId>(() => demoWorkspace?.blueprint.client.presetId ?? 'social-seller')
-  const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(() => demoWorkspace?.blueprint.client.shopIndustryPackId ?? clientDemoPresets[0].shopIndustryPackId)
+  const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(() => demoWorkspace?.blueprint.client.shopIndustryPackId ?? readLocalShopIndustryPackId())
   const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => demoWorkspace?.blueprint.client.plantIndustryPackId ?? readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const [demoSelections, setDemoSelections] = useState<Partial<Record<SetupProductId, string>>>(() => Object.fromEntries((demoWorkspace?.blueprint.products ?? clientDemoPresets[0].selections).map((selection) => [selection.product, selection.templateId])))
   const [demoBlueprintSource, setDemoBlueprint] = useState<ClientDemoBlueprint | null>(() => demoWorkspace?.blueprint ?? null)
@@ -1485,33 +1538,42 @@ export function SettingsPage() {
     updateSetup({ templateId: template.id, entryPoint: template.entryPoints[0] ?? '', startedAt: undefined })
   }
 
-  function startGuidedTrial() {
+  async function startGuidedTrial() {
     if (!workflowReady) {
       setNotice('Name the trial workspace and responsible owner first.')
       chooseSettingsStep('workflow')
       return
     }
-    if (setup.product === 'commerce') {
-      try { provisionLocalShopIndustryPack(shopIndustryPackId) } catch { /* Existing local evidence stays authoritative. */ }
-    }
-    if (setup.product === 'production') savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
-    const startedAt = new Date().toISOString()
-    setSetup((current) => ({ ...current, startedAt }))
-    if (setup.product === 'commerce' || setup.product === 'production') {
-      const metric = setup.product === 'commerce'
-        ? buildShopGuidedSaleOutcomeMetric(actions, startedAt)
-        : buildPlantGuidedShiftCloseOutcomeMetric(currentPlantShiftClose ? [currentPlantShiftClose] : [], startedAt)
-      if (metric) {
-        startPilotOutcome(window.localStorage, pilotOutcomeSetup, metric, new Date(startedAt))
-        recordBehaviorSignal(window.localStorage, {
-          event: 'agent_job_chosen',
-          product: setup.product,
-          route: clientSetupPath(setup.product),
-          detail: setup.product === 'commerce' ? 'Start Shop outcome proof' : 'Start Plant shift-close proof',
-        })
+    if (guidedTrialBusy) return
+    setGuidedTrialBusy(true)
+    try {
+      if (setup.product === 'commerce') {
+        try { provisionLocalShopIndustryPack(shopIndustryPackId) } catch { /* Existing local evidence stays authoritative. */ }
+        try { await provisionLocalShopWorkingSample(shopIndustryPackId, selectedTemplate.id) } catch { /* Existing or unavailable local data stays authoritative. */ }
       }
+      if (setup.product === 'production') savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
+      const startedAt = new Date().toISOString()
+      setSetup((current) => ({ ...current, startedAt }))
+      if (setup.product === 'commerce' || setup.product === 'production') {
+        const metric = setup.product === 'commerce'
+          ? buildShopGuidedSaleOutcomeMetric(actions, startedAt)
+          : buildPlantGuidedShiftCloseOutcomeMetric(currentPlantShiftClose ? [currentPlantShiftClose] : [], startedAt)
+        if (metric) {
+          startPilotOutcome(window.localStorage, pilotOutcomeSetup, metric, new Date(startedAt))
+          recordBehaviorSignal(window.localStorage, {
+            event: 'agent_job_chosen',
+            product: setup.product,
+            route: clientSetupPath(setup.product),
+            detail: setup.product === 'commerce' ? 'Start Shop outcome proof' : 'Start Plant shift-close proof',
+          })
+        }
+      }
+      navigate(setupProductPreviewPath(setup.product))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The working sample could not be opened.')
+    } finally {
+      setGuidedTrialBusy(false)
     }
-    navigate(setupProductPreviewPath(setup.product))
   }
 
   function save(event: FormEvent) {
@@ -2051,7 +2113,7 @@ export function SettingsPage() {
           {requestedProduct === 'production' ? <div className="form-row"><label>Plant industry pack<select onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="setup-pack-summary"><strong>{selectedPlantIndustryPack.description}</strong><small>{selectedPlantIndustryPack.firstWorkflow}</small><span>{selectedPlantIndustryPack.capabilities.slice(0, 3).join(' · ')}</span></div></div> : null}
           {requestedProduct ? <>
             {setup.product !== 'commerce' ? <div className="form-row"><label>Workflow<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label></div> : null}
-            <div className="settings-step-actions"><span>{workflowReady ? `Ready to open the working ${selectedProduct.name} sample on this device.` : 'Enter the client name and responsible owner first.'}</span><div className="setup-action-group"><button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Open working sample</button><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button></div></div>
+            <div className="settings-step-actions"><span>{workflowReady ? `Ready to open the working ${selectedProduct.name} sample on this device.` : 'Enter the client name and responsible owner first.'}</span><div className="setup-action-group"><button className="core-button primary" disabled={!workflowReady || guidedTrialBusy} onClick={() => void startGuidedTrial()} type="button">{guidedTrialBusy ? 'Opening sample' : 'Open working sample'}</button><button className="text-link" disabled={!workflowReady || guidedTrialBusy} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button></div></div>
             <details className="compact-disclosure setup-workflow-review">
               <summary><span>Review workflow and data</span><small>{selectedTemplate.name}</small></summary>
               <div>
