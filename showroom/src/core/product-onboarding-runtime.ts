@@ -5,6 +5,7 @@ import {
 } from './client-onboarding'
 import {
   installCommerceWorkingSampleCatalog,
+  loadCommerceWorkspace,
   mutateCommerceWorkspace,
   type CommerceItem,
 } from './commerce-workspace'
@@ -62,6 +63,8 @@ export async function provisionLocalShopWorkingSample(industryPackId: ShopIndust
     reorderAt: Number(row.values.reorderAt),
     price: Number(row.values.price),
   }))
+  const commerceWorkspace = loadCommerceWorkspace()
+  if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
   let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
   const result = await mutateCommerceWorkspace((current) => {
     const next = installCommerceWorkingSampleCatalog(current, {

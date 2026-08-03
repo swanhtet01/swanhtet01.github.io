@@ -1,4 +1,4 @@
-import { lazy, Suspense, type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate, useOutletContext } from 'react-router'
 
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
@@ -27,15 +27,12 @@ import {
   readLocalShopIndustryPackId,
 } from './product-onboarding-runtime'
 import {
-  plantIndustryPack,
-  plantIndustryPacks,
   readPlantIndustryPackId,
   savePlantIndustryPackId,
   type PlantIndustryPackId,
 } from './plant-industry-packs'
 import {
   shopIndustryPack,
-  shopIndustryPacks,
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
 import {
@@ -44,8 +41,6 @@ import {
   useProductionWorkspace,
   useSetupWorkspace,
 } from './workspace-runtime'
-
-const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 
 type ProductOnboardingPageProps = {
   product: SetupProductId
@@ -60,13 +55,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
-  const [dataSetupOpen, setDataSetupOpen] = useState(false)
-  const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
-  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+  const [shopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
+  const [plantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
 
   const onboardingProduct = productContracts[product]
   const selectedShopIndustryPack = shopIndustryPack(shopIndustryPackId)
-  const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
   const onboardingTemplate = setup.product === product
     ? templateFor(product, setup.templateId)
     : product === 'commerce'
@@ -133,20 +126,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         savedAt: undefined,
       }
     })
-  }
-
-  function changeShopIndustryPack(industryPackId: ShopIndustryPackId) {
-    const pack = shopIndustryPack(industryPackId)
-    const template = templateFor('commerce', pack.workflowTemplateId)
-    setShopIndustryPackId(pack.id)
-    updateSetup({ templateId: template.id, entryPoint: pack.entryPoint })
-    setNotice(`${pack.name} is ready with the ${template.name} workflow.`)
-  }
-
-  function changePlantIndustryPack(industryPackId: PlantIndustryPackId) {
-    const pack = plantIndustryPack(industryPackId)
-    setPlantIndustryPackId(pack.id)
-    setNotice(`${pack.name} is ready. Your starting workflow stays simple and can be expanded later.`)
   }
 
   async function startGuidedWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -224,31 +203,20 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     <div className="workspace-screen settings-screen product-onboarding-screen" data-product={product}>
       <PageHeading
         actions={<div className="product-onboarding-demo-action"><Link className="core-button primary" to={setupProductPreviewPath(product)}>Open {onboardingProduct.name} sample</Link><small>Instant. No account, form, or upload.</small></div>}
-        copy={`Use the working ${onboardingProduct.name} sample immediately. If it fits, add your business name to keep a personalized workspace; importing data can wait.`}
+        copy={`Open the working ${onboardingProduct.name} sample now. Add a business name only if you want your own saved workspace.`}
         eyebrow={`${onboardingProduct.name} only`}
         title={`Try ${onboardingProduct.name} now`}
       />
       <div aria-label={`${onboardingProduct.name} onboarding`} className="product-onboarding-grid">
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
-          <div className="product-onboarding-intro"><span className="core-eyebrow">Optional personalization</span><h2>Use your business name</h2><p>One field turns the sample into a named workspace on this device.</p></div>
+          <div className="product-onboarding-intro"><span className="core-eyebrow">Optional</span><h2>Save your own workspace</h2><p>Enter one business name. We will open a working copy with sample records.</p></div>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           <div className="product-onboarding-primary">
             <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : `Create my ${onboardingProduct.name} workspace`}</button>
-            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Adds realistic sample records. You can replace them with your data later.' : 'Or open the sample above with no setup.'}</small>
+            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates a local workspace with realistic sample records.' : 'No setup needed—use the sample above.'}</small>
           </div>
-          {product === 'commerce' || product === 'production' ? <details className="compact-disclosure product-onboarding-details">
-            <summary><span>Choose business type</span><small>Optional</small></summary>
-            <div className="product-onboarding-options">
-              {product === 'commerce' ? <div className="form-row"><label>Business type<select onChange={(event) => changeShopIndustryPack(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="setup-pack-summary"><strong>{selectedShopIndustryPack.firstWorkflow}</strong><small>{selectedShopIndustryPack.description}</small></div></div> : null}
-              {product === 'production' ? <div className="form-row"><label>Factory type<select onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="setup-pack-summary"><strong>{selectedPlantIndustryPack.firstWorkflow}</strong><small>{selectedPlantIndustryPack.description}</small></div></div> : null}
-            </div>
-          </details> : null}
-          <details className="compact-disclosure product-onboarding-details" onToggle={(event) => setDataSetupOpen(event.currentTarget.open)}>
-            <summary><span>Import existing data</span><small>Later</small></summary>
-            {dataSetupOpen ? workflowReady ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Your data</span><h3>Replace the sample when ready</h3><p>Import only {onboardingProduct.name} data. The other SuperMega products remain separate.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the data template...</p>}><ClientDataOnboarding initiallyOpen={false} managedIdentity={managedIdentity} owner={workspaceOwner} plantIndustryPackId={product === 'production' ? plantIndustryPackId : undefined} product={product} productName={onboardingProduct.name} productSlug={onboardingProduct.slug} shopIndustryPackId={product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={onboardingTemplate.id} workspace={setup.workspace} /></Suspense></section> : <p className="form-notice">Enter the business name before importing data.</p> : null}
-          </details>
-          <p className="product-onboarding-boundary">Only {onboardingProduct.name} changes. The other products stay separate.</p>
-          <p aria-live="polite" className="form-notice">{notice || 'Nothing is sent or published.'}</p>
+          <p className="product-onboarding-boundary">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
+          <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>
         </form>
       </div>
     </div>

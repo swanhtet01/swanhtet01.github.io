@@ -764,6 +764,7 @@ textarea { min-height: 72px; resize: vertical; }
 .settings-screen .settings-grid { flex: 0 0 auto; }
 .settings-screen .setup-form { overflow: visible; }
 .product-onboarding-screen { align-content: start; gap: 18px; }
+.product-onboarding-screen .page-heading p { max-width: 720px; overflow: visible; text-overflow: clip; white-space: normal; }
 .product-onboarding-grid { width: min(100%,720px); display: grid; grid-template-columns: minmax(0,1fr); gap: 14px; align-self: center; }
 .product-onboarding-card { position: relative; display: grid; align-content: start; gap: 14px; padding: 22px; overflow: visible; }
 .product-onboarding-intro { display: grid; gap: 5px; }
@@ -775,14 +776,9 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-form { min-height: 0; }
 .product-onboarding-form > label { display: grid; gap: 6px; }
 .product-onboarding-business-name input { min-height: 50px; font-size: 15px; }
-.product-onboarding-options { display: grid; gap: 12px; margin: 10px 12px 12px; }
-.product-onboarding-options > label { display: grid; gap: 6px; }
 .product-onboarding-primary { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--core-line); padding-top: 13px; }
 .product-onboarding-primary .core-button { flex: 0 0 auto; }
 .product-onboarding-primary small { color: var(--core-quiet); font-size: 10px; line-height: 1.4; }
-.product-onboarding-details > .setup-template-summary,
-.product-onboarding-details > .demo-data-setup,
-.product-onboarding-details > .form-notice { margin: 10px 12px 12px; }
 .product-onboarding-boundary { border-left: 3px solid var(--core-green); padding: 8px 10px; background: var(--core-green-soft); color: var(--core-ink) !important; font-size: 10px !important; }
 .ai-setup-guide { display: grid; grid-template-columns: minmax(220px,1fr) minmax(300px,.9fr) auto; align-items: center; gap: 18px; border-top: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 14px 18px; background: var(--core-green-soft); }
 .ai-setup-guide-copy { min-width: 0; display: grid; gap: 4px; }
