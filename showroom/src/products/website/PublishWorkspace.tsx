@@ -49,6 +49,22 @@ const publishSteps: Array<{ id: PublishStep; label: string }> = [
   { id: 'snapshot', label: 'Site file' },
 ]
 
+function localEvidenceSuggestion(kind: EvidenceKind, workspace: WebsiteWorkspace) {
+  const revision = workspace.contentRevision
+  if (kind === 'responsive') return {
+    finding: `Desktop, tablet, and mobile previews reviewed for ${workspace.siteName}.`,
+    reference: `Website responsive preview r${revision}`,
+  }
+  if (kind === 'links') return {
+    finding: `Navigation and call-to-action destinations reviewed for ${workspace.siteName}.`,
+    reference: `Website destination check r${revision}`,
+  }
+  return {
+    finding: `Ready-page copy and contact details reviewed for ${workspace.siteName}.`,
+    reference: `Website content r${revision}`,
+  }
+}
+
 export function PublishWorkspace({
   approvalIsCurrent,
   checks,
@@ -64,12 +80,18 @@ export function PublishWorkspace({
   onRecordPublish,
   onSaveManagedRelease,
 }: PublishWorkspaceProps) {
-  const [evidenceKind, setEvidenceKind] = useState<EvidenceKind>('content')
-  const [evidenceFinding, setEvidenceFinding] = useState('')
-  const [evidenceReference, setEvidenceReference] = useState('')
-  const [evidenceVerifier, setEvidenceVerifier] = useState('')
-  const [reviewer, setReviewer] = useState('')
-  const [approvalNote, setApprovalNote] = useState('')
+  const firstMissingEvidenceKind = evidenceRequirements.find((requirement) => !workspace.evidence.some((entry) => (
+    entry.kind === requirement.id
+    && entry.fingerprint === fingerprint
+    && entry.source.contentRevision === workspace.contentRevision
+  )))?.id ?? 'content'
+  const firstEvidenceSuggestion = localEvidenceSuggestion(firstMissingEvidenceKind, workspace)
+  const [evidenceKind, setEvidenceKind] = useState<EvidenceKind>(firstMissingEvidenceKind)
+  const [evidenceFinding, setEvidenceFinding] = useState(managedActorId ? '' : firstEvidenceSuggestion.finding)
+  const [evidenceReference, setEvidenceReference] = useState(managedActorId ? '' : firstEvidenceSuggestion.reference)
+  const [evidenceVerifier, setEvidenceVerifier] = useState(managedActorId ? '' : 'Website owner')
+  const [reviewer, setReviewer] = useState(managedActorId ? '' : 'Website owner')
+  const [approvalNote, setApprovalNote] = useState(managedActorId ? '' : `Content, responsive preview, and destinations reviewed for ${workspace.siteName}.`)
   const [approvalConfirmed, setApprovalConfirmed] = useState(false)
   const [submitting, setSubmitting] = useState<'evidence' | 'approval' | 'snapshot' | ''>('')
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -118,6 +140,13 @@ export function PublishWorkspace({
     snapshot: publishIsCurrent ? 'Ready' : 'Not ready',
   }
 
+  function chooseEvidenceKind(kind: EvidenceKind) {
+    setEvidenceKind(kind)
+    const suggestion = localEvidenceSuggestion(kind, workspace)
+    setEvidenceFinding(managedActorId ? '' : suggestion.finding)
+    setEvidenceReference(managedActorId ? '' : suggestion.reference)
+  }
+
   async function submitEvidence(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSubmitting('evidence')
@@ -129,8 +158,15 @@ export function PublishWorkspace({
     })
     setSubmitting('')
     if (saved) {
-      setEvidenceFinding('')
-      setEvidenceReference('')
+      const nextRequirement = evidenceRequirements.find((requirement) => (
+        requirement.id !== evidenceKind && !currentEvidenceByKind.get(requirement.id)
+      ))
+      if (nextRequirement) chooseEvidenceKind(nextRequirement.id)
+      else {
+        setEvidenceFinding('')
+        setEvidenceReference('')
+        setActiveStep('approval')
+      }
     }
   }
 
@@ -140,7 +176,10 @@ export function PublishWorkspace({
     setSubmitting('approval')
     const saved = await onApprove({ reviewer: managedActorId || reviewer.trim(), note: approvalNote.trim() })
     setSubmitting('')
-    if (saved) setApprovalConfirmed(false)
+    if (saved) {
+      setApprovalConfirmed(false)
+      setActiveStep('snapshot')
+    }
   }
 
   async function recordSnapshot() {
@@ -293,7 +332,7 @@ export function PublishWorkspace({
             <form className="website-evidence-form" onSubmit={submitEvidence}>
               <label>
                 <span>Requirement</span>
-                <select value={evidenceKind} onChange={(event) => setEvidenceKind(event.target.value as EvidenceKind)}>
+                <select value={evidenceKind} onChange={(event) => chooseEvidenceKind(event.target.value as EvidenceKind)}>
                   {evidenceRequirements.map((requirement) => (
                     <option key={requirement.id} value={requirement.id}>{requirement.label}</option>
                   ))}

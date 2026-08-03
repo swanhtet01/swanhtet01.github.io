@@ -771,6 +771,21 @@ export function WebsiteProduct() {
   const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
   const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
   const releaseRecordRequired = storageMode !== 'session-only'
+  const websiteTodayStep = storageIssue || canRepairLocalStorage
+    ? 'recover'
+    : starterSetupActive || starterAvailable
+      ? 'setup'
+      : hasUnsavedChanges
+        ? 'edit'
+        : failingContentChecks.length
+          ? 'checks'
+          : leadCounts.new
+            ? 'inquiries'
+            : releaseRecordRequired && !approvalIsCurrent
+              ? 'review'
+              : releaseRecordRequired && !publishIsCurrent
+                ? 'file'
+                : 'ready'
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
     : starterSetupActive
@@ -832,13 +847,19 @@ export function WebsiteProduct() {
     ? 'Open recovery'
     : starterSetupActive || starterAvailable
       ? 'Customize demo'
-      : hasUnsavedChanges || failingContentChecks.length
-        ? 'Open editor'
+      : hasUnsavedChanges
+        ? 'Review edits'
+        : failingContentChecks.length
+          ? 'Fix page checks'
         : leadCounts.new
           ? 'Review inquiries'
-        : releaseRecordRequired
-          ? 'Open checklist'
-          : 'Get website'
+          : releaseRecordRequired && !approvalIsCurrent
+            ? 'Review website'
+            : releaseRecordRequired && !publishIsCurrent
+              ? 'Create site file'
+              : releaseRecordRequired
+                ? 'Download or go live'
+                : 'Download website'
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'
     : starterAvailable || starterSetupActive
@@ -1022,6 +1043,22 @@ export function WebsiteProduct() {
               <button className="website-button is-secondary" onClick={() => openWorkspaceView('content')} type="button">Back to edit</button>
             ) : null}
           </header>
+
+          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
+            <div className="website-today-priority">
+              <span className="website-kicker">Start here</span>
+              <h2 id="website-today-title">{websiteAgentJob}</h2>
+              <p>{websiteAgentReason}</p>
+              <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
+            </div>
+            <div aria-label="Website today status" className="website-today-metrics" role="group">
+              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+            <div className="website-today-source" role="status">
+              <span>{websiteTodaySource}</span>
+              <small>{websiteReviewNote}</small>
+            </div>
+          </section> : null}
 
           {view === 'content' ? (
             <section
@@ -1292,21 +1329,6 @@ export function WebsiteProduct() {
             </div>
           </div>
 
-          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
-            <div className="website-today-priority">
-              <span className="website-kicker">Next step</span>
-              <h2 id="website-today-title">{websiteAgentJob}</h2>
-              <p>{websiteAgentReason}</p>
-              <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
-            </div>
-            <div aria-label="Website today status" className="website-today-metrics" role="group">
-              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-            <div className="website-today-source" role="status">
-              <span>{websiteTodaySource}</span>
-              <small>{websiteReviewNote}</small>
-            </div>
-          </section> : null}
         </div>
       </div>
     </div>

@@ -2338,7 +2338,7 @@
 }
 
 .website-today {
-  order: 3;
+  order: 1;
   display: grid;
   grid-template-columns: minmax(260px, .9fr) minmax(420px, 1.45fr);
   gap: 12px;
@@ -2510,7 +2510,7 @@
 
 .website-workspace-grid,
 .website-workspace-grid.view-publish {
-  order: 2;
+  order: 3;
   position: relative;
   z-index: 5;
   min-height: 0;
@@ -3267,7 +3267,7 @@
 
 /* Unified Website workflow: edit by default, then Site, Preview, or Publish. */
 .website-action-bar {
-  order: 1;
+  order: 2;
   position: relative;
   z-index: 20;
   min-height: 60px;
