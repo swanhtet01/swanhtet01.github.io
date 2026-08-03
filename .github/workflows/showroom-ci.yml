@@ -23,6 +23,8 @@ on:
       - 'tools/verify_app_deploy_workflow.mjs'
       - 'tools/verify_app_security_contract.mjs'
       - 'tools/verify_private_trial_migrations.mjs'
+      - 'tools/prepare_supabase_rehearsal_packet.mjs'
+      - 'tools/prepare_supabase_rehearsal_packet.test.mjs'
       - 'tools/verify_app_release_live.mjs'
       - 'tools/verify_coordinated_release_live.mjs'
       - 'tools/verify_public_deploy_guard.mjs'
