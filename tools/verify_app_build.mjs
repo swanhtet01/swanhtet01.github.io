@@ -37,6 +37,7 @@ let shopServiceScheduleRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
 let shopOperatingFlowRuntimeChecks = 0
+let shopNextActionRuntimeChecks = 0
 let operationalReportRuntimeChecks = 0
 let commerceRuntimeChecks = 0
 let productionRuntimeChecks = 0
@@ -221,6 +222,7 @@ const managedEcommerceBuyingLifecycleSource = await readFile(resolve(root, 'supe
 const shopOperatingFlowSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-operating-flow.ts'), 'utf8')
 const shopOperatingFlowUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopOperatingFlow.tsx'), 'utf8')
 const shopTodayUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopToday.tsx'), 'utf8')
+const shopNextActionSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-next-action.ts'), 'utf8')
 const shopServiceScheduleSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts'), 'utf8')
 const shopServiceScheduleUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopServiceSchedule.tsx'), 'utf8')
 const shopProductionDemandSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-production-demand.ts'), 'utf8')
@@ -239,6 +241,11 @@ if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intak
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopOperatingFlowSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_operating_flow_side_effect_added')
 if (!shopTodayUiSource.includes('aria-label="Next Shop action"')
   || !shopTodayUiSource.includes('const guidedJobs =')
+  || !shopTodayUiSource.includes('catalogReady: boolean')
+  || !shopTodayUiSource.includes("'Add your products'")
+  || !shopTodayUiSource.includes('Load a sample or map a product file before the first sale.')
+  || !shopTodayUiSource.includes("'/shop/?tab=inventory#shop-catalog-import'")
+  || !shopTodayUiSource.includes('{catalogReady ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}')
   || !shopTodayUiSource.includes('aria-label="Shop guided jobs"')
   || !shopTodayUiSource.includes('Use Shop in 3 steps.')
   || !shopTodayUiSource.includes('Check online orders, payment, delivery, returns, and cancellations.')
@@ -2325,19 +2332,44 @@ if (!coreSource.includes('const shopAgentRows = [')
   || !coreSource.includes("['Next step', shopAgentJob]")
   || !coreSource.includes("['Why', shopAgentReason]")
   || !coreSource.includes('See today’s next job and key numbers.')
-  || !coreSource.includes("need fulfilment or payment review.")
+  || !shopNextActionSource.includes('need fulfilment or payment review.')
   || !coreSource.includes("['Review', shopOwnerGate]")
   || coreSource.includes("['Owner gate', shopOwnerGate]")
   || coreSource.includes("['Agent job', shopAgentJob]")
   || coreSource.includes("['Reason', shopAgentReason]")
   || !coreSource.includes('aria-label="Next Shop step"')
   || !coreSource.includes('Next Shop step')
-  || !coreSource.includes("'Restore Shop write readiness'")
-  || !coreSource.includes("'Review online order requests'")
-  || !coreSource.includes("'Finish fulfilment queue'")
-  || !coreSource.includes("'Receive purchase orders'")
-  || !coreSource.includes("'Reorder low stock'")
-  || !coreSource.includes("'Set up stock locations'")
+  || !coreSource.includes("import { decideShopNextAction } from './shop-next-action'")
+  || !coreSource.includes('const shopNextAction = decideShopNextAction({')
+  || !coreSource.includes('const shopAgentJob = shopNextAction.job')
+  || !coreSource.includes('const shopAgentPath = shopNextAction.path')
+  || !shopNextActionSource.includes("'Restore Shop write readiness'")
+  || !shopNextActionSource.includes("'Import your first products'")
+  || !shopNextActionSource.includes('Shop needs products and opening stock before the counter or Ecommerce can take a real order.')
+  || !shopNextActionSource.includes('Review mapped SKU, price, opening stock, and reorder fields before anything is saved.')
+  || !shopNextActionSource.includes("'/shop/?tab=inventory#shop-catalog-import'")
+  || !shopNextActionSource.includes("'Prepare Shop catalog'")
+  || !shopNextActionSource.includes("'Open catalog import'")
+  || !coreSource.includes('<ShopToday catalogReady={commerce.items.length > 0}')
+  || !coreSource.includes('Your catalog is empty.')
+  || !coreSource.includes('Add or import products')
+  || !coreSource.includes('const shopCatalogOnboarding = <section')
+  || !coreSource.includes('{!commerce.items.length ? shopCatalogOnboarding : null}')
+  || !coreSource.includes("commerce.items.length ? 'Count stock' : 'Add products first'")
+  || !coreSource.includes('{commerce.items.length ? <Suspense fallback={null}><ShopInventoryFoundation')
+  || !coreSource.includes('Add products before enabling locations, lots, available-to-promise, or supplier policies.')
+  || !coreSource.includes('{commerce.items.length ? shopCatalogOnboarding : null}')
+  || !coreSource.includes("commerceLocation.hash === '#shop-catalog-import'")
+  || !coreSource.includes("document.getElementById('shop-catalog-import')")
+  || !coreSource.includes("target?.scrollIntoView({ block: 'start' })")
+  || !coreSource.includes('target?.focus({ preventScroll: true })')
+  || !coreSource.includes('tabIndex={-1}')
+  || (coreSource.match(/id="shop-catalog-import"/g) || []).length !== 1
+  || !shopNextActionSource.includes("'Review online order requests'")
+  || !shopNextActionSource.includes("'Finish fulfilment queue'")
+  || !shopNextActionSource.includes("'Receive purchase orders'")
+  || !shopNextActionSource.includes("'Reorder low stock'")
+  || !shopNextActionSource.includes("'Set up stock locations'")
   || !coreSource.includes('SuperMega chooses the best place to start. The manager reviews important changes before anything is saved.')
   || !coreSource.includes('const shopAutopilotStage =')
   || !coreSource.includes('const shopAutopilotNextAction =')
@@ -2376,6 +2408,9 @@ if (!coreSource.includes('const shopAgentRows = [')
   || !coreCssSource.includes('.shop-command-center-rows')
   || !coreCssSource.includes('.shop-order-control.shop-setup-guide')
   || !coreCssSource.includes('.shop-agent-queue')) fail('shop_agent_queue_missing')
+if (!shopNextActionSource.includes('export function decideShopNextAction')
+  || !shopNextActionSource.includes('Number.isSafeInteger(count) && count >= 0')
+  || ['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic', 'Date.now(', 'Math.random('].some((marker) => shopNextActionSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_next_action_contract_missing_or_impure')
 if (!coreSource.includes('const shopOrderLifecycleRows = [')
   || !coreSource.includes("['Capture', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting")
   || !coreSource.includes("['Reserve', managedInventoryProjection ? 'ATP active' : 'Catalog stock']")
@@ -4303,6 +4338,7 @@ if (coreSource.includes("await import('./shop-catalog-import')")
   || !coreSource.includes("['Upload', 'Shared mapper']")
   || !coreSource.includes("['Safety', 'Review first']")
   || !coreSource.includes('aria-label="Shop catalog import helper"')
+  || !coreSource.includes('id="shop-catalog-import"')
   || !coreSource.includes('Catalog import helper')
   || !coreSource.includes('Bring your catalog into the Shop trial.')
   || !coreSource.includes('The assistant routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package.')
@@ -4313,7 +4349,12 @@ if (coreSource.includes("await import('./shop-catalog-import')")
   || !coreSource.includes("to={clientSetupPath('commerce')}")
   || !coreSource.includes('Upload product data')
   || !coreCssSource.includes('.catalog-onboarding-bridge {')
+  || !coreCssSource.includes('display: flex; flex-wrap: wrap;')
+  || !coreCssSource.includes('.catalog-onboarding-bridge > div:first-child { min-width: min(420px,100%); flex: 1 1 520px; }')
   || !coreCssSource.includes('.catalog-onboarding-status {')
+  || !coreCssSource.includes('flex: 1 0 100%; order: 2; display: grid;')
+  || !coreCssSource.includes('.catalog-onboarding-bridge > div:first-child { min-width: 0; flex: none; }')
+  || !coreCssSource.includes('.catalog-onboarding-status { order: 0; }')
   || !coreCssSource.includes('.catalog-onboarding-status span:last-child { grid-column: 1 / -1; border-right: 0; border-bottom: 0; }')
   || !coreCssSource.includes('.catalog-import-table { max-height: 340px;')
   || !coreCssSource.includes('.catalog-import-mapping { display: grid;')
@@ -5335,7 +5376,7 @@ if (!commercePageContract.includes('purchaseOrderDraft')
   || !managedCommerceRuntime.includes('_PURCHASE_DISCREPANCY_FIELDS')
   || !commercePageContract.includes('Cancel remainder')
   || !commercePageContract.includes('id="purchase-orders"')
-  || !commercePageContract.includes("commerceLocation.hash !== '#purchase-orders'")
+  || !commercePageContract.includes("commerceLocation.hash === '#purchase-orders'")
   || !commercePageContract.includes('if (history) history.open = true')
   || !commercePageContract.includes("history?.scrollIntoView({ block: 'center' })")
   || !commercePageContract.includes("history?.querySelector('summary')?.focus({ preventScroll: true })")
@@ -17774,8 +17815,53 @@ async function verifyShopOperatingFlowRuntime() {
   }
 }
 
+async function verifyShopNextActionRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopNextActionRuntimeChecks += 1
+  }
+  const input = (patch = {}) => ({
+    actionOrderCount: 0,
+    activePurchaseOrderCount: 0,
+    canWrite: true,
+    catalogItemCount: 1,
+    inventoryReady: true,
+    lowStockCount: 0,
+    pendingAction: false,
+    pendingOnlineRequestCount: 0,
+    ...patch,
+  })
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-next-action.ts')).href}?shop-next-action-verify=${Date.now()}`)
+    const blocked = model.decideShopNextAction(input({ canWrite: false, pendingAction: true, catalogItemCount: 0 }))
+    assert(blocked.job === 'Restore Shop write readiness' && blocked.path === '/settings/#controls', 'shop_next_action_write_gate_priority_wrong')
+    const pending = model.decideShopNextAction(input({ pendingAction: true, catalogItemCount: 0, pendingOnlineRequestCount: 2 }))
+    assert(pending.job === 'Approve pending Shop change' && pending.track === 'Review', 'shop_next_action_pending_review_priority_wrong')
+    const empty = model.decideShopNextAction(input({ catalogItemCount: 0, pendingOnlineRequestCount: 2, actionOrderCount: 3, lowStockCount: 4, inventoryReady: false }))
+    assert(empty.job === 'Import your first products' && empty.path === '/shop/?tab=inventory#shop-catalog-import' && empty.nextAction === 'Open catalog import' && empty.track === 'Inventory', 'shop_next_action_empty_catalog_not_first_prerequisite')
+    const online = model.decideShopNextAction(input({ pendingOnlineRequestCount: 2, actionOrderCount: 3 }))
+    assert(online.job === 'Review online order requests' && online.reason.startsWith('2 online requests'), 'shop_next_action_online_request_priority_wrong')
+    const orders = model.decideShopNextAction(input({ actionOrderCount: 2, activePurchaseOrderCount: 3 }))
+    assert(orders.job === 'Finish fulfilment queue' && orders.track === 'Orders', 'shop_next_action_fulfilment_priority_wrong')
+    const receiving = model.decideShopNextAction(input({ activePurchaseOrderCount: 2, lowStockCount: 3 }))
+    assert(receiving.job === 'Receive purchase orders' && receiving.nextAction === 'Open receiving queue', 'shop_next_action_receiving_priority_wrong')
+    const reorder = model.decideShopNextAction(input({ lowStockCount: 2, inventoryReady: false }))
+    assert(reorder.job === 'Reorder low stock' && reorder.reason.startsWith('2 SKUs'), 'shop_next_action_reorder_priority_wrong')
+    const inventory = model.decideShopNextAction(input({ inventoryReady: false }))
+    assert(inventory.job === 'Set up stock locations' && inventory.path === '/shop/?tab=inventory', 'shop_next_action_inventory_setup_wrong')
+    const counter = model.decideShopNextAction(input())
+    assert(counter.job === 'Open counter for next sale' && counter.path === '/shop/?tab=counter' && counter.track === 'Counter', 'shop_next_action_counter_ready_wrong')
+    let invalidRejected = false
+    try { model.decideShopNextAction(input({ catalogItemCount: -1 })) } catch { invalidRejected = true }
+    assert(invalidRejected, 'shop_next_action_negative_count_accepted')
+  } catch (error) {
+    fail(`shop_next_action_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 await verifyOperationalReportRuntime()
 await verifyShopOperatingFlowRuntime()
+await verifyShopNextActionRuntime()
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyShopServiceScheduleRuntime()
@@ -18251,4 +18337,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
