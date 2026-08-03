@@ -230,7 +230,7 @@ export function WebsiteProduct() {
         copy: hasUnsavedChanges
           ? 'This preview is not saved yet. Return to edit, then save or discard it.'
           : selectedPage.stage === 'draft'
-            ? 'This page is saved as a draft. Select Edit site to update it and mark it ready.'
+            ? 'This page is saved as a draft. Select Edit page to update it and mark it ready.'
             : 'Check the selected page at desktop, tablet, or mobile size.',
       }
     : view === 'publish' && storageMode === 'session-only'
@@ -255,6 +255,9 @@ export function WebsiteProduct() {
         : storageMode === 'browser-local'
           ? 'Saved on this device'
           : 'Session only'
+  const websiteSurfaceActionLabel = surface === 'preview'
+    ? starterAvailable ? 'Edit sample' : 'Edit page'
+    : 'Preview'
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
     ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
@@ -1099,11 +1102,6 @@ export function WebsiteProduct() {
               </span>
               {!starterSetupActive ? (
                 <div className="website-primary-actions">
-                {starterAvailable && surface === 'preview' ? (
-                  <button className="website-button is-primary" onClick={openStarterSetup} type="button">
-                    Customize demo
-                  </button>
-                ) : null}
                 {surface === 'work' ? (
                   <details
                     className="website-site-settings"
@@ -1179,7 +1177,7 @@ export function WebsiteProduct() {
                   }}
                   type="button"
                 >
-                  {surface === 'preview' ? 'Edit site' : 'Preview'}
+                  {websiteSurfaceActionLabel}
                 </button>
                 {hasUnsavedChanges ? (
                   <>
