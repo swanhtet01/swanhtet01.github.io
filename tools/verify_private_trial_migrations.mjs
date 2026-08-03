@@ -16,6 +16,7 @@ const expectedMigrations = [
   '20260730113000_private_trial_backend_v6_managed_activation.sql',
   '20260730123000_private_trial_backend_v7_workspace_discovery.sql',
   '20260802161500_private_trial_backend_v8_rls_initplan.sql',
+  '20260803063822_private_trial_backend_v9_metadata_rls.sql',
 ]
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
@@ -40,6 +41,12 @@ const expectedPolicyFingerprints = {
     command: 'SELECT',
     permissive: 'PERMISSIVE',
     qual: '59ee715578ea24aa2483ddaa0debdcd467fb15e23d0c39e5fd6ac9ea360e9f99',
+    check: null,
+  },
+  trial_schema_meta_backend_read: {
+    command: 'SELECT',
+    permissive: 'PERMISSIVE',
+    qual: 'f6f657b1a947cd58fbd8d345a7c33c2192946c21de560121a208f3993d754cd3',
     check: null,
   },
   workspace_access_controls_member_read: {
@@ -315,7 +322,7 @@ await applyMigrations(database)
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('schema version eight', version.rows[0]?.schema_version === 8)
+requireCheck('schema version nine', version.rows[0]?.schema_version === 9)
 
 const relations = await database.query(`
   select relation.relname as relation_name, relation.relkind::text as relation_kind,
@@ -342,8 +349,31 @@ requireCheck(
     ),
 )
 
+const rlsRows = await database.query(`
+  select relation.relname as relation_name,
+         relation.relrowsecurity as rls_enabled,
+         relation.relforcerowsecurity as rls_forced
+  from pg_class relation
+  join pg_namespace schema_record on schema_record.oid = relation.relnamespace
+  where schema_record.nspname = 'app_private'
+    and relation.relkind in ('r', 'p')
+  order by relation.relname
+`)
+const expectedRls = [
+  { relation_name: 'approval_requests', rls_enabled: true, rls_forced: true },
+  { relation_name: 'trial_schema_meta', rls_enabled: true, rls_forced: false },
+  { relation_name: 'workspace_access_controls', rls_enabled: true, rls_forced: true },
+  { relation_name: 'workspace_events', rls_enabled: true, rls_forced: true },
+  { relation_name: 'workspace_memberships', rls_enabled: true, rls_forced: true },
+  { relation_name: 'workspace_state', rls_enabled: true, rls_forced: true },
+]
+requireCheck(
+  'metadata RLS and tenant force-RLS are exact',
+  JSON.stringify(rlsRows.rows) === JSON.stringify(expectedRls),
+)
+
 const policyRows = await database.query(`
-  select policyname, cmd, permissive, qual, with_check
+  select policyname, roles, cmd, permissive, qual, with_check
   from pg_policies
   where schemaname = 'app_private'
   order by policyname
@@ -363,6 +393,12 @@ requireCheck(
   'exact policy fingerprints',
   JSON.stringify(observedPolicyFingerprints) ===
     JSON.stringify(expectedPolicyFingerprints),
+)
+requireCheck(
+  'every private policy is scoped to the backend role',
+  policyRows.rows.every(
+    (row) => JSON.stringify(row.roles) === JSON.stringify(['supermega_trial_backend']),
+  ),
 )
 const initplanPolicyRows = policyRows.rows.filter((row) =>
   initplanPolicyNames.includes(row.policyname),
@@ -620,7 +656,7 @@ const hostedVersion = await hostedDatabase.query(
 )
 requireCheck(
   'exact Supabase hosted administrative membership accepted',
-  hostedVersion.rows[0]?.schema_version === 8,
+  hostedVersion.rows[0]?.schema_version === 9,
 )
 
 const memberDatabase = new PGlite()

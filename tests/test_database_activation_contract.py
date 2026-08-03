@@ -83,6 +83,12 @@ MIGRATION_V8 = (
     / "migrations"
     / "20260802161500_private_trial_backend_v8_rls_initplan.sql"
 )
+MIGRATION_V9 = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260803063822_private_trial_backend_v9_metadata_rls.sql"
+)
 MIGRATIONS = (
     MIGRATION_PREFLIGHT,
     MIGRATION_V1,
@@ -93,6 +99,7 @@ MIGRATIONS = (
     MIGRATION_V6,
     MIGRATION_V7,
     MIGRATION_V8,
+    MIGRATION_V9,
 )
 
 PRIVATE_SCHEMA = "app_private"
@@ -127,6 +134,7 @@ EXPECTED_POLICIES = (
     "approval_requests_capability_insert",
     "approval_requests_capability_update",
     "workspace_access_controls_member_read",
+    "trial_schema_meta_backend_read",
 )
 EXPECTED_TRIGGERS = (
     "workspace_events_immutable",
@@ -206,7 +214,7 @@ def _first_sql_token(statement: str) -> str:
 
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
-    def test_historical_migrations_are_unchanged_and_v8_is_additive(self) -> None:
+    def test_historical_migrations_are_unchanged_and_v8_v9_are_additive(self) -> None:
         preflight = _normalized_sql(MIGRATION_PREFLIGHT)
         v1 = _normalized_sql(MIGRATION_V1)
         v2 = _normalized_sql(MIGRATION_V2)
@@ -216,6 +224,7 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         v6 = _normalized_sql(MIGRATION_V6)
         v7 = _normalized_sql(MIGRATION_V7)
         v8 = _normalized_sql(MIGRATION_V8)
+        v9 = _normalized_sql(MIGRATION_V9)
         self.assertIn("pre-existing supermega trial backend role attributes are unsafe", preflight)
         self.assertIn("membership.roleid = backend_record.oid", preflight)
         self.assertIn("dependency.refclassid = 'pg_authid'::regclass", preflight)
@@ -263,6 +272,19 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         self.assertIn("workspace_id = (select current_setting('app.workspace_id', true))", v8)
         self.assertNotIn("workspace_id = current_setting('app.workspace_id', true)", v8)
         self.assertIn("set schema_version = 8", v8)
+        self.assertIn("private trial backend v9 requires schema version 8", v9)
+        self.assertIn(
+            "alter table app_private.trial_schema_meta enable row level security",
+            v9,
+        )
+        self.assertNotIn(
+            "alter table app_private.trial_schema_meta force row level security",
+            v9,
+        )
+        self.assertIn("create policy trial_schema_meta_backend_read", v9)
+        self.assertIn("to supermega_trial_backend", v9)
+        self.assertIn("using (component = 'private_trial_backend')", v9)
+        self.assertIn("set schema_version = 9", v9)
 
     def test_private_schema_and_runtime_role_are_restricted(self) -> None:
         sql = _normalized_sql()
@@ -300,6 +322,10 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
                 f"alter table app_private.{table} force row level security",
                 sql,
             )
+        self.assertIn(
+            "alter table app_private.trial_schema_meta enable row level security",
+            sql,
+        )
 
     def test_forbidden_roles_are_revoked_and_backend_grants_are_bounded(self) -> None:
         sql = _normalized_sql()
@@ -1144,6 +1170,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     "approval_requests_capability_insert",
                     "approval_requests_capability_update",
                     "workspace_access_controls_member_read",
+                    "trial_schema_meta_backend_read",
                 ]
                 TRIGGERS = [
                     "workspace_events_immutable",
@@ -1375,6 +1402,13 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         "qual": "app_private.workspace_is_active(workspace_id)",
                         "with_check": "app_private.workspace_is_active(workspace_id)",
                     },
+                    "trial_schema_meta_backend_read": {
+                        "table": "trial_schema_meta",
+                        "command": "SELECT",
+                        "permissive": "PERMISSIVE",
+                        "qual": "(component = 'private_trial_backend'::text)",
+                        "with_check": None,
+                    },
                 })
                 for contract in POLICY_CONTRACTS.values():
                     contract.setdefault("permissive", "PERMISSIVE")
@@ -1503,7 +1537,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         schema_exists=scenario != "missing_schema",
                         schema_ready=scenario != "missing_schema",
                         component="private_trial_backend",
-                        schema_version=0 if scenario == "wrong_version" else 8,
+                        schema_version=0 if scenario == "wrong_version" else 9,
                         tables=tables,
                         table_names=tables,
                         table_count=len(tables),
@@ -1643,15 +1677,29 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         rows = []
                         for table in _snapshot()["tables"]:
                             tenant_table = table in RLS_TABLES
-                            secure = tenant_table and not (
-                                scenario == "missing_rls" and table == "workspace_state"
+                            metadata_table = table == "trial_schema_meta"
+                            secure = (
+                                metadata_table
+                                and scenario != "metadata_rls_disabled"
+                            ) or (
+                                tenant_table
+                                and not (
+                                    scenario == "missing_rls"
+                                    and table == "workspace_state"
+                                )
                             )
                             rows.append(
                                 _snapshot(
                                     table_name=table,
                                     relation_kind="r",
                                     rls_enabled=secure,
-                                    rls_forced=secure,
+                                    rls_forced=(
+                                        secure
+                                        and (
+                                            tenant_table
+                                            or scenario == "metadata_rls_forced"
+                                        )
+                                    ),
                                     owner_name="runtime_login" if scenario == "wrong_owner" else "postgres",
                                 )
                             )
@@ -1661,7 +1709,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             return []
                         return [
                             _snapshot(
-                                schema_version=0 if scenario == "wrong_version" else 8,
+                                schema_version=0 if scenario == "wrong_version" else 9,
                             )
                         ]
                     if "buckets_table_exists" in q and "objects_table_exists" in q:
@@ -2313,7 +2361,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         payload = _extract_json(result.stdout + result.stderr)
         serialized = json.dumps(payload, sort_keys=True).lower()
         self.assertTrue(payload.get("ok") is True or payload.get("status") == "ready")
-        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v8")
+        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v9")
         checks = payload.get("checks")
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
@@ -2326,6 +2374,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             "private_schema_present",
             "schema_version_current",
             "expected_private_tables_only",
+            "metadata_table_rls",
             "tenant_tables_force_rls",
             "trusted_private_object_ownership",
             "runtime_role_membership_exact",
@@ -2364,7 +2413,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "name": PRIVATE_SCHEMA,
                 "component": "private_trial_backend",
-                "version": 8,
+                "version": 9,
             },
         )
         self.assertEqual(
@@ -2379,6 +2428,10 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         self.assertEqual(
             evidence.get("rls"),
             {
+                "metadata_table": {
+                    "enabled": True,
+                    "forced": False,
+                },
                 "forced_tables": sorted(RLS_TABLES),
                 "required_tables": sorted(RLS_TABLES),
             },
@@ -2469,6 +2522,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             "missing_table",
             "extra_private_view",
             "missing_rls",
+            "metadata_rls_disabled",
+            "metadata_rls_forced",
             "missing_storage_catalog",
             "storage_audit_not_read_only",
             "storage_audit_tls_missing",

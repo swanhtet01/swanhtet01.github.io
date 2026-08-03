@@ -649,7 +649,7 @@ class TrialStoreTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             store.list_actor_workspaces("actor-a", limit=51)
 
-    def test_postgres_schema_probe_requires_version_8_and_hardening_controls(self) -> None:
+    def test_postgres_schema_probe_requires_version_9_and_hardening_controls(self) -> None:
         def canonical_trigger_rows() -> list[dict[str, object]]:
             return [
                 {
@@ -698,7 +698,7 @@ class TrialStoreTests(unittest.TestCase):
                 return self.trigger_rows
 
         ready = {
-            "schema_version": 8,
+            "schema_version": 9,
             "actor_decision_columns_ready": True,
             "workspace_access_control_ready": True,
             "security_constraints_ready": True,

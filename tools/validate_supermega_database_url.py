@@ -21,7 +21,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v8"
+CONTRACT = "supermega_private_trial_database_v9"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
 ACTIVATION_TARGET_CONTRACT = "supermega_supabase_activation_target_v1"
 ACTIVATION_EVIDENCE_CONTRACT = "supermega_managed_activation_evidence_v1"
@@ -29,7 +29,7 @@ SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 EXPECTED_POSTGRES_MAJOR = 17
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 UNSUPPORTED_SUPABASE_POSTGRES17_EXTENSIONS = frozenset(
@@ -508,6 +508,13 @@ EXPECTED_POLICIES: dict[str, dict[str, Any]] = {
         "qual": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
         "check": ("app.workspace_id", "app.actor_id", "app.actor_kind", "workspace_memberships", "approvals.decide", "human"),
     },
+    "trial_schema_meta_backend_read": {
+        "table": "trial_schema_meta",
+        "command": "SELECT",
+        "permissive": "PERMISSIVE",
+        "qual": ("private_trial_backend",),
+        "check": (),
+    },
 }
 EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
     "approval_requests_access_gate": {
@@ -565,6 +572,10 @@ EXPECTED_POLICY_FINGERPRINTS: dict[str, dict[str, str | None]] = {
     "approval_requests_capability_update": {
         "qual": "44ecbdc576a99c7e56324a4c1564bcac5c6a81c0057a2bf14a929966bbf725f6",
         "check": "edc4e0b608fcb144beadf0ab88c9647a553f51306071851ce4afd33ad691dfca",
+    },
+    "trial_schema_meta_backend_read": {
+        "qual": "f6f657b1a947cd58fbd8d345a7c33c2192946c21de560121a208f3993d754cd3",
+        "check": None,
     },
 }
 
@@ -1749,6 +1760,11 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         _bool(tables[name].get("rls_enabled")) and _bool(tables[name].get("rls_forced"))
         for name in TENANT_TABLES
     )
+    metadata_rls = (
+        exact_tables
+        and _bool(tables["trial_schema_meta"].get("rls_enabled"))
+        and not _bool(tables["trial_schema_meta"].get("rls_forced"))
+    )
     storage_catalog_present = all(
         _bool(storage_catalog.get(key))
         for key in ("buckets_table_exists", "objects_table_exists")
@@ -1974,6 +1990,7 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "private_schema_present": _bool(schema.get("schema_exists")),
         "schema_version_current": snapshot.get("schema_version") == SCHEMA_VERSION,
         "expected_private_tables_only": exact_tables,
+        "metadata_table_rls": metadata_rls,
         "tenant_tables_force_rls": tenant_rls,
         "trusted_private_object_ownership": trusted_private_ownership,
         "runtime_role_membership_exact": runtime_membership_exact,
@@ -2026,6 +2043,14 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             },
             "tables": sorted(EXPECTED_TABLES),
             "rls": {
+                "metadata_table": {
+                    "enabled": _bool(
+                        tables.get("trial_schema_meta", {}).get("rls_enabled")
+                    ),
+                    "forced": _bool(
+                        tables.get("trial_schema_meta", {}).get("rls_forced")
+                    ),
+                },
                 "forced_tables": sorted(
                     name
                     for name in TENANT_TABLES
@@ -2209,7 +2234,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v8 schema contract; this flag never applies migrations.",
+        help="Require the complete v9 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(

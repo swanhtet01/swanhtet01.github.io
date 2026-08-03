@@ -29,7 +29,7 @@ SUSPENSION_RECEIPT_CONTRACT = "supermega.managed_workspace_suspension_receipt.v2
 ACTIVATION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_activation_event.v1"
 SUSPENSION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_suspension_event.v1"
 ACTIVATION_AUTHORIZATION_CONTRACT = "supermega.managed_workspace_activation_authorization.v1"
-TRIAL_SCHEMA_VERSION = 8
+TRIAL_SCHEMA_VERSION = 9
 MAX_INPUT_BYTES = 1024 * 1024
 PLAN_TTL = timedelta(days=7)
 AUTOMATIC_COMPENSATION_REASON = "Activation compensation after a downstream release gate failure."
@@ -838,7 +838,7 @@ class ManagedWorkspaceProvisioner:
             "eventInsert": bool(_row_value(row, "event_insert", 15)),
         }
         if snapshot["postgresMajor"] != 17 or snapshot["schemaVersion"] != TRIAL_SCHEMA_VERSION:
-            raise ManagedActivationError("Managed activation requires PostgreSQL 17 and private schema version 8.")
+            raise ManagedActivationError("Managed activation requires PostgreSQL 17 and private schema version 9.")
         if not snapshot["backendRoleSafe"]:
             raise ManagedActivationError("Managed activation backend role is unsafe.")
         if (

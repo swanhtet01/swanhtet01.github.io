@@ -1,10 +1,10 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v2",
-  "recordedAt": "2026-08-02T16:29:10.990Z",
+  "recordedAt": "2026-08-03T07:01:07.469Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "7963981d5f9a7f4c9d1d7edc183b82c2f5a39b7e",
+  "implementationCommit": "26b1865b5e25f51ce4dd8905a37feb2bb0f77dfe",
   "implementation": {
-    "digest": "sha256:44b138198ba3a2c089d1748a13b7ec5230d19579c68c11b8468fc6401d982afd",
+    "digest": "sha256:4864ccb0fbd1fee9845d7a6a1b1b867c15799336c9e9c4031a8f46c87e8d2deb",
     "paths": [
       "supermega_runtime/managed_context.py",
       "supermega_runtime/managed_activation.py",
@@ -14,14 +14,15 @@
       "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
       "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
       "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
+      "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
       "tools/activate_supermega_database.ps1",
       "tools/rehearse_supermega_postgres17.py",
       "tools/validate_supermega_database_url.py",
       "tools/verify_managed_runtime_environment_values.mjs"
     ]
   },
-  "implementationDigest": "sha256:44b138198ba3a2c089d1748a13b7ec5230d19579c68c11b8468fc6401d982afd",
-  "implementationFileCount": 12,
+  "implementationDigest": "sha256:4864ccb0fbd1fee9845d7a6a1b1b867c15799336c9e9c4031a8f46c87e8d2deb",
+  "implementationFileCount": 13,
   "localVerification": {
     "command": "npm run database:postgres17:record",
     "conclusion": "success",
@@ -46,8 +47,8 @@
     "loopbackOnly": true
   },
   "migration": {
-    "count": 9,
-    "schemaVersion": 8,
+    "count": 10,
+    "schemaVersion": 9,
     "productionValidatorReady": true
   },
   "runtime": {
@@ -115,7 +116,7 @@
   "recovery": {
     "backupNonempty": true,
     "format": "pg_dump_custom",
-    "restoredSchemaVersion": 8
+    "restoredSchemaVersion": 9
   },
   "storage": {
     "catalogMode": "local_private_fixture",
