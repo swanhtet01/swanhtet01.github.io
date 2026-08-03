@@ -15,6 +15,7 @@ const generatedAt = '2026-08-03T00:00:00.000Z'
 
 test('builds an exact non-mutating v9 rehearsal packet', async () => {
   const manifest = JSON.parse(await readFile(resolve(repositoryRoot, 'package.json'), 'utf8'))
+  const ignoreRules = await readFile(resolve(repositoryRoot, '.gitignore'), 'utf8')
   const runbook = await readFile(resolve(repositoryRoot, 'docs', 'supermega-enterprise-activation.md'), 'utf8')
   const packet = await buildSupabaseRehearsalPacket({
     repositoryRoot,
@@ -35,6 +36,7 @@ test('builds an exact non-mutating v9 rehearsal packet', async () => {
   assert.match(packet.packetDigest, /^sha256:[0-9a-f]{64}$/)
   assert.doesNotMatch(JSON.stringify(packet), /postgres(?:ql)?:\/\//i)
   assert.equal(manifest.scripts['database:supabase:packet'], 'node tools/prepare_supabase_rehearsal_packet.mjs')
+  assert.match(ignoreRules, /^\.tmp\/$/m)
   assert.match(runbook, /all ten migrations/)
   assert.match(runbook, /Runtime readiness requires schema version 9/)
   assert.match(runbook, /database:supabase:packet:verify/)

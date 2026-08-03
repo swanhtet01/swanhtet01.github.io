@@ -22,6 +22,7 @@ swan-intelligence-hub/
 .vercel
 .vercel_python_packages/
 .codex
+.tmp/
 node_modules/
 api-static/
 api-static-staging-*/
