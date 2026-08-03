@@ -22,6 +22,7 @@ import {
   type WebsitePageImportDraft,
 } from '../products/website/website-model.ts'
 import {
+  activateLocalEcommerceWorkingSample,
   activateLocalEcommerceMerchandising,
   type LocalEcommerceMerchandisingImport,
 } from '../products/ecommerce/local-merchandising-import.ts'
@@ -45,6 +46,8 @@ const localProductLabels: Record<ClientSolutionId, string> = {
 }
 
 const localClientDemoInstallSequence: readonly ClientSolutionId[] = ['commerce', 'production', 'website', 'ecommerce']
+
+export { activateLocalEcommerceWorkingSample }
 
 export async function preparedLocalClientDemoInstallOrder(artifactValue: unknown): Promise<ClientSolutionId[]> {
   const artifact = await restoreClientDemoPreparationArtifact(artifactValue)

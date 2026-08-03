@@ -111,6 +111,7 @@ const staticRouteSource = await readFile(resolve(root, 'showroom', 'scripts', 'p
 const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
 const websiteLeadSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts'), 'utf8')
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
+const localMerchandisingImportSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts'), 'utf8')
 const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts'), 'utf8')
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
@@ -664,15 +665,10 @@ if (!ecommerceSource.includes('const orderOpsRows = [')
   || ecommerceSource.includes('AI checks products, prices, quote readiness, Shop review queue, and safety mode before a customer request can move forward.')
   || ecommerceSource.includes('AI checks catalog, storefront fingerprint, quote readiness, Shop review queue, and safety mode before a customer request can move forward.')
   || !ecommerceSource.includes('The manager reviews important changes before they are saved.')
-  || !ecommerceSource.includes('aria-label="Product recommendation"')
-  || !ecommerceSource.includes('Product recommendation')
-  || !ecommerceSource.includes('Choose the simplest sellable set from in-stock Shop items. You only save after review.')
-  || ecommerceSource.includes('The assistant prepares the simplest sellable set from in-stock Shop items. You only save after review.')
-  || !ecommerceSource.includes('Use recommended products')
-  || !ecommerceSource.includes('function recommendedSellableSkus()')
-  || !ecommerceSource.includes('function applyProductAutopilot()')
-  || !ecommerceSource.includes('Product recommendation selected ${nextSkus.length} in-stock products. Save to confirm the storefront; no catalog, order, payment, delivery, stock, or Shop write ran.')
-  || !ecommerceSource.includes("['Boundary', 'Local selection']")
+  || ecommerceSource.includes('aria-label="Product recommendation"')
+  || ecommerceSource.includes('Use recommended products')
+  || ecommerceSource.includes('function recommendedSellableSkus()')
+  || ecommerceSource.includes('function applyProductAutopilot()')
   || !ecommerceSource.includes("['Storefront', previewResult.preview ? savedDraftIsCurrent ? 'Saved' : 'Draft ready' : 'Blocked']")
   || !ecommerceSource.includes("['Checkout', buyingReady ? 'Quote ready' : 'Locked']")
   || !ecommerceSource.includes("['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} Shop review` : 'Clear']")
@@ -2732,6 +2728,17 @@ if (!storefrontDraftSource.includes("supermega.ecommerce.storefront_draft.v2")
   || !storefrontDraftSource.includes("status: 'invalid'")
   || !storefrontDraftSource.includes('reconcileStorefrontSelection')
   || ['customerReference', 'requestLedger', 'payment', 'fulfilment', 'phone', 'address'].some((marker) => storefrontDraftSource.includes(marker))) fail('ecommerce_storefront_draft_contract_missing_or_contains_request_data')
+if (!localMerchandisingImportSource.includes('export async function activateLocalEcommerceWorkingSample')
+  || !localMerchandisingImportSource.includes('await matchesWorkingSample(current, catalog.items)')
+  || !localMerchandisingImportSource.includes("LOCAL_ECOMMERCE_BUYING_STATE_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'")
+  || !localMerchandisingImportSource.includes('validateCommerceState(JSON.parse(commerceRaw)).storefrontRequests ?? []).length')
+  || !localMerchandisingImportSource.includes('replaceExistingDraft: true')
+  || !localClientImportSource.includes('export { activateLocalEcommerceWorkingSample }')
+  || !settingsPageSource.includes("await import('./local-client-import')")
+  || !settingsPageSource.includes('await activateLocalEcommerceWorkingSample({')
+  || !localMerchandisingImportSource.includes("'Featured today'")
+  || !localMerchandisingImportSource.includes("'Pickup menu'")
+  || !localMerchandisingImportSource.includes("'Trade assortment'")) fail('ecommerce_working_sample_activation_missing')
 const storefrontDraftStoragePrefix = /export const STOREFRONT_DRAFT_KEY_PREFIX = '([^']+)'/.exec(storefrontDraftSource)?.[1]
 const legacyStorefrontDraftStoragePrefix = /export const LEGACY_STOREFRONT_DRAFT_KEY_PREFIX = '([^']+)'/.exec(storefrontDraftSource)?.[1]
 const commerceOrderDraftStoragePrefix = /export const COMMERCE_ORDER_DRAFT_KEY_PREFIX = '([^']+)'/.exec(commerceOrderDraftSource)?.[1]
@@ -13403,6 +13410,9 @@ async function verifyStorefrontDraftRuntime() {
   try {
     const draftModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-draft.ts')).href}?storefront-draft=${Date.now()}`)
     const localMerchandisingImport = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts')).href}?local-merchandising=${Date.now()}`)
+    const storefrontModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts')).href}?working-sample-storefront=${Date.now()}`)
+    const storefrontRequestModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts')).href}?working-sample-request=${Date.now()}`)
+    const buyingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts')).href}?working-sample-buying=${Date.now()}`)
     const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?local-merchandising-commerce=${Date.now()}`)
     const values = new Map()
     const storage = {
@@ -13729,6 +13739,180 @@ async function verifyStorefrontDraftRuntime() {
       })
     } catch { mismatchRejected = true }
     assert(mismatchRejected && values.get(localKey) === beforeFailure, 'storefront_draft_unconfirmed_write_not_rolled_back')
+
+    const workingSampleValues = new Map()
+    const workingSampleStorage = {
+      getItem: (key) => workingSampleValues.get(key) ?? null,
+      setItem: (key, value) => workingSampleValues.set(key, String(value)),
+      removeItem: (key) => workingSampleValues.delete(key),
+    }
+    let workingSampleQueue = Promise.resolve()
+    const workingSampleLocks = {
+      request: (_name, _options, callback) => {
+        const run = workingSampleQueue.then(callback, callback)
+        workingSampleQueue = run.then(() => undefined, () => undefined)
+        return run
+      },
+    }
+    const workingSampleCatalog = commerceModel.createSeedCommerce().items
+    const wholesaleSampleInput = {
+      templateId: 'wholesale-request',
+      businessName: 'Golden Valley Trading',
+      capturedAt: '2026-07-24T10:10:00.000Z',
+    }
+    const wholesaleSample = await localMerchandisingImport.activateLocalEcommerceWorkingSample(wholesaleSampleInput, {
+      catalog: workingSampleCatalog,
+      storage: workingSampleStorage,
+      locks: workingSampleLocks,
+    })
+    const wholesaleDraft = draftModel.readStorefrontDraft(localScope, workingSampleStorage).draft
+    const wholesaleRaw = workingSampleValues.get(localKey)
+    assert(wholesaleSample.ok
+      && wholesaleSample.status === 'installed'
+      && wholesaleDraft?.storeName === wholesaleSampleInput.businessName
+      && wholesaleDraft.summary.includes('trade assortment')
+      && wholesaleDraft.merchandising?.every((row) => row.collection === 'Trade assortment')
+      && !workingSampleValues.has(commerceModel.COMMERCE_KEY),
+    'ecommerce_wholesale_working_sample_was_not_complete_or_shop_read_only')
+    const wholesaleRetry = await localMerchandisingImport.activateLocalEcommerceWorkingSample({
+      ...wholesaleSampleInput,
+      capturedAt: '2026-07-24T10:10:01.000Z',
+    }, {
+      catalog: workingSampleCatalog,
+      storage: workingSampleStorage,
+      locks: workingSampleLocks,
+    })
+    assert(wholesaleRetry.ok
+      && wholesaleRetry.status === 'current'
+      && wholesaleRetry.revision === 1
+      && workingSampleValues.get(localKey) === wholesaleRaw,
+    'ecommerce_working_sample_retry_advanced_revision')
+    const pickupSample = await localMerchandisingImport.activateLocalEcommerceWorkingSample({
+      ...wholesaleSampleInput,
+      templateId: 'pickup-preorder',
+      capturedAt: '2026-07-24T10:10:02.000Z',
+    }, {
+      catalog: workingSampleCatalog,
+      storage: workingSampleStorage,
+      locks: workingSampleLocks,
+    })
+    const pickupDraft = draftModel.readStorefrontDraft(localScope, workingSampleStorage).draft
+    assert(pickupSample.ok
+      && pickupSample.status === 'installed'
+      && pickupDraft?.revision === 2
+      && pickupDraft.summary.includes('pickup or preorder')
+      && pickupDraft.merchandising?.every((row) => row.collection === 'Pickup menu'),
+    'ecommerce_untouched_working_sample_could_not_switch_templates')
+    const ownerEditedSample = await draftModel.saveStorefrontDraft({
+      storeName: pickupDraft.storeName,
+      summary: 'Owner-edited pickup and preorder promise.',
+      selectedSkus: pickupDraft.selectedSkus,
+      sourcePreviewDigest: `sha256:${'c'.repeat(64)}`,
+      merchandising: pickupDraft.merchandising,
+    }, pickupDraft.revision, localScope, {
+      storage: workingSampleStorage,
+      locks: workingSampleLocks,
+      now: () => '2026-07-24T10:10:03.000Z',
+    })
+    const ownerEditedRaw = workingSampleValues.get(localKey)
+    const ownerEditReplacement = await localMerchandisingImport.activateLocalEcommerceWorkingSample({
+      ...wholesaleSampleInput,
+      templateId: 'social-storefront',
+      capturedAt: '2026-07-24T10:10:04.000Z',
+    }, {
+      catalog: workingSampleCatalog,
+      storage: workingSampleStorage,
+      locks: workingSampleLocks,
+    })
+    assert(!ownerEditReplacement.ok
+      && ownerEditedSample.revision === 3
+      && ownerEditedSample.summary === 'Owner-edited pickup and preorder promise.'
+      && workingSampleValues.get(localKey) === ownerEditedRaw,
+    'ecommerce_working_sample_overwrote_saved_owner_edits')
+
+    const requestEvidenceValues = new Map()
+    const requestEvidenceStorage = {
+      getItem: (key) => requestEvidenceValues.get(key) ?? null,
+      setItem: (key, value) => requestEvidenceValues.set(key, String(value)),
+      removeItem: (key) => requestEvidenceValues.delete(key),
+    }
+    const requestEvidenceSample = await localMerchandisingImport.activateLocalEcommerceWorkingSample({
+      ...wholesaleSampleInput,
+      templateId: 'social-storefront',
+      capturedAt: '2026-07-24T10:11:00.000Z',
+    }, {
+      catalog: workingSampleCatalog,
+      storage: requestEvidenceStorage,
+      locks: workingSampleLocks,
+    })
+    assert(requestEvidenceSample.ok, 'ecommerce_request_evidence_sample_setup_failed')
+    const requestEvidenceDraft = draftModel.readStorefrontDraft(localScope, requestEvidenceStorage).draft
+    const requestPreview = storefrontModel.buildStorefrontPreview(workingSampleCatalog, {
+      storeName: requestEvidenceDraft.storeName,
+      summary: requestEvidenceDraft.summary,
+      selectedSkus: requestEvidenceDraft.selectedSkus,
+      merchandising: requestEvidenceDraft.merchandising,
+    })
+    const request = await storefrontRequestModel.buildStorefrontOrderRequest(
+      requestPreview,
+      requestEvidenceDraft.sourcePreviewDigest,
+      {
+        idempotencyKey: 'ECI-32345678-1234-4ABC-8ABC-1234567890AB',
+        customerReference: 'Working sample customer',
+        sku: requestEvidenceDraft.selectedSkus[0],
+        quantity: 1,
+        fulfilment: 'pickup',
+        createdAt: '2026-07-24T10:11:01.000Z',
+      },
+    )
+    requestEvidenceValues.set(commerceModel.COMMERCE_KEY, JSON.stringify(commerceModel.validateCommerceState({
+      ...commerceModel.createSeedCommerce(),
+      storefrontRequests: [request],
+    })))
+    const requestEvidenceRaw = requestEvidenceValues.get(localKey)
+    const requestEvidenceReplacement = await localMerchandisingImport.activateLocalEcommerceWorkingSample({
+      ...wholesaleSampleInput,
+      templateId: 'pickup-preorder',
+      capturedAt: '2026-07-24T10:11:02.000Z',
+    }, {
+      catalog: workingSampleCatalog,
+      storage: requestEvidenceStorage,
+      locks: workingSampleLocks,
+    })
+    assert(!requestEvidenceReplacement.ok
+      && requestEvidenceValues.get(localKey) === requestEvidenceRaw,
+    'ecommerce_working_sample_hid_retained_shop_request')
+
+    const buyingEvidenceValues = new Map()
+    const buyingEvidenceStorage = {
+      getItem: (key) => buyingEvidenceValues.get(key) ?? null,
+      setItem: (key, value) => buyingEvidenceValues.set(key, String(value)),
+      removeItem: (key) => buyingEvidenceValues.delete(key),
+    }
+    const buyingEvidenceSample = await localMerchandisingImport.activateLocalEcommerceWorkingSample({
+      ...wholesaleSampleInput,
+      templateId: 'social-storefront',
+      capturedAt: '2026-07-24T10:12:00.000Z',
+    }, {
+      catalog: workingSampleCatalog,
+      storage: buyingEvidenceStorage,
+      locks: workingSampleLocks,
+    })
+    assert(buyingEvidenceSample.ok, 'ecommerce_buying_evidence_sample_setup_failed')
+    buyingEvidenceValues.set(buyingModel.ecommerceBuyingStateStorageKey('ecommerce:local'), '{broken')
+    const buyingEvidenceRaw = buyingEvidenceValues.get(localKey)
+    const buyingEvidenceReplacement = await localMerchandisingImport.activateLocalEcommerceWorkingSample({
+      ...wholesaleSampleInput,
+      templateId: 'wholesale-request',
+      capturedAt: '2026-07-24T10:12:01.000Z',
+    }, {
+      catalog: workingSampleCatalog,
+      storage: buyingEvidenceStorage,
+      locks: workingSampleLocks,
+    })
+    assert(!buyingEvidenceReplacement.ok
+      && buyingEvidenceValues.get(localKey) === buyingEvidenceRaw,
+    'ecommerce_working_sample_replaced_unreadable_checkout_evidence')
   } catch (error) {
     fail(`storefront_draft_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }

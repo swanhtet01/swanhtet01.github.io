@@ -1609,6 +1609,14 @@ export function SettingsPage() {
           })
         } catch { /* Existing Website edits, inquiries, or release evidence stay authoritative. */ }
       }
+      if (setup.product === 'ecommerce' && !managedIdentity) {
+        const { activateLocalEcommerceWorkingSample } = await import('./local-client-import')
+        await activateLocalEcommerceWorkingSample({
+          templateId: selectedTemplate.id as 'social-storefront' | 'pickup-preorder' | 'wholesale-request',
+          businessName: setup.workspace,
+          capturedAt: new Date().toISOString(),
+        })
+      }
       const startedAt = new Date().toISOString()
       setSetup((current) => ({ ...current, startedAt }))
       if (setup.product === 'commerce' || setup.product === 'production') {
