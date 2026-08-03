@@ -12,6 +12,9 @@ import {
 import { currentProductionShiftClose } from './production-workspace'
 import {
   productContracts,
+  readProductSetup,
+  rememberProductSetup,
+  seedSetupForProduct,
   setupProductPreviewPath,
   templateFor,
   templatesFor,
@@ -79,18 +82,20 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       ? templateFor(product, selectedShopIndustryPack.workflowTemplateId)
       : templateFor(product, '')
     const selectionTimer = window.setTimeout(() => {
-      setSetup((current) => ({
-        ...current,
-        product,
-        templateId: template.id,
-        entryPoint: template.entryPoints[0] ?? '',
-        startedAt: undefined,
-        savedAt: undefined,
-      }))
-      setNotice(`${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
+      rememberProductSetup(window.localStorage, setup)
+      const saved = readProductSetup(window.localStorage, product)
+      setSetup(saved ?? seedSetupForProduct(product, template.id))
+      setNotice(saved
+        ? `Continue your saved ${onboardingProduct.name} workspace.`
+        : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
     }, 0)
     return () => window.clearTimeout(selectionTimer)
-  }, [onboardingProduct.name, product, selectedShopIndustryPack.workflowTemplateId, setSetup, setup.product])
+  }, [onboardingProduct.name, product, selectedShopIndustryPack.workflowTemplateId, setSetup, setup])
+
+  useEffect(() => {
+    if (setup.product !== product) return
+    rememberProductSetup(window.localStorage, setup)
+  }, [product, setup])
 
   useEffect(() => {
     if (product !== 'commerce' || setup.product !== 'commerce') return undefined

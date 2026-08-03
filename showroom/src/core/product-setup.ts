@@ -43,6 +43,7 @@ export type SetupState = {
 
 export const APPROVAL_KEY = 'supermega.approvals.v3'
 export const SETUP_KEY = 'supermega.setup.v3'
+export const PRODUCT_SETUP_REGISTRY_KEY = 'supermega.product_setups.v1'
 export const SETUP_SYNC_EVENT = 'supermega:setup-updated'
 export const ACTION_KEY = 'supermega.accountable.actions.v1'
 export const STOREFRONT_DRAFT_RESET_PREFIX = 'supermega.ecommerce.storefront_draft.v2.'
@@ -96,22 +97,29 @@ export function templateFor(product: SetupProductId, name: string) {
   return templates.find((template) => template.id === name || template.name === name) ?? fallback
 }
 
-const seedCommerceTemplate = templateFor('commerce', '')
-
-export const seedSetup: SetupState = {
-  product: 'commerce',
-  templateId: seedCommerceTemplate.id,
-  workspace: '',
-  owner: '',
-  entryPoint: seedCommerceTemplate.entryPoints[0] ?? '',
-  currentRecord: '',
-  baseline: '',
-  targetOutcome: '',
-  authorityBoundary: '',
-  acceptanceEvidence: '',
+export function seedSetupForProduct(product: SetupProductId, templateId = ''): SetupState {
+  const template = templateFor(product, templateId)
+  return {
+    product,
+    templateId: template.id,
+    workspace: '',
+    owner: '',
+    entryPoint: template.entryPoints[0] ?? '',
+    currentRecord: '',
+    baseline: '',
+    targetOutcome: '',
+    authorityBoundary: '',
+    acceptanceEvidence: '',
+  }
 }
 
+export const seedSetup: SetupState = seedSetupForProduct('commerce')
+
 const pilotRequiredFields = ['workspace', 'owner', 'entryPoint', 'currentRecord', 'baseline', 'targetOutcome', 'authorityBoundary', 'acceptanceEvidence'] as const
+const setupProductIds: SetupProductId[] = ['commerce', 'production', 'website', 'ecommerce']
+const PRODUCT_SETUP_REGISTRY_MAX_BYTES = 64 * 1024
+type ProductSetupStorage = Pick<Storage, 'getItem' | 'setItem'>
+type ProductSetupRegistry = Partial<Record<SetupProductId, SetupState>>
 
 export function normalizeSetup(value: SetupState) {
   const source = (value && typeof value === 'object' ? value : seedSetup) as Omit<Partial<SetupState>, 'product'> & { product?: string; template?: string }
@@ -139,6 +147,43 @@ export function normalizeSetup(value: SetupState) {
     ...(typeof source.savedAt === 'string' && source.savedAt ? { savedAt: source.savedAt } : {}),
   }
   return JSON.stringify(normalized) === JSON.stringify(value) ? value : normalized
+}
+
+function readProductSetupRegistry(storage: Pick<ProductSetupStorage, 'getItem'>): ProductSetupRegistry {
+  try {
+    const raw = storage.getItem(PRODUCT_SETUP_REGISTRY_KEY)
+    if (!raw || raw.length > PRODUCT_SETUP_REGISTRY_MAX_BYTES) return {}
+    const source = JSON.parse(raw) as unknown
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return {}
+    const registry: ProductSetupRegistry = {}
+    for (const product of setupProductIds) {
+      const candidate = (source as Record<string, unknown>)[product]
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
+      const normalized = normalizeSetup(candidate as SetupState)
+      if (normalized.product === product) registry[product] = normalized
+    }
+    return registry
+  } catch {
+    return {}
+  }
+}
+
+export function readProductSetup(storage: Pick<ProductSetupStorage, 'getItem'>, product: SetupProductId) {
+  return readProductSetupRegistry(storage)[product] ?? null
+}
+
+export function rememberProductSetup(storage: ProductSetupStorage, setup: SetupState) {
+  try {
+    const normalized = normalizeSetup(setup)
+    const registry = readProductSetupRegistry(storage)
+    registry[normalized.product] = normalized
+    const encoded = JSON.stringify(registry)
+    if (encoded.length > PRODUCT_SETUP_REGISTRY_MAX_BYTES) return false
+    storage.setItem(PRODUCT_SETUP_REGISTRY_KEY, encoded)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function setupProductFromQuery(value: string | null): SetupProductId | null {
