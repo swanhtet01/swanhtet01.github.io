@@ -12,12 +12,19 @@ import {
   CLIENT_DEMO_REHEARSAL_OBSERVATIONS_CONTRACT,
   CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT,
   CLIENT_DEMO_REHEARSAL_RESULT_CONTRACT,
+  CLIENT_CONTACT_INTAKE_CONTRACT,
+  CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT,
+  CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT,
   CLIENT_INTAKE_WORKSPACE_CONTRACT,
+  buildClientContactIntake,
   buildClientDemoRehearsalPlan,
   buildClientDemoRehearsalResult,
   clientDemoPreparationSummary,
   initializeClientWorkspace,
+  initializeClientWorkspaceFromContact,
   prepareClientDemo,
+  verifyClientContactIntake,
+  verifyContactClientWorkspace,
   verifyClientDemoPreparation,
   verifyClientDemoRehearsalPlan,
   verifyClientDemoRehearsalResult,
@@ -65,6 +72,39 @@ async function fixture() {
   const kitPath = resolve(directory, 'setup-kit.json')
   await writeFile(kitPath, JSON.stringify(kit), 'utf8')
   return { directory, model, blueprint, kit, kitPath }
+}
+
+function contactEvent(workflow = 'commerce') {
+  return {
+    event: 'supermega.contact.created',
+    record: {
+      lead_id: 'LEAD-ABCDEF1234567890',
+      workflow,
+      company: 'Original Company Legal Name',
+      name: 'Private Requester Name',
+      email: 'private.requester@example.com',
+      goal: 'Reduce the time needed to review and close the first operating job.',
+      requested_package: workflow === 'commerce' ? 'retail-wholesale' : '',
+      submitted_at: '2026-08-03T08:00:00.000Z',
+      raw: { private_note: 'must not enter the client workspace' },
+    },
+  }
+}
+
+function contactReview({ products = ['shop'], presetId = 'retail-network', overrides = {} } = {}) {
+  return {
+    contract: CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT,
+    leadId: 'LEAD-ABCDEF1234567890',
+    workspace: 'Reviewed client workspace',
+    implementationOwner: 'Implementation owner',
+    presetId,
+    products,
+    companyReviewed: true,
+    goalReviewed: true,
+    privateWorkspaceApproved: true,
+    reviewedAt: '2026-08-03T09:00:00.000Z',
+    ...overrides,
+  }
 }
 
 test('client preparation compiles one validated four-product founder-review artifact without writes or model work', async () => {
@@ -454,6 +494,148 @@ test('one command creates a private four-product intake workspace that becomes a
     assert.equal(cliSummary.containsClientData, false)
     assert.doesNotMatch(cli.stdout, /cli-client-intake|REPLACE WITH/)
     assert.deepEqual(JSON.parse(await readFile(resolve(cliDirectory, 'client.json'), 'utf8')).products, ['commerce', 'website', 'ecommerce'])
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
+test('contact intake routes every public product into one private reviewed client plan', () => {
+  const cases = [
+    ['commerce', ['shop'], 'commerce'],
+    ['plant', ['plant'], 'production'],
+    ['website', ['website'], 'website'],
+    ['ecommerce', ['shop', 'ecommerce'], 'ecommerce'],
+    ['guide', ['website'], 'guide'],
+  ]
+  for (const [workflow, products, expectedProduct] of cases) {
+    const presetId = expectedProduct === 'production' ? 'manufacturing' : expectedProduct === 'website' || expectedProduct === 'guide' ? 'service-business' : 'retail-network'
+    const packet = buildClientContactIntake(contactEvent(workflow), contactReview({ products, presetId }))
+    assert.equal(packet.contract, CLIENT_CONTACT_INTAKE_CONTRACT)
+    assert.equal(packet.client.requestedProduct, expectedProduct)
+    assert.deepEqual(packet.client.products, products.map((product) => product === 'shop' ? 'commerce' : product === 'plant' ? 'production' : product))
+    assert.equal(verifyClientContactIntake(packet), packet)
+    const encoded = JSON.stringify(packet)
+    assert.doesNotMatch(encoded, /Private Requester Name|private\.requester@example\.com|Original Company Legal Name|must not enter/)
+    assert.match(packet.source.leadDigest, /^sha256:[0-9a-f]{64}$/)
+    assert.match(packet.source.companyDigest, /^sha256:[0-9a-f]{64}$/)
+    assert.deepEqual(packet.controls, {
+      privateArtifact: true,
+      requesterNameRetained: false,
+      requesterEmailRetained: false,
+      rawContactRetained: false,
+      externalWritesPerformed: false,
+      modelCallsPerformed: false,
+      activationStatus: 'not_applied',
+    })
+  }
+})
+
+test('contact intake rejects unreviewed, mismatched, unsafe, or incomplete product routing', () => {
+  assert.throws(() => buildClientContactIntake(contactEvent('ecommerce'), contactReview({ products: ['ecommerce'] })), /client_contact_ecommerce_requires_shop/)
+  assert.throws(() => buildClientContactIntake(contactEvent('plant'), contactReview({ products: ['shop'] })), /client_contact_requested_product_missing/)
+  assert.throws(() => buildClientContactIntake(contactEvent(), contactReview({ overrides: { leadId: 'LEAD-0000000000000000' } })), /client_contact_lead_mismatch/)
+  assert.throws(() => buildClientContactIntake(contactEvent(), contactReview({ overrides: { privateWorkspaceApproved: false } })), /client_contact_review_approval_required/)
+  assert.throws(() => buildClientContactIntake(contactEvent(), contactReview({ overrides: { reviewedAt: '2026-08-03T07:59:59.000Z' } })), /client_contact_review_time_invalid/)
+  assert.throws(() => buildClientContactIntake(contactEvent('unknown'), contactReview()), /client_contact_product_invalid/)
+  assert.throws(() => buildClientContactIntake(contactEvent(), { ...contactReview(), extra: true }), /client_contact_review_invalid/)
+  const valid = buildClientContactIntake(contactEvent(), contactReview())
+  assert.throws(() => verifyClientContactIntake({ ...valid, request: { ...valid.request, goal: 'changed' } }), /client_contact_intake_invalid/)
+})
+
+test('owner-reviewed contact creates and verifies a usable private workspace without contact PII', async () => {
+  const source = await fixture()
+  try {
+    const directory = resolve(source.directory, 'contact-client-intake')
+    const event = contactEvent('ecommerce')
+    const review = contactReview({ products: ['shop', 'ecommerce'], presetId: 'social-seller' })
+    const initialized = await initializeClientWorkspaceFromContact({ directory, event, review })
+    assert.equal(initialized.contract, CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT)
+    assert.equal(initialized.requestedProduct, 'ecommerce')
+    assert.equal(initialized.productCount, 2)
+    assert.equal(initialized.containsClientData, true)
+    assert.equal(initialized.externalWritesPerformed, false)
+    const profile = JSON.parse(await readFile(resolve(directory, 'client.json'), 'utf8'))
+    assert.deepEqual(profile, {
+      schema: 'supermega.client_profile.v1',
+      workspace: 'Reviewed client workspace',
+      owner: 'Implementation owner',
+      presetId: 'social-seller',
+      products: ['commerce', 'ecommerce'],
+    })
+    const intakeText = await readFile(resolve(directory, 'CONTACT-INTAKE.json'), 'utf8')
+    assert.doesNotMatch(intakeText, /Private Requester Name|private\.requester@example\.com|Original Company Legal Name|must not enter/)
+    assert.match(await readFile(resolve(directory, 'START-HERE.md'), 'utf8'), /requester name, email, and raw contact record were not copied/)
+    const verified = await verifyContactClientWorkspace(directory)
+    assert.equal(verified.contract, CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT)
+    assert.equal(verified.contactIntakeDigest, initialized.contactIntakeDigest)
+    assert.equal(verified.requesterEmailRetained, false)
+    const preparation = await prepareClientDemo({ dataDirectory: directory, preparedAt: PREPARED_AT })
+    assert.deepEqual(preparation.products.map((product) => product.product), ['commerce', 'ecommerce'])
+    assert.equal(verifyClientDemoPreparation(preparation).status, 'verified_not_applied')
+    await assert.rejects(initializeClientWorkspaceFromContact({ directory, event, review }), /client_workspace_init_exists/)
+    const intakePath = resolve(directory, 'CONTACT-INTAKE.json')
+    const intake = JSON.parse(await readFile(intakePath, 'utf8'))
+    await writeFile(intakePath, JSON.stringify({ ...intake, request: { ...intake.request, goal: 'tampered goal' } }), 'utf8')
+    await assert.rejects(verifyContactClientWorkspace(directory), /client_contact_intake_invalid/)
+    await writeFile(intakePath, JSON.stringify(intake), 'utf8')
+    await writeFile(resolve(directory, 'client.json'), JSON.stringify({ ...profile, owner: 'Changed owner' }), 'utf8')
+    await assert.rejects(verifyContactClientWorkspace(directory), /client_contact_workspace_binding_invalid/)
+  } finally {
+    await rm(source.directory, { recursive: true, force: true })
+  }
+})
+
+test('contact workspace CLI is metadata-only and verifies the exact private result', async () => {
+  const source = await fixture()
+  try {
+    const event = contactEvent('website')
+    const eventPath = resolve(source.directory, 'private-contact-event.json')
+    const reviewPath = resolve(source.directory, 'private-owner-review.json')
+    const directory = resolve(source.directory, 'private-contact-workspace')
+    await writeFile(eventPath, JSON.stringify(event), 'utf8')
+    const reviewTemplate = spawnSync(process.execPath, [TOOL, '--contact-review-template', eventPath, '--out', reviewPath], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    })
+    assert.equal(reviewTemplate.status, 0, reviewTemplate.stderr)
+    assert.equal(JSON.parse(reviewTemplate.stdout).reviewApproved, false)
+    assert.doesNotMatch(reviewTemplate.stdout, /Private Requester Name|private\.requester@example\.com|Original Company Legal Name|Reduce the time needed/)
+    const generatedReview = JSON.parse(await readFile(reviewPath, 'utf8'))
+    assert.deepEqual(generatedReview.products, ['website'])
+    assert.equal(generatedReview.presetId, 'service-business')
+    assert.equal(generatedReview.companyReviewed, false)
+    assert.doesNotMatch(JSON.stringify(generatedReview), /Private Requester Name|private\.requester@example\.com|Original Company Legal Name|Reduce the time needed/)
+    await writeFile(reviewPath, JSON.stringify({
+      ...generatedReview,
+      workspace: 'Reviewed client workspace',
+      implementationOwner: 'Implementation owner',
+      companyReviewed: true,
+      goalReviewed: true,
+      privateWorkspaceApproved: true,
+      reviewedAt: '2026-08-03T09:00:00.000Z',
+    }), 'utf8')
+    const initialized = spawnSync(process.execPath, [TOOL, '--init-from-contact', directory, '--contact-event', eventPath, '--owner-review', reviewPath], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    })
+    assert.equal(initialized.status, 0, initialized.stderr)
+    const summary = JSON.parse(initialized.stdout)
+    assert.equal(summary.contract, CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT)
+    assert.equal(summary.requestedProduct, 'website')
+    assert.doesNotMatch(initialized.stdout, /Private Requester Name|private\.requester@example\.com|Original Company Legal Name|Reviewed client workspace|private-contact-workspace/)
+    const verified = spawnSync(process.execPath, [TOOL, '--verify-contact-workspace', directory], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    })
+    assert.equal(verified.status, 0, verified.stderr)
+    assert.equal(JSON.parse(verified.stdout).contactIntakeDigest, summary.contactIntakeDigest)
+    assert.doesNotMatch(verified.stdout, /Private Requester Name|private\.requester@example\.com|Original Company Legal Name|Reviewed client workspace|private-contact-workspace/)
   } finally {
     await rm(source.directory, { recursive: true, force: true })
   }

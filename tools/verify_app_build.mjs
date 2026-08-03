@@ -4875,6 +4875,24 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || !settingsPageSource.includes("await import('./local-client-import')")
   || !settingsPageSource.includes('preparedLocalClientDemoInstallOrder(artifact)')
   || !settingsPageSource.includes('applyPreparedLocalClientDemoProduct(artifact, product, preparedConfirmation)')) fail('private_client_demo_installer_contract_missing')
+if (rootPackage.scripts?.['client:workspace:contact:review-template'] !== 'node tools/prepare_client_demo.mjs --contact-review-template'
+  || rootPackage.scripts?.['client:workspace:from-contact'] !== 'node tools/prepare_client_demo.mjs --init-from-contact'
+  || rootPackage.scripts?.['client:workspace:contact:verify'] !== 'node tools/prepare_client_demo.mjs --verify-contact-workspace'
+  || !clientPreparationToolSource.includes("CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT = 'supermega.client_contact_intake_review.v1'")
+  || !clientPreparationToolSource.includes("CLIENT_CONTACT_INTAKE_CONTRACT = 'supermega.client_contact_intake.v1'")
+  || !clientPreparationToolSource.includes("CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT = 'supermega.client_contact_intake_workspace.v1'")
+  || !clientPreparationToolSource.includes('export function buildClientContactIntake')
+  || !clientPreparationToolSource.includes('export function buildClientContactReviewTemplate')
+  || !clientPreparationToolSource.includes('export async function writeClientContactReviewTemplate')
+  || !clientPreparationToolSource.includes('export function verifyClientContactIntake')
+  || !clientPreparationToolSource.includes('export async function initializeClientWorkspaceFromContact')
+  || !clientPreparationToolSource.includes('export async function verifyContactClientWorkspace')
+  || !clientPreparationToolSource.includes("fail('client_contact_ecommerce_requires_shop')")
+  || !clientPreparationToolSource.includes('requesterNameRetained: false')
+  || !clientPreparationToolSource.includes('requesterEmailRetained: false')
+  || !clientPreparationToolSource.includes('rawContactRetained: false')
+  || !clientPreparationToolSource.includes('privateWorkspaceApproved !== true')
+  || !clientPreparationToolSource.includes("activationStatus: 'not_applied'")) fail('client_contact_intake_workspace_contract_missing')
 if (rootPackage.scripts?.['client:rehearse:plan'] !== 'node tools/prepare_client_demo.mjs --rehearse'
   || rootPackage.scripts?.['client:rehearse:verify'] !== 'node tools/prepare_client_demo.mjs --verify-rehearsal'
   || rootPackage.scripts?.['client:rehearse:record'] !== 'node tools/prepare_client_demo.mjs --record-rehearsal'
