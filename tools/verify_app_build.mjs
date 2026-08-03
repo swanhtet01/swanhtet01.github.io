@@ -2895,9 +2895,14 @@ if (!ecommerceSource.includes('Shop keeps the real stock, payment, delivery, and
   || !ecommerceCssSource.includes('font-size: 12px')
   || !coreSource.includes('<strong>Ecommerce</strong><small>Build a storefront from Shop</small>')
   || coreSource.includes('<h2>AI Agent Solutions</h2>')) fail('ecommerce_storefront_ui_boundary_missing')
-if (ecommerceSource.indexOf('<EcommerceBuyingWorkspace') < 0
-  || ecommerceSource.indexOf('<EcommerceBuyingWorkspace') > ecommerceSource.indexOf('Preview verification')) {
-  fail('ecommerce_technical_verification_precedes_primary_buying_flow')
+const ecommerceBuyingWorkspaceIndex = ecommerceSource.indexOf('<EcommerceBuyingWorkspace')
+const ecommerceVerificationIndex = ecommerceSource.indexOf('className="ecommerce-verification"')
+const ecommerceWorkspaceSwitchIndex = ecommerceSource.indexOf('aria-label="Storefront view"')
+if (ecommerceBuyingWorkspaceIndex < 0
+  || ecommerceVerificationIndex < ecommerceOptionalToolsIndex
+  || ecommerceVerificationIndex > ecommerceWorkspaceSwitchIndex
+  || ecommerceWorkspaceSwitchIndex > ecommerceBuyingWorkspaceIndex) {
+  fail('ecommerce_technical_verification_not_hidden_in_optional_tools')
 }
 const managedStorefrontStart = ecommerceSource.indexOf('async function saveManagedStorefront')
 const managedStorefrontEnd = ecommerceSource.indexOf('async function saveCurrentStorefront', managedStorefrontStart)

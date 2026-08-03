@@ -1948,6 +1948,18 @@ export function EcommerceProduct() {
       </section>
         </div>
       </details>
+
+      <details className="ecommerce-verification" open={digestError ? true : undefined}>
+        <summary>
+          <span><strong>Preview verification</strong><small>Local currentness check</small></span>
+          <b>{digestError ? 'Attention' : digest ? 'Ready' : 'Checking'}</b>
+        </summary>
+        <div className="ecommerce-digest" aria-live="polite">
+          <span>Preview fingerprint</span>
+          <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
+          <small>{digestError || 'The same store fields and Shop snapshot produce the same local check.'}</small>
+        </div>
+      </details>
         </div>
       </details>
 
@@ -2200,17 +2212,6 @@ export function EcommerceProduct() {
             />
           ) : null}
 
-          <details className="ecommerce-verification" open={digestError ? true : undefined}>
-            <summary>
-              <span><strong>Preview verification</strong><small>Local currentness check</small></span>
-              <b>{digestError ? 'Attention' : digest ? 'Ready' : 'Checking'}</b>
-            </summary>
-            <div className="ecommerce-digest" aria-live="polite">
-              <span>Preview fingerprint</span>
-              <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
-              <small>{digestError || 'The same store fields and Shop snapshot produce the same local check.'}</small>
-            </div>
-          </details>
         </section>
       </div>
     </div>
