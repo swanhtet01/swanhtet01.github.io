@@ -205,6 +205,23 @@ export function managedTrialRequestUrl(product: SetupProductId, templateId: stri
   return `https://supermega.dev/contact/?${query.toString()}`
 }
 
+export function managedAccountRequestUrl(value: string | null) {
+  const product = setupProductFromQuery(value)
+  if (product) return managedTrialRequestUrl(product, 'managed-account')
+  const query = new URLSearchParams({
+    product: 'guide',
+    template: 'managed-account',
+    utm_source: 'app',
+    utm_medium: 'guided_trial',
+  })
+  return `https://supermega.dev/contact/?${query.toString()}`
+}
+
+export function managedAccountPath(path: '/login' | '/account/recovery', value: string | null) {
+  const product = setupProductFromQuery(value)
+  return product ? `${path}?product=${encodeURIComponent(productContracts[product].slug)}` : path
+}
+
 export function productFromPathname(pathname: string): SetupProductId | null {
   if (pathname.startsWith('/shop/')) return 'commerce'
   if (pathname.startsWith('/plant/')) return 'production'
