@@ -7,11 +7,11 @@ import {
   type ClientCapability,
 } from './client-capability-plan'
 
-const productDetails: Record<ClientSolutionId, { label: string; setupPath: string; primaryPath: string }> = {
-  commerce: { label: 'Shop', setupPath: '/settings/?product=shop', primaryPath: '/shop/' },
-  production: { label: 'Plant', setupPath: '/settings/?product=plant', primaryPath: '/plant/' },
-  website: { label: 'Website', setupPath: '/settings/?product=website', primaryPath: '/website/' },
-  ecommerce: { label: 'Ecommerce', setupPath: '/settings/?product=ecommerce', primaryPath: '/ecommerce/' },
+const productDetails: Record<ClientSolutionId, { label: string; setupPath: string; primaryPath: string; requestPath: string }> = {
+  commerce: { label: 'Shop', setupPath: '/settings/?product=shop', primaryPath: '/shop/', requestPath: 'https://supermega.dev/contact/?product=shop&utm_source=app&utm_medium=product&utm_campaign=working-sample' },
+  production: { label: 'Plant', setupPath: '/settings/?product=plant', primaryPath: '/plant/', requestPath: 'https://supermega.dev/contact/?product=plant&utm_source=app&utm_medium=product&utm_campaign=working-sample' },
+  website: { label: 'Website', setupPath: '/settings/?product=website', primaryPath: '/website/', requestPath: 'https://supermega.dev/contact/?product=website&utm_source=app&utm_medium=product&utm_campaign=working-sample' },
+  ecommerce: { label: 'Ecommerce', setupPath: '/settings/?product=ecommerce', primaryPath: '/ecommerce/', requestPath: 'https://supermega.dev/contact/?product=ecommerce&utm_source=app&utm_medium=product&utm_campaign=working-sample' },
 }
 
 function WorkflowLink({ capability, fallbackPath }: { capability: ClientCapability; fallbackPath: string }) {
@@ -42,22 +42,22 @@ export function ProductSystemNavigator({ product }: { product: ClientSolutionId 
   return (
     <details className="product-system-navigator" onToggle={(event) => setOpen(event.currentTarget.open)} open={open}>
       <summary>
-        <span><b>More tools</b><small>Workflows and setup</small></span>
+        <span><b>More tools</b><small>Workflows and next steps</small></span>
         <strong>{open ? 'Hide' : 'Show'}</strong>
       </summary>
       <div className="product-system-body">
         <header>
-          <div><span className="core-eyebrow">{details.label}</span><h2>Choose another task.</h2><p>Open a working sample flow, or set up your data when you are ready.</p></div>
-          <div className="product-system-actions"><Link className="core-button compact" to={details.setupPath}>Set up {details.label}</Link></div>
+          <div><span className="core-eyebrow">{details.label}</span><h2>What&apos;s next?</h2><p>Open another working flow, or request this product for your business.</p></div>
+          <div className="product-system-actions"><a className="core-button compact primary" href={details.requestPath}>Get {details.label} for my business</a></div>
         </header>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
           {workingFlows.map((capability) => <WorkflowLink capability={capability} fallbackPath={details.primaryPath} key={capability.id} />)}
         </div>
         <details className="product-system-advanced">
-          <summary><span>Setup and imports</span><strong>{setupModules.length}</strong></summary>
-          <p>{setupModules.map((capability) => capability.label).join(' / ')}</p>
+          <summary><span>Data and imports</span><strong>Optional</strong></summary>
+          <div className="product-system-setup"><p>{setupModules.map((capability) => capability.label).join(' / ')}</p><Link className="text-link" to={details.setupPath}>Prepare {details.label} data</Link></div>
         </details>
-        <footer>Use these tools only when the main workflow needs them.</footer>
+        <footer>Data import stays optional until you are ready.</footer>
       </div>
     </details>
   )

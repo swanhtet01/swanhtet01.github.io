@@ -30,7 +30,7 @@ export function verifyCurrentReleaseAssets({
   const groups = [
     ['launcher', assetCorpus, ['SUPERMEGA', 'What do you want to run?', 'Each product is a separate workspace. Open a working sample now; setup appears only when you need your own data.', 'Sell and manage stock', 'Run production', 'Publish your business', 'Take online orders', 'Counter sales, inventory, orders, and daily close.', 'Jobs, materials, output, quality, and traceability.', 'Pages, services, inquiries, and launch preview.', 'Storefront, checkout, delivery, and Shop handoff.', 'No account or setup is required for the samples.', 'Each product opens its own workspace; reviewed handoffs connect them when needed.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['shop_plant', operationsChunk, ['Create order', 'Finish payment and handoff in Orders.', 'Stock reserved. Finish fulfilment and reconcile payment before completion.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
-    ['secondary_tools', productSystemNavigatorChunk, ['More tools', 'Workflows and setup', 'Choose another task.', 'Open a working sample flow, or set up your data when you are ready.', 'Set up ', 'Setup and imports', 'Use these tools only when the main workflow needs them.']],
+    ['secondary_tools', productSystemNavigatorChunk, ['More tools', 'Workflows and next steps', "What's next?", 'Open another working flow, or request this product for your business.', 'https://supermega.dev/contact/?product=shop&utm_source=app&utm_medium=product&utm_campaign=working-sample', 'https://supermega.dev/contact/?product=plant&utm_source=app&utm_medium=product&utm_campaign=working-sample', 'https://supermega.dev/contact/?product=website&utm_source=app&utm_medium=product&utm_campaign=working-sample', 'https://supermega.dev/contact/?product=ecommerce&utm_source=app&utm_medium=product&utm_campaign=working-sample', ' for my business', 'Data and imports', 'Optional', 'Prepare ', ' data', 'Data import stays optional until you are ready.']],
     ['support_helper', productHomeReadinessCorpus, ['Support helper', 'Uses Shop, Plant, Website, and Ecommerce records.', 'Readiness review status', 'Mark reviewed', 'Acknowledgement confirms review only.', 'Company workspace status', 'Browser-local sample', 'Review launch gates', 'No managed customer action runs from this checklist.', 'supermega.local_business_snapshot.v1', 'supermega.local_business_answer.v1']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence']],
     ['website', websiteChunk, ['Make this website yours', 'Download site', 'Website starter brief generated', 'Not online yet', 'Edit sample', 'Edit page', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
@@ -55,6 +55,10 @@ export function verifyCurrentReleaseAssets({
   for (const forbidden of ['Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.']) {
     checks += 1
     if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
+  }
+  for (const forbidden of ['Workflows and setup', 'Choose another task.', 'Set up ', 'Setup and imports']) {
+    checks += 1
+    if (productSystemNavigatorChunk.includes(forbidden)) throw new Error(`retired_secondary_tools_release_asset:${forbidden}`)
   }
   for (const forbidden of ['Use Plant in 3 steps.', 'Choose a job, record output, then fix blockers.', 'Plant guided jobs']) {
     checks += 1
