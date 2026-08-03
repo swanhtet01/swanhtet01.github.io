@@ -342,9 +342,9 @@ export function CoreLayout() {
       ? { to: `${location.pathname}${location.search}`, label: `${productDisplayName(settingsProduct)} setup` }
       : { to: '/settings/#controls', label: 'Recovery' }
   const activeNavigation: NavigationItem[] = routeProduct
-    ? [productsNavigation, productNavigation[routeProduct]]
+    ? [productNavigation[routeProduct], productsNavigation]
     : setupRoute
-      ? [productsNavigation, setupNavigation]
+      ? [setupNavigation, productsNavigation]
       : [productsNavigation]
   const mobileNavigation = routeProduct || setupRoute ? activeNavigation : []
   const routeName = loginRoute
