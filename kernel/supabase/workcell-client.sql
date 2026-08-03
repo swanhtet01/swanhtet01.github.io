@@ -160,6 +160,13 @@ alter table public.supermega_ai_cache enable row level security;
 alter table public.supermega_action_queue enable row level security;
 alter table public.supermega_owner_evidence enable row level security;
 
+revoke all on public.supermega_console_activity from public;
+revoke all on public.supermega_token_ledger from public;
+revoke all on public.supermega_ai_budget_reservations from public;
+revoke all on public.supermega_ai_cache from public;
+revoke all on public.supermega_action_queue from public;
+revoke all on public.supermega_owner_evidence from public;
+
 revoke all on public.supermega_console_activity from anon, authenticated;
 revoke all on public.supermega_token_ledger from anon, authenticated;
 revoke all on public.supermega_ai_budget_reservations from anon, authenticated;

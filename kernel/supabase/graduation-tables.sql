@@ -31,5 +31,10 @@ create index if not exists supermega_graduation_count_idx on public.supermega_gr
 alter table public.supermega_graduation    enable row level security;
 alter table public.supermega_build_modules enable row level security;
 
+revoke all on table public.supermega_graduation from public, anon, authenticated;
+revoke all on table public.supermega_build_modules from public, anon, authenticated;
+grant select, insert, update on table public.supermega_graduation to service_role;
+grant select, insert on table public.supermega_build_modules to service_role;
+
 -- Reload PostgREST schema cache so the new tables are queryable over REST.
 notify pgrst, 'reload schema';
