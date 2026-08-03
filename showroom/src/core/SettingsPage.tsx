@@ -463,6 +463,7 @@ export function SettingsPage() {
   const demoBlueprint = demoKitReadiness?.kit?.blueprint ?? null
   const demoRecoveryNeeded = Boolean((demoWorkspaceSource || demoBlueprintSource) && (!demoWorkspace || !demoBlueprint))
   const [demoDataSetupOpen, setDemoDataSetupOpen] = useState(false)
+  const [productDataSetupOpen, setProductDataSetupOpen] = useState(false)
   const [preparedArtifact, setPreparedArtifact] = useState<ClientDemoPreparationArtifact | null>(null)
   const [preparingClientFiles, setPreparingClientFiles] = useState(false)
   const [preparedConfirmation, setPreparedConfirmation] = useState('')
@@ -543,7 +544,7 @@ export function SettingsPage() {
   const selectedDemoProductSummary = selectedDemoProductNames.length ? selectedDemoProductNames.join(' · ') : 'Choose at least one'
   const demoInputReady = Boolean(setup.workspace.trim() && setup.owner.trim() && selectedDemoEntries.length)
   const workflowReady = requestedProduct
-    ? Boolean(setup.workspace.trim() && setup.owner.trim())
+    ? requestedProduct === setup.product && Boolean(setup.workspace.trim() && setup.owner.trim())
     : Boolean(demoWorkspace)
   const workflowCompletion = requestedProduct
     ? Math.round(([setup.templateId, setup.workspace.trim(), setup.owner.trim()].filter(Boolean).length / 3) * 100)
@@ -2162,6 +2163,56 @@ export function SettingsPage() {
     setApprovals((current) => current.filter((approval) => !approval.managed))
     setManagedNotice('Company account disconnected.')
     setManagedBusy(false)
+  }
+
+  if (requestedProduct) {
+    const onboardingProduct = productContracts[requestedProduct]
+    const onboardingTemplate = requestedProduct === setup.product ? selectedTemplate : templateFor(requestedProduct, '')
+    const onboardingSamplePath = setupProductPreviewPath(requestedProduct)
+
+    return (
+      <div className="workspace-screen settings-screen product-onboarding-screen" data-product={requestedProduct}>
+        <PageHeading
+          copy={`Try the ready ${onboardingProduct.name} sample in one click. Add your business name and data only when you want a workspace of your own.`}
+          eyebrow={`${onboardingProduct.name} onboarding`}
+          title={`Start with ${onboardingProduct.name}`}
+        />
+        <div aria-label={`${onboardingProduct.name} onboarding choices`} className="product-onboarding-grid">
+          <section className="core-panel product-onboarding-card product-onboarding-sample">
+            <span className="product-onboarding-step">1</span>
+            <div><span className="core-eyebrow">Try it now</span><h2>Open the working sample</h2><p>See real {onboardingProduct.name} workflows with sample data. Nothing to enter first.</p></div>
+            <Link className="core-button primary" to={onboardingSamplePath}>Open {onboardingProduct.name} sample</Link>
+            <small>No account. No setup. No upload.</small>
+          </section>
+
+          <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={(event) => { event.preventDefault(); void startGuidedTrial() }}>
+            <span className="product-onboarding-step">2</span>
+            <div><span className="core-eyebrow">Make it yours</span><h2>Create your workspace</h2><p>Name the business and responsible person. SuperMega prepares {onboardingProduct.name} only.</p></div>
+            <div className="form-row">
+              <label>Business name<input maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
+              <label>Workspace owner<input maxLength={80} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" required value={setup.owner} /></label>
+            </div>
+            {requestedProduct === 'commerce' ? <div className="form-row"><label>Business type<select onChange={(event) => changeShopIndustryPack(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="setup-pack-summary"><strong>{selectedShopIndustryPack.firstWorkflow}</strong><small>{selectedShopIndustryPack.description}</small></div></div> : null}
+            {requestedProduct === 'production' ? <div className="form-row"><label>Factory type<select onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="setup-pack-summary"><strong>{selectedPlantIndustryPack.firstWorkflow}</strong><small>{selectedPlantIndustryPack.description}</small></div></div> : null}
+            {requestedProduct !== 'commerce' ? <label>Starting workflow<select disabled={requestedProduct !== setup.product} onChange={(event) => changeTemplate(event.target.value)} value={onboardingTemplate.id}>{templatesFor(requestedProduct).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label> : null}
+            <div className="product-onboarding-primary">
+              <button className="core-button primary" disabled={!workflowReady || guidedTrialBusy} type="submit">{guidedTrialBusy ? 'Creating workspace...' : `Create my ${onboardingProduct.name}`}</button>
+              <small>{workflowReady ? 'Prepared on this device. You review every real change.' : 'Enter the business name and workspace owner.'}</small>
+            </div>
+            <details className="compact-disclosure product-onboarding-details">
+              <summary><span>What is included?</span><small>{onboardingTemplate.name}</small></summary>
+              <div className="setup-template-summary"><div><span>Outcome</span><strong>{onboardingTemplate.outcome}</strong></div><ol aria-label={`${onboardingTemplate.name} workflow`}>{onboardingTemplate.workflow.map((step) => <li key={step}>{step}</li>)}</ol><small>Measure success with {onboardingTemplate.metric.toLowerCase()}.</small></div>
+            </details>
+            <details className="compact-disclosure product-onboarding-details" onToggle={(event) => setProductDataSetupOpen(event.currentTarget.open)}>
+              <summary><span>Import my business data</span><small>Optional</small></summary>
+              {productDataSetupOpen ? workflowReady ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Your data</span><h3>Replace the sample when ready</h3><p>Import only {onboardingProduct.name} data. The other SuperMega products remain separate.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the data template...</p>}><ClientDataOnboarding initiallyOpen={false} managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={requestedProduct === 'production' ? plantIndustryPackId : undefined} product={requestedProduct} productName={onboardingProduct.name} productSlug={onboardingProduct.slug} shopIndustryPackId={requestedProduct === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={onboardingTemplate.id} workspace={setup.workspace} /></Suspense></section> : <p className="form-notice">Enter the business name and workspace owner before importing data.</p> : null}
+            </details>
+            <p className="product-onboarding-boundary">This setup changes {onboardingProduct.name} only. Other products and real business systems are not changed.</p>
+            <p aria-live="polite" className="form-notice">{notice || 'Your choices stay on this device.'}</p>
+          </form>
+        </div>
+      </div>
+    )
   }
 
   return (
