@@ -1524,7 +1524,7 @@ export function OverviewPage() {
   )
 }
 
-export function OperationsPage({ product }: { product?: ProductId }) {
+export function OperationsPage({ product }: { product: ProductId }) {
   const runtime = useOutletContext<RuntimeHealth>()
   const location = useLocation()
   const navigate = useNavigate()
@@ -1537,12 +1537,9 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const ecommerceCancellationNavigationIntent = (location.state as { ecommerceCancellationIntent?: EcommerceCancellationIntent } | null)?.ecommerceCancellationIntent ?? null
   const ecommerceOrderAmendmentNavigationIntent = (location.state as { ecommerceOrderAmendmentIntent?: EcommerceOrderAmendmentIntent } | null)?.ecommerceOrderAmendmentIntent ?? null
   const ecommerceOrderRescheduleNavigationIntent = (location.state as { ecommerceOrderRescheduleIntent?: EcommerceOrderRescheduleIntent } | null)?.ecommerceOrderRescheduleIntent ?? null
-  const routeModule = location.pathname.split('/').filter(Boolean)[1]
-  const requestedView = searchParams.get('view')
   const requestedSource = searchParams.get('source')
   const requestedRequestId = searchParams.get('request')
-  const isProductRoute = Boolean(product) || routeModule === 'commerce' || routeModule === 'production'
-  const view: ProductId = product ?? (routeModule === 'production' || requestedView === 'production' || requestedView === 'plant' ? 'production' : 'commerce')
+  const view = product
   const requestedTab = searchParams.get('tab')
   const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'today'
   const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
@@ -1550,10 +1547,9 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   const requestedTabIsCanonical = requestedTab === activeTab
 
   useEffect(() => {
-    if (!isProductRoute && !requestedView) return
     const canonicalPath = productCanonicalPath(view)
-    if (location.pathname !== canonicalPath || requestedView || !requestedTabIsCanonical) navigate(`${canonicalPath}?tab=${activeTab}`, { replace: true })
-  }, [activeTab, isProductRoute, location.pathname, navigate, requestedTabIsCanonical, requestedView, view])
+    if (location.pathname !== canonicalPath || !requestedTabIsCanonical) navigate(`${canonicalPath}?tab=${activeTab}`, { replace: true })
+  }, [activeTab, location.pathname, navigate, requestedTabIsCanonical, view])
 
   function setTab(tab: CommerceTab | ProductionTab) {
     navigate(`${productCanonicalPath(view)}?tab=${tab}`, { replace: true })
@@ -1571,18 +1567,6 @@ export function OperationsPage({ product }: { product?: ProductId }) {
         production: 'Choose jobs, record output, and keep material trace current.',
         control: 'Contain quality, equipment, downtime, and maintenance problems.',
       }[productionTab]
-
-  if (!isProductRoute && !requestedView) {
-    return <div className="workspace-screen product-catalog-screen">
-      <PageHeading eyebrow="Products" title="Choose a product" copy="Try the working demo first. Add client data only when the demo makes sense." actions={<a className="core-button" href="#product-start-actions">Choose product</a>} />
-      <nav aria-label="SuperMega apps" className="product-launcher product-catalog" id="product-start-actions">
-        <Link to="/shop/?tab=counter"><span><strong>Shop</strong><small>Sell, take payment, and manage stock</small></span><b>Try demo</b></Link>
-        <Link to="/plant/?tab=production"><span><strong>Plant</strong><small>Jobs, output, and problems</small></span><b>Try demo</b></Link>
-        <Link to="/website/"><span><strong>Website</strong><small>Build, preview, and review a site</small></span><b>Try demo</b></Link>
-        <Link to="/ecommerce/"><span><strong>Ecommerce</strong><small>Build a storefront from Shop</small></span><b>Try demo</b></Link>
-      </nav>
-    </div>
-  }
 
   return (
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
