@@ -4623,10 +4623,22 @@ if (!shopProductionDemandSource.includes("SHOP_PRODUCTION_DEMAND_SCHEMA = 'super
   || shopProductionDemandSource.includes('fetch(')
   || shopProductionDemandSource.includes('localStorage')
   || shopProductionDemandSource.includes('sessionStorage')) fail('shop_production_demand_contract_missing')
+const plantProductionWorklistStart = coreSource.indexOf("if (tab === 'production') return")
+const plantProductionWorklistEnd = coreSource.indexOf("if (tab === 'control') return", plantProductionWorklistStart)
+const plantProductionWorklistContract = coreSource.slice(plantProductionWorklistStart, plantProductionWorklistEnd)
+const plantActiveJobsIndex = plantProductionWorklistContract.indexOf('<JobList disabled=')
+const plantNextDemandIndex = plantProductionWorklistContract.indexOf('data-demand-kind=')
+if (plantProductionWorklistStart < 0
+  || plantProductionWorklistEnd < 0
+  || plantActiveJobsIndex < 0
+  || plantNextDemandIndex < plantActiveJobsIndex) fail('plant_active_jobs_not_prioritized')
 if (!coreSource.includes('projectShopProductionDemand')
   || !coreSource.includes('shopProductionDemandIsCurrent')
-  || !coreSource.includes('aria-label="Shop demand to Plant"')
+  || !coreSource.includes("aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'}")
+  || !coreSource.includes("data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'}")
+  || !coreSource.includes("nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'")
   || !coreSource.includes('Use Shop demand')
+  || !coreSource.includes('Plan replenishment')
   || !coreSource.includes('operation-module production-operation-module')
   || !coreSource.includes('Shop orders, stock, reorder level, or Plant coverage changed. Nothing was written; review the current demand again.')
   || !coreSource.includes('evidenceReference: demandSignal.evidenceReference')
