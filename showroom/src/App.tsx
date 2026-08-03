@@ -10,6 +10,7 @@ const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 const SettingsPage = lazy(() => import('./core/SettingsPage').then((module) => ({ default: module.SettingsPage })))
+const ProductOnboardingPage = lazy(() => import('./core/ProductOnboardingPage').then((module) => ({ default: module.ProductOnboardingPage })))
 const ManagedLoginPage = lazy(() => import('./core/ManagedLoginPage').then((module) => ({ default: module.ManagedLoginPage })))
 const ManagedAccountPage = lazy(() => import('./core/ManagedAccountPage').then((module) => ({ default: module.ManagedAccountPage })))
 const visionPreviewEnabled = import.meta.env.DEV || import.meta.env.VITE_SUPERMEGA_VISION_PREVIEW === '1'
@@ -31,6 +32,15 @@ function productDemoPath(value: string | null) {
   return null
 }
 
+function setupProductFromQuery(value: string | null) {
+  const product = value?.toLowerCase()
+  if (product === 'shop' || product === 'commerce') return 'commerce' as const
+  if (product === 'plant' || product === 'production') return 'production' as const
+  if (product === 'website') return 'website' as const
+  if (product === 'ecommerce') return 'ecommerce' as const
+  return null
+}
+
 function ProductHomeEntry() {
   const location = useLocation()
   const route = productDemoPath(new URLSearchParams(location.search).get('demo'))
@@ -43,6 +53,15 @@ function LegacyEntryRedirect() {
   const route = productDemoPath(params.get('demo'))
 
   return <Navigate replace to={route ?? '/'} />
+}
+
+function SettingsEntry() {
+  const location = useLocation()
+  const product = setupProductFromQuery(new URLSearchParams(location.search).get('product'))
+
+  return product
+    ? <Suspense fallback={<ProductLoading name="product setup" />}><ProductOnboardingPage product={product} /></Suspense>
+    : <Suspense fallback={<ProductLoading name="client setup" />}><SettingsPage /></Suspense>
 }
 
 export default function App() {
@@ -62,7 +81,7 @@ export default function App() {
           <Route element={<Navigate replace to="/" />} path="work/*" />
           <Route element={<Navigate replace to="/website/" />} path="products/website/*" />
           <Route element={<Navigate replace to="/ecommerce/" />} path="products/ecommerce/*" />
-          <Route element={<Suspense fallback={<ProductLoading name="client setup" />}><SettingsPage /></Suspense>} path="settings/*" />
+          <Route element={<SettingsEntry />} path="settings/*" />
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
           <Route element={<Navigate replace to="/" />} path="agents/*" />
           <Route element={<Navigate replace to="/" />} path="assist/*" />
