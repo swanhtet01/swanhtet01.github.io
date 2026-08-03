@@ -12,6 +12,7 @@ import {
 import { currentProductionShiftClose } from './production-workspace'
 import {
   productContracts,
+  managedTrialRequestUrl,
   readProductSetup,
   rememberProductSetup,
   seedSetupForProduct,
@@ -199,6 +200,15 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     }
   }
 
+  function recordGuidedSetupRequest() {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'product_requested',
+      product,
+      route: `/settings/?product=${onboardingProduct.slug}`,
+      detail: `Requested guided ${onboardingProduct.name} setup`,
+    })
+  }
+
   return (
     <div className="workspace-screen settings-screen product-onboarding-screen" data-product={product}>
       <PageHeading
@@ -216,6 +226,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
             <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates a local workspace with realistic sample records.' : 'No setup needed—use the sample above.'}</small>
           </div>
           <p className="product-onboarding-boundary">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
+          <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
           <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>
         </form>
       </div>

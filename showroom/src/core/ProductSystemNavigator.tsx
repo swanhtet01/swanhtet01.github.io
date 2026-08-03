@@ -8,7 +8,7 @@ import {
   type ClientCapability,
 } from './client-capability-plan'
 import { readPlantIndustryPackId, type PlantIndustryPackId } from './plant-industry-packs'
-import { productContracts, templateFor } from './product-setup'
+import { clientSetupPath, productContracts, templateFor } from './product-setup'
 import {
   readShopServiceSchedule,
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
@@ -20,14 +20,14 @@ import { useManagedIdentity, useSetupWorkspace } from './workspace-runtime'
 
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 
-type ProductSystemDetail = { label: string; primaryPath: string; requestPath: string; dataTitle: string; dataAction: string }
-type ProductActivationEvent = 'next_steps_opened' | 'data_setup_opened' | 'product_requested'
+type ProductSystemDetail = { label: string; primaryPath: string; dataTitle: string; dataAction: string }
+type ProductActivationEvent = 'next_steps_opened' | 'data_setup_opened'
 
 const productDetails: Record<ClientSolutionId, ProductSystemDetail> = {
-  commerce: { label: 'Shop', primaryPath: '/shop/', requestPath: 'https://supermega.dev/contact/?product=shop&utm_source=app&utm_medium=product&utm_campaign=working-sample', dataTitle: 'Use your items and stock', dataAction: 'Use my Shop data' },
-  production: { label: 'Plant', primaryPath: '/plant/', requestPath: 'https://supermega.dev/contact/?product=plant&utm_source=app&utm_medium=product&utm_campaign=working-sample', dataTitle: 'Use your jobs and plan', dataAction: 'Use my Plant data' },
-  website: { label: 'Website', primaryPath: '/website/', requestPath: 'https://supermega.dev/contact/?product=website&utm_source=app&utm_medium=product&utm_campaign=working-sample', dataTitle: 'Use your pages and content', dataAction: 'Use my website content' },
-  ecommerce: { label: 'Ecommerce', primaryPath: '/ecommerce/', requestPath: 'https://supermega.dev/contact/?product=ecommerce&utm_source=app&utm_medium=product&utm_campaign=working-sample', dataTitle: 'Use your store catalog', dataAction: 'Use my store data' },
+  commerce: { label: 'Shop', primaryPath: '/shop/', dataTitle: 'Use your items and stock', dataAction: 'Use my Shop data' },
+  production: { label: 'Plant', primaryPath: '/plant/', dataTitle: 'Use your jobs and plan', dataAction: 'Use my Plant data' },
+  website: { label: 'Website', primaryPath: '/website/', dataTitle: 'Use your pages and content', dataAction: 'Use my website content' },
+  ecommerce: { label: 'Ecommerce', primaryPath: '/ecommerce/', dataTitle: 'Use your store catalog', dataAction: 'Use my store data' },
 }
 
 function readCurrentShopIndustryPackId(): ShopIndustryPackId {
@@ -114,8 +114,8 @@ export function ProductSystemNavigator({ product, managed = false }: { product: 
       </summary>
       <div className="product-system-body">
         <header>
-          <div><span className="core-eyebrow">{details.label}</span><h2>Keep working in {details.label}</h2><p>Choose another working flow, use your data, or ask us to set up {details.label} for your business.</p></div>
-          <div className="product-system-actions"><a className="core-button compact primary" href={details.requestPath} onClick={() => recordActivationSignal('product_requested', `Requested ${details.label} setup`)}>Get {details.label} for my business</a></div>
+          <div><span className="core-eyebrow">{details.label}</span><h2>Keep working in {details.label}</h2><p>Choose another working flow, use your data, or make this sample yours.</p></div>
+          <div className="product-system-actions"><Link className="core-button compact primary" to={clientSetupPath(product)}>Make {details.label} mine</Link></div>
         </header>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
           {workingFlows.map((capability) => <WorkflowLink capability={capability} fallbackPath={details.primaryPath} key={capability.id} />)}

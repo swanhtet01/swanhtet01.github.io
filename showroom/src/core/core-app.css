@@ -779,6 +779,9 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-primary .core-button { flex: 0 0 auto; }
 .product-onboarding-primary small { color: var(--core-quiet); font-size: 10px; line-height: 1.4; }
 .product-onboarding-boundary { border-left: 3px solid var(--core-green); padding: 8px 10px; background: var(--core-green-soft); color: var(--core-ink) !important; font-size: 10px !important; }
+.product-onboarding-help { margin: 0; color: var(--core-muted); font-size: 10px; }
+.product-onboarding-help a { color: var(--core-ink); font-weight: 780; text-underline-offset: 3px; }
+.product-onboarding-help a:hover { color: var(--core-green); }
 .ai-setup-guide { display: grid; grid-template-columns: minmax(220px,1fr) minmax(300px,.9fr) auto; align-items: center; gap: 18px; border-top: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 14px 18px; background: var(--core-green-soft); }
 .ai-setup-guide-copy { min-width: 0; display: grid; gap: 4px; }
 .ai-setup-guide-copy h2 { margin: 0; font-size: 16px; line-height: 1.25; }
