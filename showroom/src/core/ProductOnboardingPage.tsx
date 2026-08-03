@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { Link, useNavigate, useOutletContext } from 'react-router'
+import { useNavigate, useOutletContext } from 'react-router'
 
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { recordBehaviorSignal } from './behavior-trail'
@@ -132,7 +132,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   async function startGuidedWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!workflowReady) {
-      setNotice('Enter the business name first.')
+      setNotice('Enter a business name.')
       return
     }
     if (workspaceStarted) {
@@ -212,18 +212,17 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   return (
     <div className="workspace-screen settings-screen product-onboarding-screen" data-product={product}>
       <PageHeading
-        actions={<div className="product-onboarding-demo-action"><Link className="core-button primary" to={setupProductPreviewPath(product)}>Open {onboardingProduct.name} sample</Link><small>Instant. No account, form, or upload.</small></div>}
-        copy={`Open the working ${onboardingProduct.name} sample now. Add a business name only if you want your own saved workspace.`}
-        eyebrow={`${onboardingProduct.name} only`}
-        title={`Try ${onboardingProduct.name} now`}
+        copy={`Name this ${onboardingProduct.name} workspace once. SuperMega prepares a working copy and opens the first task.`}
+        eyebrow={`${onboardingProduct.name} setup`}
+        title={`Make ${onboardingProduct.name} yours`}
       />
       <div aria-label={`${onboardingProduct.name} onboarding`} className="product-onboarding-grid">
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
-          <div className="product-onboarding-intro"><span className="core-eyebrow">Optional</span><h2>Save your own workspace</h2><p>Enter one business name. We will open a working copy with sample records.</p></div>
+          <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>We will add realistic sample records now; replace them with your data whenever you are ready.</p></div>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           <div className="product-onboarding-primary">
             <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : `Create my ${onboardingProduct.name} workspace`}</button>
-            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates a local workspace with realistic sample records.' : 'No setup needed—use the sample above.'}</small>
+            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates a local workspace with realistic sample records.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-boundary">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>

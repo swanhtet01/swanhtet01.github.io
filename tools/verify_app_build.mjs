@@ -475,7 +475,7 @@ if (!indexSource.includes('<title>SuperMega</title>')
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Demo mode', 'Save your own workspace', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Demo mode', 'Name your workspace', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
@@ -2792,8 +2792,8 @@ if (!localWorkspaceBackupSource.includes("LOCAL_WORKSPACE_BACKUP_CONTRACT = 'sup
   || !settingsPageSource.includes('Restore previous workspace')) fail('local_workspace_restore_contract_missing')
 const settingsAdvancedIndex = settingsPageSource.indexOf('<details className="settings-advanced"')
 const settingsRestorePointIndex = settingsPageSource.indexOf('aria-label="Local workspace restore point"')
-const productWorkingSampleIndex = productOnboardingPageSource.indexOf('Open {onboardingProduct.name} sample')
-const productWorkspaceIndex = productOnboardingPageSource.indexOf('`Create my ${onboardingProduct.name} workspace`', productWorkingSampleIndex)
+const productOnboardingHeadingIndex = productOnboardingPageSource.indexOf('title={`Make ${onboardingProduct.name} yours`}')
+const productWorkspaceIndex = productOnboardingPageSource.indexOf('`Create my ${onboardingProduct.name} workspace`', productOnboardingHeadingIndex)
 const productBoundaryIndex = productOnboardingPageSource.indexOf('This setup affects {onboardingProduct.name} only.')
 const productRepeatEntryIndex = productOnboardingPageSource.indexOf('if (workspaceStarted) {')
 const productProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'commerce') {", productRepeatEntryIndex)
@@ -2801,8 +2801,8 @@ if (settingsAdvancedIndex < 0
   || settingsRestorePointIndex < settingsAdvancedIndex
   || !settingsPageSource.includes('className="setup-complete settings-restore-point"')
   || !coreCssSource.includes('.settings-restore-point { grid-column: 1 / -1; }')
-  || productWorkingSampleIndex < 0
-  || productWorkspaceIndex < productWorkingSampleIndex
+  || productOnboardingHeadingIndex < 0
+  || productWorkspaceIndex < productOnboardingHeadingIndex
   || productBoundaryIndex < productWorkspaceIndex
   || productRepeatEntryIndex < 0
   || productProvisioningIndex < productRepeatEntryIndex) fail('product_setup_primary_action_hierarchy_wrong')
@@ -3863,14 +3863,16 @@ if (!coreSource.includes('aria-label="Shop attention"')
   || !coreSource.includes('<details className="core-panel today-more')
   || !settingsPageSource.includes("useState<'workflow' | 'success'>('workflow')")
   || !settingsPageSource.includes('<PageHeading eyebrow="Client setup" title="Set up a client demo"')
-  || !productOnboardingPageSource.includes('title={`Try ${onboardingProduct.name} now`}')
-  || !productOnboardingPageSource.includes('Open {onboardingProduct.name} sample')
-  || !productOnboardingPageSource.includes('Save your own workspace')
-  || !productOnboardingPageSource.includes('Enter one business name. We will open a working copy with sample records.')
+  || !productOnboardingPageSource.includes('title={`Make ${onboardingProduct.name} yours`}')
+  || !productOnboardingPageSource.includes('Name this ${onboardingProduct.name} workspace once. SuperMega prepares a working copy and opens the first task.')
+  || !productOnboardingPageSource.includes('Name your workspace')
+  || !productOnboardingPageSource.includes('We will add realistic sample records now; replace them with your data whenever you are ready.')
   || !productOnboardingPageSource.includes('`Create my ${onboardingProduct.name} workspace`')
   || !productOnboardingPageSource.includes('workspaceStarted ? `Open my ${onboardingProduct.name}`')
   || !productOnboardingPageSource.includes('Opening it will not run setup again.')
   || !productOnboardingPageSource.includes('Nothing is sent or published.')
+  || productOnboardingPageSource.includes('Open {onboardingProduct.name} sample')
+  || productOnboardingPageSource.includes('product-onboarding-demo-action')
   || productOnboardingPageSource.includes('Responsible role')
   || productOnboardingPageSource.includes('Starting workflow')
   || productOnboardingPageSource.includes('What is included?')
@@ -4983,7 +4985,7 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('clientImportTemplate(product, workflowTemplateId, templateContext)')
   || ['fetch(', 'localStorage', 'sessionStorage', 'supabase'].some((marker) => clientOnboardingUiSource.includes(marker))) fail('four_product_client_onboarding_ui_missing_or_unsafe')
 const productOnboardingBranch = productOnboardingPageSource.indexOf('export function ProductOnboardingPage')
-const productOnboardingSampleAction = productOnboardingPageSource.indexOf('Open {onboardingProduct.name} sample')
+const productOnboardingHeading = productOnboardingPageSource.indexOf('title={`Make ${onboardingProduct.name} yours`}')
 const productOnboardingBusinessFields = productOnboardingPageSource.indexOf('<label className="product-onboarding-business-name">Business name<input')
 const productOnboardingWorkspaceAction = productOnboardingPageSource.indexOf('`Create my ${onboardingProduct.name} workspace`', productOnboardingBusinessFields)
 const productOnboardingBoundary = productOnboardingPageSource.indexOf('This setup affects {onboardingProduct.name} only.', productOnboardingWorkspaceAction)
@@ -5072,14 +5074,14 @@ if (!productSetupSource.includes('templateId: string')
   || !settingsPageSource.includes('clientDemoKitReadiness(demoBlueprintSource')
   || !settingsPageSource.includes('The saved workspace no longer matches the current setup contract.')
   || settingsPageSource.includes('JSON.stringify(buildClientDemoKit(demoBlueprint')
-  || !productOnboardingPageSource.includes('Open the working ${onboardingProduct.name} sample now. Add a business name only if you want your own saved workspace.')
+  || !productOnboardingPageSource.includes('Name this ${onboardingProduct.name} workspace once. SuperMega prepares a working copy and opens the first task.')
   || settingsPageSource.includes('aria-label="Setup steps"')
   || settingsPageSource.includes('className="setup-selected-product"')
   || settingsPageSource.includes('requestedProduct')
   || settingsPageSource.includes('product-onboarding-screen')
   || productOnboardingBranch < 0
-  || productOnboardingSampleAction < productOnboardingBranch
-  || productOnboardingBusinessFields < productOnboardingSampleAction
+  || productOnboardingHeading < productOnboardingBranch
+  || productOnboardingBusinessFields < productOnboardingHeading
   || productOnboardingWorkspaceAction < productOnboardingBusinessFields
   || productOnboardingBoundary < productOnboardingWorkspaceAction
   || productOnboardingEnd < productOnboardingBoundary
@@ -5101,8 +5103,11 @@ if (!productSetupSource.includes('templateId: string')
   || productOnboardingPageSource.includes('product-onboarding-step')
   || productOnboardingPageSource.includes('product-onboarding-sample')
   || productOnboardingPageSource.includes('onboarding choices')
-  || !productOnboardingPageSource.includes('Instant. No account, form, or upload.')
-  || !productOnboardingPageSource.includes('Enter one business name. We will open a working copy with sample records.')
+  || !productOnboardingPageSource.includes('One step')
+  || !productOnboardingPageSource.includes('We will add realistic sample records now; replace them with your data whenever you are ready.')
+  || !productOnboardingPageSource.includes('Enter a business name to continue.')
+  || productOnboardingPageSource.includes('Open {onboardingProduct.name} sample')
+  || productOnboardingPageSource.includes('product-onboarding-demo-action')
   || !productOnboardingPageSource.includes('This setup affects {onboardingProduct.name} only. Your other products stay separate.')
   || !productOnboardingPageSource.includes('Need help bringing real data?')
   || !coreCssSource.includes('.product-onboarding-help { margin: 0;')
@@ -5150,7 +5155,7 @@ if (!productSetupSource.includes('templateId: string')
   || !coreCssSource.includes('.settings-screen .setup-form { overflow: visible; }')
   || !coreCssSource.includes('.product-onboarding-screen .page-heading p { max-width: 720px; overflow: visible; text-overflow: clip; white-space: normal; }')
   || !coreCssSource.includes('.product-onboarding-grid { width: min(100%,720px); display: grid; grid-template-columns: minmax(0,1fr);')
-  || !coreCssSource.includes('.product-onboarding-demo-action { display: grid; justify-items: end;')
+  || coreCssSource.includes('.product-onboarding-demo-action')
   || !coreCssSource.includes('.product-onboarding-business-name input { min-height: 50px;')
   || coreCssSource.includes('.product-onboarding-options {')
   || coreCssSource.includes('.product-onboarding-details >')
@@ -18505,9 +18510,14 @@ else {
   const productOnboardingArtifact = await readFile(productOnboardingArtifactPath, 'utf8')
   const productOnboardingBytes = (await stat(productOnboardingArtifactPath)).size
   if (productOnboardingBytes > 25_000
-    || !productOnboardingArtifact.includes('Save your own workspace')
-    || !productOnboardingArtifact.includes('Instant. No account, form, or upload.')
+    || !productOnboardingArtifact.includes('Name your workspace')
+    || !productOnboardingArtifact.includes('One step')
+    || !productOnboardingArtifact.includes('Enter a business name to continue.')
     || productOnboardingArtifact.includes('Import existing data')
+    || productOnboardingArtifact.includes('Open Shop sample')
+    || productOnboardingArtifact.includes('Open Plant sample')
+    || productOnboardingArtifact.includes('Open Website sample')
+    || productOnboardingArtifact.includes('Open Ecommerce sample')
     || !productOnboardingArtifact.includes('Opening it will not run setup again.')
     || productOnboardingArtifact.includes('Responsible role')
     || productOnboardingArtifact.includes('Starting workflow')
