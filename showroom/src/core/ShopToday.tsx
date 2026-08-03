@@ -15,6 +15,7 @@ export type ShopTodayModule = {
 }
 
 type ShopTodayProps = {
+  catalogReady: boolean
   metrics: ShopTodayMetric[]
   modules: ShopTodayModule[]
   nextAction: string
@@ -31,13 +32,14 @@ const capabilityGroups = [
   ['Control', 'Daily close, settlement review, accounting export, audit'],
 ] as const
 
-const guidedJobs = [
-  ['1', 'Make a sale', 'Tap items, choose payment, and save a receipt.', '/shop/?tab=counter'],
-  ['2', 'Finish orders', 'Check online orders, payment, delivery, returns, and cancellations.', '/shop/?tab=orders'],
-  ['3', 'Check stock', 'See low stock, counts, receiving, and buying.', '/shop/?tab=inventory'],
-] as const
-
-export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: ShopTodayProps) {
+export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDetail, nextTo }: ShopTodayProps) {
+  const guidedJobs = [
+    catalogReady
+      ? ['1', 'Make a sale', 'Tap items, choose payment, and save a receipt.', '/shop/?tab=counter']
+      : ['1', 'Add your products', 'Load a sample or map a product file before the first sale.', '/shop/?tab=inventory#shop-catalog-import'],
+    ['2', 'Finish orders', 'Check online orders, payment, delivery, returns, and cancellations.', '/shop/?tab=orders'],
+    ['3', 'Check stock', 'See low stock, counts, receiving, and buying.', '/shop/?tab=inventory'],
+  ] as const
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Next Shop action">
       <div>
@@ -47,7 +49,7 @@ export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: 
       </div>
       <div className="shop-today-actions">
         <Link className="core-button primary" to={nextTo}>Open next step</Link>
-        <Link className="core-button" to="/shop/?tab=counter">New sale</Link>
+        {catalogReady ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
       </div>
     </section>
 
