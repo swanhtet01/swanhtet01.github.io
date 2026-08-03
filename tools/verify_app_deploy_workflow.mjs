@@ -23,6 +23,7 @@ const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mj
 const appVerifier = await readFile(resolve(root, 'tools/verify_app_release_live.mjs'), 'utf8')
 const publicVerifier = await readFile(resolve(root, 'tools/verify_public_release_live.mjs'), 'utf8')
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
+const gitIgnore = await readFile(resolve(root, '.gitignore'), 'utf8')
 const releaseBarrier = await readFile(resolve(root, 'tools/verify_coordinated_release_live.mjs'), 'utf8')
 const databaseValidator = await readFile(resolve(root, 'tools/validate_supermega_database_url.py'), 'utf8')
 const migrationVerifier = await readFile(resolve(root, 'tools/verify_private_trial_migrations.mjs'), 'utf8')
@@ -264,6 +265,13 @@ requireContract('all API tests trigger review and execute before manual release'
 requireContract('runtime package changes trigger non-mutating review', [ciWorkflow, appWorkflow].every((source) => source.includes("- 'supermega_runtime/**'")))
 requireContract('database activation controls trigger non-mutating review',
   [ciWorkflow, appWorkflow].every((source) => source.includes('tools/validate_supermega_database_url.py') && source.includes('tools/activate_supermega_database.ps1')))
+requireContract('rehearsal packet changes trigger both reviews and keep operator files ignored',
+  [ciWorkflow, appWorkflow].every((source) =>
+    source.includes('tools/prepare_supabase_rehearsal_packet.mjs')
+    && source.includes('tools/prepare_supabase_rehearsal_packet.test.mjs'))
+  && appWorkflow.includes("- '.gitignore'")
+  && appWorkflow.includes("- '.github/workflows/showroom-ci.yml'")
+  && /^\.tmp\/$/m.test(gitIgnore))
 requireContract('PostgreSQL 17 rehearsal changes trigger every non-mutating database review',
   [ciWorkflow, appWorkflow].every((source) =>
     source.includes('tools/rehearse_supermega_postgres17.py')
