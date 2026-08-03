@@ -111,9 +111,17 @@ async function verifyOnce() {
   const homepage = pages.get('/') || ''
   for (const product of manifest.customerProducts) {
     const setupRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-    assert(homepage.includes(`href="${product.appRoute}"`), 'direct_product_route_missing', { product: product.id, appRoute: product.appRoute })
-    assert(!homepage.includes(`href="${setupRoute}"`), 'public_product_setup_detour_returned', { product: product.id, setupRoute })
+    const productPage = pages.get(product.publicAnchor) || ''
+    const contactRoute = `/contact/?product=${product.id}&amp;source=product-page`
+    assert(homepage.includes(`href="${product.publicAnchor}"`), 'focused_product_page_missing', { product: product.id, publicAnchor: product.publicAnchor })
+    assert(!homepage.includes(`href="${product.appRoute}"`), 'homepage_bypasses_product_context', { product: product.id, appRoute: product.appRoute })
+    assert(productPage.includes(`href="${product.appRoute}"`), 'direct_product_route_missing', { product: product.id, appRoute: product.appRoute })
+    assert(productPage.includes(`href="${contactRoute}"`), 'product_contact_route_missing', { product: product.id, contactRoute })
+    assert(!productPage.includes(`href="${setupRoute}"`), 'public_product_setup_detour_returned', { product: product.id, setupRoute })
     for (const template of product.templates) assert(!homepage.includes(template.name), 'template_catalog_exposed', { template: template.id })
+    for (const otherProduct of manifest.customerProducts.filter((candidate) => candidate.id !== product.id)) {
+      assert(!productPage.includes(otherProduct.appRoute) && !productPage.includes(`href="${otherProduct.publicAnchor}"`), 'other_product_exposed_on_focused_page', { product: product.id, otherProduct: otherProduct.id })
+    }
   }
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
@@ -142,9 +150,9 @@ async function verifyOnce() {
   assert(contact.controls?.idempotency === 'required' && contact.controls?.edge_rate_limit === 'required' && contact.controls?.trial_proof === 'optional_client_provided', 'contact_controls_wrong', contact)
 
   await Promise.all([
-    verifyRedirect('/products/shop/', '/#shop'),
-    verifyRedirect('/products/factory/', '/#plant'),
-    verifyRedirect('/products/ecommerce/', '/#ecommerce'),
+    verifyRedirect('/products/shop/', '/shop/'),
+    verifyRedirect('/products/factory/', '/plant/'),
+    verifyRedirect('/products/ecommerce/', '/ecommerce/'),
     verifyRedirect('/ai-agent-solutions/', '/#products'),
     verifyRedirect('/offers/', '/#products'),
     verifyRedirect('/solutions/', '/#products'),

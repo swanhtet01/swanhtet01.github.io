@@ -70,7 +70,7 @@ for (const product of publicProducts) {
     if (!template.outcome?.trim() || !template.metric?.trim() || template.workflow?.length < 5 || template.entryPoints?.length < 3) fail('public_template_contract_incomplete', { product: product.id, template: template.id })
   }
 }
-if (manifest.pages?.map((page) => page.route).join(',') !== '/,/contact/,/privacy/') fail('public_page_surface_not_minimal')
+if (manifest.pages?.map((page) => page.route).join(',') !== '/,/shop/,/plant/,/website/,/ecommerce/,/contact/,/privacy/') fail('public_page_surface_not_product_focused')
 
 const expectedStaticFiles = new Set([
   ...manifest.pages.map((page) => page.file),
@@ -172,30 +172,30 @@ for (const token of [
   'href="#products">Choose a product</a>',
   'id="products"',
   '>Products<',
-  'Choose one product to try.',
-  'Open a working browser sample instantly. No account or setup is required; add your own data only after the workflow proves useful.',
-  'Need this for your company?',
+  'Choose one product to explore.',
+  'See what each product does, then open only the working sample you chose. No account or setup is required.',
+  'Not sure which one fits?',
   'id="trust"',
   'aria-label="Security boundary"',
   'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
-  'https://app.supermega.dev/shop/',
-  'https://app.supermega.dev/plant/',
+  'href="/shop/">See Shop</a>',
+  'href="/plant/">See Plant</a>',
   'id="website"',
-  'https://app.supermega.dev/website/',
+  'href="/website/">See Website</a>',
   'id="ecommerce"',
   'Create an online ordering page connected to Shop.',
-  'https://app.supermega.dev/ecommerce/',
+  'href="/ecommerce/">See Ecommerce</a>',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const product of publicProducts) {
-  if (!home.includes(product.appRoute)) fail('direct_product_route_missing', { product: product.id })
-  if (!home.includes(`>Open ${product.name}</a>`)) fail('direct_product_cta_missing', { product: product.id })
+  if (!home.includes(`href="${product.publicAnchor}">See ${product.name}</a>`)) fail('focused_product_page_missing', { product: product.id })
+  if (home.includes(product.appRoute)) fail('homepage_bypasses_product_context', { product: product.id })
   for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
     if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
   }
 }
-if ((home.match(/>Open (?:Shop|Plant|Website|Ecommerce)<\/a>/g) || []).length !== 4) fail('direct_product_cta_count_wrong')
+if ((home.match(/>See (?:Shop|Plant|Website|Ecommerce)<\/a>/g) || []).length !== 4) fail('focused_product_cta_count_wrong')
 if (home.includes('Start guided trial') || home.includes('aria-label="Templates"')) fail('retired_public_setup_copy_returned')
 if (home.includes('https://app.supermega.dev/settings/?product=')) fail('public_product_setup_detour_returned')
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
@@ -206,6 +206,46 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
 if ((home.match(/<a\b/g) || []).length > 9) fail('homepage_link_surface_too_large')
+
+const productPageOutcomes = new Map([
+  ['shop', 'Sell, fulfil, and close the day from one operating record.'],
+  ['plant', 'Turn production jobs into controlled output and a clear shift close.'],
+  ['website', 'Turn a short business brief into a responsive website package.'],
+  ['ecommerce', 'Collect an online order request and hand it to Shop for review.'],
+])
+const productPageBoundaries = new Map([
+  ['shop', 'Live payments, messages, delivery, and company stock writes require an approved setup.'],
+  ['plant', 'Machine control and live production writes require an approved setup.'],
+  ['website', 'Publishing, hosting, analytics, and domain changes happen only after approval.'],
+  ['ecommerce', 'The sample does not charge, reserve stock, or create a Shop order until a named person confirms the handoff.'],
+])
+for (const product of publicProducts) {
+  const page = pages.get(product.publicAnchor)?.html || ''
+  const contactRoute = `/contact/?product=${product.id}&amp;source=product-page`
+  for (const token of [
+    productPageOutcomes.get(product.id),
+    `href="${product.appRoute}">Open working ${product.name} sample</a>`,
+    `href="${contactRoute}">Set up ${product.name} for my company</a>`,
+    'href="/#products">All products</a>',
+    'No account required',
+    'Ready sample data',
+    'Phone and desktop',
+    'Three steps, one clear record.',
+    'Useful before setup.',
+    productPageBoundaries.get(product.id),
+  ]) {
+    if (!page.includes(token)) fail('product_page_contract_missing', { product: product.id, token })
+  }
+  if (page.includes(`https://app.supermega.dev/settings/?product=${product.id}`)) fail('public_product_setup_detour_returned', { product: product.id })
+  if (!page.includes(product.appRoute)) fail('direct_product_route_missing', { product: product.id })
+  for (const otherProduct of publicProducts.filter((candidate) => candidate.id !== product.id)) {
+    if (page.includes(otherProduct.appRoute) || page.includes(`href="${otherProduct.publicAnchor}"`)) fail('other_product_exposed_on_focused_page', { product: product.id, otherProduct: otherProduct.id })
+  }
+  for (const template of product.templates || []) {
+    if (page.includes(template.name)) fail('template_catalog_exposed_on_product_page', { product: product.id, template: template.id })
+  }
+  if ((page.match(/<a\b/g) || []).length > 7) fail('product_page_link_surface_too_large', { product: product.id })
+}
 
 const contact = pages.get('/contact/')?.html || ''
 for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', '/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||\'\')', "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Your company and goal are already filled. Add your name and reply email, review the request, then send it.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Company and goal are ready for review from your AI memory.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'Could not route the request here. Please wait and try again.']) {

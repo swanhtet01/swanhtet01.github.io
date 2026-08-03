@@ -25,6 +25,55 @@ assert(manifest.company?.publicPricing === false, 'public_pricing_must_remain_hi
 
 const publicProducts = manifest.customerProducts
 
+const publicProductProfiles = new Map([
+  ['shop', {
+    outcome: 'Sell, fulfil, and close the day from one operating record.',
+    summary: 'Use a ready Shop sample for counter sales, orders, stock, purchasing, returns, and daily close.',
+    workflow: [
+      ['Sell', 'Add items and complete a sample counter sale.'],
+      ['Fulfil', 'Move orders through the next step and keep stock work beside them.'],
+      ['Close', 'Review the day, exceptions, and evidence before closing.'],
+    ],
+    proof: ['Counter, order, and stock work in one sample', 'Ready sample records with no account required', 'The same core tasks on phone and desktop'],
+    boundary: 'The public sample stores data in this browser. Live payments, messages, delivery, and company stock writes require an approved setup.',
+  }],
+  ['plant', {
+    outcome: 'Turn production jobs into controlled output and a clear shift close.',
+    summary: 'Use a ready Plant sample for jobs, materials, output, problems, quality, maintenance, and shift handoff.',
+    workflow: [
+      ['Plan', 'Choose a job and review its target, materials, and owner.'],
+      ['Run', 'Record output, downtime, quality issues, and material use.'],
+      ['Close', 'Review the shift result and leave accountable handoff evidence.'],
+    ],
+    proof: ['Jobs, output, and material trace in one sample', 'Quality and maintenance exceptions beside the work', 'Shift evidence stays attached to the operating record'],
+    boundary: 'The public sample stores data in this browser. Machine control and live production writes require an approved setup.',
+  }],
+  ['website', {
+    outcome: 'Turn a short business brief into a responsive website package.',
+    summary: 'Answer a short brief, edit a finite set of pages, review the mobile layout, and download the result.',
+    workflow: [
+      ['Brief', 'Add the company, audience, offer, proof, and contact path.'],
+      ['Review', 'Edit the finite pages and check desktop and mobile previews.'],
+      ['Download', 'Save ready pages and download a standalone website package.'],
+    ],
+    proof: ['Finite page editor instead of an open-ended builder', 'Responsive preview before any publish step', 'Standalone website download from the sample'],
+    boundary: 'The public sample stores work in this browser. Publishing, hosting, analytics, and domain changes happen only after approval.',
+  }],
+  ['ecommerce', {
+    outcome: 'Collect an online order request and hand it to Shop for review.',
+    summary: 'Use a Shop-backed sample storefront, recoverable cart, clear quote, request receipt, and human-confirmed Shop handoff.',
+    workflow: [
+      ['Browse', 'Choose available Shop-backed items and build a recoverable cart.'],
+      ['Review', 'Check pickup or delivery intent and the time-limited quote.'],
+      ['Handoff', 'Save a request receipt and let a named Shop operator confirm it.'],
+    ],
+    proof: ['Read-only Shop catalogue snapshot', 'Recoverable cart, quote, and request receipt', 'Human-confirmed Shop draft with duplicate rejection'],
+    boundary: 'The sample does not charge, reserve stock, or create a Shop order until a named person confirms the handoff.',
+  }],
+])
+
+assert(publicProducts.every((product) => publicProductProfiles.has(product.id)), 'public_product_profile_missing')
+
 const brand = manifest.brand
 
 function escapeHtml(value) {
@@ -257,6 +306,19 @@ const sharedStyle = `
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
   .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 13px; }
   .compact-solution > .card-link { margin-top: auto; }
+  .product-hero { max-width: 980px; padding: 64px 0 44px; }
+  .product-back { min-height: 44px; display: inline-flex; align-items: center; margin-bottom: 24px; color: var(--muted); font-size: 12px; font-weight: 740; text-decoration: none; }
+  .product-back:hover { color: var(--ink); }
+  .product-hero h1 { max-width: 880px; margin-top: 18px; }
+  .product-detail { padding: 0 0 72px; }
+  .product-detail-grid { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(320px,.85fr); gap: 14px; }
+  .product-workflow-panel, .product-proof-panel { border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(25,54,42,.045); }
+  .product-workflow-panel h2, .product-proof-panel h2 { margin-top: 16px; font-size: 28px; }
+  .product-workflow-panel .steps { margin-top: 22px; }
+  .product-proof-list { display: grid; gap: 0; margin: 22px 0 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
+  .product-proof-list li { min-height: 54px; display: grid; grid-template-columns: 18px 1fr; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .product-proof-list li::before { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; content: ">_"; }
+  .product-boundary { margin: 22px 0 0; border-left: 2px solid var(--green); padding-left: 13px; color: var(--quiet); font-size: 11px; }
   .product-roadmap { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
   .roadmap-solution { min-height: 228px; display: flex; flex-direction: column; }
   .roadmap-solution > p { min-height: 0; }
@@ -283,12 +345,12 @@ const sharedStyle = `
   :focus-visible { outline: 3px solid rgba(11,116,94,.34); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; } }
   @media (max-width: 980px) { .hero { grid-template-columns: 1fr; gap: 42px; padding-top: 60px; } .hero-copy { max-width: 820px; } .workspace { transform: none; } .split, .solution-block { grid-template-columns: 1fr; gap: 30px; } .sticky-copy { position: static; } .surface-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .surface-card:last-child { grid-column: 1/-1; min-height: 210px; } .principle-grid, .trust-compact { grid-template-columns: repeat(2,minmax(0,1fr)); } .product-roadmap { grid-template-columns: 1fr; } .contact-layout { grid-template-columns: 1fr; gap: 42px; } }
-  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .brand { gap: 8px; font-size: 11px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap, .shared-capability { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
+  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .brand { gap: 8px; font-size: 11px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap, .shared-capability, .product-detail-grid { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 38px; } .product-card { padding: 24px; } .compact-solution { padding: 22px; } }
   @media (min-width: 761px) { .detail-disclosure > summary { display: none; } details.detail-disclosure:not([open]) > .disclosure-body { display: block; } .detail-disclosure { margin-top: 0; border-top: 0; } .product-disclosure .disclosure-body { padding-top: 16px; } }
   @media (max-width: 760px) { .hero { gap: 28px; padding-top: 28px; padding-bottom: 32px; } .hero-note { display: none; } .section { padding: 32px 0; } .section-head { margin-bottom: 18px; } .section-head p { font-size: 16px; } .workspace-bar { min-height: 44px; } .system-preview-body { padding: 14px 16px; } .system-row { min-height: 44px; } .system-boundary { margin-top: 14px; } .compact-solution > p { min-height: 0; } .closing-strip { padding: 22px; } }
   @media (max-width: 420px) { .compact-solution { padding: 18px; } }
-  @media (max-width: 520px) { .compact-solutions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } .compact-solution { min-height: 250px; padding: 16px; } .compact-solution h3 { margin-top: 12px; font-size: 22px; } .compact-solution > p { font-size: 11px; line-height: 1.45; } .compact-solution .card-index { min-height: 28px; font-size: 8px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { font-size: 12px; } }
+  @media (max-width: 520px) { .compact-solutions { grid-template-columns: 1fr; gap: 10px; } .compact-solution { min-height: 210px; padding: 20px; } .compact-solution h3 { margin-top: 12px; font-size: 26px; } .compact-solution > p { font-size: 13px; line-height: 1.5; } .compact-solution .card-index { min-height: 28px; font-size: 9px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { font-size: 13px; } .product-workflow-panel, .product-proof-panel { padding: 22px; } }
 `
 
 function brandHtml() {
@@ -341,8 +403,22 @@ function productCardHtml(product, index) {
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
     <div class="module-tags" role="group" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
-    <a class="card-link" href="${escapeHtml(product.appRoute)}">Open ${escapeHtml(product.name)}</a>
+    <a class="card-link" href="${escapeHtml(product.publicAnchor)}">See ${escapeHtml(product.name)}</a>
   </article>`
+}
+
+function productPageHtml(product) {
+  const profile = publicProductProfiles.get(product.id)
+  const contactRoute = `/contact/?product=${encodeURIComponent(product.id)}&source=product-page`
+  return documentHtml({
+    route: product.publicAnchor,
+    title: `${product.name} | SuperMega`,
+    description: profile.summary,
+    content: `<main>
+      <section class="frame product-hero"><a class="product-back" href="/#products">All products</a><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(profile.outcome)}</h1><p class="lede">${escapeHtml(profile.summary)}</p><div class="actions"><a class="button primary" href="${escapeHtml(product.appRoute)}">Open working ${escapeHtml(product.name)} sample</a><a class="button" href="${escapeHtml(contactRoute)}">Set up ${escapeHtml(product.name)} for my company</a></div><div class="hero-note"><span>No account required</span><span>Ready sample data</span><span>Phone and desktop</span></div></section>
+      <section class="frame product-detail" aria-label="${escapeHtml(product.name)} workflow"><div class="product-detail-grid"><section class="product-workflow-panel"><span class="eyebrow">How it works</span><h2>Three steps, one clear record.</h2><div class="steps">${profile.workflow.map(([title, detail]) => `<div class="step"><div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></div></div>`).join('')}</div></section><aside class="product-proof-panel"><span class="eyebrow">What is included</span><h2>Useful before setup.</h2><ul class="product-proof-list">${profile.proof.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul><p class="product-boundary">${escapeHtml(profile.boundary)}</p></aside></div></section>
+    </main>`,
+  })
 }
 
 const homeHtml = documentHtml({
@@ -351,7 +427,7 @@ const homeHtml = documentHtml({
   description: manifest.company.statement,
   content: `<main>
     <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four focused products</span><span>Working samples</span><span>Mobile-ready workflows</span></div></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to try.</h2><p>Open a working browser sample instantly. No account or setup is required; add your own data only after the workflow proves useful.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need this for your company?</h2><p>Tell us the product, your existing data, and the first workflow to prove. We will define the setup and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to explore.</h2><p>See what each product does, then open only the working sample you chose. No account or setup is required.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Not sure which one fits?</h2><p>Tell us one workflow that should run better. We will point you to the smallest useful starting product.</p></div><a class="button primary" href="/contact/">Ask SuperMega</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })
@@ -947,6 +1023,7 @@ module.exports = async function handler(req, res) {
 
 const pageFiles = new Map([
   ['index.html', homeHtml],
+  ...publicProducts.map((product) => [`${product.id}/index.html`, productPageHtml(product)]),
   ['contact/index.html', contactHtml],
   ['privacy/index.html', privacyHtml],
   ['404.html', notFoundHtml],
