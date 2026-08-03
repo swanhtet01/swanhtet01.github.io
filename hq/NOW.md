@@ -4,8 +4,8 @@ Updated: 2026-08-03
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `e15d4a585b608a10a00b0dcd8a6842818d763bb4`
-Live state observed: `2026-08-03T06:14:38.116Z`
+Live release commit: `690680540efaf138bfb7f57038371de01ea6bd1d`
+Live state observed: `2026-08-03T12:10:28.945Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -31,10 +31,9 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Implemented reality
 
-- HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle. `multi_agent = false`; one lease blocks duplicates, and unloaded roles/models consume no idle compute.
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
-- Each CEO cycle selects one outcome. Only exact local-only drift is advisory; all other failures block. Owner-send uncertainty retains claims and is never auto-retried.
+- HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancellation releases, completion consumes, and sellable returns restore the exact fulfilled location/lot.
@@ -47,20 +46,17 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Plant quality problems now require structured CAPA evidence before an actionable record can close. Recurrence is Unicode-safe; release, stock blocks, customer contact, certificates, and effectiveness follow-up stay separate.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - Shop, Plant, Website, and Ecommerce render the real workspace before one collapsed `More tools` drawer; workflow and setup access remain available without internal counts or a redundant product-entry button (`058c2914`).
-- Product setup asks for client and owner first, exposes one unobstructed `Open working sample`, and collapses optional workflow, data, and success detail (`e3ec8b3f`).
 - Plant's state-aware mobile action carries one shift through output, same-shift material, blocker review, accountable close, and next output; reload restores the shift and closed metrics (`2909fd66`).
-- Website's mobile mission reaches a reviewed file (`2824da83`); Ecommerce now starts a sample order directly, carries one reviewed quote into Shop, and restores confirmed progress after reload (`e15d4a58`).
+- Website now has one state-aware **Customize demo** action and the shared product eyebrow hierarchy; exact paired release and mobile browser proof passed without overflow or console errors (`69068054`).
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
-- CEO status is output-free across weekly briefs. Company Week separates recorded from delivered and fails incomplete delivery to attention; Company Health shows receipt counts (`8d97d4d`, `ece46ce`).
-- CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- Checks: 106 Ecommerce, 342 Commerce, 327 Production, 95 security, 241 onboarding, 11 backup, 85 managed import, and 52 PostgreSQL 17 checks across nine migrations.
+- Checks: 106 Ecommerce, 342 Commerce, 327 Production, 109 Website, 95 security, 241 onboarding, 11 backup, 85 managed import, and 52 PostgreSQL 17 checks across ten migrations.
 - The deterministic 12-profile rehearsal passes 24 rows. Live Shop reaches the counter; Plant mobile passes output through next output; Website mobile passes edit through standalone file; Ecommerce mobile passes sample start, cart, quote, review, Shop order, return, and reload. All four product missions are overflow-free on desktop. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
-- Both domains serve deployed `e15d4a585b608a10a00b0dcd8a6842818d763bb4`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Both Vercel deployments are READY with zero one-hour runtime errors.
+- Both domains serve deployed `690680540efaf138bfb7f57038371de01ea6bd1d`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Both Vercel deployments are READY.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating and stops no process. The Ally remains under `memory_pressure_critical` with zero run admission, zero loaded models, and local subagents disabled. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -72,9 +68,9 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
-- `supermegabase` remains private schema v7 with no active workspace. Reviewed v8 RLS is code-only; writes stay off until backup, exact target binding, hosted advisors, tenant proof, and owner-authorized migration. The 27 legacy public tables remain outside app and browser-role access.
+- Read-only hosted audit: `supermegabase` is PostgreSQL 17.6, private schema v7, 14 private policies, and zero workspace data; its 27 Security Advisor notices are INFO-only default-deny legacy public tables. v8-v9 remain code-only, and writes stay off pending isolated backup/restore, target binding, tenant/Auth/Storage proof, and owner authorization.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `e15d4a58`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `69068054`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
