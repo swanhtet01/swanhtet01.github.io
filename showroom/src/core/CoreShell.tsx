@@ -393,6 +393,13 @@ export function ProductHomePage() {
   const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
   const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
+  const managedReadiness = runtime.importProvisioning ? {
+    ready: runtime.importProvisioning.ready,
+    checks: runtime.importProvisioning.checks,
+    forbiddenUntilReady: runtime.importProvisioning.forbidden_until_ready,
+    nextAction: runtime.importProvisioning.next_action,
+    safeEnable: runtime.activationManifest?.safe_enable ?? [],
+  } : null
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Pick one product and use the working demo first. Add your data only after the flow makes sense." eyebrow="SuperMega" title="Start with one product." />
@@ -411,14 +418,12 @@ export function ProductHomePage() {
           </article>
         ))}
       </nav>
-      {hostedReady ? (
-        <section aria-label="Company dashboard" className="product-home-managed-overview">
-          <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
-          <Suspense fallback={<p className="form-notice" role="status">Loading company readiness...</p>}>
-            <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
-          </Suspense>
-        </section>
-      ) : null}
+      <section aria-label="Company workspace readiness" className="product-home-managed-overview">
+        {hostedReady ? <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense> : null}
+        <Suspense fallback={<p className="form-notice" role="status">Loading company readiness...</p>}>
+          <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} managedReadiness={managedReadiness} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
+        </Suspense>
+      </section>
       <details className="product-home-setup">
         <summary><span><strong>Add your data</strong><small>Choose one product when its demo makes sense</small></span><b>Later</b></summary>
         <div aria-label="Product data setup" className="product-home-data-start" role="region">

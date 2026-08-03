@@ -336,12 +336,13 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
 
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
+  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
     <div class="module-tags" role="group" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
-    <a class="card-link" href="${escapeHtml(product.appRoute)}">Open product</a>
+    <a class="card-link" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a>
   </article>`
 }
 
@@ -351,7 +352,7 @@ const homeHtml = documentHtml({
   description: manifest.company.statement,
   content: `<main>
     <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four focused products</span><span>Working samples</span><span>Mobile-ready workflows</span></div></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to try.</h2><p>Open Shop, Plant, Website, or Ecommerce. Each product has a working sample and a setup path for your data.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need this for your company?</h2><p>Tell us the product, your existing data, and the first workflow to prove. We will define the setup and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to try.</h2><p>Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Need this for your company?</h2><p>Tell us the product, your existing data, and the first workflow to prove. We will define the setup and acceptance test.</p></div><a class="button primary" href="/contact/">Contact SuperMega</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })

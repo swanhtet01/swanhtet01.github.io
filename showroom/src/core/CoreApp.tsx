@@ -1252,6 +1252,13 @@ export function ProductHomePage() {
     ['Data access', ready ? 'Ready for import review' : 'Locked until approved', ready ? 'Approved data can use users, audit, and controlled writes.' : 'Samples stay local until you approve real data.'],
   ] as const
   const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
+  const managedReadiness = runtime.importProvisioning ? {
+    ready: runtime.importProvisioning.ready,
+    checks: runtime.importProvisioning.checks,
+    forbiddenUntilReady: runtime.importProvisioning.forbidden_until_ready,
+    nextAction: runtime.importProvisioning.next_action,
+    safeEnable: runtime.activationManifest?.safe_enable ?? [],
+  } : null
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Pick one product and try the sample. Add your data only when it helps." eyebrow="Products" title="Start with one product." />
@@ -1300,7 +1307,7 @@ export function ProductHomePage() {
         </div>
       </section>
       <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
-        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={progress} ready={ready} />
+        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} managedReadiness={managedReadiness} nextHostedAction={nextHostedAction} progress={progress} ready={ready} />
       </Suspense>
     </div>
   )

@@ -1058,7 +1058,7 @@ export function WebsiteProduct() {
 
           {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
             <div className="website-today-priority">
-              <span className="website-kicker">Start here</span>
+              <span className="core-eyebrow">Start here</span>
               <h2 id="website-today-title">{websiteAgentJob}</h2>
               <p>{websiteAgentReason}</p>
               <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
@@ -1227,7 +1227,7 @@ export function WebsiteProduct() {
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
-                  <div><span className="website-kicker">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} Nothing is sent to customers, CRM, or Shop from this screen.</p></div>
+                  <div><span className="core-eyebrow">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} Nothing is sent to customers, CRM, or Shop from this screen.</p></div>
                   <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
                 </header>
 

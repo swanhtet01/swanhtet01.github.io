@@ -173,29 +173,33 @@ for (const token of [
   'id="products"',
   '>Products<',
   'Choose one product to try.',
-  'Open Shop, Plant, Website, or Ecommerce. Each product has a working sample and a setup path for your data.',
+  'Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.',
   'Need this for your company?',
   'id="trust"',
   'aria-label="Security boundary"',
   'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
-  'https://app.supermega.dev/shop/',
-  'https://app.supermega.dev/plant/',
+  'https://app.supermega.dev/settings/?product=shop',
+  'https://app.supermega.dev/settings/?product=plant',
   'id="website"',
-  'https://app.supermega.dev/website/',
+  'https://app.supermega.dev/settings/?product=website',
   'id="ecommerce"',
   'Create an online ordering page connected to Shop.',
-  'https://app.supermega.dev/ecommerce/',
+  'https://app.supermega.dev/settings/?product=ecommerce',
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
 for (const product of publicProducts) {
-  if (!home.includes(product.appRoute)) fail('direct_product_route_missing', { product: product.id })
+  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  if (!home.includes(guidedSampleRoute)) fail('guided_product_route_missing', { product: product.id })
   for (const capability of (product.modules?.length ? product.modules : product.workflow).slice(0, 3)) {
     if (!home.includes(capability)) fail('module_catalog_missing', { product: product.id, capability })
   }
 }
-if ((home.match(/>Open product<\/a>/g) || []).length !== 4) fail('direct_product_cta_count_wrong')
-if (home.includes('Start guided trial') || home.includes('app.supermega.dev/settings/?product=') || home.includes('aria-label="Templates"')) fail('setup_first_public_path_returned')
+if ((home.match(/>Start free sample<\/a>/g) || []).length !== 4) fail('guided_product_cta_count_wrong')
+if (home.includes('Start guided trial') || home.includes('aria-label="Templates"')) fail('retired_public_setup_copy_returned')
+for (const product of publicProducts) {
+  if (home.includes(`href="${product.appRoute}"`)) fail('direct_product_route_remains_primary', { product: product.id })
+}
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
 }

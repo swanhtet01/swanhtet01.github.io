@@ -61,6 +61,13 @@ for (const page of manifest.pages) {
   }
 }
 
+const homepage = get('/')
+for (const product of manifest.customerProducts) {
+  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  if (!homepage.includes(`href="${guidedSampleRoute}"`)) throw new Error(`preview_guided_product_route_missing:${product.id}`)
+  if (homepage.includes(`href="${product.appRoute}"`)) throw new Error(`preview_direct_product_route_remains_primary:${product.id}`)
+}
+
 const release = JSON.parse(get(manifest.release.releaseEndpoint))
 if (release.brandVersion !== manifest.brand.version) throw new Error('preview_brand_version_wrong')
 if (release.contextVersion !== manifest.contextVersion) throw new Error('preview_context_version_wrong')
