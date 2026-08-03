@@ -179,11 +179,22 @@ function resolveOutput(repositoryRoot, output) {
   return destination
 }
 
+function requireIgnoredOutput(repositoryRoot, destination) {
+  const candidate = relative(repositoryRoot, destination)
+  try {
+    execFileSync('git', ['-C', repositoryRoot, 'check-ignore', '--quiet', '--', candidate])
+  }
+  catch {
+    fail('supabase_rehearsal_output_must_be_gitignored')
+  }
+}
+
 async function main() {
   const command = parseArguments(process.argv.slice(2))
   const releaseCommit = reviewedMainCommit(root)
   if (command.mode === 'verify') {
     const input = resolveOutput(root, command.input)
+    requireIgnoredOutput(root, input)
     const packet = await validateSupabaseRehearsalPacket(JSON.parse(await readFile(input, 'utf8')), {
       expectedReleaseCommit: releaseCommit,
     })
@@ -201,6 +212,7 @@ async function main() {
   }
 
   const destination = resolveOutput(root, command.output)
+  requireIgnoredOutput(root, destination)
   const packet = await buildSupabaseRehearsalPacket({
     targetProjectRef: command.targetProjectRef,
     releaseCommit,
