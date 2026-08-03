@@ -1011,8 +1011,8 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === 9
-  && databaseRehearsal.migration?.schemaVersion === 8
+  && databaseRehearsal.migration?.count === 10
+  && databaseRehearsal.migration?.schemaVersion === 9
   && databaseRehearsal.migration?.productionValidatorReady === true
   && Object.keys(databaseRehearsal.checks || {}).length === 52
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
