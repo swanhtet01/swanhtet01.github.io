@@ -32,7 +32,7 @@ const shopContactEvent = {
   event: 'supermega.contact.created',
   record: {
     lead_id: 'LEAD-0123456789ABCDEF',
-    workflow: 'shop',
+    workflow: 'commerce',
     company: 'Test Shop',
     name: 'Test Operator',
     email: 'private@example.com',
@@ -109,6 +109,16 @@ test('converts a Shop contact event through a separate owner overlay without ret
   assert.equal(handoff.source.contactEmailRetained, false)
   assert.equal(handoff.source.rawContactDataRetained, false)
   assert.doesNotMatch(serialized, /private@example\.com|private_note|source_url|LEAD-0123456789ABCDEF/)
+})
+
+test('continues to accept the legacy Shop workflow label', () => {
+  const legacyEvent = {
+    ...shopContactEvent,
+    record: { ...shopContactEvent.record, workflow: 'shop' },
+  }
+  const handoff = buildShopPilotHandoff(shopPilotInputFromContactEvent(legacyEvent, ownerInput))
+  assert.equal(handoff.status, 'ready-for-private-pilot')
+  assert.equal(handoff.source.contactEventBound, true)
 })
 
 test('rejects non-Shop events and refuses to infer that a contact is the pilot operator', () => {

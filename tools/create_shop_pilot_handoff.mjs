@@ -8,6 +8,7 @@ export const SHOP_PILOT_REPLY_DRAFT_CONTRACT = 'supermega.shop.pilot_reply_draft
 
 const MAX_TEXT = 180
 const DAY_MS = 24 * 60 * 60 * 1000
+const SHOP_CONTACT_WORKFLOWS = new Set(['commerce', 'shop'])
 
 function boundedText(value, field, max = MAX_TEXT) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${field}_required`)
@@ -56,7 +57,12 @@ function privateEmail(value) {
 }
 
 export function shopPilotInputFromContactEvent(event, ownerInput) {
-  if (!event || event.event !== 'supermega.contact.created' || !event.record || event.record.workflow !== 'shop') {
+  if (
+    !event
+    || event.event !== 'supermega.contact.created'
+    || !event.record
+    || !SHOP_CONTACT_WORKFLOWS.has(event.record.workflow)
+  ) {
     throw new Error('shop_contact_event_required')
   }
   if (!ownerInput || typeof ownerInput !== 'object' || Array.isArray(ownerInput)) throw new Error('shop_owner_input_required')
