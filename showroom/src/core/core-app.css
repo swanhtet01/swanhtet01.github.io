@@ -1727,6 +1727,9 @@ textarea { min-height: 72px; resize: vertical; }
   .shop-counter-module { overflow-y: auto; scrollbar-gutter: stable; }
   .shop-counter-module > .shop-counter-surface { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }
   .operations-screen:not(.commerce-screen) .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }
+  .commerce-screen[data-active-tab="today"] .workspace-view,
+  .commerce-screen[data-active-tab="orders"] .workspace-view,
+  .commerce-screen[data-active-tab="inventory"] .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }
   .plant-production-module { height: auto; min-height: 100%; }
   .plant-production-module > .production-view { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }
 }

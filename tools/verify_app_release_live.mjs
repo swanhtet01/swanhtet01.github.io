@@ -520,6 +520,10 @@ if (!operationsChunk.includes('plant-production-module')
 if (!operationsChunk.includes('shop-counter-module')
   || !assetCorpus.includes('.shop-counter-module{overflow-y:auto;scrollbar-gutter:stable}')
   || !assetCorpus.includes('.shop-counter-module>.shop-counter-surface')) throw new Error('missing_live_shop_counter_layout_contract')
+if (!operationsChunk.includes('data-active-tab')
+  || !assetCorpus.includes('.commerce-screen[data-active-tab=today] .workspace-view')
+  || !assetCorpus.includes('.commerce-screen[data-active-tab=orders] .workspace-view')
+  || !assetCorpus.includes('.commerce-screen[data-active-tab=inventory] .workspace-view')) throw new Error('missing_live_shop_task_scroll_contract')
 for (const required of ['Browser-local sample only.', 'sample order and sample stock change in this browser', 'No payment is captured', 'no customer is contacted', 'no server or managed workspace is written', 'no real stock is moved']) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_shop_counter_local_boundary:${required}`)
 }

@@ -1674,7 +1674,7 @@ export function OperationsPage({ product }: { product?: ProductId }) {
   }
 
   return (
-    <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`}>
+    <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
       <PageHeading title={productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
