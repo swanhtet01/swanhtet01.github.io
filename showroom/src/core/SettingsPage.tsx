@@ -6,7 +6,7 @@ import {
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
-import { readBehaviorTrail, summarizeBehaviorPreferences } from './behavior-trail'
+import { readBehaviorTrail, summarizeBehaviorPreferences, summarizeProductActivationFunnel } from './behavior-trail'
 import { ManagedContextConsent } from './ManagedContextConsent'
 import { buildManagedAiContextExport, buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
 import { operatingChangeCopy } from './operating-baseline'
@@ -567,6 +567,7 @@ export function SettingsPage() {
   const behaviorSignalCount = behaviorTrail.length
   const agentBehaviorSignals = behaviorTrail.filter((entry) => entry.event === 'agent_job_seen' || entry.event === 'agent_job_chosen')
   const behaviorPreference = summarizeBehaviorPreferences(behaviorTrail)
+  const productActivationFunnel = summarizeProductActivationFunnel(behaviorTrail, setup.product)
   const agentProductName = (product: string) => (
     product === 'commerce'
     || product === 'production'
@@ -577,10 +578,11 @@ export function SettingsPage() {
   )
   const topAgentJob = behaviorPreference.preferred
   const lastChosenAgentJob = behaviorPreference.latest
-  const agentBehaviorRows = [
-    ['Signals', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} next-step signals` : 'No next-step signals', agentBehaviorSignals.length ? 'Seen and chosen recommendations are saved locally for export.' : 'Open a product and choose one next step to start behavior memory.'],
-    ['Preferred job', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'No pattern yet', topAgentJob ? `${topAgentJob.chosenCount} chosen; last ${formatTime(topAgentJob.lastChosenAt)}.` : 'The system waits for owner choices before selecting a safe continuation.'],
-    ['Last chosen', lastChosenAgentJob ? `${agentProductName(lastChosenAgentJob.product)}: ${lastChosenAgentJob.detail}` : 'Nothing chosen yet', lastChosenAgentJob ? `Captured ${formatTime(lastChosenAgentJob.createdAt)}.` : 'Click a recommended next step to teach the next handoff.'],
+  const productActivationRows = [
+    ['Next steps', productActivationFunnel.nextStepsOpened ? `${productActivationFunnel.nextStepsOpened} opened` : 'Not opened', 'The user opened this product\'s optional next-step panel.'],
+    ['Own data', productActivationFunnel.dataSetupsOpened ? `${productActivationFunnel.dataSetupsOpened} started` : 'Not started', 'The user opened local CSV or sample-data setup for this product.'],
+    ['Product request', productActivationFunnel.productRequests ? `${productActivationFunnel.productRequests} intent` : 'No intent yet', 'The user chose the product-specific setup handoff. No message was sent by this scorecard.'],
+    ['Next move', productActivationFunnel.nextAction, `${productActivationFunnel.completionPercent}% of the local activation journey observed in this browser.`],
   ] as const
   const learningRows = [
     ['Data', preparedRecordCount ? `${preparedRecordCount} records` : 'Import'],
@@ -1032,7 +1034,7 @@ export function SettingsPage() {
     ['Approved sources', managedPilotBrief ? `${managedPilotBrief.sourceCount} company` : preparedRecordCount ? `${preparedRecordCount} local prepared` : 'No source proof yet', managedPilotBrief ? 'Counts only; raw source records are not shown here.' : 'Open a company account to verify company-scoped sources.'],
     ['Learning checkpoint', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The aggregate operating baseline has a managed audit receipt.' : 'No external action runs from this panel.'],
   ] as const
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 24, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review), setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, localWorkspaceBackup, behaviorTrail, behaviorPreference, agentBehaviorRows, pilotOutcomeReport, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 24, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review), setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, localWorkspaceBackup, behaviorTrail, behaviorPreference, productActivationFunnel, pilotOutcomeReport, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
@@ -2153,9 +2155,9 @@ export function SettingsPage() {
                   <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceActivationPacket} type="button">Load sample packet</button><button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button><button className="text-link" disabled={!ecommerceActivationPacketText.trim()} onClick={clearEcommerceActivationPacketReview} type="button">Clear packet</button></div>
                 </div>
               </> : null}
-              <div aria-label="Behavior memory" className="learning-plan-agent">
-                <div><span className="core-eyebrow">Behavior memory</span><h3>What users keep choosing</h3><p>Free mode keeps this local. Premium can use approved queue behavior after company import.</p></div>
-                <div className="learning-plan-rows">{agentBehaviorRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              <div aria-label={`${selectedProduct.name} activation journey`} className="learning-plan-agent">
+                <div><span className="core-eyebrow">Selected product only</span><h3>{selectedProduct.name} activation journey</h3><p>Shows where this browser stopped between next steps, own data, and a product request. It stays local until the owner exports evidence.</p></div>
+                <div className="learning-plan-rows">{productActivationRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
               <div aria-label="Go-live automation summary" className="learning-plan-agent">
                 <div><span className="core-eyebrow">Go-live summary</span><h3>What automation may do next</h3><p>{runtime.activationManifest?.automation_boundary ?? 'SuperMega may prepare evidence and drafts; managed writes stay locked until runtime health confirms activation.'}</p></div>

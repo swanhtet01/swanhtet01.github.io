@@ -49,6 +49,7 @@ let shopProductionDemandRuntimeChecks = 0
 let shopDemandIntelligenceRuntimeChecks = 0
 let shopReplenishmentRuntimeChecks = 0
 let shopProcurementDecisionRuntimeChecks = 0
+let behaviorTrailRuntimeChecks = 0
 const fail = (reason) => failures.push(reason)
 if (normalizeSourceText('line one\r\nline two\rline three') !== 'line one\nline two\nline three') fail('source_line_ending_normalization_failed')
 const [manifestText, appPackageText, appSource, coreSource, coreShellSource, productSystemNavigatorSource, behaviorTrailSource, catalogImportSource, clientOnboardingSource, clientOnboardingUiSource, commerceSource, commerceOrderDraftSource, channelOrderSource, managedTrialSource, managedCommerceRuntime, managedTrialStoreRuntime, managedProductionRuntime, productionSource, teamSource, agentTeamsSource, teamModel, websiteSource, contentSource, publishSource, publishCssSource, sitePreviewSource, websiteModelSource, websiteExportSource, websiteWorkspaceSource, managedWebsiteSource, websiteCssSource, commerceIntakeSource, handoffSource, ecommerceSource, ecommerceActivationSource, ecommerceOrderReviewSource, managedStorefrontSource, storefrontSource, storefrontDraftSource, storefrontRequestSource, ecommerceConfirmSource, ecommerceHandoffSource, ecommerceCssSource, coreCssSource, schedulerSource] = await Promise.all([
@@ -1065,7 +1066,7 @@ if (!productSystemNavigatorSource.includes('Keep working in {details.label}')
   || !productSystemNavigatorSource.includes("requestPath: 'https://supermega.dev/contact/?product=plant&utm_source=app&utm_medium=product&utm_campaign=working-sample'")
   || !productSystemNavigatorSource.includes("requestPath: 'https://supermega.dev/contact/?product=website&utm_source=app&utm_medium=product&utm_campaign=working-sample'")
   || !productSystemNavigatorSource.includes("requestPath: 'https://supermega.dev/contact/?product=ecommerce&utm_source=app&utm_medium=product&utm_campaign=working-sample'")
-  || !productSystemNavigatorSource.includes('<a className="core-button compact primary" href={details.requestPath}>Get {details.label} for my business</a>')
+  || !productSystemNavigatorSource.includes('<a className="core-button compact primary" href={details.requestPath} onClick={() => recordActivationSignal(\'product_requested\', `Requested ${details.label} setup`)}>Get {details.label} for my business</a>')
   || productSystemNavigatorSource.includes('target="_blank"')
   || !productSystemNavigatorSource.includes("const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding')")
   || !productSystemNavigatorSource.includes('function ProductDataImport(')
@@ -1286,6 +1287,9 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !behaviorTrailSource.includes('const behaviorTrailLimit = 80')
   || !behaviorTrailSource.includes("'agent_job_seen'")
   || !behaviorTrailSource.includes("'agent_job_chosen'")
+  || !behaviorTrailSource.includes("'next_steps_opened'")
+  || !behaviorTrailSource.includes("'data_setup_opened'")
+  || !behaviorTrailSource.includes("'product_requested'")
   || !behaviorTrailSource.includes('export type BehaviorPreferenceSnapshot = {')
   || !behaviorTrailSource.includes("contract: 'supermega.behavior_preference.v1'")
   || !behaviorTrailSource.includes('export function summarizeBehaviorPreferences(entries: BehaviorTrailEntry[])')
@@ -1293,6 +1297,13 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !behaviorTrailSource.includes('right.chosenCount - left.chosenCount')
   || !behaviorTrailSource.includes('right.lastChosenAt.localeCompare(left.lastChosenAt)')
   || !behaviorTrailSource.includes('productCount: new Set(chosen.map((entry) => entry.product)).size')
+  || !behaviorTrailSource.includes("contract: 'supermega.product_activation_funnel.v1'")
+  || !behaviorTrailSource.includes('export function summarizeProductActivationFunnel(')
+  || !productSystemNavigatorSource.includes("recordActivationSignal('next_steps_opened'")
+  || !productSystemNavigatorSource.includes("recordActivationSignal('data_setup_opened'")
+  || !productSystemNavigatorSource.includes("recordActivationSignal('product_requested'")
+  || !productSystemNavigatorSource.includes('route: details.primaryPath')
+  || productSystemNavigatorSource.includes('route: window.location')
   || !coreShellSource.includes('recordBehaviorSignal(window.localStorage')
   || !websiteSource.includes('recordBehaviorSignal(window.localStorage')
   || !ecommerceSource.includes('recordBehaviorSignal(window.localStorage')
@@ -1306,7 +1317,7 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('const behaviorTrail = readBehaviorTrail(window.localStorage)')
   || !settingsPageSource.includes('const behaviorSignalCount = behaviorTrail.length')
   || !settingsPageSource.includes('const behaviorPreference = summarizeBehaviorPreferences(behaviorTrail)')
-  || !settingsPageSource.includes("['Preferred job', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}`")
+  || !settingsPageSource.includes('const productActivationFunnel = summarizeProductActivationFunnel(behaviorTrail, setup.product)')
   || !settingsPageSource.includes('behaviorPreference,')
   || !settingsPageSource.includes('contract: behaviorPreference.contract')
   || !settingsPageSource.includes('preferred: behaviorPreference.preferred')
@@ -1551,12 +1562,11 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('Premium can rank next actions from reviewed workspace behavior after import.')
   || !settingsPageSource.includes('Free mode prepares the review package. Premium imports approved data, behavior, and decisions only after company controls pass.')
   || !settingsPageSource.includes('SuperMega prepares the next workflow from this product setup; real writes stay locked until company controls pass.')
-  || !settingsPageSource.includes('const agentBehaviorRows = [')
-  || !settingsPageSource.includes('aria-label="Behavior memory"')
-  || settingsPageSource.includes('aria-label="Agent behavior memory"')
-  || !settingsPageSource.includes('Behavior memory')
-  || !settingsPageSource.includes('What users keep choosing')
-  || !settingsPageSource.includes('Premium can use approved queue behavior after company import.')
+  || !settingsPageSource.includes('const productActivationRows = [')
+  || !settingsPageSource.includes('aria-label={`${selectedProduct.name} activation journey`}')
+  || !settingsPageSource.includes('Selected product only')
+  || !settingsPageSource.includes('{selectedProduct.name} activation journey')
+  || !settingsPageSource.includes('Shows where this browser stopped between next steps, own data, and a product request.')
   || !settingsPageSource.includes('const activationManifestRows = [')
   || !settingsPageSource.includes('aria-label="Go-live automation summary"')
   || !settingsPageSource.includes('Go-live summary')
@@ -1569,7 +1579,7 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !settingsPageSource.includes('aria-label="Premium work plan"')
   || !settingsPageSource.includes('version: 24')
   || !settingsPageSource.includes('behaviorTrail')
-  || !settingsPageSource.includes('agentBehaviorRows')
+  || !settingsPageSource.includes('productActivationFunnel')
   || !settingsPageSource.includes('activationManifest: runtime.activationManifest')
   || !settingsPageSource.includes('activationManifestRows')
   || !settingsPageSource.includes('type SchedulerActivation = {')
@@ -3566,7 +3576,7 @@ if (!websiteSource.includes('Recovery settings')
   || !settingsPageSource.includes('localProductRecords')
   || !settingsPageSource.includes('version: 24')
   || !settingsPageSource.includes('behaviorTrail')
-  || !settingsPageSource.includes('agentBehaviorRows')
+  || !settingsPageSource.includes('productActivationFunnel')
   || !settingsPageSource.includes('activationManifestRows')
   || !settingsPageSource.includes('schedulerActivationRows')
   || !settingsPageSource.includes('managedTrialRequestRows')
@@ -18340,6 +18350,52 @@ async function verifyShopNextActionRuntime() {
   }
 }
 
+async function verifyBehaviorTrailRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    behaviorTrailRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'behavior-trail.ts')).href}?behavior-trail-verify=${Date.now()}`)
+    const entries = [
+      { id: 'B-1', event: 'next_steps_opened', product: 'commerce', route: '/shop/', detail: 'Opened Shop next steps', createdAt: '2026-08-03T01:00:00.000Z' },
+      { id: 'B-2', event: 'data_setup_opened', product: 'commerce', route: '/shop/', detail: 'Opened Shop data setup', createdAt: '2026-08-03T01:01:00.000Z' },
+      { id: 'B-3', event: 'product_requested', product: 'commerce', route: '/shop/', detail: 'Requested Shop setup', createdAt: '2026-08-03T01:02:00.000Z' },
+      { id: 'B-4', event: 'next_steps_opened', product: 'production', route: '/plant/', detail: 'Opened Plant next steps', createdAt: '2026-08-03T01:03:00.000Z' },
+    ]
+    const shop = model.summarizeProductActivationFunnel(entries, 'commerce')
+    assert(shop.contract === 'supermega.product_activation_funnel.v1'
+      && shop.nextStepsOpened === 1
+      && shop.dataSetupsOpened === 1
+      && shop.productRequests === 1
+      && shop.completionPercent === 100
+      && shop.nextAction === 'Journey complete'
+      && shop.lastSignalAt === '2026-08-03T01:02:00.000Z', 'behavior_shop_activation_funnel_wrong')
+    const plant = model.summarizeProductActivationFunnel(entries, 'production')
+    assert(plant.nextStepsOpened === 1
+      && plant.dataSetupsOpened === 0
+      && plant.productRequests === 0
+      && plant.completionPercent === 33
+      && plant.nextAction === 'Try your data', 'behavior_plant_activation_funnel_wrong')
+    const website = model.summarizeProductActivationFunnel(entries, 'website')
+    assert(website.completionPercent === 0 && website.nextAction === 'Open next steps' && website.lastSignalAt === null, 'behavior_empty_activation_funnel_wrong')
+
+    const values = new Map()
+    const storage = {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, String(value)),
+    }
+    const signal = { event: 'data_setup_opened', product: 'ecommerce', route: '/ecommerce/', detail: 'Opened Ecommerce data setup' }
+    model.recordBehaviorSignal(storage, signal)
+    model.recordBehaviorSignal(storage, signal)
+    const recorded = model.readBehaviorTrail(storage)
+    assert(recorded.length === 1 && recorded[0].event === 'data_setup_opened' && recorded[0].route === '/ecommerce/', 'behavior_activation_signal_not_deduplicated')
+  } catch (error) {
+    fail(`behavior_trail_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+await verifyBehaviorTrailRuntime()
 await verifyOperationalReportRuntime()
 await verifyShopOperatingFlowRuntime()
 await verifyShopNextActionRuntime()
@@ -18868,4 +18924,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

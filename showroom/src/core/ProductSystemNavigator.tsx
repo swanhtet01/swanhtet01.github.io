@@ -1,7 +1,8 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, type SyntheticEvent, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 
 import type { ClientSolutionId } from './client-onboarding'
+import { recordBehaviorSignal } from './behavior-trail'
 import {
   productCapabilityCatalog,
   type ClientCapability,
@@ -20,6 +21,7 @@ import { useManagedIdentity, useSetupWorkspace } from './workspace-runtime'
 const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 
 type ProductSystemDetail = { label: string; primaryPath: string; requestPath: string; dataTitle: string; dataAction: string }
+type ProductActivationEvent = 'next_steps_opened' | 'data_setup_opened' | 'product_requested'
 
 const productDetails: Record<ClientSolutionId, ProductSystemDetail> = {
   commerce: { label: 'Shop', primaryPath: '/shop/', requestPath: 'https://supermega.dev/contact/?product=shop&utm_source=app&utm_medium=product&utm_campaign=working-sample', dataTitle: 'Use your items and stock', dataAction: 'Use my Shop data' },
@@ -82,8 +84,30 @@ export function ProductSystemNavigator({ product, managed = false }: { product: 
   }, [capabilities])
   const dataPanelId = `product-system-import-${product}`
 
+  function recordActivationSignal(event: ProductActivationEvent, detail: string) {
+    if (typeof window === 'undefined') return
+    recordBehaviorSignal(window.localStorage, {
+      event,
+      product,
+      route: details.primaryPath,
+      detail,
+    })
+  }
+
+  function toggleNextSteps(event: SyntheticEvent<HTMLDetailsElement>) {
+    const isOpen = event.currentTarget.open
+    setOpen(isOpen)
+    if (isOpen) recordActivationSignal('next_steps_opened', `Opened ${details.label} next steps`)
+  }
+
+  function toggleDataSetup() {
+    const isOpening = !dataOpen
+    setDataOpen(isOpening)
+    if (isOpening) recordActivationSignal('data_setup_opened', `Opened ${details.label} data setup`)
+  }
+
   return (
-    <details className="product-system-navigator" onToggle={(event) => setOpen(event.currentTarget.open)} open={open}>
+    <details className="product-system-navigator" onToggle={toggleNextSteps} open={open}>
       <summary>
         <span><b>Next steps</b><small>More workflows or your data</small></span>
         <strong>{open ? 'Hide' : 'Show'}</strong>
@@ -91,14 +115,14 @@ export function ProductSystemNavigator({ product, managed = false }: { product: 
       <div className="product-system-body">
         <header>
           <div><span className="core-eyebrow">{details.label}</span><h2>Keep working in {details.label}</h2><p>Choose another working flow, use your data, or ask us to set up {details.label} for your business.</p></div>
-          <div className="product-system-actions"><a className="core-button compact primary" href={details.requestPath}>Get {details.label} for my business</a></div>
+          <div className="product-system-actions"><a className="core-button compact primary" href={details.requestPath} onClick={() => recordActivationSignal('product_requested', `Requested ${details.label} setup`)}>Get {details.label} for my business</a></div>
         </header>
         <div className="product-system-workflows" aria-label={`${details.label} working workflows`}>
           {workingFlows.map((capability) => <WorkflowLink capability={capability} fallbackPath={details.primaryPath} key={capability.id} />)}
         </div>
         <section aria-label={`${details.label} data`} className="product-system-data">
           <div><span className="core-eyebrow">Your data</span><h3>{details.dataTitle}</h3><p>Upload a CSV or try a sample. SuperMega matches columns locally and asks before changing {details.label}.</p><small>Only {details.label} is prepared here.</small></div>
-          <button aria-controls={dataPanelId} aria-expanded={dataOpen} className="core-button compact" onClick={() => setDataOpen((current) => !current)} type="button">{dataOpen ? 'Close data setup' : details.dataAction}</button>
+          <button aria-controls={dataPanelId} aria-expanded={dataOpen} className="core-button compact" onClick={toggleDataSetup} type="button">{dataOpen ? 'Close data setup' : details.dataAction}</button>
         </section>
         {dataOpen ? <div className="product-system-import" id={dataPanelId}><ProductDataImport details={details} managed={managed} product={product} /></div> : null}
       </div>

@@ -9,6 +9,9 @@ export type BehaviorTrailEvent =
   | 'settings_opened'
   | 'agent_job_seen'
   | 'agent_job_chosen'
+  | 'next_steps_opened'
+  | 'data_setup_opened'
+  | 'product_requested'
 
 export type BehaviorTrailEntry = {
   id: string
@@ -39,6 +42,18 @@ export type BehaviorPreferenceSnapshot = {
   } | null
 }
 
+export type ProductActivationFunnelSnapshot = {
+  contract: 'supermega.product_activation_funnel.v1'
+  version: 1
+  product: BehaviorPreferenceProduct
+  nextStepsOpened: number
+  dataSetupsOpened: number
+  productRequests: number
+  completionPercent: 0 | 33 | 67 | 100
+  nextAction: 'Open next steps' | 'Try your data' | 'Request this product' | 'Journey complete'
+  lastSignalAt: string | null
+}
+
 const behaviorTrailLimit = 80
 
 function behaviorId() {
@@ -63,6 +78,9 @@ function normalizeBehaviorTrail(value: unknown): BehaviorTrailEntry[] {
         || source.event === 'settings_opened'
         || source.event === 'agent_job_seen'
         || source.event === 'agent_job_chosen'
+        || source.event === 'next_steps_opened'
+        || source.event === 'data_setup_opened'
+        || source.event === 'product_requested'
         ? source.event
         : null
       if (!event) return null
@@ -130,6 +148,42 @@ export function summarizeBehaviorPreferences(entries: BehaviorTrailEntry[]): Beh
     latest: latestEntry
       ? { product: latestEntry.product, detail: latestEntry.detail, createdAt: latestEntry.createdAt }
       : null,
+  }
+}
+
+export function summarizeProductActivationFunnel(
+  entries: BehaviorTrailEntry[],
+  product: BehaviorPreferenceProduct,
+): ProductActivationFunnelSnapshot {
+  const productSignals = entries.filter((entry) => entry.product === product && (
+    entry.event === 'next_steps_opened'
+    || entry.event === 'data_setup_opened'
+    || entry.event === 'product_requested'
+  ))
+  const nextStepsOpened = productSignals.filter((entry) => entry.event === 'next_steps_opened').length
+  const dataSetupsOpened = productSignals.filter((entry) => entry.event === 'data_setup_opened').length
+  const productRequests = productSignals.filter((entry) => entry.event === 'product_requested').length
+  const lastSignalAt = [...productSignals]
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id))[0]
+    ?.createdAt ?? null
+
+  const completion = productRequests > 0
+    ? { completionPercent: 100 as const, nextAction: 'Journey complete' as const }
+    : dataSetupsOpened > 0
+      ? { completionPercent: 67 as const, nextAction: 'Request this product' as const }
+      : nextStepsOpened > 0
+        ? { completionPercent: 33 as const, nextAction: 'Try your data' as const }
+        : { completionPercent: 0 as const, nextAction: 'Open next steps' as const }
+
+  return {
+    contract: 'supermega.product_activation_funnel.v1',
+    version: 1,
+    product,
+    nextStepsOpened,
+    dataSetupsOpened,
+    productRequests,
+    ...completion,
+    lastSignalAt,
   }
 }
 
