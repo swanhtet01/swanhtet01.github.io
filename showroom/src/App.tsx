@@ -10,6 +10,7 @@ const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))
 const WebsiteProduct = lazy(() => import('./products/website/WebsiteProduct').then((module) => ({ default: module.WebsiteProduct })))
 const EcommerceProduct = lazy(() => import('./products/ecommerce/EcommerceProduct').then((module) => ({ default: module.EcommerceProduct })))
 const SettingsPage = lazy(() => import('./core/SettingsPage').then((module) => ({ default: module.SettingsPage })))
+const WorkspaceControlsPage = lazy(() => import('./core/WorkspaceControlsPage').then((module) => ({ default: module.WorkspaceControlsPage })))
 const ProductOnboardingPage = lazy(() => import('./core/ProductOnboardingPage').then((module) => ({ default: module.ProductOnboardingPage })))
 const ManagedLoginPage = lazy(() => import('./core/ManagedLoginPage').then((module) => ({ default: module.ManagedLoginPage })))
 const ManagedAccountPage = lazy(() => import('./core/ManagedAccountPage').then((module) => ({ default: module.ManagedAccountPage })))
@@ -64,7 +65,7 @@ function SettingsEntry() {
   }
 
   if (location.hash === '#controls') {
-    return <Suspense fallback={<ProductLoading name="recovery controls" />}><SettingsPage /></Suspense>
+    return <Suspense fallback={<ProductLoading name="workspace controls" />}><WorkspaceControlsPage /></Suspense>
   }
 
   return <Navigate replace to="/" />
@@ -88,7 +89,7 @@ export default function App() {
           <Route element={<Navigate replace to="/website/" />} path="products/website/*" />
           <Route element={<Navigate replace to="/ecommerce/" />} path="products/ecommerce/*" />
           <Route element={<SettingsEntry />} path="settings/*" />
-          <Route element={<Suspense fallback={<ProductLoading name="client builder" />}><SettingsPage /></Suspense>} path="internal/client-builder/*" />
+          {import.meta.env.DEV ? <Route element={<Suspense fallback={<ProductLoading name="client builder" />}><SettingsPage /></Suspense>} path="internal/client-builder/*" /> : null}
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
           <Route element={<Navigate replace to="/" />} path="agents/*" />
           <Route element={<Navigate replace to="/" />} path="assist/*" />
