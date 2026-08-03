@@ -1206,6 +1206,7 @@ textarea { min-height: 72px; resize: vertical; }
 .settings-advanced > summary small { margin-left: auto; color: var(--core-quiet); font-size: 10px; font-weight: 600; }
 .settings-advanced[open] > summary { border-bottom: 1px solid var(--core-line); }
 .settings-advanced-content { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(280px,.8fr); gap: 10px; padding: 10px; }
+.settings-restore-point { grid-column: 1 / -1; }
 .settings-control-stack { min-width: 0; display: grid; align-content: start; gap: 10px; }
 .company-backup-panel { min-width: 0; display: grid; align-content: start; gap: 12px; }
 .company-backup-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }

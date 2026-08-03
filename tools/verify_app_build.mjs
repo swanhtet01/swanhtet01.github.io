@@ -2766,6 +2766,17 @@ if (!localWorkspaceBackupSource.includes("LOCAL_WORKSPACE_BACKUP_CONTRACT = 'sup
   || !settingsPageSource.includes('Save restore point')
   || !settingsPageSource.includes('Load evidence backup')
   || !settingsPageSource.includes('Restore previous workspace')) fail('local_workspace_restore_contract_missing')
+const settingsAdvancedIndex = settingsPageSource.indexOf('<details className="settings-advanced"')
+const settingsRestorePointIndex = settingsPageSource.indexOf('aria-label="Local workspace restore point"')
+const settingsWorkingSampleIndex = settingsPageSource.indexOf('Opens a working ${selectedProduct.name} sample on this device.')
+const settingsLaunchChecklistIndex = settingsPageSource.indexOf('aria-label="Selected launch pack checklist"')
+if (settingsAdvancedIndex < 0
+  || settingsRestorePointIndex < settingsAdvancedIndex
+  || !settingsPageSource.includes('className="setup-complete settings-restore-point"')
+  || !coreCssSource.includes('.settings-restore-point { grid-column: 1 / -1; }')
+  || settingsWorkingSampleIndex < 0
+  || settingsLaunchChecklistIndex < 0
+  || settingsWorkingSampleIndex > settingsLaunchChecklistIndex) fail('product_setup_primary_action_hierarchy_wrong')
 if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
   || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
   || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_MAX_BYTES')
