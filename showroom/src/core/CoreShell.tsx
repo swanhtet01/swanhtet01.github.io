@@ -86,8 +86,7 @@ const checkingRuntime: RuntimeHealth = {
 }
 
 const LAST_PRODUCT_KEY = 'supermega.last-product.v1'
-const PRODUCT_SETUP_REGISTRY_KEY = 'supermega.product_setups.v1'
-const PRODUCT_SETUP_REGISTRY_MAX_BYTES = 64 * 1024
+const DEFAULT_ENTRY_PRODUCT: ClientSolutionId = 'commerce'
 const productWorkspacePaths: Record<ClientSolutionId, string> = {
   commerce: '/shop/',
   production: '/plant/',
@@ -109,22 +108,6 @@ function readLastProduct(storage: Pick<Storage, 'getItem'>): ClientSolutionId | 
     return isClientSolutionId(product) ? product : null
   } catch {
     return null
-  }
-}
-
-function readProductStarted(storage: Pick<Storage, 'getItem'>, product: ClientSolutionId) {
-  try {
-    const raw = storage.getItem(PRODUCT_SETUP_REGISTRY_KEY)
-    if (!raw || raw.length > PRODUCT_SETUP_REGISTRY_MAX_BYTES) return false
-    const registry = JSON.parse(raw) as Record<string, unknown>
-    const candidate = registry?.[product]
-    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false
-    const startedAt = (candidate as Record<string, unknown>).startedAt
-    return typeof startedAt === 'string'
-      && startedAt.length >= 20
-      && new Date(startedAt).toISOString() === startedAt
-  } catch {
-    return false
   }
 }
 
@@ -455,10 +438,10 @@ export function CoreLayout() {
 }
 
 const customerProducts = [
-  ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/', '/settings/?product=shop', 'commerce'],
-  ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/', '/settings/?product=plant', 'production'],
-  ['Website', 'Publish your business', 'Pages, services, inquiries, and launch preview.', '/website/', '/settings/?product=website', 'website'],
-  ['Ecommerce', 'Take online orders', 'Storefront, checkout, delivery, and Shop handoff.', '/ecommerce/', '/settings/?product=ecommerce', 'ecommerce'],
+  ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/'],
+  ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/'],
+  ['Website', 'Publish your business', 'Pages, services, inquiries, and launch preview.', '/website/'],
+  ['Ecommerce', 'Take online orders', 'Storefront, checkout, delivery, and Shop handoff.', '/ecommerce/'],
 ] as const
 
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
@@ -471,32 +454,29 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
     : null
   return route
     ? <Navigate replace to={route} />
-    : lastProduct
-      ? <Navigate replace to={productWorkspacePath(lastProduct)} />
-      : <ProductHomePage />
+    : choosingProduct
+      ? <ProductHomePage />
+      : <Navigate replace to={productWorkspacePath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
 }
 
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Each product opens by itself. Choose what you want to run; first-time setup is one business name and one useful task." eyebrow="Products" title="Choose one product" />
+      <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
-        {customerProducts.map(([name, job, outcome, path, setupPath, product], index) => {
-          const started = typeof window !== 'undefined' && readProductStarted(window.localStorage, product)
-          const destination = started ? path : setupPath
-          const action = started ? 'Continue' : 'Start'
-          return <Link aria-label={`${action} ${name} workspace`} className="product-track-card" data-started={started} key={name} to={destination}>
+        {customerProducts.map(([name, job, outcome, path], index) => {
+          return <Link aria-label={`Open ${name} workspace`} className="product-track-card" key={name} to={path}>
               <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
               <span className="product-track-copy">
                 <small>{job}</small>
                 <h2>{name}</h2>
                 <p>{outcome}</p>
               </span>
-              <strong className="product-track-open">{action} {name} <span aria-hidden="true">→</span></strong>
+              <strong className="product-track-open">Open {name} <span aria-hidden="true">→</span></strong>
             </Link>
         })}
       </nav>
-      <p className="product-home-note">No combined dashboard. New products start with one business name and a working first task; completed products continue where you left off.</p>
+      <p className="product-home-note">Your product workspaces stay separate. Opening a sample does not change another product.</p>
     </div>
   )
 }
