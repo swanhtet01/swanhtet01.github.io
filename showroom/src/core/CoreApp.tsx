@@ -6408,6 +6408,32 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length ? 'attention' as const : 'ready' as const },
     { label: 'Online channels', detail: 'Website and Ecommerce requests enter one Shop authority', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
   ]
+  const stockAttentionRows = stockRows.filter(({ item }) => item.onHand <= item.reorderAt)
+  const stockCatalogRows = stockRows.filter(({ item }) => item.onHand > item.reorderAt)
+
+  function renderStockRow({ item }: (typeof stockRows)[number]) {
+    const active = activePurchaseOrderBySku.get(item.sku)
+    const catalogEditing = catalogEditDraft?.sku === item.sku
+    const editing = purchaseOrderDraft?.mode === 'create'
+      ? purchaseOrderDraft.sku === item.sku
+      : purchaseOrderDraft?.mode === 'receive'
+        ? purchaseOrderDraft.purchaseOrderId === active?.purchaseOrder.id
+        : false
+    const stockNeedsAttention = item.onHand <= item.reorderAt
+    const stockAttentionLabel = stockNeedsAttention
+      ? item.onHand === item.reorderAt ? 'At reorder level' : `${item.reorderAt - item.onHand} below reorder`
+      : null
+    return <div className="data-row" data-receiving={editing || catalogEditing} data-stock-attention={stockNeedsAttention ? 'true' : 'false'} role="row" key={item.sku}>
+      <span role="rowheader"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span>
+      <span className={stockNeedsAttention ? 'warning-text' : ''} role="cell">{item.onHand}</span>
+      <span role="cell">{item.reorderAt}</span>
+      <span role="cell">{formatMoney(item.price)}</span>
+      <span className="catalog-row-actions" role="cell">
+        <button aria-controls="catalog-item-editor" aria-expanded={catalogEditing} aria-label={`Edit price and reorder level for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) catalogEditTriggerRefs.current.set(item.sku, node); else catalogEditTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openCatalogItemEditor(item.sku)}>{catalogEditing ? 'Editing' : 'Edit'}</button>
+        <button aria-expanded={editing} aria-label={active ? `Receive stock for ${item.name}` : `Order stock for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) purchaseOrderTriggerRefs.current.set(item.sku, node); else purchaseOrderTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openPurchaseOrder(item.sku)}>{editing ? 'Continue' : active ? 'Receive' : stockNeedsAttention ? 'Reorder' : 'Order'}</button>
+      </span>
+    </div>
+  }
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {commerceBoundary}
@@ -6856,7 +6882,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
     <section className="core-panel inventory-panel">
-      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>{lowStock.length ? `${lowStock.length} ${lowStock.length === 1 ? 'item needs' : 'items need'} action` : 'Stock is healthy'}</h2></div><div className="order-queue-actions"><span className="panel-note">{commerce.items.length} products</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
@@ -6886,32 +6912,19 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required step="1" type="number" value={stockCountDraft.quantity} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockCountQuantityResult === null || Boolean(commerce.inventoryFoundation && !stockCountBalance)} type="submit">Review count</button></div>
       </form> : null}
-      <div className="data-table" role="table" aria-label="Shop stock">
+      <div className="data-table stock-attention-table" data-stock-list="attention" role="table" aria-label="Shop stock">
         <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
-        {stockRows.map(({ item }) => {
-          const active = activePurchaseOrderBySku.get(item.sku)
-          const catalogEditing = catalogEditDraft?.sku === item.sku
-          const editing = purchaseOrderDraft?.mode === 'create'
-            ? purchaseOrderDraft.sku === item.sku
-            : purchaseOrderDraft?.mode === 'receive'
-              ? purchaseOrderDraft.purchaseOrderId === active?.purchaseOrder.id
-              : false
-          const stockNeedsAttention = item.onHand <= item.reorderAt
-          const stockAttentionLabel = stockNeedsAttention
-            ? item.onHand === item.reorderAt ? 'At reorder level' : `${item.reorderAt - item.onHand} below reorder`
-            : null
-          return <div className="data-row" data-receiving={editing || catalogEditing} data-stock-attention={stockNeedsAttention ? 'true' : 'false'} role="row" key={item.sku}>
-            <span role="rowheader"><strong>{item.name}</strong>{stockAttentionLabel ? <small className="stock-attention-label">{stockAttentionLabel}</small> : null}<small>{item.sku}</small></span>
-            <span className={stockNeedsAttention ? 'warning-text' : ''} role="cell">{item.onHand}</span>
-            <span role="cell">{item.reorderAt}</span>
-            <span role="cell">{formatMoney(item.price)}</span>
-            <span className="catalog-row-actions" role="cell">
-              <button aria-controls="catalog-item-editor" aria-expanded={catalogEditing} aria-label={`Edit price and reorder level for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) catalogEditTriggerRefs.current.set(item.sku, node); else catalogEditTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openCatalogItemEditor(item.sku)}>{catalogEditing ? 'Editing' : 'Edit'}</button>
-              <button aria-expanded={editing} aria-label={active ? `Receive stock for ${item.name}` : `Order stock for ${item.name}`} className="text-link" disabled={commerceControlsDisabled} ref={(node) => { if (node) purchaseOrderTriggerRefs.current.set(item.sku, node); else purchaseOrderTriggerRefs.current.delete(item.sku) }} type="button" onClick={() => openPurchaseOrder(item.sku)}>{editing ? 'Continue' : active ? 'Receive' : stockNeedsAttention ? 'Reorder' : 'Order'}</button>
-            </span>
-          </div>
-        })}
+        {stockAttentionRows.length ? stockAttentionRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No stock needs action.</strong><small>Count stock or open other products only when needed.</small></span></div>}
       </div>
+      <details className="inventory-tools-disclosure stock-catalog-disclosure">
+        <summary><span><strong>Other products</strong><small>Healthy stock, pricing, and reorder levels</small></span><b>{stockCatalogRows.length} {stockCatalogRows.length === 1 ? 'item' : 'items'}</b></summary>
+        <div className="stock-catalog-content">
+          <div className="data-table" data-stock-list="catalog" role="table" aria-label="Other Shop products">
+            <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
+            {stockCatalogRows.length ? stockCatalogRows.map(renderStockRow) : <div className="data-row stock-empty-row" role="row"><span role="cell"><strong>No other products.</strong><small>Every current product appears in the action list above.</small></span></div>}
+          </div>
+        </div>
+      </details>
       {catalogEditDraft && catalogEditItem ? <form aria-labelledby="catalog-item-editor-title" className="stock-receipt-editor" id="catalog-item-editor" onSubmit={reviewCatalogItemUpdate} ref={catalogEditEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Edit item</span>
@@ -7048,9 +7061,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </details>
       <p className="form-notice" aria-live="polite">{commerceStorageError || 'Catalog values, counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.'}</p>
     </section>
-    <StockMovementHistory movements={commerce.movements} />
+    <StockMovementHistory actionHistory={actionHistory} movements={commerce.movements} />
     {actionGate}
-    {actionHistory}
   </div>
 
   return null
@@ -7456,19 +7468,25 @@ function ClosedOrderHistory({
   </details>
 }
 
-function StockMovementHistory({ movements }: { movements: CommerceStockMovement[] }) {
+function StockMovementHistory({ actionHistory, movements }: { actionHistory: ReactNode; movements: CommerceStockMovement[] }) {
   return <details className="core-panel action-history stock-movement-history">
-    <summary><span>Stock movements</span><strong>{movements.length} attributable entries</strong></summary>
-    {movements.length ? <div className="action-history-list">{movements.map((movement) => <article key={movement.id}>
-      <div>
-        <strong>{movement.kind === 'count'
-          ? `count · ${movement.sku} · ${movement.expectedQuantity} → ${movement.countedQuantity} · ${movement.quantityDelta === 0 ? 'no variance' : `${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta}`}`
-          : `${movement.kind} · ${movement.sku} · ${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta}`}</strong>
-        <small>{movement.orderId ? `${movement.orderId} · ` : ''}{movement.actionId} · {movement.actor}</small>
-        <p>{movement.reason} · Evidence: {movement.evidenceReference}</p>
-      </div>
-      <small>{formatTime(movement.createdAt)}</small>
-    </article>)}</div> : <Empty>No attributable stock movements yet.</Empty>}
+    <summary><span>Stock records</span><strong>{movements.length} movements · actions on demand</strong></summary>
+    <div className="stock-record-content">
+      <section aria-label="Stock movements">
+        <span className="core-eyebrow">Stock movements</span>
+        {movements.length ? <div className="action-history-list">{movements.map((movement) => <article key={movement.id}>
+          <div>
+            <strong>{movement.kind === 'count'
+              ? `count · ${movement.sku} · ${movement.expectedQuantity} → ${movement.countedQuantity} · ${movement.quantityDelta === 0 ? 'no variance' : `${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta}`}`
+              : `${movement.kind} · ${movement.sku} · ${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta}`}</strong>
+            <small>{movement.orderId ? `${movement.orderId} · ` : ''}{movement.actionId} · {movement.actor}</small>
+            <p>{movement.reason} · Evidence: {movement.evidenceReference}</p>
+          </div>
+          <small>{formatTime(movement.createdAt)}</small>
+        </article>)}</div> : <Empty>No attributable stock movements yet.</Empty>}
+      </section>
+      {actionHistory}
+    </div>
   </details>
 }
 

@@ -764,6 +764,9 @@ textarea { min-height: 72px; resize: vertical; }
 .order-record-details > summary small { color: var(--core-green); font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .order-record-details > div { display: grid; gap: 3px; margin-top: 4px; }
 .stock-movement-history .empty-state { padding: 12px 13px; }
+.stock-record-content { display: grid; gap: 10px; padding-top: 8px; }
+.stock-record-content > section { display: grid; gap: 6px; }
+.stock-record-content > .action-history { box-shadow: none; }
 .exception-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border: 1px solid var(--core-line); border-radius: 5px; }
 .exception-summary span { display: grid; gap: 3px; padding: 10px; border-right: 1px solid var(--core-line); }
 .exception-summary span:last-child { border-right: 0; }
@@ -783,7 +786,16 @@ textarea { min-height: 72px; resize: vertical; }
 .inventory-tools-disclosure > summary b { flex: 0 0 auto; color: var(--core-green); font-family: var(--core-mono); font-size: 9px; text-transform: uppercase; }
 .inventory-tools-disclosure[open] > summary { border-bottom: 1px solid var(--core-line); }
 .inventory-tools-content { display: grid; gap: 12px; padding: 12px; }
+.stock-catalog-disclosure { margin-top: 10px; }
+.stock-catalog-disclosure > summary { min-height: 44px; padding-block: 6px; }
+.stock-catalog-content { max-height: min(420px,55vh); overflow: auto; padding: 0 12px 8px; scrollbar-color: rgba(11,116,94,.26) transparent; }
 .data-table { min-width: 680px; }
+.stock-attention-table > .table-head { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); padding: 0; white-space: nowrap; }
+.stock-attention-table .data-row:not(.table-head) > span:nth-child(2), .stock-attention-table .data-row:not(.table-head) > span:nth-child(3), .stock-attention-table .data-row:not(.table-head) > span:nth-child(4) { display: grid; gap: 2px; }
+.stock-attention-table .data-row:not(.table-head) > span:nth-child(2)::before, .stock-attention-table .data-row:not(.table-head) > span:nth-child(3)::before, .stock-attention-table .data-row:not(.table-head) > span:nth-child(4)::before { color: var(--core-quiet); font-family: var(--core-mono); font-size: 6px; text-transform: uppercase; }
+.stock-attention-table .data-row:not(.table-head) > span:nth-child(2)::before { content: "Available"; }
+.stock-attention-table .data-row:not(.table-head) > span:nth-child(3)::before { content: "Reorder"; }
+.stock-attention-table .data-row:not(.table-head) > span:nth-child(4)::before { content: "Price"; }
 .data-row { min-height: 50px; display: grid; grid-template-columns: minmax(180px,1.5fr) repeat(3,minmax(85px,.7fr)) minmax(90px,.7fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--core-line); color: var(--core-muted); font-size: 10px; }
 .data-row > span:first-child { display: grid; gap: 2px; }
 .data-row strong { color: var(--core-ink); }
@@ -791,6 +803,8 @@ textarea { min-height: 72px; resize: vertical; }
 .data-row.table-head { min-height: 34px; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-transform: uppercase; }
 .data-row[data-stock-attention="true"] { margin-inline: -8px; border-radius: 8px; padding-inline: 8px; background: rgba(148,98,0,.07); }
 .data-row .stock-attention-label { color: var(--core-warn); font-size: 9px; font-weight: 760; }
+.data-row.stock-empty-row { grid-template-columns: 1fr; }
+.data-row.stock-empty-row > span:first-child { grid-column: 1 / -1; }
 .data-row[data-receiving="true"] { margin-inline: -8px; border-radius: 8px; padding-inline: 8px; background: var(--core-green-soft); }
 .data-row .text-link, .purchase-order-list .text-link { min-height: 44px; }
 .catalog-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
@@ -1899,6 +1913,9 @@ textarea { min-height: 72px; resize: vertical; }
   .data-row:not(.table-head) > span:nth-child(4)::before { content: "Price"; }
   .data-row[data-stock-attention="true"] { padding-inline: 8px; }
   .inventory-panel { overflow-x: hidden; }
+  .stock-catalog-content { max-height: none; overflow: visible; padding-inline: 10px; }
+  .data-row.stock-empty-row { min-height: 72px; grid-template-columns: 1fr; grid-template-rows: auto; }
+  .data-row.stock-empty-row > span:first-child { grid-column: 1; grid-row: 1; }
   .stock-receipt-editor { grid-template-columns: 1fr; }
   .order-return-editor { grid-template-columns: 1fr; }
   .order-return-editor .form-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
