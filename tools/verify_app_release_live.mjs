@@ -52,6 +52,10 @@ export function verifyCurrentReleaseAssets({
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
+  for (const forbidden of ['Use Plant in 3 steps.', 'Choose a job, record output, then fix blockers.', 'Plant guided jobs']) {
+    checks += 1
+    if (operationsChunk.includes(forbidden)) throw new Error(`redundant_plant_release_asset:${forbidden}`)
+  }
   for (const forbidden of ['Turn accountable work into visible progress.', 'Focused workspaces for the work that matters.', 'Bring one real workflow.']) {
     checks += 1
     if (websiteChunk.includes(forbidden)) throw new Error(`generic_website_sample_release_asset:${forbidden}`)

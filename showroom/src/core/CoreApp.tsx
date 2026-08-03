@@ -9208,17 +9208,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
   }
   const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState}>
-    <div className="plant-today-priority"><span className="core-eyebrow">Today</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantAgentReason}</p><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} type="button">{plantTodayAction}</button></div>
+    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantAgentReason}</p><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} type="button">{plantTodayAction}</button></div>
     <div aria-label="Plant today status" className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
-  </section>
-  const plantStartGuide = <section className="plant-start-guide" aria-label="Plant guided jobs">
-    <header><span className="core-eyebrow">Start here</span><h2>Use Plant in 3 steps.</h2><p>Choose a job, record output, then fix blockers.</p></header>
-    <div>
-      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>1</b><span><strong>Choose job</strong><small>Open the active batch before changing anything.</small></span></button>
-      <button disabled={!selectedJob || !productionCanWrite || Boolean(pendingAction)} onClick={(event) => selectedJob ? openJobOutput(selectedJob, event.currentTarget) : runPlantAutopilot(event.currentTarget)} type="button"><b>2</b><span><strong>Record output</strong><small>Enter good units, waste, material use, and the operator note.</small></span></button>
-      <button onClick={() => navigate('/plant/?tab=control')} type="button"><b>3</b><span><strong>Fix blockers</strong><small>Open quality, machine, material, and daily work problems.</small></span></button>
-    </div>
   </section>
   const plantControl = <section aria-label="Plant control" className="plant-control">
     <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
@@ -9285,7 +9277,6 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   if (tab === 'production') return <div className="operation-module production-operation-module">
     {plantToday}
-    {plantStartGuide}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>

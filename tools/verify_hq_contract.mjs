@@ -69,6 +69,7 @@ const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterp
 const managedPilotReadiness = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8'))
 
 const manifest = JSON.parse(manifestText)
+const canonicalTextLength = (value) => value.replaceAll('\r\n', '\n').length
 const portfolio = JSON.parse(portfolioText)
 const workforce = JSON.parse(workforceText)
 const agentWorkspace = JSON.parse(agentWorkspaceText)
@@ -1071,11 +1072,11 @@ requireContract('source provenance retained',
   && kernelOperatorText.includes('const { generatedAt: _generatedAt, ...stableData } = data')
   && !workboard.includes('The selected Instagram slide confirms'))
 requireContract('HQ stays concise',
-  readme.length < 7000
-  && now.length < 9000
-  && qaBrief.length < 6000
-  && current.length < 14000
-  && portfolioText.length < 16000)
+  canonicalTextLength(readme) < 7000
+  && canonicalTextLength(now) < 9000
+  && canonicalTextLength(qaBrief) < 6000
+  && canonicalTextLength(current) < 14000
+  && canonicalTextLength(portfolioText) < 16000)
 requireContract('research remains gated',
   portfolio.researchGates?.some((entry) => entry.decision === 'reject')
   && current.includes('Resource intelligence stays inside HQ'))
