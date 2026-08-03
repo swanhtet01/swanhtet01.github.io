@@ -3525,6 +3525,7 @@ if (!websiteExportSource.includes('buildWebsiteHtml')
   || !websiteExportSource.includes('escapeHtml')
   || ['fetch(', 'localStorage', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteExportSource.includes(marker))
   || !websiteSource.includes('downloadPublishedSite')
+  || (websiteSource.match(/window\.setTimeout\(\(\) => URL\.revokeObjectURL\(url\), 5_000\)/g) ?? []).length < 3
   || !publishSource.includes('Download site')) fail('website_static_artifact_export_missing_or_side_effectful')
 if (!sitePreviewSource.includes("ctaHref.startsWith('https://')") || !sitePreviewSource.includes("ctaHref.startsWith('#')") || !sitePreviewSource.includes('aria-disabled="true"')) fail('website_preview_destination_guard_missing')
 if (!websiteWorkspaceSource.includes("addEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes("removeEventListener('storage', refreshFromStorage)") || !websiteWorkspaceSource.includes('mutateWebsiteWorkspace(update, current.revision, current.contentRevision') || websiteWorkspaceSource.includes('localStorage.setItem(WEBSITE_STORAGE_KEY, JSON.stringify(workspace))')) fail('website_confirmed_write_or_cross_tab_refresh_missing')
