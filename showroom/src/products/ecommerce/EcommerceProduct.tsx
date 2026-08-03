@@ -450,6 +450,7 @@ export function EcommerceProduct() {
       && digest
       && savedDraft.localPreviewDigest === digest)
   const savedDraftIsCurrent = savedFieldsAreCurrent && savedCatalogIsCurrent
+  const storefrontSetupRequired = Boolean(managedIdentity) && !savedDraftIsCurrent
   const hasUnsavedStorefront = !savedDraftIsCurrent
   const hasUnsavedFieldChanges = !savedFieldsAreCurrent
   const managedCatalogRebindRequired = Boolean(managedIdentity
@@ -1551,29 +1552,33 @@ export function EcommerceProduct() {
       ? 'Continue Ecommerce order in Shop'
     : importNeeded
       ? 'Prepare catalog import'
-      : !savedDraftIsCurrent
+      : storefrontSetupRequired
         ? 'Finish store'
         : buyingCart.length
           ? 'Review cart quote'
-          : 'Open store for ordering'
+          : managedIdentity
+            ? 'Open store for ordering'
+            : 'Start sample order'
   const aiAgentReason = pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
     : ecommerceActiveOrderCount
       ? `${ecommerceActiveOrderCount} Ecommerce order${ecommerceActiveOrderCount === 1 ? '' : 's'} now use the Shop-owned fulfilment record.`
     : importNeeded
       ? 'The order desk needs a real Shop catalog before the store can sell.'
-      : !savedDraftIsCurrent
+      : storefrontSetupRequired
         ? 'Save the customer view before quotes and order review are trusted.'
         : buyingCart.length
           ? `${buyingCart.length} cart line${buyingCart.length === 1 ? '' : 's'} ready for quote review.`
-          : 'The store is saved and ready for a customer request.'
+          : managedIdentity
+            ? 'The store is saved and ready for a customer request.'
+            : 'The sample store is ready for one customer-order walkthrough.'
   const aiOwnerGate = pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
     : ecommerceActiveOrderCount
       ? 'Shop remains authoritative for fulfilment, payment, cancellation, and returns.'
     : importNeeded
       ? 'Review the imported catalog before going live.'
-      : !savedDraftIsCurrent
+      : storefrontSetupRequired
         ? 'Save the exact customer view first.'
       : buyingCart.length
           ? 'Review the quote before sending to Shop.'
@@ -1585,7 +1590,7 @@ export function EcommerceProduct() {
   ] as const
   const orderAutopilotStage = importNeeded
     ? 'Connect products'
-    : !savedDraftIsCurrent
+    : storefrontSetupRequired
       ? 'Save store'
       : orderImportReview?.status === 'ready'
         ? 'Package order batch'
@@ -1606,14 +1611,14 @@ export function EcommerceProduct() {
       .filter(Boolean),
   ).size
   const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
-  const ecommerceTodayState = importNeeded || !savedDraftIsCurrent
+  const ecommerceTodayState = importNeeded || storefrontSetupRequired
     ? 'setup'
     : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || pendingManagedRequests.length
       ? 'attention'
       : 'ready'
   const ecommerceTodayHeadline = importNeeded
     ? 'Connect your products to start selling'
-    : !savedDraftIsCurrent
+    : storefrontSetupRequired
       ? 'Finish the store customers will see'
       : ecommerceRefundAttentionCount
         ? `${ecommerceRefundAttentionCount} refund${ecommerceRefundAttentionCount === 1 ? '' : 's'} need evidence`
@@ -1625,19 +1630,23 @@ export function EcommerceProduct() {
               ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
               : ecommerceTodayCartUnits
                 ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'} ready for checkout`
-                : 'Your store is ready for the next order'
+                : managedIdentity
+                  ? 'Your store is ready for the next order'
+                  : 'Try one customer order'
   const ecommerceTodaySummary = importNeeded
     ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
-    : !savedDraftIsCurrent
+    : storefrontSetupRequired
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
         : ecommerceActiveOrderCount
           ? 'Continue fulfilment from the Shop-owned order record; no duplicate order ledger is created here.'
-          : 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
+          : managedIdentity
+            ? 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
+            : 'Add one sample item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.'
   const ecommerceTodayAction = importNeeded
     ? 'Connect products'
-    : !savedDraftIsCurrent
+    : storefrontSetupRequired
       ? 'Finish store'
       : orderImportReview?.status === 'ready'
         ? 'Download order packet'
@@ -1649,9 +1658,11 @@ export function EcommerceProduct() {
               ? 'Continue in Shop'
             : ecommerceTodayCartUnits
               ? 'Review checkout'
-              : 'Prepare next order'
+              : managedIdentity
+                ? 'Prepare next order'
+                : 'Start sample order'
   const ecommerceTodayMetrics = [
-    ['Storefront', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : 'Needs setup'],
+    ['Storefront', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Sample ready'],
     ['Shop requests', pendingManagedRequests.length ? `${pendingManagedRequests.length} to review` : 'Clear'],
     ['Cart & checkout', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Order confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['Customers', ecommerceTodayCustomerCount ? `${ecommerceTodayCustomerCount} known` : 'No orders yet'],
@@ -1668,7 +1679,7 @@ export function EcommerceProduct() {
       navigate('/settings/?product=ecommerce')
       return
     }
-    if (!savedDraftIsCurrent) {
+    if (storefrontSetupRequired) {
       finishStorefrontSetup()
       return
     }
@@ -1728,14 +1739,16 @@ export function EcommerceProduct() {
       <section aria-label="Order workspace" className="ecommerce-ai-desk">
         <div>
           <span className="core-eyebrow">Order workspace</span>
-          <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : !savedDraftIsCurrent ? 'Save store before orders' : 'Ready to take reviewed orders'}</h2>
+          <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : storefrontSetupRequired ? 'Save store before orders' : managedIdentity ? 'Ready to take reviewed orders' : 'Try the sample order flow'}</h2>
           <p>{pendingManagedRequests.length
             ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
             : importNeeded
               ? 'Upload or connect the Shop catalog once. The customer view, quote, and order review use that source.'
-              : !savedDraftIsCurrent
+              : storefrontSetupRequired
                 ? 'Save the customer view so the quote, cart, and Shop review all use the same products and prices.'
-                : 'Customers can build a cart; Shop still confirms the accountable order before anything consequential happens.'}</p>
+                : managedIdentity
+                  ? 'Customers can build a cart; Shop still confirms the accountable order before anything consequential happens.'
+                  : 'Use the sample cart to review the customer path. Nothing reaches Shop until confirmation.'}</p>
         </div>
         <div className="ecommerce-ai-desk-queue">
           {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
