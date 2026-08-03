@@ -247,6 +247,12 @@ import { projectPlantOrder } from './plant-order-foundation'
 import { productionOrderPortfolioEntries } from './production-order-portfolio'
 import { projectShopDemandIntelligence } from './shop-demand-intelligence'
 import { projectShopProcurementDecision, projectShopReplenishment } from './shop-replenishment'
+import {
+  SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
+  readShopServiceSchedule,
+  shopIndustryPack,
+  type ShopIndustryPack,
+} from './shop-service-scheduling'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -1677,6 +1683,17 @@ type ShopCounterReview = {
   onCommitted: () => void
 }
 
+function readLocalShopIndustryPack() {
+  if (typeof window === 'undefined') return null
+  const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
+  if (!stored) return null
+  try {
+    return shopIndustryPack(readShopServiceSchedule(stored).industryPackId)
+  } catch {
+    return null
+  }
+}
+
 function ShopProductArtwork({ kind }: { kind: number }) {
   if (kind === 1) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="7" width="18" x="20" y="34" /><rect className="art-main" height="58" rx="7" width="18" x="41" y="24" /><rect className="art-main" height="44" rx="7" width="18" x="62" y="38" /><path className="art-highlight" d="M24 42h10M45 33h10M66 46h10" /></svg>
   if (kind === 2) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-main" d="M27 23h46l7 58H20z" /><path className="art-highlight" d="M32 39h36M39 57h22" /><circle className="art-detail" cx="50" cy="69" r="6" /></svg>
@@ -1685,8 +1702,9 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount }: {
+function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount }: {
   disabled: boolean
+  industryPack: ShopIndustryPack | null
   items: CommerceItem[]
   lowStockCount: number
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
@@ -1759,7 +1777,7 @@ function ShopCounter({ disabled, items, lowStockCount, onReview, openOrderCount 
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
-          <div><span className="core-eyebrow">Counter open</span><h2>Tap an item to add it</h2><nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
+          <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} working sample` : 'Counter open'}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} The catalog stays as sample data until you import client items.</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
           <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label>
         </header>
         {visibleItems.length ? <div className="shop-item-grid">
@@ -1877,6 +1895,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const navigate = useNavigate()
   const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
+  const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
@@ -6443,7 +6462,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    <ShopCounter disabled={commerceControlsDisabled} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
+    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} />
     {actionGate}
   </div>
 
@@ -6546,7 +6565,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} /></Suspense>
+    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)

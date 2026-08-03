@@ -55,11 +55,11 @@ function initialSchedule() {
   }
 }
 
-export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: externallyDisabled = false }: { actor?: string; disabled?: boolean }) {
+export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: externallyDisabled = false, initiallyOpen = false }: { actor?: string; disabled?: boolean; initiallyOpen?: boolean }) {
   const [initial] = useState(initialSchedule)
   const [schedule, setSchedule] = useState<ShopServiceSchedule | null>(initial.schedule)
   const [notice, setNotice] = useState(initial.error)
-  const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)
   const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
   const [serviceDraft, setServiceDraft] = useState({ name: '', durationMinutes: '60', priceMmk: '' })
   const [resourceDraft, setResourceDraft] = useState({ name: '', kind: 'staff' as 'staff' | 'room' | 'equipment' })
@@ -69,8 +69,15 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
   const managedIdentityRef = useRef<ManagedIdentity | null>(null)
   const managedVersionRef = useRef<number | null>(null)
   const managedSaveBusyRef = useRef(false)
+  const schedulePanelRef = useRef<HTMLDetailsElement>(null)
   const projection = useMemo(() => schedule ? projectShopServiceSchedule(schedule) : null, [schedule])
   const disabled = externallyDisabled || managedLoading || managedSaving
+
+  useEffect(() => {
+    if (!initiallyOpen) return
+    const frame = requestAnimationFrame(() => schedulePanelRef.current?.scrollIntoView({ block: 'start' }))
+    return () => cancelAnimationFrame(frame)
+  }, [initiallyOpen])
 
   useEffect(() => {
     let active = true
@@ -217,12 +224,12 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
     }
   }
 
-  if (!schedule || !projection) return <section className="core-panel shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Appointments</span><h2>Schedule needs recovery</h2></div></div><p className="form-notice" role="alert">{notice}</p></section>
+  if (!schedule || !projection) return <section className="core-panel shop-service-schedule" id="shop-service-schedule"><div className="panel-head"><div><span className="core-eyebrow">Appointments</span><h2>Schedule needs recovery</h2></div></div><p className="form-notice" role="alert">{notice}</p></section>
 
   const serviceById = new Map(schedule.services.map((service) => [service.id, service]))
   const resourceById = new Map(schedule.resources.map((resource) => [resource.id, resource]))
 
-  return <details className="core-panel shop-service-schedule" onToggle={(event) => setWorkspaceOpen(event.currentTarget.open)} open={workspaceOpen}>
+  return <details className="core-panel shop-service-schedule" id="shop-service-schedule" onToggle={(event) => setWorkspaceOpen(event.currentTarget.open)} open={workspaceOpen} ref={schedulePanelRef}>
     <summary><span><small>Appointments</small><strong>{projection.today.length ? `${projection.today.length} today` : 'Schedule services'}</strong></span><span>{projection.awaitingArrival} waiting · {projection.inService} in service</span></summary>
     <div className="service-schedule-body">
       <div className="service-schedule-summary" aria-label="Appointment summary">
