@@ -28,7 +28,7 @@ export function verifyCurrentReleaseAssets({
   activationRunbookChunk,
 }) {
   const groups = [
-    ['launcher', assetCorpus, ['SUPERMEGA', 'Start with one product.', 'Pick one product and use the working demo first. Add your data only after the flow makes sense.', 'Sales and inventory', 'Production and quality', 'Pages and inquiries', 'Storefront and checkout', 'Try demo', 'Add your data', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Products, prices, and stock', 'Jobs, materials, and equipment', 'Business details and pages', 'Catalog and customer orders', 'Nothing changes business records until review.', 'Later', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['launcher', assetCorpus, ['SUPERMEGA', 'What do you want to run?', 'Each product is a separate workspace. Open a working sample now; setup appears only when you need your own data.', 'Sell and manage stock', 'Run production', 'Publish your business', 'Take online orders', 'Counter sales, inventory, orders, and daily close.', 'Jobs, materials, output, quality, and traceability.', 'Pages, services, inquiries, and launch preview.', 'Storefront, checkout, delivery, and Shop handoff.', 'No account or setup is required for the samples.', 'Each product opens its own workspace; reviewed handoffs connect them when needed.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
     ['shop_plant', operationsChunk, ['Create order', 'Finish payment and handoff in Orders.', 'Stock reserved. Finish fulfilment and reconcile payment before completion.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
     ['secondary_tools', productSystemNavigatorChunk, ['More tools', 'Workflows and setup', 'Choose another task.', 'Open a working sample flow, or set up your data when you are ready.', 'Set up ', 'Setup and imports', 'Use these tools only when the main workflow needs them.']],
     ['support_helper', productHomeReadinessCorpus, ['Support helper', 'Uses Shop, Plant, Website, and Ecommerce records.', 'Readiness review status', 'Mark reviewed', 'Acknowledgement confirms review only.', 'Company workspace status', 'Browser-local sample', 'Review launch gates', 'No managed customer action runs from this checklist.', 'supermega.local_business_snapshot.v1', 'supermega.local_business_answer.v1']],
@@ -51,6 +51,10 @@ export function verifyCurrentReleaseAssets({
   for (const forbidden of ['Complete sale', 'Stock updated. Receipt saved.']) {
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
+  }
+  for (const forbidden of ['Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.']) {
+    checks += 1
+    if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
   }
   for (const forbidden of ['Use Plant in 3 steps.', 'Choose a job, record output, then fix blockers.', 'Plant guided jobs']) {
     checks += 1
