@@ -110,9 +110,9 @@ async function verifyOnce() {
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
   for (const product of manifest.customerProducts) {
-    const legacyTrialRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-    assert(homepage.includes(`href="${product.appRoute}"`), 'direct_product_route_wrong', { product: product.id, appRoute: product.appRoute })
-    assert(!homepage.includes(legacyTrialRoute), 'template_first_route_exposed', { product: product.id })
+    const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+    assert(homepage.includes(`href="${guidedSampleRoute}"`), 'guided_product_route_missing', { product: product.id, guidedSampleRoute })
+    assert(!homepage.includes(`href="${product.appRoute}"`), 'direct_product_route_remains_primary', { product: product.id, appRoute: product.appRoute })
     for (const template of product.templates) assert(!homepage.includes(template.name), 'template_catalog_exposed', { template: template.id })
   }
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })

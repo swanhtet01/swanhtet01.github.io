@@ -10,6 +10,7 @@ const releaseWorkflow = read('.github/workflows/supermega-public-release.yml')
 const ciWorkflow = read('.github/workflows/showroom-ci.yml')
 const healthWorkflow = read('.github/workflows/supermega-public-live-health.yml')
 const previewVerifier = read('tools/verify_public_preview_live.mjs')
+const liveVerifier = read('tools/verify_public_release_live.mjs')
 const rollbackResolver = read('tools/resolve_vercel_rollback_target.mjs')
 const firewallVerifier = read('tools/verify_public_firewall_state.mjs')
 const publicGenerator = read('tools/create_public_vercel_output.mjs')
@@ -43,6 +44,11 @@ if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_dep
 if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
 if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
+for (const [label, verifier] of Object.entries({ previewVerifier, liveVerifier })) {
+  if (!verifier.includes('guided_product_route_missing') || !verifier.includes('direct_product_route_remains_primary')) {
+    failures.push(`guided_product_route_contract_missing:${label}`)
+  }
+}
 if (previewVerifier.includes("'--silent'") || previewVerifier.includes("'--show-error'") || previewVerifier.includes("'--location'")) failures.push('preview_verifier_uses_platform_specific_curl_flags')
 if (previewVerifier.includes("'--token'") || !previewVerifier.includes('protected_preview_inspect_failed:') || !previewVerifier.includes('process.env.VERCEL_TOKEN')) failures.push('preview_verifier_credential_handling_unsafe')
 if (!rollbackResolver.includes("mode === 'alias'") || !rollbackResolver.includes("mode === 'deployment'") || !rollbackResolver.includes("state.projectId !== expectedProjectId") || !rollbackResolver.includes("nestedDeploymentId !== deploymentId") || !rollbackResolver.includes("state.id !== expectedDeploymentId") || !rollbackResolver.includes("state.target !== 'production'") || !rollbackResolver.includes("state.readyState !== 'READY'")) failures.push('rollback_alias_resolver_incomplete')
