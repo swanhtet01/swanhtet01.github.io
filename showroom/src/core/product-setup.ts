@@ -80,8 +80,8 @@ export function productDisplayName(product: SetupProductId) {
 }
 
 export function setupProductPreviewPath(product: SetupProductId) {
-  if (product === 'commerce') return '/shop/?tab=counter'
-  if (product === 'production') return '/plant/?tab=production'
+  if (product === 'commerce') return '/shop/'
+  if (product === 'production') return '/plant/'
   if (product === 'website') return '/website/'
   return '/ecommerce/'
 }

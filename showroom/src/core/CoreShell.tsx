@@ -399,8 +399,8 @@ export function CoreLayout() {
 }
 
 const customerProducts = [
-  ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/?tab=counter'],
-  ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/?tab=production'],
+  ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/'],
+  ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/'],
   ['Website', 'Publish your business', 'Pages, services, inquiries, and launch preview.', '/website/'],
   ['Ecommerce', 'Take online orders', 'Storefront, checkout, delivery, and Shop handoff.', '/ecommerce/'],
 ] as const
