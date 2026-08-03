@@ -28,8 +28,9 @@ export function verifyCurrentReleaseAssets({
   activationRunbookChunk,
 }) {
   const groups = [
-    ['launcher', assetCorpus, ['SUPERMEGA', 'Choose one product', 'Open one product. Each has its own workspace and navigation; SuperMega remembers your choice on this device.', 'Switch product', 'supermega.last-product.v1', 'Sell and manage stock', 'Run production', 'Publish your business', 'Take online orders', 'Counter sales, inventory, orders, and daily close.', 'Jobs, materials, output, quality, and traceability.', 'Pages, services, inquiries, and launch preview.', 'Storefront, checkout, delivery, and Shop handoff.', 'Samples open immediately with no account or setup. You see one product at a time; use Switch product only when you want a different workspace.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
-    ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'We will add realistic sample records now; replace them with your data whenever you are ready.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
+    ['launcher', assetCorpus, ['SUPERMEGA', 'Choose one product', 'Each product opens by itself. Choose what you want to run; first-time setup is one business name and one useful task.', 'Switch product', 'supermega.last-product.v1', 'supermega.product_setups.v1', 'Sell and manage stock', 'Run production', 'Publish your business', 'Take online orders', 'Counter sales, inventory, orders, and daily close.', 'Jobs, materials, output, quality, and traceability.', 'Pages, services, inquiries, and launch preview.', 'Storefront, checkout, delivery, and Shop handoff.', 'No combined dashboard. New products start with one business name and a working first task; completed products continue where you left off.', 'Start', 'Continue', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['guided_outcomes', productOnboardingChunk, ['Complete a sample sale', 'Create Shop and start selling', 'Run a sample production job', 'Create Plant and open the job', 'Preview a business website', 'Create Website and preview it', 'Open a working online store', 'Create Ecommerce and open the store']],
+    ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'We will add realistic sample records now; replace them with your data whenever you are ready.', 'First useful result:', 'Creates local sample records, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
     ['shop_plant', operationsChunk, ['Create order', 'Finish payment and handoff in Orders.', 'Stock reserved. Finish fulfilment and reconcile payment before completion.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
     ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose another working flow, use your data, or make this sample yours.', 'Make ', ' mine', 'Your data', 'Upload a CSV or try a sample.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'Only ', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
@@ -53,7 +54,7 @@ export function verifyCurrentReleaseAssets({
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
   }
-  for (const forbidden of ['Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.']) {
+  for (const forbidden of ['Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
     checks += 1
     if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
   }
@@ -81,6 +82,15 @@ async function readArtifactChunk(assetsDir, assetNames, pattern) {
   const name = assetNames.find((candidate) => pattern.test(candidate))
   if (!name) throw new Error(`artifact_chunk_missing:${pattern.source}`)
   return readFile(join(assetsDir, name), 'utf8')
+}
+
+export function extractRelativeJavascriptDependencies(value) {
+  return [...new Set([...String(value || '').matchAll(/(?:from|import)\s*["']\.\/([A-Za-z0-9_-]+\.js)["']/g)].map((match) => match[1]))]
+}
+
+async function readOptionalArtifactChunk(assetsDir, assetNames, pattern) {
+  const name = assetNames.find((candidate) => pattern.test(candidate))
+  return name ? readFile(join(assetsDir, name), 'utf8') : ''
 }
 
 if (artifactSelfTest) {
@@ -122,7 +132,7 @@ if (artifactSelfTest) {
     readArtifactChunk(assetsDir, assetNames, /^EcommerceProduct-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ecommerce-order-review-packet-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^WebsiteProduct-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^website-model-[A-Za-z0-9_-]+\.js$/),
+    readOptionalArtifactChunk(assetsDir, assetNames, /^website-model-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ClientDataOnboarding-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedLoginPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedAccountPage-[A-Za-z0-9_-]+\.js$/),
@@ -131,6 +141,9 @@ if (artifactSelfTest) {
   ])
   const evidenceVersion = extractTrialEvidenceVersion(settingsChunk)
   if (!Number.isInteger(evidenceVersion)) throw new Error('artifact_settings_evidence_version_missing')
+  const websiteDependencyCorpus = (await Promise.all(
+    extractRelativeJavascriptDependencies(websiteChunk).map((name) => readFile(join(assetsDir, name), 'utf8')),
+  )).join('\n')
   const result = verifyCurrentReleaseAssets({
     manifest: artifactManifest,
     assetCorpus,
@@ -139,7 +152,7 @@ if (artifactSelfTest) {
     productOnboardingChunk,
     settingsChunk,
     ecommerceProductCorpus: `${ecommerceChunk}\n${ecommercePacketChunk}`,
-    websiteChunk: `${websiteChunk}\n${websiteModelChunk}`,
+    websiteChunk: `${websiteChunk}\n${websiteModelChunk}\n${websiteDependencyCorpus}`,
     clientDataOnboardingChunk,
     managedLoginChunk,
     managedAccountChunk,
@@ -400,9 +413,11 @@ const websiteChunkPath = /assets\/WebsiteProduct-[A-Za-z0-9_-]+\.js/.exec(assetC
 if (!websiteChunkPath) throw new Error('website_chunk_missing')
 const websiteProductChunk = (await get(`/${websiteChunkPath}`)).body
 const websiteModelChunkPath = /assets\/website-model-[A-Za-z0-9_-]+\.js/.exec(`${assetCorpus}\n${websiteProductChunk}`)?.[0]
-if (!websiteModelChunkPath) throw new Error('website_model_chunk_missing')
-const websiteModelChunk = (await get(`/${websiteModelChunkPath}`)).body
-const websiteChunk = `${websiteProductChunk}\n${websiteModelChunk}`
+const websiteModelChunk = websiteModelChunkPath ? (await get(`/${websiteModelChunkPath}`)).body : ''
+const websiteDependencyCorpus = (await Promise.all(
+  extractRelativeJavascriptDependencies(websiteProductChunk).map(async (name) => (await get(`/assets/${name}`)).body),
+)).join('\n')
+const websiteChunk = `${websiteProductChunk}\n${websiteModelChunk}\n${websiteDependencyCorpus}`
 const activationRunbookChunkPath = /assets\/ManagedActivationRunbook-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!activationRunbookChunkPath) throw new Error('managed_activation_runbook_chunk_missing')
 const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).body

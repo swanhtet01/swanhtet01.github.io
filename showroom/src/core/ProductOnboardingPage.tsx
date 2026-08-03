@@ -16,7 +16,6 @@ import {
   readProductSetup,
   rememberProductSetup,
   seedSetupForProduct,
-  setupProductPreviewPath,
   templateFor,
   type SetupProductId,
   type SetupState,
@@ -47,6 +46,33 @@ type ProductOnboardingPageProps = {
   product: SetupProductId
 }
 
+const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: string; actionLabel: string; firstTaskPath: string }> = {
+  commerce: {
+    outcome: 'Complete a sample sale',
+    detail: 'A realistic catalog and stock are ready. Tap an item, choose payment, then create the order.',
+    actionLabel: 'Create Shop and start selling',
+    firstTaskPath: '/shop/?tab=counter',
+  },
+  production: {
+    outcome: 'Run a sample production job',
+    detail: 'A scheduled job, materials, and line are ready. Review the job, then record output.',
+    actionLabel: 'Create Plant and open the job',
+    firstTaskPath: '/plant/?tab=production',
+  },
+  website: {
+    outcome: 'Preview a business website',
+    detail: 'A responsive homepage is ready. Check desktop and mobile, then edit the page.',
+    actionLabel: 'Create Website and preview it',
+    firstTaskPath: '/website/',
+  },
+  ecommerce: {
+    outcome: 'Open a working online store',
+    detail: 'A storefront and checkout sample are ready. Review the store, then send an order into Shop.',
+    actionLabel: 'Create Ecommerce and open the store',
+    firstTaskPath: '/ecommerce/',
+  },
+}
+
 export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const runtime = useOutletContext<RuntimeHealth>()
   const navigate = useNavigate()
@@ -60,6 +86,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [plantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
 
   const onboardingProduct = productContracts[product]
+  const onboardingJourney = onboardingJourneys[product]
   const selectedShopIndustryPack = shopIndustryPack(shopIndustryPackId)
   const onboardingTemplate = setup.product === product
     ? templateFor(product, setup.templateId)
@@ -136,7 +163,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       return
     }
     if (workspaceStarted) {
-      navigate(setupProductPreviewPath(product))
+      navigate(onboardingJourney.firstTaskPath)
       return
     }
     if (workspaceBusy) return
@@ -185,14 +212,10 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       recordBehaviorSignal(window.localStorage, {
         event: 'agent_job_chosen',
         product,
-        route: setupProductPreviewPath(product),
-        detail: product === 'commerce'
-          ? 'Start Shop outcome proof'
-          : product === 'production'
-            ? 'Start Plant shift-close proof'
-            : `Create ${onboardingProduct.name} workspace`,
+        route: onboardingJourney.firstTaskPath,
+        detail: onboardingJourney.outcome,
       })
-      navigate(setupProductPreviewPath(product))
+      navigate(onboardingJourney.firstTaskPath)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : `The ${onboardingProduct.name} workspace could not be prepared.`)
     } finally {
@@ -212,19 +235,20 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   return (
     <div className="workspace-screen settings-screen product-onboarding-screen" data-product={product}>
       <PageHeading
-        copy={`Name this ${onboardingProduct.name} workspace once. SuperMega prepares a working copy and opens the first task.`}
+        copy={`Name this ${onboardingProduct.name} workspace once. SuperMega prepares a working copy and opens one useful first task.`}
         eyebrow={`${onboardingProduct.name} setup`}
         title={`Make ${onboardingProduct.name} yours`}
       />
       <div aria-label={`${onboardingProduct.name} onboarding`} className="product-onboarding-grid">
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
           <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>We will add realistic sample records now; replace them with your data whenever you are ready.</p></div>
+          <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           <div className="product-onboarding-primary">
-            <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : `Create my ${onboardingProduct.name} workspace`}</button>
-            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates a local workspace with realistic sample records.' : 'Enter a business name to continue.'}</small>
+            <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
+            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
-          <p className="product-onboarding-boundary">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
+          <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
           <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>
         </form>
