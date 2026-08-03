@@ -29,7 +29,7 @@ SUSPENSION_RECEIPT_CONTRACT = "supermega.managed_workspace_suspension_receipt.v2
 ACTIVATION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_activation_event.v1"
 SUSPENSION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_suspension_event.v1"
 ACTIVATION_AUTHORIZATION_CONTRACT = "supermega.managed_workspace_activation_authorization.v1"
-TRIAL_SCHEMA_VERSION = 8
+TRIAL_SCHEMA_VERSION = 9
 MAX_INPUT_BYTES = 1024 * 1024
 PLAN_TTL = timedelta(days=7)
 AUTOMATIC_COMPENSATION_REASON = "Activation compensation after a downstream release gate failure."

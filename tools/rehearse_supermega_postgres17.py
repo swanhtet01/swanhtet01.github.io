@@ -40,6 +40,7 @@ MIGRATIONS = (
     "20260730113000_private_trial_backend_v6_managed_activation.sql",
     "20260730123000_private_trial_backend_v7_workspace_discovery.sql",
     "20260802161500_private_trial_backend_v8_rls_initplan.sql",
+    "20260803063822_private_trial_backend_v9_metadata_rls.sql",
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v1"
@@ -56,6 +57,7 @@ IMPLEMENTATION_PATHS = (
     "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
     "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
     "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
+    "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
     "tools/activate_supermega_database.ps1",
     "tools/rehearse_supermega_postgres17.py",
     "tools/validate_supermega_database_url.py",
@@ -3071,7 +3073,7 @@ def _verify_restored_data(
             """
         ).fetchone()
     if row != (
-        8,
+        9,
         11,
         7,
         20,
@@ -3324,7 +3326,7 @@ def _run_rehearsal(
                 },
                 "migrations": {
                     "count": len(MIGRATIONS),
-                    "schema_version": 8,
+                    "schema_version": 9,
                     "production_validator_ready": primary_validation.get("ready") is True,
                 },
                 "storage": {
@@ -3354,7 +3356,7 @@ def _run_rehearsal(
                 "recovery": {
                     "format": "pg_dump_custom",
                     "backup_nonempty": True,
-                    "restored_schema_version": 8,
+                    "restored_schema_version": 9,
                 },
                 "cleanup_complete": False,
                 "secret_values_exposed": False,
