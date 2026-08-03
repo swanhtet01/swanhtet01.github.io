@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v1",
   "asOf": "2026-08-02T16:29:10.990Z",
-  "sourceDigest": "sha256:b1bc1276adc752743ac1cfcac325be70172260f83ec17cad772ead848fd2cd1b",
+  "sourceDigest": "sha256:27962097959a4fcaf75677aff91d5cee68c5c170ab7a52affdeed2df91aeb623",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -136,7 +136,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:667b667a60e8abb71aca078b9bbc0e1532a801e2a22ea2be0ce9e7190a3bcc98"
+      "digest": "sha256:fdef39b2e2d38b431be8ca537396537f25bf24eb3b4efc23f2450b340ccffc15"
     },
     {
       "path": "package.json",
