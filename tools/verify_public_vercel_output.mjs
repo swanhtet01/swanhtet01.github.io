@@ -174,7 +174,19 @@ for (const token of [
   '>Products<',
   'Choose one product to try.',
   'Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.',
-  'Need this for your company?',
+  'id="model" aria-label="Free and managed SuperMega"',
+  'Free product. Managed intelligence.',
+  'Run the products free. Add managed company intelligence when the workflow proves value.',
+  'Operate without a stripped-down plan.',
+  'Every workflow visible in Shop, Plant, Website, and Ecommerce remains available in the browser workspace.',
+  'Grounded answers from validated local records',
+  'No account or model call required',
+  'Use approved context across products.',
+  'Approved AI context across all four products',
+  'Persistent company history and role-aware access',
+  'Reviewed recommendations and accountable actions',
+  'Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.',
+  'href="/contact/?product=guide&amp;source=managed-intelligence">Request managed pilot</a>',
   'id="trust"',
   'aria-label="Security boundary"',
   'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
@@ -196,6 +208,7 @@ for (const product of publicProducts) {
   }
 }
 if ((home.match(/>Start free sample<\/a>/g) || []).length !== 4) fail('guided_product_cta_count_wrong')
+if ((home.match(/>Request managed pilot<\/a>/g) || []).length !== 1) fail('managed_pilot_cta_count_wrong')
 if (home.includes('Start guided trial') || home.includes('aria-label="Templates"')) fail('retired_public_setup_copy_returned')
 for (const product of publicProducts) {
   if (home.includes(`href="${product.appRoute}"`)) fail('direct_product_route_remains_primary', { product: product.id })
@@ -214,6 +227,11 @@ for (const token of ['data-contact-form', 'action="/api/contact-submissions"', '
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
+for (const token of ["query.get('source')==='managed-intelligence'", "if(managedIntelligenceRequest&&!handoff.toString())", 'Request managed company intelligence.', 'Describe the first Shop, Plant, Website, or Ecommerce workflow that should use approved company context.', 'Start with one proven workflow.', 'tenant boundary, recovery plan, and actions that must stay review-gated.', "submit.textContent='Request managed pilot'"]) {
+  if (!contact.includes(token)) fail('managed_intelligence_contact_contract_missing', { token })
+}
+if (/<(?:input|textarea)\b(?=[^>]*\bname="(?:name|email|company|template|goal)")(?=[^>]*\bvalue=)[^>]*>/i.test(contact)
+  || /<textarea\b(?=[^>]*\bname="goal")[^>]*>\s*[^<\s]/i.test(contact)) fail('contact_user_field_prefilled')
 if (contact.includes('value="agents"') || contact.includes('>AI Agent Solutions<')) fail('shared_capability_listed_as_contact_product')
 if (/<[^>]+\sstyle=/.test(contact)) fail('contact_inline_style_returned')
 
