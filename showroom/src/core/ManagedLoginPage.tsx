@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
-import { managedAccountPath, managedAccountRequestUrl } from './product-setup'
+import { managedAccountPath, managedAccountRequestUrl } from './account-routes'
 import {
   completeManagedWorkspaceSignIn,
   currentManagedIdentity,
