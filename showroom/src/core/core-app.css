@@ -1052,19 +1052,6 @@ textarea { min-height: 72px; resize: vertical; }
 .plant-today-source { grid-column: 1/-1; display: flex; align-items: center; gap: 8px 16px; border-top: 1px solid var(--core-line); padding-top: 10px; }
 .plant-today-source span { color: var(--core-green); font-size: 11px; font-weight: 760; }
 .plant-today-source small { margin-left: auto; max-width: 760px; text-align: right; }
-.plant-start-guide { display: grid; grid-template-columns: minmax(220px,.42fr) minmax(0,1fr); gap: 12px; border: 1px solid var(--core-line); border-radius: 14px; padding: 14px; background: var(--core-panel); box-shadow: 0 12px 32px rgba(25,54,42,.05); }
-.plant-start-guide header { display: grid; align-content: center; gap: 5px; }
-.plant-start-guide h2,.plant-start-guide p { margin: 0; }
-.plant-start-guide h2 { color: var(--core-ink); font-size: clamp(20px,2vw,28px); line-height: 1.05; letter-spacing: -.035em; }
-.plant-start-guide p,.plant-start-guide small { color: var(--core-muted); }
-.plant-start-guide > div { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
-.plant-start-guide button { min-height: 82px; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; align-items: start; border: 1px solid var(--core-line); border-radius: 12px; padding: 12px; background: color-mix(in srgb,var(--core-panel) 92%,var(--core-soft)); color: var(--core-ink); text-align: left; font: inherit; cursor: pointer; }
-.plant-start-guide button:hover:not(:disabled) { border-color: color-mix(in srgb,var(--core-green) 45%,var(--core-line)); background: color-mix(in srgb,var(--core-green) 5%,var(--core-panel)); }
-.plant-start-guide button:disabled { cursor: not-allowed; opacity: .58; }
-.plant-start-guide b { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: var(--core-green); color: #fff; font-family: var(--core-mono); font-size: 10px; }
-.plant-start-guide span { display: grid; gap: 5px; min-width: 0; }
-.plant-start-guide strong { font-size: 12px; line-height: 1.2; }
-.plant-start-guide small { font-size: 10px; line-height: 1.35; }
 .plant-job-import { display: grid; grid-template-columns: minmax(0,.9fr) minmax(280px,1fr); gap: 10px; align-items: start; margin: 8px 0 12px; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: var(--core-panel-raised); }
 .plant-job-import > div:first-child { min-width: 0; display: grid; gap: 4px; }
 .plant-job-import strong { color: var(--core-ink); font-size: 12px; }
@@ -2182,9 +2169,6 @@ textarea { min-height: 72px; resize: vertical; }
   .plant-today-metrics span { min-height: 50px; padding: 8px; }
   .plant-today-source { padding-top: 8px; }
   .plant-today-source small { display: none; }
-  .plant-start-guide { grid-template-columns: 1fr; padding: 13px; }
-  .plant-start-guide > div { grid-template-columns: 1fr; }
-  .plant-start-guide button { min-height: 70px; }
   .plant-batch-disclosure > summary { align-items: flex-start; flex-wrap: wrap; }
   .plant-batch-disclosure > summary small { width: 100%; margin-left: 0; }
   .plant-job-import { grid-template-columns: 1fr; }
