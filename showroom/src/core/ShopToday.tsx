@@ -15,6 +15,7 @@ export type ShopTodayModule = {
 }
 
 type ShopTodayProps = {
+  catalogReady: boolean
   metrics: ShopTodayMetric[]
   modules: ShopTodayModule[]
   nextAction: string
@@ -31,7 +32,7 @@ const capabilityGroups = [
   ['Control', 'Daily close, settlement review, accounting export, audit'],
 ] as const
 
-export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: ShopTodayProps) {
+export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDetail, nextTo }: ShopTodayProps) {
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Next Shop action">
       <div>
@@ -41,7 +42,7 @@ export function ShopToday({ metrics, modules, nextAction, nextDetail, nextTo }: 
       </div>
       <div className="shop-today-actions">
         <Link className="core-button primary" to={nextTo}>Open next step</Link>
-        <Link className="core-button" to="/shop/?tab=counter">New sale</Link>
+        {catalogReady ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
       </div>
     </section>
 

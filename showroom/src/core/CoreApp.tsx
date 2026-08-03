@@ -255,6 +255,7 @@ import {
   shopIndustryPack,
   type ShopIndustryPack,
 } from './shop-service-scheduling'
+import { decideShopNextAction } from './shop-next-action'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -1800,7 +1801,9 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
             </button>
           })}
-        </div> : <Empty>No matching item. Search by name or SKU.</Empty>}
+        </div> : <Empty>{items.length
+          ? 'No matching item. Search by name or SKU.'
+          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Add or import products</Link> before the first sale.</>}</Empty>}
       </section>
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
@@ -2505,12 +2508,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   ), [commerce, correctionDraft])
 
   useEffect(() => {
-    if (tab !== 'inventory' || commerceLocation.hash !== '#purchase-orders') return
+    if (tab !== 'inventory') return
     const frame = window.requestAnimationFrame(() => {
-      const history = purchaseOrderHistoryRef.current
-      if (history) history.open = true
-      history?.scrollIntoView({ block: 'center' })
-      history?.querySelector('summary')?.focus({ preventScroll: true })
+      if (commerceLocation.hash === '#purchase-orders') {
+        const history = purchaseOrderHistoryRef.current
+        if (history) history.open = true
+        history?.scrollIntoView({ block: 'center' })
+        history?.querySelector('summary')?.focus({ preventScroll: true })
+        return
+      }
+      if (commerceLocation.hash === '#shop-catalog-import') {
+        const target = document.getElementById('shop-catalog-import')
+        target?.scrollIntoView({ block: 'start' })
+        target?.focus({ preventScroll: true })
+      }
     })
     return () => window.cancelAnimationFrame(frame)
   }, [commerceLocation.hash, tab])
@@ -3213,75 +3224,23 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <div className="shop-replenishment-list" role="list">{demandForecastRows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.completedOrderCount} completed {row.completedOrderCount === 1 ? 'order' : 'orders'} · {row.confidence} evidence</small></span><span><b>{row.status === 'stockout_risk' ? 'Stockout risk' : row.status === 'reorder_soon' ? 'Reorder soon' : `${row.forecastWeeklyUnits}/week`}</b><small>{row.projectedDaysOfCover === null ? 'Cover collecting' : `${row.projectedDaysOfCover}d projected cover`} · {row.planningHorizonDays}d {row.planningHorizonSource === 'supplier_policy' ? 'supplier lead' : 'planning horizon'}{row.recommendedSafetyStockUnits === null ? '' : ` · ${row.recommendedSafetyStockUnits} safety suggested`}</small></span></div>)}</div>
     </section> : <p className="empty-state">Demand forecast starts after the first completed sale.</p>}
   </section>
-  const shopAgentJob = !commerceCanWrite
-    ? 'Restore Shop write readiness'
-    : pendingAction
-      ? 'Approve pending Shop change'
-      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
-        ? 'Review online order requests'
-        : actionOrders.length
-          ? 'Finish fulfilment queue'
-          : activePurchaseOrders.length
-            ? 'Receive purchase orders'
-            : lowStock.length
-              ? 'Reorder low stock'
-              : !commerce.inventoryFoundation || !managedInventoryProjection
-                ? 'Set up stock locations'
-                : 'Open counter for next sale'
-  const shopAgentReason = !commerceCanWrite
-    ? 'Writes are paused until durable storage or company account readiness is confirmed.'
-    : pendingAction
-      ? 'A reviewed Shop change is waiting for a named human confirmation.'
-      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
-        ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online request${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0) === 1 ? '' : 's'} need Shop review before order, stock, payment, or delivery changes.`
-        : actionOrders.length
-          ? `${actionOrders.length} order${actionOrders.length === 1 ? '' : 's'} need fulfilment or payment review.`
-          : activePurchaseOrders.length
-            ? `${activePurchaseOrders.length} purchase order${activePurchaseOrders.length === 1 ? '' : 's'} can be checked against received stock evidence.`
-            : lowStock.length
-              ? `${lowStock.length} SKU${lowStock.length === 1 ? '' : 's'} are at or below reorder level.`
-              : !commerce.inventoryFoundation || !managedInventoryProjection
-                ? 'Stock can move from simple on-hand counts to location, lot, ATP, reservation, and count evidence.'
-                : 'Orders, inventory, purchase orders, and stock foundation are ready for front-counter work.'
-  const shopAgentPath = !commerceCanWrite
-    ? '/settings/#controls'
-    : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length || pendingAction
-      ? '/shop/?tab=orders'
-      : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection
-        ? '/shop/?tab=inventory'
-        : '/shop/?tab=counter'
-  const shopAutopilotStage = !commerceCanWrite
-    ? 'Restore Shop readiness'
-    : pendingAction
-      ? 'Review pending Shop change'
-      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
-        ? 'Review online requests'
-        : actionOrders.length
-          ? 'Finish order queue'
-          : activePurchaseOrders.length
-            ? 'Receive purchase orders'
-            : lowStock.length
-              ? 'Reorder low stock'
-              : !commerce.inventoryFoundation || !managedInventoryProjection
-                ? 'Set up stock foundation'
-                : 'Open counter sales'
-  const shopAutopilotNextAction = !commerceCanWrite
-    ? 'Open setup controls'
-    : pendingAction
-      ? 'Finish review'
-      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
-        ? 'Open online request review'
-        : actionOrders.length
-          ? 'Open fulfilment queue'
-          : activePurchaseOrders.length
-            ? 'Open receiving queue'
-            : lowStock.length
-              ? 'Open reorder queue'
-              : !commerce.inventoryFoundation || !managedInventoryProjection
-                ? 'Open inventory setup'
-                : 'Open counter'
+  const shopNextAction = decideShopNextAction({
+    actionOrderCount: actionOrders.length,
+    activePurchaseOrderCount: activePurchaseOrders.length,
+    canWrite: commerceCanWrite,
+    catalogItemCount: commerce.items.length,
+    inventoryReady: Boolean(commerce.inventoryFoundation && managedInventoryProjection),
+    lowStockCount: lowStock.length,
+    pendingAction: Boolean(pendingAction),
+    pendingOnlineRequestCount: pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0),
+  })
+  const shopAgentJob = shopNextAction.job
+  const shopAgentReason = shopNextAction.reason
+  const shopAgentPath = shopNextAction.path
+  const shopAutopilotStage = shopNextAction.stage
+  const shopAutopilotNextAction = shopNextAction.nextAction
   const shopAutopilotRows = [
-    ['Track', pendingAction ? 'Review' : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length ? 'Orders' : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection ? 'Inventory' : 'Counter'],
+    ['Track', shopNextAction.track],
     ['Stage', shopAutopilotStage],
     ['Next', shopAutopilotNextAction],
     ['Memory', 'Saves helpful patterns'],
@@ -3302,6 +3261,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
     ['Boundary', 'Review before writes'],
   ] as const
+  const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
+    <div><span className="core-eyebrow">Catalog import helper</span><strong>Bring your catalog into the Shop trial.</strong><p>The assistant routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
+    <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
+    <button className="core-button" disabled={commerceControlsDisabled} onClick={loadSampleCatalogItem} type="button">Load sample catalog item</button>
+    <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
+  </section>
   function runShopAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -6467,7 +6432,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {commerceBoundary}
-    <Suspense fallback={null}><ShopToday metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} /></Suspense>
+    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} /></Suspense>
     {actionGate}
   </div>
 
@@ -6911,8 +6876,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
+    {!commerce.items.length ? shopCatalogOnboarding : null}
     <section className="core-panel inventory-panel">
-      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>{lowStock.length ? `${lowStock.length} ${lowStock.length === 1 ? 'item needs' : 'items need'} action` : 'Stock is healthy'}</h2></div><div className="order-queue-actions"><span className="panel-note">{commerce.items.length} products</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></div></div>
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">Stock check</span>
@@ -6969,7 +6935,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
         <div className="inventory-tools-content">
           {supplierControl}
-          <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} production={relatedProduction} scope={orderDraftScope} /></Suspense>
+          {commerce.items.length ? <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} production={relatedProduction} scope={orderDraftScope} /></Suspense> : <p className="empty-state">Add products before enabling locations, lots, available-to-promise, or supplier policies.</p>}
         </div>
       </details>
       {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierSourcing}>
@@ -7073,12 +7039,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           </article>
         })}</div> : <p className="empty-state">No purchase orders yet. Use Order stock on an item when replenishment is needed.</p>}
       </details>
-      <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge">
-        <div><span className="core-eyebrow">Catalog import helper</span><strong>Bring your catalog into the Shop trial.</strong><p>The assistant routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
-        <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-        <button className="core-button" disabled={commerceControlsDisabled} onClick={loadSampleCatalogItem} type="button">Load sample catalog item</button>
-        <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
-      </section>
+      {commerce.items.length ? shopCatalogOnboarding : null}
       <details className="compact-disclosure catalog-disclosure" onToggle={(event) => setCatalogCreateOpen(event.currentTarget.open)} open={catalogCreateOpen}>
         <summary>Add catalog item</summary>
         <form className="core-form compact-form catalog-create-form" onSubmit={queueCatalogItem} ref={catalogCreateFormRef}>
