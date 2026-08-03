@@ -277,7 +277,7 @@ export type ProductionMutationResult =
   | { ok: true; state: ProductionState; replayed: boolean }
   | { ok: false; error: string }
 
-export type ProductionWorkspaceMutationKind = 'operating-event' | 'order-execution'
+export type ProductionWorkspaceMutationKind = 'operating-event' | 'order-execution' | 'working-sample'
 
 export type ProductionShiftOutput = {
   goodUnits: number
@@ -2018,6 +2018,25 @@ function productionOrderExecutionAppendIsExact(current: ProductionState, candida
   return Number.isFinite(commandAt) && commandAt >= latestOperatingAt
 }
 
+function productionWorkingSampleTransitionIsExact(current: ProductionState, candidate: ProductionState) {
+  const sampleId = productionWorkingSamplePackId(candidate)
+  if (!sampleId || candidate.jobs.length < 1 || candidate.events.length !== candidate.jobs.length) return false
+  const prefix = `${productionWorkingSampleActionPrefix}${sampleId.toUpperCase()}-`
+  const sampleEvents = candidate.events.filter((event) => event.actionId.startsWith(prefix))
+  if (sampleEvents.length !== candidate.events.length) return false
+  const capturedAt = sampleEvents[0]?.createdAt
+  const reasonMatch = /^Seed the (.+) working sample\.$/.exec(sampleEvents[0]?.reason ?? '')
+  if (!capturedAt || !reasonMatch
+    || sampleEvents.some((event) => event.createdAt !== capturedAt || event.reason !== sampleEvents[0].reason)) return false
+  const expected = installProductionWorkingSampleJobs(current, {
+    sampleId,
+    sampleName: reasonMatch[1],
+    jobs: candidate.jobs.map((job) => ({ ...job })),
+    capturedAt,
+  })
+  return Boolean(expected) && JSON.stringify(expected) === JSON.stringify(candidate)
+}
+
 export async function mutateProductionWorkspace(
   transition: (state: ProductionState) => ProductionState | null,
   storage = browserStorage(),
@@ -2042,6 +2061,10 @@ export async function mutateProductionWorkspace(
       if (mutationKind === 'order-execution') {
         if (!productionOrderExecutionAppendIsExact(current, candidate)) {
           return { ok: false, error: 'Production order execution must append exactly one chained command without changing operating history. Nothing was written.' } as const
+        }
+      } else if (mutationKind === 'working-sample') {
+        if (!productionWorkingSampleTransitionIsExact(current, candidate)) {
+          return { ok: false, error: 'A Plant working sample can replace only untouched sample jobs. Nothing was written.' } as const
         }
       } else if (mutationKind === 'operating-event') {
         const revisionDelta = candidate.revision - current.revision
@@ -2072,6 +2095,14 @@ export async function mutateProductionWorkspace(
   } catch {
     return { ok: false, error: 'The Production write lock failed. Nothing was applied.' }
   }
+}
+
+export function mutateProductionWorkingSample(
+  transition: (state: ProductionState) => ProductionState | null,
+  storage = browserStorage(),
+  lockManager = globalThis.navigator?.locks as unknown as ProductionLockManager | undefined,
+) {
+  return mutateProductionWorkspace(transition, storage, lockManager, 'working-sample')
 }
 
 function actionIdIsUsed(state: ProductionState, actionId: string) {
@@ -2903,6 +2934,87 @@ export type ProductionJobsImportResult = {
   created: number
   alreadyPresent: number
   replayed: boolean
+}
+
+const productionWorkingSampleActionPrefix = 'ACT-DEMO-WORKING-SAMPLE-'
+
+export function installProductionWorkingSampleJobs(stateValue: ProductionState, input: {
+  sampleId: string
+  sampleName: string
+  jobs: ProductionJob[]
+  capturedAt: string
+}) {
+  let source: ProductionState
+  try { source = validateProductionState(stateValue) } catch { return null }
+  const sampleId = typeof input?.sampleId === 'string' ? input.sampleId.trim().toLowerCase() : ''
+  const sampleName = typeof input?.sampleName === 'string' ? input.sampleName.trim() : ''
+  if (!/^[a-z][a-z0-9-]{1,39}$/.test(sampleId)
+    || !validCanonicalText(sampleName, 80)
+    || !Array.isArray(input?.jobs) || input.jobs.length < 1 || input.jobs.length > 20
+    || typeof input.capturedAt !== 'string' || !validTimestamp(input.capturedAt)) return null
+  const uniqueJobIds = new Set(input.jobs.map((job) => job.id))
+  if (uniqueJobIds.size !== input.jobs.length) return null
+
+  const sampleEvents = source.events.filter((event) => event.actionId.startsWith(productionWorkingSampleActionPrefix))
+  if (sampleEvents.some((event) => event.kind !== 'job_created')) return null
+  const sampleJobIds = new Set(sampleEvents.map((event) => event.subjectId))
+  const requestedPrefix = `${productionWorkingSampleActionPrefix}${sampleId.toUpperCase()}-`
+  const compareJobId = (left: ProductionJob, right: ProductionJob) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+  const currentSampleJobs = source.jobs.filter((job) => sampleJobIds.has(job.id)).sort(compareJobId)
+  const requestedJobs = input.jobs.map((job) => ({ ...job })).sort(compareJobId)
+  if (sampleJobIds.size === requestedJobs.length
+    && sampleEvents.length === requestedJobs.length
+    && sampleEvents.every((event) => event.actionId.startsWith(requestedPrefix))
+    && JSON.stringify(currentSampleJobs) === JSON.stringify(requestedJobs)) return source
+
+  const seed = createSeedProduction()
+  const seedWithoutJobs = validateProductionState({ ...seed, jobs: [] })
+  let base = source
+  if (sampleEvents.length || sampleJobIds.size) {
+    const baseRevision = source.revision - sampleEvents.length
+    if (baseRevision < 0) return null
+    try {
+      base = validateProductionState({
+        ...source,
+        revision: baseRevision,
+        jobs: source.jobs.filter((job) => !sampleJobIds.has(job.id)),
+        events: source.events.filter((event) => !event.actionId.startsWith(productionWorkingSampleActionPrefix)),
+      })
+    } catch {
+      return null
+    }
+    if (JSON.stringify(base) !== JSON.stringify(seed) && JSON.stringify(base) !== JSON.stringify(seedWithoutJobs)) return null
+    base = seed
+  } else if (JSON.stringify(base) !== JSON.stringify(seed)) {
+    return null
+  }
+  if (requestedJobs.some((job) => base.jobs.some((existing) => existing.id === job.id))) return null
+
+  let next = seedWithoutJobs
+  for (const [index, job] of requestedJobs.entries()) {
+    const registered = registerProductionJob(next, job, {
+      actionId: `${requestedPrefix}${String(index + 1).padStart(3, '0')}`,
+      capturedAt: input.capturedAt,
+      actor: 'Demo setup',
+      reason: `Seed the ${sampleName} working sample.`,
+      evidenceReference: `DEMO-WORKING-SAMPLE-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
+    })
+    if (!registered) return null
+    next = registered
+  }
+  return next
+}
+
+export function productionWorkingSamplePackId(stateValue: ProductionState) {
+  let state: ProductionState
+  try { state = validateProductionState(stateValue) } catch { return null }
+  const sampleIds = new Set(state.events.flatMap((event) => {
+    if (!event.actionId.startsWith(productionWorkingSampleActionPrefix)) return []
+    const suffix = event.actionId.slice(productionWorkingSampleActionPrefix.length)
+    const match = /^([A-Z][A-Z0-9-]{1,39})-\d{3}$/.exec(suffix)
+    return match ? [match[1].toLowerCase()] : []
+  }))
+  return sampleIds.size === 1 ? [...sampleIds][0] : null
 }
 
 export function importProductionJobs(stateValue: ProductionState, input: {

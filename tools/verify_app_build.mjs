@@ -5671,7 +5671,17 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('No Plant record changed.')) fail('production_shift_handoff_contract_missing')
 if (!productionSource.includes('registerProductionJob')
   || !productionSource.includes('export function importProductionJobs')
+  || !productionSource.includes('export function installProductionWorkingSampleJobs')
+  || !productionSource.includes('export function productionWorkingSamplePackId')
+  || !productionSource.includes('export function mutateProductionWorkingSample')
   || !productionSource.includes('ACT-CLIENT-PLAN-')
+  || !productionSource.includes('ACT-DEMO-WORKING-SAMPLE-')
+  || !settingsPageSource.includes('provisionLocalPlantWorkingSample')
+  || !settingsPageSource.includes("clientImportTemplate('production', workflowTemplateId, { plantIndustryPackId: industryPackId })")
+  || !coreSource.includes('className="plant-pack-context"')
+  || !coreSource.includes('sample jobs are loaded.')
+  || !coreSource.includes('Existing Plant job data was preserved.')
+  || !coreCssSource.includes('.plant-pack-context')
   || !coreSource.includes('production.job.created')
   || !coreSource.includes("<summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>")
   || !coreSource.includes('Review job')) fail('production_recurring_job_workflow_missing')
@@ -16288,6 +16298,62 @@ async function verifyProductionRuntime() {
       capturedAt: '2026-07-28T09:00:00.000Z',
       actor: 'Plant owner',
     }) === null, 'client_production_plan_unbound_source_accepted')
+    const foodSampleJobs = [
+      { id: 'FOOD-001', line: 'Batch Kitchen', product: 'Chili sauce batch', target: 200, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-15T17:29:59.999Z' },
+      { id: 'FOOD-002', line: 'Filling Line', product: 'Juice batch', target: 300, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-16T17:29:59.999Z' },
+    ]
+    const foodWorkingSample = model.installProductionWorkingSampleJobs(model.createSeedProduction(), {
+      sampleId: 'food-beverage',
+      sampleName: 'Food and beverage',
+      jobs: foodSampleJobs,
+      capturedAt: '2026-07-28T09:00:00.000Z',
+    })
+    assert(foodWorkingSample?.jobs.length === 2
+      && foodWorkingSample.jobs.some((job) => job.id === 'FOOD-001')
+      && !foodWorkingSample.jobs.some((job) => job.id === 'JOB-201')
+      && model.productionWorkingSamplePackId(foodWorkingSample) === 'food-beverage',
+    'production_working_sample_was_not_installed_or_identified')
+    const replayedFoodWorkingSample = model.installProductionWorkingSampleJobs(foodWorkingSample, {
+      sampleId: 'food-beverage',
+      sampleName: 'Food and beverage',
+      jobs: foodSampleJobs,
+      capturedAt: '2026-07-28T10:00:00.000Z',
+    })
+    assert(replayedFoodWorkingSample === foodWorkingSample, 'production_working_sample_retry_was_not_idempotent')
+    const apparelWorkingSample = model.installProductionWorkingSampleJobs(foodWorkingSample, {
+      sampleId: 'apparel',
+      sampleName: 'Apparel',
+      jobs: [{ id: 'STYLE-001', line: 'Sewing Line 1', product: 'Cotton shirt style', target: 400, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-15T17:29:59.999Z' }],
+      capturedAt: '2026-07-28T10:00:00.000Z',
+    })
+    assert(apparelWorkingSample?.jobs.some((job) => job.id === 'STYLE-001')
+      && !apparelWorkingSample.jobs.some((job) => job.id === 'FOOD-001')
+      && model.productionWorkingSamplePackId(apparelWorkingSample) === 'apparel',
+    'production_working_sample_could_not_replace_an_untouched_prior_pack')
+    let browserWorkingSampleRaw = JSON.stringify(foodWorkingSample)
+    const browserWorkingSampleStorage = {
+      getItem: () => browserWorkingSampleRaw,
+      setItem: (_key, value) => { browserWorkingSampleRaw = value },
+      removeItem: () => {},
+    }
+    const browserWorkingSampleLock = { request: async (_name, _options, callback) => callback() }
+    const switchedWorkingSample = await model.mutateProductionWorkingSample((current) => model.installProductionWorkingSampleJobs(current, {
+      sampleId: 'apparel',
+      sampleName: 'Apparel',
+      jobs: [{ id: 'STYLE-001', line: 'Sewing Line 1', product: 'Cotton shirt style', target: 400, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-15T17:29:59.999Z' }],
+      capturedAt: '2026-07-28T10:00:00.000Z',
+    }), browserWorkingSampleStorage, browserWorkingSampleLock)
+    assert(switchedWorkingSample.ok
+      && model.productionWorkingSamplePackId(switchedWorkingSample.state) === 'apparel'
+      && JSON.parse(browserWorkingSampleRaw).jobs.some((job) => job.id === 'STYLE-001'),
+    'production_working_sample_write_boundary_rejected_safe_switch')
+    const usedFoodWorkingSample = model.recordProductionOutput(foodWorkingSample, 'FOOD-001', 1, 'SHIFT-FOOD-01', proof('ACT-FOOD-OUTPUT', 1_000))
+    assert(usedFoodWorkingSample && model.installProductionWorkingSampleJobs(usedFoodWorkingSample, {
+      sampleId: 'apparel',
+      sampleName: 'Apparel',
+      jobs: [{ id: 'STYLE-001', line: 'Sewing Line 1', product: 'Cotton shirt style', target: 400, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-15T17:29:59.999Z' }],
+      capturedAt: '2026-07-28T10:00:00.000Z',
+    }) === null, 'production_working_sample_replaced_operator_output_evidence')
     assertThrows(() => model.validateProductionState({
       ...withJob,
       jobs: [{ ...withJob.jobs[0], priority: 'low' }, ...withJob.jobs.slice(1)],

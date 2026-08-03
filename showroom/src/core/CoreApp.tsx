@@ -54,7 +54,7 @@ import {
   type PendingAccountableAction,
 } from './workspace-runtime'
 import { formatTime, teamDefinitions, useTeamWorkspace } from './team-work'
-import { readPlantIndustryPackId } from './plant-industry-packs'
+import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
   advanceCommerceOrder,
   approveCommercePurchaseBudgetEnvelope,
@@ -207,6 +207,7 @@ import {
   productionShopDemandSource,
   productionShiftOutput,
   productionStateCanonical,
+  productionWorkingSamplePackId,
   recordProductionOutput,
   recordProductionScrap,
   recordProductionMaterialConsumption,
@@ -7593,6 +7594,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   useEffect(() => { productionRef.current = production }, [production])
   const [localPlantIndustryPackId] = useState(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const plantIndustryPackId = production.openingPlan?.industryPackId ?? localPlantIndustryPackId
+  const activePlantIndustryPack = plantIndustryPack(plantIndustryPackId)
+  const loadedPlantSamplePackId = productionWorkingSamplePackId(production)
+  const loadedPlantSamplePack = loadedPlantSamplePackId ? plantIndustryPack(loadedPlantSamplePackId) : null
+  const plantSampleJobsActive = loadedPlantSamplePackId === plantIndustryPackId
+  const plantSampleWorkflow = loadedPlantSamplePack?.firstWorkflow ?? activePlantIndustryPack.firstWorkflow
+  const plantSampleContext = plantSampleJobsActive
+    ? `${activePlantIndustryPack.name} sample jobs are loaded.`
+    : loadedPlantSamplePack
+      ? `${loadedPlantSamplePack.name} sample jobs are preserved. ${activePlantIndustryPack.name} is selected for future setup.`
+      : 'Existing Plant job data was preserved.'
   const plantOrderScopeWorkspaceId = managedIdentity
     ? managedWorkspaceId || managedIdentity.workspaceId
     : 'local-sample'
@@ -9346,7 +9357,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
   }
   const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState} data-step={plantTodayStep}>
-    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} type="button">{plantTodayAction}</button></div>
+    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><div className="plant-pack-context"><strong>{loadedPlantSamplePack?.name ?? activePlantIndustryPack.name} working sample</strong><span>{plantSampleWorkflow}. {plantSampleContext}</span></div><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} type="button">{plantTodayAction}</button></div>
     <div aria-label="Plant today status" className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>

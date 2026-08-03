@@ -54,6 +54,7 @@ import {
   loadManagedCompanyBrief,
   loadManagedBootstrap,
   managedTrialAuthConfigured,
+  plantImportDueAt,
   planManagedEcommerceOrderQueueImport,
   preflightManagedEcommerceOrderQueueApply,
   retainManagedCompanyBrief,
@@ -74,7 +75,12 @@ import {
   validateEcommerceOrderImportReviewPacket,
   type EcommerceOrderQueueReadinessPacket,
 } from '../products/ecommerce/ecommerce-order-review-packet'
-import { currentProductionShiftClose } from './production-workspace'
+import {
+  currentProductionShiftClose,
+  installProductionWorkingSampleJobs,
+  mutateProductionWorkingSample,
+  type ProductionJob,
+} from './production-workspace'
 import { formatTime, useTeamWorkspace } from './team-work'
 import { buildManagedTrialProof } from './managed-trial-proof'
 import { PilotOutcomePanel } from './PilotOutcomePanel'
@@ -219,6 +225,44 @@ async function provisionLocalShopWorkingSample(industryPackId: ShopIndustryPackI
       sampleId: pack.id,
       sampleName: pack.name,
       items,
+      capturedAt: new Date().toISOString(),
+    })
+    if (!next) return current
+    disposition = next === current ? 'current' : 'installed'
+    return next
+  })
+  if (!result.ok) throw new Error(result.error)
+  return disposition
+}
+
+async function provisionLocalPlantWorkingSample(industryPackId: PlantIndustryPackId, workflowTemplateId: string, owner: string) {
+  const pack = plantIndustryPack(industryPackId)
+  const preview = await createClientImportPreview(
+    clientImportTemplate('production', workflowTemplateId, { plantIndustryPackId: industryPackId }),
+    'production',
+    undefined,
+    `sample-${industryPackId}.csv`,
+    workflowTemplateId,
+  )
+  if (!preview.readyForStaging || preview.rows.some((row) => row.status !== 'ready')) {
+    throw new Error(`The ${pack.name} working sample did not pass its local data checks.`)
+  }
+  const jobs: ProductionJob[] = preview.rows.map((row) => ({
+    id: row.values.jobCode,
+    line: row.values.line,
+    product: row.values.productName,
+    target: Number(row.values.targetQuantity),
+    output: 0,
+    owner: owner.trim(),
+    priority: 'normal',
+    dueAt: plantImportDueAt(row.values.dueDate),
+  }))
+  let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
+  const result = await mutateProductionWorkingSample((current) => {
+    const next = installProductionWorkingSampleJobs(current, {
+      sampleId: pack.id,
+      sampleName: pack.name,
+      jobs,
       capturedAt: new Date().toISOString(),
     })
     if (!next) return current
@@ -1551,7 +1595,10 @@ export function SettingsPage() {
         try { provisionLocalShopIndustryPack(shopIndustryPackId) } catch { /* Existing local evidence stays authoritative. */ }
         try { await provisionLocalShopWorkingSample(shopIndustryPackId, selectedTemplate.id) } catch { /* Existing or unavailable local data stays authoritative. */ }
       }
-      if (setup.product === 'production') savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
+      if (setup.product === 'production') {
+        savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
+        try { await provisionLocalPlantWorkingSample(plantIndustryPackId, selectedTemplate.id, setup.owner) } catch { /* Existing or unavailable local data stays authoritative. */ }
+      }
       const startedAt = new Date().toISOString()
       setSetup((current) => ({ ...current, startedAt }))
       if (setup.product === 'commerce' || setup.product === 'production') {
