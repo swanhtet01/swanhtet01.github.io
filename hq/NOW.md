@@ -4,8 +4,8 @@ Updated: 2026-08-03
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `2824da83052200953967b337e81304b99de1f3f4`
-Live state observed: `2026-08-03T05:30:51.929Z`
+Live release commit: `e15d4a585b608a10a00b0dcd8a6842818d763bb4`
+Live state observed: `2026-08-03T06:14:38.116Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -49,7 +49,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Shop, Plant, Website, and Ecommerce render the real workspace before one collapsed `More tools` drawer; workflow and setup access remain available without internal counts or a redundant product-entry button (`058c2914`).
 - Product setup asks for client and owner first, exposes one unobstructed `Open working sample`, and collapses optional workflow, data, and success detail (`e3ec8b3f`).
 - Plant's state-aware mobile action carries one shift through output, same-shift material, blocker review, accountable close, and next output; reload restores the shift and closed metrics (`2909fd66`).
-- Website's mobile mission guides edit, page readiness, evidence, named approval, retained file, reload, download, and standalone rendering (`2824da83`).
+- Website's mobile mission reaches a reviewed file (`2824da83`); Ecommerce now starts a sample order directly, carries one reviewed quote into Shop, and restores confirmed progress after reload (`e15d4a58`).
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 - CEO status is output-free across weekly briefs. Company Week separates recorded from delivered and fails incomplete delivery to attention; Company Health shows receipt counts (`8d97d4d`, `ece46ce`).
 - CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
@@ -58,9 +58,9 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
 - Checks: 106 Ecommerce, 342 Commerce, 327 Production, 95 security, 241 onboarding, 11 backup, 85 managed import, and 52 PostgreSQL 17 checks across nine migrations.
-- The deterministic 12-profile rehearsal passes 24 rows. Desktop lifecycle and all setup starts pass. Live Shop reaches the counter; Plant mobile passes output through next output; Website mobile passes edit through standalone file. Both missions are overflow-free on desktop. Rendered mobile acceptance remains for Ecommerce.
+- The deterministic 12-profile rehearsal passes 24 rows. Live Shop reaches the counter; Plant mobile passes output through next output; Website mobile passes edit through standalone file; Ecommerce mobile passes sample start, cart, quote, review, Shop order, return, and reload. All four product missions are overflow-free on desktop. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
-- Both domains serve deployed `2824da83052200953967b337e81304b99de1f3f4`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Both Vercel deployments are READY with zero one-hour runtime errors.
+- Both domains serve deployed `e15d4a585b608a10a00b0dcd8a6842818d763bb4`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Both Vercel deployments are READY with zero one-hour runtime errors.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating and stops no process. The Ally remains under `memory_pressure_critical` with zero run admission, zero loaded models, and local subagents disabled. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -74,7 +74,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - `supermegabase` remains private schema v7 with no active workspace. Reviewed v8 RLS is code-only; writes stay off until backup, exact target binding, hosted advisors, tenant proof, and owner-authorized migration. The 27 legacy public tables remain outside app and browser-role access.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `2824da83`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `e15d4a58`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
@@ -91,6 +91,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete rendered mobile Ecommerce mission acceptance; setup starts plus the live Shop, Plant, and Website missions already pass.
-2. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
-3. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.
+1. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
+2. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.
