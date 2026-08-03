@@ -225,18 +225,18 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   return (
     <div className="workspace-screen settings-screen product-onboarding-screen" data-product={product}>
       <PageHeading
-        actions={<div className="product-onboarding-demo-action"><Link className="core-button" to={setupProductPreviewPath(product)}>Open the working sample</Link><small>No account. No setup. No upload.</small></div>}
-        copy={`Enter one business name and SuperMega prepares a working ${onboardingProduct.name} workspace. Customize or import data only when useful.`}
-        eyebrow={`${onboardingProduct.name} onboarding`}
-        title={`Start with ${onboardingProduct.name}`}
+        actions={<div className="product-onboarding-demo-action"><Link className="core-button" to={setupProductPreviewPath(product)}>Try the sample now</Link><small>Instant. No account or upload.</small></div>}
+        copy={`Enter your business name once. SuperMega adds realistic sample data and opens the first useful ${onboardingProduct.name} screen. Everything else is optional.`}
+        eyebrow={`${onboardingProduct.name} quick start`}
+        title={`Start using ${onboardingProduct.name}`}
       />
       <div aria-label={`${onboardingProduct.name} onboarding`} className="product-onboarding-grid">
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
-          <div className="product-onboarding-intro"><span className="core-eyebrow">Your workspace</span><h2>Start with your business name</h2><p>SuperMega adds a safe working sample so you can use the product immediately.</p></div>
+          <div className="product-onboarding-intro"><span className="core-eyebrow">One required field</span><h2>Name this workspace</h2><p>We use the name only to personalize your private working sample.</p></div>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           <div className="product-onboarding-primary">
-            <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Creating workspace...' : `Create ${onboardingProduct.name} workspace`}</button>
-            <small>{workflowReady ? `Ready with ${onboardingTemplate.name}. You review every real change.` : 'Enter the business name to continue.'}</small>
+            <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : `Start using ${onboardingProduct.name}`}</button>
+            <small>{workflowReady ? `Starts with ${onboardingTemplate.name}. You can change it later.` : 'Enter the business name to continue.'}</small>
           </div>
           <details className="compact-disclosure product-onboarding-details">
             <summary><span>Customize setup</span><small>Optional</small></summary>

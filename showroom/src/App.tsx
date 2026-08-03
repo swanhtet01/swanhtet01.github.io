@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 
 import {
   CoreLayout,
-  ProductHomePage,
+  ProductHomeEntry,
 } from './core/CoreShell'
 
 const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))
@@ -42,12 +42,6 @@ function setupProductFromQuery(value: string | null) {
   return null
 }
 
-function ProductHomeEntry() {
-  const location = useLocation()
-  const route = productDemoPath(new URLSearchParams(location.search).get('demo'))
-  return route ? <Navigate replace to={route} /> : <ProductHomePage />
-}
-
 function LegacyEntryRedirect() {
   const location = useLocation()
   const params = new URLSearchParams(location.search)
@@ -76,7 +70,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<CoreLayout />}>
-          <Route element={<ProductHomeEntry />} index />
+          <Route element={<ProductHomeEntry productDemoPath={productDemoPath} />} index />
           <Route element={<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage product="commerce" /></Suspense>} path="shop/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Plant" />}><OperationsPage product="production" /></Suspense>} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />

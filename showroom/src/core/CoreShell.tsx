@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router'
+import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
 import { recordBehaviorSignal } from './behavior-trail'
@@ -85,9 +85,42 @@ const checkingRuntime: RuntimeHealth = {
   importProvisioning: null,
 }
 
+const LAST_PRODUCT_KEY = 'supermega.last-product.v1'
+const productWorkspacePaths: Record<ClientSolutionId, string> = {
+  commerce: '/shop/',
+  production: '/plant/',
+  website: '/website/',
+  ecommerce: '/ecommerce/',
+}
+
+function isClientSolutionId(value: unknown): value is ClientSolutionId {
+  return value === 'commerce' || value === 'production' || value === 'website' || value === 'ecommerce'
+}
+
+function productWorkspacePath(product: ClientSolutionId) {
+  return productWorkspacePaths[product]
+}
+
+function readLastProduct(storage: Pick<Storage, 'getItem'>): ClientSolutionId | null {
+  try {
+    const product = storage.getItem(LAST_PRODUCT_KEY)
+    return isClientSolutionId(product) ? product : null
+  } catch {
+    return null
+  }
+}
+
+function rememberLastProduct(storage: Pick<Storage, 'setItem'>, product: ClientSolutionId) {
+  try {
+    storage.setItem(LAST_PRODUCT_KEY, product)
+  } catch {
+    // Product memory is optional; the launcher remains available when storage is blocked.
+  }
+}
+
 type NavigationItem = { to: string; label: string; end?: boolean }
 
-const productsNavigation: NavigationItem = { to: '/', label: 'Products', end: true }
+const productsNavigation: NavigationItem = { to: '/?choose=1', label: 'Switch product', end: true }
 const productNavigation: Record<ClientSolutionId, NavigationItem> = {
   commerce: { to: '/shop/', label: 'Shop' },
   production: { to: '/plant/', label: 'Plant' },
@@ -344,6 +377,7 @@ export function CoreLayout() {
     if (location.pathname.startsWith('/vision/')) return
     const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}${location.hash}`
     const product = routeProduct ?? settingsProduct ?? 'unknown'
+    if (routeProduct) rememberLastProduct(window.localStorage, routeProduct)
     recordBehaviorSignal(window.localStorage, {
       event: location.pathname === '/'
         ? 'home_opened'
@@ -409,10 +443,25 @@ const customerProducts = [
   ['Ecommerce', 'Take online orders', 'Storefront, checkout, delivery, and Shop handoff.', '/ecommerce/'],
 ] as const
 
+export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
+  const location = useLocation()
+  const params = new URLSearchParams(location.search)
+  const route = productDemoPath(params.get('demo'))
+  const choosingProduct = params.get('choose') === '1'
+  const lastProduct = !route && !choosingProduct && typeof window !== 'undefined'
+    ? readLastProduct(window.localStorage)
+    : null
+  return route
+    ? <Navigate replace to={route} />
+    : lastProduct
+      ? <Navigate replace to={productWorkspacePath(lastProduct)} />
+      : <ProductHomePage />
+}
+
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Each product is a separate workspace. Open a working sample now; setup appears only when you need your own data." eyebrow="Choose a product" title="What do you want to run?" />
+      <PageHeading copy="Pick one workspace. SuperMega remembers it on this device; use Switch product whenever you need another." eyebrow="Products" title="Choose one product" />
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => (
           <Link aria-label={`Open ${name}`} className="product-track-card" key={name} to={path}>
@@ -426,7 +475,7 @@ export function ProductHomePage() {
           </Link>
         ))}
       </nav>
-      <p className="product-home-note">No account or setup is required for the samples. Each product opens its own workspace; reviewed handoffs connect them when needed.</p>
+      <p className="product-home-note">No account or setup is required. Products stay separate and connect only through reviewed handoffs.</p>
     </div>
   )
 }
