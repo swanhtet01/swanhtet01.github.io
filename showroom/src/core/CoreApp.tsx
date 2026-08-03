@@ -24,7 +24,6 @@ import {
   setupProductFromQuery,
   SHOP_ORDER_DRAFT_RESET_EPOCH_KEY,
   SHOP_ORDER_DRAFT_RESET_PREFIX,
-  templateFor,
   clientSetupPath,
   type SetupProductId,
 } from './product-setup'
@@ -263,7 +262,6 @@ const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module)
 const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
 const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: module.ShopToday })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
-const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
 
 type PurchaseOrderDraft =
   | { mode: 'create'; requisitionId?: string; sku: string; supplier: string; expectedAt: string; quantity: string; unitCostMmk: string }
@@ -1221,97 +1219,6 @@ export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: strin
 
 export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty-state"><span>&gt;_</span><p>{children}</p></div>
-}
-
-const customerTracks = [
-  ['Shop', 'Retail, showroom, social selling.', 'Sell, reserve, review requests.', '/shop/?tab=counter'],
-  ['Plant', 'Factory, workshop, service floor.', 'Plan jobs, record output, and close shifts.', '/plant/?tab=production'],
-  ['Website', 'Company site and proof catalog.', 'Create pages, offers, leads.', '/website/'],
-  ['Ecommerce', 'Online ordering and delivery.', 'Build storefronts and Shop review.', '/ecommerce/'],
-] as const
-
-export function ProductHomePage() {
-  const runtime = useOutletContext<RuntimeHealth>()
-  const [setup] = useSetupWorkspace()
-  const progress = pilotProgress(setup)
-  const ready = pilotReady(setup)
-  const contract = productContracts[setup.product]
-  const template = templateFor(setup.product, setup.templateId)
-  const sourceNamed = Boolean(setup.currentRecord.trim())
-  const proofNamed = Boolean(setup.acceptanceEvidence.trim())
-  const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
-  const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
-  const nextHref = ready ? '/settings/#controls' : clientSetupPath(setup.product)
-  const nextAction = ready ? 'Export readiness file' : 'Add your data'
-  const nextDetail = ready
-    ? `${contract.name} is ready for data review.`
-    : `${contract.name} data setup is ${progress}% complete.`
-  const autopilotRows = [
-    ['Track', contract.name, template.name],
-    ['Data', sourceNamed ? 'First source named' : 'Needs first source', sourceNamed ? setup.currentRecord : 'Upload, paste, or describe one real record.'],
-    ['Proof', proofNamed ? 'Acceptance proof named' : 'Needs acceptance proof', proofNamed ? setup.acceptanceEvidence : 'Define how you know the workflow works.'],
-    ['Data access', ready ? 'Ready for import review' : 'Locked until approved', ready ? 'Approved data can use users, audit, and controlled writes.' : 'Samples stay local until you approve real data.'],
-  ] as const
-  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
-  const managedReadiness = runtime.importProvisioning ? {
-    ready: runtime.importProvisioning.ready,
-    checks: runtime.importProvisioning.checks,
-    forbiddenUntilReady: runtime.importProvisioning.forbidden_until_ready,
-    nextAction: runtime.importProvisioning.next_action,
-    safeEnable: runtime.activationManifest?.safe_enable ?? [],
-  } : null
-  return (
-    <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Pick one product and try the sample. Add your data only when it helps." eyebrow="Products" title="Start with one product." />
-      <section className="product-home-operating-model" aria-label="SuperMega operating model">
-        <div>
-          <span className="core-eyebrow">Try first</span>
-          <strong>Sample data stays on this device.</strong>
-        </div>
-        <div>
-          <span className="core-eyebrow">Add data later</span>
-          <strong>Import data after the demo makes sense.</strong>
-        </div>
-        <Link className="core-button primary" to={clientSetupPath(setup.product)}>Add data</Link>
-      </section>
-      <nav aria-label="Business tracks" className="product-track-grid">
-        {customerTracks.map(([name, fit, outcome, path]) => (
-          <article className="product-track-card" key={name}>
-            <div>
-              <span className="core-eyebrow">{fit}</span>
-              <h2>{name}</h2>
-              <p>{outcome}</p>
-            </div>
-            <div className="product-track-actions">
-              <Link to={path}>Try demo</Link>
-            </div>
-          </article>
-        ))}
-      </nav>
-      <section className="product-home-autopilot" aria-label="Recommended next step">
-        <div className="product-home-autopilot-head">
-          <div>
-            <span className="core-eyebrow">Next step</span>
-            <h2>Recommended next move</h2>
-            <p>{nextDetail} No external send, publish, payment, or production write runs from this screen.</p>
-          </div>
-          <Link className="core-button primary" to={nextHref}>{nextAction}</Link>
-        </div>
-        <div className="product-home-autopilot-grid">
-          {autopilotRows.map(([label, value, detail]) => (
-            <span key={label}>
-              <small>{label}</small>
-              <strong>{value}</strong>
-              <em>{detail}</em>
-            </span>
-          ))}
-        </div>
-      </section>
-      <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
-        <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} managedReadiness={managedReadiness} nextHostedAction={nextHostedAction} progress={progress} ready={ready} />
-      </Suspense>
-    </div>
-  )
 }
 
 function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: Approval; onClose: () => void; onDecision: (status: 'approved' | 'declined', reviewer: string, note: string) => Promise<void> | void }) {
