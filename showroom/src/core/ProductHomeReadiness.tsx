@@ -32,9 +32,23 @@ import {
 type ProductHomeReadinessProps = {
   activationCoverage: number
   hostedReady: boolean
+  managedReadiness: ManagedTrialReadiness | null
   nextHostedAction: string
   progress: number
   ready: boolean
+}
+
+type ManagedTrialReadiness = {
+  ready: boolean
+  checks: Array<{
+    id: string
+    label: string
+    ready: boolean
+    action: string
+  }>
+  forbiddenUntilReady: string[]
+  nextAction: string
+  safeEnable: string[]
 }
 
 const productContinuations = {
@@ -44,7 +58,7 @@ const productContinuations = {
   ecommerce: { label: 'Ecommerce', path: '/ecommerce/' },
 } satisfies Record<Exclude<BehaviorProductId, 'unknown'>, { label: string; path: string }>
 
-export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHostedAction, progress, ready }: ProductHomeReadinessProps) {
+export function ProductHomeReadiness({ activationCoverage, hostedReady, managedReadiness, nextHostedAction, progress, ready }: ProductHomeReadinessProps) {
   const commandInputRef = useRef<HTMLInputElement>(null)
   const managedRequestRef = useRef(0)
   const ownerControlRequestRef = useRef(0)
@@ -95,6 +109,10 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
     [hostedReady ? 'Prepare live account' : 'Finish live gate', hostedReady ? 'Controls ready' : `${activationCoverage}% gated`, hostedReady ? 'Use account roles, audit, and approval before any real write.' : nextHostedAction],
     ['Product coverage', behaviorProducts ? `${behaviorProducts}/4 touched` : 'Pick one product', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.'],
   ] as const
+  const managedBlockerCount = managedReadiness?.checks.filter((check) => !check.ready).length ?? 0
+  const managedRestrictedCount = managedReadiness?.forbiddenUntilReady.length ?? 0
+  const browserSampleEnabled = managedReadiness?.safeEnable.includes('browser_local_trial') ?? false
+  const managedSafeMode = managedReadiness?.ready ? 'Company workspace' : browserSampleEnabled ? 'Browser-local sample' : 'Read-only preview'
 
   const refreshLocalOwnerControl = useCallback(() => {
     setLocalOwnerControl(buildLocalOwnerControlRun(
@@ -402,6 +420,36 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, nextHost
           </div>
           <Link className="text-link" to={commandPath}>{commandLabel}</Link>
         </details>
+        {managedReadiness ? <details aria-label="Managed trial readiness" className="business-command-evidence">
+          <summary><span>Company workspace status</span><small>{managedReadiness.ready ? 'Ready for activation review' : `${managedBlockerCount} checks left`}</small></summary>
+          <div className="product-home-readiness-grid">
+            <span>
+              <small>Safe today</small>
+              <strong>{managedSafeMode}</strong>
+              <em>{managedReadiness.ready ? 'Company controls still need approval.' : 'Use the sample in this browser.'}</em>
+            </span>
+            <span>
+              <small>Company access</small>
+              <strong>{managedReadiness.ready ? 'Ready to review' : `${managedBlockerCount} checks left`}</strong>
+              <em>{managedReadiness.ready ? 'Roles and audit controls can be reviewed.' : 'Accounts and company data stay locked.'}</em>
+            </span>
+            <span>
+              <small>Protected actions</small>
+              <strong>{managedRestrictedCount} held</strong>
+              <em>Writes, payments, and messages stay off.</em>
+            </span>
+            <span>
+              <small>Your evidence</small>
+              <strong>{ownerControl.sourceCount}/4 products</strong>
+              <em>Start with the product that matters most.</em>
+            </span>
+          </div>
+          <details className="owner-control-queue">
+            <summary>Review launch gates <span>{managedReadiness.checks.length}</span></summary>
+            <div>{managedReadiness.checks.map((check) => <span key={check.id}><strong>{check.label}</strong><small>{check.ready ? 'Ready' : check.action}</small></span>)}</div>
+          </details>
+          <p className="business-command-boundary">Next managed step: {managedReadiness.nextAction} No managed customer action runs from this checklist.</p>
+        </details> : null}
       </section>
       <section className="product-home-readiness product-home-business-tracks" aria-label="Product setup paths">
         <div className="product-home-readiness-head">
