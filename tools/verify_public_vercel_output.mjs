@@ -223,13 +223,14 @@ const productPageBoundaries = new Map([
 for (const product of publicProducts) {
   const page = pages.get(product.publicAnchor)?.html || ''
   const contactRoute = `/contact/?product=${product.id}&amp;source=product-page`
+  const setupRoute = `https://app.supermega.dev/settings/?product=${product.id}`
   for (const token of [
     productPageOutcomes.get(product.id),
-    `href="${product.appRoute}">Open working ${product.name} sample</a>`,
-    `href="${contactRoute}">Set up ${product.name} for my company</a>`,
+    `href="${product.appRoute}">Try ${product.name} sample</a>`,
+    `href="${setupRoute}">Set up my ${product.name}</a>`,
     'href="/#products">All products</a>',
-    'No account required',
-    'Ready sample data',
+    'No account for sample',
+    'One-step setup',
     'Phone and desktop',
     'Three steps, one clear record.',
     'Useful before setup.',
@@ -237,7 +238,8 @@ for (const product of publicProducts) {
   ]) {
     if (!page.includes(token)) fail('product_page_contract_missing', { product: product.id, token })
   }
-  if (page.includes(`https://app.supermega.dev/settings/?product=${product.id}`)) fail('public_product_setup_detour_returned', { product: product.id })
+  if (page.includes(contactRoute)) fail('public_product_contact_onboarding_detour_present', { product: product.id })
+  if (!page.includes(setupRoute)) fail('public_product_setup_route_missing', { product: product.id })
   if (!page.includes(product.appRoute)) fail('direct_product_route_missing', { product: product.id })
   for (const otherProduct of publicProducts.filter((candidate) => candidate.id !== product.id)) {
     if (page.includes(otherProduct.appRoute) || page.includes(`href="${otherProduct.publicAnchor}"`)) fail('other_product_exposed_on_focused_page', { product: product.id, otherProduct: otherProduct.id })

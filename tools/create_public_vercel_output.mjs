@@ -409,13 +409,13 @@ function productCardHtml(product, index) {
 
 function productPageHtml(product) {
   const profile = publicProductProfiles.get(product.id)
-  const contactRoute = `/contact/?product=${encodeURIComponent(product.id)}&source=product-page`
+  const setupRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
   return documentHtml({
     route: product.publicAnchor,
     title: `${product.name} | SuperMega`,
     description: profile.summary,
     content: `<main>
-      <section class="frame product-hero"><a class="product-back" href="/#products">All products</a><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(profile.outcome)}</h1><p class="lede">${escapeHtml(profile.summary)}</p><div class="actions"><a class="button primary" href="${escapeHtml(product.appRoute)}">Open working ${escapeHtml(product.name)} sample</a><a class="button" href="${escapeHtml(contactRoute)}">Set up ${escapeHtml(product.name)} for my company</a></div><div class="hero-note"><span>No account required</span><span>Ready sample data</span><span>Phone and desktop</span></div></section>
+      <section class="frame product-hero"><a class="product-back" href="/#products">All products</a><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(profile.outcome)}</h1><p class="lede">${escapeHtml(profile.summary)}</p><div class="actions"><a class="button primary" href="${escapeHtml(product.appRoute)}">Try ${escapeHtml(product.name)} sample</a><a class="button" href="${escapeHtml(setupRoute)}">Set up my ${escapeHtml(product.name)}</a></div><div class="hero-note"><span>No account for sample</span><span>One-step setup</span><span>Phone and desktop</span></div></section>
       <section class="frame product-detail" aria-label="${escapeHtml(product.name)} workflow"><div class="product-detail-grid"><section class="product-workflow-panel"><span class="eyebrow">How it works</span><h2>Three steps, one clear record.</h2><div class="steps">${profile.workflow.map(([title, detail]) => `<div class="step"><div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></div></div>`).join('')}</div></section><aside class="product-proof-panel"><span class="eyebrow">What is included</span><h2>Useful before setup.</h2><ul class="product-proof-list">${profile.proof.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul><p class="product-boundary">${escapeHtml(profile.boundary)}</p></aside></div></section>
     </main>`,
   })

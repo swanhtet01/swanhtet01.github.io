@@ -116,8 +116,9 @@ async function verifyOnce() {
     assert(homepage.includes(`href="${product.publicAnchor}"`), 'focused_product_page_missing', { product: product.id, publicAnchor: product.publicAnchor })
     assert(!homepage.includes(`href="${product.appRoute}"`), 'homepage_bypasses_product_context', { product: product.id, appRoute: product.appRoute })
     assert(productPage.includes(`href="${product.appRoute}"`), 'direct_product_route_missing', { product: product.id, appRoute: product.appRoute })
-    assert(productPage.includes(`href="${contactRoute}"`), 'product_contact_route_missing', { product: product.id, contactRoute })
-    assert(!productPage.includes(`href="${setupRoute}"`), 'public_product_setup_detour_returned', { product: product.id, setupRoute })
+    assert(productPage.includes(`href="${product.appRoute}">Try ${product.name} sample</a>`), 'product_demo_action_missing', { product: product.id })
+    assert(productPage.includes(`href="${setupRoute}">Set up my ${product.name}</a>`), 'product_setup_route_missing', { product: product.id, setupRoute })
+    assert(!productPage.includes(`href="${contactRoute}"`), 'product_contact_onboarding_detour_present', { product: product.id, contactRoute })
     for (const template of product.templates) assert(!homepage.includes(template.name), 'template_catalog_exposed', { template: template.id })
     for (const otherProduct of manifest.customerProducts.filter((candidate) => candidate.id !== product.id)) {
       assert(!productPage.includes(otherProduct.appRoute) && !productPage.includes(`href="${otherProduct.publicAnchor}"`), 'other_product_exposed_on_focused_page', { product: product.id, otherProduct: otherProduct.id })

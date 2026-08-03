@@ -45,8 +45,8 @@ if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('p
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
 if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
 for (const [label, verifier, contract] of [
-  ['previewVerifier', previewVerifier, ['preview_direct_product_route_missing', 'preview_product_setup_detour_returned']],
-  ['liveVerifier', liveVerifier, ['direct_product_route_missing', 'public_product_setup_detour_returned']],
+  ['previewVerifier', previewVerifier, ['preview_direct_product_route_missing', 'preview_product_setup_route_missing', 'preview_product_contact_onboarding_detour_present']],
+  ['liveVerifier', liveVerifier, ['direct_product_route_missing', 'product_setup_route_missing', 'product_contact_onboarding_detour_present']],
 ]) {
   if (!contract.every((token) => verifier.includes(token))) {
     failures.push(`direct_product_route_contract_missing:${label}`)

@@ -71,8 +71,9 @@ for (const product of manifest.customerProducts) {
   if (!homepage.includes(`href="${product.publicAnchor}"`)) throw new Error(`preview_focused_product_page_missing:${product.id}`)
   if (homepage.includes(`href="${product.appRoute}"`)) throw new Error(`preview_homepage_bypasses_product_context:${product.id}`)
   if (!productPage.includes(`href="${product.appRoute}"`)) throw new Error(`preview_direct_product_route_missing:${product.id}`)
-  if (!productPage.includes(`href="${contactRoute}"`)) throw new Error(`preview_product_contact_route_missing:${product.id}`)
-  if (productPage.includes(`href="${setupRoute}"`)) throw new Error(`preview_product_setup_detour_returned:${product.id}`)
+  if (!productPage.includes(`href="${product.appRoute}">Try ${product.name} sample</a>`)) throw new Error(`preview_product_demo_action_missing:${product.id}`)
+  if (!productPage.includes(`href="${setupRoute}">Set up my ${product.name}</a>`)) throw new Error(`preview_product_setup_route_missing:${product.id}`)
+  if (productPage.includes(`href="${contactRoute}"`)) throw new Error(`preview_product_contact_onboarding_detour_present:${product.id}`)
   for (const otherProduct of manifest.customerProducts.filter((candidate) => candidate.id !== product.id)) {
     if (productPage.includes(otherProduct.appRoute) || productPage.includes(`href="${otherProduct.publicAnchor}"`)) throw new Error(`preview_other_product_exposed:${product.id}:${otherProduct.id}`)
   }
