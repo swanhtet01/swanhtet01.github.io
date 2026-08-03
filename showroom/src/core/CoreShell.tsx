@@ -290,17 +290,24 @@ export function CoreLayout() {
   const [theme, setTheme] = useState<InterfaceTheme>(initialInterfaceTheme)
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
-  const settingsProduct = location.pathname.startsWith('/settings/') ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
-  const storedSettingsSetup = location.pathname.startsWith('/settings/') ? readLocalSetupReadiness() : null
+  const customerSettingsRoute = location.pathname.startsWith('/settings/')
+  const internalBuilderRoute = location.pathname.startsWith('/internal/client-builder')
+  const settingsProduct = customerSettingsRoute ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
+  const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
   const sensitiveAccountRoute = location.pathname.startsWith('/account/')
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
   const accountEntryRoute = loginRoute || sensitiveAccountRoute
   const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
-  const setupRoute = location.pathname.startsWith('/settings/')
+  const setupRoute = customerSettingsRoute || internalBuilderRoute
+  const setupNavigation: NavigationItem = internalBuilderRoute
+    ? { to: '/internal/client-builder/', label: 'Client builder' }
+    : settingsProduct
+      ? { to: `${location.pathname}${location.search}`, label: `${productDisplayName(settingsProduct)} setup` }
+      : { to: '/settings/#controls', label: 'Recovery' }
   const activeNavigation: NavigationItem[] = routeProduct
     ? [productsNavigation, productNavigation[routeProduct]]
     : setupRoute
-      ? [productsNavigation, { to: '/settings/', label: 'Setup' }]
+      ? [productsNavigation, setupNavigation]
       : [productsNavigation]
   const mobileNavigation = routeProduct || setupRoute ? activeNavigation : []
   const routeName = loginRoute
@@ -313,8 +320,10 @@ export function CoreLayout() {
       ? 'Ecommerce'
       : location.pathname.startsWith('/vision/')
         ? 'Vision'
-      : location.pathname.startsWith('/settings/')
-        ? 'Setup'
+      : internalBuilderRoute
+        ? 'Client builder'
+      : customerSettingsRoute
+        ? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : 'Recovery')
         : location.pathname.startsWith('/shop/')
           ? 'Shop'
           : location.pathname.startsWith('/plant/')
@@ -325,25 +334,35 @@ export function CoreLayout() {
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
     window.scrollTo({ top: 0, behavior: 'instant' })
-  }, [location.pathname, location.search, routeName])
+  }, [location.hash, location.pathname, location.search, routeName])
 
   useEffect(() => {
     if (location.pathname.startsWith('/vision/')) return
-    const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}`
+    const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}${location.hash}`
     const product = routeProduct ?? settingsProduct ?? 'unknown'
     recordBehaviorSignal(window.localStorage, {
       event: location.pathname === '/'
         ? 'home_opened'
-        : location.pathname.startsWith('/settings/')
+        : customerSettingsRoute
           ? (settingsProduct ? 'setup_opened' : 'settings_opened')
           : routeProduct
             ? 'product_opened'
             : 'settings_opened',
       product,
       route,
-      detail: sensitiveAccountRoute ? 'Company account access viewed.' : routeProduct ? `${productDisplayName(routeProduct)} product viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
+      detail: sensitiveAccountRoute
+        ? 'Company account access viewed.'
+        : routeProduct
+          ? `${productDisplayName(routeProduct)} product viewed.`
+          : internalBuilderRoute
+            ? 'Internal client builder viewed.'
+            : settingsProduct
+              ? `${productDisplayName(settingsProduct)} onboarding viewed.`
+              : customerSettingsRoute
+                ? 'Recovery and activation controls viewed.'
+                : 'Product launcher viewed.',
     })
-  }, [location.pathname, location.search, routeProduct, sensitiveAccountRoute, settingsProduct])
+  }, [customerSettingsRoute, internalBuilderRoute, location.hash, location.pathname, location.search, routeProduct, sensitiveAccountRoute, settingsProduct])
 
   useEffect(() => {
     document.documentElement.dataset.supermegaTheme = theme

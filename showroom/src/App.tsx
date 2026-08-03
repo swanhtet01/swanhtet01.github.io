@@ -59,9 +59,15 @@ function SettingsEntry() {
   const location = useLocation()
   const product = setupProductFromQuery(new URLSearchParams(location.search).get('product'))
 
-  return product
-    ? <Suspense fallback={<ProductLoading name="product setup" />}><ProductOnboardingPage product={product} /></Suspense>
-    : <Suspense fallback={<ProductLoading name="client setup" />}><SettingsPage /></Suspense>
+  if (product) {
+    return <Suspense fallback={<ProductLoading name="product setup" />}><ProductOnboardingPage product={product} /></Suspense>
+  }
+
+  if (location.hash === '#controls') {
+    return <Suspense fallback={<ProductLoading name="recovery controls" />}><SettingsPage /></Suspense>
+  }
+
+  return <Navigate replace to="/" />
 }
 
 export default function App() {
@@ -82,10 +88,11 @@ export default function App() {
           <Route element={<Navigate replace to="/website/" />} path="products/website/*" />
           <Route element={<Navigate replace to="/ecommerce/" />} path="products/ecommerce/*" />
           <Route element={<SettingsEntry />} path="settings/*" />
+          <Route element={<Suspense fallback={<ProductLoading name="client builder" />}><SettingsPage /></Suspense>} path="internal/client-builder/*" />
           <Route element={<LegacyEntryRedirect />} path="legacy-entry" />
           <Route element={<Navigate replace to="/" />} path="agents/*" />
           <Route element={<Navigate replace to="/" />} path="assist/*" />
-          <Route element={<Navigate replace to="/settings/" />} path="setup/*" />
+          <Route element={<Navigate replace to="/" />} path="setup/*" />
           <Route element={<Navigate replace to="/settings/#controls" />} path="trust/*" />
           <Route element={<Navigate replace to="/" />} path="app/*" />
           <Route element={<Suspense fallback={<ProductLoading name="managed access" />}><ManagedLoginPage /></Suspense>} path="login" />
