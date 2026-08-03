@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join, relative, resolve } from 'node:path'
+import { runInNewContext } from 'node:vm'
 
 const root = process.cwd()
 const staticDir = resolve(root, '.vercel', 'output', 'static')
@@ -248,11 +249,86 @@ for (const product of publicProducts) {
 }
 
 const contact = pages.get('/contact/')?.html || ''
-for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', '/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||\'\')', "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Your company and goal are already filled. Add your name and reply email, review the request, then send it.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Company and goal are ready for review from your AI memory.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'Could not route the request here. Please wait and try again.']) {
+for (const token of [
+  'data-contact-form',
+  'action="/api/contact-submissions"',
+  'name="name"',
+  'name="email"',
+  'name="company"',
+  'name="product"',
+  'value="shop"',
+  'value="plant"',
+  'value="website"',
+  'value="ecommerce"',
+  'type="hidden" name="template"',
+  'name="goal"',
+  'name="idempotency_key"',
+  'name="proof_contract"',
+  'name="proof_version"',
+  'name="proof_digest"',
+  'name="proof_product"',
+  'name="proof_template"',
+  'name="proof_readiness"',
+  'name="proof_sources"',
+  'name="proof_behavior"',
+  'name="proof_decisions"',
+  'proof_outcome',
+  'proof_outcome_digest',
+  'proof_outcome_accepted',
+  'name="proof_raw_records"',
+  'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert',
+  'x-idempotency-key',
+  'rate_limited',
+  'trial_proof_invalid',
+  'Tell us your company and one recurring job that should become easier.',
+  'Start with one real job.',
+  'Which job should become easier first?',
+  'Request next step',
+  'Nothing is connected or activated when you send this request.',
+  '>Shop<',
+  '>Plant<',
+  '>Website<',
+  '>Ecommerce<',
+  'No account, data connection, automation, or external action begins from this form.',
+  'Reply email',
+  'data-contact-heading',
+  'data-contact-lede',
+  'data-contact-copy-heading',
+  'data-contact-copy',
+  'data-trial-proof',
+  'Client-provided trial proof',
+  'Reviewed setup summary',
+  'it does not verify a managed account.',
+  'digest-bound aggregate summary',
+  'location.hash.slice(1)',
+  '/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||\'\')',
+  "productNames={shop:'Shop',plant:'Plant',website:'Website',ecommerce:'Ecommerce'}",
+  'requestedProductName&&!handoff.toString()',
+  "heading.textContent='Set up '+requestedProductName+' for your company.'",
+  "lede.textContent='Tell us your company and the first '+requestedProductName+' job you want to improve.",
+  "copyHeading.textContent='One product. One first job.'",
+  "copy.textContent='You do not need to choose a template.",
+  "handoff.get('company')",
+  "handoff.get('goal')",
+  "history.replaceState(null,'',location.pathname+location.search)",
+  "heading.textContent='Finish your '+productName+' request.'",
+  'Your company and goal are already filled. Add your name and reply email, review the request, then send it.',
+  'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.',
+  'Raw records, questions, approval contents, and account details stay out.',
+  'Trial summary attached for review. Nothing has been sent.',
+  'Trial summary detached. Review the updated request before sending.',
+  'Company and goal are ready for review from your AI memory.',
+  'Request received:',
+  'Keep this ID for follow-up.',
+  'Too many requests from this connection. Please wait ten minutes and try again.',
+  'Could not route the request here. Please wait and try again.',
+]) {
   if (!contact.includes(token)) fail('contact_contract_missing', { token })
 }
 if (contact.includes('mailto:') || contact.includes('tel:') || contact.includes('Email swanhtet@supermega.dev')) fail('contact_bypass_links_returned')
 if (contact.includes('value="agents"') || contact.includes('>AI Agent Solutions<')) fail('shared_capability_listed_as_contact_product')
+if (contact.includes('Template, if known') || contact.includes('<label>Starting point')) fail('contact_customer_decision_bloat_returned')
+if ((contact.match(/<label\b/g) || []).length !== 5) fail('contact_visible_field_count_wrong')
 if (/<[^>]+\sstyle=/.test(contact)) fail('contact_inline_style_returned')
 
 const privacy = pages.get('/privacy/')?.html || ''
@@ -308,6 +384,70 @@ if (!securityRoute) fail('public_security_header_route_missing')
 const csp = securityRoute.headers['content-security-policy']
 const styleBody = contact.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? ''
 const scriptBody = contact.match(/<script>([\s\S]*?)<\/script>/)?.[1] ?? ''
+
+function simulateContactOnboarding(search, hash = '') {
+  const field = (value = '') => ({ value, textContent: '', disabled: false, addEventListener() {} })
+  const textNode = (text) => ({ ...field(), textContent: text })
+  const product = field('guide')
+  const names = { guide: 'Help me choose', shop: 'Shop', plant: 'Plant', website: 'Website', ecommerce: 'Ecommerce' }
+  Object.defineProperty(product, 'selectedOptions', { get: () => [{ textContent: names[product.value] || 'Help me choose' }] })
+  const template = field()
+  const company = field()
+  const goal = field()
+  const status = field()
+  const submit = field()
+  const requestKey = field()
+  const source = field()
+  const referrer = field()
+  const heading = textNode('What should run better?')
+  const lede = textNode('Tell us your company and one recurring job that should become easier. We will reply with the smallest useful next step.')
+  const copyHeading = textNode('Start with one real job.')
+  const copy = textNode('No account, data connection, automation, or external action begins from this form. We first identify the record, responsible person, and acceptance check.')
+  const formFields = new Map([
+    ['[data-form-status]', status],
+    ['button[type="submit"]', submit],
+    ['[name="product"]', product],
+    ['[name="template"]', template],
+    ['[name="company"]', company],
+    ['[name="goal"]', goal],
+    ['[name="idempotency_key"]', requestKey],
+    ['[name="source_url"]', source],
+    ['[name="referrer"]', referrer],
+  ])
+  const form = { querySelector: (selector) => formFields.get(selector) || null, addEventListener() {}, appendChild() {} }
+  const nodes = new Map([
+    ['[data-contact-form]', form],
+    ['[data-contact-heading]', heading],
+    ['[data-contact-lede]', lede],
+    ['[data-contact-copy-heading]', copyHeading],
+    ['[data-contact-copy]', copy],
+    ['[data-trial-proof]', null],
+  ])
+  let historyReplaced = false
+  runInNewContext(scriptBody, {
+    document: { querySelector: (selector) => nodes.get(selector) ?? null, createElement: () => field() },
+    location: { search, hash, pathname: '/contact/' },
+    history: { replaceState() { historyReplaced = true } },
+    URLSearchParams,
+    window: {},
+  }, { timeout: 1_000 })
+  return { product: product.value, template: template.value, company: company.value, goal: goal.value, heading: heading.textContent, lede: lede.textContent, copyHeading: copyHeading.textContent, copy: copy.textContent, historyReplaced }
+}
+
+for (const [id, name] of Object.entries({ shop: 'Shop', plant: 'Plant', website: 'Website', ecommerce: 'Ecommerce' })) {
+  const result = simulateContactOnboarding(`?product=${id}&source=product-page`)
+  if (result.product !== id
+    || result.heading !== `Set up ${name} for your company.`
+    || !result.lede.includes(`the first ${name} job you want to improve`)
+    || result.copyHeading !== 'One product. One first job.'
+    || result.copy !== 'You do not need to choose a template. Nothing is connected, imported, or activated when you send this request.'
+    || result.historyReplaced) fail('contact_product_context_runtime_wrong', { product: id, result })
+}
+const unknownProduct = simulateContactOnboarding('?product=constructor')
+if (unknownProduct.product !== 'guide' || unknownProduct.heading !== 'What should run better?' || unknownProduct.copyHeading !== 'Start with one real job.') fail('contact_unknown_product_not_ignored')
+const appHandoff = simulateContactOnboarding('?product=shop&template=retail', '#company=Golden%20Valley&goal=Close%20orders%20faster')
+if (appHandoff.product !== 'shop' || appHandoff.template !== 'retail' || appHandoff.company !== 'Golden Valley' || appHandoff.goal !== 'Close orders faster' || appHandoff.heading !== 'Finish your Shop request.' || !appHandoff.historyReplaced) fail('contact_app_handoff_runtime_wrong', { appHandoff })
+
 const expectedStyleHash = `'sha256-${createHash('sha256').update(styleBody).digest('base64')}'`
 const expectedScriptHash = `'sha256-${createHash('sha256').update(scriptBody).digest('base64')}'`
 for (const token of ["default-src 'self'", "base-uri 'none'", "object-src 'none'", "frame-ancestors 'none'", "form-action 'self'", "script-src-attr 'none'", "style-src-attr 'none'", expectedStyleHash, expectedScriptHash]) {

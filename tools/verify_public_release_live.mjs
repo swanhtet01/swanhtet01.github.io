@@ -126,9 +126,10 @@ async function verifyOnce() {
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
   const contactPage = pages.get('/contact/') || ''
-  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Client-provided trial proof', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Trial summary detached.', 'Request received:']) {
+  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Client-provided trial proof', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Trial summary detached.', 'Request received:', 'Tell us your company and one recurring job that should become easier.', 'type="hidden" name="template"', 'Which job should become easier first?', 'Request next step', "heading.textContent='Set up '+requestedProductName+' for your company.'", 'You do not need to choose a template.']) {
     assert(contactPage.includes(token), 'contact_trial_proof_contract_missing', { token })
   }
+  assert(!contactPage.includes('Template, if known'), 'contact_template_decision_returned')
   const privacyPage = pages.get('/privacy/') || ''
   assert(privacyPage.includes('optional trial proof summary, outcome status, and digest') && privacyPage.includes('digest-bound aggregate outcome') && privacyPage.includes('excludes raw product records, questions, approval contents, and account details'), 'trial_proof_privacy_copy_missing')
 

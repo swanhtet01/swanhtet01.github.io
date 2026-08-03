@@ -78,6 +78,19 @@ for (const product of manifest.customerProducts) {
   }
 }
 
+const contactPage = renderedPages.get('/contact/') || ''
+for (const token of [
+  'Tell us your company and one recurring job that should become easier.',
+  'type="hidden" name="template"',
+  'Which job should become easier first?',
+  'Request next step',
+  "heading.textContent='Set up '+requestedProductName+' for your company.'",
+  'You do not need to choose a template.',
+]) {
+  if (!contactPage.includes(token)) throw new Error(`preview_contact_onboarding_contract_missing:${token}`)
+}
+if (contactPage.includes('Template, if known')) throw new Error('preview_contact_template_decision_returned')
+
 const release = JSON.parse(get(manifest.release.releaseEndpoint))
 if (release.brandVersion !== manifest.brand.version) throw new Error('preview_brand_version_wrong')
 if (release.contextVersion !== manifest.contextVersion) throw new Error('preview_context_version_wrong')
