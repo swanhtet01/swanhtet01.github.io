@@ -80,9 +80,12 @@ async function readPage(route) {
     'aria-label="SuperMega home"',
     '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
     'href="https://app.supermega.dev/login">Company sign in</a>',
-    'href="/contact/"',
     'href="/privacy/">Privacy</a>',
   ]) assert(html.includes(token), 'page_shared_contract_missing', { route, token })
+  const contactRouteToken = route === '/'
+    ? 'href="/contact/?product=guide&amp;source=managed-intelligence">Request managed pilot</a>'
+    : 'href="/contact/">Contact</a>'
+  assert(html.includes(contactRouteToken), 'page_contact_route_missing', { route, token: contactRouteToken })
   for (const token of manifest.retiredPublicNames) assert(!html.toLowerCase().includes(token.toLowerCase()), 'retired_context_live', { route, token })
   return html
 }
@@ -109,6 +112,9 @@ async function verifyOnce() {
   assert(pages.get('/')?.includes('href="#products">Choose a product</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
+  for (const token of ['id="model" aria-label="Free and managed SuperMega"', 'Free product. Managed intelligence.', 'Approved AI context across all four products', 'Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.']) {
+    assert(homepage.includes(token), 'homepage_offer_contract_missing', { token })
+  }
   for (const product of manifest.customerProducts) {
     const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
     assert(homepage.includes(`href="${guidedSampleRoute}"`), 'guided_product_route_missing', { product: product.id, guidedSampleRoute })
@@ -118,7 +124,7 @@ async function verifyOnce() {
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
   const contactPage = pages.get('/contact/') || ''
-  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Client-provided trial proof', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Trial summary detached.', 'Request received:']) {
+  for (const token of ['supermega.managed_trial_proof.v2', 'data-trial-proof', 'Client-provided trial proof', 'name="proof_digest"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'digest-bound aggregate summary', 'trial_proof_invalid', 'Trial summary detached.', 'Request received:', "query.get('source')==='managed-intelligence'", 'Request managed company intelligence.', "submit.textContent='Request managed pilot'"]) {
     assert(contactPage.includes(token), 'contact_trial_proof_contract_missing', { token })
   }
   const privacyPage = pages.get('/privacy/') || ''
