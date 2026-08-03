@@ -461,6 +461,7 @@ module.exports = function handler(_req, res) {
 
 const contactFunction = `'use strict'
 const { createHash, createHmac } = require('node:crypto')
+const { isDeepStrictEqual } = require('node:util')
 
 const RATE_LIMIT = 5
 const RATE_WINDOW_MS = 10 * 60 * 1000
@@ -474,6 +475,7 @@ const TRIAL_PROOF_VERSION = 2
 const TRIAL_PROOF_BASE_FIELDS = ['proof_contract', 'proof_version', 'proof_digest', 'proof_product', 'proof_template', 'proof_readiness', 'proof_sources', 'proof_behavior', 'proof_decisions', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'proof_raw_records']
 const APPROVED_CONTEXT_FIELDS = ['proof_context_contract', 'proof_context_digest', 'proof_context_outcome_digest', 'proof_context_approved', 'proof_context_raw_records']
 const TRIAL_PROOF_FIELDS = [...TRIAL_PROOF_BASE_FIELDS, ...APPROVED_CONTEXT_FIELDS]
+const LEAD_RECORD_FIELDS = ['lead_id', 'task_id', 'source', 'name', 'email', 'company', 'workflow', 'requested_package', 'goal', 'data', 'team', 'source_url', 'page_path', 'referrer', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'lead_score', 'lead_stage', 'status', 'owner', 'next_step', 'submitted_at', 'raw']
 const replayCache = new Map()
 const rateBuckets = new Map()
 
@@ -690,7 +692,7 @@ function sourceAttribution(sourceUrl) {
   }
 }
 
-function recordFrom(safe, req, idempotencyKey, fingerprint) {
+function recordFrom(safe, idempotencyKey, fingerprint) {
   const submittedAt = new Date().toISOString()
   const leadId = 'LEAD-' + keyedDigest('lead:' + idempotencyKey).slice(0, 16).toUpperCase()
   const taskId = 'TASK-' + keyedDigest('task:' + idempotencyKey).slice(0, 16).toUpperCase()
@@ -725,7 +727,6 @@ function recordFrom(safe, req, idempotencyKey, fingerprint) {
     raw: {
       ...contactSafe,
       ...(trialProof ? { trial_proof: trialProof } : {}),
-      user_agent: text(req.headers?.['user-agent'], 240),
       contact_idempotency: {
         version: fingerprintVersion(safe),
         algorithm: CONTACT_FINGERPRINT_ALGORITHM,
@@ -736,6 +737,39 @@ function recordFrom(safe, req, idempotencyKey, fingerprint) {
 }
 
 const hasOwn = (value, key) => Boolean(value && Object.prototype.hasOwnProperty.call(value, key))
+
+function normalizedStoredRecord(row, expected, existing = false) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null
+  const normalized = {}
+  for (const field of LEAD_RECORD_FIELDS) {
+    if (!hasOwn(row, field)) return null
+    let value = row[field]
+    if (field === 'submitted_at') {
+      const timestamp = new Date(value)
+      if (Number.isNaN(timestamp.getTime())) return null
+      value = existing ? expected.submitted_at : timestamp.toISOString()
+    }
+    if (field === 'raw') {
+      if (typeof value === 'string') {
+        try { value = JSON.parse(value) } catch { return null }
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+      const projected = {}
+      for (const key of Object.keys(expected.raw)) {
+        if (!hasOwn(value, key)) return null
+        projected[key] = value[key]
+      }
+      value = projected
+    }
+    normalized[field] = value
+  }
+  return normalized
+}
+
+function leadRecordMatches(row, expected, existing = false) {
+  const normalized = normalizedStoredRecord(row, expected, existing)
+  return Boolean(normalized && isDeepStrictEqual(normalized, expected))
+}
 
 function legacySafeFromRow(row) {
   const raw = row && typeof row.raw === 'object' && !Array.isArray(row.raw) ? row.raw : null
@@ -783,7 +817,7 @@ async function responseRows(response) {
 async function fetchSupabaseLead(base, key, leadId) {
   const query = new URLSearchParams({
     lead_id: 'eq.' + leadId,
-    select: 'lead_id,name,email,company,workflow,requested_package,goal,source_url,referrer,raw',
+    select: LEAD_RECORD_FIELDS.join(','),
     limit: '2',
   })
   const response = await fetch(base + '/rest/v1/supermega_leads?' + query.toString(), {
@@ -809,6 +843,7 @@ async function saveSupabase(record, fingerprint) {
     if (text(rows[0]?.lead_id, 80) !== record.lead_id) throw new Error('lead_store_insert_mismatch')
     const persisted = storedFingerprint(rows[0])
     if (persisted.legacy || persisted.fingerprint !== fingerprint) throw new Error('lead_store_insert_fingerprint_mismatch')
+    if (!leadRecordMatches(rows[0], record)) throw new Error('lead_store_insert_record_mismatch')
     return { status: 'ready', channel: 'lead_store', created: true }
   }
 
@@ -817,6 +852,7 @@ async function saveSupabase(record, fingerprint) {
   const existing = await fetchSupabaseLead(base, key, record.lead_id)
   const persisted = storedFingerprint(existing)
   if (persisted.fingerprint !== fingerprint) return { status: 'conflict', channel: 'lead_store' }
+  if (!persisted.legacy && !leadRecordMatches(existing, record, true)) return { status: 'conflict', channel: 'lead_store' }
   return { status: 'ready', channel: 'lead_store', created: false, legacy: persisted.legacy }
 }
 
@@ -884,7 +920,7 @@ module.exports = async function handler(req, res) {
   const rate = localRateLimit(req, now)
   if (!rate.allowed) { send(res, 429, { status: 'error', reason: 'rate_limited' }, { 'retry-after': String(rate.retryAfter) }); return }
 
-  const record = recordFrom(safe, req, idempotencyKey, fingerprint)
+  const record = recordFrom(safe, idempotencyKey, fingerprint)
   let storeResult
   try { storeResult = await saveSupabase(record, fingerprint) } catch {
     send(res, 503, { status: 'error', reason: 'contact_persistence_unavailable', fallback_email: 'swanhtet@supermega.dev' })

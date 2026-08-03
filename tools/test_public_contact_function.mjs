@@ -385,6 +385,7 @@ try {
   const storeRequests = []
   let storeCalls = 0
   let unexpectedDeliveryCalls = 0
+  let tamperNextInsertRepresentation = false
   globalThis.fetch = async (url, options) => {
     const target = new URL(String(url))
     if (target.origin !== 'https://example.supabase.co') {
@@ -400,7 +401,12 @@ try {
       storeRequests.push({ method: 'POST', record: clone(incoming) })
       if (persistedLeads.has(incoming.lead_id)) return jsonResponse(201, [])
       persistedLeads.set(incoming.lead_id, clone(incoming))
-      return jsonResponse(201, [incoming])
+      const representation = clone(incoming)
+      if (tamperNextInsertRepresentation) {
+        tamperNextInsertRepresentation = false
+        representation.company = 'Unexpected stored company'
+      }
+      return jsonResponse(201, [representation])
     }
     if (options.method === 'GET') {
       assert.equal(target.searchParams.get('limit'), '2')
@@ -414,7 +420,7 @@ try {
     throw new Error('unexpected_supabase_method')
   }
 
-  const durableAccepted = await invoke({ body: validSubmission, headers: withKey(200, { 'x-forwarded-for': '203.0.113.88' }) })
+  const durableAccepted = await invoke({ body: validSubmission, headers: withKey(200, { 'x-forwarded-for': '203.0.113.88', 'user-agent': 'synthetic-private-agent' }) })
   assert.equal(durableAccepted.status, 202)
   assert.equal(durableAccepted.headers['x-idempotent-replay'], undefined)
   assert.equal(storeCalls, 1)
@@ -426,6 +432,7 @@ try {
     payload_fingerprint: durableRecord.raw.contact_idempotency.payload_fingerprint,
   })
   assert.match(durableRecord.raw.contact_idempotency.payload_fingerprint, /^[a-f0-9]{64}$/)
+  assert.equal(Object.prototype.hasOwnProperty.call(durableRecord.raw, 'user_agent'), false)
 
   const coldSameHandler = loadHandler({ fresh: true })
   const durableReplay = await invoke({ activeHandler: coldSameHandler, body: validSubmission, headers: withKey(200, { 'x-forwarded-for': '203.0.113.89' }) })
@@ -486,6 +493,31 @@ try {
   assert.equal(durableProofReplay.body.proof_bound, true)
   assert.equal(durableProofReplay.headers['x-idempotent-replay'], 'true')
 
+  const driftAccepted = await invoke({
+    activeHandler: loadHandler({ fresh: true }),
+    body: validSubmission,
+    headers: withKey(204, { 'x-forwarded-for': '203.0.113.98' }),
+  })
+  assert.equal(driftAccepted.status, 202)
+  persistedLeads.get(driftAccepted.body.request_id).goal = 'Stored row drift must not replay.'
+  const driftReplay = await invoke({
+    activeHandler: loadHandler({ fresh: true }),
+    body: validSubmission,
+    headers: withKey(204, { 'x-forwarded-for': '203.0.113.99' }),
+  })
+  assert.equal(driftReplay.status, 409)
+  assert.equal(driftReplay.body.reason, 'idempotency_conflict')
+
+  tamperNextInsertRepresentation = true
+  const mismatchedInsert = await invoke({
+    activeHandler: loadHandler({ fresh: true }),
+    body: validSubmission,
+    headers: withKey(205, { 'x-forwarded-for': '203.0.113.100' }),
+  })
+  assert.equal(mismatchedInsert.status, 503)
+  assert.equal(mismatchedInsert.body.reason, 'contact_persistence_unavailable')
+  assert.equal(unexpectedDeliveryCalls, 0)
+
   const legacyAccepted = await invoke({ activeHandler: loadHandler({ fresh: true }), body: validSubmission, headers: withKey(201, { 'x-forwarded-for': '203.0.113.91' }) })
   assert.equal(legacyAccepted.status, 202)
   const legacyRecord = persistedLeads.get(legacyAccepted.body.request_id)
@@ -512,7 +544,7 @@ try {
   assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
   assert.equal(unexpectedDeliveryCalls, 0)
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 128 }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 136 }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {
