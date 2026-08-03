@@ -21,6 +21,7 @@ import type { WebsiteReleaseState } from './website-release-foundation'
 import {
   applyWebsiteStarterBrief,
   isUntouchedWebsiteStarter,
+  websiteStarterTemplates,
   type WebsiteStarterBrief,
 } from './website-starter'
 import {
@@ -211,6 +212,11 @@ export function WebsiteProduct() {
   const approvalIsCurrent = Boolean(approval)
   const publishIsCurrent = Boolean(publish)
   const starterAvailable = !hasUnsavedChanges && isUntouchedWebsiteStarter(editorWorkspace)
+  const workingSampleTemplate = workspace.workingSample
+    ? websiteStarterTemplates.find((template) => template.id === workspace.workingSample?.templateId) ?? null
+    : null
+  const workingSampleIsCurrent = Boolean(workspace.workingSample
+    && workspace.workingSample.contentFingerprint === fingerprint)
   const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
   const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
@@ -883,6 +889,9 @@ export function WebsiteProduct() {
     : storageMode === 'browser-local'
       ? 'Saved on this device'
       : 'Available in this browser session'
+  const websiteTodayContext = workingSampleTemplate
+    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'working sample' : 'starting template'} · ${websiteTodaySource}`
+    : websiteTodaySource
   const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
     contract: 'supermega.website.lead-export.v1',
     exportedAt: new Date().toISOString(),
@@ -1058,7 +1067,7 @@ export function WebsiteProduct() {
               {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
             </div>
             <div className="website-today-source" role="status">
-              <span>{websiteTodaySource}</span>
+              <span>{websiteTodayContext}</span>
               <small>{websiteReviewNote}</small>
             </div>
           </section> : null}

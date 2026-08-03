@@ -157,6 +157,13 @@ export type WebsiteOpeningPlan = {
   pageIds: string[]
 }
 
+export type WebsiteWorkingSample = {
+  contract: 'supermega.website.working-sample.v1'
+  templateId: WebsiteOpeningPlan['workflowTemplateId']
+  contentFingerprint: string
+  installedAt: string
+}
+
 export type WebsiteWorkspace = {
   schema: typeof WEBSITE_SCHEMA
   version: 2
@@ -170,6 +177,7 @@ export type WebsiteWorkspace = {
   localPublishes: LocalPublishRecord[]
   events: WebsiteWorkflowEvent[]
   openingPlan?: WebsiteOpeningPlan
+  workingSample?: WebsiteWorkingSample
   releaseRecords?: WebsiteReleaseState[]
   leadLedger?: WebsiteLeadLedger
 }
@@ -1392,6 +1400,7 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
     'evidence', 'approvals', 'localPublishes', 'events',
   ]
   if (Object.hasOwn(value, 'openingPlan')) workspaceKeys.push('openingPlan')
+  if (Object.hasOwn(value, 'workingSample')) workspaceKeys.push('workingSample')
   if (Object.hasOwn(value, 'releaseRecords')) workspaceKeys.push('releaseRecords')
   if (Object.hasOwn(value, 'leadLedger')) workspaceKeys.push('leadLedger')
   if (!hasExactKeys(value, workspaceKeys)) return false
@@ -1418,6 +1427,15 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
       || value.openingPlan.pageIds.length > MAX_WEBSITE_PAGES
       || !value.openingPlan.pageIds.every((pageId) => isText(pageId, 80))
       || !hasUniqueStrings(value.openingPlan.pageIds)) return false
+  }
+  if (Object.hasOwn(value, 'workingSample')) {
+    if (!isRecord(value.workingSample)
+      || !hasExactKeys(value.workingSample, ['contract', 'templateId', 'contentFingerprint', 'installedAt'])
+      || value.workingSample.contract !== 'supermega.website.working-sample.v1'
+      || !['business-presence', 'lead-generation', 'catalog-showcase'].includes(String(value.workingSample.templateId))
+      || typeof value.workingSample.contentFingerprint !== 'string'
+      || !fingerprintPattern.test(value.workingSample.contentFingerprint)
+      || !isIsoTimestamp(value.workingSample.installedAt)) return false
   }
   if (Object.hasOwn(value, 'releaseRecords')) {
     if (!Array.isArray(value.releaseRecords)

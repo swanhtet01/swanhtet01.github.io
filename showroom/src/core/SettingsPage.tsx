@@ -130,6 +130,7 @@ import {
   type CommerceItem,
 } from './commerce-workspace'
 import { projectPlantOrder } from './plant-order-foundation'
+import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { productionOrderPortfolioEntries } from './production-order-portfolio'
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
@@ -1598,6 +1599,15 @@ export function SettingsPage() {
       if (setup.product === 'production') {
         savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
         try { await provisionLocalPlantWorkingSample(plantIndustryPackId, selectedTemplate.id, setup.owner) } catch { /* Existing or unavailable local data stays authoritative. */ }
+      }
+      if (setup.product === 'website') {
+        try {
+          await activateLocalWebsiteWorkingSample({
+            templateId: selectedTemplate.id as 'business-presence' | 'lead-generation' | 'catalog-showcase',
+            businessName: setup.workspace,
+            capturedAt: new Date().toISOString(),
+          })
+        } catch { /* Existing Website edits, inquiries, or release evidence stay authoritative. */ }
       }
       const startedAt = new Date().toISOString()
       setSetup((current) => ({ ...current, startedAt }))

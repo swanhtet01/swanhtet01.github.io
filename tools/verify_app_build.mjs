@@ -3501,7 +3501,18 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSource.includes('isUntouchedWebsiteStarter')
   || !websiteStarterSource.includes("stage: 'draft'")
   || !websiteStarterSource.includes('websiteStarterBriefIssues')
-  || ['fetch(', 'localStorage', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))) fail('website_named_business_starter_missing_or_side_effectful')
+  || ['fetch(', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))
+  || websiteStarterSetupSource.includes('localStorage')) fail('website_named_business_starter_missing_or_side_effectful')
+if (!websiteModelSource.includes("contract: 'supermega.website.working-sample.v1'")
+  || !websiteModelSource.includes('workingSample?: WebsiteWorkingSample')
+  || !websiteStarterSource.includes('export function installWebsiteWorkingSample')
+  || !websiteStarterSource.includes('export async function activateLocalWebsiteWorkingSample')
+  || !websiteStarterSource.includes('marker.contentFingerprint === workspaceFingerprint(workspace)')
+  || !websiteStarterSource.includes('WEBSITE_EDIT_SESSION_KEY')
+  || !websiteStarterSource.includes('WEBSITE_LEAD_LEDGER_KEY')
+  || !settingsPageSource.includes('await activateLocalWebsiteWorkingSample({')
+  || !websiteSource.includes("? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'working sample' : 'starting template'}")
+  || !websiteSource.includes('websiteTodayContext')) fail('website_working_sample_activation_missing')
 if (!websiteModelSource.includes("siteName: 'Mingalar Fresh Mart'")
   || !websiteModelSource.includes("headline: 'Fresh everyday groceries without the extra trip.'")
   || !websiteModelSource.includes("internalName: 'Catalog'")
@@ -9876,6 +9887,7 @@ async function verifyWebsiteRuntime() {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?website-verify=${Date.now()}`)
     const exporter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-export.ts')).href}?website-export-verify=${Date.now()}`)
     const starter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts')).href}?website-starter-verify=${Date.now()}`)
+    const leads = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts')).href}?website-leads-verify=${Date.now()}`)
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
     assert(seed.siteName === 'Mingalar Fresh Mart'
@@ -9948,6 +9960,99 @@ async function verifyWebsiteRuntime() {
       && committedBrief.workspace.revision === 1
       && committedBrief.workspace.contentRevision === 1
       && committedBrief.workspace.pages[0].stage === 'draft', 'website_starter_preview_did_not_save_as_one_draft_revision')
+    const leadWorkingSampleInput = {
+      templateId: 'lead-generation',
+      businessName: 'Golden Valley Services',
+      capturedAt: at(55),
+    }
+    const leadWorkingSample = starter.installWebsiteWorkingSample(seed, leadWorkingSampleInput)
+    assert(leadWorkingSample?.siteName === leadWorkingSampleInput.businessName
+      && leadWorkingSample.pages.map((page) => page.slug).join(',') === '/,/services,/contact'
+      && leadWorkingSample.pages.every((page) => page.stage === 'ready')
+      && leadWorkingSample.workingSample?.templateId === 'lead-generation'
+      && leadWorkingSample.workingSample.contentFingerprint === model.workspaceFingerprint(leadWorkingSample)
+      && model.readinessChecks(leadWorkingSample).filter((check) => !check.id.startsWith('evidence-')).every((check) => check.passed),
+    'website_lead_working_sample_was_not_complete_and_ready')
+    assert(starter.installWebsiteWorkingSample(leadWorkingSample, { ...leadWorkingSampleInput, capturedAt: at(56) }) === leadWorkingSample,
+      'website_working_sample_retry_was_not_idempotent')
+    const catalogWorkingSample = starter.installWebsiteWorkingSample(leadWorkingSample, {
+      ...leadWorkingSampleInput,
+      templateId: 'catalog-showcase',
+      capturedAt: at(57),
+    })
+    assert(catalogWorkingSample?.workingSample?.templateId === 'catalog-showcase'
+      && catalogWorkingSample.pages.some((page) => page.slug === '/catalog')
+      && !catalogWorkingSample.pages.some((page) => page.slug === '/services'),
+    'website_untouched_working_sample_could_not_switch_templates')
+    const editedWorkingSample = model.applyWebsiteWorkspaceUpdate(catalogWorkingSample, (current) => ({
+      ...current,
+      pages: current.pages.map((page) => page.slug === '/'
+        ? { ...page, updatedAt: at(58), hero: { ...page.hero, headline: 'Owner-edited Website headline' } }
+        : page),
+    }))
+    assert(editedWorkingSample.ok
+      && starter.installWebsiteWorkingSample(editedWorkingSample.workspace, {
+        ...leadWorkingSampleInput,
+        templateId: 'business-presence',
+        capturedAt: at(59),
+      }) === null,
+    'website_working_sample_overwrote_saved_owner_edits')
+    const evidenceWorkingSample = model.applyWebsiteWorkspaceUpdate(leadWorkingSample, (current) => model.recordWebsiteEvidence(current, {
+      actionId: 'website-working-sample-evidence',
+      capturedAt: at(59),
+      kind: 'content',
+      finding: 'Website working-sample content reviewed.',
+      reference: 'website-working-sample-review',
+      verifiedBy: 'Website owner',
+    }))
+    assert(evidenceWorkingSample.ok
+      && starter.installWebsiteWorkingSample(evidenceWorkingSample.workspace, {
+        ...leadWorkingSampleInput,
+        templateId: 'business-presence',
+        capturedAt: at(60),
+      }) === null,
+    'website_working_sample_overwrote_release_evidence')
+    const websiteWorkingSampleValues = new Map()
+    const websiteWorkingSampleStorage = {
+      getItem: (key) => websiteWorkingSampleValues.get(key) ?? null,
+      setItem: (key, value) => websiteWorkingSampleValues.set(key, String(value)),
+    }
+    const activatedWebsiteWorkingSample = await starter.activateLocalWebsiteWorkingSample(leadWorkingSampleInput, websiteWorkingSampleStorage, locks)
+    const activatedWebsiteWorkingState = model.loadWebsiteWorkspace(websiteWorkingSampleStorage)
+    assert(activatedWebsiteWorkingSample.ok
+      && activatedWebsiteWorkingState.ok
+      && activatedWebsiteWorkingState.workspace.revision === 1
+      && activatedWebsiteWorkingState.workspace.contentRevision === 1
+      && activatedWebsiteWorkingState.workspace.workingSample?.templateId === 'lead-generation',
+    'website_working_sample_was_not_persisted_atomically')
+    const websiteWorkingSampleRaw = websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY)
+    websiteWorkingSampleValues.set(model.WEBSITE_EDIT_SESSION_KEY, 'pending-owner-preview')
+    const blockedWebsiteWorkingSample = await starter.activateLocalWebsiteWorkingSample({
+      ...leadWorkingSampleInput,
+      templateId: 'catalog-showcase',
+      capturedAt: at(60),
+    }, websiteWorkingSampleStorage, locks)
+    assert(!blockedWebsiteWorkingSample.ok
+      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw,
+    'website_working_sample_replaced_an_unsaved_owner_preview')
+    websiteWorkingSampleValues.delete(model.WEBSITE_EDIT_SESSION_KEY)
+    const websiteLeadLedger = leads.captureWebsiteLead(leads.emptyWebsiteLeadLedger(), {
+      siteName: leadWorkingSampleInput.businessName,
+      sourcePage: '/',
+      name: 'Website customer',
+      contact: 'customer@example.com',
+      request: 'Please share the service options.',
+      consentRecorded: true,
+    }, { id: 'website-working-sample-lead', now: at(61) })
+    websiteWorkingSampleValues.set(leads.WEBSITE_LEAD_LEDGER_KEY, JSON.stringify(websiteLeadLedger))
+    const leadBlockedWebsiteWorkingSample = await starter.activateLocalWebsiteWorkingSample({
+      ...leadWorkingSampleInput,
+      templateId: 'catalog-showcase',
+      capturedAt: at(62),
+    }, websiteWorkingSampleStorage, locks)
+    assert(!leadBlockedWebsiteWorkingSample.ok
+      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw,
+    'website_working_sample_hid_retained_customer_inquiries')
     const websiteImportDigest = `sha256:${'b'.repeat(64)}`
     const websiteImportInput = {
       siteName: 'Golden Valley Services',
