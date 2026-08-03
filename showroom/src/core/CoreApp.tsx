@@ -12,7 +12,7 @@ import {
   loadManagedBootstrap,
   type ManagedIdentity,
 } from './managed-trial'
-import { recordBehaviorSignal, type BehaviorProductId } from './behavior-trail'
+import { recordBehaviorSignal } from './behavior-trail'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
   ACTION_KEY,
@@ -1296,18 +1296,6 @@ export function ProductHomePage() {
       </Suspense>
     </div>
   )
-}
-
-function BehaviorSignalOnRender({ detail, product, route }: { detail: string; product: BehaviorProductId; route: string }) {
-  useEffect(() => {
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_seen',
-      product,
-      route,
-      detail,
-    })
-  }, [detail, product, route])
-  return null
 }
 
 function ApprovalReviewDialog({ approval, onClose, onDecision }: { approval: Approval; onClose: () => void; onDecision: (status: 'approved' | 'declined', reviewer: string, note: string) => Promise<void> | void }) {
@@ -3225,21 +3213,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               : !commerce.inventoryFoundation || !managedInventoryProjection
                 ? 'Stock can move from simple on-hand counts to location, lot, ATP, reservation, and count evidence.'
                 : 'Orders, inventory, purchase orders, and stock foundation are ready for front-counter work.'
-  const shopOwnerGate = !commerceCanWrite
-    ? 'Open Settings before any Shop write is allowed.'
-    : pendingAction
-      ? 'Approve or cancel the pending accountable action.'
-      : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting
-        ? 'Choose whether each online request becomes a Shop order.'
-        : actionOrders.length
-          ? 'Confirm fulfilment, payment, return, cancellation, or settlement.'
-          : activePurchaseOrders.length
-            ? 'Confirm received quantity, location, lot, and evidence.'
-            : lowStock.length
-              ? 'Confirm supplier reference, expected arrival, and quantity.'
-              : !commerce.inventoryFoundation || !managedInventoryProjection
-                ? 'Enable the inventory foundation before location-level stock control.'
-                : 'Confirm each sale before stock or cash records change.'
   const shopAgentPath = !commerceCanWrite
     ? '/settings/#controls'
     : pendingStorefrontRequests.length || legacyWebsiteWorkWaiting || actionOrders.length || pendingAction
@@ -3247,11 +3220,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       : activePurchaseOrders.length || lowStock.length || !commerce.inventoryFoundation || !managedInventoryProjection
         ? '/shop/?tab=inventory'
         : '/shop/?tab=counter'
-  const shopAgentRows = [
-    ['Next step', shopAgentJob],
-    ['Why', shopAgentReason],
-    ['Review', shopOwnerGate],
-  ]
   const shopAutopilotStage = !commerceCanWrite
     ? 'Restore Shop readiness'
     : pendingAction
@@ -3364,23 +3332,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     </div>
     <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
-  const shopAgentQueue = <section aria-label="Next Shop step" className="shop-agent-queue">
-    <BehaviorSignalOnRender detail={shopAgentJob} product="commerce" route={commerceLocation.pathname + commerceLocation.search} />
-    <div>
-      <span className="core-eyebrow">Next Shop step</span>
-      <h2>{shopAgentJob}</h2>
-      <p>SuperMega chooses the best place to start. The manager reviews important changes before anything is saved.</p>
-    </div>
-    <div>{shopAgentRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <Link className="core-button compact" onClick={() => {
-      recordBehaviorSignal(window.localStorage, { event: 'agent_job_chosen', product: 'commerce', route: commerceLocation.pathname + commerceLocation.search, detail: shopAgentJob })
-    }} to={shopAgentPath}>{shopAgentPath.includes('settings') ? 'Open Settings' : shopAgentPath.includes('inventory') ? 'Open Inventory' : shopAgentPath.includes('orders') ? 'Open Orders' : 'Open Counter'}</Link>
-  </section>
-  const shopGuidance = <details className="product-guidance-disclosure">
-    <summary><span>Need help choosing?</span><small>Shows the next safe Shop step</small></summary>
-    <div className="product-guidance-content">{shopAgentQueue}</div>
-  </details>
-
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_seen',
@@ -6472,7 +6423,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
-    {shopGuidance}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
       <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
@@ -6905,7 +6855,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'inventory') return <div className="operation-module">
     {commerceBoundary}
-    {shopGuidance}
     <section className="core-panel inventory-panel">
       <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : 'Count stock'}</button></div></div>
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
@@ -7189,9 +7138,12 @@ function OrderList({
     const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
     const needsPayment = order.paymentStatus === 'pending'
     const reconcileIsPrimary = needsPayment && (order.status === 'ready' || order.status === 'completed')
-    const canAdvance = active && !reconcileIsPrimary
+    const settleRefundIsPrimary = !reconcileIsPrimary && order.refundStatus === 'due'
+    const canAdvance = active && !reconcileIsPrimary && !settleRefundIsPrimary
     const promiseUrgency = active ? commerceOrderPromiseUrgency(order, promiseNow) : 'scheduled'
     const acknowledgement = acknowledgementDownloads.get(order.id)
+    const canCancelOrder = active && canCancel(order.id)
+    const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary)
     return <article key={order.id}>
       <div>
         <div className="order-statuses">
@@ -7219,11 +7171,17 @@ function OrderList({
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
-        {reconcileIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
-        {order.refundStatus === 'due' ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
-        {canAdvance ? <button className="text-link" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
-        {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
-        {active && canCancel(order.id) ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel</button> : null}
+        {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
+        {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
+        {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
+        {hasSecondaryActions ? <details className="order-row-more">
+          <summary aria-label={`More options for ${order.id}`}>More</summary>
+          <div>
+            {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
+            {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
+            {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel order</button> : null}
+          </div>
+        </details> : null}
       </div>
     </article>
   })}</div>

@@ -528,6 +528,12 @@ if (!assetCorpus.includes('More Shop tools')
   || !assetCorpus.includes('Customers, finance, channels, and purchasing')
   || assetCorpus.includes('Use Shop in 3 steps.')
   || !assetCorpus.includes('.shop-today-workspaces>summary')) throw new Error('missing_live_shop_today_hierarchy_contract')
+if (!operationsChunk.includes('More options for ')
+  || !operationsChunk.includes('Cancel order')
+  || operationsChunk.includes('Need help choosing?')
+  || operationsChunk.includes('Shows the next safe Shop step')
+  || !assetCorpus.includes('.order-row-more>summary')
+  || assetCorpus.includes('.shop-agent-queue{')) throw new Error('missing_live_shop_order_action_hierarchy_contract')
 for (const required of ['Browser-local sample only.', 'sample order and sample stock change in this browser', 'No payment is captured', 'no customer is contacted', 'no server or managed workspace is written', 'no real stock is moved']) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_shop_counter_local_boundary:${required}`)
 }
