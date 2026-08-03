@@ -1422,7 +1422,7 @@ export function SettingsPage() {
 
   function chooseSettingsStep(step: 'workflow' | 'success') {
     setSettingsStep(step)
-    if (location.hash) navigate('/settings/', { replace: true })
+    if (location.hash) navigate('/internal/client-builder/', { replace: true })
   }
 
   function save(event: FormEvent) {
@@ -1802,7 +1802,7 @@ export function SettingsPage() {
     try {
       applyLocalWorkspaceBackup(window.localStorage, restorePoint)
       window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
-      window.location.assign('/settings/')
+      window.location.assign('/settings/#controls')
     } catch (error) {
       setRestoreNotice(error instanceof Error ? error.message : 'The previous local workspace could not be restored safely.')
       setRestoreBusy(false)

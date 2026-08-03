@@ -83,8 +83,8 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, managedR
   const ownerControl = managedOwnerControl?.run ?? localOwnerControl
   const ownerControlPrimary = ownerControl.items.find((item) => item.status === 'pending') ?? null
   const ownerControlMode = managedOwnerControl ? 'managed' : 'local'
-  const commandPath = ready && preferredContinuation ? preferredContinuation.path : ready ? '/settings/#controls' : '/settings/'
-  const commandLabel = ready && preferredContinuation ? `Continue ${preferredContinuation.label}` : ready ? 'Export evidence' : 'Finish setup'
+  const commandPath = ready && preferredContinuation ? preferredContinuation.path : ready ? '/settings/#controls' : '#product-start-actions'
+  const commandLabel = ready && preferredContinuation ? `Continue ${preferredContinuation.label}` : ready ? 'Export evidence' : 'Choose product'
   const trackActionRows = [
     ['Shop', 'commerce', '/settings/?product=shop', '/shop/?tab=inventory', 'Prepare catalog', 'Open Shop'],
     ['Plant', 'production', '/settings/?product=plant', '/plant/?tab=production', 'Prepare jobs', 'Open Plant'],
@@ -451,14 +451,13 @@ export function ProductHomeReadiness({ activationCoverage, hostedReady, managedR
           <p className="business-command-boundary">Next managed step: {managedReadiness.nextAction} No managed customer action runs from this checklist.</p>
         </details> : null}
       </section>
-      <section className="product-home-readiness product-home-business-tracks" aria-label="Product setup paths">
+      <section className="product-home-readiness product-home-business-tracks" aria-label="Product setup paths" id="product-start-actions">
         <div className="product-home-readiness-head">
           <div>
             <span className="core-eyebrow">Choose a product</span>
             <h2>Start one product.</h2>
             <p>Pick a template or open the working sample. Setup stays in review before business records change.</p>
           </div>
-          <Link className="core-button" to="/settings/">Set up data</Link>
         </div>
         <div className="product-home-track-actions" aria-label="Product start actions">
           {trackActionRows.map(([label, product, setupPath, workPath, setupAction, openAction]) => (

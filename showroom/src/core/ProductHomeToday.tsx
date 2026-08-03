@@ -253,7 +253,7 @@ export function ProductHomeToday({ runtimeStatus = 'demo' }: { runtimeStatus?: R
   }
 
   if (!report || !next) {
-    return <section className="product-home-today" aria-label="Today across SuperMega"><div className="product-home-today-head"><div><span className="core-eyebrow">Today</span><h2>{loading ? 'Checking products...' : 'Product summary unavailable'}</h2><p>{notice || 'No verified product source is available yet.'}</p></div><Link className="core-button primary" to="/settings/">Setup data</Link></div></section>
+    return <section className="product-home-today" aria-label="Today across SuperMega"><div className="product-home-today-head"><div><span className="core-eyebrow">Today</span><h2>{loading ? 'Checking products...' : 'Product summary unavailable'}</h2><p>{notice || 'No verified product source is available yet.'}</p></div><Link className="core-button primary" to="#product-start-actions">Choose product</Link></div></section>
   }
 
   const attentionCount = report.summary.critical + report.summary.warning + report.summary.action
