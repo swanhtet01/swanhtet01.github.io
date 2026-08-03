@@ -838,7 +838,7 @@ class ManagedWorkspaceProvisioner:
             "eventInsert": bool(_row_value(row, "event_insert", 15)),
         }
         if snapshot["postgresMajor"] != 17 or snapshot["schemaVersion"] != TRIAL_SCHEMA_VERSION:
-            raise ManagedActivationError("Managed activation requires PostgreSQL 17 and private schema version 8.")
+            raise ManagedActivationError("Managed activation requires PostgreSQL 17 and private schema version 9.")
         if not snapshot["backendRoleSafe"]:
             raise ManagedActivationError("Managed activation backend role is unsafe.")
         if (
