@@ -381,6 +381,13 @@ const customerTracks = [
   ['Ecommerce', 'Storefront and checkout', 'Run online orders, delivery, and Shop review.', 'pickup, local delivery, preorder, social orders', '/ecommerce/'],
 ] as const
 
+const productDataTracks = [
+  ['Shop', 'Products, prices, and stock', '/settings/?product=shop'],
+  ['Plant', 'Jobs, materials, and equipment', '/settings/?product=plant'],
+  ['Website', 'Business details and pages', '/settings/?product=website'],
+  ['Ecommerce', 'Catalog and customer orders', '/settings/?product=ecommerce'],
+] as const
+
 export function ProductHomePage() {
   const runtime = useOutletContext<RuntimeHealth>()
   const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
@@ -404,18 +411,30 @@ export function ProductHomePage() {
           </article>
         ))}
       </nav>
-      <details className="product-home-setup">
-        <summary><span><strong>Add your data</strong><small>Imports, readiness, and secure access</small></span><b>Later</b></summary>
-        <div>
+      {hostedReady ? (
+        <section aria-label="Company dashboard" className="product-home-managed-overview">
           <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense>
-          <section className="product-home-operating-model" aria-label="SuperMega operating model">
-            <div><span className="core-eyebrow">Try first</span><strong>Sample data stays on this device.</strong></div>
-            <div><span className="core-eyebrow">Add data later</span><strong>Import data after the demo makes sense.</strong></div>
-            <Link className="core-button primary" to="/settings/">Add data</Link>
-          </section>
-          <Suspense fallback={<p className="form-notice" role="status">Loading launch readiness...</p>}>
+          <Suspense fallback={<p className="form-notice" role="status">Loading company readiness...</p>}>
             <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
           </Suspense>
+        </section>
+      ) : null}
+      <details className="product-home-setup">
+        <summary><span><strong>Add your data</strong><small>Choose one product when its demo makes sense</small></span><b>Later</b></summary>
+        <div aria-label="Product data setup" className="product-home-data-start" role="region">
+          <div className="product-home-data-intro">
+            <span className="core-eyebrow">Add data later</span>
+            <strong>Prepare one product at a time.</strong>
+            <p>Sample data stays on this device. Import data after the demo makes sense. Nothing changes business records until review.</p>
+          </div>
+          <nav aria-label="Data setup by product" className="product-home-data-grid">
+            {productDataTracks.map(([name, records, path]) => (
+              <Link aria-label={`Prepare ${name} data`} key={name} to={path}>
+                <span><strong>{name}</strong><small>{records}</small></span>
+                <b>Prepare</b>
+              </Link>
+            ))}
+          </nav>
         </div>
       </details>
     </div>
