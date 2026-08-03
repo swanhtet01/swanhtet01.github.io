@@ -461,21 +461,21 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
 export function ProductHomePage() {
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Pick one workspace. SuperMega remembers it on this device; use Switch product whenever you need another." eyebrow="Products" title="Choose one product" />
+      <PageHeading copy="Open one product. Each has its own workspace and navigation; SuperMega remembers your choice on this device." eyebrow="Products" title="Choose one product" />
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => (
-          <Link aria-label={`Open ${name}`} className="product-track-card" key={name} to={path}>
+          <Link aria-label={`Open ${name} workspace`} className="product-track-card" key={name} to={path}>
             <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
             <span className="product-track-copy">
               <small>{job}</small>
               <h2>{name}</h2>
               <p>{outcome}</p>
             </span>
-            <strong className="product-track-open">Open <span aria-hidden="true">→</span></strong>
+            <strong className="product-track-open">Open {name} <span aria-hidden="true">→</span></strong>
           </Link>
         ))}
       </nav>
-      <p className="product-home-note">No account or setup is required. Products stay separate and connect only through reviewed handoffs.</p>
+      <p className="product-home-note">Samples open immediately with no account or setup. You see one product at a time; use Switch product only when you want a different workspace.</p>
     </div>
   )
 }

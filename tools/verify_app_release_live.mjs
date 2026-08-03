@@ -17,6 +17,7 @@ export function verifyCurrentReleaseAssets({
   assetCorpus,
   operationsChunk,
   productSystemNavigatorChunk,
+  productOnboardingChunk,
   settingsChunk,
   ecommerceProductCorpus,
   websiteChunk,
@@ -27,7 +28,8 @@ export function verifyCurrentReleaseAssets({
   activationRunbookChunk,
 }) {
   const groups = [
-    ['launcher', assetCorpus, ['SUPERMEGA', 'Choose one product', 'Pick one workspace. SuperMega remembers it on this device; use Switch product whenever you need another.', 'Switch product', 'supermega.last-product.v1', 'Sell and manage stock', 'Run production', 'Publish your business', 'Take online orders', 'Counter sales, inventory, orders, and daily close.', 'Jobs, materials, output, quality, and traceability.', 'Pages, services, inquiries, and launch preview.', 'Storefront, checkout, delivery, and Shop handoff.', 'No account or setup is required. Products stay separate and connect only through reviewed handoffs.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['launcher', assetCorpus, ['SUPERMEGA', 'Choose one product', 'Open one product. Each has its own workspace and navigation; SuperMega remembers your choice on this device.', 'Switch product', 'supermega.last-product.v1', 'Sell and manage stock', 'Run production', 'Publish your business', 'Take online orders', 'Counter sales, inventory, orders, and daily close.', 'Jobs, materials, output, quality, and traceability.', 'Pages, services, inquiries, and launch preview.', 'Storefront, checkout, delivery, and Shop handoff.', 'Samples open immediately with no account or setup. You see one product at a time; use Switch product only when you want a different workspace.', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['onboarding', productOnboardingChunk, ['Optional personalization', 'One field turns the sample into a named workspace on this device.', 'Import existing data', 'Opening it will not run setup again.', 'Nothing is sent or published.']],
     ['shop_plant', operationsChunk, ['Create order', 'Finish payment and handoff in Orders.', 'Stock reserved. Finish fulfilment and reconcile payment before completion.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
     ['secondary_tools', productSystemNavigatorChunk, ['More tools', 'Workflows and next steps', "What's next?", 'Open another working flow, or request this product for your business.', 'https://supermega.dev/contact/?product=shop&utm_source=app&utm_medium=product&utm_campaign=working-sample', 'https://supermega.dev/contact/?product=plant&utm_source=app&utm_medium=product&utm_campaign=working-sample', 'https://supermega.dev/contact/?product=website&utm_source=app&utm_medium=product&utm_campaign=working-sample', 'https://supermega.dev/contact/?product=ecommerce&utm_source=app&utm_medium=product&utm_campaign=working-sample', ' for my business', 'Data and imports', 'Optional', 'Prepare ', ' data', 'Data import stays optional until you are ready.']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence']],
@@ -100,6 +102,7 @@ if (artifactSelfTest) {
   const [
     operationsChunk,
     productSystemNavigatorChunk,
+    productOnboardingChunk,
     settingsChunk,
     ecommerceChunk,
     ecommercePacketChunk,
@@ -113,6 +116,7 @@ if (artifactSelfTest) {
   ] = await Promise.all([
     readArtifactChunk(assetsDir, assetNames, /^(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ProductSystemNavigator-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ProductOnboardingPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^SettingsPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^EcommerceProduct-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ecommerce-order-review-packet-[A-Za-z0-9_-]+\.js$/),
@@ -131,6 +135,7 @@ if (artifactSelfTest) {
     assetCorpus,
     operationsChunk,
     productSystemNavigatorChunk,
+    productOnboardingChunk,
     settingsChunk,
     ecommerceProductCorpus: `${ecommerceChunk}\n${ecommercePacketChunk}`,
     websiteChunk: `${websiteChunk}\n${websiteModelChunk}`,
@@ -356,6 +361,9 @@ const operationsChunk = (await get(`/${operationsChunkPath}`)).body
 const productSystemNavigatorChunkPath = /assets\/ProductSystemNavigator-[A-Za-z0-9_-]+\.js/.exec(`${assetCorpus}\n${operationsChunk}`)?.[0]
 if (!productSystemNavigatorChunkPath) throw new Error('product_system_navigator_chunk_missing')
 const productSystemNavigatorChunk = (await get(`/${productSystemNavigatorChunkPath}`)).body
+const productOnboardingChunkPath = /assets\/ProductOnboardingPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
+if (!productOnboardingChunkPath) throw new Error('product_onboarding_chunk_missing')
+const productOnboardingChunk = (await get(`/${productOnboardingChunkPath}`)).body
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!settingsChunkPath) throw new Error('settings_chunk_missing')
 const settingsChunk = (await get(`/${settingsChunkPath}`)).body
@@ -402,6 +410,7 @@ const releaseAssetVerification = verifyCurrentReleaseAssets({
   assetCorpus,
   operationsChunk,
   productSystemNavigatorChunk,
+  productOnboardingChunk,
   settingsChunk,
   ecommerceProductCorpus,
   websiteChunk,
