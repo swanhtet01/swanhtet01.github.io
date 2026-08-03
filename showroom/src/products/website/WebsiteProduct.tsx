@@ -776,7 +776,7 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Answer 5 questions'
     : starterAvailable
-        ? 'Create from template'
+        ? 'Customize this demo'
         : hasUnsavedChanges
           ? 'Save or discard edits'
           : failingContentChecks.length
@@ -795,7 +795,7 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Answer a short brief to replace the example with client-specific pages.'
       : starterAvailable
-        ? 'Start with the sample template and change only the business details.'
+        ? 'Review the working sample first. Customize it only when you are ready to add business details.'
         : hasUnsavedChanges
           ? 'Save the preview or discard it before review.'
           : failingContentChecks.length
@@ -814,7 +814,7 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Review the generated pages before saving.'
       : starterAvailable
-        ? 'Use the sample now, or create a client-specific version.'
+        ? 'The working sample stays unchanged until you choose Customize demo.'
         : hasUnsavedChanges
           ? 'Save or discard the preview.'
           : failingContentChecks.length
@@ -831,7 +831,7 @@ export function WebsiteProduct() {
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
     : starterSetupActive || starterAvailable
-      ? 'Create from template'
+      ? 'Customize demo'
       : hasUnsavedChanges || failingContentChecks.length
         ? 'Open editor'
         : leadCounts.new
@@ -1064,7 +1064,7 @@ export function WebsiteProduct() {
                 <div className="website-primary-actions">
                 {starterAvailable && surface === 'preview' ? (
                   <button className="website-button is-primary" onClick={openStarterSetup} type="button">
-                    Use this demo
+                    Customize demo
                   </button>
                 ) : null}
                 {surface === 'work' ? (
@@ -1177,22 +1177,6 @@ export function WebsiteProduct() {
               ) : null}
             </section>
           ) : null}
-
-          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
-            <div className="website-today-priority">
-              <span className="website-kicker">Start here</span>
-              <h2 id="website-today-title">{websiteAgentJob}</h2>
-              <p>{websiteAgentReason}</p>
-              <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
-            </div>
-            <div aria-label="Website today status" className="website-today-metrics" role="group">
-              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-            <div className="website-today-source" role="status">
-              <span>{websiteTodaySource}</span>
-              <small>{websiteReviewNote}</small>
-            </div>
-          </section> : null}
 
           {!starterSetupActive ? <details className="website-start-tools website-business-controls">
             <summary><span><strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small></span><b>{leadCounts.new} new</b></summary>
@@ -1307,6 +1291,22 @@ export function WebsiteProduct() {
               />
             </div>
           </div>
+
+          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState}>
+            <div className="website-today-priority">
+              <span className="website-kicker">Next step</span>
+              <h2 id="website-today-title">{websiteAgentJob}</h2>
+              <p>{websiteAgentReason}</p>
+              <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
+            </div>
+            <div aria-label="Website today status" className="website-today-metrics" role="group">
+              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+            </div>
+            <div className="website-today-source" role="status">
+              <span>{websiteTodaySource}</span>
+              <small>{websiteReviewNote}</small>
+            </div>
+          </section> : null}
         </div>
       </div>
     </div>
