@@ -8055,6 +8055,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const currentShiftHasOutput = Boolean(canonicalShiftRef
     && currentShiftOutput.goodUnits > 0
     && currentShiftOutput.entryCount > 0)
+  const guidedPlantJobId = activeJobs[0]?.id ?? ''
   const shiftCloseProblemCount = openIssues.filter((issue) => issue.kind === 'quality' || issue.severity === 'critical' || issue.severity === 'high').length
     + heldJobs.length
     + openWcmCount
@@ -8246,15 +8247,40 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   useEffect(() => {
     const focus = new URLSearchParams(productionLocation.search).get('focus')
     if (focus === 'material-use' && tab === 'production') {
-      if (activeJobs[0]) openMaterialTrace(activeJobs[0], null)
+      if (guidedPlantJobId) {
+        requestAnimationFrame(() => {
+          outputTriggerRef.current = null
+          setJobId(guidedPlantJobId)
+          setMaterialDraft((current) => ({ ...current, jobId: guidedPlantJobId }))
+          setOutputOpen(true)
+          setMaterialGuideOpen(true)
+          requestAnimationFrame(() => {
+            const disclosure = materialDisclosureRef.current
+            if (!disclosure) return
+            disclosure.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            disclosure.querySelector<HTMLInputElement>('input[placeholder="RM-001 or Resin A"]')?.focus({ preventScroll: true })
+          })
+        })
+      }
       navigate('/plant/?tab=production', { replace: true })
       return
     }
     if (focus === 'shift-close' && tab === 'control') {
-      openShiftCloseGuide()
+      const suggestedShiftRef = canonicalShiftRef || shiftReferencePlaceholder()
+      requestAnimationFrame(() => {
+        setShiftRef(suggestedShiftRef)
+        setHandoffShiftRef(suggestedShiftRef)
+        setShiftCloseGuideOpen(true)
+        requestAnimationFrame(() => {
+          const disclosure = shiftCloseDisclosureRef.current
+          if (!disclosure) return
+          disclosure.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          disclosure.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true })
+        })
+      })
       navigate('/plant/?tab=control', { replace: true })
     }
-  }, [navigate, production.revision, productionLocation.search, tab])
+  }, [canonicalShiftRef, guidedPlantJobId, navigate, productionLocation.search, tab])
 
   async function initializeManagedProduction(event: FormEvent) {
     event.preventDefault()
