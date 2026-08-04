@@ -1542,7 +1542,7 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-counter-summary a:hover, .shop-counter-summary a:focus-visible { color: var(--core-green); text-decoration: underline; }
 .shop-counter-summary a + a { border-left: 1px solid var(--core-line-strong); padding-left: 12px; }
 .shop-item-search { width: min(260px,38%); }
-.shop-item-search input { min-height: 42px; border-radius: 12px; padding-left: 13px; }
+.shop-item-search input { min-height: 44px; border-radius: 12px; padding-left: 13px; }
 .shop-item-grid { min-height: 0; display: grid; grid-template-columns: repeat(auto-fill,minmax(155px,1fr)); align-content: start; gap: 10px; overflow-y: auto; padding: 1px 3px 8px 1px; scrollbar-color: rgba(86,240,193,.25) transparent; }
 .shop-product-tile { position: relative; min-width: 0; min-height: 220px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; border: 1px solid var(--core-line); border-radius: 16px; padding: 10px; background: var(--core-panel-raised); color: var(--core-ink); text-align: left; cursor: pointer; transition: border-color .16s ease, transform .16s ease, background .16s ease; --art: #56f0c1; --art-soft: #153a34; --art-detail: #071b17; }
 .shop-product-tile[data-art="1"] { --art: #63c7ff; --art-soft: #142f42; --art-detail: #082034; }

@@ -1257,6 +1257,7 @@ async function auditBlueprintPreviewWorkflow(browser, baseUrl, viewport) {
     const response = await page.goto(`${baseUrl}/shop/`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
     if (!response || response.status() < 200 || response.status() >= 400) fail(`workflow_blueprint_http_status:${response?.status() ?? 'none'}`)
     await waitForProduct(page, 'Shop')
+    await page.waitForURL((url) => url.pathname === '/shop/' && url.searchParams.get('tab') === 'counter', { timeout: 8_000 })
     const productStateBefore = await productStorage()
 
     const navigator = await expectOneVisible(page.locator('details.product-system-navigator'), 'workflow_blueprint_navigator_count')

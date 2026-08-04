@@ -82,9 +82,9 @@
       "path": "/",
       "titleIncludes": "Shop",
       "requiredText": ["Shop"],
-      "maxVisibleActions": 15,
-      "targetVisibleActions": 15,
-      "maxFirstViewportActions": { "mobile": 13, "desktop": 14 }
+      "maxVisibleActions": 19,
+      "targetVisibleActions": 19,
+      "maxFirstViewportActions": { "mobile": 16, "desktop": 18 }
     },
     {
       "id": "app-shop-orders",
