@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v1",
   "asOf": "2026-08-04T05:28:37.850Z",
-  "sourceDigest": "sha256:9061d48730645fe27a580fa688c8f5d9fea769c98c965e4759e271e58c81efee",
+  "sourceDigest": "sha256:76175268ac0274e458463f801bdbc03725e2b29aeff567ddc64fbdfce290f3d4",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -13,14 +13,14 @@
     {
       "id": "local_postgres17",
       "status": "ready-local",
-      "evidence": "52 checks, TLS, RLS, tenant isolation, durable owner control, backup and restore.",
+      "evidence": "53 checks, TLS, RLS, tenant isolation, active-session revocation, durable owner control, backup and restore.",
       "nextAction": "Keep the digest-bound rehearsal current."
     },
     {
       "id": "hosted_postgres17",
       "status": "blocked",
       "evidence": "Protected production is PostgreSQL 17 at managed schema v7; no owner-approved isolated hosted rehearsal exists.",
-      "nextAction": "Run local v8 and v9 on an approved isolated Supabase target, then rerun the hosted validator."
+      "nextAction": "Run local v8 through v10 on an approved isolated Supabase target, then rerun the hosted validator and session-revocation proof."
     },
     {
       "id": "hosted_storage_privacy",
@@ -43,8 +43,8 @@
     {
       "id": "security",
       "status": "blocked",
-      "evidence": "27 fail-closed public-table advisor findings remain, and protected managed schema v7 trails local target v9.",
-      "nextAction": "Apply local v8 and v9 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, role-boundary, and storage checks before any production proposal."
+      "evidence": "27 fail-closed public-table advisor findings remain, and protected managed schema v7 trails local target v10.",
+      "nextAction": "Apply local v8 through v10 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, active-session revocation, role-boundary, and storage checks before any production proposal."
     },
     {
       "id": "named_pilot",
@@ -128,7 +128,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:8e550b50698ebe3499f93a43bc1511c2f8b26d0ecf91f160809731ff5a56dc54"
+      "digest": "sha256:40049f2eb772e37ce9e73775c1004cd5f82a543db2c58bfbebe76bb70dfa3af9"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -136,11 +136,11 @@
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
-      "digest": "sha256:5a08b8d2490cf037fd4b23a1d2a514fc654b4b4355106ca2e5d32b605a6413fb"
+      "digest": "sha256:36e0660d3cfd94b4efdd15700a3b3f3eb4cfbb481d32a1b56eb88cf67846137b"
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:7b6464d70f434b5ac7381bcd1e48dc509198b27fcf73092ead6a6fd540312c45"
+      "digest": "sha256:bb07b3549b219af4a83c03b1a2faf4eedd80180dc2a4aa4a3af854e595c9646a"
     },
     {
       "path": "package.json",
@@ -148,7 +148,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:7cde719b43b286d6adc3e5add9c54826848c8f63bebabd7e5431149527bf2d41"
+      "digest": "sha256:70856a68ec9b7efb2e1ed0d9f6ddb5bbed7750751cbdbfbefe4b1f964afdfeb1"
     }
   ]
 }

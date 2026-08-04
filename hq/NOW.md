@@ -33,7 +33,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
-- Managed identity fails before tenant lookup unless the token's Supabase issuer, authenticated non-anonymous audience/role, user/session UUIDs, and fresh `/user` response agree (`eec19002`). Hosted active-session revocation remains unproven.
+- Managed identity fails before tenant lookup unless the token's Supabase issuer, authenticated non-anonymous audience/role, user/session UUIDs, and fresh `/user` response agree. Local schema v10 then checks the exact signed session against private `auth.sessions` before discovery, membership, product data, or owner activation; deleted sessions fail closed (`eec19002`, `ac9a9ca4`). Hosted active-session revocation remains unproven.
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
@@ -55,7 +55,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- Checks: 106 Ecommerce, 347 Commerce, 332 Production, 10 Shop next-action, 118 Website, 92 security, 241 onboarding, 11 backup, 85 managed import, 5 focused Supabase Auth tests, and 52 PostgreSQL 17 checks across ten migrations.
+- Checks: 106 Ecommerce, 347 Commerce, 332 Production, 10 Shop next-action, 118 Website, 93 security, 241 onboarding, 11 backup, 85 managed import, 5 focused Supabase Auth tests, and 53 PostgreSQL 17 checks across eleven migrations.
 - The deterministic 12-profile rehearsal passes 24 rows. All four desktop missions are overflow-free. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
 - Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1`; paired brand, context, and catalog identities match at `jade-v2-2026-07` / `2026-07-31.3`, and the scheduler ceiling is one job. Paired release metadata is internally consistent; current-head page-contract checks report drift because the local candidate is not deployed.
@@ -70,7 +70,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
-- Hosted audit: `supermegabase` is PostgreSQL 17.6 with private schema v7, 14 policies, zero workspace data, and 27 INFO notices. v8-v9 remain code-only; writes await approved isolated tenant, security, and recovery proof.
+- Hosted audit: `supermegabase` is PostgreSQL 17.6 with private schema v7, 14 policies, zero workspace data, and 27 INFO notices. v8-v10 remain code-only; writes await approved isolated tenant, active-session revocation, security, and recovery proof.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
 - Both domains remain on accepted live `25cac2f5`; exact current-head verification reports release drift. The verified local candidate is newer and not deployed. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
 - The live public `/website/` and `/ecommerce/` routes intermittently returned `404` during the 2026-08-04 candidate verification; public availability remains unproven until a protected release and exact live check both pass.
@@ -90,5 +90,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
+1. On approved isolated Supabase, apply v8-v10 and prove Storage, RLS, active-session revocation, tenant isolation, and exact restore before writes.
 2. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.

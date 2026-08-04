@@ -922,7 +922,7 @@ requireContract('workboard release authority and active execution order are curr
   && workboardExecutionOrder.includes('usable Website download checkpoint `e18fc6bc`')
   && workboardExecutionOrder.includes('Website mobile mission release `2824da83`')
   && workboardExecutionOrder.includes('Ecommerce mobile mission release `e15d4a58`')
-  && workboardExecutionOrder.includes('owner-approved existing Supabase target')
+  && workboardExecutionOrder.includes('owner-approved isolated non-production Supabase target')
   && workboardExecutionOrder.includes('Repeat the 12-profile rehearsal against the live isolated release')
   && workboardExecutionOrder.includes('retain complete rendered mobile Website and Ecommerce mission acceptance')
   && workboardExecutionOrder.includes('exact-commit protected preview')

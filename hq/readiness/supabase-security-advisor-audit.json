@@ -87,8 +87,8 @@
     "queryContract": "supermega.supabase-managed-schema-metadata.v1",
     "schema": "app_private",
     "liveSchemaVersion": 7,
-    "localTargetVersion": 9,
-    "versionDrift": 2,
+    "localTargetVersion": 10,
+    "versionDrift": 3,
     "tableCount": 6,
     "rlsTableCount": 5,
     "policyCount": 14,
@@ -115,6 +115,11 @@
         "version": 9,
         "path": "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
         "digest": "sha256:1dc908aeaf88bc91e03c566e31652816fba699aaf0bcce5b0d5c512ad9ab0115"
+      },
+      {
+        "version": 10,
+        "path": "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+        "digest": "sha256:0a112ee27bda7ca238f3992ffab841c414268e44aad6b68023c75915afa40cde"
       }
     ]
   },
@@ -125,7 +130,7 @@
     "currentRowExposureProven": false,
     "browserGrantHardeningRequired": true,
     "productionMutationAuthorized": false,
-    "nextAction": "Apply local v8 and v9 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, role-boundary, and storage checks before any production proposal."
+    "nextAction": "Apply local v8 through v10 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, active-session revocation, role-boundary, and storage checks before any production proposal."
   },
   "controls": {
     "connectorReadRequests": 16,
@@ -135,5 +140,5 @@
     "businessRowsRead": 0,
     "credentialsRecorded": false
   },
-  "evidenceDigest": "sha256:bd7e4abc4591fb612edb661fbe84a68805c8e81c8ab0bd16a12165970fab7ee4"
+  "evidenceDigest": "sha256:6c5319b06da2483d60253f8bbfac66843967f1278c2e866082bfcc0d022cd031"
 }
