@@ -91,6 +91,7 @@ const databaseImplementationPaths = [
   'supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql',
   'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
   'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
+  'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
   'tools/activate_supermega_database.ps1',
   'tools/rehearse_supermega_postgres17.py',
   'tools/validate_supermega_database_url.py',
@@ -1145,10 +1146,10 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === 10
-  && databaseRehearsal.migration?.schemaVersion === 9
+  && databaseRehearsal.migration?.count === 11
+  && databaseRehearsal.migration?.schemaVersion === 10
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 52
+  && Object.keys(databaseRehearsal.checks || {}).length === 53
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
   && databaseRehearsal.checks?.capabilityScopedReads === true
   && databaseRehearsal.checks?.capabilityScopedEventReads === true
@@ -1158,6 +1159,7 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.checks?.managedOwnerAuthorizationDurable === true
   && databaseRehearsal.checks?.managedActivationAtomicRollback === true
   && databaseRehearsal.checks?.managedActivationIdempotentReplay === true
+  && databaseRehearsal.checks?.managedSupabaseSessionRevocationEnforced === true
   && databaseRehearsal.checks?.managedContextActivationEvidenceBound === true
   && databaseRehearsal.checks?.managedContextAuthenticatedIdentityEnforced === true
   && databaseRehearsal.checks?.managedContextValidationZeroWrite === true
@@ -1191,9 +1193,9 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
   && managedPilotReadiness.controls?.productionWritesEnabled === false
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === '27 fail-closed public-table advisor findings remain, and protected managed schema v7 trails local target v9.'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === '27 fail-closed public-table advisor findings remain, and protected managed schema v7 trails local target v10.'
   && supabaseSecurityAudit.managedBackend?.liveSchemaVersion === 7
-  && supabaseSecurityAudit.managedBackend?.localTargetVersion === 9
+  && supabaseSecurityAudit.managedBackend?.localTargetVersion === 10
   && supabaseSecurityAudit.managedBackend?.browserRolesDenied === true
   && supabaseSecurityAudit.managedBackend?.metadataRlsEnabled === false
   && supabaseSecurityAudit.controls?.databaseWrites === 0)

@@ -59,6 +59,14 @@ class SupabaseAuthConfig:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class VerifiedSupabaseUser:
+    """A named Supabase user bound to the exact signed Auth session."""
+
+    user_id: str
+    session_id: str
+
+
 def _normalize_base_url(value: str) -> str:
     if not value:
         return ""
@@ -105,8 +113,11 @@ def _canonical_uuid(value: object) -> str:
     return str(parsed) if str(parsed) == candidate.casefold() else ""
 
 
-def _authenticated_token_subject(token: str, config: SupabaseAuthConfig) -> str:
-    """Return the subject only for a named session issued by this project.
+def _authenticated_token_identity(
+    token: str,
+    config: SupabaseAuthConfig,
+) -> VerifiedSupabaseUser | None:
+    """Return signed identity claims only for this project's named session.
 
     Supabase Auth remains the signature and freshness authority through the
     server-side ``/user`` request below. These checks bind that response to the
@@ -134,21 +145,21 @@ def _authenticated_token_subject(token: str, config: SupabaseAuthConfig) -> str:
         or not subject
         or not session_id
     ):
-        return ""
-    return subject
+        return None
+    return VerifiedSupabaseUser(user_id=subject, session_id=session_id)
 
 
-def verify_supabase_user_token(
+def verify_supabase_user_identity(
     token: str,
     config: SupabaseAuthConfig,
     *,
     timeout_seconds: float = 4.0,
-) -> str | None:
-    """Return a fresh, server-confirmed user id or reject the token.
+) -> VerifiedSupabaseUser | None:
+    """Return a fresh user and signed session pair confirmed by Supabase Auth.
 
-    The Auth ``/user`` endpoint supports both legacy symmetric and current
-    asymmetric Supabase signing keys. Authorization still happens in the
-    private trial store through explicit workspace membership and capabilities.
+    The caller must still confirm that ``session_id`` exists in
+    ``auth.sessions`` before authorizing managed data. That second check makes
+    sign-out and administrative session revocation effective before JWT expiry.
     """
 
     candidate = str(token or "").strip()
@@ -156,8 +167,8 @@ def verify_supabase_user_token(
         return None
     if not candidate or len(candidate) > _MAX_TOKEN_LENGTH or len(candidate.split(".")) != 3:
         return None
-    token_subject = _authenticated_token_subject(candidate, config)
-    if not token_subject:
+    token_identity = _authenticated_token_identity(candidate, config)
+    if token_identity is None:
         return None
 
     request = UrlRequest(
@@ -166,7 +177,7 @@ def verify_supabase_user_token(
             "accept": "application/json",
             "apikey": config.publishable_key,
             "authorization": f"Bearer {candidate}",
-            "user-agent": "supermega-trial-runtime/1.1",
+            "user-agent": "supermega-trial-runtime/1.2",
         },
         method="GET",
     )
@@ -190,11 +201,34 @@ def verify_supabase_user_token(
     if not isinstance(user, dict) or user.get("is_anonymous") is not False:
         return None
     user_id = _canonical_uuid(user.get("id"))
-    return user_id if user_id == token_subject else None
+    return token_identity if user_id == token_identity.user_id else None
+
+
+def verify_supabase_user_token(
+    token: str,
+    config: SupabaseAuthConfig,
+    *,
+    timeout_seconds: float = 4.0,
+) -> str | None:
+    """Return a fresh, server-confirmed user id or reject the token.
+
+    The Auth ``/user`` endpoint supports both legacy symmetric and current
+    asymmetric Supabase signing keys. Authorization still happens in the
+    private trial store through explicit workspace membership and capabilities.
+    """
+
+    identity = verify_supabase_user_identity(
+        token,
+        config,
+        timeout_seconds=timeout_seconds,
+    )
+    return identity.user_id if identity is not None else None
 
 
 __all__ = [
     "SupabaseAuthConfig",
     "SupabaseAuthUnavailable",
+    "VerifiedSupabaseUser",
+    "verify_supabase_user_identity",
     "verify_supabase_user_token",
 ]

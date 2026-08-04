@@ -21,7 +21,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 
-CONTRACT = "supermega_private_trial_database_v9"
+CONTRACT = "supermega_private_trial_database_v10"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
 ACTIVATION_TARGET_CONTRACT = "supermega_supabase_activation_target_v1"
 ACTIVATION_EVIDENCE_CONTRACT = "supermega_managed_activation_evidence_v1"
@@ -29,7 +29,7 @@ SCHEMA = "app_private"
 BACKEND_ROLE = "supermega_trial_backend"
 TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 EXPECTED_POSTGRES_MAJOR = 17
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 UNSUPPORTED_SUPABASE_POSTGRES17_EXTENSIONS = frozenset(
@@ -183,12 +183,19 @@ EXPECTED_FUNCTIONS = {
         "",
         "table(workspace_id text, capabilities text[], display_name text)",
     ),
+    "supabase_session_is_active": (
+        "target_user_id uuid, target_session_id uuid",
+        "boolean",
+    ),
 }
 WORKSPACE_ACCESS_FUNCTION_FINGERPRINT = (
     "db273aa3f0342e648db5b5e37560b08009ee22a3e274f9395718bdfbbd257a35"
 )
 WORKSPACE_DIRECTORY_FUNCTION_FINGERPRINT = (
     "6f7002c211b52aef98a7dd702a1ca112163570ceb03446883ee3d332bea867d0"
+)
+SUPABASE_SESSION_FUNCTION_FINGERPRINT = (
+    "63c4ced17eca7e868b599fb844455c02b0689bb3ee22f9f3d71dc78f2a25902a"
 )
 EXPECTED_NON_OWNER_ACL = frozenset(
     {
@@ -206,6 +213,7 @@ EXPECTED_NON_OWNER_ACL = frozenset(
         ("table", "workspace_access_controls", BACKEND_ROLE, "SELECT", False),
         ("function", "workspace_is_active", BACKEND_ROLE, "EXECUTE", False),
         ("function", "actor_workspace_directory", BACKEND_ROLE, "EXECUTE", False),
+        ("function", "supabase_session_is_active", BACKEND_ROLE, "EXECUTE", False),
     }
 )
 EXPECTED_BACKEND_ACL_DEPENDENCIES = frozenset(
@@ -223,6 +231,11 @@ EXPECTED_BACKEND_ACL_DEPENDENCIES = frozenset(
             0,
         ),
         ("function", f"{SCHEMA}.actor_workspace_directory()", 0),
+        (
+            "function",
+            f"{SCHEMA}.supabase_session_is_active(target_user_id uuid, target_session_id uuid)",
+            0,
+        ),
     }
 )
 EVENT_SURFACE_CONSTRAINT = "workspace_events_approval_surface_v4_check"
@@ -1394,6 +1407,7 @@ def collect_snapshot(connection: Any) -> dict[str, Any]:
                    pg_get_function_result(function_record.oid) as result_type,
                    function_record.prosrc as function_source,
                    function_record.prosecdef as security_definer,
+                   function_record.provolatile as volatility,
                    function_record.proconfig as function_config,
                    language_record.lanname as function_language
             from pg_proc function_record
@@ -1821,6 +1835,15 @@ def evaluate_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             functions["actor_workspace_directory"].get("function_source")
         )
         == WORKSPACE_DIRECTORY_FUNCTION_FINGERPRINT
+        and str(functions["supabase_session_is_active"].get("function_language")) == "sql"
+        and functions["supabase_session_is_active"].get("security_definer") is True
+        and str(functions["supabase_session_is_active"].get("volatility")) == "s"
+        and _ordered_texts(functions["supabase_session_is_active"].get("function_config"))
+        == ('search_path=""',)
+        and _catalog_expression_fingerprint(
+            functions["supabase_session_is_active"].get("function_source")
+        )
+        == SUPABASE_SESSION_FUNCTION_FINGERPRINT
     )
     trusted_private_ownership = (
         str(schema.get("owner_name")) == TRUSTED_OWNER
@@ -2234,7 +2257,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--ensure-schema",
         action="store_true",
-        help="Require the complete v9 schema contract; this flag never applies migrations.",
+        help="Require the complete v10 schema contract; this flag never applies migrations.",
     )
     parser.add_argument("--require-ready", action="store_true")
     parser.add_argument(

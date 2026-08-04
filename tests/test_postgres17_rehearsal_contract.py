@@ -52,6 +52,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "managed_production_job_to_output",
             "managed_human_attribution",
             "managed_exact_retry",
+            "managed_supabase_session_revocation_enforced",
             "approval_agent_row_spoof_denied",
             "approval_service_row_spoof_denied",
             "approval_human_decision_once",
@@ -92,6 +93,7 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
                 "20260730123000_private_trial_backend_v7_workspace_discovery.sql",
                 "20260802161500_private_trial_backend_v8_rls_initplan.sql",
                 "20260803063822_private_trial_backend_v9_metadata_rls.sql",
+                "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
             ),
         )
         source = REHEARSAL.read_text(encoding="utf-8")

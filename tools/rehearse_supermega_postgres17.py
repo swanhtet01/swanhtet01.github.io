@@ -41,6 +41,7 @@ MIGRATIONS = (
     "20260730123000_private_trial_backend_v7_workspace_discovery.sql",
     "20260802161500_private_trial_backend_v8_rls_initplan.sql",
     "20260803063822_private_trial_backend_v9_metadata_rls.sql",
+    "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v1"
@@ -58,6 +59,7 @@ IMPLEMENTATION_PATHS = (
     "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
     "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
     "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
+    "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
     "tools/activate_supermega_database.ps1",
     "tools/rehearse_supermega_postgres17.py",
     "tools/validate_supermega_database_url.py",
@@ -74,7 +76,9 @@ APPROVAL_HUMAN_ACTOR = "approval-owner"
 APPROVAL_IDENTITY_AUTHORITY = "trusted_backend_transaction_context"
 MANAGED_WORKSPACE = "rehearsal-managed"
 MANAGED_OWNER_ACTOR = "c63af44e-b7c1-4dbf-970d-389d5bba93a7"
+MANAGED_OWNER_SESSION = "1ed07925-e474-42e3-82f1-4387f1ae63f9"
 MANAGED_SECOND_ACTOR = "f3ea98a2-9954-413c-ad4d-c6dc7ce8a23c"
+MANAGED_SECOND_SESSION = "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3"
 MANAGED_APPROVAL_ID = "7f201a3b-d6d9-4c1a-b6c6-3d0d1e123731"
 DATABASE_REJECTION_SQLSTATES = frozenset({"23514", "40001", "42501", "55000"})
 
@@ -427,6 +431,17 @@ def _create_database_and_roles(admin_url: str, database_name: str) -> None:
                 cursor.execute(f'create role "{role}" nologin')
 
 
+def _create_auth_session_fixture(admin_database_url: str) -> None:
+    """Create the minimum local Auth catalog that Supabase owns when hosted."""
+
+    with _connect(admin_database_url, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("create schema auth authorization postgres")
+            cursor.execute(
+                "create table auth.sessions (id uuid primary key, user_id uuid not null)"
+            )
+
+
 def _apply_migrations(
     *,
     postgres_bin: Path,
@@ -442,7 +457,7 @@ def _apply_migrations(
         migration_path = MIGRATION_DIRECTORY / migration
         if not migration_path.is_file():
             raise RehearsalFailure("migration_inventory_incomplete")
-        _require_success(
+        result = _run(
             [
                 str(psql),
                 "--host",
@@ -460,9 +475,18 @@ def _apply_migrations(
                 str(migration_path),
             ],
             environment=migration_environment,
-            failure_code="migration_application_failed",
             timeout=120,
         )
+        if result.returncode != 0:
+            error_match = re.search(r"ERROR:\s*([^\r\n]+)", result.stderr or "")
+            detail = re.sub(
+                r"[^a-z0-9]+",
+                "_",
+                str(error_match.group(1) if error_match else "postgres_error").casefold(),
+            ).strip("_")[:120]
+            raise RehearsalFailure(
+                f"migration_application_failed_{migration_path.stem}_{detail}"
+            )
         if position == 1:
             _seed_v1_upgrade_data(admin_database_url)
 
@@ -1121,7 +1145,11 @@ def _exercise_managed_activation_control(
         ManagedWorkspaceProvisioner,
         compile_activation_plan,
     )
-    from supermega_runtime.trial_store import PostgresTrialStore
+    from supermega_runtime.trial_store import (
+        PostgresTrialStore,
+        TrialNotReadyError,
+        TrialPrincipal,
+    )
 
     now = datetime.now(timezone.utc)
     activation_request = _managed_activation_request()
@@ -1147,10 +1175,16 @@ def _exercise_managed_activation_control(
         != approved_context.get("outcome", {}).get("digest")
     ):
         raise RehearsalFailure("managed_context_activation_evidence_unbound")
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        administrator.execute(
+            "insert into auth.sessions (id, user_id) values (%s::uuid, %s::uuid)",
+            (MANAGED_OWNER_SESSION, MANAGED_OWNER_ACTOR),
+        )
     provisioner = ManagedWorkspaceProvisioner(admin_database_url)
     authorization = provisioner.authorize(
         plan,
         verified_owner_actor_id=MANAGED_OWNER_ACTOR,
+        verified_owner_session_id=MANAGED_OWNER_SESSION,
         decision_note="Owner approved the bounded PostgreSQL rehearsal.",
     )
     if authorization.get("status") != "approved" or authorization.get("replayed") is not False:
@@ -1238,6 +1272,10 @@ def _exercise_managed_activation_control(
             """,
             (MANAGED_WORKSPACE, MANAGED_SECOND_ACTOR),
         )
+        administrator.execute(
+            "insert into auth.sessions (id, user_id) values (%s::uuid, %s::uuid)",
+            (MANAGED_SECOND_SESSION, MANAGED_SECOND_ACTOR),
+        )
 
     managed_context = _exercise_managed_context_postgres_route(
         runtime_database_url,
@@ -1250,13 +1288,52 @@ def _exercise_managed_activation_control(
         reducer=lambda _surface, _event_type, state, _payload: state,
         write_enabled=False,
     )
-    active_directory, active_directory_truncated = directory_store.list_actor_workspaces(
+    discovery_principal = TrialPrincipal(
+        "workspace-discovery",
         MANAGED_SECOND_ACTOR,
-        actor_kind="human",
+        "human",
+        True,
+        MANAGED_SECOND_SESSION,
+        "supabase",
+    )
+    managed_supabase_principal = TrialPrincipal(
+        MANAGED_WORKSPACE,
+        MANAGED_SECOND_ACTOR,
+        "human",
+        True,
+        MANAGED_SECOND_SESSION,
+        "supabase",
+    )
+    active_directory, active_directory_truncated = directory_store.list_actor_workspaces(
+        discovery_principal,
         limit=50,
     )
     if active_directory_truncated or [item.workspace_id for item in active_directory] != [MANAGED_WORKSPACE]:
         raise RehearsalFailure("managed_workspace_discovery_active_failed")
+    if directory_store.get_state(managed_supabase_principal, "company").workspace_id != MANAGED_WORKSPACE:
+        raise RehearsalFailure("managed_supabase_session_active_failed")
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        administrator.execute(
+            "delete from auth.sessions where id = %s::uuid",
+            (MANAGED_SECOND_SESSION,),
+        )
+    revoked_checks = 0
+    for operation in (
+        lambda: directory_store.list_actor_workspaces(discovery_principal, limit=50),
+        lambda: directory_store.get_state(managed_supabase_principal, "company"),
+    ):
+        try:
+            operation()
+        except TrialNotReadyError as exc:
+            if exc.reasons == ("auth_session_active",):
+                revoked_checks += 1
+    if revoked_checks != 2:
+        raise RehearsalFailure("managed_supabase_session_revocation_failed")
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        administrator.execute(
+            "insert into auth.sessions (id, user_id) values (%s::uuid, %s::uuid)",
+            (MANAGED_SECOND_SESSION, MANAGED_SECOND_ACTOR),
+        )
 
     def visible_counts() -> tuple[int, int, int, int, int]:
         with _connect(runtime_database_url) as runtime:
@@ -1327,8 +1404,7 @@ def _exercise_managed_activation_control(
     if visible_counts() != (0, 0, 0, 0, 0):
         raise RehearsalFailure("managed_suspension_rls_bypass")
     suspended_directory, suspended_directory_truncated = directory_store.list_actor_workspaces(
-        MANAGED_SECOND_ACTOR,
-        actor_kind="human",
+        discovery_principal,
         limit=50,
     )
     if suspended_directory_truncated or suspended_directory:
@@ -1357,6 +1433,7 @@ def _exercise_managed_activation_control(
         "managed_owner_authorization_durable": True,
         "managed_activation_atomic_rollback": True,
         "managed_activation_idempotent_replay": True,
+        "managed_supabase_session_revocation_enforced": True,
         "managed_context_activation_evidence_bound": True,
         **managed_context,
         "managed_suspension_database_enforced": True,
@@ -3073,7 +3150,7 @@ def _verify_restored_data(
             """
         ).fetchone()
     if row != (
-        9,
+        10,
         11,
         7,
         20,
@@ -3180,6 +3257,7 @@ def _run_rehearsal(
 
             phase = "database_bootstrap"
             _create_database_and_roles(admin_root_url, DATABASE_NAME)
+            _create_auth_session_fixture(admin_database_url)
             phase = "migration_application"
             _apply_migrations(
                 postgres_bin=postgres_bin,
@@ -3326,7 +3404,7 @@ def _run_rehearsal(
                 },
                 "migrations": {
                     "count": len(MIGRATIONS),
-                    "schema_version": 9,
+                    "schema_version": 10,
                     "production_validator_ready": primary_validation.get("ready") is True,
                 },
                 "storage": {
@@ -3356,7 +3434,7 @@ def _run_rehearsal(
                 "recovery": {
                     "format": "pg_dump_custom",
                     "backup_nonempty": True,
-                    "restored_schema_version": 9,
+                    "restored_schema_version": 10,
                 },
                 "cleanup_complete": False,
                 "secret_values_exposed": False,

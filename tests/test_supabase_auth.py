@@ -6,7 +6,12 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_token
+from supermega_runtime.supabase_auth import (
+    SupabaseAuthConfig,
+    VerifiedSupabaseUser,
+    verify_supabase_user_identity,
+    verify_supabase_user_token,
+)
 
 
 def _jwt(payload: dict[str, object]) -> str:
@@ -81,7 +86,7 @@ class SupabaseAuthTests(unittest.TestCase):
         ):
             self.assertFalse(SupabaseAuthConfig.from_environment().ready)
 
-    def test_verifier_uses_auth_server_and_returns_named_user_id(self) -> None:
+    def test_verifier_uses_auth_server_and_preserves_signed_session_identity(self) -> None:
         config = SupabaseAuthConfig(
             base_url="https://example.supabase.co",
             publishable_key="sb_publishable_abcdefghijklmnopqrstuvwxyz",
@@ -95,13 +100,16 @@ class SupabaseAuthTests(unittest.TestCase):
         opener.open.return_value = response
         token = _user_token()
         with patch("supermega_runtime.supabase_auth.build_opener", return_value=opener):
-            user_id = verify_supabase_user_token(token, config)
+            identity = verify_supabase_user_identity(token, config)
 
-        self.assertEqual(user_id, USER_ID)
+        self.assertEqual(identity, VerifiedSupabaseUser(USER_ID, SESSION_ID))
         request = opener.open.call_args.args[0]
         self.assertEqual(request.full_url, "https://example.supabase.co/auth/v1/user")
         self.assertEqual(request.get_header("Authorization"), f"Bearer {token}")
         self.assertEqual(request.get_header("Apikey"), config.publishable_key)
+
+        with patch("supermega_runtime.supabase_auth.build_opener", return_value=opener):
+            self.assertEqual(verify_supabase_user_token(token, config), USER_ID)
 
     def test_verifier_binds_auth_response_to_signed_project_session_and_subject(self) -> None:
         config = SupabaseAuthConfig(

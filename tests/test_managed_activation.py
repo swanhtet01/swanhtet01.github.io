@@ -33,6 +33,7 @@ from supermega_runtime.managed_activation import (
 
 NOW = datetime(2026, 7, 30, 12, 0, 0, tzinfo=timezone.utc)
 OWNER_ID = "c63af44e-b7c1-4dbf-970d-389d5bba93a7"
+OWNER_SESSION_ID = "1ed07925-e474-42e3-82f1-4387f1ae63f9"
 APPROVAL_ID = "7f201a3b-d6d9-4c1a-b6c6-3d0d1e123731"
 PROJECT_REF = "zvtzwcimpvvtkowflhda"
 RELEASE_COMMIT = "a" * 40
@@ -257,6 +258,7 @@ class FakeDatabase:
         self.clock = NOW
         self.current_user = "postgres"
         self.provisioning_role_privileged = True
+        self.session_active = True
 
     def connect(self, _database_url: str):
         return FakeConnection(self)
@@ -324,7 +326,7 @@ class FakeCursor:
                     if len(self.database.statements) > 1
                     else False,
                     "provisioning_role_privileged": self.database.provisioning_role_privileged,
-                    "schema_version": 9,
+                    "schema_version": 10,
                     "backend_role_safe": True,
                     "access_select": True,
                     "access_insert": True,
@@ -338,6 +340,8 @@ class FakeCursor:
                     "event_insert": True,
                 }
             ]
+        elif "supabase_session_is_active" in sql:
+            self.rows = [{"active": self.database.session_active}]
         elif "from app_private.approval_requests" in sql and sql.startswith("select"):
             approval_id, workspace_id, command_id, _approval_order = values
             matches = [
@@ -463,7 +467,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
         second = activation_plan()
         self.assertEqual(first, second)
         self.assertEqual(first["contract"], ACTIVATION_PLAN_CONTRACT)
-        self.assertEqual(first["target"]["schemaVersion"], 9)
+        self.assertEqual(first["target"]["schemaVersion"], 10)
         self.assertEqual(first["target"]["adminCaSha256"], ADMIN_CA_SHA256)
         self.assertIn("commerce.write", first["ownerCapabilities"])
         self.assertNotIn("production.write", first["ownerCapabilities"])
@@ -581,8 +585,15 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         return self.provisioner.authorize(
             self.plan,
             verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
             decision_note="Owner reviewed the exact workspace, release, and plan digest.",
         )
+
+    def test_revoked_owner_session_cannot_authorize_activation(self) -> None:
+        self.database.session_active = False
+        with self.assertRaisesRegex(ManagedActivationError, "session is no longer active"):
+            self.authorize()
+        self.assertEqual(self.database.approvals, [])
 
     def test_apply_replay_suspend_and_suspension_replay_are_idempotent(self) -> None:
         preflight = self.provisioner.inspect(self.plan)

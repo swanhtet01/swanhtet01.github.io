@@ -29,7 +29,7 @@ SUSPENSION_RECEIPT_CONTRACT = "supermega.managed_workspace_suspension_receipt.v2
 ACTIVATION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_activation_event.v1"
 SUSPENSION_EVENT_RESULT_CONTRACT = "supermega.managed_workspace_suspension_event.v1"
 ACTIVATION_AUTHORIZATION_CONTRACT = "supermega.managed_workspace_activation_authorization.v1"
-TRIAL_SCHEMA_VERSION = 9
+TRIAL_SCHEMA_VERSION = 10
 MAX_INPUT_BYTES = 1024 * 1024
 PLAN_TTL = timedelta(days=7)
 AUTOMATIC_COMPENSATION_REASON = "Activation compensation after a downstream release gate failure."
@@ -838,7 +838,7 @@ class ManagedWorkspaceProvisioner:
             "eventInsert": bool(_row_value(row, "event_insert", 15)),
         }
         if snapshot["postgresMajor"] != 17 or snapshot["schemaVersion"] != TRIAL_SCHEMA_VERSION:
-            raise ManagedActivationError("Managed activation requires PostgreSQL 17 and private schema version 9.")
+            raise ManagedActivationError("Managed activation requires PostgreSQL 17 and private schema version 10.")
         if not snapshot["backendRoleSafe"]:
             raise ManagedActivationError("Managed activation backend role is unsafe.")
         if (
@@ -1166,9 +1166,17 @@ class ManagedWorkspaceProvisioner:
             and _row_value(row, "command_fingerprint", 2) == fingerprint
         )
 
-    def authorize(self, plan_value: object, *, verified_owner_actor_id: str, decision_note: str) -> dict[str, Any]:
+    def authorize(
+        self,
+        plan_value: object,
+        *,
+        verified_owner_actor_id: str,
+        verified_owner_session_id: str,
+        decision_note: str,
+    ) -> dict[str, Any]:
         plan = validate_activation_plan(plan_value, require_current=True)
         verified_owner = _uuid(verified_owner_actor_id, "Verified owner actor ID")
+        verified_session = _uuid(verified_owner_session_id, "Verified owner session ID")
         note = _visible_text(decision_note, "Activation authorization note", 500)
         if verified_owner != plan["ownerActorId"]:
             raise ManagedActivationError("Supabase Auth user does not match the activation owner.")
@@ -1178,6 +1186,12 @@ class ManagedWorkspaceProvisioner:
                 with connection.cursor() as cursor:
                     cursor.execute("set transaction isolation level serializable")
                     self._assert_schema(cursor, require_write_privilege=True)
+                    cursor.execute(
+                        "select app_private.supabase_session_is_active(%s::uuid, %s::uuid) as active",
+                        (verified_owner, verified_session),
+                    )
+                    if not bool(_row_value(cursor.fetchone(), "active", 0)):
+                        raise ManagedActivationError("Supabase Auth session is no longer active.")
                     self._lock(cursor, plan["workspaceId"])
                     authorization = self._authorization_row(cursor, plan)
                     access = self._access_row(cursor, plan["workspaceId"])
@@ -1818,7 +1832,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     from supermega_runtime.supabase_auth import (
                         SupabaseAuthConfig,
                         SupabaseAuthUnavailable,
-                        verify_supabase_user_token,
+                        verify_supabase_user_identity,
                     )
 
                     token = _read_secret_file(args.owner_access_token_file, "Owner access token")
@@ -1830,14 +1844,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                         publishable_key=publishable_key,
                     )
                     try:
-                        verified_owner = verify_supabase_user_token(token, config)
+                        verified_owner = verify_supabase_user_identity(token, config)
                     except SupabaseAuthUnavailable as exc:
                         raise ManagedActivationError("Supabase Auth could not verify owner authorization.") from exc
                     if verified_owner is None:
                         raise ManagedActivationError("Owner access token is invalid or anonymous.")
                     result = provisioner.authorize(
                         plan,
-                        verified_owner_actor_id=verified_owner,
+                        verified_owner_actor_id=verified_owner.user_id,
+                        verified_owner_session_id=verified_owner.session_id,
                         decision_note=args.decision_note,
                     )
                     token = ""

@@ -23,8 +23,13 @@ const PENDING_MIGRATIONS = [
     path: 'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
     digest: 'sha256:1dc908aeaf88bc91e03c566e31652816fba699aaf0bcce5b0d5c512ad9ab0115',
   },
+  {
+    version: 10,
+    path: 'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+    digest: 'sha256:0a112ee27bda7ca238f3992ffab841c414268e44aad6b68023c75915afa40cde',
+  },
 ]
-const NEXT_ACTION = 'Apply local v8 and v9 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, role-boundary, and storage checks before any production proposal.'
+const NEXT_ACTION = 'Apply local v8 through v10 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, active-session revocation, role-boundary, and storage checks before any production proposal.'
 
 function fail(code) {
   throw new Error(code)
@@ -96,8 +101,8 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
     || managed.queryContract !== MANAGED_QUERY_CONTRACT
     || managed.schema !== 'app_private'
     || managed.liveSchemaVersion !== 7
-    || managed.localTargetVersion !== 9
-    || managed.versionDrift !== 2
+    || managed.localTargetVersion !== 10
+    || managed.versionDrift !== 3
     || managed.tableCount !== 6
     || managed.rlsTableCount !== 5
     || managed.policyCount !== 14
@@ -168,8 +173,8 @@ function fixture() {
       queryContract: MANAGED_QUERY_CONTRACT,
       schema: 'app_private',
       liveSchemaVersion: 7,
-      localTargetVersion: 9,
-      versionDrift: 2,
+      localTargetVersion: 10,
+      versionDrift: 3,
       tableCount: 6,
       rlsTableCount: 5,
       policyCount: 14,

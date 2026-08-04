@@ -272,8 +272,8 @@ test('Ecommerce comparison is exact, no-write, and batch-specific', () => {
 
 test('final batch requires production activation gates and candidate product operations together', () => {
   const currentRequirements = JSON.stringify(RELEASE_SECURITY_HQ_REQUIREMENTS)
-  assert.match(currentRequirements, /all ten migrations as `postgres`/)
-  assert.match(currentRequirements, /schema version 9/)
+  assert.match(currentRequirements, /all eleven migrations as `postgres`/)
+  assert.match(currentRequirements, /schema version 10/)
   assert.match(currentRequirements, /product-specific-onboarding-and-safe-handoff/)
   assert.doesNotMatch(currentRequirements, /all nine migrations as `postgres`|schema version 8|Business starter tracks|AI operating tracks/)
   const upstream = assessReleaseSecurityHqSources(finalBatchSources(['upstream']))

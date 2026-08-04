@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(import.meta.dirname, '..')
 const projectRefPattern = /^[a-z0-9]{20}$/
 const commitPattern = /^[0-9a-f]{40}$/
-const expectedSchemaVersion = 9
-const expectedMigrationCount = 10
-const expectedFinalMigration = '20260803063822_private_trial_backend_v9_metadata_rls.sql'
+const expectedSchemaVersion = 10
+const expectedMigrationCount = 11
+const expectedFinalMigration = '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql'
 
 function fail(code) {
   throw new Error(code)
@@ -91,11 +91,12 @@ export async function buildSupabaseRehearsalPacket({
       'provider-backup-inventory-before-migration',
       'independent-restore-to-isolated-target',
       'hostname-verified-postgresql-17-preflight',
-      'ordered-migration-application-through-v9',
-      'read-only-v9-runtime-validator',
+      'ordered-migration-application-through-v10',
+      'read-only-v10-runtime-validator',
       'supabase-security-advisor-without-applicable-errors',
       'private-storage-isolation-proof',
       'named-user-auth-and-cross-tenant-denial',
+      'active-session-acceptance-and-revoked-session-denial',
     ],
     recoveryNotes: [
       'Provider physical backups do not preserve custom-role passwords.',

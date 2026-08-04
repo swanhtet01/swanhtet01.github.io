@@ -14,6 +14,7 @@ const checkNames = [
   'capability_denial', 'capability_scoped_event_reads', 'capability_scoped_reads', 'dedicated_runtime_role_validated',
   'event_immutability', 'identity_transaction_local', 'invalid_initial_version_denied', 'legacy_actor_denied',
   'managed_exact_retry', 'managed_human_attribution', 'managed_owner_authorization_durable',
+  'managed_supabase_session_revocation_enforced',
   'managed_activation_atomic_rollback', 'managed_activation_idempotent_replay', 'managed_context_activation_evidence_bound',
   'managed_context_authenticated_identity_enforced', 'managed_context_owner_capability_enforced',
   'managed_context_retention_idempotent_replay', 'managed_context_retention_rls_audited',
@@ -36,10 +37,10 @@ const context = {
 const raw = {
   contract: 'supermega_postgres17_rehearsal_v1', ok: true, ready: true, status: 'rehearsed',
   engine: { major: 17, version: '17.10', tls_active: true, loopback_only: true },
-  migrations: { count: 9, schema_version: 8, production_validator_ready: true },
+  migrations: { count: 11, schema_version: 10, production_validator_ready: true },
   authority: { actor_identity_source: 'trusted_backend_transaction_context', database_authenticates_individual_actors: false, runtime_credentials_must_remain_server_only: true },
   checks: Object.fromEntries(checkNames.map((name) => [name, true])),
-  recovery: { backup_nonempty: true, format: 'pg_dump_custom', restored_schema_version: 8 },
+  recovery: { backup_nonempty: true, format: 'pg_dump_custom', restored_schema_version: 10 },
   storage: { catalog_mode: 'local_private_fixture', hosted_storage_privacy_proof_required: true, policy_count: 0, public_bucket_count: 0 },
   cleanup_complete: true, secret_values_exposed: false, production_mutated: false, supabase_mutated: false, vercel_mutated: false,
 }
@@ -54,7 +55,7 @@ test('builds a sanitized digest-bound local PostgreSQL 17 proof without hosted c
   assert.deepEqual(validateSanitizedProof(proof, implementation), {
     ok: true,
     contract: DATABASE_REHEARSAL_EVIDENCE_SCHEMA,
-    checks: 52,
+    checks: 53,
     implementationFiles: 11,
     hostedActivationProven: false,
   })

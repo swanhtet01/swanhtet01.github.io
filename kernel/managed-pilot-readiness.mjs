@@ -53,7 +53,7 @@ export function buildManagedPilotReadiness(input = {}) {
   const packageManifest = input.packageManifest
   const sourceReceipts = input.sourceReceipts
   if (!isRecord(portfolio) || portfolio.schemaVersion !== 'supermega.hq.portfolio.v3' || !Array.isArray(portfolio.products)) fail('managed_pilot_readiness_portfolio_invalid')
-  if (!isRecord(database) || database.schemaVersion !== 'supermega.hq.database-rehearsal.v2' || Object.keys(database.checks || {}).length !== 52 || Object.values(database.checks || {}).some((value) => value !== true)) fail('managed_pilot_readiness_database_evidence_invalid')
+  if (!isRecord(database) || database.schemaVersion !== 'supermega.hq.database-rehearsal.v2' || Object.keys(database.checks || {}).length !== 53 || Object.values(database.checks || {}).some((value) => value !== true)) fail('managed_pilot_readiness_database_evidence_invalid')
   if (database.storage?.hostedStoragePrivacyProofRequired !== true || database.localVerification?.externallyHosted !== false) fail('managed_pilot_readiness_database_scope_invalid')
   if (!storage.includes('Status: local verifier ready; hosted proof blocked')) fail('managed_pilot_readiness_storage_evidence_invalid')
   if (!isRecord(packageManifest?.supermega) || packageManifest.supermega.productionSupabaseTargetStatus !== 'protected-unapproved') fail('managed_pilot_readiness_production_boundary_invalid')
@@ -66,8 +66,8 @@ export function buildManagedPilotReadiness(input = {}) {
     || !Number.isInteger(securityAudit.advisor?.findingCount)
     || securityAudit.advisor.findingCount < 1
     || securityAudit.managedBackend?.liveSchemaVersion !== 7
-    || securityAudit.managedBackend?.localTargetVersion !== 9
-    || securityAudit.managedBackend?.versionDrift !== 2
+    || securityAudit.managedBackend?.localTargetVersion !== 10
+    || securityAudit.managedBackend?.versionDrift !== 3
     || securityAudit.managedBackend?.browserRolesDenied !== true
     || securityAudit.managedBackend?.metadataRlsEnabled !== false
     || securityAudit.managedBackend?.storageBucketCount !== 0
@@ -105,8 +105,8 @@ export function buildManagedPilotReadiness(input = {}) {
   if (products.map((product) => product.productId).join(',') !== PRODUCT_IDS.join(',')) fail('managed_pilot_readiness_product_order_invalid')
 
   const gates = [
-    gate('local_postgres17', 'ready-local', '52 checks, TLS, RLS, tenant isolation, durable owner control, backup and restore.', 'Keep the digest-bound rehearsal current.'),
-    gate('hosted_postgres17', 'blocked', `Protected production is PostgreSQL 17 at managed schema v${securityAudit.managedBackend.liveSchemaVersion}; no owner-approved isolated hosted rehearsal exists.`, 'Run local v8 and v9 on an approved isolated Supabase target, then rerun the hosted validator.'),
+    gate('local_postgres17', 'ready-local', '53 checks, TLS, RLS, tenant isolation, active-session revocation, durable owner control, backup and restore.', 'Keep the digest-bound rehearsal current.'),
+    gate('hosted_postgres17', 'blocked', `Protected production is PostgreSQL 17 at managed schema v${securityAudit.managedBackend.liveSchemaVersion}; no owner-approved isolated hosted rehearsal exists.`, 'Run local v8 through v10 on an approved isolated Supabase target, then rerun the hosted validator and session-revocation proof.'),
     gate('hosted_storage_privacy', 'blocked', 'The six-request verifier is ready, but hosted proof is absent.', 'Run the verifier against an owner-approved isolated private bucket.'),
     gate('live_product_contract', 'blocked', 'The exact paired release is verified, but its managed product contract remains isolated_demo.', 'Prove managed persistence and security on the approved isolated target before any managed-pilot claim.'),
     gate('managed_persistence', 'blocked', 'Live managed persistence ready is false.', 'Prove durable commands, recovery, and tenant isolation on the isolated target.'),
