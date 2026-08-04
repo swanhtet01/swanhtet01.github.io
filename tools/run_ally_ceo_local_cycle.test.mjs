@@ -54,10 +54,10 @@ test('HQ live command failures retain only recognized contract categories', () =
     stdout: JSON.stringify({
       ok: false,
       contract: 'supermega.hq-live-state.v1',
-      failures: ['hq_release_commit_stale', 'snapshot_stale'],
+      failures: ['hq_release_commit_stale', 'public_product_contract_drift', 'snapshot_stale'],
       release: { commit: 'must-not-escape' },
     }),
-  }), 'ally_ceo_local_cycle_hq_live_failed:hq_release_commit_stale,snapshot_stale')
+  }), 'ally_ceo_local_cycle_hq_live_failed:hq_release_commit_stale,public_product_contract_drift,snapshot_stale')
   assert.equal(commandFailureReason('hq_live', {
     code: 1,
     stdout: JSON.stringify({ contract: 'supermega.hq-live-state.v1', failures: ['token_must_not_escape'] }),
@@ -339,6 +339,7 @@ const hqLive = JSON.stringify({
   snapshotAgeHours: 1.5,
   observedAt: '2026-07-29T00:30:00.000Z',
   appProductContract: { ok: true, contract: 'supermega_app_live', status: 'current', reason: null },
+  publicProductContract: { ok: true, contract: 'supermega_public_live_release', status: 'current', reason: null },
   probes: {
     timeoutMs: 15000,
     maxAttempts: 2,
@@ -645,6 +646,21 @@ test('read-only CEO work can report bounded live product drift without weakening
     runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: invalid.runCommand }),
     /ally_ceo_local_cycle_hq_live_rejected/,
   )
+
+  const publicDrifted = JSON.parse(hqLive)
+  publicDrifted.publicProductContract = {
+    ok: false,
+    contract: 'supermega_public_live_release',
+    status: 'drifted',
+    reason: 'page_http_error',
+  }
+  publicDrifted.advisories = ['public_product_contract_drift']
+  const publicState = harness({ hqLive: JSON.stringify(publicDrifted) })
+  const publicResult = await runAllyCeoLocalCycle({ execute: false }, { plan: plan(), runCommand: publicState.runCommand })
+  assert.equal(publicResult.status, 'ready')
+  assert.equal(publicResult.liveHq.launchReadinessCurrent, false)
+  assert.equal(publicResult.liveHq.publicProductContractStatus, 'drifted')
+  assert.equal(publicResult.liveHq.publicProductContractReason, 'page_http_error')
 })
 
 test('exact hosted scheduler drift permits one local-only outcome with zero Vercel or scheduler authority', async () => {

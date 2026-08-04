@@ -28,10 +28,11 @@ const SCHEDULED_MEMORY_BLOCK_PERCENT = 85
 const EXECUTION_SPEC_VERSION = '2026-07-29.23'
 const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
-const CEO_LIVE_ADVISORIES = Object.freeze(new Set(['app_product_contract_drift', 'hq_release_commit_stale']))
+const CEO_LIVE_ADVISORIES = Object.freeze(new Set(['app_product_contract_drift', 'public_product_contract_drift', 'hq_release_commit_stale']))
 const LOCAL_ONLY_HQ_LIVE_FAILURE = 'scheduler_batch_limit_exceeded'
 const SAFE_HQ_LIVE_FAILURES = Object.freeze(new Set([
   'app_product_contract_drift',
+  'public_product_contract_drift',
   'app_release_contract_invalid',
   'public_release_contract_invalid',
   'paired_release_identity_mismatch',
@@ -524,6 +525,7 @@ function validateHqLiveReceipt(receipt) {
     probes?.cloudAutonomyAttempts,
   ]
   const productContract = receipt?.appProductContract
+  const publicProductContract = receipt?.publicProductContract
   const advisories = receipt?.advisories
   const productContractCurrent = productContract?.contract === 'supermega_app_live'
     && productContract.ok === true
@@ -532,7 +534,15 @@ function validateHqLiveReceipt(receipt) {
   const productContractDrifted = productContract?.contract === 'supermega_app_live'
     && productContract.ok === false
     && productContract.status === 'drifted'
-    && /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))(?::[A-Za-z0-9_.=/-]+){0,3}$/.test(String(productContract.reason || ''))
+    && /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected|present|forbidden|stale|cacheable))(?::[A-Za-z0-9_.=/-]+){0,3}$/.test(String(productContract.reason || ''))
+  const publicProductContractCurrent = publicProductContract?.contract === 'supermega_public_live_release'
+    && publicProductContract.ok === true
+    && publicProductContract.status === 'current'
+    && publicProductContract.reason === null
+  const publicProductContractDrifted = publicProductContract?.contract === 'supermega_public_live_release'
+    && publicProductContract.ok === false
+    && publicProductContract.status === 'drifted'
+    && /^(?:page_[a-z0-9_]+|asset_[a-z0-9_]+|release_[a-z0-9_]+|health_[a-z0-9_]+|www_[a-z0-9_]+)$/.test(String(publicProductContract.reason || ''))
   const failures = receipt?.failures
   const localOnlySchedulerDrift = receipt?.ok === false
     && Array.isArray(failures)
@@ -553,6 +563,9 @@ function validateHqLiveReceipt(receipt) {
     || (!productContractCurrent && !productContractDrifted)
     || (productContractDrifted && !advisories.includes('app_product_contract_drift'))
     || (productContractCurrent && advisories.includes('app_product_contract_drift'))
+    || (!publicProductContractCurrent && !publicProductContractDrifted)
+    || (publicProductContractDrifted && !advisories.includes('public_product_contract_drift'))
+    || (publicProductContractCurrent && advisories.includes('public_product_contract_drift'))
     || !/^[a-f0-9]{40}$/.test(commit)
     || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(observedAt)
     || !Number.isFinite(snapshotAgeHours)
@@ -578,9 +591,11 @@ function validateHqLiveReceipt(receipt) {
     probeAttempts: attempts,
     managedPersistenceReady: false,
     securityReady: false,
-    launchReadinessCurrent: productContractCurrent,
+    launchReadinessCurrent: productContractCurrent && publicProductContractCurrent,
     productContractStatus: productContract.status,
     productContractReason: productContract.reason,
+    publicProductContractStatus: publicProductContract.status,
+    publicProductContractReason: publicProductContract.reason,
     advisories: [...advisories],
     failures: [...failures],
     executionMode: localOnlySchedulerDrift ? 'local_only_scheduler_drift' : 'live_observed',

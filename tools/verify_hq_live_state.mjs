@@ -3,20 +3,39 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const CONTRACT = 'supermega.hq-live-state.v1'
-const CEO_ADVISORY_FAILURES = new Set(['app_product_contract_drift', 'hq_release_commit_stale'])
+const CEO_ADVISORY_FAILURES = new Set(['app_product_contract_drift', 'public_product_contract_drift', 'hq_release_commit_stale'])
 const APP_ORIGIN = 'https://app.supermega.dev'
 const PUBLIC_ORIGIN = 'https://supermega.dev'
 const MAX_RESPONSE_BYTES = 65_536
 const LIVE_PROBE_TIMEOUT_MS = 15_000
 const LIVE_PROBE_MAX_ATTEMPTS = 2
+const HQ_PUBLIC_VERIFY_ATTEMPTS = 2
+const HQ_PUBLIC_VERIFY_RETRY_MS = 1_000
 const MAX_HQ_NOW_BYTES = 128 * 1_024
 const MAX_SNAPSHOT_AGE_MS = 72 * 60 * 60 * 1_000
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000
 const RELEASE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/
 const UTC_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/
 const APP_LIVE_CONTRACT = 'supermega_app_live'
-const SAFE_LIVE_FAILURE_CATEGORY = /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))$/
-const LIVE_PRODUCT_DRIFT_REASON = /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected))(?::[A-Za-z0-9_.=/-]+){0,3}$/
+const PUBLIC_LIVE_CONTRACT = 'supermega_public_live_release'
+const SAFE_LIVE_FAILURE_CATEGORY = /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected|present|forbidden|stale|cacheable))$/
+const LIVE_PRODUCT_DRIFT_REASON = /^(?:missing_live_[a-z0-9_]+|live_[a-z0-9_]+|[a-z0-9_]+_(?:missing|wrong|invalid|mismatch|rejected|present|forbidden|stale|cacheable))(?::[A-Za-z0-9_.=/-]+){0,3}$/
+
+function parseVerifierReceipt(value) {
+  const text = String(value || '').trim()
+  if (!text) return null
+  const starts = [0, ...[...text.matchAll(/(?:^|\n)(?=\{)/g)].map((match) => match.index + (match[0] === '\n' ? 1 : 0))]
+    .filter((index, position, values) => values.indexOf(index) === position)
+    .sort((left, right) => right - left)
+  for (const start of starts) {
+    try {
+      return JSON.parse(text.slice(start))
+    } catch {
+      // A verifier may emit bounded retry notices before its final JSON receipt.
+    }
+  }
+  return null
+}
 
 function safeLiveVerifierFailure(stderr, status) {
   const detail = /Error:\s+([^\r\n]{1,240})/.exec(String(stderr))?.[1]?.trim() ?? ''
@@ -62,6 +81,36 @@ export function classifyLiveAppProductContract(result) {
   throw new Error(`live_app_product_contract_failed:${reason || 'verifier_receipt_invalid'}`)
 }
 
+export function assessLivePublicVerifier({ status, signal = null, stdout = '', stderr = '', error = null }) {
+  if (error) return { ok: false, reason: 'verifier_process_error' }
+  if (signal) return { ok: false, reason: 'verifier_process_interrupted' }
+  if (status !== 0) {
+    const receipt = parseVerifierReceipt(stderr) || parseVerifierReceipt(stdout)
+    const reason = receipt?.contract === PUBLIC_LIVE_CONTRACT && receipt?.baseUrl === PUBLIC_ORIGIN
+      ? String(receipt.reason || '')
+      : ''
+    const category = /^([a-z][a-z0-9_]{2,100})(?::|$)/.exec(reason)?.[1] || ''
+    return { ok: false, reason: category || `exit_${status}` }
+  }
+
+  const receipt = parseVerifierReceipt(stdout)
+  if (receipt?.ok !== true || receipt?.contract !== PUBLIC_LIVE_CONTRACT || receipt?.baseUrl !== PUBLIC_ORIGIN) {
+    return { ok: false, reason: 'verifier_receipt_contract_invalid' }
+  }
+  return { ok: true, contract: receipt.contract, status: 'current', reason: null }
+}
+
+export function classifyLivePublicProductContract(result) {
+  if (result?.ok === true && result.contract === PUBLIC_LIVE_CONTRACT && result.status === 'current' && result.reason === null) {
+    return result
+  }
+  const reason = String(result?.reason || '')
+  if (result?.ok === false && /^(?:page_[a-z0-9_]+|asset_[a-z0-9_]+|release_[a-z0-9_]+|health_[a-z0-9_]+|www_[a-z0-9_]+)$/.test(reason)) {
+    return { ok: false, contract: PUBLIC_LIVE_CONTRACT, status: 'drifted', reason }
+  }
+  throw new Error(`live_public_product_contract_failed:${reason || 'verifier_receipt_invalid'}`)
+}
+
 function verifyLiveAppProductContract(root) {
   const execution = spawnSync(process.execPath, [resolve(root, 'tools', 'verify_app_release_live.mjs')], {
     cwd: root,
@@ -73,6 +122,23 @@ function verifyLiveAppProductContract(root) {
   })
   const result = assessLiveAppVerifier(execution)
   return classifyLiveAppProductContract(result)
+}
+
+function verifyLivePublicProductContract(root) {
+  const execution = spawnSync(process.execPath, [resolve(root, 'tools', 'verify_public_release_live.mjs')], {
+    cwd: root,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PUBLIC_VERIFY_ATTEMPTS: String(HQ_PUBLIC_VERIFY_ATTEMPTS),
+      PUBLIC_VERIFY_RETRY_MS: String(HQ_PUBLIC_VERIFY_RETRY_MS),
+    },
+    maxBuffer: 8 * 1024 * 1024,
+    timeout: 60_000,
+    windowsHide: true,
+  })
+  const result = assessLivePublicVerifier(execution)
+  return classifyLivePublicProductContract(result)
 }
 
 function requireLine(text, label, pattern) {
@@ -139,7 +205,7 @@ function sameReleaseIdentity(left, right) {
     .every((field) => typeof left?.[field] === 'string' && left[field] === right?.[field])
 }
 
-export function assessHqLiveState({ hq, appProductContract, appRelease, publicRelease, health, cloud, now = new Date() }) {
+export function assessHqLiveState({ hq, appProductContract, publicProductContract, appRelease, publicRelease, health, cloud, now = new Date() }) {
   const failures = []
   const requireCheck = (name, condition) => { if (!condition) failures.push(name) }
   const observedAtMs = Date.parse(hq.observedAt)
@@ -151,6 +217,10 @@ export function assessHqLiveState({ hq, appProductContract, appRelease, publicRe
     && appProductContract.contract === APP_LIVE_CONTRACT
     && appProductContract.status === 'current'
     && appProductContract.reason === null)
+  requireCheck('public_product_contract_drift', publicProductContract?.ok === true
+    && publicProductContract.contract === PUBLIC_LIVE_CONTRACT
+    && publicProductContract.status === 'current'
+    && publicProductContract.reason === null)
   requireCheck('app_release_contract_invalid', appRelease?.service === 'supermega-app' && validReleaseIdentity(appRelease))
   requireCheck('public_release_contract_invalid', publicRelease?.service === 'supermega-public-site' && validReleaseIdentity(publicRelease))
   requireCheck('paired_release_identity_mismatch', sameReleaseIdentity(appRelease, publicRelease))
@@ -272,7 +342,8 @@ Live security ready: \`false\``)
     execution_policy: 'review_gated_no_external_send_or_money_actions',
   }
   const appProductContract = { ok: true, contract: APP_LIVE_CONTRACT, status: 'current', reason: null }
-  const baseline = { hq, appProductContract, appRelease, publicRelease, health, cloud, now }
+  const publicProductContract = { ok: true, contract: PUBLIC_LIVE_CONTRACT, status: 'current', reason: null }
+  const baseline = { hq, appProductContract, publicProductContract, appRelease, publicRelease, health, cloud, now }
   if (!assessHqLiveState(baseline).ok) throw new Error('self_test_baseline_failed')
 
   const liveReceipt = JSON.stringify({
@@ -286,12 +357,34 @@ Live security ready: \`false\``)
     ['accept_live_app_receipt', assessLiveAppVerifier({ status: 0, stdout: liveReceipt }).status === 'current'],
     ['reject_live_app_failure', assessLiveAppVerifier({ status: 1, stderr: 'Error: live_settings_evidence_version_mismatch:local=13:live=23' }).reason === 'live_settings_evidence_version_mismatch:local=13:live=23'],
     ['retain_safe_live_failure_category', assessLiveAppVerifier({ status: 1, stderr: 'Error: missing_live_launch_readiness_context:AI command queue' }).reason === 'missing_live_launch_readiness_context'],
+    ['retain_retired_chunk_present_category', assessLiveAppVerifier({ status: 1, stderr: 'Error: retired_product_home_readiness_chunk_present' }).reason === 'retired_product_home_readiness_chunk_present'],
     ['reject_live_app_signal', assessLiveAppVerifier({ status: null, signal: 'SIGTERM' }).reason === 'verifier_process_interrupted'],
     ['reject_live_app_malformed_receipt', assessLiveAppVerifier({ status: 0, stdout: 'not-json' }).reason === 'verifier_receipt_invalid'],
     ['reject_live_app_wrong_contract', assessLiveAppVerifier({ status: 0, stdout: JSON.stringify({ ...JSON.parse(liveReceipt), contract: 'wrong' }) }).reason === 'verifier_receipt_contract_invalid'],
     ['redact_unsafe_failure_detail', assessLiveAppVerifier({ status: 1, stderr: 'Error: token secret=value' }).reason === 'exit_1'],
   ]
   for (const [name, passed] of appVerifierCases) {
+    if (!passed) throw new Error(`self_test_${name}_failed`)
+  }
+  const publicLiveReceipt = JSON.stringify({
+    ok: true,
+    contract: PUBLIC_LIVE_CONTRACT,
+    baseUrl: PUBLIC_ORIGIN,
+  })
+  const publicFailureReceipt = `public_release_retry=1 reason=page_http_error\n${JSON.stringify({
+    ok: false,
+    contract: PUBLIC_LIVE_CONTRACT,
+    baseUrl: PUBLIC_ORIGIN,
+    reason: 'page_http_error:{"route":"/website/","status":404}',
+  })}`
+  const publicVerifierCases = [
+    ['accept_live_public_receipt', assessLivePublicVerifier({ status: 0, stdout: publicLiveReceipt }).status === 'current'],
+    ['classify_live_public_drift', classifyLivePublicProductContract(assessLivePublicVerifier({ status: 1, stderr: publicFailureReceipt })).reason === 'page_http_error'],
+    ['reject_live_public_signal', assessLivePublicVerifier({ status: null, signal: 'SIGTERM' }).reason === 'verifier_process_interrupted'],
+    ['reject_live_public_wrong_contract', assessLivePublicVerifier({ status: 0, stdout: JSON.stringify({ ...JSON.parse(publicLiveReceipt), contract: 'wrong' }) }).reason === 'verifier_receipt_contract_invalid'],
+    ['redact_unstructured_public_failure', assessLivePublicVerifier({ status: 1, stderr: 'token secret=value' }).reason === 'exit_1'],
+  ]
+  for (const [name, passed] of publicVerifierCases) {
     if (!passed) throw new Error(`self_test_${name}_failed`)
   }
   const currentProductContract = classifyLiveAppProductContract(assessLiveAppVerifier({ status: 0, stdout: liveReceipt }))
@@ -357,6 +450,7 @@ Live security ready: \`false\``)
 
   const failureCases = [
     ['app_product_contract_drift', { ...baseline, appProductContract: { ok: false, contract: APP_LIVE_CONTRACT, status: 'drifted', reason: 'release_context_version_mismatch:ctx' } }],
+    ['public_product_contract_drift', { ...baseline, publicProductContract: { ok: false, contract: PUBLIC_LIVE_CONTRACT, status: 'drifted', reason: 'page_http_error' } }],
     ['app_release_contract_invalid', { ...baseline, appRelease: { ...appRelease, brandVersion: '' } }],
     ['public_release_contract_invalid', { ...baseline, publicRelease: { ...publicRelease, service: 'wrong' } }],
     ['paired_release_identity_mismatch', { ...baseline, publicRelease: { ...publicRelease, commit: 'b'.repeat(40) } }],
@@ -395,7 +489,7 @@ Live security ready: \`false\``)
     if (!(error instanceof Error) || error.message !== 'hq_now_contract_duplicate') throw error
   }
 
-  return { ok: true, contract: CONTRACT, checks: failureCases.length + appVerifierCases.length + probeCases.length + 5, networkRequests: 0 }
+  return { ok: true, contract: CONTRACT, checks: failureCases.length + appVerifierCases.length + publicVerifierCases.length + probeCases.length + 5, networkRequests: 0 }
 }
 
 async function main() {
@@ -407,6 +501,7 @@ async function main() {
 
   const root = resolve(import.meta.dirname, '..')
   const appProductContract = verifyLiveAppProductContract(root)
+  const publicProductContract = verifyLivePublicProductContract(root)
   const hq = parseHqLiveState(await readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'))
   const [appReleaseProbe, publicReleaseProbe, healthProbe, cloudProbe] = await Promise.all([
     fetchLiveJson('app_release', `${APP_ORIGIN}/__release.json`),
@@ -418,7 +513,7 @@ async function main() {
   const publicRelease = publicReleaseProbe.value
   const health = healthProbe.value
   const cloud = cloudProbe.value
-  const result = assessHqLiveState({ hq, appProductContract, appRelease, publicRelease, health, cloud })
+  const result = assessHqLiveState({ hq, appProductContract, publicProductContract, appRelease, publicRelease, health, cloud })
   const advisories = args.includes('--ceo-advisory')
     ? result.failures.filter((failure) => CEO_ADVISORY_FAILURES.has(failure))
     : []
@@ -431,6 +526,7 @@ async function main() {
     observedAt: new Date().toISOString(),
     hqObservedAt: hq.observedAt,
     appProductContract,
+    publicProductContract,
     probes: {
       timeoutMs: LIVE_PROBE_TIMEOUT_MS,
       maxAttempts: LIVE_PROBE_MAX_ATTEMPTS,
