@@ -38,9 +38,11 @@ const implementationPaths = [
   'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
   'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
   'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+  'supabase/rehearsal/20260804_public_browser_quarantine.sql',
   'tools/activate_supermega_database.ps1',
   'tools/rehearse_supermega_postgres17.py',
   'tools/validate_supermega_database_url.py',
+  'tools/verify_public_browser_quarantine.mjs',
   'tools/verify_managed_runtime_environment_values.mjs',
 ]
 
@@ -88,9 +90,12 @@ const rawCheckNames = [
   'migration_chain_applied',
   'mismatched_identity_denied',
   'optimistic_concurrency',
+  'public_browser_quarantine_enforced',
+  'public_browser_quarantine_idempotent',
   'restore_completed',
   'restored_data_preserved',
   'restored_database_validated',
+  'restored_public_browser_quarantine_preserved',
   'revocation',
   'runtime_role_settings_empty',
   'runtime_set_role_denied',
@@ -153,6 +158,10 @@ export function buildSanitizedProof(raw, context) {
   if (raw.recovery?.backup_nonempty !== true || raw.recovery?.restored_schema_version !== 10) fail('database_rehearsal_recovery_invalid')
   if (!/^[0-9a-f]{40}$/.test(context.implementationCommit || '')) fail('database_rehearsal_commit_invalid')
   if (!/^sha256:[0-9a-f]{64}$/.test(context.implementation.digest || '') || !Number.isSafeInteger(context.implementation.fileCount) || context.implementation.fileCount < 10) fail('database_rehearsal_implementation_invalid')
+  if (raw.implementation?.digest !== context.implementation.digest
+    || JSON.stringify(raw.implementation?.paths) !== JSON.stringify(context.implementation.paths)) {
+    fail('database_rehearsal_runner_implementation_mismatch')
+  }
   if (!/^[0-9a-f]{64}$/.test(context.archive.sha256 || '') || !Number.isSafeInteger(context.archive.bytes) || context.archive.bytes < 1) fail('database_rehearsal_archive_invalid')
 
   return {

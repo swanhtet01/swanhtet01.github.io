@@ -22,8 +22,9 @@ const checkNames = [
   'managed_suspension_blocks_additional_member', 'managed_suspension_write_denied',
   'managed_workspace_discovery_actor_scoped', 'managed_workspace_discovery_suspension_filtered',
   'managed_production_job_to_output', 'managed_website_to_commerce_journey',
-  'migration_chain_applied', 'mismatched_identity_denied', 'optimistic_concurrency', 'restore_completed',
-  'restored_data_preserved', 'restored_database_validated', 'revocation', 'runtime_role_settings_empty',
+  'migration_chain_applied', 'mismatched_identity_denied', 'optimistic_concurrency',
+  'public_browser_quarantine_enforced', 'public_browser_quarantine_idempotent', 'restore_completed',
+  'restored_data_preserved', 'restored_database_validated', 'restored_public_browser_quarantine_preserved', 'revocation', 'runtime_role_settings_empty',
   'runtime_set_role_denied', 'server_timestamps', 'tenant_isolation', 'v1_upgrade_preserved', 'write_capability_implies_read',
 ]
 
@@ -39,6 +40,7 @@ const raw = {
   engine: { major: 17, version: '17.10', tls_active: true, loopback_only: true },
   migrations: { count: 11, schema_version: 10, production_validator_ready: true },
   authority: { actor_identity_source: 'trusted_backend_transaction_context', database_authenticates_individual_actors: false, runtime_credentials_must_remain_server_only: true },
+  implementation: { digest: implementation.digest, paths: implementation.paths },
   checks: Object.fromEntries(checkNames.map((name) => [name, true])),
   recovery: { backup_nonempty: true, format: 'pg_dump_custom', restored_schema_version: 10 },
   storage: { catalog_mode: 'local_private_fixture', hosted_storage_privacy_proof_required: true, policy_count: 0, public_bucket_count: 0 },
@@ -55,7 +57,7 @@ test('builds a sanitized digest-bound local PostgreSQL 17 proof without hosted c
   assert.deepEqual(validateSanitizedProof(proof, implementation), {
     ok: true,
     contract: DATABASE_REHEARSAL_EVIDENCE_SCHEMA,
-    checks: 53,
+    checks: 56,
     implementationFiles: 11,
     hostedActivationProven: false,
   })
@@ -68,6 +70,9 @@ test('rejects failed checks, stale implementation evidence, and overclaimed scop
 
   const proof = buildSanitizedProof(raw, context)
   assert.throws(() => validateSanitizedProof(proof, { ...implementation, digest: `sha256:${'d'.repeat(64)}` }), /database_rehearsal_evidence_stale/)
+  const mismatchedRunner = structuredClone(raw)
+  mismatchedRunner.implementation.digest = `sha256:${'e'.repeat(64)}`
+  assert.throws(() => buildSanitizedProof(mismatchedRunner, context), /database_rehearsal_runner_implementation_mismatch/)
   proof.localVerification.externallyHosted = true
   assert.throws(() => validateSanitizedProof(proof, implementation), /database_rehearsal_evidence_scope_overclaimed/)
 })
