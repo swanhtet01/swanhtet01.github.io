@@ -24,14 +24,16 @@ This charter refines the active company goal; it does not declare the current re
 
 The local candidate now proves that Shop, Plant, Website, and Ecommerce each move from a one-field product setup to the correct separate workspace and one useful first task on mobile and desktop. The complete local browser matrix has fourteen workflow gates and 98 deterministic checkpoints. First-value timing is now bound to the latest product-onboarding journey, so an old demo completion cannot make a new workspace appear activated.
 
-The company constraint is no longer a missing fifth product, framework, or menu. Seven managed-pilot gates remain blocked: hosted Postgres rehearsal, private storage proof, live managed product contract, managed persistence, security, a named pilot, and production activation. The current CEO priority is therefore:
+The company constraint is no longer a missing fifth product, framework, or menu. Seven managed-pilot gates remain blocked: hosted Postgres rehearsal, private storage proof, live managed product contract, managed persistence, security, a named pilot, and production activation. The local foundation now also has a digest-bound public Data API quarantine: it covers the exact 27-table/two-sequence legacy catalog, removes browser grants and risky future-object defaults, preserves the server contact path, rejects drift, and survives PostgreSQL 17 backup/restore. This is local evidence only. The current CEO priority is therefore:
 
 1. Preserve the simple four-product first session and its browser evidence.
-2. Close managed identity binding, tenant isolation, explicit grants/RLS, idempotency, conflict, backup, restore, and observability proof on an approved isolated target. Local PostgreSQL 17 now requires the exact Auth project, signed named session, token subject, and fresh Auth user to agree, then rejects discovery, product data, and owner activation after session deletion. Repeat that proof on hosted Supabase before any managed claim.
+2. On an approved isolated Supabase clone, apply the digest-bound public browser quarantine plus v8-v10 and prove identity binding, tenant isolation, explicit grants/RLS, idempotency, conflict, active-session revocation, private Storage, backup, restore, and observability. Local PostgreSQL 17 already proves the exact Auth project/session/user contract and immediate denial after session deletion; repeat it under hosted Supabase before any managed claim.
 3. Run five named operator sessions and measure first value, time to value, correction effort, and repeat useful work.
 4. Fund only the product depth or adapter that the evidence identifies as the next constraint.
 
 Production, provider, connector, payment, publish, and customer-message authority remain separately gated.
+
+The resource strategy is deliberate: keep the current React/Vite product shell, use Supabase Auth/Postgres/Storage as the managed data foundation, and keep serial deterministic browser/database release gates. After hosted security and one named pilot exist, compare Supabase Queues and Vercel Workflow against one tenant-bound durable job, evaluate privacy-minimized first-party/PostHog outcome events, and add provider-neutral AI only behind the existing evidence and human-approval contracts. Do not add a framework, analytics SDK, queue, or model provider while the current bottleneck is hosted proof and operator evidence.
 
 ## Portfolio boundary
 
@@ -133,7 +135,7 @@ These capabilities are internal platform layers. Customers should still see only
 
 | Resource or integration | Customer job and KPI | Smallest useful experiment | Decision now |
 | --- | --- | --- | --- |
-| Supabase Auth, Postgres, Storage, and RLS | Durable managed workspaces; verified first value without identity confusion, cross-tenant access, or data loss | Apply reviewed v8-v10, explicit browser grants, private Storage, restore, tenant denial, and the locally proven active-session revocation contract on one isolated non-production target | Highest priority managed foundation; do not touch protected production before every hosted gate passes |
+| Supabase Auth, Postgres, Storage, and RLS | Durable managed workspaces; verified first value without identity confusion, cross-tenant access, or data loss | Apply reviewed v8-v10 plus the digest-bound public browser quarantine, private Storage, restore, tenant denial, and the locally proven active-session revocation contract on one isolated non-production target | Highest priority managed foundation; do not touch protected production before every hosted gate passes |
 | Playwright Core and system browser | Prevent release regressions in first-session completion, mobile usability, and recovery | Keep the 14-workflow, 98-checkpoint matrix serial and deterministic | Adopted release authority for browser behavior |
 | Existing Vercel deployment and function observability | Diagnose live release, latency, failure, and cost without adding client complexity | Read the exact release's existing logs and metrics during a bounded pilot | Use before adding a second observability vendor or browser SDK |
 | PostHog custom product events | Verified first-value funnel, time to value, and retention | Mirror only the approved first-party event schema in an isolated consented pilot; no autocapture or session replay | Defer until hosted identity, consent, retention, and privacy review exist |
@@ -237,7 +239,7 @@ A product release is not ready because the build passes. It is ready only when t
 2. Preserve the now-proven Blueprint no-write preview inside each product's existing `Next steps` data tool. Keep its deterministic mapping, repair, digest, review lock, and `staged_not_applied` contracts; do not create another public setup page.
 3. Preserve the now-proven current-journey first-value attribution and four-product one-field onboarding-to-first-task browser gate. Instrument the three CEO KPIs around those records, then run five moderated Shop/Plant sessions before expanding product scope.
 4. Preserve the now-proven Shop local write-ahead and reload-recovery contract at both viewports. Measure receipt growth, startup cost, conflict frequency, and low-end Android behavior before extending the same bounded contract to Plant.
-5. Close managed-persistence evidence in this order: tenant isolation, authenticated tenant-bound idempotency, conflict handling, backup/restore rehearsal, then production activation readiness. Never treat browser-stored outbox state as managed write authority. Provider writes and live activation remain owner-gated.
+5. Close managed-persistence evidence on one owner-approved isolated clone: verify the signed public catalog, apply the digest-bound browser quarantine and v8-v10, then prove tenant isolation, authenticated tenant-bound idempotency, active-session revocation, conflict handling, private Storage, server-path retention, backup/restore, and only then production activation readiness. Never treat browser-stored outbox state as managed write authority. Provider writes and live activation remain owner-gated.
 6. Only after those gates pass, compare private Supabase Queues and Vercel Workflow against one bounded durable-job contract; adopt at most one execution path for that job and keep customer browsers away from queue authority.
 
 ## Evidence and references

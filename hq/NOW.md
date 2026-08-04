@@ -14,7 +14,7 @@ Live security ready: `false`
 
 ## North-star outcome
 
-Prove one measured workflow where SuperMega keeps the record and a responsible owner resolves exceptions.
+Prove one measured workflow with a durable record and owner-resolved exceptions.
 
 ## Portfolio correction
 
@@ -33,7 +33,8 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
-- Managed identity fails before tenant lookup unless the token's Supabase issuer, authenticated non-anonymous audience/role, user/session UUIDs, and fresh `/user` response agree. Local schema v10 then checks the exact signed session against private `auth.sessions` before discovery, membership, product data, or owner activation; deleted sessions fail closed (`eec19002`, `ac9a9ca4`). Hosted active-session revocation remains unproven.
+- Managed identity binds the Supabase issuer, named user/session IDs, token subject, and fresh `/user`. Schema v10 checks `auth.sessions` before data or activation and denies deleted sessions (`eec19002`, `ac9a9ca4`). Hosted revocation remains unproven.
+- The protected metadata audit finds 27 public tables, two sequences, and no views/routines. A digest-bound isolated-target quarantine removes browser grants and preserves the server path. Local PGlite/PostgreSQL backup/restore pass; hosted application remains unproven (`c363c9aa`, `b9cc0910`).
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
@@ -55,10 +56,10 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- Checks: 106 Ecommerce, 347 Commerce, 332 Production, 10 Shop next-action, 118 Website, 93 security, 241 onboarding, 11 backup, 85 managed import, 5 focused Supabase Auth tests, and 53 PostgreSQL 17 checks across eleven migrations.
+- Checks: 106 Ecommerce, 347 Commerce, 332 Production, 10 Shop next-action, 118 Website, 95 security, 241 onboarding, 11 backup, 85 managed import, 5 focused Supabase Auth tests, and 56 PostgreSQL 17 checks across eleven migrations plus the public browser quarantine.
 - The deterministic 12-profile rehearsal passes 24 rows. All four desktop missions are overflow-free. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
-- Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1`; paired brand, context, and catalog identities match at `jade-v2-2026-07` / `2026-07-31.3`, and the scheduler ceiling is one job. Paired release metadata is internally consistent; current-head page-contract checks report drift because the local candidate is not deployed.
+- Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1`; paired brand, context, and catalog identities match at `jade-v2-2026-07` / `2026-07-31.3`. Paired release metadata is internally consistent; current-head page-contract checks report drift.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating; loaded models and local subagents remain off. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -70,9 +71,9 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
-- Hosted audit: `supermegabase` is PostgreSQL 17.6 with private schema v7, 14 policies, zero workspace data, and 27 INFO notices. v8-v10 remain code-only; writes await approved isolated tenant, active-session revocation, security, and recovery proof.
+- Hosted audit: `supermegabase` is PostgreSQL 17.6 at private schema v7 with 27 INFO notices. Browser object/default grants, v8-v10, and the quarantine remain hosted blockers pending an approved isolated clone, private Storage, tenant isolation, revocation, and recovery proof.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Both domains remain on accepted live `25cac2f5`; exact current-head verification reports release drift. The verified local candidate is newer and not deployed. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
+- Both domains remain on accepted live `25cac2f5`; exact current-head verification reports release drift. Seven hosted gates block marketing; external handoffs require `release:handoff:verify`.
 - The live public `/website/` and `/ecommerce/` routes intermittently returned `404` during the 2026-08-04 candidate verification; public availability remains unproven until a protected release and exact live check both pass.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
@@ -90,5 +91,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. On approved isolated Supabase, apply v8-v10 and prove Storage, RLS, active-session revocation, tenant isolation, and exact restore before writes.
+1. On an approved isolated Supabase clone, apply the signed quarantine and v8-v10; prove grants/defaults, Storage, RLS, revocation, tenant isolation, server-path retention, backup, and restore before writes.
 2. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.

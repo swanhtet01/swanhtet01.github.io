@@ -22,7 +22,12 @@ const input = {
   databaseEvidence: {
     schemaVersion: 'supermega.hq.database-rehearsal.v2',
     recordedAt: '2026-07-31T10:00:00.000Z',
-    checks: Object.fromEntries(Array.from({ length: 53 }, (_, index) => [`check${index}`, true])),
+    checks: {
+      ...Object.fromEntries(Array.from({ length: 53 }, (_, index) => [`check${index}`, true])),
+      publicBrowserQuarantineEnforced: true,
+      publicBrowserQuarantineIdempotent: true,
+      restoredPublicBrowserQuarantinePreserved: true,
+    },
     storage: { hostedStoragePrivacyProofRequired: true },
     localVerification: { externallyHosted: false },
   },
@@ -34,8 +39,9 @@ const input = {
     targetClassification: 'protected-production',
     postgres: { major: 17 },
     advisor: { status: 'blocked', findingCount: 27 },
+    catalog: { sequenceCount: 2, nonTableRelationCount: 0, publicRoutineCount: 0, browserCallableRoutineCount: 0 },
     managedBackend: { liveSchemaVersion: 7, localTargetVersion: 10, versionDrift: 3, browserRolesDenied: true, metadataRlsEnabled: false, storageBucketCount: 0 },
-    conclusion: { productionMutationAuthorized: false, nextAction: 'Rehearse hardening on an isolated target.' },
+    conclusion: { productionMutationAuthorized: false, indirectExposureAudited: true, nextAction: 'Rehearse hardening on an isolated target.' },
     controls: { databaseWrites: 0 },
   },
   hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\nexact current-head verification reports release drift\nNo named pilot customer',
@@ -49,7 +55,7 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.equal(ledger.gates[0].status, 'ready-local')
   assert.equal(
     ledger.gates.find((gate) => gate.id === 'security')?.evidence,
-    '27 fail-closed public-table advisor findings remain, and protected managed schema v7 trails local target v10.',
+    '27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v10.',
   )
   assert.doesNotMatch(JSON.stringify(ledger), /app_product_contract_drift/)
   assert.equal(ledger.products.length, 4)

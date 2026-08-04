@@ -92,9 +92,11 @@ const databaseImplementationPaths = [
   'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
   'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
   'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+  'supabase/rehearsal/20260804_public_browser_quarantine.sql',
   'tools/activate_supermega_database.ps1',
   'tools/rehearse_supermega_postgres17.py',
   'tools/validate_supermega_database_url.py',
+  'tools/verify_public_browser_quarantine.mjs',
   'tools/verify_managed_runtime_environment_values.mjs',
 ]
 const databaseImplementationHash = createHash('sha256')
@@ -922,7 +924,7 @@ requireContract('workboard release authority and active execution order are curr
   && workboardExecutionOrder.includes('usable Website download checkpoint `e18fc6bc`')
   && workboardExecutionOrder.includes('Website mobile mission release `2824da83`')
   && workboardExecutionOrder.includes('Ecommerce mobile mission release `e15d4a58`')
-  && workboardExecutionOrder.includes('owner-approved isolated non-production Supabase target')
+  && workboardExecutionOrder.includes('owner-approved isolated non-production Supabase clone')
   && workboardExecutionOrder.includes('Repeat the 12-profile rehearsal against the live isolated release')
   && workboardExecutionOrder.includes('retain complete rendered mobile Website and Ecommerce mission acceptance')
   && workboardExecutionOrder.includes('exact-commit protected preview')
@@ -1149,7 +1151,7 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.migration?.count === 11
   && databaseRehearsal.migration?.schemaVersion === 10
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 53
+  && Object.keys(databaseRehearsal.checks || {}).length === 56
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
   && databaseRehearsal.checks?.capabilityScopedReads === true
   && databaseRehearsal.checks?.capabilityScopedEventReads === true
@@ -1160,6 +1162,9 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.checks?.managedActivationAtomicRollback === true
   && databaseRehearsal.checks?.managedActivationIdempotentReplay === true
   && databaseRehearsal.checks?.managedSupabaseSessionRevocationEnforced === true
+  && databaseRehearsal.checks?.publicBrowserQuarantineEnforced === true
+  && databaseRehearsal.checks?.publicBrowserQuarantineIdempotent === true
+  && databaseRehearsal.checks?.restoredPublicBrowserQuarantinePreserved === true
   && databaseRehearsal.checks?.managedContextActivationEvidenceBound === true
   && databaseRehearsal.checks?.managedContextAuthenticatedIdentityEnforced === true
   && databaseRehearsal.checks?.managedContextValidationZeroWrite === true
@@ -1180,6 +1185,14 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.safety?.supabaseMutated === false
   && databaseRehearsal.safety?.vercelMutated === false)
 
+requireContract('public browser quarantine checkpoint remains truthful and owner gated',
+  workboard.includes('| OPS-157 | Security + Managed Platform Codex | done-local |')
+  && workboard.includes('27 RLS-enabled public tables, two public sequences')
+  && workboard.includes('Protected production remains schema v7 with its existing grants')
+  && now.includes('digest-bound isolated-target quarantine')
+  && now.includes('hosted application remains unproven')
+  && ceoProductGoal.includes('Do not add a framework, analytics SDK, queue, or model provider while the current bottleneck is hosted proof and operator evidence.'))
+
 requireContract('managed pilot readiness is derived and fail closed',
   managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v1'
   && managedPilotReadiness.overall?.status === 'blocked'
@@ -1193,7 +1206,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
   && managedPilotReadiness.controls?.productionWritesEnabled === false
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === '27 fail-closed public-table advisor findings remain, and protected managed schema v7 trails local target v10.'
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === '27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v10.'
   && supabaseSecurityAudit.managedBackend?.liveSchemaVersion === 7
   && supabaseSecurityAudit.managedBackend?.localTargetVersion === 10
   && supabaseSecurityAudit.managedBackend?.browserRolesDenied === true
