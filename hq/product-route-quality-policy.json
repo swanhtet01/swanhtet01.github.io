@@ -82,9 +82,9 @@
       "path": "/",
       "titleIncludes": "Shop",
       "requiredText": ["Shop"],
-      "maxVisibleActions": 26,
-      "targetVisibleActions": 20,
-      "maxFirstViewportActions": { "mobile": 15, "desktop": 20 }
+      "maxVisibleActions": 15,
+      "targetVisibleActions": 15,
+      "maxFirstViewportActions": { "mobile": 13, "desktop": 14 }
     },
     {
       "id": "app-shop-orders",
@@ -92,9 +92,14 @@
       "path": "/shop/?tab=orders",
       "titleIncludes": "Shop",
       "requiredText": ["Shop", "Orders"],
-      "maxVisibleActions": 115,
-      "targetVisibleActions": 44,
-      "maxFirstViewportActions": { "mobile": 20, "desktop": 40 }
+      "maxVisibleActions": 23,
+      "targetVisibleActions": 23,
+      "maxFirstViewportActions": { "mobile": 16, "desktop": 22 },
+      "disclosures": [
+        { "summaryIncludes": "Daily tools", "contentSelector": ".shop-business-controls-content" },
+        { "summaryIncludes": "Order overview", "contentSelector": ".today-more-content" },
+        { "summaryIncludes": "Appointments", "contentSelector": ".service-schedule-body" }
+      ]
     },
     {
       "id": "app-shop-inventory",
@@ -102,9 +107,9 @@
       "path": "/shop/?tab=inventory",
       "titleIncludes": "Shop",
       "requiredText": ["Shop", "Stock"],
-      "maxVisibleActions": 44,
-      "targetVisibleActions": 32,
-      "maxFirstViewportActions": { "mobile": 24, "desktop": 34 }
+      "maxVisibleActions": 21,
+      "targetVisibleActions": 21,
+      "maxFirstViewportActions": { "mobile": 14, "desktop": 20 }
     },
     {
       "id": "app-plant-jobs",
@@ -112,8 +117,8 @@
       "path": "/plant/?tab=production",
       "titleIncludes": "Plant",
       "requiredText": ["Plant", "Jobs"],
-      "maxVisibleActions": 34,
-      "targetVisibleActions": 30,
+      "maxVisibleActions": 20,
+      "targetVisibleActions": 20,
       "maxFirstViewportActions": { "mobile": 9, "desktop": 14 }
     },
     {
@@ -122,8 +127,8 @@
       "path": "/plant/?tab=issues",
       "titleIncludes": "Plant",
       "requiredText": ["Plant", "Problems"],
-      "maxVisibleActions": 34,
-      "targetVisibleActions": 30,
+      "maxVisibleActions": 20,
+      "targetVisibleActions": 20,
       "maxFirstViewportActions": { "mobile": 9, "desktop": 14 }
     },
     {
@@ -133,8 +138,8 @@
       "titleIncludes": "Website",
       "requiredText": ["Website"],
       "expectedH1Count": 2,
-      "maxVisibleActions": 26,
-      "targetVisibleActions": 22,
+      "maxVisibleActions": 18,
+      "targetVisibleActions": 18,
       "maxFirstViewportActions": { "mobile": 10, "desktop": 15 }
     },
     {
@@ -143,8 +148,8 @@
       "path": "/ecommerce/",
       "titleIncludes": "Ecommerce",
       "requiredText": ["Ecommerce"],
-      "maxVisibleActions": 54,
-      "targetVisibleActions": 36,
+      "maxVisibleActions": 19,
+      "targetVisibleActions": 19,
       "maxFirstViewportActions": { "mobile": 9, "desktop": 12 }
     },
     {

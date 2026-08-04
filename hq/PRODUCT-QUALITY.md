@@ -5,7 +5,7 @@ Status: local candidate; production not verified by this report
 
 ## Current result
 
-`npm run qa:routes` passes the committed regression and usability policy across 14 public/app routes at 390 x 844 and 1280 x 900: 28 checks, zero horizontal overflow, zero unnamed visible actions, zero duplicate IDs, zero placeholder links, zero mobile touch targets below 44 px, zero console errors, zero page errors, and zero external requests. `simplicityTargetsMet` remains false, so the stricter `npm run qa:routes:strict` gate correctly stays blocked.
+`npm run qa:routes` passes the committed regression and usability policy across 14 public/app routes at 390 x 844 and 1280 x 900: 28 checks, zero horizontal overflow, zero unnamed visible actions, zero duplicate IDs, zero placeholder links, zero mobile touch targets below 44 px, zero console errors, zero page errors, zero external requests, and zero disclosure interaction failures. `simplicityTargetsMet` is true, so the stricter `npm run qa:routes:strict` gate is now expected to pass.
 
 This is a browser-local artifact check. It does not prove hosted persistence, production activation, payment execution, deployment identity, or production security readiness.
 
@@ -20,13 +20,13 @@ The regression ceiling stops action density from increasing. The lower target is
 | Public home | 9 | 9 | 9 | Target met |
 | Public product page | 7 | 7 | 7 | Target met |
 | Public contact | 10 | 10 | 10 | Target met |
-| Shop home | 25 | 26 | 20 | Reduce secondary controls |
-| Shop Orders | 114 | 115 | 44 | Highest-priority redesign |
-| Shop Stock | 43 | 44 | 32 | Move purchasing depth behind the selected task |
-| Plant Jobs | 33 | 34 | 30 | Near target after the focused drawer change |
-| Plant Problems | 33 | 34 | 30 | Near target; preserve quality depth behind issue context |
-| Website | 22 | 26 | 22 | Mobile target met; reduce desktop-only secondary controls |
-| Ecommerce | 53 | 54 | 36 | Move advanced order tools behind the current request |
+| Shop home | 14 | 15 | 15 | Target met |
+| Shop Orders | 22 | 23 | 23 | Target met; advanced workflows remain available on demand |
+| Shop Stock | 20 | 21 | 21 | Target met |
+| Plant Jobs | 19 | 20 | 20 | Target met |
+| Plant Problems | 19 | 20 | 20 | Target met |
+| Website | 14 | 18 | 18 | Target met |
+| Ecommerce | 18 | 19 | 19 | Target met |
 | Shop setup | 8 | 9 | 9 | Target met |
 
 ## Defects fixed during this audit
@@ -36,12 +36,14 @@ The regression ceiling stops action density from increasing. The lower target is
 - Ecommerce request filters have a 44 x 44 px minimum target.
 - The auditor measures labelled checkbox/radio hit areas instead of incorrectly failing the small native input glyph.
 - Hidden, inert, or accessibility-hidden honeypots are excluded from visible-action findings.
+- Closed native disclosure content is explicitly hidden at the author CSS layer, preventing component layout rules from exposing every advanced form at once.
+- Shop Orders now verifies that Daily tools, Order overview, and Appointments each start closed, open through their summary control, and close again.
 
 ## Next product slice
 
-Redesign Shop Orders first. Preserve every workflow and evidence boundary, but show only the daily queue, the current order state, one primary action, and one contextual `More` control. Move reports, imports, service schedules, finance, supplier, and enterprise controls behind task-labelled disclosures or drawers. Acceptance is no more than 44 visible actions at either viewport, no increase in first-viewport actions, and the complete route/app/security gate remaining green.
+Open a useful sample workspace before asking a prospect to configure or import anything, then measure first value from sample entry and imported data. Preserve the newly sealed action-density ceilings while proving the first complete Shop, Plant, Website, and Ecommerce job at both viewports.
 
-After Shop Orders, use the same pattern for Ecommerce advanced order tools and Shop Stock purchasing controls. Do not add a fifth customer product or a component-framework migration while these target gaps remain.
+After first-value proof, close managed persistence, tenant isolation, recovery rehearsal, and hosted activation gates. Do not add a fifth customer product or a component-framework migration while those production boundaries remain open.
 
 ## Reproduce
 

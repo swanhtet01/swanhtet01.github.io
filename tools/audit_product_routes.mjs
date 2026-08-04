@@ -40,6 +40,7 @@ function validatePolicy(policy) {
     if (route.expectedH1Count != null && (!Number.isInteger(route.expectedH1Count) || route.expectedH1Count < 1 || route.expectedH1Count > 3)) fail('route_quality_policy_heading_count_invalid')
     if (route.targetVisibleActions != null && (!Number.isInteger(route.targetVisibleActions) || route.targetVisibleActions > route.maxVisibleActions)) fail('route_quality_policy_action_target_invalid')
     if (!route.maxFirstViewportActions || [...viewportIds].some((id) => !Number.isInteger(route.maxFirstViewportActions[id]))) fail('route_quality_policy_action_budget_invalid')
+    if (route.disclosures != null && (!Array.isArray(route.disclosures) || route.disclosures.some((check) => !check?.summaryIncludes || !check?.contentSelector))) fail('route_quality_policy_disclosure_checks_invalid')
     routeIds.add(route.id)
   }
 }
@@ -183,6 +184,18 @@ async function collectPageMetrics(page) {
     }
     const ids = new Map()
     for (const element of document.querySelectorAll('[id]')) ids.set(element.id, (ids.get(element.id) ?? 0) + 1)
+    const actionGroups = new Map()
+    for (const action of actions) {
+      const container = action.closest('dialog,form,details,section,nav,article')
+      const labelledBy = container?.getAttribute('aria-labelledby')
+      const label = container?.getAttribute('aria-label')
+        || (labelledBy ? document.getElementById(labelledBy)?.textContent?.trim() : '')
+        || container?.querySelector(':scope > summary')?.textContent?.trim()
+        || container?.querySelector('h1,h2,h3')?.textContent?.trim()
+        || (container?.className && typeof container.className === 'string' ? container.className.split(/\s+/).slice(0, 2).join('.') : '')
+        || 'page shell'
+      actionGroups.set(label, (actionGroups.get(label) ?? 0) + 1)
+    }
     const mainElements = [...document.querySelectorAll('main,[role="main"]')].filter(visible)
     const h1Elements = [...document.querySelectorAll('h1')].filter(visible)
     return {
@@ -190,6 +203,7 @@ async function collectPageMetrics(page) {
       duplicateIds: [...ids.entries()].filter(([, count]) => count > 1).map(([id, count]) => ({ id, count })),
       firstViewportActionCount: firstViewportActions.length,
       firstViewportActionNames: firstViewportActions.slice(0, 30).map((element) => accessibleName(element).slice(0, 120)),
+      actionGroups: [...actionGroups.entries()].map(([name, count]) => ({ name: name.slice(0, 160), count })).sort((left, right) => right.count - left.count || left.name.localeCompare(right.name)),
       h1Count: h1Elements.length,
       h1Text: h1Elements.map((element) => element.textContent?.trim() ?? ''),
       horizontalOverflowPx: Math.max(0, Math.round((document.documentElement.scrollWidth - document.documentElement.clientWidth) * 10) / 10),
@@ -202,6 +216,7 @@ async function collectPageMetrics(page) {
         const rect = touchRect(element)
         return rect.width < 44 || rect.height < 44
       }).map(summarizeAction),
+      visibleActionNames: actions.map((element) => accessibleName(element).slice(0, 160)),
       visibleActionCount: actions.length,
     }
   })
@@ -229,6 +244,40 @@ function evaluateFindings(route, viewport, pageResult) {
   if (pageResult.consoleErrors.length) failures.push(`console_errors:${pageResult.consoleErrors.length}`)
   if (pageResult.pageErrors.length) failures.push(`page_errors:${pageResult.pageErrors.length}`)
   if (pageResult.externalRequests.length) failures.push(`external_requests:${pageResult.externalRequests.length}`)
+  failures.push(...pageResult.disclosureFailures)
+  return failures
+}
+
+async function verifyDisclosures(page, checks = []) {
+  const failures = []
+  for (const check of checks) {
+    const summaries = page.locator('summary').filter({ hasText: check.summaryIncludes })
+    const summaryCount = await summaries.count()
+    if (summaryCount !== 1) {
+      failures.push(`disclosure_summary_count:${check.summaryIncludes}:${summaryCount}`)
+      continue
+    }
+    const summary = summaries.first()
+    const content = summary.locator('..').locator(check.contentSelector)
+    const contentCount = await content.count()
+    if (contentCount !== 1) {
+      failures.push(`disclosure_content_count:${check.summaryIncludes}:${contentCount}`)
+      continue
+    }
+    if (await content.isVisible()) failures.push(`disclosure_initially_visible:${check.summaryIncludes}`)
+    await summary.click()
+    try {
+      await content.waitFor({ state: 'visible', timeout: 2_000 })
+    } catch {
+      failures.push(`disclosure_did_not_open:${check.summaryIncludes}`)
+    }
+    await summary.click()
+    try {
+      await content.waitFor({ state: 'hidden', timeout: 2_000 })
+    } catch {
+      failures.push(`disclosure_did_not_close:${check.summaryIncludes}`)
+    }
+  }
   return failures
 }
 
@@ -271,11 +320,14 @@ async function auditRoute(browser, baseUrl, route, viewport, settleMs) {
       return document.querySelector('h1') && !/Loading (Shop|Plant|Website|Ecommerce)…/.test(visibleText)
     }, null, { timeout: 8_000 }).catch(() => {})
     if (settleMs) await page.waitForTimeout(settleMs)
+    const metrics = await collectPageMetrics(page)
+    const disclosureFailures = await verifyDisclosures(page, route.disclosures)
     const pageResult = {
       consoleErrors,
       consoleWarnings,
+      disclosureFailures,
       externalRequests,
-      metrics: await collectPageMetrics(page),
+      metrics,
       pageErrors,
       status: response?.status() ?? null,
       title: await page.title(),
@@ -375,6 +427,7 @@ const summary = {
     consoleErrors: result.consoleErrors.length,
     pageErrors: result.pageErrors.length,
     externalRequests: result.externalRequests.length,
+    disclosureFailures: result.disclosureFailures.length,
   })),
 }
 process.stdout.write(`${JSON.stringify(process.argv.includes('--details') ? report : summary, null, 2)}\n`)

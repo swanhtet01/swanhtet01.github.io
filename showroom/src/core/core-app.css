@@ -26,6 +26,7 @@ body::before { position: fixed; inset: 0; z-index: -2; background: radial-gradie
 button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; }
+details:not([open]) > :not(summary) { display: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 
 .core-shell { width: 100%; max-width: 100%; height: 100svh; display: grid; grid-template-columns: 184px minmax(0, 1fr); overflow-x: clip; }
