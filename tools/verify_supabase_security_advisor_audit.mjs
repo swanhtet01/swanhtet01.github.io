@@ -5,12 +5,14 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const CONTRACT = 'supermega.supabase-security-advisor-audit.v1'
-const QUERY_CONTRACT = 'supermega.supabase-security-metadata-query.v1'
+const QUERY_CONTRACT = 'supermega.supabase-security-metadata-query.v2'
 const root = resolve(import.meta.dirname, '..')
 const auditPath = resolve(root, 'hq', 'readiness', 'supabase-security-advisor-audit.json')
 const packagePath = resolve(root, 'package.json')
 const REMEDIATION_URL = 'https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy'
 const PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
+const SEQUENCE_PRIVILEGES = ['USAGE', 'SELECT']
+const PUBLIC_SEQUENCES = ['supermega_leads_id_seq', 'supermega_sales_runs_id_seq']
 const MANAGED_QUERY_CONTRACT = 'supermega.supabase-managed-schema-metadata.v1'
 const PENDING_MIGRATIONS = [
   {
@@ -29,7 +31,7 @@ const PENDING_MIGRATIONS = [
     digest: 'sha256:0a112ee27bda7ca238f3992ffab841c414268e44aad6b68023c75915afa40cde',
   },
 ]
-const NEXT_ACTION = 'Apply local v8 through v10 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, active-session revocation, role-boundary, and storage checks before any production proposal.'
+const NEXT_ACTION = 'Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal.'
 
 function fail(code) {
   throw new Error(code)
@@ -80,7 +82,16 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
     || catalog.scope !== 'pg_catalog_metadata_only'
     || catalog.businessRowsRead !== 0
     || catalog.tableCount !== catalog.tables?.length
-    || catalog.tableCount !== advisor.findingCount) fail('supabase_security_audit_catalog_invalid')
+    || catalog.tableCount !== advisor.findingCount
+    || catalog.nonTableRelationCount !== 0
+    || catalog.publicRoutineCount !== 0
+    || catalog.browserCallableRoutineCount !== 0
+    || catalog.sequenceCount !== catalog.sequences?.length
+    || catalog.sequenceCount !== PUBLIC_SEQUENCES.length
+    || catalog.defaultPrivilegeOwners?.join(',') !== 'postgres,supabase_admin'
+    || catalog.defaultBrowserTablePrivilegesPresent !== true
+    || catalog.defaultBrowserSequencePrivilegesPresent !== true
+    || catalog.defaultBrowserFunctionExecutePresent !== true) fail('supabase_security_audit_catalog_invalid')
   const catalogNames = []
   for (const table of catalog.tables) {
     if (!isRecord(table)
@@ -95,6 +106,17 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
   }
   if (catalogNames.join(',') !== sortedUnique(catalogNames).join(',')
     || catalogNames.join(',') !== advisor.tables.join(',')) fail('supabase_security_audit_catalog_table_set_invalid')
+  if (catalog.sequences.map((sequence) => sequence.name).join(',') !== PUBLIC_SEQUENCES.join(',')) {
+    fail('supabase_security_audit_catalog_sequence_set_invalid')
+  }
+  for (const sequence of catalog.sequences) {
+    if (!isRecord(sequence)
+      || sequence.schema !== 'public'
+      || sequence.anonPrivileges?.join(',') !== SEQUENCE_PRIVILEGES.join(',')
+      || sequence.authenticatedPrivileges?.join(',') !== SEQUENCE_PRIVILEGES.join(',')) {
+      fail('supabase_security_audit_catalog_sequence_invalid')
+    }
+  }
 
   const managed = value.managedBackend
   if (!isRecord(managed)
@@ -125,7 +147,7 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
   if (!isRecord(conclusion)
     || conclusion.status !== 'blocked'
     || conclusion.directBrowserTableAccessDefaultDenied !== true
-    || conclusion.indirectExposureAudited !== false
+    || conclusion.indirectExposureAudited !== true
     || conclusion.currentRowExposureProven !== false
     || conclusion.browserGrantHardeningRequired !== true
     || conclusion.productionMutationAuthorized !== false
@@ -133,7 +155,7 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
 
   const controls = value.controls
   if (!isRecord(controls)
-    || controls.connectorReadRequests !== 16
+    || controls.connectorReadRequests !== 20
     || controls.failedReadRequests !== 1
     || controls.providerMutations !== 0
     || controls.databaseWrites !== 0
@@ -168,6 +190,15 @@ function fixture() {
       businessRowsRead: 0,
       tableCount: 1,
       tables: [{ name: 'example_records', schema: 'public', rlsEnabled: true, rlsForced: false, policyCount: 0, anonPrivileges: PRIVILEGES, authenticatedPrivileges: PRIVILEGES }],
+      nonTableRelationCount: 0,
+      publicRoutineCount: 0,
+      browserCallableRoutineCount: 0,
+      sequenceCount: 2,
+      sequences: PUBLIC_SEQUENCES.map((name) => ({ name, schema: 'public', anonPrivileges: SEQUENCE_PRIVILEGES, authenticatedPrivileges: SEQUENCE_PRIVILEGES })),
+      defaultPrivilegeOwners: ['postgres', 'supabase_admin'],
+      defaultBrowserTablePrivilegesPresent: true,
+      defaultBrowserSequencePrivilegesPresent: true,
+      defaultBrowserFunctionExecutePresent: true,
     },
     managedBackend: {
       queryContract: MANAGED_QUERY_CONTRACT,
@@ -196,13 +227,13 @@ function fixture() {
     conclusion: {
       status: 'blocked',
       directBrowserTableAccessDefaultDenied: true,
-      indirectExposureAudited: false,
+      indirectExposureAudited: true,
       currentRowExposureProven: false,
       browserGrantHardeningRequired: true,
       productionMutationAuthorized: false,
       nextAction: NEXT_ACTION,
     },
-    controls: { connectorReadRequests: 16, failedReadRequests: 1, providerMutations: 0, databaseWrites: 0, businessRowsRead: 0, credentialsRecorded: false },
+    controls: { connectorReadRequests: 20, failedReadRequests: 1, providerMutations: 0, databaseWrites: 0, businessRowsRead: 0, credentialsRecorded: false },
     evidenceDigest: '',
   }
   value.evidenceDigest = auditDigest(value)
@@ -215,7 +246,7 @@ function selfTest() {
   const wrongTarget = structuredClone(valid)
   wrongTarget.projectRef = 'bcdefghijklmnopqrstu'
   const broadClaim = structuredClone(valid)
-  broadClaim.conclusion.indirectExposureAudited = true
+  broadClaim.conclusion.indirectExposureAudited = false
   const hiddenMutation = structuredClone(valid)
   hiddenMutation.controls.databaseWrites = 1
   const stale = structuredClone(valid)

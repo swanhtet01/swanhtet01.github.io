@@ -90,6 +90,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_*.py' -v
           python tools/validate_supermega_database_url.py --self-test
           node tools/verify_private_trial_migrations.mjs
+          node tools/verify_public_browser_quarantine.mjs
           node tools/verify_coordinated_release_live.mjs --self-test
           node tools/verify_app_deploy_workflow.mjs
 

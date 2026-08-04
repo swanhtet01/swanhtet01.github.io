@@ -272,7 +272,9 @@ requireContract('database activation controls trigger non-mutating review',
 requireContract('rehearsal packet changes trigger both reviews and keep operator files ignored',
   [ciWorkflow, appWorkflow].every((source) =>
     source.includes('tools/prepare_supabase_rehearsal_packet.mjs')
-    && source.includes('tools/prepare_supabase_rehearsal_packet.test.mjs'))
+    && source.includes('tools/prepare_supabase_rehearsal_packet.test.mjs')
+    && source.includes("- 'supabase/rehearsal/**'")
+    && source.includes('tools/verify_public_browser_quarantine.mjs'))
   && appWorkflow.includes("- '.gitignore'")
   && appWorkflow.includes("- '.github/workflows/showroom-ci.yml'")
   && /^\.tmp\/$/m.test(gitIgnore))
@@ -280,6 +282,10 @@ requireContract('PostgreSQL 17 rehearsal changes trigger every non-mutating data
   [ciWorkflow, appWorkflow].every((source) =>
     source.includes('tools/rehearse_supermega_postgres17.py')
     && source.includes('tools/run_postgres17_rehearsal.mjs')))
+requireContract('public browser quarantine proof precedes every production candidate',
+  workflow.includes('node tools/verify_public_browser_quarantine.mjs')
+  && workflow.indexOf('node tools/verify_public_browser_quarantine.mjs') < workflow.indexOf('Deploy isolated app production candidate')
+  && workflow.indexOf('node tools/verify_public_browser_quarantine.mjs') < workflow.indexOf('Deploy isolated production candidate'))
 requireContract('migration proof changes trigger every database-aware workflow',
   [workflow, ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_private_trial_migrations.mjs') && source.includes('package-lock.json')))
 requireContract('real migration proof precedes every production candidate',

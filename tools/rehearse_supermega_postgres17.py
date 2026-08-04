@@ -30,6 +30,9 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_DIRECTORY = ROOT / "supabase" / "migrations"
+PUBLIC_BROWSER_QUARANTINE = (
+    ROOT / "supabase" / "rehearsal" / "20260804_public_browser_quarantine.sql"
+)
 MIGRATIONS = (
     "20260722004500_private_trial_backend_role_preflight.sql",
     "20260722005134_private_trial_backend_foundation.sql",
@@ -49,6 +52,39 @@ RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
+PUBLIC_BROWSER_TABLES = (
+    "assets",
+    "enterprise_agent_runs",
+    "enterprise_audit_events",
+    "enterprise_connector_events",
+    "enterprise_knowledge_chunks",
+    "enterprise_knowledge_embeddings",
+    "enterprise_lead_activities",
+    "enterprise_lead_hunt_profiles",
+    "enterprise_leads",
+    "enterprise_memberships",
+    "enterprise_metric_records",
+    "enterprise_module_definitions",
+    "enterprise_sessions",
+    "enterprise_source_change_events",
+    "enterprise_source_records",
+    "enterprise_users",
+    "enterprise_workspace_domains",
+    "enterprise_workspace_modules",
+    "enterprise_workspace_profiles",
+    "enterprise_workspace_tasks",
+    "enterprise_workspaces",
+    "iot_telemetry",
+    "production_ledger",
+    "supermega_campaign_clicks",
+    "supermega_leads",
+    "supermega_sales_runs",
+    "wcm_incidents",
+)
+PUBLIC_BROWSER_SEQUENCES = (
+    "supermega_leads_id_seq",
+    "supermega_sales_runs_id_seq",
+)
 IMPLEMENTATION_PATHS = (
     "supermega_runtime/managed_context.py",
     "supermega_runtime/managed_activation.py",
@@ -60,9 +96,11 @@ IMPLEMENTATION_PATHS = (
     "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
     "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
     "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+    "supabase/rehearsal/20260804_public_browser_quarantine.sql",
     "tools/activate_supermega_database.ps1",
     "tools/rehearse_supermega_postgres17.py",
     "tools/validate_supermega_database_url.py",
+    "tools/verify_public_browser_quarantine.mjs",
     "tools/verify_managed_runtime_environment_values.mjs",
 )
 JOURNEY_PRODUCT_WORKSPACE = "rehearsal-product"
@@ -427,8 +465,9 @@ def _create_database_and_roles(admin_url: str, database_name: str) -> None:
     with _connect(admin_url, autocommit=True) as connection:
         with connection.cursor() as cursor:
             cursor.execute(f'create database "{database_name}"')
-            for role in ("anon", "authenticated", "service_role"):
+            for role in ("anon", "authenticated", "supabase_admin"):
                 cursor.execute(f'create role "{role}" nologin')
+            cursor.execute('create role "service_role" nologin bypassrls')
 
 
 def _create_auth_session_fixture(admin_database_url: str) -> None:
@@ -440,6 +479,154 @@ def _create_auth_session_fixture(admin_database_url: str) -> None:
             cursor.execute(
                 "create table auth.sessions (id uuid primary key, user_id uuid not null)"
             )
+
+
+def _create_public_browser_fixture(admin_database_url: str) -> None:
+    """Mirror the reviewed legacy public catalog without copying business rows."""
+
+    with _connect(admin_database_url, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            for owner in ("postgres", "supabase_admin"):
+                cursor.execute(
+                    f'alter default privileges for role "{owner}" in schema public '
+                    "grant all privileges on tables to anon, authenticated, service_role"
+                )
+                cursor.execute(
+                    f'alter default privileges for role "{owner}" in schema public '
+                    "grant all privileges on sequences to anon, authenticated, service_role"
+                )
+                cursor.execute(
+                    f'alter default privileges for role "{owner}" in schema public '
+                    "grant execute on functions to anon, authenticated, service_role"
+                )
+            for table in PUBLIC_BROWSER_TABLES:
+                cursor.execute(f'create table public."{table}" (id bigint)')
+                cursor.execute(f'alter table public."{table}" enable row level security')
+            for sequence in PUBLIC_BROWSER_SEQUENCES:
+                cursor.execute(f'create sequence public."{sequence}"')
+            cursor.execute(
+                "grant all privileges on all tables in schema public "
+                "to anon, authenticated, service_role"
+            )
+            cursor.execute(
+                "grant all privileges on all sequences in schema public "
+                "to anon, authenticated, service_role"
+            )
+
+
+def _apply_public_browser_quarantine(
+    *,
+    postgres_bin: Path,
+    admin_password: str,
+    port: int,
+    database_name: str,
+    environment: dict[str, str],
+) -> None:
+    if not PUBLIC_BROWSER_QUARANTINE.is_file():
+        raise RehearsalFailure("public_browser_quarantine_missing")
+    quarantine_environment = dict(environment)
+    quarantine_environment["PGPASSWORD"] = admin_password
+    result = _run(
+        [
+            str(_binary(postgres_bin, "psql")),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--username",
+            "postgres",
+            "--dbname",
+            database_name,
+            "--no-password",
+            "--set",
+            "ON_ERROR_STOP=1",
+            "--file",
+            str(PUBLIC_BROWSER_QUARANTINE),
+        ],
+        environment=quarantine_environment,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise RehearsalFailure("public_browser_quarantine_application_failed")
+
+
+def _verify_public_browser_quarantine(admin_database_url: str) -> None:
+    table_privileges = (
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER",
+    )
+    sequence_privileges = ("USAGE", "SELECT", "UPDATE")
+    with _connect(admin_database_url, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            for browser_role in ("anon", "authenticated"):
+                for table in PUBLIC_BROWSER_TABLES:
+                    for privilege in table_privileges:
+                        cursor.execute(
+                            "select has_table_privilege(%s, %s, %s)",
+                            (browser_role, f"public.{table}", privilege),
+                        )
+                        if cursor.fetchone()[0] is True:
+                            raise RehearsalFailure(
+                                "public_browser_quarantine_table_grant_retained"
+                            )
+                for sequence in PUBLIC_BROWSER_SEQUENCES:
+                    for privilege in sequence_privileges:
+                        cursor.execute(
+                            "select has_sequence_privilege(%s, %s, %s)",
+                            (browser_role, f"public.{sequence}", privilege),
+                        )
+                        if cursor.fetchone()[0] is True:
+                            raise RehearsalFailure(
+                                "public_browser_quarantine_sequence_grant_retained"
+                            )
+            for table in PUBLIC_BROWSER_TABLES:
+                for privilege in table_privileges:
+                    cursor.execute(
+                        "select has_table_privilege('service_role', %s, %s)",
+                        (f"public.{table}", privilege),
+                    )
+                    if cursor.fetchone()[0] is not True:
+                        raise RehearsalFailure(
+                            "public_browser_quarantine_service_table_grant_changed"
+                        )
+            for sequence in PUBLIC_BROWSER_SEQUENCES:
+                for privilege in sequence_privileges:
+                    cursor.execute(
+                        "select has_sequence_privilege('service_role', %s, %s)",
+                        (f"public.{sequence}", privilege),
+                    )
+                    if cursor.fetchone()[0] is not True:
+                        raise RehearsalFailure(
+                            "public_browser_quarantine_service_sequence_grant_changed"
+                        )
+            cursor.execute(
+                """
+                select count(*)
+                from pg_default_acl default_acl
+                join pg_roles owner_role on owner_role.oid = default_acl.defaclrole
+                join pg_namespace schema_record
+                  on schema_record.oid = default_acl.defaclnamespace
+                cross join lateral aclexplode(default_acl.defaclacl) privilege_record
+                left join pg_roles grantee_role
+                  on grantee_role.oid = privilege_record.grantee
+                where owner_role.rolname in ('postgres', 'supabase_admin')
+                  and schema_record.nspname = 'public'
+                  and default_acl.defaclobjtype in ('r', 'S', 'f')
+                  and (
+                    privilege_record.grantee = 0
+                    or grantee_role.rolname in ('anon', 'authenticated')
+                  )
+                """
+            )
+            if cursor.fetchone()[0] != 0:
+                raise RehearsalFailure(
+                    "public_browser_quarantine_default_grant_retained"
+                )
 
 
 def _apply_migrations(
@@ -3258,6 +3445,23 @@ def _run_rehearsal(
             phase = "database_bootstrap"
             _create_database_and_roles(admin_root_url, DATABASE_NAME)
             _create_auth_session_fixture(admin_database_url)
+            phase = "public_browser_quarantine"
+            _create_public_browser_fixture(admin_database_url)
+            _apply_public_browser_quarantine(
+                postgres_bin=postgres_bin,
+                admin_password=admin_password,
+                port=port,
+                database_name=DATABASE_NAME,
+                environment=environment,
+            )
+            _apply_public_browser_quarantine(
+                postgres_bin=postgres_bin,
+                admin_password=admin_password,
+                port=port,
+                database_name=DATABASE_NAME,
+                environment=environment,
+            )
+            _verify_public_browser_quarantine(admin_database_url)
             phase = "migration_application"
             _apply_migrations(
                 postgres_bin=postgres_bin,
@@ -3384,6 +3588,7 @@ def _run_rehearsal(
                 restore_admin_database_url,
                 expected_approval_authority_snapshot=approval_authority_snapshot,
             )
+            _verify_public_browser_quarantine(restore_admin_database_url)
 
             version = str(preflight["engine"]["version"])
             major = int(preflight["engine"]["major"])
@@ -3415,6 +3620,8 @@ def _run_rehearsal(
                 },
                 "checks": {
                     "migration_chain_applied": True,
+                    "public_browser_quarantine_enforced": True,
+                    "public_browser_quarantine_idempotent": True,
                     "dedicated_runtime_role_validated": True,
                     **boundaries,
                     **product_journeys,
@@ -3425,6 +3632,7 @@ def _run_rehearsal(
                     "restore_completed": True,
                     "restored_database_validated": restored_validation.get("ready") is True,
                     "restored_data_preserved": True,
+                    "restored_public_browser_quarantine_preserved": True,
                 },
                 "authority": {
                     "actor_identity_source": APPROVAL_IDENTITY_AUTHORITY,

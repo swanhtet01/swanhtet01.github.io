@@ -1,6 +1,6 @@
 {
   "contract": "supermega.supabase-security-advisor-audit.v1",
-  "asOf": "2026-08-04T05:28:37.850Z",
+  "asOf": "2026-08-04T10:56:25.412Z",
   "projectRef": "zvtzwcimpvvtkowflhda",
   "targetClassification": "protected-production",
   "postgres": {
@@ -49,7 +49,7 @@
     ]
   },
   "catalog": {
-    "queryContract": "supermega.supabase-security-metadata-query.v1",
+    "queryContract": "supermega.supabase-security-metadata-query.v2",
     "scope": "pg_catalog_metadata_only",
     "businessRowsRead": 0,
     "tableCount": 27,
@@ -81,7 +81,19 @@
       { "name": "supermega_leads", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
       { "name": "supermega_sales_runs", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
       { "name": "wcm_incidents", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] }
-    ]
+    ],
+    "nonTableRelationCount": 0,
+    "publicRoutineCount": 0,
+    "browserCallableRoutineCount": 0,
+    "sequenceCount": 2,
+    "sequences": [
+      { "name": "supermega_leads_id_seq", "schema": "public", "anonPrivileges": ["USAGE", "SELECT"], "authenticatedPrivileges": ["USAGE", "SELECT"] },
+      { "name": "supermega_sales_runs_id_seq", "schema": "public", "anonPrivileges": ["USAGE", "SELECT"], "authenticatedPrivileges": ["USAGE", "SELECT"] }
+    ],
+    "defaultPrivilegeOwners": ["postgres", "supabase_admin"],
+    "defaultBrowserTablePrivilegesPresent": true,
+    "defaultBrowserSequencePrivilegesPresent": true,
+    "defaultBrowserFunctionExecutePresent": true
   },
   "managedBackend": {
     "queryContract": "supermega.supabase-managed-schema-metadata.v1",
@@ -126,19 +138,19 @@
   "conclusion": {
     "status": "blocked",
     "directBrowserTableAccessDefaultDenied": true,
-    "indirectExposureAudited": false,
+    "indirectExposureAudited": true,
     "currentRowExposureProven": false,
     "browserGrantHardeningRequired": true,
     "productionMutationAuthorized": false,
-    "nextAction": "Apply local v8 through v10 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, active-session revocation, role-boundary, and storage checks before any production proposal."
+    "nextAction": "Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal."
   },
   "controls": {
-    "connectorReadRequests": 16,
+    "connectorReadRequests": 20,
     "failedReadRequests": 1,
     "providerMutations": 0,
     "databaseWrites": 0,
     "businessRowsRead": 0,
     "credentialsRecorded": false
   },
-  "evidenceDigest": "sha256:6c5319b06da2483d60253f8bbfac66843967f1278c2e866082bfcc0d022cd031"
+  "evidenceDigest": "sha256:6745aab0e75c6650e86f502ae8cf4a51e49063c47864e0e2cfa69885b9c6c63d"
 }

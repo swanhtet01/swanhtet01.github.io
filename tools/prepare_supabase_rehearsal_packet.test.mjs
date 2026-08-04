@@ -30,6 +30,15 @@ test('builds an exact non-mutating v10 rehearsal packet', async () => {
   assert.equal(packet.release.schemaVersion, 10)
   assert.equal(packet.release.migrationCount, 11)
   assert.equal(packet.release.migrations.at(-1).name, '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql')
+  assert.equal(packet.release.browserQuarantine.contract, 'supermega.public-browser-quarantine.v1')
+  assert.equal(packet.release.browserQuarantine.scope, 'isolated-rehearsal-only')
+  assert.equal(packet.release.browserQuarantine.sourceAudit.publicTableCount, 27)
+  assert.equal(packet.release.browserQuarantine.sourceAudit.publicSequenceCount, 2)
+  assert.match(packet.release.browserQuarantine.script.sha256, /^[0-9a-f]{64}$/)
+  assert.deepEqual(packet.release.browserQuarantine.browserRolesDenied, ['anon', 'authenticated'])
+  assert.equal(packet.release.browserQuarantine.serviceRolePreserved, true)
+  assert.ok(packet.requiredEvidence.includes('public-browser-table-and-sequence-denial'))
+  assert.ok(packet.requiredEvidence.includes('service-role-contact-path-retained'))
   assert.equal(packet.authority.rehearsalProjectRef, targetProjectRef)
   assert.equal(packet.controls.activationAllowed, false)
   assert.equal(packet.controls.externalMutationPerformed, false)
@@ -40,6 +49,7 @@ test('builds an exact non-mutating v10 rehearsal packet', async () => {
   assert.match(runbook, /all eleven migrations/)
   assert.match(runbook, /Runtime readiness requires schema version 10/)
   assert.match(runbook, /database:supabase:packet:verify/)
+  assert.match(runbook, /public browser quarantine/i)
 })
 
 test('rejects the protected production project', async () => {

@@ -10,6 +10,8 @@ const commitPattern = /^[0-9a-f]{40}$/
 const expectedSchemaVersion = 10
 const expectedMigrationCount = 11
 const expectedFinalMigration = '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql'
+const browserQuarantinePath = 'supabase/rehearsal/20260804_public_browser_quarantine.sql'
+const securityAuditPath = 'hq/readiness/supabase-security-advisor-audit.json'
 
 function fail(code) {
   throw new Error(code)
@@ -36,6 +38,47 @@ async function migrationInventory(repositoryRoot) {
   })))
 }
 
+async function browserQuarantineInventory(repositoryRoot) {
+  const [sql, auditRaw] = await Promise.all([
+    readFile(resolve(repositoryRoot, browserQuarantinePath)),
+    readFile(resolve(repositoryRoot, securityAuditPath), 'utf8'),
+  ])
+  const audit = JSON.parse(auditRaw)
+  if (audit?.managedBackend?.liveSchemaVersion !== 7) fail('supabase_rehearsal_quarantine_audit_schema_invalid')
+  if (audit?.catalog?.businessRowsRead !== 0) fail('supabase_rehearsal_quarantine_audit_boundary_invalid')
+  if (!Array.isArray(audit?.catalog?.tables) || audit.catalog.tables.length !== 27) {
+    fail('supabase_rehearsal_quarantine_audit_inventory_invalid')
+  }
+  if (audit.catalog.queryContract !== 'supermega.supabase-security-metadata-query.v2'
+    || audit.catalog.sequenceCount !== 2
+    || audit.catalog.nonTableRelationCount !== 0
+    || audit.catalog.publicRoutineCount !== 0
+    || audit.catalog.browserCallableRoutineCount !== 0
+    || audit.conclusion?.indirectExposureAudited !== true
+    || !/^sha256:[0-9a-f]{64}$/.test(audit.evidenceDigest || '')) {
+    fail('supabase_rehearsal_quarantine_audit_exposure_invalid')
+  }
+  return {
+    contract: 'supermega.public-browser-quarantine.v1',
+    state: 'prepared-not-executed',
+    scope: 'isolated-rehearsal-only',
+    script: {
+      path: browserQuarantinePath,
+      sha256: sha256(sql),
+    },
+    sourceAudit: {
+      path: securityAuditPath,
+      sha256: sha256(auditRaw),
+      evidenceDigest: audit.evidenceDigest,
+      publicTableCount: audit.catalog.tables.length,
+      publicSequenceCount: audit.catalog.sequenceCount,
+      businessRowsRead: 0,
+    },
+    browserRolesDenied: ['anon', 'authenticated'],
+    serviceRolePreserved: true,
+  }
+}
+
 function digestPacket(payload) {
   return `sha256:${sha256(JSON.stringify(payload))}`
 }
@@ -57,7 +100,10 @@ export async function buildSupabaseRehearsalPacket({
   if (productionTargetStatus !== 'protected-unapproved') fail('supabase_rehearsal_production_guard_invalid')
   if (targetProjectRef === productionProjectRef) fail('supabase_rehearsal_target_is_production')
 
-  const migrations = await migrationInventory(repositoryRoot)
+  const [migrations, browserQuarantine] = await Promise.all([
+    migrationInventory(repositoryRoot),
+    browserQuarantineInventory(repositoryRoot),
+  ])
   const payload = {
     contract: 'supermega.supabase-rehearsal-packet.v1',
     state: 'prepared-not-executed',
@@ -67,6 +113,7 @@ export async function buildSupabaseRehearsalPacket({
       schemaVersion: expectedSchemaVersion,
       migrationCount: migrations.length,
       migrations,
+      browserQuarantine,
     },
     authority: {
       protectedProductionProjectRef: productionProjectRef,
@@ -81,6 +128,7 @@ export async function buildSupabaseRehearsalPacket({
       backupEvidence: '.tmp/supermega-rehearsal-backup-evidence.json',
       restoreEvidence: '.tmp/supermega-rehearsal-restore-evidence.json',
       validatorEvidence: '.tmp/supermega-rehearsal-validator-evidence.json',
+      browserQuarantineEvidence: '.tmp/supermega-rehearsal-browser-quarantine-evidence.json',
     },
     preflight: {
       command: `npm run database:supabase:preflight -- -DatabaseUrlFile .tmp\\supermega-rehearsal-admin-url.txt -ExpectedProjectRef ${targetProjectRef} -SslRootCertFile .tmp\\supermega-rehearsal-ca.crt`,
@@ -97,6 +145,9 @@ export async function buildSupabaseRehearsalPacket({
       'private-storage-isolation-proof',
       'named-user-auth-and-cross-tenant-denial',
       'active-session-acceptance-and-revoked-session-denial',
+      'public-browser-table-and-sequence-denial',
+      'public-default-privilege-denial-for-postgres-and-supabase-admin',
+      'service-role-contact-path-retained',
     ],
     recoveryNotes: [
       'Provider physical backups do not preserve custom-role passwords.',
