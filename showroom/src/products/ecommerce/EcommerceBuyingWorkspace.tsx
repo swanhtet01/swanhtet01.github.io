@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
+import { recordBehaviorSignal } from '../../core/behavior-trail'
+
 import {
   buildEcommerceCheckoutQuote,
   buildEcommerceCancellationIntent,
@@ -1120,6 +1122,12 @@ export function EcommerceBuyingWorkspace({
       setRecoveryRead({ scope, status: 'ready', issue: '' })
       setFreshQuoteId('')
       if (onRecordManagedRequest) await onRecordManagedRequest(request)
+      recordBehaviorSignal(window.localStorage, {
+        event: 'first_value_completed',
+        product: 'ecommerce',
+        route: window.location.pathname + window.location.search,
+        detail: 'Saved a reviewed Ecommerce order request for Shop review.',
+      })
       setFreshQuoteId(request.id)
       setQuoteClock(quotedAt.getTime())
       setNotice(onRecordManagedRequest

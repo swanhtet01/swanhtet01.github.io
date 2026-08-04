@@ -9,6 +9,7 @@ export type BehaviorTrailEvent =
   | 'settings_opened'
   | 'agent_job_seen'
   | 'agent_job_chosen'
+  | 'first_value_completed'
   | 'next_steps_opened'
   | 'data_setup_opened'
   | 'product_requested'
@@ -54,6 +55,17 @@ export type ProductActivationFunnelSnapshot = {
   lastSignalAt: string | null
 }
 
+export type ProductFirstValueSnapshot = {
+  contract: 'supermega.product_first_value.v1'
+  version: 1
+  product: BehaviorPreferenceProduct
+  status: 'not_started' | 'in_progress' | 'completed'
+  startedAt: string | null
+  completedAt: string | null
+  elapsedSeconds: number | null
+  detail: string | null
+}
+
 const behaviorTrailLimit = 80
 
 function behaviorId() {
@@ -78,6 +90,7 @@ function normalizeBehaviorTrail(value: unknown): BehaviorTrailEntry[] {
         || source.event === 'settings_opened'
         || source.event === 'agent_job_seen'
         || source.event === 'agent_job_chosen'
+        || source.event === 'first_value_completed'
         || source.event === 'next_steps_opened'
         || source.event === 'data_setup_opened'
         || source.event === 'product_requested'
@@ -184,6 +197,32 @@ export function summarizeProductActivationFunnel(
     productRequests,
     ...completion,
     lastSignalAt,
+  }
+}
+
+export function summarizeProductFirstValue(
+  entries: BehaviorTrailEntry[],
+  product: BehaviorPreferenceProduct,
+): ProductFirstValueSnapshot {
+  const productEntries = entries
+    .filter((entry) => entry.product === product && Number.isFinite(Date.parse(entry.createdAt)))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+  const completed = productEntries.find((entry) => entry.event === 'first_value_completed') ?? null
+  const started = productEntries.find((entry) => entry.event === 'product_opened'
+    && (!completed || Date.parse(entry.createdAt) <= Date.parse(completed.createdAt))) ?? null
+  const elapsedSeconds = started && completed
+    ? Math.max(0, Math.round((Date.parse(completed.createdAt) - Date.parse(started.createdAt)) / 1_000))
+    : null
+
+  return {
+    contract: 'supermega.product_first_value.v1',
+    version: 1,
+    product,
+    status: completed ? 'completed' : started ? 'in_progress' : 'not_started',
+    startedAt: started?.createdAt ?? null,
+    completedAt: completed?.createdAt ?? null,
+    elapsedSeconds,
+    detail: completed?.detail ?? null,
   }
 }
 

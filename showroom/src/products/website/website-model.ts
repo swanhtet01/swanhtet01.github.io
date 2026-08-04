@@ -704,15 +704,14 @@ export function websiteSource(workspace: WebsiteWorkspace): WebsiteSourceRef {
   return { contentRevision: workspace.contentRevision, digest: workspaceFingerprint(workspace) }
 }
 
-export function createWebsiteArtifact(workspace: WebsiteWorkspace): WebsiteArtifact {
+function createWebsiteArtifactFromPages(workspace: WebsiteWorkspace, pages: WebsitePage[]): WebsiteArtifact {
   const source = websiteSource(workspace)
   const content: Omit<WebsiteArtifact, 'contentDigest'> = {
     schema: 'supermega.website.artifact.v1',
     siteName: workspace.siteName,
     fingerprint: source.digest,
     source,
-    pages: workspace.pages
-      .filter((page) => page.stage === 'ready')
+    pages: pages
       .map((page) => ({
         id: page.id,
         slug: normalizeSlug(page.slug),
@@ -728,6 +727,14 @@ export function createWebsiteArtifact(workspace: WebsiteWorkspace): WebsiteArtif
   }
   if (!isWebsiteArtifact(artifact)) throw new Error('Approved Website content could not be retained safely.')
   return artifact
+}
+
+export function createWebsiteArtifact(workspace: WebsiteWorkspace): WebsiteArtifact {
+  return createWebsiteArtifactFromPages(workspace, workspace.pages.filter((page) => page.stage === 'ready'))
+}
+
+export function createWebsitePreviewArtifact(workspace: WebsiteWorkspace): WebsiteArtifact {
+  return createWebsiteArtifactFromPages(workspace, workspace.pages)
 }
 
 function sameSource(left: WebsiteSourceRef, right: WebsiteSourceRef) {

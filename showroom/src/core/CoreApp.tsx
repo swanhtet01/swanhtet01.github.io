@@ -2985,6 +2985,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       throw error
     }
     if (!managedIdentity) setActions((current) => [record, ...current])
+    if (pendingAction.presentation === 'counter') recordBehaviorSignal(window.localStorage, {
+      event: 'first_value_completed',
+      product: 'commerce',
+      route: commerceLocation.pathname + commerceLocation.search,
+      detail: 'Created a reviewed Shop order and reserved its stock.',
+    })
     setNotice(pendingAction.presentation === 'counter'
       ? `Order ${commerceOrderDisplayReference(pendingAction.subjectId)} created. Stock reserved. Finish fulfilment and reconcile payment before completion.`
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
@@ -7823,6 +7829,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           recordedShiftRef,
           productionActionProof(record),
         ))
+        if (productionShiftOutput(production, recordedShiftRef).goodUnits > 0) recordBehaviorSignal(window.localStorage, {
+          event: 'first_value_completed',
+          product: 'production',
+          route: productionLocation.pathname + productionLocation.search,
+          detail: 'Recorded reviewed Plant output with same-shift material trace.',
+        })
         setMaterialDraft((current) => ({ ...current, jobId: recordedJobId, materialRef: '', materialLot: '', quantity: '1' }))
         setMaterialGuideOpen(false)
         setOutputOpen(false)

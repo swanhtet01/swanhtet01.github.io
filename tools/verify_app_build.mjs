@@ -123,6 +123,7 @@ const plantEquipmentOnboardingSource = await readFile(resolve(root, 'showroom', 
 const plantEquipmentCommissioningSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentCommissioning.tsx'), 'utf8')
 const plantEquipmentMaintenanceStrategySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantEquipmentMaintenanceStrategy.tsx'), 'utf8')
 const settingsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'SettingsPage.tsx'), 'utf8')
+const ecommerceBuyingWorkspaceSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8')
 const workspaceControlsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'WorkspaceControlsPage.tsx'), 'utf8')
 const productOnboardingPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
 const productOnboardingRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-onboarding-runtime.ts'), 'utf8')
@@ -278,7 +279,8 @@ if (!coreCssSource.includes('.production-operation-module > .plant-batch-disclos
 if (!localWorkspaceStorageSource.includes("'supermega.plant.order-foundation.v1:'")
   || !settingsPageSource.includes('listLocalWorkspaceStorageKeys(window.localStorage)')) fail('plant_execution_evidence_not_reset_or_restored_with_workspace')
 if (!plantOrderUiSource.includes('<details className="compact-disclosure production-history" open>')) fail('plant_required_batch_fields_hidden_by_default')
-if (!websiteSource.includes("const releaseRecordRequired = storageMode !== 'session-only'")
+if (!websiteSource.includes("const releaseRecordRequired = storageMode === 'managed'")
+  || !websiteSource.includes("const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges")
   || !websiteSource.includes("['Review', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required']")
   || !websiteSource.includes("['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download']")) fail('website_durable_trial_release_gates_missing')
 if (websiteSource.includes("{websiteTodayState !== 'ready' ? <section")
@@ -1290,6 +1292,7 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !behaviorTrailSource.includes('const behaviorTrailLimit = 80')
   || !behaviorTrailSource.includes("'agent_job_seen'")
   || !behaviorTrailSource.includes("'agent_job_chosen'")
+  || !behaviorTrailSource.includes("'first_value_completed'")
   || !behaviorTrailSource.includes("'next_steps_opened'")
   || !behaviorTrailSource.includes("'data_setup_opened'")
   || !behaviorTrailSource.includes("'product_requested'")
@@ -1302,6 +1305,8 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !behaviorTrailSource.includes('productCount: new Set(chosen.map((entry) => entry.product)).size')
   || !behaviorTrailSource.includes("contract: 'supermega.product_activation_funnel.v1'")
   || !behaviorTrailSource.includes('export function summarizeProductActivationFunnel(')
+  || !behaviorTrailSource.includes("contract: 'supermega.product_first_value.v1'")
+  || !behaviorTrailSource.includes('export function summarizeProductFirstValue(')
   || !productSystemNavigatorSource.includes("recordActivationSignal('next_steps_opened'")
   || !productSystemNavigatorSource.includes("recordActivationSignal('data_setup_opened'")
   || !productOnboardingPageSource.includes("event: 'product_requested'")
@@ -1319,6 +1324,9 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !websiteSource.includes("event: 'agent_job_chosen'")
   || !ecommerceSource.includes("event: 'agent_job_seen'")
   || !ecommerceSource.includes("event: 'agent_job_chosen'")
+  || !coreSource.includes("event: 'first_value_completed'")
+  || !websiteSource.includes("event: 'first_value_completed'")
+  || !ecommerceBuyingWorkspaceSource.includes("event: 'first_value_completed'")
   || !companyBackupSource.includes("'supermega.behavior-trail.v1'")
   || !settingsPageSource.includes('const behaviorTrail = readBehaviorTrail(window.localStorage)')
   || !settingsPageSource.includes('const behaviorSignalCount = behaviorTrail.length')
@@ -3564,6 +3572,7 @@ if (!websiteModelSource.includes("supermega.website.workspace.v2")
 if (!websiteModelSource.includes('contentRevision') || !websiteModelSource.includes('evidenceIds') || !websiteModelSource.includes('migratedFromV1') || !websiteModelSource.includes('getCurrentApproval') || !websiteModelSource.includes('getCurrentPublish')) fail('website_release_provenance_missing')
 if (!websiteModelSource.includes("supermega.website.artifact.v1")
   || !websiteModelSource.includes('createWebsiteArtifact')
+  || !websiteModelSource.includes('createWebsitePreviewArtifact')
   || !websiteModelSource.includes('artifact: createWebsiteArtifact(workspace)')
   || !websiteModelSource.includes('isMetadataOnlyPublishRecord')) fail('website_approved_artifact_persistence_missing')
 if (!websiteExportSource.includes('buildWebsiteHtml')
@@ -3673,7 +3682,7 @@ if (websiteHydration.indexOf('try {') < 0 || websiteHydration.indexOf('try {') >
 const websiteUnifiedCss = websiteCssSource.slice(websiteCssSource.lastIndexOf('/* Unified Website workflow'))
 if (!websiteSource.includes("type WebsiteView = 'content' | 'publish'")
   || !websiteSource.includes('className="website-action-bar"')
-  || !websiteSource.includes("storageMode !== 'session-only' ? canReview ? (")
+  || !websiteSource.includes("storageMode === 'managed' ? canReview ? (")
   || websiteSource.includes('The four-page prototype limit is reached')
   || websiteSource.includes('This prototype is capped at four pages.')
   || !websiteSource.includes('className="website-primary-actions"')
@@ -3688,17 +3697,17 @@ if (!websiteSource.includes("type WebsiteView = 'content' | 'publish'")
   || websiteSource.includes('splitPreview')
   || websiteSource.includes('className="website-mobile-seo-settings"')
   || ['.website-workspace-nav', '.website-mobile-mode-nav', '.website-mobile-page-bar', '.website-mobile-site-settings', '.website-surface-controls', '.website-split-control', '[data-split='].some((selector) => websiteCssSource.includes(selector))) fail('website_unified_action_bar_missing')
-if (!websiteSource.includes("storageMode !== 'session-only' ? canReview ? (")
+if (!websiteSource.includes("storageMode === 'managed' ? canReview ? (")
   || !websiteSource.includes("storageMode !== 'session-only' ? (")
   || !websiteSource.includes("view === 'publish' && storageMode === 'session-only'")
   || !websiteSource.includes('<PublishWorkspace')
   || !websiteSource.includes('<TrialReadyWorkspace')
   || !websiteSource.includes('Download your website')
   || !websiteSource.includes('Download website')
-  || !websiteSource.includes("{canReview ? 'Download website' : 'Download draft'}")
-  || !websiteSource.includes(": null : surface === 'work' ? (")
+  || !websiteSource.includes('Download preview')
+  || !websiteSource.includes(': null : localPreviewReady ? (')
   || !websiteSource.includes('onClick={downloadTrialSite}')
-  || !websiteSource.includes('createWebsiteHtmlDownload(createWebsiteArtifact(workspace))')
+  || !websiteSource.includes('createWebsiteHtmlDownload(createWebsitePreviewArtifact(workspace))')
   || !websiteSource.includes('no site or domain was deployed')
   || !websiteSource.includes('Downloading does not deploy a site, connect a domain, or send customer data.')
   || !websiteCssSource.includes('.website-trial-ready-body')
@@ -10086,6 +10095,13 @@ async function verifyWebsiteRuntime() {
       && briefPreview.pages[0].hero.ctaHref === '/catalog'
       && briefPreview.pages[1].hero.ctaHref === starterBrief.contactHref
       && briefPreview.pages[2].hero.ctaHref === starterBrief.contactHref, 'website_starter_brief_did_not_create_complete_catalog_draft')
+    const previewArtifact = model.createWebsitePreviewArtifact(briefPreview)
+    const previewDownload = exporter.createWebsiteHtmlDownload(previewArtifact)
+    assert(previewArtifact.pages.length === briefPreview.pages.length
+      && previewArtifact.source.digest === model.workspaceFingerprint(briefPreview)
+      && previewArtifact.pages.every((page) => !('stage' in page) && !('updatedAt' in page) && !('internalName' in page))
+      && previewDownload.filename.endsWith('.html')
+      && previewDownload.content.includes(starterBrief.businessName), 'website_reviewable_preview_artifact_invalid')
     const businessPreview = starter.applyWebsiteStarterBrief(seed, { ...starterBrief, templateId: 'business-presence' }, at(51))
     const leadPreview = starter.applyWebsiteStarterBrief(seed, { ...starterBrief, templateId: 'lead-generation' }, at(52))
     assert(businessPreview.pages.map((page) => page.slug).join(',') === '/,/about,/contact', 'website_business_presence_template_pages_missing')
@@ -18423,6 +18439,10 @@ async function verifyBehaviorTrailRuntime() {
       { id: 'B-2', event: 'data_setup_opened', product: 'commerce', route: '/shop/', detail: 'Opened Shop data setup', createdAt: '2026-08-03T01:01:00.000Z' },
       { id: 'B-3', event: 'product_requested', product: 'commerce', route: '/settings/?product=shop', detail: 'Requested guided Shop setup', createdAt: '2026-08-03T01:02:00.000Z' },
       { id: 'B-4', event: 'next_steps_opened', product: 'production', route: '/plant/', detail: 'Opened Plant next steps', createdAt: '2026-08-03T01:03:00.000Z' },
+      { id: 'B-5', event: 'product_opened', product: 'ecommerce', route: '/ecommerce/', detail: 'Ecommerce product viewed.', createdAt: '2026-08-03T01:04:00.000Z' },
+      { id: 'B-6', event: 'product_opened', product: 'ecommerce', route: '/ecommerce/?view=store', detail: 'Ecommerce store viewed.', createdAt: '2026-08-03T01:05:00.000Z' },
+      { id: 'B-7', event: 'first_value_completed', product: 'ecommerce', route: '/ecommerce/', detail: 'Saved a reviewed Ecommerce order request for Shop review.', createdAt: '2026-08-03T01:06:00.000Z' },
+      { id: 'B-8', event: 'first_value_completed', product: 'ecommerce', route: '/ecommerce/', detail: 'Later Ecommerce request.', createdAt: '2026-08-03T01:07:00.000Z' },
     ]
     const shop = model.summarizeProductActivationFunnel(entries, 'commerce')
     assert(shop.contract === 'supermega.product_activation_funnel.v1'
@@ -18440,6 +18460,18 @@ async function verifyBehaviorTrailRuntime() {
       && plant.nextAction === 'Try your data', 'behavior_plant_activation_funnel_wrong')
     const website = model.summarizeProductActivationFunnel(entries, 'website')
     assert(website.completionPercent === 0 && website.nextAction === 'Open next steps' && website.lastSignalAt === null, 'behavior_empty_activation_funnel_wrong')
+    const ecommerceFirstValue = model.summarizeProductFirstValue(entries, 'ecommerce')
+    assert(ecommerceFirstValue.contract === 'supermega.product_first_value.v1'
+      && ecommerceFirstValue.status === 'completed'
+      && ecommerceFirstValue.startedAt === '2026-08-03T01:04:00.000Z'
+      && ecommerceFirstValue.completedAt === '2026-08-03T01:06:00.000Z'
+      && ecommerceFirstValue.elapsedSeconds === 120
+      && ecommerceFirstValue.detail === 'Saved a reviewed Ecommerce order request for Shop review.', 'behavior_first_value_summary_wrong')
+    const websiteFirstValue = model.summarizeProductFirstValue(entries, 'website')
+    assert(websiteFirstValue.status === 'not_started'
+      && websiteFirstValue.startedAt === null
+      && websiteFirstValue.completedAt === null
+      && websiteFirstValue.elapsedSeconds === null, 'behavior_empty_first_value_summary_wrong')
 
     const values = new Map()
     const storage = {

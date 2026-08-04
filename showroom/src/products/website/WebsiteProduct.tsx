@@ -28,7 +28,7 @@ import {
   approveWebsiteRevision,
   commitWebsiteEditSession,
   createBlankPage,
-  createWebsiteArtifact,
+  createWebsitePreviewArtifact,
   createWebsiteEditSession,
   createId,
   deleteWebsiteRecoveryArchive,
@@ -757,7 +757,7 @@ export function WebsiteProduct() {
   function downloadTrialSite() {
     if (!requireSavedWorkspace('downloading the Website')) return
     try {
-      const download = createWebsiteHtmlDownload(createWebsiteArtifact(workspace))
+      const download = createWebsiteHtmlDownload(createWebsitePreviewArtifact(workspace))
       const url = URL.createObjectURL(new Blob([download.content], { type: download.mimeType }))
       const link = document.createElement('a')
       link.href = url
@@ -767,6 +767,12 @@ export function WebsiteProduct() {
       link.click()
       link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 5_000)
+      recordBehaviorSignal(window.localStorage, {
+        event: 'first_value_completed',
+        product: 'website',
+        route: location.pathname + location.search,
+        detail: 'Produced a reviewable Website preview file from saved content.',
+      })
       setNotice(`${download.filename} downloaded. It is a standalone preview; no site or domain was deployed.`)
     } catch (error) {
       setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
@@ -779,13 +785,16 @@ export function WebsiteProduct() {
     && Boolean(page.hero.ctaHref.trim()))
   const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
   const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
-  const releaseRecordRequired = storageMode !== 'session-only'
+  const releaseRecordRequired = storageMode === 'managed'
+  const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges
   const websiteTodayStep = storageIssue || canRepairLocalStorage
     ? 'recover'
     : starterSetupActive || starterAvailable
       ? 'setup'
       : hasUnsavedChanges
         ? 'edit'
+        : localPreviewReady
+          ? 'preview-file'
         : failingContentChecks.length
           ? 'checks'
           : leadCounts.new
@@ -803,6 +812,8 @@ export function WebsiteProduct() {
         ? 'Customize this demo'
         : hasUnsavedChanges
           ? 'Save or discard edits'
+          : localPreviewReady
+            ? 'Download your website preview'
           : failingContentChecks.length
             ? 'Fix page checks'
             : leadCounts.new
@@ -822,6 +833,8 @@ export function WebsiteProduct() {
         ? 'Review the working sample first. Customize it only when you are ready to add business details.'
         : hasUnsavedChanges
           ? 'Save the preview or discard it before review.'
+          : localPreviewReady
+            ? 'Your saved customization is ready as a standalone review file. Page checks and managed approval remain separate before go-live.'
           : failingContentChecks.length
             ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
             : leadCounts.new
@@ -841,6 +854,8 @@ export function WebsiteProduct() {
         ? 'The working sample stays unchanged until you choose Customize demo.'
         : hasUnsavedChanges
           ? 'Save or discard the preview.'
+          : localPreviewReady
+            ? 'Downloading does not deploy a site, connect a domain, or approve a managed release.'
           : failingContentChecks.length
             ? 'Fix content, navigation, proof, and contact readiness.'
             : leadCounts.new
@@ -858,6 +873,8 @@ export function WebsiteProduct() {
       ? 'Customize demo'
       : hasUnsavedChanges
         ? 'Review edits'
+        : localPreviewReady
+          ? 'Download preview'
         : failingContentChecks.length
           ? 'Fix page checks'
         : leadCounts.new
@@ -922,6 +939,10 @@ export function WebsiteProduct() {
     }
     if (starterAvailable || starterSetupActive) {
       openStarterSetup()
+      return
+    }
+    if (localPreviewReady) {
+      downloadTrialSite()
       return
     }
     if (hasUnsavedChanges || failingContentChecks.length) {
@@ -1208,13 +1229,13 @@ export function WebsiteProduct() {
                       {savingDraft ? 'Saving…' : 'Save'}
                     </button>
                   </>
-                ) : storageMode !== 'session-only' ? canReview ? (
+                ) : storageMode === 'managed' ? canReview ? (
                   <button className="website-button is-primary" onClick={() => openWorkspaceView('publish')} type="button">
                     Prepare file
                   </button>
-                ) : null : surface === 'work' ? (
+                ) : null : localPreviewReady ? (
                   <button className="website-button is-primary" onClick={downloadTrialSite} type="button">
-                    {canReview ? 'Download website' : 'Download draft'}
+                    Download preview
                   </button>
                 ) : null}
                 </div>
