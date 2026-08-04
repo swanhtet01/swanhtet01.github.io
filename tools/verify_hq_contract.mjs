@@ -186,7 +186,7 @@ requireContract('CEO four-product and innovation goal is explicit',
   && ceoProductGoal.includes('### 3. SuperMega Actions')
   && ceoProductGoal.includes('### 4. SuperMega Connect')
   && ceoProductGoal.includes('Verified first-value rate')
-  && ceoProductGoal.includes('Preserve the proven mobile Ecommerce-to-Shop journey plus Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file at both viewports')
+  && ceoProductGoal.includes('Preserve Ecommerce-to-Shop, Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file proof at both viewports')
   && ceoProductGoal.includes('Evaluate Supabase Queues only for server-owned durable import')
   && ceoProductGoal.includes('Keep AI execution provider-neutral'))
 requireContract('route quality policy is bounded and four-product',
@@ -211,6 +211,7 @@ requireContract('route quality browser gate is fail-closed and resource bounded'
   && routeQualityAudit.includes('disclosure_did_not_close')
   && routeQualityAudit.includes('auditEcommerceShopOrderWorkflow')
   && routeQualityAudit.includes("workflowId: 'ecommerce-request-shop-confirmation'")
+  && routeQualityAudit.includes('for (const viewport of policy.viewports) workflowResults.push(await auditEcommerceShopOrderWorkflow')
   && routeQualityAudit.includes('auditShopSaleCloseWorkflow')
   && routeQualityAudit.includes("workflowId: 'shop-counter-sale-daily-close'")
   && routeQualityAudit.includes('auditPlantPlanShiftCloseWorkflow')
@@ -237,8 +238,8 @@ requireContract('route quality browser gate is fail-closed and resource bounded'
   && !routeQualityAudit.includes("from 'node:child_process'"))
 requireContract('route quality report preserves current evidence and production caveat',
   productQualityReport.includes('28 checks')
-  && productQualityReport.includes('seven browser workflow gates')
-  && productQualityReport.includes('59 deterministic checkpoints')
+  && productQualityReport.includes('eight browser workflow gates')
+  && productQualityReport.includes('66 deterministic checkpoints')
   && productQualityReport.includes('`simplicityTargetsMet` is true')
   && productQualityReport.includes('Shop Orders | 22 | 23 | 23 | Target met')
   && productQualityReport.includes('production not verified by this report')

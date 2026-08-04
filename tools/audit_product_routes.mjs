@@ -367,15 +367,15 @@ async function waitForProduct(page, name) {
   await page.waitForFunction((expected) => document.querySelector('h1')?.textContent?.trim() === expected, name, { timeout: 8_000 })
 }
 
-async function auditEcommerceShopOrderWorkflow(browser, baseUrl) {
+async function auditEcommerceShopOrderWorkflow(browser, baseUrl, viewport) {
   const context = await browser.newContext({
     colorScheme: 'light',
     deviceScaleFactor: 1,
-    hasTouch: true,
-    isMobile: true,
+    hasTouch: viewport.touch,
+    isMobile: viewport.touch,
     locale: 'en-US',
     reducedMotion: 'reduce',
-    viewport: { width: 390, height: 844 },
+    viewport: { width: viewport.width, height: viewport.height },
   })
   const page = await context.newPage()
   const checkpoints = []
@@ -398,13 +398,14 @@ async function auditEcommerceShopOrderWorkflow(browser, baseUrl) {
     await intercept.abort('blockedbyclient')
   })
   const failures = []
+  const customer = 'QA Customer'
   try {
     const response = await page.goto(`${baseUrl}/ecommerce/`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
     if (!response || response.status() < 200 || response.status() >= 400) fail(`workflow_ecommerce_http_status:${response?.status() ?? 'none'}`)
     await waitForProduct(page, 'Ecommerce')
 
     await (await expectOne(page.getByRole('button', { name: 'Start sample order', exact: true }), 'workflow_start_sample_order_count')).click()
-    await (await expectOne(page.getByLabel('Name', { exact: true }), 'workflow_customer_name_count')).fill('QA Customer')
+    await (await expectOne(page.getByLabel('Name', { exact: true }), 'workflow_customer_name_count')).fill(customer)
     await (await expectOne(page.getByLabel('Phone', { exact: true }), 'workflow_customer_phone_count')).fill('09123456789')
     checkpoints.push('sample_cart_ready')
 
@@ -416,7 +417,7 @@ async function auditEcommerceShopOrderWorkflow(browser, baseUrl) {
     if (!await sendRequest.isEnabled()) fail('workflow_send_request_disabled')
     await sendRequest.click()
     await expectOneVisible(page.getByRole('heading', { name: 'Order request sent for Shop review', exact: true }), 'workflow_request_receipt_heading_count')
-    const requestReceipt = await expectOneVisible(page.locator('article').filter({ hasText: 'Request for QA Customer' }), 'workflow_request_receipt_count')
+    const requestReceipt = await expectOneVisible(page.locator('article').filter({ hasText: `Request for ${customer}` }), 'workflow_request_receipt_count')
     const requestReceiptText = await requestReceipt.innerText()
     const requestReference = requestReceiptText.match(/Reference (ECR-[A-F0-9-]+)/)?.[1]
     if (!requestReference) fail('workflow_request_reference_missing')
@@ -461,7 +462,7 @@ async function auditEcommerceShopOrderWorkflow(browser, baseUrl) {
   if (externalRequests.length) failures.push(`external_requests:${externalRequests.length}`)
   return {
     workflowId: 'ecommerce-request-shop-confirmation',
-    viewport: 'mobile',
+    viewport: viewport.id,
     ok: failures.length === 0,
     checkpoints,
     failures,
@@ -905,7 +906,7 @@ try {
         }
       }
       if (scope === 'app' && !routeFilter && !viewportFilter) {
-        workflowResults.push(await auditEcommerceShopOrderWorkflow(browser, server.baseUrl))
+        for (const viewport of policy.viewports) workflowResults.push(await auditEcommerceShopOrderWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditShopSaleCloseWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditPlantPlanShiftCloseWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditWebsiteEditReleaseWorkflow(browser, server.baseUrl, viewport))

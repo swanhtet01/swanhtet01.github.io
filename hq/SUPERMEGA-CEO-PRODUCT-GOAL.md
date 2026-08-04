@@ -201,8 +201,8 @@ A product release is not ready because the build passes. It is ready only when t
 
 ## Immediate sequence
 
-1. Preserve the proven mobile Ecommerce-to-Shop journey plus Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file at both viewports.
-2. Add Ecommerce desktop proof without duplicating Shop authority or increasing first-screen action density.
+1. Preserve Ecommerce-to-Shop, Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file proof at both viewports.
+2. Prototype Blueprint as a no-write import preview without duplicating product authority or increasing first-screen action density.
 3. Instrument the three CEO KPIs around the existing useful samples and first-value records, then run five moderated Shop/Plant sessions before expanding product scope.
 4. Prototype Blueprint as a no-write import preview over the existing client-preparation contract, using messy catalog and production fixtures; measure mapping accuracy, repair burden, and time to first value.
 5. Prototype native IndexedDB outbox and recovery for Shop. Compare PGlite only if measured relational/offline requirements justify its payload and startup cost.
