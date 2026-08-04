@@ -8,6 +8,7 @@ import binascii
 import json
 import os
 from typing import Any
+from uuid import UUID
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request as UrlRequest, build_opener
@@ -95,6 +96,48 @@ def _is_publishable_key(value: str) -> bool:
     return bool(payload and payload.get("role") == "anon")
 
 
+def _canonical_uuid(value: object) -> str:
+    candidate = str(value or "").strip()
+    try:
+        parsed = UUID(candidate)
+    except (ValueError, AttributeError, TypeError):
+        return ""
+    return str(parsed) if str(parsed) == candidate.casefold() else ""
+
+
+def _authenticated_token_subject(token: str, config: SupabaseAuthConfig) -> str:
+    """Return the subject only for a named session issued by this project.
+
+    Supabase Auth remains the signature and freshness authority through the
+    server-side ``/user`` request below. These checks bind that response to the
+    configured project and reject anonymous, service, static custom, or
+    malformed tokens before they can reach workspace authorization.
+    """
+
+    payload = _decode_jwt_payload(token)
+    if not payload:
+        return ""
+    audience = payload.get("aud")
+    authenticated_audience = audience == "authenticated" or (
+        isinstance(audience, list)
+        and audience
+        and all(isinstance(item, str) for item in audience)
+        and "authenticated" in audience
+    )
+    subject = _canonical_uuid(payload.get("sub"))
+    session_id = _canonical_uuid(payload.get("session_id"))
+    if (
+        payload.get("iss") != f"{config.base_url}/auth/v1"
+        or not authenticated_audience
+        or payload.get("role") != "authenticated"
+        or payload.get("is_anonymous") is not False
+        or not subject
+        or not session_id
+    ):
+        return ""
+    return subject
+
+
 def verify_supabase_user_token(
     token: str,
     config: SupabaseAuthConfig,
@@ -112,6 +155,9 @@ def verify_supabase_user_token(
     if not config.ready:
         return None
     if not candidate or len(candidate) > _MAX_TOKEN_LENGTH or len(candidate.split(".")) != 3:
+        return None
+    token_subject = _authenticated_token_subject(candidate, config)
+    if not token_subject:
         return None
 
     request = UrlRequest(
@@ -143,8 +189,8 @@ def verify_supabase_user_token(
         raise SupabaseAuthUnavailable("Supabase Auth returned invalid JSON.") from exc
     if not isinstance(user, dict) or user.get("is_anonymous") is not False:
         return None
-    user_id = str(user.get("id") or "").strip()
-    return user_id if user_id else None
+    user_id = _canonical_uuid(user.get("id"))
+    return user_id if user_id == token_subject else None
 
 
 __all__ = [
