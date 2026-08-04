@@ -109,6 +109,10 @@ async function verifyOnce() {
   assert(pages.get('/')?.includes('href="#products">Choose a product</a>'), 'homepage_product_cta_missing')
   assert(pages.get('/')?.includes('id="products"'), 'product_portfolio_missing')
   const homepage = pages.get('/') || ''
+  assert(homepage.includes('Start with one working sample.'), 'managed_setup_positioning_missing')
+  assert(homepage.includes('Try it free in this browser. When it fits, SuperMega can set up secure company data, access, recovery, and support around that product.'), 'managed_setup_boundary_missing')
+  assert(homepage.includes('href="/contact/?product=guide&amp;source=managed-setup">Plan managed setup</a>'), 'managed_setup_action_missing')
+  assert(!homepage.includes('id="model"') && !homepage.includes('Managed company intelligence'), 'abstract_managed_offer_returned')
   for (const product of manifest.customerProducts) {
     const setupRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
     const productPage = pages.get(product.publicAnchor) || ''

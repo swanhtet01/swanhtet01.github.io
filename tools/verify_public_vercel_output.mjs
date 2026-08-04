@@ -175,7 +175,9 @@ for (const token of [
   '>Products<',
   'Choose one product to explore.',
   'See what each product does, then open only the working sample you chose. No account or setup is required.',
-  'Not sure which one fits?',
+  'Start with one working sample.',
+  'Try it free in this browser. When it fits, SuperMega can set up secure company data, access, recovery, and support around that product.',
+  'href="/contact/?product=guide&amp;source=managed-setup">Plan managed setup</a>',
   'id="trust"',
   'aria-label="Security boundary"',
   'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
@@ -189,6 +191,7 @@ for (const token of [
 ]) {
   if (!home.includes(token)) fail('homepage_contract_missing', { token })
 }
+if (home.includes('id="model"') || home.includes('Managed company intelligence')) fail('abstract_managed_offer_returned')
 for (const product of publicProducts) {
   if (!home.includes(`href="${product.publicAnchor}">See ${product.name}</a>`)) fail('focused_product_page_missing', { product: product.id })
   if (home.includes(product.appRoute)) fail('homepage_bypasses_product_context', { product: product.id })
