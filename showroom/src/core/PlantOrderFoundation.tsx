@@ -46,7 +46,7 @@ import {
 } from './plant-order-foundation'
 import type { CommerceState } from './commerce-workspace'
 import { pendingProductionMaterialHandoffs, projectProductionMaterialRequirements, projectProductionPortfolioMrp } from './production-material-handoff'
-import { validateProductionState, type ProductionJob, type ProductionState } from './production-workspace'
+import { productionJobPlanSourceDigest, validateProductionState, type ProductionJob, type ProductionState } from './production-workspace'
 import {
   productionOrderExecutionForJob,
   productionOrderPortfolioEntries,
@@ -147,21 +147,6 @@ function proof(actor: string, label: string): PlantOrderProof {
     actor: actor.trim() || 'Local Plant supervisor',
     reason: `Review and record ${label}.`,
     evidenceReference: `PLANT-EXECUTION:${actionId}`,
-  }
-}
-
-function jobSnapshot(scope: string, job: ProductionJob) {
-  return {
-    scope,
-    job: {
-      id: job.id,
-      product: job.product,
-      target: job.target,
-      output: job.output,
-      scrap: job.scrap ?? 0,
-      qualityHoldActionId: job.qualityHold?.actionId ?? null,
-      closureActionId: job.closure?.actionId ?? null,
-    },
   }
 }
 
@@ -375,7 +360,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     : { ...reworkDraft, operationId: projection.routing.at(-1)?.operationId ?? '' }
   const selectedSetupJob = activeJobs.find((job) => job.id === setupDraft.jobId) ?? activeJobs[0]
   const boundJob = projection.plan ? jobs.find((job) => job.id === projection.plan?.job.jobId) : undefined
-  const bindingCurrent = Boolean(!projection.plan || (boundJob && plantOrderEvidenceDigest(jobSnapshot(scope, boundJob)) === projection.plan.sourceDigest))
+  const bindingCurrent = Boolean(!projection.plan || (boundJob && productionJobPlanSourceDigest(scope, boundJob) === projection.plan.sourceDigest))
   const controlsDisabled = disabled || busy || Boolean(review) || (!bindingCurrent && projection.status !== 'released_to_stock')
   const nextMaterial = projection.materials.find((material) => material.remainingToIssueMilli > 0)
   const nextMaterialSubstitution = nextMaterial ? projection.materialSubstitutions.find((approval) => approval.materialId === nextMaterial.materialId) : undefined
@@ -598,7 +583,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       const workCentres = [...workCentreNames].map(([workCentreId, name]) => ({ workCentreId, name }))
         .sort((left, right) => left.workCentreId < right.workCentreId ? -1 : left.workCentreId > right.workCentreId ? 1 : 0)
       const targetQuantity = remaining(selectedSetupJob); const expectedHeadDigest = state.headDigest
-      const sourceDigest = plantOrderEvidenceDigest(jobSnapshot(scope, selectedSetupJob))
+      const sourceDigest = productionJobPlanSourceDigest(scope, selectedSetupJob)
       const effectiveFrom = explicitOffsetTimestamp(setupDraft.effectiveFrom, 'the plan effective date')
       const effectiveUntil = explicitOffsetTimestamp(setupDraft.effectiveUntil, 'the plan expiry date')
       if (Date.parse(effectiveUntil) <= Date.parse(effectiveFrom)) throw new Error('Plan expiry must follow its effective date.')

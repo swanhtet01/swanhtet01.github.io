@@ -4625,7 +4625,8 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !coreSource.includes('onIssue={mutateCommerce}')
   || !coreSource.includes('commerceState={relatedCommerce}')
   || !coreSource.includes('const plantOrderScopeWorkspaceId = managedIdentity')
-  || !coreSource.includes('scope={`plant:${plantOrderScopeWorkspaceId}`}')
+  || !coreSource.includes('const plantOrderScope = `plant:${plantOrderScopeWorkspaceId}`')
+  || !coreSource.includes('scope={plantOrderScope}')
   || coreSource.includes("scope={`plant:${managedWorkspaceId ?? managedIdentity?.workspaceId ?? 'local-sample'}`}")
   || !shopProductionHandoffUiSource.includes('Shop remains the only stock authority.')
   || !shopProductionHandoffUiSource.includes('Review the exact stock decrement. Nothing has been written yet.')
@@ -5612,6 +5613,18 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !productionSource.includes('openQualityIssues')
   || !productionSource.includes('materialEntries')
   || !productionSource.includes('shortCloses')
+  || !productionSource.includes('controlledOrders')
+  || !productionSource.includes('productionOrderPortfolioEntries(current)')
+  || !productionSource.includes('productionJobPlanSourceDigest(plantOrderScope, job) === plan.sourceDigest')
+  || !productionSource.includes("buildProductionShiftHandoff(state: ProductionState, shiftRef: string, plantOrderScope = 'plant:local-sample')")
+  || !productionSource.includes('currentProductionShiftCloseEvidence')
+  || !productionSource.includes("disposition: 'released' | 'complete_not_released' | 'carry_forward'")
+  || !productionSource.includes('Complete output needs a current inspection before shift close.')
+  || !productionSource.includes('Accepted output needs accountable batch release before shift close.')
+  || !productionSource.includes('The controlled plan must be reconciled to the current Plant job before shift close.')
+  || !productionSource.includes("binding ${order.bindingCurrent ? 'current' : 'stale'}")
+  || !productionSource.includes('Carry-forward work needs a responsible owner.')
+  || !productionSource.includes('handoff.controlledOrders.some((order) => order.blockingReasons.length > 0)')
   || !productionSource.includes('activeDowntime')
   || !productionSource.includes('activeMaintenance')
   || !productionSource.includes("kind: 'shift_closed'")
@@ -5629,11 +5642,19 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('Prepare shift close file')
   || coreSource.includes('Prepare shift packet')
   || !coreSource.includes('Shift close checklist')
+  || !coreSource.includes('className="plant-shift-close-grid"')
+  || !coreCssSource.includes('.plant-shift-close-grid { min-width: 0; display: grid; grid-template-columns: repeat(3,minmax(0,1fr));')
   || coreSource.includes('AI shift close checklist')
   || !coreSource.includes('Review shift close')
   || !coreSource.includes('Shift closed by')
+  || !coreSource.includes('controlled-order blockers')
+  || !coreSource.includes('<summary>Controlled orders <span>{handoff.controlledOrders.length}</span></summary>')
+  || !coreSource.includes("Binding {order.bindingCurrent ? 'current' : 'stale'}")
+  || !coreSource.includes('every controlled order is released or safely owned forward')
+  || !coreSource.includes('const plantHandoffReady = shiftCloseReady || Boolean(currentShiftClose)')
+  || !coreSource.includes('currentShiftCloseEvidence?.handoff.controlledOrders.length')
   || !coreSource.includes("actorSuggestion: managedIdentity ? undefined : 'Shift supervisor'")
-  || !coreSource.includes('reasonSuggestion: `Output, material trace, quality, and maintenance checks reviewed for ${reviewedHandoff.shiftRef}.`')
+  || !coreSource.includes('reasonSuggestion: `Output, controlled orders, material trace, quality, and maintenance checks reviewed for ${reviewedHandoff.shiftRef}.`')
   || !coreSource.includes('evidenceReferenceSuggestion: `Shift close ${reviewedHandoff.shiftRef} · revision ${reviewedHandoff.sourceRevision}`')
   || !coreSource.includes('reasonSuggestion: `Material use reviewed for ${recordedJobId} during ${recordedShiftRef}.`')
   || !coreSource.includes('evidenceReferenceSuggestion: `Plant shift ${recordedShiftRef} · ${recordedJobId} · ${materialRef}')
@@ -5644,6 +5665,7 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('Copy close file')
   || coreSource.includes('Copy handoff')
   || !coreSource.includes('shiftHandoff.sourceCanonical === currentProductionCanonical')
+  || !coreSource.includes('shiftHandoff.plantOrderScope === plantOrderScope')
   || !coreSource.includes('shiftHandoff.shiftRef === handoffShiftRef.trim()')
   || !coreSource.includes('Active quality holds')
   || !coreSource.includes('Open quality problems')
@@ -16899,6 +16921,78 @@ async function verifyProductionRuntime() {
     assert(model.recordProductionShiftClose(shiftCloseOutput, outputOnlyHandoff, prematureCloseProof) === null, 'production_shift_close_without_material_succeeded')
     const shiftCloseMaterialProof = proof('ACT-SHIFT-CLOSE-MATERIAL', 3_320)
     const shiftCloseMaterial = model.recordProductionMaterialConsumption(shiftCloseOutput, 'JOB-1', 'RM-CLOSE-01', 'LOT-CLOSE-01', 1, 'kg', shiftRef, shiftCloseMaterialProof)
+    const closeExecutionPlan = plantModel.buildPlantOrderPlan({
+      planId: 'PLN-SHIFT-CLOSE-001', sourceDigest: model.productionJobPlanSourceDigest('plant:local-sample', shiftCloseMaterial.jobs[0]),
+      job: { jobId: 'JOB-1', product: 'Test batch', targetQuantity: 9, outputBatchId: 'BATCH-SHIFT-CLOSE-001' },
+      materials: [{ materialId: 'MAT-CLOSE-001', name: 'Close material', unit: 'kg', quantityPerUnitMilli: 1_000 }],
+      workCentres: [{ workCentreId: 'WC-CLOSE-001', name: 'Close line' }],
+      routing: [{ operationId: 'OP-CLOSE-10', sequence: 1, name: 'Close operation', workCentreId: 'WC-CLOSE-001', minutesPerUnitMilli: 1_000 }],
+    })
+    const closeEmptyExecution = plantModel.createEmptyPlantOrderState()
+    const closeOrderExecution = plantModel.applyPlantOrderPlan(closeEmptyExecution, closeExecutionPlan, proof('ACT-SHIFT-CLOSE-PLAN', 3_321), closeEmptyExecution.headDigest).state
+    const controlledUnownedState = model.validateProductionState({ ...shiftCloseMaterial, orderExecution: closeOrderExecution })
+    const controlledUnownedHandoff = model.buildProductionShiftHandoff(controlledUnownedState, shiftRef)
+    assert(controlledUnownedHandoff?.controlledOrders.length === 1
+      && controlledUnownedHandoff.controlledOrders[0].jobId === 'JOB-1'
+      && controlledUnownedHandoff.controlledOrders[0].planId === closeExecutionPlan.planId
+      && controlledUnownedHandoff.controlledOrders[0].planDigest === closeExecutionPlan.packageDigest
+      && controlledUnownedHandoff.controlledOrders[0].bindingCurrent === true
+      && controlledUnownedHandoff.controlledOrders[0].disposition === 'carry_forward'
+      && controlledUnownedHandoff.controlledOrders[0].nextOperation?.operationId === 'OP-CLOSE-10'
+      && controlledUnownedHandoff.controlledOrders[0].blockingReasons.includes('Carry-forward work needs a responsible owner.')
+      && controlledUnownedHandoff.controlledOrders[0].blockingReasons.includes('Carry-forward work needs a due time.'),
+    'production_shift_close_controlled_order_evidence_missing')
+    const wrongScopeHandoff = model.buildProductionShiftHandoff(controlledUnownedState, shiftRef, 'plant:wrong-workspace')
+    assert(wrongScopeHandoff?.controlledOrders[0].bindingCurrent === false
+      && wrongScopeHandoff.controlledOrders[0].blockingReasons.includes('The controlled plan must be reconciled to the current Plant job before shift close.'),
+    'production_shift_close_wrong_scope_plan_binding_succeeded')
+    assert(model.recordProductionShiftClose(controlledUnownedState, controlledUnownedHandoff, proof('ACT-SHIFT-CLOSE-UNOWNED-CONTROLLED', 3_325)) === null, 'production_shift_close_unowned_controlled_carry_forward_succeeded')
+    const controlledOwnedState = model.validateProductionState({
+      ...controlledUnownedState,
+      jobs: controlledUnownedState.jobs.map((job) => job.id === 'JOB-1' ? { ...job, owner: 'Incoming shift lead', priority: 'urgent', dueAt: '2026-07-24T10:00:00.000Z' } : job),
+    })
+    const controlledOwnedHandoff = model.buildProductionShiftHandoff(controlledOwnedState, shiftRef)
+    assert(controlledOwnedHandoff?.controlledOrders[0].blockingReasons.length === 0
+      && controlledOwnedHandoff.controlledOrders[0].owner === 'Incoming shift lead'
+      && controlledOwnedHandoff.controlledOrders[0].dueAt === '2026-07-24T10:00:00.000Z'
+      && model.formatProductionShiftHandoff(controlledOwnedHandoff).includes(`plan ${closeExecutionPlan.planId}`)
+      && model.formatProductionShiftHandoff(controlledOwnedHandoff).includes(closeExecutionPlan.packageDigest),
+    'production_shift_close_owned_controlled_carry_forward_not_ready')
+    assert(model.recordProductionShiftClose(controlledOwnedState, { ...controlledOwnedHandoff, controlledOrders: [] }, proof('ACT-SHIFT-CLOSE-TAMPERED-CONTROLLED', 3_328)) === null, 'production_shift_close_tampered_controlled_evidence_succeeded')
+    assert(model.recordProductionShiftClose(controlledOwnedState, {
+      ...controlledOwnedHandoff,
+      controlledOrders: controlledOwnedHandoff.controlledOrders.map((order) => ({ ...order, planId: 'PLN-FORGED-FIELD' })),
+    }, proof('ACT-SHIFT-CLOSE-TAMPERED-CONTROLLED-FIELD', 3_328)) === null, 'production_shift_close_tampered_controlled_field_succeeded')
+    const controlledClosed = model.recordProductionShiftClose(controlledOwnedState, controlledOwnedHandoff, proof('ACT-SHIFT-CLOSE-OWNED-CONTROLLED', 3_329))
+    assert(controlledClosed?.events[0].kind === 'shift_closed'
+      && model.currentProductionShiftClose(controlledClosed, shiftRef)?.actionId === 'ACT-SHIFT-CLOSE-OWNED-CONTROLLED',
+    'production_shift_close_owned_controlled_carry_forward_failed')
+    const closedControlledEvidence = model.currentProductionShiftCloseEvidence(controlledClosed, shiftRef)
+    assert(closedControlledEvidence?.handoff.controlledOrders.length === 1
+      && closedControlledEvidence.handoff.controlledOrders[0].planId === closeExecutionPlan.planId
+      && closedControlledEvidence.handoff.controlledOrders[0].planDigest === closeExecutionPlan.packageDigest,
+    'production_shift_close_reload_lost_controlled_evidence')
+    const untouchedControlledJob = { id: 'JOB-2', line: 'Line 02', product: 'Second controlled batch', target: 4, output: 0, owner: 'Line 02 lead', priority: 'normal', dueAt: '2026-07-24T12:00:00.000Z' }
+    const untouchedControlledPlan = plantModel.buildPlantOrderPlan({
+      planId: 'PLN-SHIFT-CLOSE-002', sourceDigest: model.productionJobPlanSourceDigest('plant:local-sample', untouchedControlledJob),
+      job: { jobId: untouchedControlledJob.id, product: untouchedControlledJob.product, targetQuantity: 4, outputBatchId: 'BATCH-SHIFT-CLOSE-002' },
+      materials: [{ materialId: 'MAT-CLOSE-002', name: 'Second material', unit: 'kg', quantityPerUnitMilli: 1_000 }],
+      workCentres: [{ workCentreId: 'WC-CLOSE-002', name: 'Second line' }],
+      routing: [{ operationId: 'OP-CLOSE-20', sequence: 1, name: 'Second operation', workCentreId: 'WC-CLOSE-002', minutesPerUnitMilli: 1_000 }],
+    })
+    const untouchedControlledExecution = plantModel.applyPlantOrderPlan(plantModel.createEmptyPlantOrderState(), untouchedControlledPlan, proof('ACT-SHIFT-CLOSE-PLAN-002', 3_322), plantModel.createEmptyPlantOrderState().headDigest).state
+    const untouchedControlledState = model.validateProductionState({ ...shiftCloseMaterial, jobs: [...shiftCloseMaterial.jobs, untouchedControlledJob], orderExecution: untouchedControlledExecution })
+    const untouchedControlledHandoff = model.buildProductionShiftHandoff(untouchedControlledState, shiftRef)
+    assert(untouchedControlledHandoff?.controlledOrders.some((order) => order.jobId === untouchedControlledJob.id)
+      && !untouchedControlledHandoff.shiftEntries.some((entry) => entry.jobId === untouchedControlledJob.id)
+      && !untouchedControlledHandoff.materialEntries.some((entry) => entry.jobId === untouchedControlledJob.id),
+    'production_shift_close_omitted_controlled_execution_without_top_level_shift_event')
+    const staleControlledState = model.validateProductionState({ ...shiftCloseMaterial, orderExecution })
+    const staleControlledHandoff = model.buildProductionShiftHandoff(staleControlledState, shiftRef)
+    assert(staleControlledHandoff?.controlledOrders[0].bindingCurrent === false
+      && staleControlledHandoff.controlledOrders[0].blockingReasons.includes('The controlled plan must be reconciled to the current Plant job before shift close.')
+      && model.recordProductionShiftClose(staleControlledState, staleControlledHandoff, proof('ACT-SHIFT-CLOSE-STALE-CONTROLLED', 3_329)) === null,
+    'production_shift_close_stale_controlled_binding_succeeded')
     const closeHandoff = model.buildProductionShiftHandoff(shiftCloseMaterial, shiftRef)
     const shiftCloseProof = proof('ACT-SHIFT-CLOSE', 3_330)
     const closedShift = model.recordProductionShiftClose(shiftCloseMaterial, closeHandoff, shiftCloseProof)
@@ -16951,7 +17045,7 @@ async function verifyProductionRuntime() {
     assert(model.currentProductionShiftClose(forgedHeldClose, shiftRef) === null, 'production_shift_close_forged_blocked_source_remained_current')
     const shiftCloseDowntime = model.startProductionDowntime(shiftCloseMaterial, 'MC-1', proof('ACT-SHIFT-CLOSE-DOWNTIME', 3_350))
     assert(model.recordProductionShiftClose(shiftCloseDowntime, model.buildProductionShiftHandoff(shiftCloseDowntime, shiftRef), proof('ACT-SHIFT-CLOSE-WCM', 3_360)) === null, 'production_shift_close_with_open_wcm_succeeded')
-    productionRuntimeChecks += 18
+    productionRuntimeChecks += 28
 
     let machineState = resolved
     const observedStates = ['attention', 'stopped', 'attention', 'running', 'stopped', 'running']
