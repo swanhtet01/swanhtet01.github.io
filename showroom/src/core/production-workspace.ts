@@ -60,6 +60,21 @@ export type ProductionJob = {
   shopDemandSource?: ProductionShopDemandSource
 }
 
+export function productionJobPlanSourceDigest(scope: string, job: ProductionJob) {
+  return plantOrderEvidenceDigest({
+    scope,
+    job: {
+      id: job.id,
+      product: job.product,
+      target: job.target,
+      output: job.output,
+      scrap: job.scrap ?? 0,
+      qualityHoldActionId: job.qualityHold?.actionId ?? null,
+      closureActionId: job.closure?.actionId ?? null,
+    },
+  })
+}
+
 export type ProductionIssueResolution = {
   actionId: string
   resolvedAt: string
@@ -287,6 +302,7 @@ export type ProductionShiftOutput = {
 
 export type ProductionShiftHandoff = {
   shiftRef: string
+  plantOrderScope: string
   sourceRevision: number
   sourceCanonical: string
   shiftOutput: ProductionShiftOutput
@@ -332,6 +348,47 @@ export type ProductionShiftHandoff = {
     recordedBy: string
     reason: string
     evidenceReference: string
+  }>
+  controlledOrders: Array<{
+    jobId: string
+    product: string
+    planId: string
+    planDigest: string
+    bindingCurrent: boolean
+    status: 'planned' | 'shortfall' | 'ready' | 'released' | 'in_process' | 'inspection_due' | 'quality_hold' | 'ready_to_release' | 'released_to_stock'
+    disposition: 'released' | 'complete_not_released' | 'carry_forward'
+    targetUnits: number
+    outputUnits: number
+    acceptedUnits: number
+    completedOperationCount: number
+    operationCount: number
+    genealogyLinkCount: number
+    owner?: string
+    dueAt?: string
+    nextOperation?: {
+      operationId: string
+      name: string
+      status: 'blocked' | 'ready' | 'in_progress'
+      remainingUnits: number
+    }
+    inspection?: {
+      inspectionId: string
+      result: 'pass' | 'fail'
+      inspectedUnits: number
+      acceptedUnits: number
+      rejectedUnits: number
+      actionId: string
+      evidenceReference: string
+    }
+    batchRelease?: {
+      releaseId: string
+      actionId: string
+      releasedAt: string
+      releasedBy: string
+      evidenceReference: string
+    }
+    exceptions: string[]
+    blockingReasons: string[]
   }>
   unfinishedJobs: Array<{
     id: string
@@ -2189,8 +2246,9 @@ export function productionMaintenanceDueQueue(
   return { contract: 'supermega.production.maintenance-due-queue.v1', asOf, items }
 }
 
-export function buildProductionShiftHandoff(state: ProductionState, shiftRef: string): ProductionShiftHandoff | null {
+export function buildProductionShiftHandoff(state: ProductionState, shiftRef: string, plantOrderScope = 'plant:local-sample'): ProductionShiftHandoff | null {
   if (!validCanonicalText(shiftRef, 80)) return null
+  if (!validCanonicalText(plantOrderScope, 160)) return null
   const current = validateProductionState(state)
   const shiftEntries = current.events
     .filter((event) => event.kind === 'output_recorded' && event.shiftRef === shiftRef)
@@ -2255,6 +2313,78 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
         evidenceReference: event.evidenceReference,
       }
     })
+  const controlledOrders: ProductionShiftHandoff['controlledOrders'] = productionOrderPortfolioEntries(current).flatMap(({ jobId, execution }) => {
+    const projection = projectPlantOrder(execution)
+    const plan = projection.plan
+    const job = current.jobs.find((candidate) => candidate.id === jobId)
+    if (!plan || !job || projection.status === 'unplanned') throw new Error(`Controlled shift order ${jobId} is missing its reviewed plan or Production job.`)
+    const nextOperation = projection.operations.find((operation) => operation.status !== 'complete')
+    const bindingCurrent = productionJobPlanSourceDigest(plantOrderScope, job) === plan.sourceDigest
+      && job.product === plan.job.product
+      && job.target - job.output - (job.scrap ?? 0) === plan.job.targetQuantity
+      && !job.qualityHold
+      && !job.closure
+    const disposition = projection.status === 'released_to_stock'
+      ? 'released' as const
+      : projection.status === 'inspection_due' || projection.status === 'quality_hold' || projection.status === 'ready_to_release'
+        ? 'complete_not_released' as const
+        : 'carry_forward' as const
+    const exceptions: string[] = []
+    const blockingReasons: string[] = []
+    if (!bindingCurrent) exceptions.push('The Plant job changed after this controlled plan was reviewed.')
+    if (nextOperation) exceptions.push(`Next operation ${nextOperation.operationId} has ${nextOperation.remainingQuantity} units remaining.`)
+    if (projection.totalOutput > 0 && !projection.latestInspection) exceptions.push('Current controlled output has no inspection.')
+    if (projection.qualityHold) exceptions.push(`Inspection ${projection.qualityHold.inspectionId} retains a quality hold.`)
+    if (projection.status === 'ready_to_release') exceptions.push('Accepted output is waiting for accountable batch release.')
+    if (projection.materialIssues.length > projection.genealogy.length) exceptions.push('Issued material is missing an exact input-lot to output-batch link.')
+    if (projection.status === 'inspection_due') blockingReasons.push('Complete output needs a current inspection before shift close.')
+    if (projection.status === 'quality_hold') blockingReasons.push('A controlled batch quality hold must be resolved before shift close.')
+    if (projection.status === 'ready_to_release') blockingReasons.push('Accepted output needs accountable batch release before shift close.')
+    if (!bindingCurrent) blockingReasons.push('The controlled plan must be reconciled to the current Plant job before shift close.')
+    if (disposition === 'carry_forward' && !job.owner) blockingReasons.push('Carry-forward work needs a responsible owner.')
+    if (disposition === 'carry_forward' && !job.dueAt) blockingReasons.push('Carry-forward work needs a due time.')
+    return [{
+      jobId,
+      product: job.product,
+      planId: plan.planId,
+      planDigest: plan.packageDigest,
+      bindingCurrent,
+      status: projection.status,
+      disposition,
+      targetUnits: plan.job.targetQuantity,
+      outputUnits: projection.totalOutput,
+      acceptedUnits: projection.metrics.acceptedQuantity,
+      completedOperationCount: projection.metrics.completedOperationCount,
+      operationCount: projection.operations.length,
+      genealogyLinkCount: projection.genealogy.length,
+      ...(job.owner ? { owner: job.owner } : {}),
+      ...(job.dueAt ? { dueAt: job.dueAt } : {}),
+      ...(nextOperation ? { nextOperation: {
+        operationId: nextOperation.operationId,
+        name: nextOperation.name,
+        status: nextOperation.status as 'blocked' | 'ready' | 'in_progress',
+        remainingUnits: nextOperation.remainingQuantity,
+      } } : {}),
+      ...(projection.latestInspection ? { inspection: {
+        inspectionId: projection.latestInspection.id,
+        result: projection.latestInspection.result,
+        inspectedUnits: projection.latestInspection.inspectedQuantity,
+        acceptedUnits: projection.latestInspection.acceptedQuantity,
+        rejectedUnits: projection.latestInspection.rejectedQuantity,
+        actionId: projection.latestInspection.proof.actionId,
+        evidenceReference: projection.latestInspection.proof.evidenceReference,
+      } } : {}),
+      ...(projection.batchRelease ? { batchRelease: {
+        releaseId: projection.batchRelease.id,
+        actionId: projection.batchRelease.proof.actionId,
+        releasedAt: projection.batchRelease.proof.capturedAt,
+        releasedBy: projection.batchRelease.proof.actor,
+        evidenceReference: projection.batchRelease.proof.evidenceReference,
+      } } : {}),
+      exceptions,
+      blockingReasons,
+    }]
+  })
   const unfinishedJobs = current.jobs
     .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
     .sort(compareProductionJobSchedule)
@@ -2356,6 +2486,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
   })
   return {
     shiftRef,
+    plantOrderScope,
     sourceRevision: current.revision,
     sourceCanonical: productionCanonical(current),
     shiftOutput: productionShiftOutput(current, shiftRef),
@@ -2363,6 +2494,7 @@ export function buildProductionShiftHandoff(state: ProductionState, shiftRef: st
     materialEntries,
     materialTotals,
     shortCloses,
+    controlledOrders,
     unfinishedJobs,
     activeHolds,
     priorityProblems,
@@ -2403,6 +2535,19 @@ export function formatProductionShiftHandoff(handoff: ProductionShiftHandoff) {
   if (!handoff.shortCloses.length) lines.push('- None')
   for (const entry of handoff.shortCloses) {
     lines.push(`- ${handoffLine(entry.jobId)} · ${handoffLine(entry.product)} · ${entry.goodUnits} good · ${entry.scrapUnits} scrap · ${entry.remainingUnits} not produced · closed ${entry.recordedAt} by ${handoffLine(entry.recordedBy)} · ${handoffLine(entry.reason)} · evidence ${handoffLine(entry.evidenceReference)} · action ${handoffLine(entry.actionId)}`)
+  }
+  lines.push('', `Controlled orders (${handoff.controlledOrders.length})`)
+  if (!handoff.controlledOrders.length) lines.push('- None touched by this shift')
+  for (const order of handoff.controlledOrders) {
+    const owner = order.owner ? `owner ${handoffLine(order.owner)}` : 'owner missing'
+    const due = order.dueAt ? `due ${order.dueAt}` : 'due time missing'
+    lines.push(`- ${handoffLine(order.jobId)} | ${handoffLine(order.product)} | ${order.disposition} | ${order.status} | binding ${order.bindingCurrent ? 'current' : 'stale'} | ${owner} | ${due} | plan ${handoffLine(order.planId)} | digest ${order.planDigest}`)
+    lines.push(`  Operations ${order.completedOperationCount}/${order.operationCount} | output ${order.outputUnits}/${order.targetUnits} | accepted ${order.acceptedUnits} | genealogy ${order.genealogyLinkCount}`)
+    if (order.nextOperation) lines.push(`  Next ${handoffLine(order.nextOperation.operationId)} | ${handoffLine(order.nextOperation.name)} | ${order.nextOperation.status} | ${order.nextOperation.remainingUnits} remaining`)
+    if (order.inspection) lines.push(`  Inspection ${handoffLine(order.inspection.inspectionId)} | ${order.inspection.result} | ${order.inspection.acceptedUnits} accepted | ${order.inspection.rejectedUnits} rejected | evidence ${handoffLine(order.inspection.evidenceReference)} | action ${handoffLine(order.inspection.actionId)}`)
+    if (order.batchRelease) lines.push(`  Release ${handoffLine(order.batchRelease.releaseId)} | ${order.batchRelease.releasedAt} by ${handoffLine(order.batchRelease.releasedBy)} | evidence ${handoffLine(order.batchRelease.evidenceReference)} | action ${handoffLine(order.batchRelease.actionId)}`)
+    for (const exception of order.exceptions) lines.push(`  Exception: ${handoffLine(exception)}`)
+    for (const blocker of order.blockingReasons) lines.push(`  BLOCKED: ${handoffLine(blocker)}`)
   }
   lines.push(
     '',
@@ -2465,7 +2610,7 @@ function shiftCloseSummary(
   return `Closed shift ${shiftRef} with ${goodUnits} good, ${scrapUnits} scrap, ${outputEntryCount} output entries, ${materialEntryCount} material entries`
 }
 
-export function currentProductionShiftClose(state: ProductionState, shiftRef?: string) {
+export function currentProductionShiftCloseEvidence(state: ProductionState, shiftRef?: string, plantOrderScope = 'plant:local-sample') {
   const current = validateProductionState(state)
   const event = current.events[0]
   const closeShiftRef = event?.shiftRef
@@ -2480,7 +2625,7 @@ export function currentProductionShiftClose(state: ProductionState, shiftRef?: s
     events: current.events.slice(1),
   })
   if (`sha256:${sha256Hex(productionCanonical(sourceState))}` !== event.sourceDigest) return null
-  const handoff = buildProductionShiftHandoff(sourceState, closeShiftRef)
+  const handoff = buildProductionShiftHandoff(sourceState, closeShiftRef, plantOrderScope)
   if (!handoff
     || handoff.sourceRevision !== event.sourceRevision
     || handoff.shiftOutput.goodUnits !== event.goodUnits
@@ -2494,8 +2639,13 @@ export function currentProductionShiftClose(state: ProductionState, shiftRef?: s
     || handoff.openQualityIssues.length > 0
     || handoff.priorityProblems.length > 0
     || handoff.activeDowntime.length > 0
-    || handoff.activeMaintenance.length > 0) return null
-  return event
+    || handoff.activeMaintenance.length > 0
+    || handoff.controlledOrders.some((order) => order.blockingReasons.length > 0)) return null
+  return { event, handoff }
+}
+
+export function currentProductionShiftClose(state: ProductionState, shiftRef?: string, plantOrderScope = 'plant:local-sample') {
+  return currentProductionShiftCloseEvidence(state, shiftRef, plantOrderScope)?.event ?? null
 }
 
 export function recordProductionShiftClose(
@@ -2503,7 +2653,7 @@ export function recordProductionShiftClose(
   handoff: ProductionShiftHandoff,
   proof: ProductionActionProof,
 ) {
-  if (!validProof(proof) || !handoff || !validCanonicalText(handoff.shiftRef, 80)) return null
+  if (!validProof(proof) || !handoff || !validCanonicalText(handoff.shiftRef, 80) || !validCanonicalText(handoff.plantOrderScope, 160)) return null
   const current = validateProductionState(state)
   const sourceDigest = productionShiftCloseSourceDigest(handoff)
   const goodUnits = handoff.shiftOutput.goodUnits
@@ -2521,12 +2671,12 @@ export function recordProductionShiftClose(
     && existing.outputEntryCount === outputEntryCount
     && existing.materialEntryCount === materialEntryCount
     && sameProof(existing, proof) ? current : null
-  const expectedHandoff = buildProductionShiftHandoff(current, handoff.shiftRef)
+  const expectedHandoff = buildProductionShiftHandoff(current, handoff.shiftRef, handoff.plantOrderScope)
   if (!expectedHandoff || JSON.stringify(expectedHandoff) !== JSON.stringify(handoff)) return null
   const latestEvent = current.events[0]
   if (actionIdIsUsed(current, proof.actionId)
     || current.revision >= Number.MAX_SAFE_INTEGER
-    || currentProductionShiftClose(current) !== null
+    || currentProductionShiftClose(current, undefined, handoff.plantOrderScope) !== null
     || (latestEvent && timestampBefore(proof.capturedAt, latestEvent.createdAt))
     || (current.orderExecution?.commands.length
       && timestampBefore(proof.capturedAt, current.orderExecution.commands[current.orderExecution.commands.length - 1].payload.proof.capturedAt))
@@ -2539,7 +2689,8 @@ export function recordProductionShiftClose(
     || handoff.openQualityIssues.length > 0
     || handoff.priorityProblems.length > 0
     || handoff.activeDowntime.length > 0
-    || handoff.activeMaintenance.length > 0) return null
+    || handoff.activeMaintenance.length > 0
+    || handoff.controlledOrders.some((order) => order.blockingReasons.length > 0)) return null
   const event = eventFor(proof, {
     kind: 'shift_closed',
     subjectId: handoff.shiftRef,
