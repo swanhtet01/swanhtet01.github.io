@@ -24,11 +24,11 @@ This charter refines the active company goal; it does not declare the current re
 
 The local candidate now proves that Shop, Plant, Website, and Ecommerce each move from a one-field product setup to the correct separate workspace and one useful first task on mobile and desktop. The complete local browser matrix has fourteen workflow gates and 98 deterministic checkpoints. First-value timing is now bound to the latest product-onboarding journey, so an old demo completion cannot make a new workspace appear activated.
 
-Production does not yet serve that candidate. On 2026-08-04 both canonical release endpoints still identified `25cac2f50dfcc210d29dd1fd794ac194083f90d1`, while the verified local candidate was `c5d0b39b545463f7bd97a87fbf16a9df4ccf3573`. The hosted app root still opens the older multi-product and support-helper dashboard; the local root opens the current product directly and keeps the four-product chooser behind an explicit switch action. Public DNS resolves the app to Vercel, and a cleared Ally DNS cache restored normal access, so the remaining customer-facing issue is release drift rather than a missing domain.
+Production does not yet serve that candidate. On 2026-08-04 both canonical release endpoints still identified `25cac2f50dfcc210d29dd1fd794ac194083f90d1`, while integrated candidate `0e9883eaa1a2a936c3e77d057b598f9956d2557c` contains current main plus the verified product candidate. The hosted app root still opens the older multi-product and support-helper dashboard; the integrated root opens the current product directly and keeps the four-product chooser behind an explicit switch action. Public DNS resolves the app to Vercel, and a cleared Ally DNS cache restored normal access, so the remaining customer-facing issue is release drift rather than a missing domain.
 
 The company constraint is no longer a missing fifth product, framework, or menu. Seven managed-pilot gates remain blocked: hosted Postgres rehearsal, private storage proof, live managed product contract, managed persistence, security, a named pilot, and production activation. The local foundation now also has a digest-bound public Data API quarantine: it covers the exact 27-table/two-sequence legacy catalog, removes browser grants and risky future-object defaults, preserves the server contact path, rejects drift, and survives PostgreSQL 17 backup/restore. This is local evidence only. The current CEO priority is therefore:
 
-1. Reconcile the verified candidate onto current `origin/main`, then require a protected preview, owner-authorized paired app/public promotion, rollback target, exact matching release metadata, and a fresh live browser matrix before calling the redesign live.
+1. Retain integrated candidate `0e9883ea`, then require its exact release handoff, protected preview, owner-authorized paired app/public promotion, rollback target, matching release metadata, and a fresh live browser matrix before calling the redesign live.
 2. Preserve the simple four-product first session and its browser evidence while that integration is reviewed; do not add another product, shell, framework, or navigation layer.
 3. On an approved isolated Supabase clone, apply the digest-bound public browser quarantine plus v8-v10 and prove identity binding, tenant isolation, explicit grants/RLS, idempotency, conflict, active-session revocation, private Storage, backup, restore, and observability. Local PostgreSQL 17 already proves the exact Auth project/session/user contract and immediate denial after session deletion; repeat it under hosted Supabase before any managed claim.
 4. Run five named operator sessions and measure first value, time to value, correction effort, and repeat useful work.
@@ -212,7 +212,7 @@ Production instrumentation is not yet available, so targets below are provisiona
 
 ## Current UX evidence baseline
 
-The strict 2026-08-04 candidate audit used Edge at 390 x 844 and 1280 x 900. It passed 28 route checks and fourteen end-to-end workflow checks with no route, workflow, simplicity-target, console, page, external-request, unnamed-action, horizontal-overflow, disclosure, or mobile touch-target failures. Report digest: `sha256:88678357453112e9b7b911f54da8467c24a66341b724ed899dabe9079e91fd11`.
+The strict 2026-08-04 integrated audit used Edge at 390 x 844 and 1280 x 900. It passed 28 route checks and fourteen end-to-end workflow checks with no route, workflow, simplicity-target, console, page, external-request, unnamed-action, horizontal-overflow, disclosure, or mobile touch-target failures. Report digest: `sha256:736bab5afec8648a9507c7b4dace44d7685fc439e6fc2be7643af18fb490ce71`.
 
 `Visible actions` counts settled interactive elements. `Mobile first viewport` counts controls visible without scrolling. These budgets protect simplicity; they do not imply every visible control deserves equal emphasis.
 
@@ -241,7 +241,7 @@ A product release is not ready because the build passes. It is ready only when t
 
 ## Immediate sequence
 
-1. Reconcile the candidate with current `origin/main` on a new owner-reviewed integration branch. Preserve both upstream safeguards and candidate product behavior; run the complete gate before preparing the existing exact-commit release handoff. No force push or direct deployment from this checkout.
+1. Retain integrated candidate `0e9883ea`, which preserves current-main safeguards and candidate product behavior and passes the complete local and strict rendered gates. Prepare and verify the existing exact-commit release handoff; no force push or direct deployment from this checkout.
 2. After separate owner authorization, use the protected coordinated workflow for one paired app/public release. Capture rollback targets first; then require matching `__release.json`, current static assets, all public product routes, and the mobile/desktop first-session matrix against the promoted commit.
 3. Preserve Ecommerce-to-Shop, Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file proof at both viewports.
 4. Preserve the now-proven Blueprint no-write preview inside each product's existing `Next steps` data tool. Keep its deterministic mapping, repair, digest, review lock, and `staged_not_applied` contracts; do not create another public setup page.
@@ -270,6 +270,6 @@ A product release is not ready because the build passes. It is ready only when t
 ## Assumptions and unresolved evidence
 
 - No production activation, retention, revenue, support-volume, or cohort dataset was available for this decision. KPI targets are provisional pilot targets.
-- The local route audit is current to candidate `c5d0b39b` on 2026-08-04; production remains paired at `25cac2f5` and stale until an integrated exact commit passes protected preview, paired promotion, rollback, and fresh live evidence.
+- The local route audit is current to integrated candidate `0e9883ea` on 2026-08-04; production remains paired at `25cac2f5` and stale until that exact integrated line passes protected preview, paired promotion, rollback, and fresh live evidence.
 - Myanmar-specific payment, tax, data-residency, language, hardware, and channel requirements require client and legal discovery before an adapter can be called production-ready.
 - Framework and integration adoption remains conditional on measured device performance, operating cost, security review, and the release gates above.
