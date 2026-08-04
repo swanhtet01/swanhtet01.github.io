@@ -22,6 +22,7 @@ const kernelWorkflow = await readFile(resolve(root, '.github/workflows/kernel-de
 const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mjs'), 'utf8')
 const appVerifier = await readFile(resolve(root, 'tools/verify_app_release_live.mjs'), 'utf8')
 const publicVerifier = await readFile(resolve(root, 'tools/verify_public_release_live.mjs'), 'utf8')
+const routeQualityAudit = await readFile(resolve(root, 'tools/audit_product_routes.mjs'), 'utf8')
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const gitIgnore = await readFile(resolve(root, '.gitignore'), 'utf8')
 const releaseBarrier = await readFile(resolve(root, 'tools/verify_coordinated_release_live.mjs'), 'utf8')
@@ -239,8 +240,15 @@ requireContract('app build contract',
   config.buildCommand === 'npm run app:build'
   && generator.includes("buildCommand: 'npm run app:build'")
   && packageJson.scripts?.['app:build'] === 'npm run app:release:write && npm --prefix showroom run build'
-  && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
+  && packageJson.scripts?.['app:build:checked'] === 'npm run app:build && npm run app:verify && npm run public:build && npm run qa:routes:artifacts && node tools/verify_app_release_live.mjs --artifact-self-test'
+  && packageJson.scripts?.['qa:routes:artifacts'] === 'node tools/audit_product_routes.mjs --require-targets'
   && ciWorkflow.includes('run: npm run app:build:checked'))
+requireContract('checked build enforces route-level WCAG evidence without customer runtime code',
+  routeQualityAudit.includes("import AxeBuilder from '@axe-core/playwright'")
+  && routeQualityAudit.includes("const accessibilityTags = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']")
+  && routeQualityAudit.includes('new AxeBuilder({ page }).withTags(tags).analyze()')
+  && routeQualityAudit.includes('accessibility_violations:')
+  && routeQualityAudit.includes('accessibilityViolations: result.accessibility.violationCount'))
 requireContract('remote dependency install contract', config.installCommand === 'npm --prefix showroom ci' && generator.includes("installCommand: 'npm --prefix showroom ci'"))
 requireContract('remote security inputs are included', generator.includes("'!.env.app.example'"))
 requireContract('canonical output directory', config.outputDirectory === 'showroom/dist')
@@ -301,7 +309,7 @@ requireContract('real migration proof precedes every production candidate',
 requireContract('app guard remains non-mutating but runs API tests', appWorkflow.includes("- 'supermega_runtime/**'") && appWorkflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v") && !/vercel@56\.1\.0\s+(?:deploy|promote|rollback)\b/.test(appWorkflow) && !appWorkflow.includes('VERCEL_TOKEN') && !/environment:\s*production/.test(appWorkflow))
 requireContract('protected app candidate verification', workflow.includes("VERCEL_PROTECTED_PREVIEW: '1'") && appVerifier.includes("'curl', path, '--deployment'") && appVerifier.includes('deploymentFunctions') && appVerifier.includes("JSON.stringify(['api/app'])") && appVerifier.includes('hosted_agent_runtime_contract_wrong'))
 requireContract('current app asset contract gates local build and protected candidate',
-  packageJson.scripts['app:build:checked'] === 'npm run app:build && npm run app:verify && node tools/verify_app_release_live.mjs --artifact-self-test'
+  packageJson.scripts['app:build:checked'] === 'npm run app:build && npm run app:verify && npm run public:build && npm run qa:routes:artifacts && node tools/verify_app_release_live.mjs --artifact-self-test'
   && workflow.includes('Verify immutable app asset contract')
   && workflow.includes('node tools/verify_app_release_live.mjs --artifact-self-test')
   && workflow.indexOf('Verify immutable app asset contract') < workflow.indexOf('Deploy isolated app production candidate')

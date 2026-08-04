@@ -1626,6 +1626,7 @@ textarea { min-height: 72px; resize: vertical; }
 }
 
 @media (min-width: 841px) {
+  .orders-module, .orders-module.has-return-draft { height: auto; min-height: 100%; overflow: visible; scrollbar-gutter: auto; }
   .shop-counter-module { overflow-y: auto; scrollbar-gutter: stable; }
   .shop-counter-module > .shop-counter-surface { min-height: 500px; flex: 0 0 clamp(500px,calc(100svh - 280px),620px); overflow: hidden; }
   .operations-screen:not(.commerce-screen) .workspace-view { overflow-y: auto; scrollbar-gutter: stable; }
@@ -1706,7 +1707,7 @@ textarea { min-height: 72px; resize: vertical; }
   .queue-panel .record-list, .decision-list-panel .decision-list, .order-queue-panel .order-list, .job-panel .job-list { flex: none; }
   .workspace-view { max-width: 100%; min-width: 0; overflow: visible !important; }
   .operation-module { height: auto; }
-  .orders-module { overflow: visible; scrollbar-gutter: auto; }
+  .orders-module, .orders-module.has-return-draft { overflow: visible; scrollbar-gutter: auto; }
   .orders-module > .order-workspace { min-height: 0; flex: none; }
   .production-operation-module { overflow: visible; padding-right: 0; scrollbar-gutter: auto; }
   .production-operation-module > .production-view { min-height: 0; }

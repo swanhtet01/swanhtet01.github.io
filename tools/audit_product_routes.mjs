@@ -5,6 +5,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, extname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import AxeBuilder from '@axe-core/playwright'
 import { chromium } from 'playwright-core'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -18,6 +19,7 @@ const routeFilter = routeIndex >= 0 ? process.argv[routeIndex + 1] : null
 const viewportIndex = process.argv.indexOf('--viewport')
 const viewportFilter = viewportIndex >= 0 ? process.argv[viewportIndex + 1] : null
 const workflowOnly = process.argv.includes('--workflow')
+const accessibilityTags = ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']
 
 function fail(message) {
   throw new Error(message)
@@ -223,6 +225,37 @@ async function collectPageMetrics(page) {
   })
 }
 
+async function collectAccessibility(page, tags) {
+  const result = await new AxeBuilder({ page }).withTags(tags).analyze()
+  return {
+    engine: '@axe-core/playwright',
+    engineVersion: result.testEngine?.version ?? null,
+    incompleteCount: result.incomplete.reduce((total, finding) => total + finding.nodes.length, 0),
+    passes: result.passes.length,
+    tags,
+    violationCount: result.violations.reduce((total, finding) => total + finding.nodes.length, 0),
+    violations: result.violations
+      .map((finding) => ({
+        help: finding.help,
+        helpUrl: finding.helpUrl,
+        id: finding.id,
+        impact: finding.impact ?? 'unknown',
+        nodes: finding.nodes.map((node) => ({
+          failureSummary: String(node.failureSummary ?? '').replace(/\s+/g, ' ').trim().slice(0, 500),
+          targets: node.target
+            .map((target) => Array.isArray(target) ? target.join(' > ') : String(target))
+            .map((target) => target.slice(0, 240))
+            .sort(),
+        })),
+        targets: finding.nodes
+          .flatMap((node) => node.target.map((target) => Array.isArray(target) ? target.join(' > ') : String(target)))
+          .map((target) => target.slice(0, 240))
+          .sort(),
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  }
+}
+
 function evaluateFindings(route, viewport, pageResult) {
   const failures = []
   const metrics = pageResult.metrics
@@ -245,6 +278,10 @@ function evaluateFindings(route, viewport, pageResult) {
   if (pageResult.consoleErrors.length) failures.push(`console_errors:${pageResult.consoleErrors.length}`)
   if (pageResult.pageErrors.length) failures.push(`page_errors:${pageResult.pageErrors.length}`)
   if (pageResult.externalRequests.length) failures.push(`external_requests:${pageResult.externalRequests.length}`)
+  if (pageResult.accessibility.violationCount) {
+    const ruleIds = pageResult.accessibility.violations.map((finding) => finding.id).join(',')
+    failures.push(`accessibility_violations:${pageResult.accessibility.violationCount}:${ruleIds}`)
+  }
   failures.push(...pageResult.disclosureFailures)
   return failures
 }
@@ -323,7 +360,9 @@ async function auditRoute(browser, baseUrl, route, viewport, settleMs) {
     if (settleMs) await page.waitForTimeout(settleMs)
     const metrics = await collectPageMetrics(page)
     const disclosureFailures = await verifyDisclosures(page, route.disclosures)
+    const accessibility = await collectAccessibility(page, accessibilityTags)
     const pageResult = {
+      accessibility,
       consoleErrors,
       consoleWarnings,
       disclosureFailures,
@@ -1381,6 +1420,8 @@ const summary = {
     pageErrors: result.pageErrors.length,
     externalRequests: result.externalRequests.length,
     disclosureFailures: result.disclosureFailures.length,
+    accessibilityViolations: result.accessibility.violationCount,
+    accessibilityRules: result.accessibility.violations.map((finding) => finding.id),
   })),
 }
 process.stdout.write(`${JSON.stringify(process.argv.includes('--details') ? report : summary, null, 2)}\n`)
