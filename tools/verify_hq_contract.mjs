@@ -67,6 +67,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 const managedPilotReadiness = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8'))
+const supabaseSecurityAudit = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'supabase-security-advisor-audit.json'), 'utf8'))
 const ceoProductGoal = await readFile(resolve(root, 'hq', 'SUPERMEGA-CEO-PRODUCT-GOAL.md'), 'utf8')
 const productQualityReport = await readFile(resolve(root, 'hq', 'PRODUCT-QUALITY.md'), 'utf8')
 const routeQualityPolicyText = await readFile(resolve(root, 'hq', 'product-route-quality-policy.json'), 'utf8')
@@ -1113,7 +1114,14 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.controls?.externalWritesPerformed === false
   && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
-  && managedPilotReadiness.controls?.productionWritesEnabled === false)
+  && managedPilotReadiness.controls?.productionWritesEnabled === false
+  && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === '27 fail-closed public-table advisor findings remain, and protected managed schema v7 trails local target v9.'
+  && supabaseSecurityAudit.managedBackend?.liveSchemaVersion === 7
+  && supabaseSecurityAudit.managedBackend?.localTargetVersion === 9
+  && supabaseSecurityAudit.managedBackend?.browserRolesDenied === true
+  && supabaseSecurityAudit.managedBackend?.metadataRlsEnabled === false
+  && supabaseSecurityAudit.controls?.databaseWrites === 0)
 
 requireContract('current Supabase compatibility is a release gate',
   packageText.includes('"database:supabase:compatibility": "node tools/verify_supabase_compatibility.mjs"')

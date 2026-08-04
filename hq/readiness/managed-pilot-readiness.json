@@ -1,13 +1,13 @@
 {
   "contract": "supermega.managed-pilot-readiness.v1",
-  "asOf": "2026-08-03T07:01:07.469Z",
-  "sourceDigest": "sha256:a2a777196b766215fdd338da3f5959dccca231c2408f9292ee9f536aa4e5ee93",
+  "asOf": "2026-08-04T05:28:37.850Z",
+  "sourceDigest": "sha256:7d9e461c4bb50bb3ec132f426769a943760e4387217a26a43b06d1cefd68d997",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
     "blockingGateCount": 7,
-    "nextAction": "Obtain founder approval for one isolated non-production Supabase target and one named Shop pilot operator."
+    "nextAction": "Approve one isolated non-production Supabase target and one named Shop pilot operator; protected production remains unchanged."
   },
   "gates": [
     {
@@ -19,8 +19,8 @@
     {
       "id": "hosted_postgres17",
       "status": "blocked",
-      "evidence": "Local evidence explicitly does not prove hosted activation.",
-      "nextAction": "Run the approved isolated Supabase rehearsal and validator."
+      "evidence": "Protected production is PostgreSQL 17 at managed schema v7; no owner-approved isolated hosted rehearsal exists.",
+      "nextAction": "Run local v8 and v9 on an approved isolated Supabase target, then rerun the hosted validator."
     },
     {
       "id": "hosted_storage_privacy",
@@ -43,8 +43,8 @@
     {
       "id": "security",
       "status": "blocked",
-      "evidence": "Live security ready is false.",
-      "nextAction": "Resolve hosted Security Advisor and exact policy evidence."
+      "evidence": "27 fail-closed public-table advisor findings remain, and protected managed schema v7 trails local target v9.",
+      "nextAction": "Apply local v8 and v9 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, role-boundary, and storage checks before any production proposal."
     },
     {
       "id": "named_pilot",
@@ -135,6 +135,10 @@
       "digest": "sha256:392c1d5e65efacd355ad0e879376f4ca9b4b1bc2aa4d192105a518a2586d63fc"
     },
     {
+      "path": "hq/readiness/supabase-security-advisor-audit.json",
+      "digest": "sha256:5a08b8d2490cf037fd4b23a1d2a514fc654b4b4355106ca2e5d32b605a6413fb"
+    },
+    {
       "path": "hq/NOW.md",
       "digest": "sha256:f55e05bbab34583cc2d4e56de8302bdfb66adb970dc8455d08125dc6bcdd21c1"
     },
@@ -144,7 +148,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:905786c0e7dcd68c93577f1db0ed30d94ec5d6f21cb50fc40744cfe42a9705b4"
+      "digest": "sha256:7cde719b43b286d6adc3e5add9c54826848c8f63bebabd7e5431149527bf2d41"
     }
   ]
 }

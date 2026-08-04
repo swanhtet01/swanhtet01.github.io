@@ -49,6 +49,7 @@ export function buildManagedPilotReadiness(input = {}) {
   const database = input.databaseEvidence
   const now = String(input.hqNow || '')
   const storage = String(input.storageAudit || '')
+  const securityAudit = input.securityAudit
   const packageManifest = input.packageManifest
   const sourceReceipts = input.sourceReceipts
   if (!isRecord(portfolio) || portfolio.schemaVersion !== 'supermega.hq.portfolio.v3' || !Array.isArray(portfolio.products)) fail('managed_pilot_readiness_portfolio_invalid')
@@ -56,7 +57,24 @@ export function buildManagedPilotReadiness(input = {}) {
   if (database.storage?.hostedStoragePrivacyProofRequired !== true || database.localVerification?.externallyHosted !== false) fail('managed_pilot_readiness_database_scope_invalid')
   if (!storage.includes('Status: local verifier ready; hosted proof blocked')) fail('managed_pilot_readiness_storage_evidence_invalid')
   if (!isRecord(packageManifest?.supermega) || packageManifest.supermega.productionSupabaseTargetStatus !== 'protected-unapproved') fail('managed_pilot_readiness_production_boundary_invalid')
-  if (!Array.isArray(sourceReceipts) || sourceReceipts.length !== 6 || sourceReceipts.some((receipt) => !/^[a-z0-9_./-]+$/i.test(receipt?.path || '') || !/^sha256:[0-9a-f]{64}$/.test(receipt?.digest || ''))) fail('managed_pilot_readiness_sources_invalid')
+  if (!isRecord(securityAudit)
+    || securityAudit.contract !== 'supermega.supabase-security-advisor-audit.v1'
+    || securityAudit.targetClassification !== 'protected-production'
+    || securityAudit.projectRef !== packageManifest.supermega.productionSupabaseProjectRef
+    || securityAudit.postgres?.major !== 17
+    || securityAudit.advisor?.status !== 'blocked'
+    || !Number.isInteger(securityAudit.advisor?.findingCount)
+    || securityAudit.advisor.findingCount < 1
+    || securityAudit.managedBackend?.liveSchemaVersion !== 7
+    || securityAudit.managedBackend?.localTargetVersion !== 9
+    || securityAudit.managedBackend?.versionDrift !== 2
+    || securityAudit.managedBackend?.browserRolesDenied !== true
+    || securityAudit.managedBackend?.metadataRlsEnabled !== false
+    || securityAudit.managedBackend?.storageBucketCount !== 0
+    || securityAudit.conclusion?.productionMutationAuthorized !== false
+    || securityAudit.controls?.databaseWrites !== 0
+    || !Number.isFinite(Date.parse(securityAudit.asOf))) fail('managed_pilot_readiness_security_audit_invalid')
+  if (!Array.isArray(sourceReceipts) || sourceReceipts.length !== 7 || sourceReceipts.some((receipt) => !/^[a-z0-9_./-]+$/i.test(receipt?.path || '') || !/^sha256:[0-9a-f]{64}$/.test(receipt?.digest || ''))) fail('managed_pilot_readiness_sources_invalid')
 
   const liveMode = field(now, 'Live operating mode')
   const managedPersistence = field(now, 'Live managed persistence ready')
@@ -88,25 +106,25 @@ export function buildManagedPilotReadiness(input = {}) {
 
   const gates = [
     gate('local_postgres17', 'ready-local', '52 checks, TLS, RLS, tenant isolation, durable owner control, backup and restore.', 'Keep the digest-bound rehearsal current.'),
-    gate('hosted_postgres17', 'blocked', 'Local evidence explicitly does not prove hosted activation.', 'Run the approved isolated Supabase rehearsal and validator.'),
+    gate('hosted_postgres17', 'blocked', `Protected production is PostgreSQL 17 at managed schema v${securityAudit.managedBackend.liveSchemaVersion}; no owner-approved isolated hosted rehearsal exists.`, 'Run local v8 and v9 on an approved isolated Supabase target, then rerun the hosted validator.'),
     gate('hosted_storage_privacy', 'blocked', 'The six-request verifier is ready, but hosted proof is absent.', 'Run the verifier against an owner-approved isolated private bucket.'),
     gate('live_product_contract', 'blocked', 'The exact paired release is verified, but its managed product contract remains isolated_demo.', 'Prove managed persistence and security on the approved isolated target before any managed-pilot claim.'),
     gate('managed_persistence', 'blocked', 'Live managed persistence ready is false.', 'Prove durable commands, recovery, and tenant isolation on the isolated target.'),
-    gate('security', 'blocked', 'Live security ready is false.', 'Resolve hosted Security Advisor and exact policy evidence.'),
+    gate('security', 'blocked', `${securityAudit.advisor.findingCount} fail-closed public-table advisor findings remain, and protected managed schema v${securityAudit.managedBackend.liveSchemaVersion} trails local target v${securityAudit.managedBackend.localTargetVersion}.`, securityAudit.conclusion.nextAction),
     gate('named_pilot', 'blocked', 'HQ records no named pilot customer or measured baseline.', 'Select one Shop design partner, named operator, baseline, and acceptance evidence.'),
     gate('production_activation', 'blocked', 'The production Supabase target remains protected-unapproved.', 'Keep writes disabled until separate founder approval after every hosted gate passes.'),
   ]
 
   const result = {
     contract: MANAGED_PILOT_READINESS_CONTRACT,
-    asOf: database.recordedAt,
+    asOf: securityAudit.asOf,
     sourceDigest: readinessDigest(sourceReceipts),
     overall: {
       status: 'blocked',
       localDatabaseProofReady: true,
       hostedActivationReady: false,
       blockingGateCount: gates.filter((entry) => entry.status === 'blocked').length,
-      nextAction: 'Obtain founder approval for one isolated non-production Supabase target and one named Shop pilot operator.',
+      nextAction: 'Approve one isolated non-production Supabase target and one named Shop pilot operator; protected production remains unchanged.',
     },
     gates,
     products,

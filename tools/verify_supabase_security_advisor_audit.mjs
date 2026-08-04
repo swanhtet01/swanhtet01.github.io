@@ -11,6 +11,20 @@ const auditPath = resolve(root, 'hq', 'readiness', 'supabase-security-advisor-au
 const packagePath = resolve(root, 'package.json')
 const REMEDIATION_URL = 'https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy'
 const PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
+const MANAGED_QUERY_CONTRACT = 'supermega.supabase-managed-schema-metadata.v1'
+const PENDING_MIGRATIONS = [
+  {
+    version: 8,
+    path: 'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
+    digest: 'sha256:2886d53c39a08cbd129ca0a3def051b9129bbc96c49add058122520ee3d7d0ab',
+  },
+  {
+    version: 9,
+    path: 'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
+    digest: 'sha256:1dc908aeaf88bc91e03c566e31652816fba699aaf0bcce5b0d5c512ad9ab0115',
+  },
+]
+const NEXT_ACTION = 'Apply local v8 and v9 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, role-boundary, and storage checks before any production proposal.'
 
 function fail(code) {
   throw new Error(code)
@@ -77,6 +91,31 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
   if (catalogNames.join(',') !== sortedUnique(catalogNames).join(',')
     || catalogNames.join(',') !== advisor.tables.join(',')) fail('supabase_security_audit_catalog_table_set_invalid')
 
+  const managed = value.managedBackend
+  if (!isRecord(managed)
+    || managed.queryContract !== MANAGED_QUERY_CONTRACT
+    || managed.schema !== 'app_private'
+    || managed.liveSchemaVersion !== 7
+    || managed.localTargetVersion !== 9
+    || managed.versionDrift !== 2
+    || managed.tableCount !== 6
+    || managed.rlsTableCount !== 5
+    || managed.policyCount !== 14
+    || managed.performancePolicyFindingCount !== 10
+    || managed.metadataRlsEnabled !== false
+    || managed.browserRolesDenied !== true
+    || managed.serverBypassRoleDenied !== true
+    || managed.runtimeRoleSchemaUsage !== true
+    || managed.runtimeRoleSchemaCreate !== false
+    || managed.securityDefinerFunctionCount !== 1
+    || managed.securityDefinerPublicExecute !== false
+    || managed.securityDefinerActorContextChecked !== true
+    || managed.securityDefinerSearchPathFixed !== true
+    || managed.viewCount !== 0
+    || managed.storageBucketCount !== 0
+    || managed.postgrestSchemaSettingObservable !== false
+    || JSON.stringify(managed.pendingMigrations) !== JSON.stringify(PENDING_MIGRATIONS)) fail('supabase_security_audit_managed_backend_invalid')
+
   const conclusion = value.conclusion
   if (!isRecord(conclusion)
     || conclusion.status !== 'blocked'
@@ -85,11 +124,11 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
     || conclusion.currentRowExposureProven !== false
     || conclusion.browserGrantHardeningRequired !== true
     || conclusion.productionMutationAuthorized !== false
-    || conclusion.nextAction !== 'Rehearse explicit browser-grant revocation and restrictive deny policies on an approved isolated target, then rerun Security Advisor and catalog checks before any production proposal.') fail('supabase_security_audit_conclusion_invalid')
+    || conclusion.nextAction !== NEXT_ACTION) fail('supabase_security_audit_conclusion_invalid')
 
   const controls = value.controls
   if (!isRecord(controls)
-    || controls.connectorReadRequests !== 3
+    || controls.connectorReadRequests !== 16
     || controls.failedReadRequests !== 1
     || controls.providerMutations !== 0
     || controls.databaseWrites !== 0
@@ -125,6 +164,30 @@ function fixture() {
       tableCount: 1,
       tables: [{ name: 'example_records', schema: 'public', rlsEnabled: true, rlsForced: false, policyCount: 0, anonPrivileges: PRIVILEGES, authenticatedPrivileges: PRIVILEGES }],
     },
+    managedBackend: {
+      queryContract: MANAGED_QUERY_CONTRACT,
+      schema: 'app_private',
+      liveSchemaVersion: 7,
+      localTargetVersion: 9,
+      versionDrift: 2,
+      tableCount: 6,
+      rlsTableCount: 5,
+      policyCount: 14,
+      performancePolicyFindingCount: 10,
+      metadataRlsEnabled: false,
+      browserRolesDenied: true,
+      serverBypassRoleDenied: true,
+      runtimeRoleSchemaUsage: true,
+      runtimeRoleSchemaCreate: false,
+      securityDefinerFunctionCount: 1,
+      securityDefinerPublicExecute: false,
+      securityDefinerActorContextChecked: true,
+      securityDefinerSearchPathFixed: true,
+      viewCount: 0,
+      storageBucketCount: 0,
+      postgrestSchemaSettingObservable: false,
+      pendingMigrations: PENDING_MIGRATIONS,
+    },
     conclusion: {
       status: 'blocked',
       directBrowserTableAccessDefaultDenied: true,
@@ -132,9 +195,9 @@ function fixture() {
       currentRowExposureProven: false,
       browserGrantHardeningRequired: true,
       productionMutationAuthorized: false,
-      nextAction: 'Rehearse explicit browser-grant revocation and restrictive deny policies on an approved isolated target, then rerun Security Advisor and catalog checks before any production proposal.',
+      nextAction: NEXT_ACTION,
     },
-    controls: { connectorReadRequests: 3, failedReadRequests: 1, providerMutations: 0, databaseWrites: 0, businessRowsRead: 0, credentialsRecorded: false },
+    controls: { connectorReadRequests: 16, failedReadRequests: 1, providerMutations: 0, databaseWrites: 0, businessRowsRead: 0, credentialsRecorded: false },
     evidenceDigest: '',
   }
   value.evidenceDigest = auditDigest(value)
@@ -152,12 +215,15 @@ function selfTest() {
   hiddenMutation.controls.databaseWrites = 1
   const stale = structuredClone(valid)
   stale.advisor.tables = ['renamed_records']
+  const migrationDrift = structuredClone(valid)
+  migrationDrift.managedBackend.liveSchemaVersion = 8
   const checks = {
     accepts_exact_blocked_snapshot: true,
     rejects_wrong_project: throws(() => validateSupabaseSecurityAdvisorAudit(wrongTarget, valid.projectRef), 'supabase_security_audit_target_invalid'),
     rejects_unproven_safety_claim: throws(() => validateSupabaseSecurityAdvisorAudit(broadClaim, valid.projectRef), 'supabase_security_audit_conclusion_invalid'),
     rejects_provider_mutation: throws(() => validateSupabaseSecurityAdvisorAudit(hiddenMutation, valid.projectRef), 'supabase_security_audit_controls_invalid'),
     rejects_stale_table_set: throws(() => validateSupabaseSecurityAdvisorAudit(stale, valid.projectRef), 'supabase_security_audit_catalog_table_set_invalid'),
+    rejects_unproven_migration_state: throws(() => validateSupabaseSecurityAdvisorAudit(migrationDrift, valid.projectRef), 'supabase_security_audit_managed_backend_invalid'),
   }
   return { ok: Object.values(checks).every(Boolean), contract: CONTRACT, checks }
 }

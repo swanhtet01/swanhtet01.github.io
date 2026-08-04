@@ -1,6 +1,6 @@
 {
   "contract": "supermega.supabase-security-advisor-audit.v1",
-  "asOf": "2026-08-03T19:24:36.522Z",
+  "asOf": "2026-08-04T05:28:37.850Z",
   "projectRef": "zvtzwcimpvvtkowflhda",
   "targetClassification": "protected-production",
   "postgres": {
@@ -83,6 +83,41 @@
       { "name": "wcm_incidents", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] }
     ]
   },
+  "managedBackend": {
+    "queryContract": "supermega.supabase-managed-schema-metadata.v1",
+    "schema": "app_private",
+    "liveSchemaVersion": 7,
+    "localTargetVersion": 9,
+    "versionDrift": 2,
+    "tableCount": 6,
+    "rlsTableCount": 5,
+    "policyCount": 14,
+    "performancePolicyFindingCount": 10,
+    "metadataRlsEnabled": false,
+    "browserRolesDenied": true,
+    "serverBypassRoleDenied": true,
+    "runtimeRoleSchemaUsage": true,
+    "runtimeRoleSchemaCreate": false,
+    "securityDefinerFunctionCount": 1,
+    "securityDefinerPublicExecute": false,
+    "securityDefinerActorContextChecked": true,
+    "securityDefinerSearchPathFixed": true,
+    "viewCount": 0,
+    "storageBucketCount": 0,
+    "postgrestSchemaSettingObservable": false,
+    "pendingMigrations": [
+      {
+        "version": 8,
+        "path": "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
+        "digest": "sha256:2886d53c39a08cbd129ca0a3def051b9129bbc96c49add058122520ee3d7d0ab"
+      },
+      {
+        "version": 9,
+        "path": "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
+        "digest": "sha256:1dc908aeaf88bc91e03c566e31652816fba699aaf0bcce5b0d5c512ad9ab0115"
+      }
+    ]
+  },
   "conclusion": {
     "status": "blocked",
     "directBrowserTableAccessDefaultDenied": true,
@@ -90,15 +125,15 @@
     "currentRowExposureProven": false,
     "browserGrantHardeningRequired": true,
     "productionMutationAuthorized": false,
-    "nextAction": "Rehearse explicit browser-grant revocation and restrictive deny policies on an approved isolated target, then rerun Security Advisor and catalog checks before any production proposal."
+    "nextAction": "Apply local v8 and v9 plus explicit public browser-grant hardening only on an owner-approved isolated target, then rerun migration, advisor, role-boundary, and storage checks before any production proposal."
   },
   "controls": {
-    "connectorReadRequests": 3,
+    "connectorReadRequests": 16,
     "failedReadRequests": 1,
     "providerMutations": 0,
     "databaseWrites": 0,
     "businessRowsRead": 0,
     "credentialsRecorded": false
   },
-  "evidenceDigest": "sha256:cae57613932556b7641ac85686570d35c555ee92de185f79ade160621a81d983"
+  "evidenceDigest": "sha256:bd7e4abc4591fb612edb661fbe84a68805c8e81c8ab0bd16a12165970fab7ee4"
 }
