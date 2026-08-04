@@ -202,11 +202,11 @@ A product release is not ready because the build passes. It is ready only when t
 ## Immediate sequence
 
 1. Preserve Ecommerce-to-Shop, Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file proof at both viewports.
-2. Prototype Blueprint as a no-write import preview without duplicating product authority or increasing first-screen action density.
+2. Preserve the now-proven Blueprint no-write preview inside each product's existing `Next steps` data tool. Keep its deterministic mapping, repair, digest, review lock, and `staged_not_applied` contracts; do not create another public setup page.
 3. Instrument the three CEO KPIs around the existing useful samples and first-value records, then run five moderated Shop/Plant sessions before expanding product scope.
-4. Prototype Blueprint as a no-write import preview over the existing client-preparation contract, using messy catalog and production fixtures; measure mapping accuracy, repair burden, and time to first value.
-5. Prototype native IndexedDB outbox and recovery for Shop. Compare PGlite only if measured relational/offline requirements justify its payload and startup cost.
-6. After tenant isolation, restore rehearsal, and hosted activation evidence pass, compare private Supabase Queues and Vercel Workflow against one bounded durable-job contract; adopt at most one execution path for that job.
+4. Build the smallest SuperMega Sync slice: a native IndexedDB outbox and deterministic recovery proof for Shop. Compare PGlite only if measured relational/offline requirements justify its payload and startup cost.
+5. Close local managed-persistence evidence in this order: tenant isolation, idempotent replay, conflict handling, backup/restore rehearsal, then production activation readiness. Provider writes and live activation remain owner-gated.
+6. Only after those gates pass, compare private Supabase Queues and Vercel Workflow against one bounded durable-job contract; adopt at most one execution path for that job and keep customer browsers away from queue authority.
 
 ## Evidence and references
 

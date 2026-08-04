@@ -878,6 +878,111 @@ async function auditWebsiteEditReleaseWorkflow(browser, baseUrl, viewport) {
   }
 }
 
+async function auditBlueprintPreviewWorkflow(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    colorScheme: 'light',
+    deviceScaleFactor: 1,
+    hasTouch: viewport.touch,
+    isMobile: viewport.touch,
+    locale: 'en-US',
+    reducedMotion: 'reduce',
+    viewport: { width: viewport.width, height: viewport.height },
+  })
+  const page = await context.newPage()
+  const checkpoints = []
+  const consoleErrors = []
+  const externalRequests = []
+  const pageErrors = []
+  const baseOrigin = new URL(baseUrl).origin
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 400))
+  })
+  page.on('pageerror', (error) => pageErrors.push(error.message.slice(0, 400)))
+  await page.route('**/*', async (intercept) => {
+    const url = intercept.request().url()
+    const parsed = new URL(url)
+    if (parsed.origin === baseOrigin || ['blob:', 'data:'].includes(parsed.protocol)) {
+      await intercept.continue()
+      return
+    }
+    externalRequests.push(`${intercept.request().method()} ${parsed.origin}${parsed.pathname}`.slice(0, 400))
+    await intercept.abort('blockedbyclient')
+  })
+  const failures = []
+  const productStorage = () => page.evaluate(() => {
+    const exactKeys = new Set([
+      'supermega.commerce.workspace.v2',
+      'supermega.production.workspace.v2',
+      'supermega.website.workspace.v2',
+    ])
+    const prefixes = [
+      'supermega.ecommerce.buying_lifecycle.',
+      'supermega.ecommerce.storefront_draft.',
+    ]
+    return Object.fromEntries(Object.keys(localStorage)
+      .filter((key) => exactKeys.has(key) || prefixes.some((prefix) => key.startsWith(prefix)))
+      .sort()
+      .map((key) => [key, localStorage.getItem(key)]))
+  })
+  try {
+    const response = await page.goto(`${baseUrl}/shop/`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
+    if (!response || response.status() < 200 || response.status() >= 400) fail(`workflow_blueprint_http_status:${response?.status() ?? 'none'}`)
+    await waitForProduct(page, 'Shop')
+    const productStateBefore = await productStorage()
+
+    const navigator = await expectOneVisible(page.locator('details.product-system-navigator'), 'workflow_blueprint_navigator_count')
+    const navigatorSummary = await expectOneVisible(navigator.locator(':scope > summary'), 'workflow_blueprint_navigator_summary_count')
+    checkpoints.push('blueprint_product_entry_ready')
+
+    await navigatorSummary.click()
+    const dataRegion = await expectOneVisible(navigator.getByRole('region', { name: 'Shop data', exact: true }), 'workflow_blueprint_data_region_count')
+    const dataBoundary = await dataRegion.innerText()
+    if (!dataBoundary.includes('matches columns locally') || !dataBoundary.includes('asks before changing Shop') || !dataBoundary.includes('Only Shop is prepared here')) fail('workflow_blueprint_data_boundary_invalid')
+    checkpoints.push('blueprint_data_boundary_visible')
+
+    await (await expectOneVisible(dataRegion.getByRole('button', { name: 'Use my Shop data', exact: true }), 'workflow_blueprint_open_data_count')).click()
+    const importWorkspace = await expectOneVisible(navigator.locator('.catalog-import-workspace'), 'workflow_blueprint_import_workspace_count')
+    const boundaryBeforePreview = await expectOneVisible(importWorkspace.locator('.catalog-import-boundary'), 'workflow_blueprint_boundary_count')
+    if (!(await boundaryBeforePreview.innerText()).includes('Nothing is sent to AI or added to Shop while you review it')) fail('workflow_blueprint_review_boundary_missing')
+    checkpoints.push('blueprint_import_opened')
+
+    await (await expectOne(importWorkspace.getByRole('button', { name: 'Try sample', exact: true }), 'workflow_blueprint_try_sample_count')).click()
+    const preview = await expectOneVisible(importWorkspace.locator('.catalog-import-preview'), 'workflow_blueprint_preview_count', 8_000)
+    const sourceSummary = await expectOneVisible(preview.locator('.catalog-import-source'), 'workflow_blueprint_source_summary_count')
+    const sourceSummaryText = await sourceSummary.innerText()
+    const normalizedSourceSummary = sourceSummaryText.toLowerCase()
+    if (!normalizedSourceSummary.includes('2 rows found') || !normalizedSourceSummary.includes('ready to prepare')) fail(`workflow_blueprint_sample_preview_invalid:${sourceSummaryText.replace(/\s+/g, ' ').trim()}`)
+    checkpoints.push('sample_preview_ready')
+
+    const approval = await expectOneVisible(preview.locator('label.website-intake-confirm'), 'workflow_blueprint_approval_count')
+    const approvalCheckbox = await expectOne(approval.locator('input[type="checkbox"]'), 'workflow_blueprint_approval_checkbox_count')
+    if (await approvalCheckbox.isChecked()) fail('workflow_blueprint_approval_preselected')
+    const applyButton = await expectOneVisible(preview.getByRole('button', { name: /Add 2 .* to Shop/ }), 'workflow_blueprint_apply_count')
+    if (await applyButton.isEnabled()) fail('workflow_blueprint_apply_unlocked_without_review')
+    checkpoints.push('activation_remains_locked')
+
+    if (JSON.stringify(await productStorage()) !== JSON.stringify(productStateBefore)) fail('workflow_blueprint_product_write_during_preview')
+    checkpoints.push('product_state_unchanged')
+  } catch (error) {
+    failures.push(`workflow_exception:${error instanceof Error ? error.message : String(error)}`.slice(0, 500))
+  } finally {
+    await context.close()
+  }
+  if (consoleErrors.length) failures.push(`console_errors:${consoleErrors.length}`)
+  if (pageErrors.length) failures.push(`page_errors:${pageErrors.length}`)
+  if (externalRequests.length) failures.push(`external_requests:${externalRequests.length}`)
+  return {
+    workflowId: 'blueprint-shop-data-no-write-preview',
+    viewport: viewport.id,
+    ok: failures.length === 0,
+    checkpoints,
+    failures,
+    consoleErrors,
+    pageErrors,
+    externalRequests,
+  }
+}
+
 const policySource = await readFile(policyPath, 'utf8')
 const policy = JSON.parse(policySource)
 validatePolicy(policy)
@@ -910,6 +1015,7 @@ try {
         for (const viewport of policy.viewports) workflowResults.push(await auditShopSaleCloseWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditPlantPlanShiftCloseWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditWebsiteEditReleaseWorkflow(browser, server.baseUrl, viewport))
+        for (const viewport of policy.viewports) workflowResults.push(await auditBlueprintPreviewWorkflow(browser, server.baseUrl, viewport))
       }
     } finally {
       await server.close()
