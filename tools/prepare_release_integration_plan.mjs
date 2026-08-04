@@ -100,6 +100,8 @@ export function classifyIntegrationConflict(path) {
     || candidate.startsWith('tests/test_cloud_')
     || candidate.startsWith('tests/test_database_')) return 'identity-data-onboarding'
   if (candidate === 'package.json'
+    || candidate === 'tools/create_public_vercel_output.mjs'
+    || candidate.startsWith('kernel/managed-pilot-readiness')
     || candidate.startsWith('tools/verify_')
     || candidate.startsWith('hq/')
     || candidate.startsWith('docs/')) return 'release-security-hq'
