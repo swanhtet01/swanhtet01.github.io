@@ -748,6 +748,135 @@ async function auditPlantPlanShiftCloseWorkflow(browser, baseUrl, viewport) {
   }
 }
 
+async function auditWebsiteEditReleaseWorkflow(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    acceptDownloads: true,
+    colorScheme: 'light',
+    deviceScaleFactor: 1,
+    hasTouch: viewport.touch,
+    isMobile: viewport.touch,
+    locale: 'en-US',
+    reducedMotion: 'reduce',
+    viewport: { width: viewport.width, height: viewport.height },
+  })
+  const page = await context.newPage()
+  const checkpoints = []
+  const consoleErrors = []
+  const externalRequests = []
+  const pageErrors = []
+  const baseOrigin = new URL(baseUrl).origin
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 400))
+  })
+  page.on('pageerror', (error) => pageErrors.push(error.message.slice(0, 400)))
+  await page.route('**/*', async (intercept) => {
+    const url = intercept.request().url()
+    const parsed = new URL(url)
+    if (parsed.origin === baseOrigin || ['blob:', 'data:'].includes(parsed.protocol)) {
+      await intercept.continue()
+      return
+    }
+    externalRequests.push(`${intercept.request().method()} ${parsed.origin}${parsed.pathname}`.slice(0, 400))
+    await intercept.abort('blockedbyclient')
+  })
+  const failures = []
+  const businessName = `QA Website ${viewport.id}`
+  try {
+    const response = await page.goto(`${baseUrl}/website/`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
+    if (!response || response.status() < 200 || response.status() >= 400) fail(`workflow_website_http_status:${response?.status() ?? 'none'}`)
+    await waitForProduct(page, 'Website')
+
+    await (await expectOneVisible(page.getByRole('button', { name: 'Customize demo', exact: true }), 'workflow_website_customize_count')).click()
+    const starter = await expectOneVisible(page.getByRole('region', { name: 'Edit', exact: true }), 'workflow_website_starter_region_count')
+    const businessNameField = await expectOneVisible(starter.getByLabel('Business name', { exact: true }), 'workflow_website_business_name_count')
+    await businessNameField.fill(businessName)
+    const requiredBriefComplete = await starter.locator('input[required],textarea[required],select[required]').evaluateAll((fields) => fields.length >= 4 && fields.every((field) => String(field.value ?? '').trim().length > 0))
+    if (!requiredBriefComplete) fail('workflow_website_starter_brief_incomplete')
+    checkpoints.push('starter_brief_reviewed')
+
+    await (await expectOne(starter.getByRole('button', { name: 'Make preview', exact: true }), 'workflow_website_make_preview_count')).click()
+    const preview = await expectOneVisible(page.locator('.website-preview-site'), 'workflow_website_preview_count')
+    if (!(await preview.innerText()).includes(businessName)) fail('workflow_website_custom_preview_missing')
+    const readyMetrics = await expectOneVisible(page.getByRole('group', { name: 'Website today status', exact: true }), 'workflow_website_ready_metrics_count')
+    const readyMetricsText = await readyMetrics.innerText()
+    if (!readyMetricsText.includes('0/3 ready') || !readyMetricsText.includes('Blocked by draft')) fail(`workflow_website_generated_readiness_missing:${readyMetricsText.replace(/\s+/g, ' ').slice(0, 240)}`)
+    checkpoints.push('client_preview_generated')
+
+    const actionBar = await expectOneVisible(page.getByRole('region', { name: 'Website actions', exact: true }), 'workflow_website_action_bar_count')
+    await (await expectOne(actionBar.getByRole('button', { name: 'Edit page', exact: true }), 'workflow_website_edit_page_count')).click()
+    const pageSelect = await expectOneVisible(actionBar.getByLabel('Page', { exact: true }), 'workflow_website_page_select_count')
+    const pageIds = await pageSelect.locator('option').evaluateAll((options) => options.map((option) => option.value))
+    if (pageIds.length !== 3 || pageIds.some((id) => !id)) fail('workflow_website_generated_page_ids_invalid')
+    for (const [index, pageId] of pageIds.entries()) {
+      await pageSelect.selectOption(pageId)
+      const markReady = await expectOneVisible(page.getByRole('button', { name: 'Mark page ready', exact: true }), `workflow_website_mark_ready_${index}_count`)
+      if (!await markReady.isEnabled()) fail(`workflow_website_page_${index}_not_ready_for_review`)
+      await markReady.click()
+    }
+    if (!(await readyMetrics.innerText()).includes('3/3 ready')) fail('workflow_website_all_pages_not_ready')
+    checkpoints.push('pages_reviewed_ready')
+
+    await (await expectOne(actionBar.getByRole('button', { name: 'Preview', exact: true }), 'workflow_website_open_preview_count')).click()
+    const previewControls = await expectOneVisible(page.getByRole('group', { name: 'Responsive preview size', exact: true }), 'workflow_website_preview_controls_count')
+    for (const [label, id] of [['Desktop', 'desktop'], ['Tablet', 'tablet'], ['Mobile', 'mobile']]) {
+      const control = await expectOne(previewControls.getByRole('button', { name: label, exact: true }), `workflow_website_${id}_preview_count`)
+      await control.click()
+      if (await control.getAttribute('aria-pressed') !== 'true') fail(`workflow_website_${id}_preview_not_selected`)
+      await expectOneVisible(page.locator(`.website-preview-frame.is-${id}`), `workflow_website_${id}_frame_count`)
+    }
+    checkpoints.push('responsive_preview_verified')
+
+    if (await actionBar.getByRole('button', { name: 'Download preview', exact: true }).count()) fail('workflow_website_unsaved_download_available')
+    await expectOne(actionBar.getByRole('button', { name: 'Save', exact: true }), 'workflow_website_save_count')
+    checkpoints.push('unsaved_download_blocked')
+
+    await actionBar.getByRole('button', { name: 'Save', exact: true }).click()
+    const saveNotice = await expectOneVisible(page.locator('.website-notice').filter({ hasText: 'Website saved once as content revision' }), 'workflow_website_save_notice_count', 8_000)
+    if (!(await saveNotice.innerText()).includes('Nothing was deployed')) fail('workflow_website_save_boundary_missing')
+    await page.reload({ timeout: 20_000, waitUntil: 'domcontentloaded' })
+    const restoredPreview = await expectOneVisible(page.locator('.website-preview-site'), 'workflow_website_restored_preview_count')
+    if (!(await restoredPreview.innerText()).includes(businessName)) fail('workflow_website_saved_revision_not_restored')
+    const savedState = await expectOneVisible(page.locator('.website-save-state'), 'workflow_website_saved_state_count')
+    if (!['Saved on this device', 'Session only'].includes((await savedState.innerText()).trim())) fail('workflow_website_saved_state_invalid')
+    checkpoints.push('saved_revision_restored')
+
+    const restoredActionBar = await expectOneVisible(page.getByRole('region', { name: 'Website actions', exact: true }), 'workflow_website_restored_action_bar_count')
+    const downloadButton = await expectOne(restoredActionBar.getByRole('button', { name: 'Download preview', exact: true }), 'workflow_website_download_count')
+    const downloadPromise = page.waitForEvent('download', { timeout: 10_000 })
+    await downloadButton.click()
+    const download = await downloadPromise
+    const suggestedFilename = download.suggestedFilename()
+    if (suggestedFilename !== `qa-website-${viewport.id}.html`) fail(`workflow_website_download_filename_invalid:${suggestedFilename}`)
+    const downloadPath = await download.path()
+    if (!downloadPath) fail('workflow_website_download_path_missing')
+    const downloadedHtml = await readFile(downloadPath, 'utf8')
+    if (downloadedHtml.length < 2_000 || !downloadedHtml.includes(businessName) || !downloadedHtml.toLowerCase().includes('<!doctype html>')) fail('workflow_website_download_content_invalid')
+    checkpoints.push('reviewable_site_file_downloaded')
+
+    const downloadNotice = await expectOneVisible(page.locator('.website-notice').filter({ hasText: 'standalone preview' }), 'workflow_website_download_notice_count')
+    const downloadNoticeText = await downloadNotice.innerText()
+    if (!downloadNoticeText.includes('no site or domain was deployed')) fail('workflow_website_deployment_boundary_missing')
+    checkpoints.push('deployment_boundary_visible')
+  } catch (error) {
+    failures.push(`workflow_exception:${error instanceof Error ? error.message : String(error)}`.slice(0, 500))
+  } finally {
+    await context.close()
+  }
+  if (consoleErrors.length) failures.push(`console_errors:${consoleErrors.length}`)
+  if (pageErrors.length) failures.push(`page_errors:${pageErrors.length}`)
+  if (externalRequests.length) failures.push(`external_requests:${externalRequests.length}`)
+  return {
+    workflowId: 'website-brief-responsive-preview-release-file',
+    viewport: viewport.id,
+    ok: failures.length === 0,
+    checkpoints,
+    failures,
+    consoleErrors,
+    pageErrors,
+    externalRequests,
+  }
+}
+
 const policySource = await readFile(policyPath, 'utf8')
 const policy = JSON.parse(policySource)
 validatePolicy(policy)
@@ -779,6 +908,7 @@ try {
         workflowResults.push(await auditEcommerceShopOrderWorkflow(browser, server.baseUrl))
         for (const viewport of policy.viewports) workflowResults.push(await auditShopSaleCloseWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditPlantPlanShiftCloseWorkflow(browser, server.baseUrl, viewport))
+        for (const viewport of policy.viewports) workflowResults.push(await auditWebsiteEditReleaseWorkflow(browser, server.baseUrl, viewport))
       }
     } finally {
       await server.close()
