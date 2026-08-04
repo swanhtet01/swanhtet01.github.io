@@ -6,7 +6,12 @@ import {
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
-import { readBehaviorTrail, summarizeBehaviorPreferences, summarizeProductActivationFunnel } from './behavior-trail'
+import {
+  readBehaviorTrail,
+  summarizeBehaviorPreferences,
+  summarizeProductActivationFunnel,
+  summarizeProductFirstValue,
+} from './behavior-trail'
 import { ManagedContextConsent } from './ManagedContextConsent'
 import { buildManagedAiContextExport, buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
 import { operatingChangeCopy } from './operating-baseline'
@@ -568,6 +573,12 @@ export function SettingsPage() {
   const agentBehaviorSignals = behaviorTrail.filter((entry) => entry.event === 'agent_job_seen' || entry.event === 'agent_job_chosen')
   const behaviorPreference = summarizeBehaviorPreferences(behaviorTrail)
   const productActivationFunnel = summarizeProductActivationFunnel(behaviorTrail, setup.product)
+  const productFirstValue = summarizeProductFirstValue(behaviorTrail, setup.product)
+  const firstValueElapsed = productFirstValue.elapsedSeconds == null
+    ? null
+    : productFirstValue.elapsedSeconds < 60
+      ? `${productFirstValue.elapsedSeconds}s`
+      : `${Math.ceil(productFirstValue.elapsedSeconds / 60)}m`
   const agentProductName = (product: string) => (
     product === 'commerce'
     || product === 'production'
@@ -579,6 +590,11 @@ export function SettingsPage() {
   const topAgentJob = behaviorPreference.preferred
   const lastChosenAgentJob = behaviorPreference.latest
   const productActivationRows = [
+    ['First value', productFirstValue.status === 'completed' ? 'Complete' : productFirstValue.status === 'in_progress' ? 'In progress' : 'Not started', productFirstValue.status === 'completed'
+      ? `${productFirstValue.detail ?? 'A useful product workflow was completed.'}${firstValueElapsed ? ` First value took ${firstValueElapsed} in this browser.` : ''}`
+      : productFirstValue.status === 'in_progress'
+        ? 'The product was opened. Complete its guided first workflow to prove useful value.'
+        : 'Open this product and complete its guided first workflow to begin.'],
     ['Next steps', productActivationFunnel.nextStepsOpened ? `${productActivationFunnel.nextStepsOpened} opened` : 'Not opened', 'The user opened this product\'s optional next-step panel.'],
     ['Own data', productActivationFunnel.dataSetupsOpened ? `${productActivationFunnel.dataSetupsOpened} started` : 'Not started', 'The user opened local CSV or sample-data setup for this product.'],
     ['Product request', productActivationFunnel.productRequests ? `${productActivationFunnel.productRequests} intent` : 'No intent yet', 'The user chose the product-specific setup handoff. No message was sent by this scorecard.'],
@@ -1034,7 +1050,7 @@ export function SettingsPage() {
     ['Approved sources', managedPilotBrief ? `${managedPilotBrief.sourceCount} company` : preparedRecordCount ? `${preparedRecordCount} local prepared` : 'No source proof yet', managedPilotBrief ? 'Counts only; raw source records are not shown here.' : 'Open a company account to verify company-scoped sources.'],
     ['Learning checkpoint', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The aggregate operating baseline has a managed audit receipt.' : 'No external action runs from this panel.'],
   ] as const
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 24, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review), setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, localWorkspaceBackup, behaviorTrail, behaviorPreference, productActivationFunnel, pilotOutcomeReport, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 24, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review), setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, localWorkspaceBackup, behaviorTrail, behaviorPreference, productActivationFunnel, productFirstValue, pilotOutcomeReport, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
