@@ -33,28 +33,29 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
+- Managed identity fails before tenant lookup unless the token's Supabase issuer, authenticated non-anonymous audience/role, user/session UUIDs, and fresh `/user` response agree (`eec19002`). Hosted active-session revocation remains unproven.
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancellation releases, completion consumes, and sellable returns restore the exact fulfilled location/lot.
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted from rejected units; no posting occurs.
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
-- Shop owns delivery zones, fees, promises, taxes, and payment eligibility. Ecommerce and Shop retain exact decisions; Shop rechecks authority before reservation.
+- Shop owns Ecommerce delivery, tax, and payment eligibility; Shop rechecks authority before reservation.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
-- Plant controls up to 20 job-bound plans. Priority-and-due MRP consumes Shop stock and open POs once and exposes per-order exceptions.
-- Plant maintenance binds due work, results, findings, corrective action, and human disposition; it performs no automatic dispatch or equipment control.
+- Plant MRP handles up to 20 job plans against Shop stock and open POs.
+- Plant maintenance retains reviewed due work and findings; no automatic dispatch or machine control.
 - Plant quality problems now require structured CAPA evidence before an actionable record can close. Recurrence is Unicode-safe; release, stock blocks, customer contact, certificates, and effectiveness follow-up stay separate.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
-- Shop, Plant, Website, and Ecommerce render the real workspace before one collapsed `More tools` drawer; workflow and setup access remain available without internal counts or a redundant product-entry button (`058c2914`).
-- Plant's state-aware mobile action carries one shift through output, same-shift material, blocker review, accountable close, and next output; reload restores the shift and closed metrics (`2909fd66`).
-- Website keeps one **Customize demo** action and the shared product hierarchy (`69068054`). Shop routes an empty catalog from Today and Counter to one import helper, avoids the zero-SKU Inventory crash, and advances to sale after confirmed import (`757cd3b6`).
-- Local candidate: the app root chooses one product; product-scoped navigation and focused public pages precede samples (`a903bae4`, `47fd933c`).
+- Four real product workspaces precede one collapsed `More tools` drawer; no duplicate entry button (`058c2914`).
+- Plant mobile carries one shift through output, material, blockers, close, and reload (`2909fd66`).
+- Website has one **Customize demo**; empty Shop catalogs route to one safe import (`69068054`, `757cd3b6`).
+- Local candidate keeps one product per entry and focused public pages (`47fd933c`).
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- Checks: 106 Ecommerce, 347 Commerce, 332 Production, 10 Shop next-action, 117 Website, 95 security, 241 onboarding, 11 backup, 85 managed import, and 52 PostgreSQL 17 checks across ten migrations.
+- Checks: 106 Ecommerce, 347 Commerce, 332 Production, 10 Shop next-action, 118 Website, 92 security, 241 onboarding, 11 backup, 85 managed import, 5 focused Supabase Auth tests, and 52 PostgreSQL 17 checks across ten migrations.
 - The deterministic 12-profile rehearsal passes 24 rows. All four desktop missions are overflow-free. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
 - Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1`; paired brand, context, and catalog identities match at `jade-v2-2026-07` / `2026-07-31.3`, and the scheduler ceiling is one job. Paired release metadata is internally consistent; current-head page-contract checks report drift because the local candidate is not deployed.

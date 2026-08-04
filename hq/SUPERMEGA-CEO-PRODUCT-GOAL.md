@@ -27,7 +27,7 @@ The local candidate now proves that Shop, Plant, Website, and Ecommerce each mov
 The company constraint is no longer a missing fifth product, framework, or menu. Seven managed-pilot gates remain blocked: hosted Postgres rehearsal, private storage proof, live managed product contract, managed persistence, security, a named pilot, and production activation. The current CEO priority is therefore:
 
 1. Preserve the simple four-product first session and its browser evidence.
-2. Close managed tenant isolation, explicit grants/RLS, idempotency, conflict, backup, restore, and observability proof on an approved isolated target.
+2. Close managed identity binding, tenant isolation, explicit grants/RLS, idempotency, conflict, backup, restore, and observability proof on an approved isolated target. Require the exact Auth project, signed named session, token subject, and fresh Auth user to agree before tenant lookup; prove active-session revocation for consequential operations on the hosted target.
 3. Run five named operator sessions and measure first value, time to value, correction effort, and repeat useful work.
 4. Fund only the product depth or adapter that the evidence identifies as the next constraint.
 
@@ -133,7 +133,7 @@ These capabilities are internal platform layers. Customers should still see only
 
 | Resource or integration | Customer job and KPI | Smallest useful experiment | Decision now |
 | --- | --- | --- | --- |
-| Supabase Auth, Postgres, Storage, and RLS | Durable managed workspaces; verified first value without cross-tenant access or data loss | Apply and verify local v8/v9 plus explicit browser grants on one isolated non-production target | Highest priority managed foundation; do not touch protected production before every hosted gate passes |
+| Supabase Auth, Postgres, Storage, and RLS | Durable managed workspaces; verified first value without identity confusion, cross-tenant access, or data loss | Preserve project/session/subject/Auth-user binding, then apply and verify local v8/v9 plus explicit browser grants and active-session revocation on one isolated non-production target | Highest priority managed foundation; do not touch protected production before every hosted gate passes |
 | Playwright Core and system browser | Prevent release regressions in first-session completion, mobile usability, and recovery | Keep the 14-workflow, 98-checkpoint matrix serial and deterministic | Adopted release authority for browser behavior |
 | Existing Vercel deployment and function observability | Diagnose live release, latency, failure, and cost without adding client complexity | Read the exact release's existing logs and metrics during a bounded pilot | Use before adding a second observability vendor or browser SDK |
 | PostHog custom product events | Verified first-value funnel, time to value, and retention | Mirror only the approved first-party event schema in an isolated consented pilot; no autocapture or session replay | Defer until hosted identity, consent, retention, and privacy review exist |
