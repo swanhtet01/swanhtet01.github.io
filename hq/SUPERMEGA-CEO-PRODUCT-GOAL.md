@@ -198,7 +198,7 @@ A product release is not ready because the build passes. It is ready only when t
 
 ## Immediate sequence
 
-1. Add an automated route/action/accessibility inventory for the public site and four product routes.
+1. Reduce Shop Orders from 114/115 visible actions to at most 44 without removing workflows; expose only the current order task and move the rest behind contextual controls.
 2. Make public product pages open working samples before setup, then measure first-value journeys.
 3. Prototype Shop offline outbox/recovery behind the existing workspace adapter.
 4. Instrument the three CEO KPIs and run five moderated Shop/Plant first-value sessions before expanding product scope.
@@ -206,7 +206,7 @@ A product release is not ready because the build passes. It is ready only when t
 
 ## Evidence and references
 
-- Local implementation and browser audit: `showroom/src`, `tools/verify_app_build.mjs`, and the route measurements above.
+- Local implementation and browser audit: `showroom/src`, `tools/verify_app_build.mjs`, `tools/audit_product_routes.mjs`, and `PRODUCT-QUALITY.md`.
 - Playwright ARIA snapshots: https://playwright.dev/docs/aria-snapshots
 - React Aria: https://react-spectrum.adobe.com/react-aria/getting-started.html
 - PGlite: https://pglite.dev/docs/about

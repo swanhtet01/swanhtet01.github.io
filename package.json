@@ -15,6 +15,8 @@
     "app:dev:verify": "node tools/verify_local_app_dev.mjs",
     "app:verify:live": "node tools/verify_app_release_live.mjs",
     "app:verify:live:current": "node tools/verify_app_release_live.mjs --current-head",
+    "qa:routes": "npm --prefix showroom run build && npm run public:build && node tools/audit_product_routes.mjs",
+    "qa:routes:strict": "npm --prefix showroom run build && npm run public:build && node tools/audit_product_routes.mjs --require-targets",
     "dev": "node tools/run_local_app.mjs",
     "bundle:preview": "python3 tools/package_preview_bundle.py",
     "deploy:preview": "bash tools/deploy_preview.sh",
@@ -110,6 +112,7 @@
     "hq:verify:live:self-test": "node tools/verify_hq_live_state.mjs --self-test"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.4"
+    "@electric-sql/pglite": "0.5.4",
+    "playwright-core": "1.62.1"
   }
 }

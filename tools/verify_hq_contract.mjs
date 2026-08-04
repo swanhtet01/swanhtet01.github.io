@@ -67,6 +67,11 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 const managedPilotReadiness = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8'))
+const ceoProductGoal = await readFile(resolve(root, 'hq', 'SUPERMEGA-CEO-PRODUCT-GOAL.md'), 'utf8')
+const productQualityReport = await readFile(resolve(root, 'hq', 'PRODUCT-QUALITY.md'), 'utf8')
+const routeQualityPolicyText = await readFile(resolve(root, 'hq', 'product-route-quality-policy.json'), 'utf8')
+const routeQualityAudit = await readFile(resolve(root, 'tools', 'audit_product_routes.mjs'), 'utf8')
+const routeQualityPolicy = JSON.parse(routeQualityPolicyText)
 
 const manifest = JSON.parse(manifestText)
 const canonicalTextLength = (value) => value.replaceAll('\r\n', '\n').length
@@ -172,6 +177,46 @@ requireContract('AI is shared infrastructure, not a fifth product',
   && sharedCapability('ai-assistance')?.appAnchor === '/work/?view=agents')
 requireContract('product lifecycle is explicit',
   portfolio.productLifecycle?.join(',') === 'discover,define,build,release,learn')
+requireContract('CEO four-product and innovation goal is explicit',
+  ceoProductGoal.includes('Make each SuperMega product deliver one verified business outcome in a first session')
+  && ceoProductGoal.includes('SuperMega has four customer products. Do not add a fifth product')
+  && ceoProductGoal.includes('### 1. SuperMega Blueprint')
+  && ceoProductGoal.includes('### 2. SuperMega Sync')
+  && ceoProductGoal.includes('### 3. SuperMega Actions')
+  && ceoProductGoal.includes('### 4. SuperMega Connect')
+  && ceoProductGoal.includes('Verified first-value rate')
+  && ceoProductGoal.includes('Reduce Shop Orders'))
+requireContract('route quality policy is bounded and four-product',
+  routeQualityPolicy.contract === 'supermega.product-route-quality-policy.v1'
+  && routeQualityPolicy.viewports?.map((entry) => entry.id).join(',') === 'mobile,desktop'
+  && routeQualityPolicy.routes?.length === 14
+  && new Set(routeQualityPolicy.routes.map((entry) => entry.id)).size === 14
+  && routeQualityPolicy.routes.filter((entry) => entry.scope === 'public').length === 6
+  && routeQualityPolicy.routes.filter((entry) => entry.scope === 'app').length === 8
+  && ['app-shop-orders', 'app-shop-inventory', 'app-plant-jobs', 'app-plant-problems', 'app-website', 'app-ecommerce'].every((id) => routeQualityPolicy.routes.some((entry) => entry.id === id))
+  && routeQualityPolicy.routes.every((entry) => Number.isInteger(entry.maxVisibleActions)
+    && Number.isInteger(entry.targetVisibleActions)
+    && entry.targetVisibleActions <= entry.maxVisibleActions))
+requireContract('route quality browser gate is fail-closed and resource bounded',
+  routeQualityAudit.includes("import { chromium } from 'playwright-core'")
+  && routeQualityAudit.includes("await page.route('**/*'")
+  && routeQualityAudit.includes('externalRequests.push(')
+  && routeQualityAudit.includes('touch_targets_under_44')
+  && routeQualityAudit.includes('horizontal_overflow')
+  && routeQualityAudit.includes("element.closest('[hidden],[inert],[aria-hidden=\"true\"]')")
+  && routeQualityAudit.includes('await server.close()')
+  && routeQualityAudit.includes('await browser.close()')
+  && !routeQualityAudit.includes("from 'node:child_process'"))
+requireContract('route quality report preserves current debt and production caveat',
+  productQualityReport.includes('28 checks')
+  && productQualityReport.includes('Shop Orders | 114 | 115 | 44 | Highest-priority redesign')
+  && productQualityReport.includes('production not verified by this report')
+  && productQualityReport.includes('does not prove hosted persistence')
+  && productQualityReport.includes('Do not add a fifth customer product'))
+requireContract('route quality command and pinned browser client are installed',
+  packageText.includes('"qa:routes": "npm --prefix showroom run build && npm run public:build && node tools/audit_product_routes.mjs"')
+  && packageText.includes('"qa:routes:strict": "npm --prefix showroom run build && npm run public:build && node tools/audit_product_routes.mjs --require-targets"')
+  && packageText.includes('"playwright-core": "1.62.1"'))
 requireContract('one bounded agent operating model is authoritative',
   portfolio.agentOperatingModel?.mode === 'bounded-demand-driven'
   && portfolio.agentOperatingModel?.manager === 'CEO / Codex integrator'

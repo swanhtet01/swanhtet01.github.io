@@ -614,9 +614,9 @@ textarea { min-height: 72px; resize: vertical; }
 .order-row-more > summary::after { content: '+'; color: var(--core-green); font-family: var(--core-mono); font-size: 12px; }
 .order-row-more[open] > summary::after { content: '\2212'; }
 .order-row-more > div { display: grid; justify-items: end; gap: 2px; border-top: 1px solid var(--core-line); padding-top: 4px; }
-.order-row-more > div .text-link { min-height: 40px; text-align: right; }
+.order-row-more > div .text-link { min-height: 44px; text-align: right; }
 .order-record-details { min-width: 0; }
-.order-record-details > summary { display: flex; align-items: center; gap: 8px; width: fit-content; cursor: pointer; color: var(--core-quiet); list-style: none; }
+.order-record-details > summary { min-height: 44px; display: flex; align-items: center; gap: 8px; width: fit-content; cursor: pointer; color: var(--core-quiet); list-style: none; }
 .order-record-details > summary::-webkit-details-marker { display: none; }
 .order-record-details > summary::after { content: '+'; color: var(--core-green); font-family: var(--core-mono); font-size: 12px; }
 .order-record-details[open] > summary::after { content: '\2212'; }

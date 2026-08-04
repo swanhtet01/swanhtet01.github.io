@@ -581,6 +581,7 @@
 }
 
 .ecommerce-request-filter button {
+  min-width: 44px;
   min-height: 44px;
   border: 1px solid rgba(12, 106, 86, .18);
   border-radius: 999px;
