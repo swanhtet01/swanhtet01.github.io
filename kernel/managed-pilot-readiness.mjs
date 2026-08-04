@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-export const MANAGED_PILOT_READINESS_CONTRACT = 'supermega.managed-pilot-readiness.v1'
+export const MANAGED_PILOT_READINESS_CONTRACT = 'supermega.managed-pilot-readiness.v2'
 
 const PRODUCT_IDS = ['shop', 'plant', 'website', 'ecommerce']
 const GATE_IDS = [
@@ -13,6 +13,22 @@ const GATE_IDS = [
   'named_pilot',
   'production_activation',
 ]
+const PROPOSED_ACTIONS = [
+  'create_one_preview_branch',
+  'apply_reviewed_migrations_to_preview',
+  'create_one_named_preview_operator',
+  'run_hosted_isolation_storage_recovery_proof',
+  'delete_preview_branch_after_evidence',
+]
+const FORBIDDEN_ACTIONS = [
+  'production_database_change',
+  'production_deploy',
+  'customer_message',
+  'payment',
+  'stock_move',
+  'managed_product_activation',
+  'hosted_scheduler_activation',
+]
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -24,6 +40,12 @@ function stableStringify(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+}
+
+function exactStringArray(value, expected) {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && value.every((entry, index) => entry === expected[index])
 }
 
 export function readinessDigest(value) {
@@ -106,7 +128,33 @@ export function buildManagedPilotReadiness(input = {}) {
       localDatabaseProofReady: true,
       hostedActivationReady: false,
       blockingGateCount: gates.filter((entry) => entry.status === 'blocked').length,
-      nextAction: 'Obtain founder approval for one isolated non-production Supabase target and one named Shop pilot operator.',
+      nextAction: 'Approve one 24-hour, data-less Supabase preview branch and name one Shop pilot operator.',
+    },
+    founderDecision: {
+      status: 'required',
+      authority: 'proposal_only',
+      createsAuthority: false,
+      approvalReceipt: null,
+      decision: 'Approve one bounded managed-pilot rehearsal.',
+      target: {
+        provider: 'supabase',
+        environment: 'preview_branch',
+        production: false,
+        startsWithProductionData: false,
+        requiredServices: ['database', 'auth', 'storage'],
+        maximumLifetimeHours: 24,
+        deleteAfterEvidence: true,
+        providerUsageChargesAcknowledged: false,
+      },
+      operator: {
+        productId: 'shop',
+        namedBusinessRequired: true,
+        namedOperatorRequired: true,
+        measuredBaselineRequired: true,
+        acceptanceEvidenceRequired: true,
+      },
+      proposedActions: [...PROPOSED_ACTIONS],
+      doesNotAuthorize: [...FORBIDDEN_ACTIONS],
     },
     gates,
     products,
@@ -128,6 +176,27 @@ export function validateManagedPilotReadiness(value) {
   if (!isRecord(value) || value.contract !== MANAGED_PILOT_READINESS_CONTRACT || !Number.isFinite(Date.parse(value.asOf))) fail('managed_pilot_readiness_contract_invalid')
   if (!/^sha256:[0-9a-f]{64}$/.test(value.sourceDigest || '') || value.sourceDigest !== readinessDigest(value.sourceReceipts)) fail('managed_pilot_readiness_digest_invalid')
   if (value.overall?.status !== 'blocked' || value.overall?.hostedActivationReady !== false || value.overall?.localDatabaseProofReady !== true || value.overall?.blockingGateCount !== 7) fail('managed_pilot_readiness_overall_invalid')
+  const decision = value.founderDecision
+  if (decision?.status !== 'required'
+    || decision.authority !== 'proposal_only'
+    || decision.createsAuthority !== false
+    || decision.approvalReceipt !== null
+    || decision.target?.provider !== 'supabase'
+    || decision.target?.environment !== 'preview_branch'
+    || decision.target?.production !== false
+    || decision.target?.startsWithProductionData !== false
+    || decision.target?.maximumLifetimeHours !== 24
+    || decision.target?.deleteAfterEvidence !== true
+    || decision.target?.providerUsageChargesAcknowledged !== false
+    || decision.target?.requiredServices?.join(',') !== 'database,auth,storage'
+    || decision.operator?.productId !== 'shop'
+    || decision.operator?.namedBusinessRequired !== true
+    || decision.operator?.namedOperatorRequired !== true
+    || decision.operator?.measuredBaselineRequired !== true
+    || decision.operator?.acceptanceEvidenceRequired !== true
+    || !exactStringArray(decision.proposedActions, PROPOSED_ACTIONS)
+    || !exactStringArray(decision.doesNotAuthorize, FORBIDDEN_ACTIONS)
+    || decision.proposedActions.some((action) => decision.doesNotAuthorize.includes(action))) fail('managed_pilot_readiness_founder_decision_invalid')
   if (!Array.isArray(value.gates) || value.gates.map((entry) => entry.id).join(',') !== GATE_IDS.join(',') || value.gates[0]?.status !== 'ready-local' || value.gates.slice(1).some((entry) => entry.status !== 'blocked')) fail('managed_pilot_readiness_gates_invalid')
   if (!Array.isArray(value.products) || value.products.map((product) => product.productId).join(',') !== PRODUCT_IDS.join(',') || value.products.some((product) => product.managedPilotStatus !== 'blocked' || product.automationStatus !== 'owner-gated')) fail('managed_pilot_readiness_products_invalid')
   if (value.controls?.externalWritesPerformed !== false || value.controls?.connectorRequestsPerformed !== 0 || value.controls?.modelCallsRequiredToBuild !== 0 || value.controls?.productionWritesEnabled !== false || value.controls?.ownerApprovalRequired !== true) fail('managed_pilot_readiness_controls_invalid')

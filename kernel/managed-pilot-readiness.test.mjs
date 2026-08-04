@@ -43,6 +43,14 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.doesNotMatch(JSON.stringify(ledger), /app_product_contract_drift/)
   assert.equal(ledger.products.length, 4)
   assert.equal(ledger.controls.modelCallsRequiredToBuild, 0)
+  assert.equal(ledger.founderDecision.target.environment, 'preview_branch')
+  assert.equal(ledger.founderDecision.target.maximumLifetimeHours, 24)
+  assert.equal(ledger.founderDecision.target.startsWithProductionData, false)
+  assert.equal(ledger.founderDecision.operator.productId, 'shop')
+  assert.equal(ledger.founderDecision.authority, 'proposal_only')
+  assert.equal(ledger.founderDecision.createsAuthority, false)
+  assert.equal(ledger.founderDecision.approvalReceipt, null)
+  assert.ok(ledger.founderDecision.doesNotAuthorize.includes('production_database_change'))
   assert.equal(validateManagedPilotReadiness(ledger), ledger)
 })
 
@@ -57,4 +65,38 @@ test('rejects hosted overclaims and product authority drift', () => {
   const ungated = structuredClone(input)
   ungated.portfolio.products[0].localAutomation.status = 'ready-local'
   assert.throws(() => buildManagedPilotReadiness(ungated), /managed_pilot_readiness_product_invalid/)
+})
+
+test('rejects a founder decision that can touch production or outlive the bounded rehearsal', () => {
+  const ledger = buildManagedPilotReadiness(input)
+  ledger.founderDecision.target.production = true
+  assert.throws(() => validateManagedPilotReadiness(ledger), /managed_pilot_readiness_founder_decision_invalid/)
+
+  const longLived = buildManagedPilotReadiness(input)
+  longLived.founderDecision.target.maximumLifetimeHours = 168
+  assert.throws(() => validateManagedPilotReadiness(longLived), /managed_pilot_readiness_founder_decision_invalid/)
+})
+
+test('rejects broadened, incomplete, or contradictory proposal authority', () => {
+  const broadened = buildManagedPilotReadiness(input)
+  broadened.founderDecision.proposedActions.push('production_deploy')
+  assert.throws(() => validateManagedPilotReadiness(broadened), /managed_pilot_readiness_founder_decision_invalid/)
+
+  const incomplete = buildManagedPilotReadiness(input)
+  incomplete.founderDecision.doesNotAuthorize.pop()
+  assert.throws(() => validateManagedPilotReadiness(incomplete), /managed_pilot_readiness_founder_decision_invalid/)
+
+  const contradictory = buildManagedPilotReadiness(input)
+  contradictory.founderDecision.doesNotAuthorize[0] = contradictory.founderDecision.proposedActions[0]
+  assert.throws(() => validateManagedPilotReadiness(contradictory), /managed_pilot_readiness_founder_decision_invalid/)
+
+  const authoritative = buildManagedPilotReadiness(input)
+  authoritative.founderDecision.createsAuthority = true
+  authoritative.founderDecision.approvalReceipt = { approvedBy: 'founder' }
+  assert.throws(() => validateManagedPilotReadiness(authoritative), /managed_pilot_readiness_founder_decision_invalid/)
+
+  const collapsed = buildManagedPilotReadiness(input)
+  collapsed.founderDecision.proposedActions = [collapsed.founderDecision.proposedActions.join(',')]
+  collapsed.founderDecision.doesNotAuthorize = [collapsed.founderDecision.doesNotAuthorize.join(',')]
+  assert.throws(() => validateManagedPilotReadiness(collapsed), /managed_pilot_readiness_founder_decision_invalid/)
 })

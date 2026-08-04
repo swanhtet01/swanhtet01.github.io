@@ -24,6 +24,7 @@ import {
   COMPANY_DAILY_BUDGET_DEFAULT_UNITS,
   COMPANY_DAILY_BUDGET_HARD_MAX_UNITS,
 } from '../kernel/gateway.mjs'
+import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText] = await Promise.all([
@@ -66,7 +67,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'supermega_runtime', 'agent_governance.py'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
-const managedPilotReadiness = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8'))
+const managedPilotReadiness = validateManagedPilotReadiness(JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8')))
 
 const manifest = JSON.parse(manifestText)
 const canonicalTextLength = (value) => value.replaceAll('\r\n', '\n').length
@@ -1054,13 +1055,26 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.safety?.vercelMutated === false)
 
 requireContract('managed pilot readiness is derived and fail closed',
-  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v1'
+  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v2'
   && managedPilotReadiness.overall?.status === 'blocked'
   && managedPilotReadiness.overall?.localDatabaseProofReady === true
   && managedPilotReadiness.overall?.hostedActivationReady === false
   && managedPilotReadiness.overall?.blockingGateCount === 7
   && managedPilotReadiness.products?.map((product) => product.productId).join(',') === 'shop,plant,website,ecommerce'
   && managedPilotReadiness.products?.every((product) => product.managedPilotStatus === 'blocked' && product.automationStatus === 'owner-gated')
+  && managedPilotReadiness.founderDecision?.status === 'required'
+  && managedPilotReadiness.founderDecision?.authority === 'proposal_only'
+  && managedPilotReadiness.founderDecision?.createsAuthority === false
+  && managedPilotReadiness.founderDecision?.approvalReceipt === null
+  && managedPilotReadiness.founderDecision?.target?.environment === 'preview_branch'
+  && managedPilotReadiness.founderDecision?.target?.production === false
+  && managedPilotReadiness.founderDecision?.target?.startsWithProductionData === false
+  && managedPilotReadiness.founderDecision?.target?.maximumLifetimeHours === 24
+  && managedPilotReadiness.founderDecision?.target?.deleteAfterEvidence === true
+  && managedPilotReadiness.founderDecision?.operator?.productId === 'shop'
+  && managedPilotReadiness.founderDecision?.proposedActions?.includes('delete_preview_branch_after_evidence')
+  && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('production_database_change')
+  && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('hosted_scheduler_activation')
   && managedPilotReadiness.controls?.externalWritesPerformed === false
   && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
