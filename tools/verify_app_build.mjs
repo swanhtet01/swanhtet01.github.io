@@ -2512,11 +2512,9 @@ if (!appSource.includes("lazy(() => import('./products/ecommerce/EcommerceProduc
   || !appSource.includes('path="plant/*"')) fail('canonical_product_routes_missing')
 const publicProductRoutes = [...appSource.matchAll(/<Route element=\{<Suspense fallback=\{<ProductLoading name="[^"]+" \/>\}>.*?path="([a-z][a-z0-9-]*)\/\*" \/>/g)]
   .map((match) => match[1])
-  .filter((route) => route !== 'settings' && route !== 'vision')
+  .filter((route) => route !== 'settings')
 if (publicProductRoutes.join(',') !== 'shop,plant,website,ecommerce') fail('public_product_route_drift')
-if (!appSource.includes("const VisionProduct = visionPreviewEnabled\n  ? lazy(() => import('./products/vision/VisionProduct')")
-  || !appSource.includes('visionPreviewEnabled && VisionProduct ? <Route')
-  || !appSource.includes('path="vision/*"')) fail('private_vision_preview_gate_missing')
+if (/VisionProduct|visionPreviewEnabled|VITE_SUPERMEGA_VISION_PREVIEW|path="vision\/\*"/.test(appSource)) fail('retired_service_product_route_present')
 if (!appSource.includes("} from './core/CoreShell'")
   || appSource.includes("} from './core/CoreApp'")
   || !appSource.includes("const OperationsPage = lazy(() => import('./core/OperationsPageRoute'))")
@@ -6112,6 +6110,7 @@ if (coreSource.includes('>All apps</Link>')
   || !coreCssSource.includes('.order-row-actions .text-link { min-width: 44px; justify-content: center; }')
   || !coreCssSource.includes('.boundary-list a { min-height: 44px;')) fail('product_mobile_simplification_missing')
 let workflowProfiles = 0
+if (Object.hasOwn(manifest, 'serviceProducts')) fail('retired_service_product_catalog_present')
 const solutionProducts = manifest.customerProducts || []
 if (solutionProducts.map((product) => `${product.id}:${product.runtimeId}`).join(',') !== 'shop:commerce,plant:production,website:website,ecommerce:ecommerce') fail('canonical_four_product_order_missing')
 const websiteProductContract = solutionProducts.find((product) => product.id === 'website')
@@ -18556,7 +18555,7 @@ else {
     fail('product_operations_eagerly_loaded_on_home')
   }
 }
-if (files.some((path) => /[\\/]VisionProduct-[^\\/]+\.(?:js|css)$/.test(path))) fail('private_vision_preview_shipped_in_production')
+if (files.some((path) => /[\\/]VisionProduct-[^\\/]+\.(?:js|css)$/.test(path))) fail('retired_service_product_shipped_in_production')
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))
 if (!operationsArtifactPath) fail('operations_route_artifact_missing')

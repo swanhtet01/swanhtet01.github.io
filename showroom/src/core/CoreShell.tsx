@@ -356,8 +356,6 @@ export function CoreLayout() {
       ? 'Website'
       : location.pathname.startsWith('/ecommerce/')
       ? 'Ecommerce'
-      : location.pathname.startsWith('/vision/')
-        ? 'Vision'
       : internalBuilderRoute
         ? 'Client builder'
       : customerSettingsRoute
@@ -375,7 +373,6 @@ export function CoreLayout() {
   }, [location.hash, location.pathname, location.search, routeName])
 
   useEffect(() => {
-    if (location.pathname.startsWith('/vision/')) return
     const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}${location.hash}`
     const product = routeProduct ?? settingsProduct ?? 'unknown'
     if (routeProduct) rememberLastProduct(window.localStorage, routeProduct)

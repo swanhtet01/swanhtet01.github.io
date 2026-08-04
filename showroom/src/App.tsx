@@ -14,10 +14,6 @@ const WorkspaceControlsPage = lazy(() => import('./core/WorkspaceControlsPage').
 const ProductOnboardingPage = lazy(() => import('./core/ProductOnboardingPage').then((module) => ({ default: module.ProductOnboardingPage })))
 const ManagedLoginPage = lazy(() => import('./core/ManagedLoginPage').then((module) => ({ default: module.ManagedLoginPage })))
 const ManagedAccountPage = lazy(() => import('./core/ManagedAccountPage').then((module) => ({ default: module.ManagedAccountPage })))
-const visionPreviewEnabled = import.meta.env.DEV || import.meta.env.VITE_SUPERMEGA_VISION_PREVIEW === '1'
-const VisionProduct = visionPreviewEnabled
-  ? lazy(() => import('./products/vision/VisionProduct').then((module) => ({ default: module.VisionProduct })))
-  : null
 
 function ProductLoading({ name }: { name: string }) {
   return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Loading {name}…</p></div>
@@ -29,7 +25,6 @@ function productDemoPath(value: string | null) {
   if (demo === 'shop' || demo === 'retail') return '/shop/'
   if (demo === 'website' || demo === 'site') return '/website/'
   if (demo === 'ecommerce' || demo === 'storefront' || demo === 'online-orders') return '/ecommerce/'
-  if (visionPreviewEnabled && (demo === 'vision' || demo === 'computer-vision')) return '/vision/'
   return null
 }
 
@@ -75,7 +70,6 @@ export default function App() {
           <Route element={<Suspense fallback={<ProductLoading name="Plant" />}><OperationsPage product="production" /></Suspense>} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Ecommerce" />}><EcommerceProduct /></Suspense>} path="ecommerce/*" />
-          {visionPreviewEnabled && VisionProduct ? <Route element={<Suspense fallback={<ProductLoading name="Vision" />}><VisionProduct /></Suspense>} path="vision/*" /> : null}
           <Route element={<Navigate replace to="/shop/" />} path="operations/commerce/*" />
           <Route element={<Navigate replace to="/plant/" />} path="operations/production/*" />
           <Route element={<Navigate replace to="/" />} path="operations/*" />
