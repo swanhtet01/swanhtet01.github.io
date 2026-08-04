@@ -24,12 +24,15 @@ This charter refines the active company goal; it does not declare the current re
 
 The local candidate now proves that Shop, Plant, Website, and Ecommerce each move from a one-field product setup to the correct separate workspace and one useful first task on mobile and desktop. The complete local browser matrix has fourteen workflow gates and 98 deterministic checkpoints. First-value timing is now bound to the latest product-onboarding journey, so an old demo completion cannot make a new workspace appear activated.
 
+Production does not yet serve that candidate. On 2026-08-04 both canonical release endpoints still identified `25cac2f50dfcc210d29dd1fd794ac194083f90d1`, while the verified local candidate was `c5d0b39b545463f7bd97a87fbf16a9df4ccf3573`. The hosted app root still opens the older multi-product and support-helper dashboard; the local root opens the current product directly and keeps the four-product chooser behind an explicit switch action. Public DNS resolves the app to Vercel, and a cleared Ally DNS cache restored normal access, so the remaining customer-facing issue is release drift rather than a missing domain.
+
 The company constraint is no longer a missing fifth product, framework, or menu. Seven managed-pilot gates remain blocked: hosted Postgres rehearsal, private storage proof, live managed product contract, managed persistence, security, a named pilot, and production activation. The local foundation now also has a digest-bound public Data API quarantine: it covers the exact 27-table/two-sequence legacy catalog, removes browser grants and risky future-object defaults, preserves the server contact path, rejects drift, and survives PostgreSQL 17 backup/restore. This is local evidence only. The current CEO priority is therefore:
 
-1. Preserve the simple four-product first session and its browser evidence.
-2. On an approved isolated Supabase clone, apply the digest-bound public browser quarantine plus v8-v10 and prove identity binding, tenant isolation, explicit grants/RLS, idempotency, conflict, active-session revocation, private Storage, backup, restore, and observability. Local PostgreSQL 17 already proves the exact Auth project/session/user contract and immediate denial after session deletion; repeat it under hosted Supabase before any managed claim.
-3. Run five named operator sessions and measure first value, time to value, correction effort, and repeat useful work.
-4. Fund only the product depth or adapter that the evidence identifies as the next constraint.
+1. Reconcile the verified candidate onto current `origin/main`, then require a protected preview, owner-authorized paired app/public promotion, rollback target, exact matching release metadata, and a fresh live browser matrix before calling the redesign live.
+2. Preserve the simple four-product first session and its browser evidence while that integration is reviewed; do not add another product, shell, framework, or navigation layer.
+3. On an approved isolated Supabase clone, apply the digest-bound public browser quarantine plus v8-v10 and prove identity binding, tenant isolation, explicit grants/RLS, idempotency, conflict, active-session revocation, private Storage, backup, restore, and observability. Local PostgreSQL 17 already proves the exact Auth project/session/user contract and immediate denial after session deletion; repeat it under hosted Supabase before any managed claim.
+4. Run five named operator sessions and measure first value, time to value, correction effort, and repeat useful work.
+5. Fund only the product depth or adapter that the evidence identifies as the next constraint.
 
 Production, provider, connector, payment, publish, and customer-message authority remain separately gated.
 
@@ -137,7 +140,7 @@ These capabilities are internal platform layers. Customers should still see only
 | --- | --- | --- | --- |
 | Supabase Auth, Postgres, Storage, and RLS | Durable managed workspaces; verified first value without identity confusion, cross-tenant access, or data loss | Apply reviewed v8-v10 plus the digest-bound public browser quarantine, private Storage, restore, tenant denial, and the locally proven active-session revocation contract on one isolated non-production target | Highest priority managed foundation; do not touch protected production before every hosted gate passes |
 | Playwright Core and system browser | Prevent release regressions in first-session completion, mobile usability, and recovery | Keep the 14-workflow, 98-checkpoint matrix serial and deterministic | Adopted release authority for browser behavior |
-| Existing Vercel deployment and function observability | Diagnose live release, latency, failure, and cost without adding client complexity | Read the exact release's existing logs and metrics during a bounded pilot | Use before adding a second observability vendor or browser SDK |
+| Existing Vercel paired release, deployment identity, and function observability | Prevent a verified local candidate from drifting away from what customers actually receive; diagnose latency, failure, and cost without adding client complexity | Require exact app/public release metadata, matching static artifacts, protected preview, rollback target, and live route proof for the selected commit | Immediate release priority; use before adding a second observability vendor or browser SDK |
 | PostHog custom product events | Verified first-value funnel, time to value, and retention | Mirror only the approved first-party event schema in an isolated consented pilot; no autocapture or session replay | Defer until hosted identity, consent, retention, and privacy review exist |
 | Supabase Queues versus Vercel Workflow | Durable server-owned import, connector retry, or release-package job | Run the same idempotent, tenant-bound, failure-injected job on each candidate | Prototype after managed security; select at most one orchestration authority |
 | OpenAI Agents SDK or another model provider | Source-backed drafts and recommendations that reduce operator effort | One read-only or draft-only workflow with explicit approval, rejection, cost, and quality evidence | Provider-neutral prototype only; deterministic product contracts retain authority |
@@ -209,16 +212,19 @@ Production instrumentation is not yet available, so targets below are provisiona
 
 ## Current UX evidence baseline
 
-Captured before the current Plant focus-drawer and touch-target slice on 2026-08-04 from settled route DOMs. `Visible actions` counts interactive elements visible after the route settled; `mobile first viewport` counts visible controls in a 390 x 844 audit viewport. Counts describe interface density, not feature completeness, and remain the comparison baseline for the next automated inventory.
+The strict 2026-08-04 candidate audit used Edge at 390 x 844 and 1280 x 900. It passed 28 route checks and fourteen end-to-end workflow checks with no route, workflow, simplicity-target, console, page, external-request, unnamed-action, horizontal-overflow, disclosure, or mobile touch-target failures. Report digest: `sha256:88678357453112e9b7b911f54da8467c24a66341b724ed899dabe9079e91fd11`.
 
-| Product | Live visible actions | Local candidate visible actions | Mobile first viewport controls | Mobile controls below 44 px |
+`Visible actions` counts settled interactive elements. `Mobile first viewport` counts controls visible without scrolling. These budgets protect simplicity; they do not imply every visible control deserves equal emphasis.
+
+| Candidate route | Mobile visible actions | Desktop visible actions | Mobile first viewport | Mobile controls below 44 px |
 | --- | ---: | ---: | ---: | ---: |
-| Shop | 13 | 26 | 16 | 0 |
-| Plant | 53 | 50 | 20 | 9 |
-| Website | 29 | 26 | 11 | 0 |
-| Ecommerce | 59 | 55 | 10 | 0 |
+| Shop orders | 22 | 23 | 16 | 0 |
+| Plant jobs | 19 | 20 | 9 | 0 |
+| Website | 14 | 18 | 10 | 0 |
+| Ecommerce | 18 | 19 | 9 | 0 |
+| Shop setup | 8 | 9 | 7 | 0 |
 
-The same audit found 18 visible actions on the live app root and a multi-product sidebar during product setup. The local Shop setup had nine visible actions and one field, but its help link measured 35 px before the current fix. These numbers show that Plant and Ecommerce carry the highest total action density, while the production onboarding flow still exposes company-wide concepts too early.
+The candidate root now resumes Shop by default and exposes fourteen settled mobile actions, thirteen in the first viewport. The explicit `/?choose=1` switcher shows only four product cards with one action each. Production still serves the older `Start with one product` multi-product/support-helper root from `25cac2f5`; live density is therefore not accepted as current-candidate evidence.
 
 ## Release and investment gates
 
@@ -235,12 +241,14 @@ A product release is not ready because the build passes. It is ready only when t
 
 ## Immediate sequence
 
-1. Preserve Ecommerce-to-Shop, Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file proof at both viewports.
-2. Preserve the now-proven Blueprint no-write preview inside each product's existing `Next steps` data tool. Keep its deterministic mapping, repair, digest, review lock, and `staged_not_applied` contracts; do not create another public setup page.
-3. Preserve the now-proven current-journey first-value attribution and four-product one-field onboarding-to-first-task browser gate. Instrument the three CEO KPIs around those records, then run five moderated Shop/Plant sessions before expanding product scope.
-4. Preserve the now-proven Shop local write-ahead and reload-recovery contract at both viewports. Measure receipt growth, startup cost, conflict frequency, and low-end Android behavior before extending the same bounded contract to Plant.
-5. Close managed-persistence evidence on one owner-approved isolated clone: verify the signed public catalog, apply the digest-bound browser quarantine and v8-v10, then prove tenant isolation, authenticated tenant-bound idempotency, active-session revocation, conflict handling, private Storage, server-path retention, backup/restore, and only then production activation readiness. Never treat browser-stored outbox state as managed write authority. Provider writes and live activation remain owner-gated.
-6. Only after those gates pass, compare private Supabase Queues and Vercel Workflow against one bounded durable-job contract; adopt at most one execution path for that job and keep customer browsers away from queue authority.
+1. Reconcile the candidate with current `origin/main` on a new owner-reviewed integration branch. Preserve both upstream safeguards and candidate product behavior; run the complete gate before preparing the existing exact-commit release handoff. No force push or direct deployment from this checkout.
+2. After separate owner authorization, use the protected coordinated workflow for one paired app/public release. Capture rollback targets first; then require matching `__release.json`, current static assets, all public product routes, and the mobile/desktop first-session matrix against the promoted commit.
+3. Preserve Ecommerce-to-Shop, Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file proof at both viewports.
+4. Preserve the now-proven Blueprint no-write preview inside each product's existing `Next steps` data tool. Keep its deterministic mapping, repair, digest, review lock, and `staged_not_applied` contracts; do not create another public setup page.
+5. Preserve the now-proven current-journey first-value attribution and four-product one-field onboarding-to-first-task browser gate. Instrument the three CEO KPIs around those records, then run five moderated Shop/Plant sessions before expanding product scope.
+6. Preserve the now-proven Shop local write-ahead and reload-recovery contract at both viewports. Measure receipt growth, startup cost, conflict frequency, and low-end Android behavior before extending the same bounded contract to Plant.
+7. Close managed-persistence evidence on one owner-approved isolated clone: verify the signed public catalog, apply the digest-bound browser quarantine and v8-v10, then prove tenant isolation, authenticated tenant-bound idempotency, active-session revocation, conflict handling, private Storage, server-path retention, backup/restore, and only then production activation readiness. Never treat browser-stored outbox state as managed write authority. Provider writes and live activation remain owner-gated.
+8. Only after those gates pass, compare private Supabase Queues and Vercel Workflow against one bounded durable-job contract; adopt at most one execution path for that job and keep customer browsers away from queue authority.
 
 ## Evidence and references
 
@@ -262,6 +270,6 @@ A product release is not ready because the build passes. It is ready only when t
 ## Assumptions and unresolved evidence
 
 - No production activation, retention, revenue, support-volume, or cohort dataset was available for this decision. KPI targets are provisional pilot targets.
-- The local route audit is current to the working tree on 2026-08-04; production remains a separate, stale release until live evidence proves otherwise.
+- The local route audit is current to candidate `c5d0b39b` on 2026-08-04; production remains paired at `25cac2f5` and stale until an integrated exact commit passes protected preview, paired promotion, rollback, and fresh live evidence.
 - Myanmar-specific payment, tax, data-residency, language, hardware, and channel requirements require client and legal discovery before an adapter can be called production-ready.
 - Framework and integration adoption remains conditional on measured device performance, operating cost, security review, and the release gates above.

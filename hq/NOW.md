@@ -5,7 +5,7 @@ Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
 Live release commit: `25cac2f50dfcc210d29dd1fd794ac194083f90d1`
-Live state observed: `2026-08-04T09:29:22.291Z`
+Live state observed: `2026-08-04T14:39:16.823Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -51,6 +51,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Plant mobile carries one shift through output, material, blockers, close, and reload (`2909fd66`).
 - Website has one **Customize demo**; empty Shop catalogs route to one safe import (`69068054`, `757cd3b6`).
 - Local candidate keeps one product per entry and focused public pages (`47fd933c`).
+- Candidate `c5d0b39b` passes 28 routes and fourteen workflows; live `25cac2f5` still serves the old entry.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
 ## Verified baseline
@@ -59,7 +60,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Checks: 106 Ecommerce, 347 Commerce, 332 Production, 10 Shop next-action, 118 Website, 95 security, 241 onboarding, 11 backup, 85 managed import, 5 focused Supabase Auth tests, and 56 PostgreSQL 17 checks across eleven migrations plus the public browser quarantine.
 - The deterministic 12-profile rehearsal passes 24 rows. All four desktop missions are overflow-free. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
-- Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1`; paired brand, context, and catalog identities match at `jade-v2-2026-07` / `2026-07-31.3`. Paired release metadata is internally consistent; current-head page-contract checks report drift.
+- Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1`; paired brand, context, and catalog identities match at `jade-v2-2026-07` / `2026-07-31.3`. Paired release metadata is internally consistent; current-head page-contract checks report drift. The strict candidate audit remains local.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating; loaded models and local subagents remain off. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
@@ -73,7 +74,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - Hosted audit: `supermegabase` is PostgreSQL 17.6 at private schema v7 with 27 INFO notices. Browser object/default grants, v8-v10, and the quarantine remain hosted blockers pending an approved isolated clone, private Storage, tenant isolation, revocation, and recovery proof.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Both domains remain on accepted live `25cac2f5`; exact current-head verification reports release drift. Seven hosted gates block marketing; external handoffs require `release:handoff:verify`.
+- Both domains remain on accepted live `25cac2f5`; exact current-head verification reports release drift. The candidate diverges from current main/live, so integrate before handoff; external handoffs require `release:handoff:verify`.
 - The live public `/website/` and `/ecommerce/` routes intermittently returned `404` during the 2026-08-04 candidate verification; public availability remains unproven until a protected release and exact live check both pass.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
@@ -91,5 +92,6 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. On an approved isolated Supabase clone, apply the signed quarantine and v8-v10; prove grants/defaults, Storage, RLS, revocation, tenant isolation, server-path retention, backup, and restore before writes.
-2. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.
+1. Create the no-write integration packet, reconcile in bounded batches, and rerun the complete gate.
+2. After separate owner approval, require protected paired release, rollback, and exact live evidence.
+3. Then prove Supabase security on an isolated clone and recruit one Shop design partner; AI and scheduling stay dormant.
