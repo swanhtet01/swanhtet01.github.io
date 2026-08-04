@@ -738,6 +738,10 @@ function commerceOrderDisplayReference(orderId: string) {
   return match ? `#${match[1]}` : canonical
 }
 
+function commerceOrderTargetId(orderId: string) {
+  return `shop-order-${orderId.replace(/[^A-Za-z0-9_-]+/g, '-')}`
+}
+
 function commandUuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
@@ -1775,8 +1779,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   ), [commerce, correctionDraft])
 
   useEffect(() => {
-    if (tab !== 'inventory') return
+    if (tab !== 'inventory' && tab !== 'orders') return
     const frame = window.requestAnimationFrame(() => {
+      if (tab === 'orders' && commerceLocation.hash.startsWith('#shop-order-')) {
+        const target = document.getElementById(commerceLocation.hash.slice(1))
+        target?.scrollIntoView({ block: 'center' })
+        target?.focus({ preventScroll: true })
+        return
+      }
+      if (tab !== 'inventory') return
       if (commerceLocation.hash === '#purchase-orders') {
         const history = purchaseOrderHistoryRef.current
         if (history) history.open = true
@@ -1791,7 +1802,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       }
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [commerceLocation.hash, tab])
+  }, [commerce.orders.length, commerceLocation.hash, tab])
 
   useEffect(() => {
     let current = true
@@ -3003,7 +3014,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       ? `Order ${commerceOrderDisplayReference(pendingAction.subjectId)} created. Stock reserved. Finish fulfilment and reconcile payment before completion.`
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
     setPendingAction(null)
-    if (pendingAction.presentation === 'counter') navigate('/shop/?tab=orders#shop-order-queue')
+    if (pendingAction.presentation === 'counter') navigate(`/shop/?tab=orders#${commerceOrderTargetId(pendingAction.subjectId)}`)
   }
 
   function useChannelDraft(draft: ChannelOrderDraft) {
@@ -5784,7 +5795,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
+      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
@@ -6401,6 +6412,7 @@ function OrderList({
   orders,
   canCancel,
   disabled,
+  highlightedTargetId,
   onAdvance,
   onCancel,
   onReconcilePayment,
@@ -6410,6 +6422,7 @@ function OrderList({
   orders: CommerceOrder[]
   canCancel: (id: string) => boolean
   disabled: boolean
+  highlightedTargetId: string
   onAdvance: (id: string) => void
   onCancel: (id: string) => void
   onReconcilePayment: (id: string) => void
@@ -6428,7 +6441,8 @@ function OrderList({
     const acknowledgement = acknowledgementDownloads.get(order.id)
     const canCancelOrder = active && canCancel(order.id)
     const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder || (order.refundStatus === 'due' && !settleRefundIsPrimary)
-    return <article key={order.id}>
+    const targetId = commerceOrderTargetId(order.id)
+    return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <div className="order-statuses">
           <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'pending' : 'bounded'}`}>{order.status}</span>
