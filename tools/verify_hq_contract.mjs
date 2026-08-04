@@ -816,6 +816,10 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('| CEO-019 | CEO / Codex integrator | done-live |')
   && workboard.includes('Commit `757cd3b64d0818d477e698235c58c4fbf34682c5` makes zero catalog the first prerequisite')
   && workboard.includes('Guarded release `30817032783` promoted both canonical domains')
+  && workboard.includes('| REL-020 | Release / CEO integrator | done-live |')
+  && workboard.includes(`Both canonical release endpoints reported commit \`${hqLiveReleaseCommit}\``)
+  && workboard.includes('Current-head public verification remains failed by stale context plus intermittent `/website/` and `/ecommerce/` `404` responses.')
+  && workboard.includes('The local `47fd933c` product-first candidate supersedes the abstract managed-intelligence homepage but is not integrated or deployed.')
   && workboard.includes('| CEO-020 | CEO / Codex integrator | done-local |')
   && workboard.includes('Commit `a903bae4` removes company-readiness and data-setup panels from the app root')
   && workboard.includes('The combined candidate is not deployed')
@@ -1574,7 +1578,8 @@ requireContract('hosted one-job release stays accepted while candidate drift is 
   && workboard.includes('24 conflicts across five bounded batches')
   && workboard.includes('zero merge, push, deployment, or provider authority')
   && workboard.includes('| CEO-012 | CEO / Codex integrator | done-live |')
-  && now.includes('Accepted-commit checks pass; current-head checks report drift'))
+  && now.includes('Paired release metadata is internally consistent; current-head page-contract checks report drift')
+  && now.includes('public availability remains unproven until a protected release and exact live check both pass.'))
 
 requireContract('identity data integration authority follows the owning module',
   workboard.includes('| OPS-124 | CEO + Identity/Data Integration Contract Codex | done-local |')

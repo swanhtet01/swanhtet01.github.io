@@ -1,11 +1,11 @@
 # SuperMega work board
 
-Updated: 2026-08-03
+Updated: 2026-08-04
 Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `main`
-Current accepted release checkpoint: `757cd3b64d0818d477e698235c58c4fbf34682c5`
-Current accepted product checkpoint: `757cd3b64d0818d477e698235c58c4fbf34682c5`
+Current accepted release checkpoint: `25cac2f50dfcc210d29dd1fd794ac194083f90d1`
+Current accepted product checkpoint: `25cac2f50dfcc210d29dd1fd794ac194083f90d1`
 Current accepted operating checkpoint: `63a245f`
 Current accepted agent-operations checkpoint: `a2e1b89`
 Current accepted security checkpoint: `98b8044`
@@ -30,6 +30,7 @@ Claude coordination is paused by founder direction.
 
 | ID | Team / worker | Status | Outcome | Write authority | Acceptance |
 | --- | --- | --- | --- | --- | --- |
+| REL-020 | Release / CEO integrator | done-live | Retain the actual paired production checkpoint while the newer four-product candidate remains local. | Read-only release metadata and existing protected release evidence only | Both canonical release endpoints reported commit `25cac2f50dfcc210d29dd1fd794ac194083f90d1`, brand `jade-v2-2026-07`, and context/catalog `2026-07-31.3` at `2026-08-04T09:29:22.291Z`. The app reports `isolated_demo`, managed persistence false, security false, scheduler degraded, scheduler configured false, and one job per run. Current-head public verification remains failed by stale context plus intermittent `/website/` and `/ecommerce/` `404` responses. The local `47fd933c` product-first candidate supersedes the abstract managed-intelligence homepage but is not integrated or deployed. |
 | CEO-006 | CEO / Codex integrator | done-local | Correct the portfolio to Shop, Plant, Website, and Ecommerce, with AI assistance as shared infrastructure while preserving stable runtime data. | Authority, manifest, app shell, public generator, and verifiers in bounded slices | HQ, app-build, and public-output contracts passed; desktop/mobile routes preserved existing state; no push or deploy. |
 | CEO-007 | CEO / Codex integrator | done-local | Make all four products open into real work, support light and dark interfaces, and define honest reusable vertical packs without adding customer-facing setup clutter. | Product shell, Shop counter, Plant first screen, Website and Ecommerce entry states, template-pack manifest, and focused verifiers only | Shop counter sale, Ecommerce quote-to-Shop order, Plant output, Website responsive preview/editor, both themes, full local app/security gate, and zero-vulnerability dependency audits passed. Shop packs cover retail, cafe, restaurant, spa, gym, and school; Plant packs cover general, batch, food and beverage, apparel, and assembly. Planned modules remain explicitly unsellable as available. No subagent, model call, push, deploy, domain, credential, payment, customer send, or production write occurred. |
 | CEO-008 | CEO / Codex integrator | done-live | Publish the direct-product recovery as one exact paired release without exposing setup clutter or weakening rollback controls. | Existing GitHub protected release only; no ad-hoc provider deploy or domain mutation | Commit `2b25e747c1818703031a3bfcb958f7669655a157` serves from both canonical domains. Two stale verifier assumptions failed closed and rolled back before the corrected release passed candidate inspection, paired promotion, exact-release verification, domain controls, and independent rendered-browser checks. Production remains honestly labelled `isolated_demo`; managed persistence and security readiness remain false. |
