@@ -75,6 +75,8 @@
     "client:rehearse:result:verify": "node tools/prepare_client_demo.mjs --verify-rehearsal-result",
     "client:prepare:self-test": "node --test tools/prepare_client_demo.test.mjs",
     "client:pilot:rehearse": "node tools/rehearse_integrated_client_pilots.mjs",
+    "client:pilot:evidence:prepare": "node tools/rehearse_integrated_client_pilots.mjs --output",
+    "client:pilot:evidence:verify": "node tools/rehearse_integrated_client_pilots.mjs --verify",
     "client:pilot:self-test": "node --test tools/rehearse_integrated_client_pilots.test.mjs",
     "client:pilot:handoff": "node tools/create_shop_pilot_handoff.mjs",
     "client:pilot:handoff:self-test": "node --test tools/create_shop_pilot_handoff.test.mjs",

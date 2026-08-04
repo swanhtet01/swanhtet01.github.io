@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
-import { lstat, readFile } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 import {
   CLIENT_DEMO_PREPARATION_MAX_BYTES,
@@ -11,6 +12,24 @@ import {
 const ROOT = resolve(import.meta.dirname, '..')
 export const INTEGRATED_CLIENT_PILOT_CONTRACT = 'supermega.integrated_client_pilot.v1'
 export const CLIENT_BOUND_INTEGRATED_PILOT_CONTRACT = 'supermega.client_bound_integrated_pilot.v1'
+export const INTEGRATED_CLIENT_PILOT_EVIDENCE_CONTRACT = 'supermega.integrated_client_pilot_evidence.v1'
+
+const REPOSITORY = 'swanhtet01/swanhtet01.github.io'
+const ORIGIN = `https://github.com/${REPOSITORY}.git`
+const MAX_EVIDENCE_BYTES = 256 * 1024
+const MAX_EVIDENCE_AGE_MS = 72 * 60 * 60 * 1_000
+const SHA_PATTERN = /^[0-9a-f]{40}$/
+const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/
+const BRANCH_PATTERN = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
+const SHOP_LIFECYCLE_STAGES = Object.freeze([
+  'source_intake',
+  'shop_confirmation',
+  'stock_reservation',
+  'preparing',
+  'ready',
+  'payment_reconciliation',
+  'completion',
+])
 
 const timeline = Object.freeze({
   websiteEvidence: [
@@ -45,6 +64,71 @@ function invariant(condition, reason) {
 
 function sha256(value) {
   return `sha256:${createHash('sha256').update(value).digest('hex')}`
+}
+
+function exactTimestamp(value, reason) {
+  const candidate = String(value || '')
+  invariant(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(candidate)
+      && new Date(candidate).toISOString() === candidate,
+    reason,
+  )
+  return candidate
+}
+
+function exactSha(value, reason) {
+  const candidate = String(value || '').trim().toLowerCase()
+  invariant(SHA_PATTERN.test(candidate), reason)
+  return candidate
+}
+
+function exactDigest(value, reason) {
+  const candidate = String(value || '').trim().toLowerCase()
+  invariant(DIGEST_PATTERN.test(candidate), reason)
+  return candidate
+}
+
+function git(...args) {
+  const result = spawnSync('git', args, {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_NO_LAZY_FETCH: '1', GIT_TERMINAL_PROMPT: '0' },
+    maxBuffer: 4 * 1024 * 1024,
+    timeout: 30_000,
+    windowsHide: true,
+  })
+  invariant(!result.error && !result.signal && result.status === 0, 'integrated_pilot_evidence_git_failed')
+  return String(result.stdout || '').trim()
+}
+
+function normalizeImplementation(value) {
+  const branch = String(value?.branch || '')
+  invariant(
+    value?.repository === REPOSITORY
+      && value?.origin === ORIGIN
+      && BRANCH_PATTERN.test(branch)
+      && value?.clean === true,
+    'integrated_pilot_evidence_implementation_invalid',
+  )
+  return {
+    repository: REPOSITORY,
+    origin: ORIGIN,
+    branch,
+    commit: exactSha(value.commit, 'integrated_pilot_evidence_commit_invalid'),
+    clean: true,
+  }
+}
+
+function currentEvidenceImplementation() {
+  const implementation = normalizeImplementation({
+    repository: REPOSITORY,
+    origin: git('remote', 'get-url', 'origin'),
+    branch: git('symbolic-ref', '--short', 'HEAD'),
+    commit: git('rev-parse', 'HEAD'),
+    clean: true,
+  })
+  invariant(!git('status', '--porcelain=v1'), 'integrated_pilot_evidence_worktree_dirty')
+  return implementation
 }
 
 function proof(actionId, capturedAt, evidenceReference, reason) {
@@ -369,6 +453,252 @@ export async function runIntegratedClientPilots() {
   return receipt
 }
 
+function pilotEvidenceSummary(pilotReceipt) {
+  invariant(
+    pilotReceipt?.ok === true
+      && pilotReceipt.contract === INTEGRATED_CLIENT_PILOT_CONTRACT
+      && pilotReceipt.mode === 'isolated_deterministic_rehearsal'
+      && JSON.stringify(pilotReceipt.products) === JSON.stringify(['Website', 'Ecommerce', 'Shop', 'Plant'])
+      && pilotReceipt.outcomes?.website?.orderStatus === 'completed'
+      && pilotReceipt.outcomes?.ecommerce?.orderStatus === 'completed'
+      && pilotReceipt.outcomes?.shop?.websiteOrderStatus === 'completed'
+      && pilotReceipt.outcomes?.shop?.ecommerceOrderStatus === 'completed'
+      && pilotReceipt.outcomes?.shop?.reconciledOrderCount === 2
+      && pilotReceipt.outcomes?.shop?.sourceBoundOrderCount === 2
+      && pilotReceipt.outcomes?.plant?.sourceAuthority === 'commerce'
+      && pilotReceipt.outcomes?.plant?.targetAuthority === 'production'
+      && pilotReceipt.metrics?.productCount === 4
+      && pilotReceipt.metrics?.completedOrders === 2
+      && pilotReceipt.metrics?.reconciledPayments === 2
+      && pilotReceipt.metrics?.demandBoundPlantJobs === 1
+      && pilotReceipt.metrics?.humanControlledActions === 16
+      && pilotReceipt.metrics?.externalWrites === 0
+      && pilotReceipt.metrics?.networkRequests === 0
+      && pilotReceipt.metrics?.modelCalls === 0
+      && pilotReceipt.controls?.syntheticFixture === true
+      && pilotReceipt.controls?.managedPersistenceProven === false
+      && pilotReceipt.controls?.productionActivationPerformed === false
+      && pilotReceipt.controls?.customerMessageSent === false
+      && pilotReceipt.controls?.paymentProviderCalled === false
+      && pilotReceipt.controls?.deliveryProviderCalled === false
+      && pilotReceipt.controls?.connectorCalls === 0
+      && pilotReceipt.controls?.humanReviewRequired === true,
+    'integrated_pilot_evidence_runtime_invalid',
+  )
+  return {
+    receiptContract: INTEGRATED_CLIENT_PILOT_CONTRACT,
+    receiptDigest: sha256(JSON.stringify(pilotReceipt)),
+    shopLifecycle: {
+      status: 'passed_synthetic_isolated',
+      stages: [...SHOP_LIFECYCLE_STAGES],
+      completedOrders: 2,
+      reconciledPayments: 2,
+      sourceBoundOrders: 2,
+      humanControlledActions: 16,
+    },
+    crossProduct: {
+      websiteOrderCompleted: true,
+      ecommerceOrderCompleted: true,
+      demandBoundPlantJobs: 1,
+      sourceAuthority: 'commerce',
+      targetAuthority: 'production',
+    },
+  }
+}
+
+function normalizePilotEvidenceSummary(value) {
+  invariant(
+    value?.receiptContract === INTEGRATED_CLIENT_PILOT_CONTRACT
+      && value.shopLifecycle?.status === 'passed_synthetic_isolated'
+      && JSON.stringify(value.shopLifecycle?.stages) === JSON.stringify(SHOP_LIFECYCLE_STAGES)
+      && value.shopLifecycle?.completedOrders === 2
+      && value.shopLifecycle?.reconciledPayments === 2
+      && value.shopLifecycle?.sourceBoundOrders === 2
+      && value.shopLifecycle?.humanControlledActions === 16
+      && value.crossProduct?.websiteOrderCompleted === true
+      && value.crossProduct?.ecommerceOrderCompleted === true
+      && value.crossProduct?.demandBoundPlantJobs === 1
+      && value.crossProduct?.sourceAuthority === 'commerce'
+      && value.crossProduct?.targetAuthority === 'production',
+    'integrated_pilot_evidence_summary_invalid',
+  )
+  return {
+    receiptContract: INTEGRATED_CLIENT_PILOT_CONTRACT,
+    receiptDigest: exactDigest(value.receiptDigest, 'integrated_pilot_evidence_receipt_digest_invalid'),
+    shopLifecycle: {
+      status: 'passed_synthetic_isolated',
+      stages: [...SHOP_LIFECYCLE_STAGES],
+      completedOrders: 2,
+      reconciledPayments: 2,
+      sourceBoundOrders: 2,
+      humanControlledActions: 16,
+    },
+    crossProduct: {
+      websiteOrderCompleted: true,
+      ecommerceOrderCompleted: true,
+      demandBoundPlantJobs: 1,
+      sourceAuthority: 'commerce',
+      targetAuthority: 'production',
+    },
+  }
+}
+
+function evidencePacket({ generatedAt, implementation, pilot }) {
+  const body = {
+    contract: INTEGRATED_CLIENT_PILOT_EVIDENCE_CONTRACT,
+    digestScope: 'utf8_compact_json_without_digest',
+    generatedAt: exactTimestamp(generatedAt, 'integrated_pilot_evidence_time_invalid'),
+    mode: 'local_isolated_synthetic_proof',
+    implementation: normalizeImplementation(implementation),
+    pilot: normalizePilotEvidenceSummary(pilot),
+    assessment: {
+      shopLifecycle: 'proven_in_synthetic_isolated_runtime',
+      realNamedPilot: 'not_proven',
+      managedPersistence: 'not_proven',
+      hostedSecurity: 'not_proven',
+      productionActivation: 'not_proven',
+      nextAction: 'collect_owner_reviewed_named_operator_input_and_rehearse_on_approved_isolated_target',
+    },
+    controls: {
+      syntheticFixture: true,
+      containsCustomerValues: false,
+      ownerApprovalRecorded: false,
+      managedPersistenceProven: false,
+      productionActivationPerformed: false,
+      customerMessageSent: false,
+      paymentProviderCalled: false,
+      deliveryProviderCalled: false,
+      externalWrites: 0,
+      networkRequests: 0,
+      modelCalls: 0,
+      connectorCalls: 0,
+      humanReviewRequired: true,
+    },
+    authority: {
+      ownerManualSendApproved: false,
+      hostedWriteApproved: false,
+      deploymentApproved: false,
+      productionActivationApproved: false,
+      providerMutationApproved: false,
+      externalWritesPerformed: false,
+    },
+  }
+  return { ...body, digest: sha256(JSON.stringify(body)) }
+}
+
+export function buildIntegratedClientPilotEvidence(input) {
+  return evidencePacket({
+    generatedAt: input?.generatedAt,
+    implementation: input?.implementation,
+    pilot: pilotEvidenceSummary(input?.pilotReceipt),
+  })
+}
+
+export function validateIntegratedClientPilotEvidence(packet) {
+  invariant(packet && typeof packet === 'object' && !Array.isArray(packet), 'integrated_pilot_evidence_packet_invalid')
+  const rebuilt = evidencePacket({
+    generatedAt: packet.generatedAt,
+    implementation: packet.implementation,
+    pilot: packet.pilot,
+  })
+  invariant(JSON.stringify(rebuilt) === JSON.stringify(packet), 'integrated_pilot_evidence_packet_invalid')
+  return rebuilt
+}
+
+export async function writeIntegratedClientPilotEvidence(outputPath, packet) {
+  const absolute = resolve(outputPath)
+  await mkdir(dirname(absolute), { recursive: true })
+  const existing = await lstat(absolute).catch(() => null)
+  invariant(!existing, 'integrated_pilot_evidence_output_exists')
+  const validated = validateIntegratedClientPilotEvidence(packet)
+  const payload = `${JSON.stringify(validated, null, 2)}\n`
+  invariant(Buffer.byteLength(payload) <= MAX_EVIDENCE_BYTES, 'integrated_pilot_evidence_output_too_large')
+  const handle = await open(absolute, 'wx', 0o600)
+  try {
+    await handle.writeFile(payload, 'utf8')
+  } finally {
+    await handle.close()
+  }
+  return {
+    path: absolute,
+    bytes: Buffer.byteLength(payload),
+    digest: sha256(payload),
+    packetDigest: validated.digest,
+  }
+}
+
+async function prepareIntegratedClientPilotEvidence(outputPath) {
+  const implementation = currentEvidenceImplementation()
+  const packet = buildIntegratedClientPilotEvidence({
+    generatedAt: new Date().toISOString(),
+    implementation,
+    pilotReceipt: await runIntegratedClientPilots(),
+  })
+  invariant(
+    JSON.stringify(currentEvidenceImplementation()) === JSON.stringify(implementation),
+    'integrated_pilot_evidence_implementation_changed',
+  )
+  return {
+    ok: true,
+    contract: INTEGRATED_CLIENT_PILOT_EVIDENCE_CONTRACT,
+    ...await writeIntegratedClientPilotEvidence(outputPath, packet),
+    implementationCommit: implementation.commit,
+    shopLifecycle: packet.assessment.shopLifecycle,
+    realNamedPilot: packet.assessment.realNamedPilot,
+    managedPersistence: packet.assessment.managedPersistence,
+    externalWritesPerformed: false,
+  }
+}
+
+export async function verifyIntegratedClientPilotEvidence(inputPath) {
+  const absolute = resolve(inputPath)
+  const metadata = await lstat(absolute).catch(() => null)
+  invariant(
+    metadata?.isFile() && !metadata.isSymbolicLink() && metadata.size > 0 && metadata.size <= MAX_EVIDENCE_BYTES,
+    'integrated_pilot_evidence_file_invalid',
+  )
+  const payload = await readFile(absolute, 'utf8')
+  invariant(Buffer.byteLength(payload) === metadata.size, 'integrated_pilot_evidence_file_changed')
+  let packet
+  try {
+    packet = validateIntegratedClientPilotEvidence(JSON.parse(payload))
+  } catch (error) {
+    if (String(error?.message || '').startsWith('integrated_pilot_evidence_')) throw error
+    throw new Error('integrated_pilot_evidence_packet_invalid')
+  }
+  const age = Date.now() - Date.parse(packet.generatedAt)
+  invariant(age >= -5 * 60 * 1_000, 'integrated_pilot_evidence_from_future')
+  invariant(age <= MAX_EVIDENCE_AGE_MS, 'integrated_pilot_evidence_stale')
+  const implementation = currentEvidenceImplementation()
+  invariant(
+    JSON.stringify(implementation) === JSON.stringify(packet.implementation),
+    'integrated_pilot_evidence_implementation_changed',
+  )
+  const current = buildIntegratedClientPilotEvidence({
+    generatedAt: packet.generatedAt,
+    implementation,
+    pilotReceipt: await runIntegratedClientPilots(),
+  })
+  invariant(
+    JSON.stringify(currentEvidenceImplementation()) === JSON.stringify(implementation),
+    'integrated_pilot_evidence_implementation_changed',
+  )
+  invariant(JSON.stringify(current) === JSON.stringify(packet), 'integrated_pilot_evidence_runtime_changed')
+  return {
+    ok: true,
+    contract: INTEGRATED_CLIENT_PILOT_EVIDENCE_CONTRACT,
+    path: absolute,
+    bytes: metadata.size,
+    digest: sha256(payload),
+    packetDigest: packet.digest,
+    implementationCommit: implementation.commit,
+    shopLifecycle: packet.assessment.shopLifecycle,
+    realNamedPilot: packet.assessment.realNamedPilot,
+    managedPersistence: packet.assessment.managedPersistence,
+    externalWritesPerformed: false,
+  }
+}
+
 export function bindIntegratedClientPilot(preparation, pilotReceipt, boundAt = new Date().toISOString()) {
   verifyClientDemoPreparation(preparation)
   invariant(
@@ -486,14 +816,30 @@ async function preparationFromFile(pathValue) {
 }
 
 function parseArgs(argv) {
-  const options = { preparationPath: '', boundAt: '' }
+  const options = { preparationPath: '', boundAt: '', outputPath: '', verifyPath: '' }
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
     if (argument === '--preparation') options.preparationPath = argv[++index] ?? ''
     else if (argument === '--bound-at') options.boundAt = argv[++index] ?? ''
+    else if (argument === '--output') options.outputPath = argv[++index] ?? ''
+    else if (argument === '--verify') options.verifyPath = argv[++index] ?? ''
     else if (argument === '--help' || argument === '-h') options.help = true
     else throw new Error(`integrated_client_pilot_unknown_argument:${argument}`)
   }
+  for (const [flag, value] of [
+    ['--preparation', options.preparationPath],
+    ['--bound-at', options.boundAt],
+    ['--output', options.outputPath],
+    ['--verify', options.verifyPath],
+  ]) {
+    invariant(!argv.includes(flag) || (value && !value.startsWith('--')), `integrated_client_pilot_value_missing:${flag}`)
+  }
+  invariant(!(options.outputPath && options.verifyPath), 'integrated_pilot_evidence_mode_invalid')
+  invariant(
+    !(options.outputPath || options.verifyPath) || (!options.preparationPath && !options.boundAt),
+    'integrated_pilot_evidence_arguments_invalid',
+  )
+  invariant(!options.boundAt || options.preparationPath, 'client_bound_pilot_preparation_path_missing')
   return options
 }
 
@@ -507,11 +853,19 @@ if (invokedPath === resolve(import.meta.filename)) {
         '',
         '  npm run client:pilot:rehearse',
         '  npm run client:pilot:rehearse -- --preparation <private-review.json>',
+        '  npm run client:pilot:rehearse -- --output <exclusive-evidence.json>',
+        '  npm run client:pilot:rehearse -- --verify <evidence.json>',
         '',
         'Without a preparation file, runs the deterministic four-product fixture.',
         'With a verified preparation file, returns a metadata-only client-bound pilot receipt.',
+        'Output mode binds synthetic Shop lifecycle proof to the clean current Git commit.',
+        'Verify mode reruns the lifecycle and rejects source, commit, receipt, or file drift.',
         'No client values, product writes, network requests, model calls, or activation are performed.',
       ].join('\n') + '\n')
+    } else if (options.outputPath) {
+      process.stdout.write(`${JSON.stringify(await prepareIntegratedClientPilotEvidence(options.outputPath))}\n`)
+    } else if (options.verifyPath) {
+      process.stdout.write(`${JSON.stringify(await verifyIntegratedClientPilotEvidence(options.verifyPath))}\n`)
     } else {
       const pilot = await runIntegratedClientPilots()
       const output = options.preparationPath
@@ -524,10 +878,12 @@ if (invokedPath === resolve(import.meta.filename)) {
       process.stdout.write(`${JSON.stringify(output, null, 2)}\n`)
     }
   } catch (error) {
+    const evidenceMode = process.argv.includes('--output') || process.argv.includes('--verify')
     process.stderr.write(`${JSON.stringify({
       ok: false,
-      contract: INTEGRATED_CLIENT_PILOT_CONTRACT,
+      contract: evidenceMode ? INTEGRATED_CLIENT_PILOT_EVIDENCE_CONTRACT : INTEGRATED_CLIENT_PILOT_CONTRACT,
       error: error instanceof Error ? error.message : 'Integrated client pilot failed.',
+      externalWritesPerformed: false,
     })}\n`)
     process.exitCode = 1
   }

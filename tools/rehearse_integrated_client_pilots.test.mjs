@@ -11,8 +11,12 @@ import {
 import {
   CLIENT_BOUND_INTEGRATED_PILOT_CONTRACT,
   INTEGRATED_CLIENT_PILOT_CONTRACT,
+  INTEGRATED_CLIENT_PILOT_EVIDENCE_CONTRACT,
   bindIntegratedClientPilot,
+  buildIntegratedClientPilotEvidence,
   runIntegratedClientPilots,
+  validateIntegratedClientPilotEvidence,
+  writeIntegratedClientPilotEvidence,
 } from './rehearse_integrated_client_pilots.mjs'
 
 test('four-product client pilot closes two channel orders and creates one demand-bound Plant job', async () => {
@@ -58,6 +62,58 @@ test('integrated pilot receipt is deterministic', async () => {
   const second = await runIntegratedClientPilots()
 
   assert.deepEqual(second, first)
+})
+
+test('isolated Shop lifecycle evidence is commit-bound, explicit, and non-overwriting', async () => {
+  const parent = await mkdtemp(resolve(tmpdir(), 'supermega-integrated-pilot-evidence-'))
+  const output = resolve(parent, 'evidence.json')
+  try {
+    const packet = buildIntegratedClientPilotEvidence({
+      generatedAt: '2026-08-05T00:00:00.000Z',
+      implementation: {
+        repository: 'swanhtet01/swanhtet01.github.io',
+        origin: 'https://github.com/swanhtet01/swanhtet01.github.io.git',
+        branch: 'codex/supermega-enterprise',
+        commit: 'a'.repeat(40),
+        clean: true,
+      },
+      pilotReceipt: await runIntegratedClientPilots(),
+    })
+    assert.equal(packet.contract, INTEGRATED_CLIENT_PILOT_EVIDENCE_CONTRACT)
+    assert.equal(packet.pilot.shopLifecycle.status, 'passed_synthetic_isolated')
+    assert.deepEqual(packet.pilot.shopLifecycle.stages, [
+      'source_intake',
+      'shop_confirmation',
+      'stock_reservation',
+      'preparing',
+      'ready',
+      'payment_reconciliation',
+      'completion',
+    ])
+    assert.equal(packet.assessment.realNamedPilot, 'not_proven')
+    assert.equal(packet.assessment.managedPersistence, 'not_proven')
+    assert.equal(packet.controls.containsCustomerValues, false)
+    assert.equal(packet.controls.ownerApprovalRecorded, false)
+    assert.equal(packet.authority.ownerManualSendApproved, false)
+    assert.deepEqual(validateIntegratedClientPilotEvidence(packet), packet)
+
+    const tampered = structuredClone(packet)
+    tampered.authority.productionActivationApproved = true
+    assert.throws(
+      () => validateIntegratedClientPilotEvidence(tampered),
+      /integrated_pilot_evidence_packet_invalid/,
+    )
+
+    const receipt = await writeIntegratedClientPilotEvidence(output, packet)
+    assert.equal(receipt.bytes > 0, true)
+    assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), packet)
+    await assert.rejects(
+      () => writeIntegratedClientPilotEvidence(output, packet),
+      /integrated_pilot_evidence_output_exists/,
+    )
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
 })
 
 test('private client preparation binds to pilot proof without exposing client values or claiming activation', async () => {
