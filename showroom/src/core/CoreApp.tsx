@@ -6951,6 +6951,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const maintenanceOutcomeRef = useRef<HTMLSelectElement>(null)
   const scheduleDialogRef = useRef<HTMLDialogElement>(null)
   const scheduleTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const outputPanelRef = useRef<HTMLElement>(null)
   const outputJobSelectRef = useRef<HTMLSelectElement>(null)
   const outputTriggerRef = useRef<HTMLButtonElement | null>(null)
   const materialDisclosureRef = useRef<HTMLDetailsElement>(null)
@@ -7726,6 +7727,30 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setOutputOpen(false)
     setMaterialGuideOpen(false)
     requestAnimationFrame(() => outputTriggerRef.current?.focus())
+  }
+
+  function handleOutputDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeJobOutput()
+      return
+    }
+    if (event.key !== 'Tab' || !outputOpen) return
+    const panel = outputPanelRef.current
+    if (!panel) return
+    const focusable = Array.from(panel.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]:not([tabindex="-1"])'))
+      .filter((element) => element.getClientRects().length > 0 && element.getAttribute('aria-hidden') !== 'true')
+    const first = focusable[0]
+    const last = focusable.at(-1)
+    if (!first || !last) return
+    const active = document.activeElement
+    if (event.shiftKey && (active === first || !panel.contains(active))) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
+      event.preventDefault()
+      first.focus()
+    }
   }
 
   function closeSelectedJobShort(trigger: HTMLButtonElement) {
@@ -8691,8 +8716,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </details>
       </section>
       <button aria-label="Close job output" className={`plant-output-backdrop${outputOpen ? ' is-open' : ''}`} onClick={closeJobOutput} type="button" />
-      <section aria-labelledby="plant-output-title" className={`core-panel output-panel${outputOpen ? ' is-open' : ''}`} id="plant-output-panel" onKeyDown={(event) => { if (event.key === 'Escape') closeJobOutput() }}>
-        <div className="plant-output-head"><div><span className="core-eyebrow">Job output</span><h2 id="plant-output-title">Record good or scrap</h2></div><button aria-label="Close job output" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
+      <section aria-labelledby="plant-output-title" aria-modal={outputOpen} className={`core-panel output-panel${outputOpen ? ' is-open' : ''}`} id="plant-output-panel" onKeyDown={handleOutputDialogKeyDown} ref={outputPanelRef} role="dialog">
+        <div className="plant-output-head"><div><span className="core-eyebrow">{materialGuideOpen ? 'Material trace' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Add material trace' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
         <form autoComplete="off" className="core-form compact-form" id="plant-output-form" onSubmit={recordOutput}>
           <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
