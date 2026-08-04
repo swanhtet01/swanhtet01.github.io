@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-04
+Updated: 2026-08-05
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -51,7 +51,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Plant mobile carries one shift through output, material, blockers, close, and reload (`2909fd66`).
 - Website has one **Customize demo**; empty Shop catalogs route to one safe import (`69068054`, `757cd3b6`).
 - Local candidate keeps one product per entry and focused public pages (`47fd933c`).
-- Integrated candidate `0e9883ea` passes 28 routes and fourteen workflows; live `25cac2f5` still serves the old entry.
+- `0e9883ea` remains the integration base. Fresh receipts define current HEAD; live `25cac2f5` serves the old entry.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
 ## Verified baseline
@@ -74,7 +74,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - Hosted audit: `supermegabase` is PostgreSQL 17.6 at private schema v7 with 27 INFO notices. Browser object/default grants, v8-v10, and the quarantine remain hosted blockers pending an approved isolated clone, private Storage, tenant isolation, revocation, and recovery proof.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Both domains remain on accepted live `25cac2f5`; exact current-head verification reports release drift. Integrated `0e9883ea` passes the complete local and strict rendered gates; external handoffs require `release:handoff:verify`.
+- Both domains remain on accepted live `25cac2f5`; exact current-head verification reports release drift. For review, external handoffs require `release:handoff:verify` with fresh `runtime:truth`.
 - The live public `/website/` and `/ecommerce/` routes intermittently returned `404` during the 2026-08-04 candidate verification; public availability remains unproven until a protected release and exact live check both pass.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
@@ -92,6 +92,6 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Prepare and verify the integrated candidate's exact-commit release handoff.
+1. Use fresh current-head receipts to review one candidate push and protected preview.
 2. After separate owner approval, require protected paired release, rollback, and exact live evidence.
 3. Then prove Supabase security on an isolated clone and recruit one Shop design partner; AI and scheduling stay dormant.
