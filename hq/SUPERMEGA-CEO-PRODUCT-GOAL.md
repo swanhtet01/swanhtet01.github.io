@@ -129,12 +129,15 @@ These capabilities are internal platform layers. Customers should still see only
 - Build a native IndexedDB outbox and recovery proof for Shop first. Compare PGlite only after measuring bundle size, startup time, storage behavior, and low-end Android performance.
 - Keep workflow transitions as explicit TypeScript contracts. Evaluate XState when at least three independently complex flows need the same state-machine semantics or current transition bugs justify the dependency.
 - Model Shop/Plant item, lot, location, and trace events so a future GS1 adapter does not require a data rewrite.
+- Evaluate Supabase Queues only for server-owned durable import, connector-retry, and release-package jobs after managed tenant security is proven. Keep queues private, require idempotent consumers, and do not expose queue functions to customer browsers.
+- Keep AI execution provider-neutral. The OpenAI Agents SDK is only an optional managed adapter candidate for resumable, human-approved work after privacy, cost, quality, and local-fallback evaluation; product contracts remain the authority and models receive no direct consequential write permission.
 - Evaluate Vercel Workflow only for managed, long-running, resumable tasks after hosted activation and cost limits are defined.
 
 ### Defer or reject for now
 
 - No new component library, broad design-system rewrite, or framework migration.
 - No standalone AI-agent customer product.
+- No client-side durable queue, autonomous customer message, payment, publish, stock, or production transition.
 - No direct OPC UA machine commands; Plant may ingest read-only observations only after a client-specific safety review.
 - No experimental browser-wide OpenTelemetry rollout. Prefer server-side observability and bounded first-party product events until browser support and privacy requirements justify it.
 - No fifth customer product, public HQ dashboard, or agent-team navigation.
@@ -198,11 +201,12 @@ A product release is not ready because the build passes. It is ready only when t
 
 ## Immediate sequence
 
-1. Reduce Shop Orders from 114/115 visible actions to at most 44 without removing workflows; expose only the current order task and move the rest behind contextual controls.
-2. Make public product pages open working samples before setup, then measure first-value journeys.
-3. Prototype Shop offline outbox/recovery behind the existing workspace adapter.
-4. Instrument the three CEO KPIs and run five moderated Shop/Plant first-value sessions before expanding product scope.
-5. Use the results to choose the next depth investment: Shop offline execution, Plant BOM/routing, Website release adapter, or Ecommerce Shop-handoff completion.
+1. Preserve the proven mobile Ecommerce-to-Shop request, accountable confirmation, and customer-tracking gate; add its desktop proof and seal Shop sale-to-fulfilment-to-close at both viewports.
+2. Seal Plant plan-to-output-to-quality-close and Website edit-to-responsive-preview-to-release-review at both viewports without increasing first-screen action density.
+3. Instrument the three CEO KPIs around the existing useful samples and first-value records, then run five moderated Shop/Plant sessions before expanding product scope.
+4. Prototype Blueprint as a no-write import preview over the existing client-preparation contract, using messy catalog and production fixtures; measure mapping accuracy, repair burden, and time to first value.
+5. Prototype native IndexedDB outbox and recovery for Shop. Compare PGlite only if measured relational/offline requirements justify its payload and startup cost.
+6. After tenant isolation, restore rehearsal, and hosted activation evidence pass, compare private Supabase Queues and Vercel Workflow against one bounded durable-job contract; adopt at most one execution path for that job.
 
 ## Evidence and references
 
@@ -212,6 +216,8 @@ A product release is not ready because the build passes. It is ready only when t
 - PGlite: https://pglite.dev/docs/about
 - XState: https://stately.ai/docs
 - Supabase Row Level Security: https://supabase.com/docs/guides/database/postgres/row-level-security
+- Supabase Queues: https://supabase.com/docs/guides/queues
+- OpenAI Agents SDK human approval and resumable state: https://openai.github.io/openai-agents-js/guides/human-in-the-loop/
 - GS1 Global Traceability Standard: https://www.gs1.org/standards/gs1-global-traceability-standard/current-standard
 - OPC UA: https://opcfoundation.org/about/opc-technologies/opc-ua/
 - Vercel Workflows: https://vercel.com/workflows

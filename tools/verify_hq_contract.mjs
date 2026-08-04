@@ -186,7 +186,9 @@ requireContract('CEO four-product and innovation goal is explicit',
   && ceoProductGoal.includes('### 3. SuperMega Actions')
   && ceoProductGoal.includes('### 4. SuperMega Connect')
   && ceoProductGoal.includes('Verified first-value rate')
-  && ceoProductGoal.includes('Reduce Shop Orders'))
+  && ceoProductGoal.includes('Preserve the proven mobile Ecommerce-to-Shop')
+  && ceoProductGoal.includes('Evaluate Supabase Queues only for server-owned durable import')
+  && ceoProductGoal.includes('Keep AI execution provider-neutral'))
 requireContract('route quality policy is bounded and four-product',
   routeQualityPolicy.contract === 'supermega.product-route-quality-policy.v1'
   && routeQualityPolicy.viewports?.map((entry) => entry.id).join(',') === 'mobile,desktop'
