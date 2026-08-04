@@ -1,6 +1,6 @@
 # SuperMega CEO product goal
 
-Updated: 2026-08-04
+Updated: 2026-08-05
 Owner: SuperMega CEO / Product
 Status: active operating charter
 
@@ -19,6 +19,358 @@ SuperMega succeeds when:
 7. New features, libraries, and integrations ship only when they measurably improve customer value or operating leverage.
 
 This charter refines the active company goal; it does not declare the current release complete.
+
+## 2026-08-05 enterprise execution reset
+
+### Adapted objective
+
+Within 30 days of receiving an owner-approved isolated managed target and a named pilot operator, deliver one protected managed-pilot release in which:
+
+1. Shop completes sale or order intake through fulfilment, payment review, exception handling, and close.
+2. Plant completes demand or job release through material use, output, quality disposition, and traceable close.
+3. Website completes approved brief through responsive review, retained release artifact, and a governed publish handoff.
+4. Ecommerce completes Shop-backed catalog through cart, order request, Shop acceptance, customer-safe status, and return or support request.
+5. All four products use authenticated tenant-isolated persistence, durable commands, immutable evidence, private files, backup and tested restore.
+6. A new user enters one product, sees one next task, and reaches its first verified value without seeing HQ, agents, readiness machinery, or unrelated products.
+
+The 90-day objective is four validated industry templates, one measured operator cohort per product, one shared import and configuration engine, server-side observability, and one evaluated AI assistance workflow. Matching Odoo, ERPNext, SAP, or Salesforce feature-for-feature is not a credible 30-day claim. SuperMega competes first through simpler operation, stronger workflow integrity, Myanmar-ready delivery, and faster configuration for the selected verticals.
+
+This adapted objective is the execution goal beneath the broader company goal. It replaces feature-count expansion as the operating priority.
+
+### Why the product still feels incomplete
+
+The repository contains substantial local domain behavior, but five fractures prevent it from behaving like a finished product:
+
+| Fracture | Current evidence | Decision |
+| --- | --- | --- |
+| Release truth | Local candidate `62a1d006` is 97 commits ahead of live `25cac2f5`; both live domains still identify the older release | Reconcile one exact candidate and protected preview before more public UI work |
+| Persistence truth | The four products are rich browser-local release candidates; seven managed-pilot gates remain blocked | Managed identity, persistence, RLS, private Storage, backup, restore, and hosted proof are P0 |
+| Source truth | `CURRENT.md`, `hq/NOW.md`, `hq/WORKBOARD.md`, branch history, and live metadata contain different historical checkpoints | Generate one runtime-truth receipt and treat dated narrative records as evidence, not competing current state |
+| UI ownership | `CoreApp.tsx` is 9,194 lines and mixes Shop, Plant, cross-product navigation, setup, and internal controls | Split by product domain while preserving the verified routes and contracts; do not redesign from scratch |
+| Acceptance truth | Automated local gates are strong, but there is no named pilot, production cohort, retention baseline, or supported operating run | Stop calling module count readiness; graduate only on named operator evidence and recovery proof |
+
+The next constraint is therefore not another page, agent team, framework, or speculative module. It is turning the existing local workflows into one coherent, managed, supportable system.
+
+## Target enterprise architecture
+
+### Architecture decision
+
+Use a **modular monolith** until measured scale, isolation, or team-ownership evidence justifies a service split.
+
+- React, React Router, Vite, and the existing product tokens remain the experience layer.
+- FastAPI remains the server boundary for domain commands, queries, imports, approvals, files, and AI requests.
+- Supabase Auth, Postgres, and private Storage become the managed identity and data foundation only after the isolated hosted gates pass.
+- Vercel remains the paired public/app release and runtime-observability boundary.
+- Postgres is the only SuperMega system of record. Browser state is an offline/sample cache, not managed write authority.
+- Odoo, ERPNext, Medusa, Saleor, and Puck are reference or bounded-evaluation sources; none becomes a second business authority by default.
+- A queue, workflow engine, analytics SDK, model provider, and integration adapter each require one measured job and one accepted authority. Duplicates are rejected.
+
+```text
+supermega.dev
+  concise company promise + four product entry links + contact/privacy
+             |
+             v
+app.supermega.dev
+  Shop | Plant | Website | Ecommerce
+  product-specific shell; one next task; optional advanced tools
+             |
+             v
+FastAPI application boundary
+  queries | commands | approvals | imports | files | AI drafts | adapters
+             |
+             v
+Domain modules in one deployable system
+  shop | plant | website | ecommerce | shared platform
+             |
+             v
+Supabase managed foundation
+  Auth | private Postgres | RLS/grants | Storage | backup/restore
+             |
+             +--> outbox/work queue --> approved external adapters
+
+Internal only: HQ + R&D + release + support + bounded agent coordination
+```
+
+### Customer information architecture
+
+Public pages remain `/`, `/contact/`, and `/privacy/`. Product cards deep-link to a useful sample. The app root resumes the last product or opens Shop at the counter; product selection is explicit, not a dashboard.
+
+| Product | Primary surface | Secondary surface | Advanced surface | Hidden from first use |
+| --- | --- | --- | --- | --- |
+| Shop | Counter | Orders | Stock | purchasing, CRM, finance, reports, integrations, and setup until relevant |
+| Plant | Jobs | Problems | Plan and trace | engineering, maintenance, costing, compliance, and setup until relevant |
+| Website | Pages | Preview | Release | SEO, assets, localization, analytics, domains, and governance until relevant |
+| Ecommerce | Store | Orders | Configure | promotions, accounts, shipping, payment, tax, channels, and analytics until relevant |
+
+Each product owns its navigation, empty state, next-action policy, search, and mobile flow. Cross-product links appear only when a real record crosses a boundary. HQ, agent teams, system readiness, setup baselines, and internal evidence contracts never appear in normal customer navigation.
+
+### Shared platform modules
+
+1. **Identity and tenancy** — organization, workspace, company, branch, location, membership, role, capability, session, and revocation.
+2. **Master data** — customer, supplier, item or service, variant, unit, currency, tax class, account role, location, lot, serial, asset, document, and source identity.
+3. **Command and event control** — versioned command, expected revision, idempotency key, actor, capability, reason, evidence, immutable event, and conflict result.
+4. **Workflow and approval** — state machine, task owner, due state, exception, approval policy, decision, and escalation.
+5. **Import and Blueprint** — source snapshot, field inference, versioned mapping, no-write preview, row repair, duplicate review, digest, activation packet, and rollback.
+6. **Files and evidence** — private object, checksum, classification, retention, access grant, version, and attachment link.
+7. **Search and views** — permission-filtered search, saved filters, task inbox, timeline, comments, and notification preferences.
+8. **Reporting** — canonical dimensions, operational projections, exported evidence, scheduled report request, and accounting or BI handoff.
+9. **Integration control** — adapter registry, credentials reference, webhook receipt, outbox, retry, dead letter, rate limit, and reconciliation.
+10. **Operations** — release identity, feature flag, health, trace, metric, audit, backup, restore, incident, support case, and data export or deletion request.
+
+The canonical write path is:
+
+```text
+authenticated intent
+-> capability and tenant check
+-> schema and business validation
+-> idempotency and expected-revision check
+-> optional named-human approval
+-> atomic domain write + immutable event + outbox record
+-> permission-filtered projection
+-> adapter execution and reconciliation, when separately authorized
+```
+
+### Product domain ownership
+
+| Domain | Owns | Reads or projects | Must never own |
+| --- | --- | --- | --- |
+| Shop | customer commitment, order, reservation, stock movement, fulfilment, payment status, return/refund evidence, purchase/receipt, close | Ecommerce request, Website lead, Plant output handoff | Website content, Plant execution, provider settlement truth |
+| Plant | demand plan, BOM/routing revision, work order, material issue/use, WIP, output/scrap, quality, CAPA, maintenance, genealogy, shift close | Shop demand and inventory availability | retail sale, customer payment, machine command without a separate safety system |
+| Website | site brief, page/section content, assets, review, artifact, release request, lead form definition | approved brand/master data and lead-routing destination | Ecommerce checkout, Shop stock, unapproved DNS or publish action |
+| Ecommerce | storefront configuration, Shop catalog projection, cart, quote, customer intent, status projection, support/return request | Shop price, availability, order, fulfilment, payment-status truth | independent stock, order, refund, close, or payment ledger |
+
+Cross-product work uses explicit versioned handoff contracts and source IDs. Domains do not mutate one another's tables directly.
+
+## Product module architecture and lifecycle
+
+The detailed capability catalogue below is a sequencing map, not a promise that every item is live. A module is sellable only at the delivery level it has passed.
+
+### Shop
+
+Core lifecycle: `lead or channel -> quote/order -> reserve -> fulfil/service -> payment review -> return/exception -> close -> accounting handoff`.
+
+- Sell and POS: visual catalog, barcode, variants, units, discounts, taxes, receipts, split tender, suspended carts, shifts, offline queue, printer/scanner adapters.
+- Orders and fulfilment: walk-in, phone, social, Website, Ecommerce, preorder, wholesale, promise, allocation, pick/prepare, delivery/pickup, cancellation, amendment, return.
+- Inventory and purchasing: warehouse/location/bin, ATP, reservation, lot/serial/expiry, count, adjustment, transfer, replenishment, supplier, RFQ/PO, receipt, discrepancy, return-to-vendor.
+- Customer operations: profiles, addresses/consent, price and credit terms, loyalty/membership, booking, service history, support/warranty.
+- Finance controls: payment status, reconciliation, receivables, tax snapshots, close, counted settlement, correction documents, balanced review export, future posting adapter.
+- Management: branch/shift responsibility, permissions, exception inbox, margin projection, stock turns, fill rate, supplier performance, channel conversion, audit.
+
+Pilot exit: one authenticated operator completes a full operating day with durable records, explained inventory and payment variance, one return exception, export, backup, and restore.
+
+### Plant
+
+Core lifecycle: `demand -> MPS/MRP -> BOM/routing -> material/capacity check -> release -> execute -> inspect -> output/scrap -> genealogy -> cost/variance -> shift close`.
+
+- Planning: demand, forecast, MPS, MRP, capacity, constraints, priorities, reschedule evidence, purchase/transfer suggestions.
+- Product engineering: item revision, BOM/recipe/formula, routing, work instruction, effective dates, engineering change and approval.
+- Execution: work order, operation queue, WIP, labor/machine time, material issue/return/substitution, output, by-product, scrap, rework.
+- Quality and trace: specifications, sampling, incoming/in-process/final inspection, hold, deviation, NCR/CAPA, release, lot/serial genealogy, recall dossier.
+- Maintenance and assets: hierarchy, meter, preventive plan, work request/order, downtime, parts, findings, calibration, return-to-service.
+- Cost and performance: standard/actual material, labor and overhead, WIP valuation projection, variance, yield, throughput, plan attainment, OEE and bottleneck evidence.
+- Workforce/compliance: skill authorization, roster, shift handoff, safety/permit, training, document control, retention and audit.
+
+Pilot exit: one authenticated operator and supervisor complete one order-bound production window with material genealogy, quality disposition, downtime source, close, recovery, and measured correction effort.
+
+### Website
+
+Core lifecycle: `brief -> structure -> content/assets -> responsive preview -> review -> approval -> immutable artifact -> publish request -> lead learning`.
+
+- Structure/editor: site/page tree, reusable typed sections, navigation, redirects, tokens, responsive rules, light/dark variants, bounded custom fields.
+- Content/assets: structured copy, proof, FAQ/news/legal, localization, image/document library, alt text, crop/optimization, rights/expiry.
+- Discovery/conversion: metadata, canonical URL, sitemap/robots, structured data, social cards, forms, spam/consent, source attribution, Shop lead handoff.
+- Quality/release: WCAG and performance budgets, broken-link checks, preview environment, approval, artifact digest, domain/TLS readiness, publish adapter, rollback, release history.
+- Learning/governance: privacy-safe outcomes, campaign attribution, roles, comments, version history, backup, restore, retention.
+
+Pilot exit: one named business moves from brief to accepted responsive artifact, protected preview, approved publish/rollback rehearsal, working lead receipt, and recovery evidence.
+
+### Ecommerce
+
+Core lifecycle: `Shop catalog projection -> merchandising -> cart -> checkout intent -> Shop acceptance -> fulfilment/status -> return or support`.
+
+- Catalog/merchandising: Shop-owned SKU/price/availability projection, variants/media, collections, search/filter, badges, bundles, recommendations, schedules.
+- Cart/checkout: durable draft, quantities, customer/contact, pickup/delivery, address/zone, notes, consent, quote, duplicate-safe request and acknowledgement.
+- Commercial rules: price lists, promotions/coupons, wholesale breaks, fees and tax projection with Shop revalidation.
+- Account/service: governed identity, address book, order history, reorder, preferences, return/support/correction request, abuse/rate-limit recovery.
+- Provider boundaries: payment method/status, shipping quote/tracking, tax calculation, channel feed and webhook, all reconciled through Shop authority.
+- Learning/trust: view-to-request funnel, abandonment, Shop confirmation, fulfilment, repeat use, policy, privacy, fraud review, audit and recovery.
+
+Pilot exit: a named customer and Shop operator complete request, acknowledgement, acceptance, fulfilment status, correction or return, duplicate recovery, and tenant-safe restore without Ecommerce creating a parallel ledger.
+
+## Template and onboarding architecture
+
+A template is a versioned configuration package, never a code fork or separate product. Every package contains:
+
+- product and industry identity;
+- enabled capabilities and terminology;
+- roles, capabilities, approvals, thresholds, and exception owners;
+- required master data and default records;
+- workflow states and allowed transitions;
+- page/dashboard composition and progressive-disclosure rules;
+- CSV/spreadsheet mappings, transforms, duplicate keys, and repair rules;
+- sample records isolated from real records;
+- connector requirements and disabled-by-default external authority;
+- acceptance mission, expected evidence, migration version, and rollback plan.
+
+Initial validated packs are Shop retail, restaurant/cafe, service/booking, and social seller; Plant discrete assembly, batch/process, food, and quality/traceability; Website business presence and lead generation; Ecommerce social storefront and pickup/preorder. Gym, school, wholesale, multi-branch, regulated production, and B2B storefront packs remain candidate configurations until one named workflow validates each.
+
+Onboarding is one branch:
+
+```text
+open product sample
+-> choose use sample, import data, or start empty
+-> preview exactly what will be created
+-> repair only blocking rows
+-> name responsible owner
+-> activate reversible workspace
+-> complete first task
+```
+
+No company questionnaire, readiness dashboard, agent roster, or full module selector precedes the sample. Internal client preparation uses the same template package and import engine, then produces a private review packet rather than a customer-facing setup maze.
+
+## AI and agent architecture
+
+AI assistance is a governed platform capability. “Agents” are roles and bounded runs, not always-on processes or a fifth product.
+
+```text
+approved record set
+-> context compiler and data minimizer
+-> provider-neutral model adapter
+-> typed draft with source spans, confidence, prompt/model version
+-> deterministic validation and policy check
+-> named human review: accept, edit, reject
+-> ordinary domain command, if authorized
+-> outcome/evaluation/trace record
+```
+
+### Customer assistance roles
+
+- Shop: order-intake draft, product/import mapping, replenishment suggestion, exception summary, customer-response draft, close explanation.
+- Plant: production-plan suggestion, material exception summary, quality/CAPA draft, maintenance prioritization, shift handoff.
+- Website: brief extraction, page plan, source-backed copy draft, SEO/accessibility checklist, localization draft.
+- Ecommerce: merchandising draft, catalog cleanup, support triage, abandoned-request recovery draft, promotion analysis.
+
+### Internal company roles
+
+- CEO/integrator selects one measurable outcome and accepts evidence.
+- Product defines the user job, workflow, scope, template, and KPI.
+- Engineering implements domain contracts, migration, UI, and tests.
+- QA/security/release verifies routes, permissions, failure, recovery, performance, and exact artifact identity.
+- R&D evaluates one resource or competitor pattern against a product KPI.
+- Onboarding/support prepares imports, guides operators, records failures, and updates templates.
+- Growth drafts positioning, demos, leads, and follow-up; external contact remains owner-approved.
+- Finance/risk reviews pricing, claims, data handling, payments, and consequential authority.
+
+On this ROG Ally, these are dormant capabilities with one active assignment and zero local subagents by default. One role can execute several serial checks; role count must never be confused with running processes. A company work item requires an outcome, owner, source receipts, no more than five write paths, authority class, acceptance check, and stop condition.
+
+### AI production gates
+
+1. At least 20 representative fixtures, including ambiguous, malicious, missing, multilingual, and unsupported inputs.
+2. Typed schema validity, source coverage, critical-field accuracy, refusal behavior, and zero fabricated consequential facts.
+3. Zero direct payment, message, publish, access, stock, production, release, or machine authority.
+4. Tenant-bound context minimization, retention decision, redacted traces, rate/cost budget, and deletion behavior.
+5. Named-user evidence that the assistance reduces time or correction effort versus the deterministic workflow.
+
+Order Intake remains the first evaluated workflow. Do not add an agent marketplace, autonomous employee UI, or orchestration framework until that gate passes.
+
+## Fast delivery sequence
+
+### First 48 hours — one source of truth
+
+- Generate a current-state receipt from Git HEAD, origin/main, live release metadata, managed-readiness JSON, route inventory, migrations, and test gates.
+- Resolve the canonical checkout/branch and prepare one exact protected preview candidate; do not copy another historical branch wholesale.
+- Replace contradictory “current” prose with generated references and archive only after its useful decisions are retained.
+- Freeze new product/module/UI expansion while P0 is open.
+
+Exit: one candidate commit, one diff, one rollback target, one source register, and no unresolved release identity.
+
+### Days 3–7 — managed foundation
+
+- Rehearse migrations v8–v10 and the public-browser quarantine on an owner-approved isolated Supabase target.
+- Prove Auth/session revocation, membership/capability binding, RLS and grants, tenant denial, private Storage, idempotent commands, conflict behavior, backup, and restore.
+- Expose one server-mediated managed workspace bootstrap and command path; keep browser-local sample mode separate and visibly labelled.
+- Add request/command/DB traces with redaction using existing Vercel observability before a second vendor.
+
+Exit: seven managed-readiness gates have evidence or an explicit failing receipt; no protected production mutation.
+
+### Days 8–14 — Shop managed vertical
+
+- Bind Counter, Orders, Stock, customer, purchasing, return, payment review, and close to the managed command/event path.
+- Preserve the current simple counter-first UI and move advanced controls behind the exact task that needs them.
+- Run import, offline/retry, duplicate, concurrent-stock, return, close, export, backup, and restore tests.
+- Complete five moderated sessions with one named Shop operator and record time-to-first-sale, corrections, variance, and repeat use.
+
+Exit: one complete managed Shop operating day with zero unexplained stock/payment variance and a tested restore.
+
+### Days 15–21 — Plant and cross-product integrity
+
+- Bind demand, job, material, output, quality, maintenance, genealogy, and shift close to managed commands.
+- Prove Shop demand-to-Plant and Plant output-to-Shop handoffs without direct cross-domain table writes.
+- Validate one order-bound production window, downtime source, quality exception, and recall trace with named roles.
+
+Exit: one plan-to-stock loop with exact genealogy, recovery, and operator evidence.
+
+### Days 22–30 — Website and Ecommerce delivery
+
+- Bind Website content, evidence, artifact, preview, release request, lead receipt, and rollback record to managed state.
+- Bind Ecommerce storefront configuration, account/contact intent, quote/request, Shop status, correction, return, and support to managed state.
+- Rehearse one publish adapter and one payment/shipping/tax adapter in simulated or no-write mode; activate none without separate authority.
+- Verify all four products at 390 px and desktop, with one first task, no dead controls, no internal navigation, and full recovery.
+
+Exit: one protected four-product managed-pilot candidate and an evidence-backed go/no-go packet.
+
+### Days 31–90 — validated enterprise v1
+
+- Validate four template packs and the shared import engine against real operator files.
+- Add role administration, saved views, notification preferences, support/incident workflow, data export/deletion, SLOs, and disaster-recovery rehearsal.
+- Evaluate Order Intake; keep or reject it using quality, correction, latency, cost, and user-time evidence.
+- Add at most one durable job authority and at most one analytics implementation after their measured gates.
+- Promote only adapters demanded by accepted pilots; publish support and migration documentation.
+
+Exit: four managed workflows, four accepted templates, measured retention, tested recovery, support ownership, and truthful production readiness.
+
+## Enterprise acceptance contract
+
+A product is not enterprise-ready until all of these are evidenced for its current release:
+
+- complete primary lifecycle plus cancellation, correction, and failure paths;
+- authenticated tenant isolation and least-privilege roles;
+- atomic idempotent writes, optimistic concurrency, audit events, and external outbox reconciliation;
+- import preview, correction, export, backup, restore, retention, and deletion behavior;
+- mobile/desktop keyboard and screen-reader usability, performance budget, and no dead controls;
+- release identity, protected preview, rollback, observability, incident owner, and support runbook;
+- one named operator cohort with first-value, completion, correction, exception, and repeat-use evidence;
+- truthful capability labels: sample, local, managed pilot, production, and integrated never collapse into one claim.
+
+Primary pilot measures are median time to first verified value, core-loop completion, correction effort, unexplained variance, recovery success, cross-tenant denial, crash-free sessions, and four-week repeat use. Module count is a coverage measure, not a customer outcome.
+
+## Source and resource authority
+
+Use sources in this order:
+
+1. **Live and executable truth:** live `__release.json`, current Git commit and diff, route/action audit, tests, migration receipts, managed-readiness receipt, and runtime observations.
+2. **Current product authority:** `CURRENT.md`, `site-manifest.json`, `hq/portfolio.json`, this charter, and the enterprise product roadmap after reconciling their dates against executable truth.
+3. **User-supplied operating packs:** the two identical `supermega-codex-operating-system.zip` files and `supermega-free-resource-sources-and-rnd.zip`. Their enduring rules—provenance, private/public separation, decision-ready outputs, verification, and reusable R&D—are adopted. Their older public resource-directory roadmap is internal R&D history, not a fifth customer product.
+4. **Primary external references:** official Odoo, ERPNext, SAP, Supabase, Vercel, Playwright, W3C, OWASP, Medusa, Saleor, Puck, GS1, and OPC Foundation documentation.
+5. **Discovery only:** the supplied ChatGPT share and social posts. They may identify questions or patterns but cannot verify product, market, pricing, security, or architecture claims.
+
+### Resource adoption register
+
+| Resource | Use | Decision |
+| --- | --- | --- |
+| Odoo 19 and ERPNext | Functional lifecycle and module coverage benchmark | Reference only; do not import a second ERP authority |
+| SAP S/4HANA / Digital Manufacturing | Control, accounting, traceability, quality, and manufacturing reference | Reference only; implement only client-required controls |
+| Supabase Auth/Postgres/Storage | Managed identity, data, RLS, private files, backup foundation | Adopt after isolated hosted proof |
+| Vercel | Paired release, protected previews, runtime and trace visibility | Keep; no second deploy authority |
+| Playwright plus axe | Route, workflow, mobile, accessibility, and browser regression evidence | Keep as release gate |
+| Medusa and Saleor | Ecommerce domain, reservation, channel, payment, fulfillment, and extension patterns | Reference; adapter only for a named merchant requirement |
+| Puck | Typed React block editor and permission model | One Website spike only if the finite editor blocks a measured workflow |
+| Supabase Queues versus Vercel Workflow | Durable import, adapter retry, or approval-wait jobs | Compare one job after managed proof; select at most one orchestration authority |
+| OpenTelemetry / Vercel tracing | Server-side request, command, model, adapter, and DB correlation | Adopt incrementally with customer-content redaction |
+| PostHog | Product outcome events | Defer until consent, identity, retention, and deletion are proven |
+| Provider-neutral structured AI | Bounded source-backed drafts and recommendations | Evaluate Order Intake first; no direct domain authority |
+
+The R&D rule is one candidate, one user job, one KPI, one reversible experiment, one failure/recovery test, and one adopt/revise/reject decision. GitHub stars and feature lists are discovery signals, not adoption evidence.
 
 ## Current CEO decision
 
