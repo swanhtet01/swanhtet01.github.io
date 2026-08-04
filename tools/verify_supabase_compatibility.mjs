@@ -3,7 +3,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { extname, resolve } from 'node:path'
 
-const CONTRACT = 'supermega.supabase-current-compatibility.v1'
+const CONTRACT = 'supermega.supabase-current-compatibility.v2'
 const root = resolve(import.meta.dirname, '..')
 const SOURCE_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx', '.py', '.ps1', '.sql', '.json', '.yml', '.yaml'])
 const SCAN_ROOTS = ['supabase', 'kernel', 'showroom/src', 'tools', '.github']
@@ -40,6 +40,44 @@ function sqlStatements(text) {
     .filter(Boolean)
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function addPublicTableContractFindings(path, statements, findings) {
+  const normalizedPath = normalizePath(path)
+  const createdTables = new Set()
+  for (const statement of statements) {
+    const match = /\bcreate\s+table(?:\s+if\s+not\s+exists)?\s+"?public"?\s*\.\s*"?([a-z0-9_]+)"?/i.exec(statement)
+    if (match) createdTables.add(match[1].toLowerCase())
+  }
+
+  for (const table of createdTables) {
+    const tablePattern = `"?public"?\\s*\\.\\s*"?${escapeRegExp(table)}"?`
+    const rlsPattern = new RegExp(`\\balter\\s+table(?:\\s+if\\s+exists)?\\s+${tablePattern}\\s+enable\\s+row\\s+level\\s+security\\b`, 'i')
+    const revokePattern = new RegExp(`\\brevoke\\s+all(?:\\s+privileges)?\\s+on(?:\\s+table)?\\s+${tablePattern}\\s+from\\s+(.+)$`, 'i')
+    const grantPattern = new RegExp(`\\bgrant\\s+(?:all(?:\\s+privileges)?|(?:select|insert|update|delete|truncate|references|trigger)(?:\\s*,\\s*(?:select|insert|update|delete|truncate|references|trigger))*)\\s+on(?:\\s+table)?\\s+${tablePattern}\\s+to\\s+service_role\\b`, 'i')
+
+    if (!statements.some((statement) => rlsPattern.test(statement))) {
+      findings.push({ path: normalizedPath, code: 'public_table_rls_missing', table })
+    }
+
+    const revokedClientRoles = new Set()
+    for (const statement of statements) {
+      const match = revokePattern.exec(statement)
+      if (!match) continue
+      for (const role of match[1].match(/\b(?:public|anon|authenticated)\b/gi) || []) revokedClientRoles.add(role.toLowerCase())
+    }
+    if (!['public', 'anon', 'authenticated'].every((role) => revokedClientRoles.has(role))) {
+      findings.push({ path: normalizedPath, code: 'public_table_client_revoke_missing', table })
+    }
+
+    if (!statements.some((statement) => grantPattern.test(statement))) {
+      findings.push({ path: normalizedPath, code: 'public_table_service_grant_missing', table })
+    }
+  }
+}
+
 export function compatibilityFindings(path, text) {
   const findings = []
   const normalizedPath = normalizePath(path)
@@ -48,7 +86,8 @@ export function compatibilityFindings(path, text) {
   }
   if (extname(path).toLowerCase() !== '.sql') return findings
 
-  for (const statement of sqlStatements(String(text))) {
+  const statements = sqlStatements(String(text))
+  for (const statement of statements) {
     const match = /\b(?:create|alter)\s+extension(?:\s+if\s+not\s+exists)?\s+"?([a-z0-9_]+)"?/i.exec(statement)
     if (!match) continue
     const extension = match[1].toLowerCase()
@@ -59,6 +98,7 @@ export function compatibilityFindings(path, text) {
       findings.push({ path: normalizedPath, code: 'postgres17_removed_extension', extension })
     }
   }
+  addPublicTableContractFindings(path, statements, findings)
   return findings
 }
 
@@ -79,6 +119,28 @@ async function scanRepository() {
 
 function runSelfTest() {
   const safe = compatibilityFindings('safe.sql', 'create extension if not exists "pgcrypto";')
+  const safePublicTable = compatibilityFindings('safe-public.sql', `
+    create table if not exists public.example_records (id text primary key);
+    alter table public.example_records enable row level security;
+    revoke all on table public.example_records from PUBLIC, anon, authenticated;
+    grant select, insert on table public.example_records to service_role;
+  `)
+  const missingRls = compatibilityFindings('missing-rls.sql', `
+    create table public.example_records (id text primary key);
+    revoke all on public.example_records from public, anon, authenticated;
+    grant select on public.example_records to service_role;
+  `)
+  const missingPublicRevoke = compatibilityFindings('missing-public-revoke.sql', `
+    create table public.example_records (id text primary key);
+    alter table public.example_records enable row level security;
+    revoke all on public.example_records from anon, authenticated;
+    grant select on public.example_records to service_role;
+  `)
+  const missingServiceGrant = compatibilityFindings('missing-service-grant.sql', `
+    create table public.example_records (id text primary key);
+    alter table public.example_records enable row level security;
+    revoke all on public.example_records from public, anon, authenticated;
+  `)
   const pinned = compatibilityFindings('pinned.sql', ['create extension pgcrypto ', 'version \'1.3\';'].join(''))
   const removed = compatibilityFindings('removed.sql', ['create extension ', 'plv8;'].join(''))
   const deprecated = compatibilityFindings('client.ts', `const endpoint = '${['logs', 'all'].join('.')}'`)
@@ -89,6 +151,10 @@ function runSelfTest() {
     reject_removed_postgres17_extension: removed.some((item) => item.code === 'postgres17_removed_extension'),
     reject_deprecated_logs_endpoint: deprecated.some((item) => item.code === 'deprecated_management_logs_endpoint'),
     ignore_sql_comments: commentOnly.length === 0,
+    allow_explicit_public_table_contract: safePublicTable.length === 0,
+    reject_public_table_without_rls: missingRls.some((item) => item.code === 'public_table_rls_missing'),
+    reject_public_table_without_public_revoke: missingPublicRevoke.some((item) => item.code === 'public_table_client_revoke_missing'),
+    reject_public_table_without_service_grant: missingServiceGrant.some((item) => item.code === 'public_table_service_grant_missing'),
   }
   return { ok: Object.values(checks).every(Boolean), contract: CONTRACT, mode: 'offline_self_test', checks }
 }
@@ -105,6 +171,7 @@ async function main() {
     managedSqlFiles: result.managedSqlFiles,
     findings: result.findings,
     currentSupabaseChanges: {
+      dataApiExplicitGrantsEnforcedForAllProjects: '2026-10-30',
       managementLogsEndpointRemoval: '2026-09-23',
       extensionVersionClauseIgnoredFrom: '2026-08-05',
     },

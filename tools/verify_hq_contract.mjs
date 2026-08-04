@@ -24,7 +24,6 @@ import {
   COMPANY_DAILY_BUDGET_DEFAULT_UNITS,
   COMPANY_DAILY_BUDGET_HARD_MAX_UNITS,
 } from '../kernel/gateway.mjs'
-import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText] = await Promise.all([
@@ -67,7 +66,14 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'supermega_runtime', 'agent_governance.py'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
-const managedPilotReadiness = validateManagedPilotReadiness(JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8')))
+const managedPilotReadiness = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8'))
+const supabaseSecurityAudit = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'supabase-security-advisor-audit.json'), 'utf8'))
+const ceoProductGoal = await readFile(resolve(root, 'hq', 'SUPERMEGA-CEO-PRODUCT-GOAL.md'), 'utf8')
+const productQualityReport = await readFile(resolve(root, 'hq', 'PRODUCT-QUALITY.md'), 'utf8')
+const routeQualityPolicyText = await readFile(resolve(root, 'hq', 'product-route-quality-policy.json'), 'utf8')
+const routeQualityAudit = await readFile(resolve(root, 'tools', 'audit_product_routes.mjs'), 'utf8')
+const commerceSyncOutbox = await readFile(resolve(root, 'showroom', 'src', 'core', 'commerce-sync-outbox.ts'), 'utf8')
+const routeQualityPolicy = JSON.parse(routeQualityPolicyText)
 
 const manifest = JSON.parse(manifestText)
 const canonicalTextLength = (value) => value.replaceAll('\r\n', '\n').length
@@ -85,9 +91,12 @@ const databaseImplementationPaths = [
   'supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql',
   'supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql',
   'supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql',
+  'supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+  'supabase/rehearsal/20260804_public_browser_quarantine.sql',
   'tools/activate_supermega_database.ps1',
   'tools/rehearse_supermega_postgres17.py',
   'tools/validate_supermega_database_url.py',
+  'tools/verify_public_browser_quarantine.mjs',
   'tools/verify_managed_runtime_environment_values.mjs',
 ]
 const databaseImplementationHash = createHash('sha256')
@@ -173,6 +182,120 @@ requireContract('AI is shared infrastructure, not a fifth product',
   && sharedCapability('ai-assistance')?.appAnchor === '/work/?view=agents')
 requireContract('product lifecycle is explicit',
   portfolio.productLifecycle?.join(',') === 'discover,define,build,release,learn')
+requireContract('CEO four-product and innovation goal is explicit',
+  ceoProductGoal.includes('Make each SuperMega product deliver one verified business outcome in a first session')
+  && ceoProductGoal.includes('SuperMega has four customer products. Do not add a fifth product')
+  && ceoProductGoal.includes('### 1. SuperMega Blueprint')
+  && ceoProductGoal.includes('### 2. SuperMega Sync')
+  && ceoProductGoal.includes('### 3. SuperMega Actions')
+  && ceoProductGoal.includes('### 4. SuperMega Connect')
+  && ceoProductGoal.includes('Verified first-value rate')
+  && ceoProductGoal.includes('Preserve Ecommerce-to-Shop, Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file proof at both viewports')
+  && ceoProductGoal.includes('Preserve the now-proven Blueprint no-write preview')
+  && ceoProductGoal.includes('Preserve the now-proven Shop local write-ahead and reload-recovery contract')
+  && ceoProductGoal.includes('fourteen workflow gates and 98 deterministic checkpoints')
+  && ceoProductGoal.includes('Highest priority managed foundation')
+  && ceoProductGoal.includes('PostHog custom product events')
+  && ceoProductGoal.includes('select at most one orchestration authority')
+  && ceoProductGoal.includes('current-journey first-value attribution')
+  && ceoProductGoal.includes('Never treat browser-stored outbox state as managed write authority')
+  && ceoProductGoal.includes('Evaluate Supabase Queues only for server-owned durable import')
+  && ceoProductGoal.includes('Keep AI execution provider-neutral'))
+requireContract('route quality policy is bounded and four-product',
+  routeQualityPolicy.contract === 'supermega.product-route-quality-policy.v1'
+  && routeQualityPolicy.viewports?.map((entry) => entry.id).join(',') === 'mobile,desktop'
+  && routeQualityPolicy.routes?.length === 14
+  && new Set(routeQualityPolicy.routes.map((entry) => entry.id)).size === 14
+  && routeQualityPolicy.routes.filter((entry) => entry.scope === 'public').length === 6
+  && routeQualityPolicy.routes.filter((entry) => entry.scope === 'app').length === 8
+  && ['app-shop-orders', 'app-shop-inventory', 'app-plant-jobs', 'app-plant-problems', 'app-website', 'app-ecommerce'].every((id) => routeQualityPolicy.routes.some((entry) => entry.id === id))
+  && routeQualityPolicy.routes.every((entry) => Number.isInteger(entry.maxVisibleActions)
+    && Number.isInteger(entry.targetVisibleActions)
+    && entry.targetVisibleActions <= entry.maxVisibleActions))
+requireContract('route quality browser gate is fail-closed and resource bounded',
+  routeQualityAudit.includes("import { chromium } from 'playwright-core'")
+  && routeQualityAudit.includes("await page.route('**/*'")
+  && routeQualityAudit.includes('externalRequests.push(')
+  && routeQualityAudit.includes('touch_targets_under_44')
+  && routeQualityAudit.includes('horizontal_overflow')
+  && routeQualityAudit.includes('verifyDisclosures')
+  && routeQualityAudit.includes('disclosure_did_not_open')
+  && routeQualityAudit.includes('disclosure_did_not_close')
+  && routeQualityAudit.includes('auditFourProductOnboardingFirstTaskWorkflow')
+  && routeQualityAudit.includes("workflowId: 'four-product-onboarding-first-task'")
+  && routeQualityAudit.includes('for (const viewport of policy.viewports) workflowResults.push(await auditFourProductOnboardingFirstTaskWorkflow')
+  && routeQualityAudit.includes('auditEcommerceShopOrderWorkflow')
+  && routeQualityAudit.includes("workflowId: 'ecommerce-request-shop-confirmation'")
+  && routeQualityAudit.includes('for (const viewport of policy.viewports) workflowResults.push(await auditEcommerceShopOrderWorkflow')
+  && routeQualityAudit.includes('auditShopSaleCloseWorkflow')
+  && routeQualityAudit.includes("workflowId: 'shop-counter-sale-daily-close'")
+  && routeQualityAudit.includes('auditShopSyncRecoveryWorkflow')
+  && routeQualityAudit.includes("workflowId: 'shop-indexeddb-outbox-reload-recovery'")
+  && routeQualityAudit.includes('for (const viewport of policy.viewports) workflowResults.push(await auditShopSyncRecoveryWorkflow')
+  && routeQualityAudit.includes('auditPlantPlanShiftCloseWorkflow')
+  && routeQualityAudit.includes("workflowId: 'plant-plan-output-material-quality-shift-close'")
+  && routeQualityAudit.includes('auditWebsiteEditReleaseWorkflow')
+  && routeQualityAudit.includes("workflowId: 'website-brief-responsive-preview-release-file'")
+  && routeQualityAudit.includes('auditBlueprintPreviewWorkflow')
+  && routeQualityAudit.includes("workflowId: 'blueprint-shop-data-no-write-preview'")
+  && routeQualityAudit.includes('for (const viewport of policy.viewports) workflowResults.push(await auditBlueprintPreviewWorkflow')
+  && routeQualityAudit.includes("process.argv.includes('--workflow')")
+  && routeQualityAudit.includes("checkpoints.push('shop_handoff_without_write')")
+  && routeQualityAudit.includes("checkpoints.push('accountable_stock_review')")
+  && routeQualityAudit.includes("checkpoints.push('customer_tracking_reconciled')")
+  && routeQualityAudit.includes("checkpoints.push('payment_gate_before_completion')")
+  && routeQualityAudit.includes("checkpoints.push('daily_close_saved')")
+  && routeQualityAudit.includes("checkpoints.push('ack_interruption_left_durable_intent')")
+  && routeQualityAudit.includes("checkpoints.push('reload_reconciled_applied_intent')")
+  && routeQualityAudit.includes("checkpoints.push('outbox_drained_to_receipt')")
+  && routeQualityAudit.includes("checkpoints.push('order_not_duplicated')")
+  && routeQualityAudit.includes("checkpoints.push('job_import_reviewed')")
+  && routeQualityAudit.includes("checkpoints.push('production_job_created')")
+  && routeQualityAudit.includes("checkpoints.push('quality_capa_resolved')")
+  && routeQualityAudit.includes("checkpoints.push('shift_close_saved')")
+  && routeQualityAudit.includes("checkpoints.push('pages_reviewed_ready')")
+  && routeQualityAudit.includes("checkpoints.push('saved_revision_restored')")
+  && routeQualityAudit.includes("checkpoints.push('reviewable_site_file_downloaded')")
+  && routeQualityAudit.includes("checkpoints.push('deployment_boundary_visible')")
+  && routeQualityAudit.includes("checkpoints.push('blueprint_product_entry_ready')")
+  && routeQualityAudit.includes("checkpoints.push('blueprint_data_boundary_visible')")
+  && routeQualityAudit.includes("checkpoints.push('blueprint_import_opened')")
+  && routeQualityAudit.includes("checkpoints.push('activation_remains_locked')")
+  && routeQualityAudit.includes("checkpoints.push('product_state_unchanged')")
+  && routeQualityAudit.includes('checkpoints.push(`${journey.id}_onboarding_first_task_ready`)')
+  && routeQualityAudit.includes("firstActionLabel: 'Add Daily essentials basket to this sale'")
+  && routeQualityAudit.includes("firstActionLabel: 'Record output'")
+  && routeQualityAudit.includes("firstActionLabel: 'Download preview'")
+  && routeQualityAudit.includes("firstActionLabel: 'Start sample order'")
+  && routeQualityAudit.includes("element.closest('[hidden],[inert],[aria-hidden=\"true\"]')")
+  && routeQualityAudit.includes('await server.close()')
+  && routeQualityAudit.includes('await browser.close()')
+  && !routeQualityAudit.includes("from 'node:child_process'"))
+requireContract('route quality report preserves current evidence and production caveat',
+  productQualityReport.includes('28 checks')
+  && productQualityReport.includes('fourteen browser workflow gates')
+  && productQualityReport.includes('98 deterministic checkpoints')
+  && productQualityReport.includes('four-product onboarding-to-first-task journey')
+  && productQualityReport.includes('First-value measurement now starts from the latest onboarding route')
+  && productQualityReport.includes('Shop now stages each reviewed local action in a native IndexedDB write-ahead outbox')
+  && productQualityReport.includes('Blueprint now proves the existing Shop data tool')
+  && productQualityReport.includes('`simplicityTargetsMet` is true')
+  && productQualityReport.includes('Shop Orders | 22 | 23 | 23 | Target met')
+  && productQualityReport.includes('production not verified by this report')
+  && productQualityReport.includes('does not prove hosted persistence')
+  && productQualityReport.includes('Do not add a fifth customer product'))
+requireContract('Shop local sync recovery is bounded, digest-bound, and local-only',
+  commerceSyncOutbox.includes("COMMERCE_SYNC_OUTBOX_CONTRACT = 'supermega.commerce.sync-outbox.v1'")
+  && commerceSyncOutbox.includes('COMMERCE_SYNC_MAX_PENDING = 32')
+  && commerceSyncOutbox.includes('COMMERCE_SYNC_MAX_STATE_BYTES = 2 * 1024 * 1024')
+  && commerceSyncOutbox.includes('currentDigest === intent.candidateDigest')
+  && commerceSyncOutbox.includes('currentDigest !== intent.baseDigest')
+  && commerceSyncOutbox.includes('Nothing was overwritten.')
+  && !commerceSyncOutbox.includes('fetch('))
+requireContract('route quality command and pinned browser client are installed',
+  packageText.includes('"qa:routes": "npm --prefix showroom run build && npm run public:build && node tools/audit_product_routes.mjs"')
+  && packageText.includes('"qa:routes:strict": "npm --prefix showroom run build && npm run public:build && node tools/audit_product_routes.mjs --require-targets"')
+  && packageText.includes('"playwright-core": "1.62.1"'))
 requireContract('one bounded agent operating model is authoritative',
   portfolio.agentOperatingModel?.mode === 'bounded-demand-driven'
   && portfolio.agentOperatingModel?.manager === 'CEO / Codex integrator'
@@ -696,9 +819,13 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('| CEO-019 | CEO / Codex integrator | done-live |')
   && workboard.includes('Commit `757cd3b64d0818d477e698235c58c4fbf34682c5` makes zero catalog the first prerequisite')
   && workboard.includes('Guarded release `30817032783` promoted both canonical domains')
-  && workboard.includes('| CEO-020 | CEO / Codex integrator | done-live |')
-  && workboard.includes('Commit `25cac2f50dfcc210d29dd1fd794ac194083f90d1` makes the free-local and managed-company-intelligence model explicit')
-  && workboard.includes('Guarded release `30823422205` promoted both canonical domains')
+  && workboard.includes('| REL-020 | Release / CEO integrator | done-live |')
+  && workboard.includes(`Both canonical release endpoints reported commit \`${hqLiveReleaseCommit}\``)
+  && workboard.includes('Current-head public verification remains failed by stale context plus intermittent `/website/` and `/ecommerce/` `404` responses.')
+  && workboard.includes('The local `47fd933c` product-first candidate supersedes the abstract managed-intelligence homepage but is not integrated or deployed.')
+  && workboard.includes('| CEO-020 | CEO / Codex integrator | done-local |')
+  && workboard.includes('Commit `a903bae4` removes company-readiness and data-setup panels from the app root')
+  && workboard.includes('The combined candidate is not deployed')
   && workboard.includes('| ENG-080 | Shop + Data Integrity Codex | done-local |')
   && workboard.includes('replaces forged cancellation actor/time with the authenticated human')
   && workboard.includes('| ENG-081 | Shop + Pricing Integrity Codex | done-local |')
@@ -762,7 +889,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && now.includes('Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.')
   && now.includes('The deterministic 12-profile rehearsal passes 24 rows')
   && now.includes('The active delivery focus is:')
-  && now.includes(`Live HQ and both domains agree on \`${hqLiveReleaseCommit.slice(0, 8)}\`; no release drift is present.`)
+  && now.includes(`Both domains remain on accepted live \`${hqLiveReleaseCommit.slice(0, 8)}\`; exact current-head verification reports release drift.`)
   && now.includes('Plant Jobs persists managed BOM/routing, WIP, minutes')
   && now.includes('operation/output requires exact authenticated Shop issue evidence')
   && now.includes('Controlled batches bind reviewed productive time and closed downtime')
@@ -797,7 +924,7 @@ requireContract('workboard release authority and active execution order are curr
   && workboardExecutionOrder.includes('usable Website download checkpoint `e18fc6bc`')
   && workboardExecutionOrder.includes('Website mobile mission release `2824da83`')
   && workboardExecutionOrder.includes('Ecommerce mobile mission release `e15d4a58`')
-  && workboardExecutionOrder.includes('owner-approved existing Supabase target')
+  && workboardExecutionOrder.includes('owner-approved isolated non-production Supabase clone')
   && workboardExecutionOrder.includes('Repeat the 12-profile rehearsal against the live isolated release')
   && workboardExecutionOrder.includes('retain complete rendered mobile Website and Ecommerce mission acceptance')
   && workboardExecutionOrder.includes('exact-commit protected preview')
@@ -1021,10 +1148,10 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.engine?.loopbackOnly === true
   && databaseRehearsal.runtime?.adapter === 'PostgresTrialStore'
   && databaseRehearsal.runtime?.explicitTransaction === true
-  && databaseRehearsal.migration?.count === 10
-  && databaseRehearsal.migration?.schemaVersion === 9
+  && databaseRehearsal.migration?.count === 11
+  && databaseRehearsal.migration?.schemaVersion === 10
   && databaseRehearsal.migration?.productionValidatorReady === true
-  && Object.keys(databaseRehearsal.checks || {}).length === 52
+  && Object.keys(databaseRehearsal.checks || {}).length === 56
   && Object.values(databaseRehearsal.checks || {}).every((value) => value === true)
   && databaseRehearsal.checks?.capabilityScopedReads === true
   && databaseRehearsal.checks?.capabilityScopedEventReads === true
@@ -1034,6 +1161,10 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.checks?.managedOwnerAuthorizationDurable === true
   && databaseRehearsal.checks?.managedActivationAtomicRollback === true
   && databaseRehearsal.checks?.managedActivationIdempotentReplay === true
+  && databaseRehearsal.checks?.managedSupabaseSessionRevocationEnforced === true
+  && databaseRehearsal.checks?.publicBrowserQuarantineEnforced === true
+  && databaseRehearsal.checks?.publicBrowserQuarantineIdempotent === true
+  && databaseRehearsal.checks?.restoredPublicBrowserQuarantinePreserved === true
   && databaseRehearsal.checks?.managedContextActivationEvidenceBound === true
   && databaseRehearsal.checks?.managedContextAuthenticatedIdentityEnforced === true
   && databaseRehearsal.checks?.managedContextValidationZeroWrite === true
@@ -1054,31 +1185,33 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.safety?.supabaseMutated === false
   && databaseRehearsal.safety?.vercelMutated === false)
 
+requireContract('public browser quarantine checkpoint remains truthful and owner gated',
+  workboard.includes('| OPS-157 | Security + Managed Platform Codex | done-local |')
+  && workboard.includes('27 RLS-enabled public tables, two public sequences')
+  && workboard.includes('Protected production remains schema v7 with its existing grants')
+  && now.includes('digest-bound isolated-target quarantine')
+  && now.includes('hosted application remains unproven')
+  && ceoProductGoal.includes('Do not add a framework, analytics SDK, queue, or model provider while the current bottleneck is hosted proof and operator evidence.'))
+
 requireContract('managed pilot readiness is derived and fail closed',
-  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v2'
+  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v1'
   && managedPilotReadiness.overall?.status === 'blocked'
   && managedPilotReadiness.overall?.localDatabaseProofReady === true
   && managedPilotReadiness.overall?.hostedActivationReady === false
   && managedPilotReadiness.overall?.blockingGateCount === 7
   && managedPilotReadiness.products?.map((product) => product.productId).join(',') === 'shop,plant,website,ecommerce'
   && managedPilotReadiness.products?.every((product) => product.managedPilotStatus === 'blocked' && product.automationStatus === 'owner-gated')
-  && managedPilotReadiness.founderDecision?.status === 'required'
-  && managedPilotReadiness.founderDecision?.authority === 'proposal_only'
-  && managedPilotReadiness.founderDecision?.createsAuthority === false
-  && managedPilotReadiness.founderDecision?.approvalReceipt === null
-  && managedPilotReadiness.founderDecision?.target?.environment === 'preview_branch'
-  && managedPilotReadiness.founderDecision?.target?.production === false
-  && managedPilotReadiness.founderDecision?.target?.startsWithProductionData === false
-  && managedPilotReadiness.founderDecision?.target?.maximumLifetimeHours === 24
-  && managedPilotReadiness.founderDecision?.target?.deleteAfterEvidence === true
-  && managedPilotReadiness.founderDecision?.operator?.productId === 'shop'
-  && managedPilotReadiness.founderDecision?.proposedActions?.includes('delete_preview_branch_after_evidence')
-  && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('production_database_change')
-  && managedPilotReadiness.founderDecision?.doesNotAuthorize?.includes('hosted_scheduler_activation')
   && managedPilotReadiness.controls?.externalWritesPerformed === false
   && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
-  && managedPilotReadiness.controls?.productionWritesEnabled === false)
+  && managedPilotReadiness.controls?.productionWritesEnabled === false
+  && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === '27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v10.'
+  && supabaseSecurityAudit.managedBackend?.liveSchemaVersion === 7
+  && supabaseSecurityAudit.managedBackend?.localTargetVersion === 10
+  && supabaseSecurityAudit.managedBackend?.browserRolesDenied === true
+  && supabaseSecurityAudit.managedBackend?.metadataRlsEnabled === false
+  && supabaseSecurityAudit.controls?.databaseWrites === 0)
 
 requireContract('current Supabase compatibility is a release gate',
   packageText.includes('"database:supabase:compatibility": "node tools/verify_supabase_compatibility.mjs"')
@@ -1454,13 +1587,14 @@ requireContract('live HQ state is machine-verifiable and read-only',
   && workboard.includes('Checkpoint `bc19dac2` adds `supermega.hq-live-state.v1`')
   && workboard.includes('A one-off non-terminating working-set trim released 2,084.8 MB'))
 
-requireContract('hosted one-job release drift is resolved',
+requireContract('hosted one-job release stays accepted while candidate drift is explicit',
   workboard.includes('| OPS-123 | CEO + Hosted Agent Release Integrity Codex | done-local |')
   && workboard.includes('production remains `isolated_demo`, scheduler-disabled, and scale-to-zero, but still reports the superseded two-job ceiling')
   && workboard.includes('24 conflicts across five bounded batches')
   && workboard.includes('zero merge, push, deployment, or provider authority')
   && workboard.includes('| CEO-012 | CEO / Codex integrator | done-live |')
-  && now.includes('scheduler ceiling is one job, and exact live verification passes.'))
+  && now.includes('Paired release metadata is internally consistent; current-head page-contract checks report drift')
+  && now.includes('public availability remains unproven until a protected release and exact live check both pass.'))
 
 requireContract('identity data integration authority follows the owning module',
   workboard.includes('| OPS-124 | CEO + Identity/Data Integration Contract Codex | done-local |')

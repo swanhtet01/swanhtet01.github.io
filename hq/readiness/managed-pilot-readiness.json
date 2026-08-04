@@ -1,70 +1,26 @@
 {
-  "contract": "supermega.managed-pilot-readiness.v2",
-  "asOf": "2026-08-03T07:01:07.469Z",
-  "sourceDigest": "sha256:850060ffd433ac659489eade428de80c77a3e62b102ff3f06c2c5d547edbda60",
+  "contract": "supermega.managed-pilot-readiness.v1",
+  "asOf": "2026-08-04T10:56:25.412Z",
+  "sourceDigest": "sha256:bb46f3e09c5e0196698955c09404658dd4ea685acfb1a9f8b92a5178cd3f4f31",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
     "blockingGateCount": 7,
-    "nextAction": "Approve one 24-hour, data-less Supabase preview branch and name one Shop pilot operator."
-  },
-  "founderDecision": {
-    "status": "required",
-    "authority": "proposal_only",
-    "createsAuthority": false,
-    "approvalReceipt": null,
-    "decision": "Approve one bounded managed-pilot rehearsal.",
-    "target": {
-      "provider": "supabase",
-      "environment": "preview_branch",
-      "production": false,
-      "startsWithProductionData": false,
-      "requiredServices": [
-        "database",
-        "auth",
-        "storage"
-      ],
-      "maximumLifetimeHours": 24,
-      "deleteAfterEvidence": true,
-      "providerUsageChargesAcknowledged": false
-    },
-    "operator": {
-      "productId": "shop",
-      "namedBusinessRequired": true,
-      "namedOperatorRequired": true,
-      "measuredBaselineRequired": true,
-      "acceptanceEvidenceRequired": true
-    },
-    "proposedActions": [
-      "create_one_preview_branch",
-      "apply_reviewed_migrations_to_preview",
-      "create_one_named_preview_operator",
-      "run_hosted_isolation_storage_recovery_proof",
-      "delete_preview_branch_after_evidence"
-    ],
-    "doesNotAuthorize": [
-      "production_database_change",
-      "production_deploy",
-      "customer_message",
-      "payment",
-      "stock_move",
-      "managed_product_activation",
-      "hosted_scheduler_activation"
-    ]
+    "nextAction": "Approve one isolated non-production Supabase target and one named Shop pilot operator; protected production remains unchanged."
   },
   "gates": [
     {
       "id": "local_postgres17",
       "status": "ready-local",
-      "evidence": "52 checks, TLS, RLS, tenant isolation, durable owner control, backup and restore.",
+      "evidence": "56 checks, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup and restore.",
       "nextAction": "Keep the digest-bound rehearsal current."
     },
     {
       "id": "hosted_postgres17",
       "status": "blocked",
-      "evidence": "Local evidence explicitly does not prove hosted activation.",
-      "nextAction": "Run the approved isolated Supabase rehearsal and validator."
+      "evidence": "Protected production is PostgreSQL 17 at managed schema v7; no owner-approved isolated hosted rehearsal exists.",
+      "nextAction": "Apply v8 through v10 plus the digest-bound public browser quarantine on an approved isolated Supabase target, then rerun the hosted validator and session-revocation proof."
     },
     {
       "id": "hosted_storage_privacy",
@@ -87,8 +43,8 @@
     {
       "id": "security",
       "status": "blocked",
-      "evidence": "Live security ready is false.",
-      "nextAction": "Resolve hosted Security Advisor and exact policy evidence."
+      "evidence": "27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v10.",
+      "nextAction": "Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal."
     },
     {
       "id": "named_pilot",
@@ -172,23 +128,27 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:8e550b50698ebe3499f93a43bc1511c2f8b26d0ecf91f160809731ff5a56dc54"
+      "digest": "sha256:b5df3bc61f5c5af1992209c8e69cdb4b8b5f26ad079fb1d19332b01907948a1c"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
       "digest": "sha256:392c1d5e65efacd355ad0e879376f4ca9b4b1bc2aa4d192105a518a2586d63fc"
     },
     {
+      "path": "hq/readiness/supabase-security-advisor-audit.json",
+      "digest": "sha256:c74d7794ce200a16612a7503be2a9b7e1c4ce02b462d0c9fa7d0806869af55b1"
+    },
+    {
       "path": "hq/NOW.md",
-      "digest": "sha256:b301d1e1cf42eaa3d62fd95c051353e1cccda546d57c32d200c327890cd3bcf4"
+      "digest": "sha256:7b590d69077ee84eb3e8b958679822580c2e609aca23882fdf32bb303ca1a5b9"
     },
     {
       "path": "package.json",
-      "digest": "sha256:02b1e43364629fa0466eb285a452d8ba51988d8cd5dd7f508bea75c6cdff98eb"
+      "digest": "sha256:3ed13f87c70b3de677d9a81a4df3c2710997d765ecd8774e9cf9f1f89fa08d1f"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:e197ab508eb90837f0a5aca6efca6aa6a2a4f6a65ab4de5b48f3fd1a0fd3cc85"
+      "digest": "sha256:7f5c8e2d5b922f22fa21f63b45d1b09c9206410bd039f36fac6b876e7d7835f7"
     }
   ]
 }

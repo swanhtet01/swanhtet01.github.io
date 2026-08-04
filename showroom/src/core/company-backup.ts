@@ -20,6 +20,7 @@ const portableExactKeys = new Set([
   'supermega.website.workspace.v2',
   'supermega.website-ecommerce-handoff.v1',
   'supermega.setup.v3',
+  'supermega.product_setups.v1',
   'supermega.approvals.v3',
   'supermega.accountable.actions.v1',
   'supermega.behavior-trail.v1',

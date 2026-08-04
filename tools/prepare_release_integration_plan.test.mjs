@@ -62,6 +62,8 @@ test('conflicts route to bounded accountable batches', () => {
   assert.equal(classifyIntegrationConflict('showroom/src/core/CoreApp.tsx'), 'app-shell')
   assert.equal(classifyIntegrationConflict('showroom/src/products/ecommerce/EcommerceProduct.tsx'), 'ecommerce')
   assert.equal(classifyIntegrationConflict('tools/verify_app_security_contract.mjs'), 'release-security-hq')
+  assert.equal(classifyIntegrationConflict('tools/create_public_vercel_output.mjs'), 'release-security-hq')
+  assert.equal(classifyIntegrationConflict('kernel/managed-pilot-readiness.mjs'), 'release-security-hq')
   assert.equal(classifyIntegrationConflict('unknown/new-contract.ts'), 'cross-cutting')
 })
 

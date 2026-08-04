@@ -25,6 +25,55 @@ assert(manifest.company?.publicPricing === false, 'public_pricing_must_remain_hi
 
 const publicProducts = manifest.customerProducts
 
+const publicProductProfiles = new Map([
+  ['shop', {
+    outcome: 'Sell, fulfil, and close the day from one operating record.',
+    summary: 'Use a ready Shop sample for counter sales, orders, stock, purchasing, returns, and daily close.',
+    workflow: [
+      ['Sell', 'Add items and complete a sample counter sale.'],
+      ['Fulfil', 'Move orders through the next step and keep stock work beside them.'],
+      ['Close', 'Review the day, exceptions, and evidence before closing.'],
+    ],
+    proof: ['Counter, order, and stock work in one sample', 'Ready sample records with no account required', 'The same core tasks on phone and desktop'],
+    boundary: 'The public sample stores data in this browser. Live payments, messages, delivery, and company stock writes require an approved setup.',
+  }],
+  ['plant', {
+    outcome: 'Turn production jobs into controlled output and a clear shift close.',
+    summary: 'Use a ready Plant sample for jobs, materials, output, problems, quality, maintenance, and shift handoff.',
+    workflow: [
+      ['Plan', 'Choose a job and review its target, materials, and owner.'],
+      ['Run', 'Record output, downtime, quality issues, and material use.'],
+      ['Close', 'Review the shift result and leave accountable handoff evidence.'],
+    ],
+    proof: ['Jobs, output, and material trace in one sample', 'Quality and maintenance exceptions beside the work', 'Shift evidence stays attached to the operating record'],
+    boundary: 'The public sample stores data in this browser. Machine control and live production writes require an approved setup.',
+  }],
+  ['website', {
+    outcome: 'Turn a short business brief into a responsive website package.',
+    summary: 'Answer a short brief, edit a finite set of pages, review the mobile layout, and download the result.',
+    workflow: [
+      ['Brief', 'Add the company, audience, offer, proof, and contact path.'],
+      ['Review', 'Edit the finite pages and check desktop and mobile previews.'],
+      ['Download', 'Save ready pages and download a standalone website package.'],
+    ],
+    proof: ['Finite page editor instead of an open-ended builder', 'Responsive preview before any publish step', 'Standalone website download from the sample'],
+    boundary: 'The public sample stores work in this browser. Publishing, hosting, analytics, and domain changes happen only after approval.',
+  }],
+  ['ecommerce', {
+    outcome: 'Collect an online order request and hand it to Shop for review.',
+    summary: 'Use a Shop-backed sample storefront, recoverable cart, clear quote, request receipt, and human-confirmed Shop handoff.',
+    workflow: [
+      ['Browse', 'Choose available Shop-backed items and build a recoverable cart.'],
+      ['Review', 'Check pickup or delivery intent and the time-limited quote.'],
+      ['Handoff', 'Save a request receipt and let a named Shop operator confirm it.'],
+    ],
+    proof: ['Read-only Shop catalogue snapshot', 'Recoverable cart, quote, and request receipt', 'Human-confirmed Shop draft with duplicate rejection'],
+    boundary: 'The sample does not charge, reserve stock, or create a Shop order until a named person confirms the handoff.',
+  }],
+])
+
+assert(publicProducts.every((product) => publicProductProfiles.has(product.id)), 'public_product_profile_missing')
+
 const brand = manifest.brand
 
 function escapeHtml(value) {
@@ -257,6 +306,19 @@ const sharedStyle = `
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
   .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 13px; }
   .compact-solution > .card-link { margin-top: auto; }
+  .product-hero { max-width: 980px; padding: 64px 0 44px; }
+  .product-back { min-height: 44px; display: inline-flex; align-items: center; margin-bottom: 24px; color: var(--muted); font-size: 12px; font-weight: 740; text-decoration: none; }
+  .product-back:hover { color: var(--ink); }
+  .product-hero h1 { max-width: 880px; margin-top: 18px; }
+  .product-detail { padding: 0 0 72px; }
+  .product-detail-grid { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(320px,.85fr); gap: 14px; }
+  .product-workflow-panel, .product-proof-panel { border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; background: var(--panel-solid); box-shadow: 0 12px 34px rgba(25,54,42,.045); }
+  .product-workflow-panel h2, .product-proof-panel h2 { margin-top: 16px; font-size: 28px; }
+  .product-workflow-panel .steps { margin-top: 22px; }
+  .product-proof-list { display: grid; gap: 0; margin: 22px 0 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
+  .product-proof-list li { min-height: 54px; display: grid; grid-template-columns: 18px 1fr; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .product-proof-list li::before { color: var(--green); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; content: ">_"; }
+  .product-boundary { margin: 22px 0 0; border-left: 2px solid var(--green); padding-left: 13px; color: var(--quiet); font-size: 11px; }
   .product-roadmap { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
   .roadmap-solution { min-height: 228px; display: flex; flex-direction: column; }
   .roadmap-solution > p { min-height: 0; }
@@ -280,26 +342,15 @@ const sharedStyle = `
   .closing-strip { display: grid; grid-template-columns: 1fr auto; gap: 30px; align-items: center; margin-top: 14px; border: 1px solid rgba(11,116,94,.2); border-radius: var(--radius); padding: 24px 28px; background: var(--panel-soft); }
   .closing-strip h2 { margin-bottom: 6px; font-size: 27px; }
   .closing-strip p { margin: 0; color: var(--muted); font-size: 12px; }
-  .offer-model-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border-block: 1px solid var(--line-strong); }
-  .offer-model-lane { min-width: 0; padding: 30px 34px 30px 0; }
-  .offer-model-lane + .offer-model-lane { border-left: 1px solid var(--line-strong); padding-right: 0; padding-left: 34px; }
-  .offer-model-lane h3 { margin: 14px 0 9px; font-size: 25px; }
-  .offer-model-lane > p { max-width: 520px; color: var(--muted); font-size: 13px; }
-  .offer-model-list { display: grid; gap: 0; margin: 22px 0 0; padding: 0; list-style: none; }
-  .offer-model-list li { min-height: 45px; display: flex; align-items: center; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
-  .offer-model-list li::before { margin-right: 10px; color: var(--green); content: ">"; font-family: "SFMono-Regular", Consolas, monospace; font-weight: 800; }
-  .offer-model-action { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 24px; }
-  .offer-model-action p { max-width: 720px; margin: 0; color: var(--quiet); font-size: 11px; }
   :focus-visible { outline: 3px solid rgba(11,116,94,.34); outline-offset: 3px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: .01ms !important; } }
   @media (max-width: 980px) { .hero { grid-template-columns: 1fr; gap: 42px; padding-top: 60px; } .hero-copy { max-width: 820px; } .workspace { transform: none; } .split, .solution-block { grid-template-columns: 1fr; gap: 30px; } .sticky-copy { position: static; } .surface-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .surface-card:last-child { grid-column: 1/-1; min-height: 210px; } .principle-grid, .trust-compact { grid-template-columns: repeat(2,minmax(0,1fr)); } .product-roadmap { grid-template-columns: 1fr; } .contact-layout { grid-template-columns: 1fr; gap: 42px; } }
-  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .brand { gap: 8px; font-size: 11px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap, .shared-capability { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
+  @media (max-width: 760px) { .frame { width: min(calc(100% - 30px), 1200px); } .header-inner { min-height: 62px; gap: 10px; } .brand { gap: 8px; font-size: 11px; } .nav-link { padding-inline: 8px; } .nav-optional { display: none; } .header-cta { min-height: 42px; padding-inline: 13px; } .hero, .page-hero { padding-top: 46px; } .hero { padding-bottom: 52px; } .workspace-body { grid-template-columns: 1fr; min-height: 0; } .workspace-nav { display: none; } .workspace-main { padding: 16px; } .metric-grid { grid-template-columns: 1fr; } .metric { min-height: 76px; } .surface-grid, .product-grid, .template-grid, .module-grid, .principle-grid, .trust-compact, .case-grid, .compact-solutions, .product-roadmap, .shared-capability, .product-detail-grid { grid-template-columns: 1fr; } .surface-card, .surface-card:last-child { grid-column: auto; min-height: 220px; } .solution-block { padding: 24px; } .system-preview-body { padding: 18px; } .system-row { grid-template-columns: 28px 92px minmax(0, 1fr); } .system-row i { display: none; } .section { padding: 50px 0; } .control-line, .closing-strip { display: grid; grid-template-columns: 1fr; } .callout { grid-template-columns: 1fr; } .callout { padding: 26px; } .contact-form { padding: 20px; } .field-grid { grid-template-columns: 1fr; } label.wide { grid-column: auto; } .prose section { grid-template-columns: 1fr; gap: 6px; } .footer-inner { display: grid; } .footer-links { justify-content: flex-start; } }
   @media (max-width: 420px) { .nav-link { display: none; } h1 { font-size: 38px; } .product-card { padding: 24px; } .compact-solution { padding: 22px; } }
   @media (min-width: 761px) { .detail-disclosure > summary { display: none; } details.detail-disclosure:not([open]) > .disclosure-body { display: block; } .detail-disclosure { margin-top: 0; border-top: 0; } .product-disclosure .disclosure-body { padding-top: 16px; } }
   @media (max-width: 760px) { .hero { gap: 28px; padding-top: 28px; padding-bottom: 32px; } .hero-note { display: none; } .section { padding: 32px 0; } .section-head { margin-bottom: 18px; } .section-head p { font-size: 16px; } .workspace-bar { min-height: 44px; } .system-preview-body { padding: 14px 16px; } .system-row { min-height: 44px; } .system-boundary { margin-top: 14px; } .compact-solution > p { min-height: 0; } .closing-strip { padding: 22px; } }
   @media (max-width: 420px) { .compact-solution { padding: 18px; } }
-  @media (max-width: 520px) { .compact-solutions { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; } .compact-solution { min-height: 250px; padding: 16px; } .compact-solution h3 { margin-top: 12px; font-size: 22px; } .compact-solution > p { font-size: 11px; line-height: 1.45; } .compact-solution .card-index { min-height: 28px; font-size: 8px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { font-size: 12px; } }
-  @media (max-width: 760px) { .offer-model-grid { grid-template-columns: 1fr; } .offer-model-lane { padding: 24px 0; } .offer-model-lane + .offer-model-lane { border-top: 1px solid var(--line-strong); border-left: 0; padding-left: 0; } .offer-model-action { align-items: stretch; flex-direction: column; } .offer-model-action .button { width: 100%; } }
+  @media (max-width: 520px) { .compact-solutions { grid-template-columns: 1fr; gap: 10px; } .compact-solution { min-height: 210px; padding: 20px; } .compact-solution h3 { margin-top: 12px; font-size: 26px; } .compact-solution > p { font-size: 13px; line-height: 1.5; } .compact-solution .card-index { min-height: 28px; font-size: 9px; } .compact-solution .module-tags { display: none; } .compact-solution .card-link { font-size: 13px; } .product-workflow-panel, .product-proof-panel { padding: 22px; } }
 `
 
 function brandHtml() {
@@ -347,14 +398,27 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
 
 function productCardHtml(product, index) {
   const capabilities = (product.modules?.length ? product.modules : product.workflow).slice(0, 3)
-  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
   return `<article class="compact-solution" id="${escapeHtml(product.id)}">
     <span class="card-index">0${index + 1} / ${escapeHtml(product.eyebrow)}</span>
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
     <div class="module-tags" role="group" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
-    <a class="card-link" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a>
+    <a class="card-link" href="${escapeHtml(product.publicAnchor)}">See ${escapeHtml(product.name)}</a>
   </article>`
+}
+
+function productPageHtml(product) {
+  const profile = publicProductProfiles.get(product.id)
+  const setupRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  return documentHtml({
+    route: product.publicAnchor,
+    title: `${product.name} | SuperMega`,
+    description: profile.summary,
+    content: `<main>
+      <section class="frame product-hero"><a class="product-back" href="/#products">All products</a><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(profile.outcome)}</h1><p class="lede">${escapeHtml(profile.summary)}</p><div class="actions"><a class="button primary" href="${escapeHtml(product.appRoute)}">Try ${escapeHtml(product.name)} sample</a><a class="button" href="${escapeHtml(setupRoute)}">Set up my ${escapeHtml(product.name)}</a></div><div class="hero-note"><span>No account for sample</span><span>One-step setup</span><span>Phone and desktop</span></div></section>
+      <section class="frame product-detail" aria-label="${escapeHtml(product.name)} workflow"><div class="product-detail-grid"><section class="product-workflow-panel"><span class="eyebrow">How it works</span><h2>Three steps, one clear record.</h2><div class="steps">${profile.workflow.map(([title, detail]) => `<div class="step"><div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p></div></div>`).join('')}</div></section><aside class="product-proof-panel"><span class="eyebrow">What is included</span><h2>Useful before setup.</h2><ul class="product-proof-list">${profile.proof.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul><p class="product-boundary">${escapeHtml(profile.boundary)}</p></aside></div></section>
+    </main>`,
+  })
 }
 
 const homeHtml = documentHtml({
@@ -363,8 +427,7 @@ const homeHtml = documentHtml({
   description: manifest.company.statement,
   content: `<main>
     <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four focused products</span><span>Working samples</span><span>Mobile-ready workflows</span></div></div></section>
-    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to try.</h2><p>Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
-    <section class="frame section offer-model" id="model" aria-label="Free and managed SuperMega"><div class="section-head"><span class="eyebrow">Free product. Managed intelligence.</span><h2>Run the products free. Add managed company intelligence when the workflow proves value.</h2><p>The free workspace keeps the operating software useful on its own. Managed service adds approved AI context and company controls without replacing the underlying record.</p></div><div class="offer-model-grid"><div class="offer-model-lane"><span class="eyebrow">Free local workspace</span><h3>Operate without a stripped-down plan.</h3><p>Every workflow visible in Shop, Plant, Website, and Ecommerce remains available in the browser workspace.</p><ul class="offer-model-list"><li>Full local operating modules and imports</li><li>Grounded answers from validated local records</li><li>Approvals, evidence, backup, and export</li><li>No account or model call required</li></ul></div><div class="offer-model-lane"><span class="eyebrow">Managed company intelligence</span><h3>Use approved context across products.</h3><p>SuperMega can retain reviewed context, rank next actions, and prepare controlled work only after company controls pass.</p><ul class="offer-model-list"><li>Approved AI context across all four products</li><li>Persistent company history and role-aware access</li><li>Reviewed recommendations and accountable actions</li><li>Managed setup, recovery, and support</li></ul></div></div><div class="offer-model-action"><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p><a class="button primary" href="/contact/?product=guide&amp;source=managed-intelligence">Request managed pilot</a></div></section>
+    <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to explore.</h2><p>See what each product does, then open only the working sample you chose. No account or setup is required.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div><div class="closing-strip"><div><h2>Start with one working sample.</h2><p>Try it free in this browser. When it fits, SuperMega can set up secure company data, access, recovery, and support around that product.</p></div><a class="button primary" href="/contact/?product=guide&amp;source=managed-setup">Plan managed setup</a></div></section>
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })
@@ -384,10 +447,16 @@ const contactScript = `<script>(function(){
     var valid=values.proof_contract==='supermega.managed_trial_proof.v2'&&values.proof_version==='2'&&/^sha256:[0-9a-f]{64}$/.test(values.proof_digest)&&/^(shop|plant|website|ecommerce)$/.test(values.proof_product)&&/^[a-z0-9][a-z0-9._-]{0,119}$/.test(values.proof_template)&&boundedInteger(values.proof_readiness,100)&&boundedInteger(values.proof_sources,1000000)&&boundedInteger(values.proof_behavior,1000000)&&boundedInteger(values.proof_decisions,1000000)&&/^(not_started|collecting|target_met|improved|unchanged|regressed)$/.test(values.proof_outcome)&&outcomeDigestValid&&/^(true|false)$/.test(values.proof_outcome_accepted)&&(!outcomeAccepted||/^(target_met|improved)$/.test(values.proof_outcome))&&values.proof_raw_records==='false'&&values.proof_product===(query.get('product')||'')&&values.proof_template===(query.get('template')||'')&&contextValid;
     return {attempted:true,proof:valid?values:null};
   }
-  var requestedProduct=query.get('product'),managedIntelligenceRequest=query.get('source')==='managed-intelligence';if(product&&/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||''))product.value=requestedProduct;
+  var requestedProduct=query.get('product'),productNames={shop:'Shop',plant:'Plant',website:'Website',ecommerce:'Ecommerce'},requestedProductName=/^(shop|plant|website|ecommerce)$/.test(requestedProduct||'')?productNames[requestedProduct]:'';if(product&&/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||''))product.value=requestedProduct;
   if(query.get('template')&&template)template.value=query.get('template');
   if(handoff.get('company')&&company)company.value=handoff.get('company').slice(0,180);
   if(handoff.get('goal')&&goal)goal.value=handoff.get('goal').slice(0,4000);
+  if(requestedProductName&&!handoff.toString()){
+    if(heading)heading.textContent='Set up '+requestedProductName+' for your company.';
+    if(lede)lede.textContent='Tell us your company and the first '+requestedProductName+' job you want to improve. We will reply with the data needed, the sample we will prepare, and the acceptance check.';
+    if(copyHeading)copyHeading.textContent='One product. One first job.';
+    if(copy)copy.textContent='You do not need to choose a template. Nothing is connected, imported, or activated when you send this request.';
+  }
   var proofResult=readProof(),proof=proofResult.proof;
   if(proof){
     proofNames.forEach(function(name){var input=form.querySelector('[name="'+name+'"]');if(!input){input=document.createElement('input');input.type='hidden';input.name=name;form.appendChild(input)}input.value=proof[name]});
@@ -401,13 +470,6 @@ const contactScript = `<script>(function(){
   }
   if(product)product.addEventListener('change',detachProofIfChanged);
   if(template)template.addEventListener('input',detachProofIfChanged);
-  if(managedIntelligenceRequest&&!handoff.toString()){
-    if(heading)heading.textContent='Request managed company intelligence.';
-    if(lede)lede.textContent='Describe the first Shop, Plant, Website, or Ecommerce workflow that should use approved company context.';
-    if(copyHeading)copyHeading.textContent='Start with one proven workflow.';
-    if(copy)copy.textContent='We will confirm the records, responsible owner, acceptance test, tenant boundary, recovery plan, and actions that must stay review-gated.';
-    submit.textContent='Request managed pilot';
-  }
   if(handoff.toString()){
     var productName=product&&product.selectedOptions.length?product.selectedOptions[0].textContent:'managed AI';
     if(heading)heading.textContent='Finish your '+productName+' request.';
@@ -442,7 +504,7 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1 data-contact-heading>What should run better?</h1><p class="lede" data-contact-lede>Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2 data-contact-copy-heading>Start with the work.</h2><p data-contact-copy>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Client-provided trial proof</span><h3>Reviewed setup summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1 data-contact-heading>What should run better?</h1><p class="lede" data-contact-lede>Tell us your company and one recurring job that should become easier. We will reply with the smallest useful next step.</p></section><section class="contact-layout"><div class="contact-copy"><h2 data-contact-copy-heading>Start with one real job.</h2><p data-contact-copy>No account, data connection, automation, or external action begins from this form. We first identify the record, responsible person, and acceptance check.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Client-provided trial proof</span><h3>Reviewed setup summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Request the next step</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label class="wide">Product<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option></select></label><label class="wide">Which job should become easier first?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="template" /><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Request next step</button><p class="form-note">Nothing is connected or activated when you send this request.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({
@@ -481,6 +543,7 @@ module.exports = function handler(_req, res) {
 
 const contactFunction = `'use strict'
 const { createHash, createHmac } = require('node:crypto')
+const { isDeepStrictEqual } = require('node:util')
 
 const RATE_LIMIT = 5
 const RATE_WINDOW_MS = 10 * 60 * 1000
@@ -494,6 +557,7 @@ const TRIAL_PROOF_VERSION = 2
 const TRIAL_PROOF_BASE_FIELDS = ['proof_contract', 'proof_version', 'proof_digest', 'proof_product', 'proof_template', 'proof_readiness', 'proof_sources', 'proof_behavior', 'proof_decisions', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'proof_raw_records']
 const APPROVED_CONTEXT_FIELDS = ['proof_context_contract', 'proof_context_digest', 'proof_context_outcome_digest', 'proof_context_approved', 'proof_context_raw_records']
 const TRIAL_PROOF_FIELDS = [...TRIAL_PROOF_BASE_FIELDS, ...APPROVED_CONTEXT_FIELDS]
+const LEAD_RECORD_FIELDS = ['lead_id', 'task_id', 'source', 'name', 'email', 'company', 'workflow', 'requested_package', 'goal', 'data', 'team', 'source_url', 'page_path', 'referrer', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'lead_score', 'lead_stage', 'status', 'owner', 'next_step', 'submitted_at', 'raw']
 const replayCache = new Map()
 const rateBuckets = new Map()
 
@@ -710,7 +774,7 @@ function sourceAttribution(sourceUrl) {
   }
 }
 
-function recordFrom(safe, req, idempotencyKey, fingerprint) {
+function recordFrom(safe, idempotencyKey, fingerprint) {
   const submittedAt = new Date().toISOString()
   const leadId = 'LEAD-' + keyedDigest('lead:' + idempotencyKey).slice(0, 16).toUpperCase()
   const taskId = 'TASK-' + keyedDigest('task:' + idempotencyKey).slice(0, 16).toUpperCase()
@@ -745,7 +809,6 @@ function recordFrom(safe, req, idempotencyKey, fingerprint) {
     raw: {
       ...contactSafe,
       ...(trialProof ? { trial_proof: trialProof } : {}),
-      user_agent: text(req.headers?.['user-agent'], 240),
       contact_idempotency: {
         version: fingerprintVersion(safe),
         algorithm: CONTACT_FINGERPRINT_ALGORITHM,
@@ -756,6 +819,39 @@ function recordFrom(safe, req, idempotencyKey, fingerprint) {
 }
 
 const hasOwn = (value, key) => Boolean(value && Object.prototype.hasOwnProperty.call(value, key))
+
+function normalizedStoredRecord(row, expected, existing = false) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null
+  const normalized = {}
+  for (const field of LEAD_RECORD_FIELDS) {
+    if (!hasOwn(row, field)) return null
+    let value = row[field]
+    if (field === 'submitted_at') {
+      const timestamp = new Date(value)
+      if (Number.isNaN(timestamp.getTime())) return null
+      value = existing ? expected.submitted_at : timestamp.toISOString()
+    }
+    if (field === 'raw') {
+      if (typeof value === 'string') {
+        try { value = JSON.parse(value) } catch { return null }
+      }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+      const projected = {}
+      for (const key of Object.keys(expected.raw)) {
+        if (!hasOwn(value, key)) return null
+        projected[key] = value[key]
+      }
+      value = projected
+    }
+    normalized[field] = value
+  }
+  return normalized
+}
+
+function leadRecordMatches(row, expected, existing = false) {
+  const normalized = normalizedStoredRecord(row, expected, existing)
+  return Boolean(normalized && isDeepStrictEqual(normalized, expected))
+}
 
 function legacySafeFromRow(row) {
   const raw = row && typeof row.raw === 'object' && !Array.isArray(row.raw) ? row.raw : null
@@ -803,7 +899,7 @@ async function responseRows(response) {
 async function fetchSupabaseLead(base, key, leadId) {
   const query = new URLSearchParams({
     lead_id: 'eq.' + leadId,
-    select: 'lead_id,name,email,company,workflow,requested_package,goal,source_url,referrer,raw',
+    select: LEAD_RECORD_FIELDS.join(','),
     limit: '2',
   })
   const response = await fetch(base + '/rest/v1/supermega_leads?' + query.toString(), {
@@ -829,6 +925,7 @@ async function saveSupabase(record, fingerprint) {
     if (text(rows[0]?.lead_id, 80) !== record.lead_id) throw new Error('lead_store_insert_mismatch')
     const persisted = storedFingerprint(rows[0])
     if (persisted.legacy || persisted.fingerprint !== fingerprint) throw new Error('lead_store_insert_fingerprint_mismatch')
+    if (!leadRecordMatches(rows[0], record)) throw new Error('lead_store_insert_record_mismatch')
     return { status: 'ready', channel: 'lead_store', created: true }
   }
 
@@ -837,6 +934,7 @@ async function saveSupabase(record, fingerprint) {
   const existing = await fetchSupabaseLead(base, key, record.lead_id)
   const persisted = storedFingerprint(existing)
   if (persisted.fingerprint !== fingerprint) return { status: 'conflict', channel: 'lead_store' }
+  if (!persisted.legacy && !leadRecordMatches(existing, record, true)) return { status: 'conflict', channel: 'lead_store' }
   return { status: 'ready', channel: 'lead_store', created: false, legacy: persisted.legacy }
 }
 
@@ -904,7 +1002,7 @@ module.exports = async function handler(req, res) {
   const rate = localRateLimit(req, now)
   if (!rate.allowed) { send(res, 429, { status: 'error', reason: 'rate_limited' }, { 'retry-after': String(rate.retryAfter) }); return }
 
-  const record = recordFrom(safe, req, idempotencyKey, fingerprint)
+  const record = recordFrom(safe, idempotencyKey, fingerprint)
   let storeResult
   try { storeResult = await saveSupabase(record, fingerprint) } catch {
     send(res, 503, { status: 'error', reason: 'contact_persistence_unavailable', fallback_email: 'swanhtet@supermega.dev' })
@@ -931,6 +1029,7 @@ module.exports = async function handler(req, res) {
 
 const pageFiles = new Map([
   ['index.html', homeHtml],
+  ...publicProducts.map((product) => [`${product.id}/index.html`, productPageHtml(product)]),
   ['contact/index.html', contactHtml],
   ['privacy/index.html', privacyHtml],
   ['404.html', notFoundHtml],

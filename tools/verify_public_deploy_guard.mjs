@@ -44,9 +44,12 @@ if (vercelConfig.git?.deploymentEnabled !== false) failures.push('native_git_dep
 if (!previewVerifier.includes('preview_contact_not_accepting')) failures.push('preview_contact_readiness_not_verified')
 if (!previewVerifier.includes('deployment_function_surface_wrong')) failures.push('preview_function_inventory_not_verified')
 if (!previewVerifier.includes('const maxAttempts = 6') || !previewVerifier.includes('protected_preview_retry:')) failures.push('preview_propagation_retry_missing')
-for (const [label, verifier] of Object.entries({ previewVerifier, liveVerifier })) {
-  if (!verifier.includes('guided_product_route_missing') || !verifier.includes('direct_product_route_remains_primary')) {
-    failures.push(`guided_product_route_contract_missing:${label}`)
+for (const [label, verifier, contract] of [
+  ['previewVerifier', previewVerifier, ['preview_direct_product_route_missing', 'preview_product_setup_route_missing', 'preview_product_contact_onboarding_detour_present']],
+  ['liveVerifier', liveVerifier, ['direct_product_route_missing', 'product_setup_route_missing', 'product_contact_onboarding_detour_present']],
+]) {
+  if (!contract.every((token) => verifier.includes(token))) {
+    failures.push(`direct_product_route_contract_missing:${label}`)
   }
 }
 if (previewVerifier.includes("'--silent'") || previewVerifier.includes("'--show-error'") || previewVerifier.includes("'--location'")) failures.push('preview_verifier_uses_platform_specific_curl_flags')

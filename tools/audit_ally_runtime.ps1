@@ -20,7 +20,8 @@ $LocalCompanyHealthContract = 'local-company.health.v1'
 $CodexSubagentPolicyContract = 'supermega.codex-subagent-policy.v1'
 $MaxLocalCompanyHealthBytes = 65536
 $MaxCodexConfigBytes = 262144
-$RepoMarker = 'supermega-platform'
+$RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$LegacyRepoSegmentPattern = '(?i)(?:^|[\\/])supermega-platform(?:[\\/]|$)'
 $BackendPorts = @(8000, 8001, 8788)
 
 function Get-ListenerRole {
@@ -29,6 +30,15 @@ function Get-ListenerRole {
     if ($BackendPorts -contains $Port) { return 'backend' }
     if ($Port -eq 8765) { return 'worker' }
     return ''
+}
+
+function Test-SuperMegaRepoCommandLine {
+    param([AllowNull()][string]$CommandLine)
+    if ([string]::IsNullOrWhiteSpace($CommandLine)) { return $false }
+    $normalizedCommandLine = $CommandLine.Replace('/', '\')
+    $normalizedRepoPrefix = $RepoRoot.Replace('/', '\').TrimEnd('\') + '\'
+    if ($normalizedCommandLine.IndexOf($normalizedRepoPrefix, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    return $CommandLine -match $LegacyRepoSegmentPattern
 }
 
 function ConvertTo-CodexSubagentPolicy {
@@ -283,7 +293,12 @@ function Invoke-SelfTest {
     if ((Get-ListenerRole 5173) -ne 'frontend' -or (Get-ListenerRole 4187) -ne 'frontend') { throw 'frontend_port_fixture_failed' }
     if ((Get-ListenerRole 8788) -ne 'backend' -or (Get-ListenerRole 8000) -ne 'backend') { throw 'backend_port_fixture_failed' }
     if ((Get-ListenerRole 8765) -ne 'worker' -or (Get-ListenerRole 11434) -ne '') { throw 'worker_port_fixture_failed' }
-    [pscustomobject]@{ ok = $true; contract = $Contract; hostAdmissionContract = $HostAdmissionContract; localCompanyHealthContract = $LocalCompanyHealthContract; codexSubagentPolicyContract = $CodexSubagentPolicyContract; checks = 21; processMutation = $false }
+    if (-not (Test-SuperMegaRepoCommandLine "node.exe `"$RepoRoot\showroom\node_modules\vite\bin\vite.js`"")) { throw 'current_repo_listener_fixture_failed' }
+    if (Test-SuperMegaRepoCommandLine "node.exe $RepoRoot-copy\showroom\vite.js") { throw 'current_repo_lookalike_listener_fixture_failed' }
+    if (-not (Test-SuperMegaRepoCommandLine 'node.exe C:\Users\owner\Projects\supermega-platform\showroom\vite.js')) { throw 'legacy_repo_listener_fixture_failed' }
+    if (Test-SuperMegaRepoCommandLine 'node.exe C:\Temp\supermega-platform-copy\vite.js') { throw 'lookalike_repo_listener_fixture_failed' }
+    if (Test-SuperMegaRepoCommandLine $null) { throw 'missing_command_line_listener_fixture_failed' }
+    [pscustomobject]@{ ok = $true; contract = $Contract; hostAdmissionContract = $HostAdmissionContract; localCompanyHealthContract = $LocalCompanyHealthContract; codexSubagentPolicyContract = $CodexSubagentPolicyContract; checks = 26; processMutation = $false }
 }
 
 if ($SelfTest) {
@@ -364,7 +379,7 @@ try {
         $owned = if ($role -eq 'worker') {
             Test-Lineage ([int]$listener.OwningProcess) { param($candidate) [string]$candidate.CommandLine -match 'local_company\.cli' }
         } else {
-            Test-Lineage ([int]$listener.OwningProcess) { param($candidate) [string]$candidate.CommandLine -match $RepoMarker }
+            Test-Lineage ([int]$listener.OwningProcess) { param($candidate) Test-SuperMegaRepoCommandLine ([string]$candidate.CommandLine) }
         }
         $listenerRecords.Add([pscustomobject]@{
             role = $role

@@ -1,0 +1,166 @@
+{
+  "contract": "supermega.product-route-quality-policy.v1",
+  "settleMs": 500,
+  "viewports": [
+    {
+      "id": "mobile",
+      "width": 390,
+      "height": 844,
+      "touch": true
+    },
+    {
+      "id": "desktop",
+      "width": 1280,
+      "height": 900,
+      "touch": false
+    }
+  ],
+  "routes": [
+    {
+      "id": "public-home",
+      "scope": "public",
+      "path": "/",
+      "titleIncludes": "SuperMega",
+      "requiredText": ["Shop", "Plant", "Website", "Ecommerce"],
+      "maxVisibleActions": 9,
+      "targetVisibleActions": 9,
+      "maxFirstViewportActions": { "mobile": 3, "desktop": 3 }
+    },
+    {
+      "id": "public-shop",
+      "scope": "public",
+      "path": "/shop/",
+      "titleIncludes": "Shop",
+      "requiredText": ["Shop"],
+      "maxVisibleActions": 7,
+      "targetVisibleActions": 7,
+      "maxFirstViewportActions": { "mobile": 5, "desktop": 5 }
+    },
+    {
+      "id": "public-plant",
+      "scope": "public",
+      "path": "/plant/",
+      "titleIncludes": "Plant",
+      "requiredText": ["Plant"],
+      "maxVisibleActions": 7,
+      "targetVisibleActions": 7,
+      "maxFirstViewportActions": { "mobile": 5, "desktop": 5 }
+    },
+    {
+      "id": "public-website",
+      "scope": "public",
+      "path": "/website/",
+      "titleIncludes": "Website",
+      "requiredText": ["Website"],
+      "maxVisibleActions": 7,
+      "targetVisibleActions": 7,
+      "maxFirstViewportActions": { "mobile": 5, "desktop": 5 }
+    },
+    {
+      "id": "public-ecommerce",
+      "scope": "public",
+      "path": "/ecommerce/",
+      "titleIncludes": "Ecommerce",
+      "requiredText": ["Ecommerce"],
+      "maxVisibleActions": 7,
+      "targetVisibleActions": 7,
+      "maxFirstViewportActions": { "mobile": 5, "desktop": 5 }
+    },
+    {
+      "id": "public-contact",
+      "scope": "public",
+      "path": "/contact/",
+      "titleIncludes": "SuperMega",
+      "requiredText": ["Start with one real job"],
+      "maxVisibleActions": 10,
+      "targetVisibleActions": 10,
+      "maxFirstViewportActions": { "mobile": 3, "desktop": 7 }
+    },
+    {
+      "id": "app-home",
+      "scope": "app",
+      "path": "/",
+      "titleIncludes": "Shop",
+      "requiredText": ["Shop"],
+      "maxVisibleActions": 15,
+      "targetVisibleActions": 15,
+      "maxFirstViewportActions": { "mobile": 13, "desktop": 14 }
+    },
+    {
+      "id": "app-shop-orders",
+      "scope": "app",
+      "path": "/shop/?tab=orders",
+      "titleIncludes": "Shop",
+      "requiredText": ["Shop", "Orders"],
+      "maxVisibleActions": 23,
+      "targetVisibleActions": 23,
+      "maxFirstViewportActions": { "mobile": 16, "desktop": 22 },
+      "disclosures": [
+        { "summaryIncludes": "Daily tools", "contentSelector": ".shop-business-controls-content" },
+        { "summaryIncludes": "Order overview", "contentSelector": ".today-more-content" },
+        { "summaryIncludes": "Appointments", "contentSelector": ".service-schedule-body" }
+      ]
+    },
+    {
+      "id": "app-shop-inventory",
+      "scope": "app",
+      "path": "/shop/?tab=inventory",
+      "titleIncludes": "Shop",
+      "requiredText": ["Shop", "Stock"],
+      "maxVisibleActions": 21,
+      "targetVisibleActions": 21,
+      "maxFirstViewportActions": { "mobile": 14, "desktop": 20 }
+    },
+    {
+      "id": "app-plant-jobs",
+      "scope": "app",
+      "path": "/plant/?tab=production",
+      "titleIncludes": "Plant",
+      "requiredText": ["Plant", "Jobs"],
+      "maxVisibleActions": 20,
+      "targetVisibleActions": 20,
+      "maxFirstViewportActions": { "mobile": 9, "desktop": 14 }
+    },
+    {
+      "id": "app-plant-problems",
+      "scope": "app",
+      "path": "/plant/?tab=issues",
+      "titleIncludes": "Plant",
+      "requiredText": ["Plant", "Problems"],
+      "maxVisibleActions": 20,
+      "targetVisibleActions": 20,
+      "maxFirstViewportActions": { "mobile": 9, "desktop": 14 }
+    },
+    {
+      "id": "app-website",
+      "scope": "app",
+      "path": "/website/",
+      "titleIncludes": "Website",
+      "requiredText": ["Website"],
+      "expectedH1Count": 2,
+      "maxVisibleActions": 18,
+      "targetVisibleActions": 18,
+      "maxFirstViewportActions": { "mobile": 10, "desktop": 15 }
+    },
+    {
+      "id": "app-ecommerce",
+      "scope": "app",
+      "path": "/ecommerce/",
+      "titleIncludes": "Ecommerce",
+      "requiredText": ["Ecommerce"],
+      "maxVisibleActions": 19,
+      "targetVisibleActions": 19,
+      "maxFirstViewportActions": { "mobile": 9, "desktop": 12 }
+    },
+    {
+      "id": "app-shop-setup",
+      "scope": "app",
+      "path": "/settings/?product=shop",
+      "titleIncludes": "Shop",
+      "requiredText": ["Shop"],
+      "maxVisibleActions": 9,
+      "targetVisibleActions": 9,
+      "maxFirstViewportActions": { "mobile": 7, "desktop": 8 }
+    }
+  ]
+}

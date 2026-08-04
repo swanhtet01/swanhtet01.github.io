@@ -47,8 +47,10 @@ function get(path) {
   throw new Error(`protected_preview_request_failed:${path}:attempts=${maxAttempts}:${lastFailure}`)
 }
 
+const renderedPages = new Map()
 for (const page of manifest.pages) {
   const html = get(page.route)
+  renderedPages.set(page.route, html)
   for (const token of [
     `meta name="supermega-brand-version" content="${manifest.brand.version}"`,
     `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
@@ -61,12 +63,34 @@ for (const page of manifest.pages) {
   }
 }
 
-const homepage = get('/')
+const homepage = renderedPages.get('/') || ''
 for (const product of manifest.customerProducts) {
-  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
-  if (!homepage.includes(`href="${guidedSampleRoute}"`)) throw new Error(`preview_guided_product_route_missing:${product.id}`)
-  if (homepage.includes(`href="${product.appRoute}"`)) throw new Error(`preview_direct_product_route_remains_primary:${product.id}`)
+  const setupRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  const productPage = renderedPages.get(product.publicAnchor) || ''
+  const contactRoute = `/contact/?product=${product.id}&amp;source=product-page`
+  if (!homepage.includes(`href="${product.publicAnchor}"`)) throw new Error(`preview_focused_product_page_missing:${product.id}`)
+  if (homepage.includes(`href="${product.appRoute}"`)) throw new Error(`preview_homepage_bypasses_product_context:${product.id}`)
+  if (!productPage.includes(`href="${product.appRoute}"`)) throw new Error(`preview_direct_product_route_missing:${product.id}`)
+  if (!productPage.includes(`href="${product.appRoute}">Try ${product.name} sample</a>`)) throw new Error(`preview_product_demo_action_missing:${product.id}`)
+  if (!productPage.includes(`href="${setupRoute}">Set up my ${product.name}</a>`)) throw new Error(`preview_product_setup_route_missing:${product.id}`)
+  if (productPage.includes(`href="${contactRoute}"`)) throw new Error(`preview_product_contact_onboarding_detour_present:${product.id}`)
+  for (const otherProduct of manifest.customerProducts.filter((candidate) => candidate.id !== product.id)) {
+    if (productPage.includes(otherProduct.appRoute) || productPage.includes(`href="${otherProduct.publicAnchor}"`)) throw new Error(`preview_other_product_exposed:${product.id}:${otherProduct.id}`)
+  }
 }
+
+const contactPage = renderedPages.get('/contact/') || ''
+for (const token of [
+  'Tell us your company and one recurring job that should become easier.',
+  'type="hidden" name="template"',
+  'Which job should become easier first?',
+  'Request next step',
+  "heading.textContent='Set up '+requestedProductName+' for your company.'",
+  'You do not need to choose a template.',
+]) {
+  if (!contactPage.includes(token)) throw new Error(`preview_contact_onboarding_contract_missing:${token}`)
+}
+if (contactPage.includes('Template, if known')) throw new Error('preview_contact_template_decision_returned')
 
 const release = JSON.parse(get(manifest.release.releaseEndpoint))
 if (release.brandVersion !== manifest.brand.version) throw new Error('preview_brand_version_wrong')

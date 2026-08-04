@@ -1,11 +1,11 @@
 # HQ now
 
-Updated: 2026-08-03
+Updated: 2026-08-04
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
 Live release commit: `25cac2f50dfcc210d29dd1fd794ac194083f90d1`
-Live state observed: `2026-08-03T14:46:45.695Z`
+Live state observed: `2026-08-04T14:39:16.823Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -14,7 +14,7 @@ Live security ready: `false`
 
 ## North-star outcome
 
-Prove one measured workflow where SuperMega keeps the record and a responsible owner resolves exceptions.
+Prove one measured workflow with a durable record and owner-resolved exceptions.
 
 ## Portfolio correction
 
@@ -33,32 +33,36 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
+- Managed identity binds the Supabase issuer, named user/session IDs, token subject, and fresh `/user`. Schema v10 checks `auth.sessions` before data or activation and denies deleted sessions (`eec19002`, `ac9a9ca4`). Hosted revocation remains unproven.
+- The protected metadata audit finds 27 public tables, two sequences, and no views/routines. A digest-bound isolated-target quarantine removes browser grants and preserves the server path. Local PGlite/PostgreSQL backup/restore pass; hosted application remains unproven (`c363c9aa`, `b9cc0910`).
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancellation releases, completion consumes, and sellable returns restore the exact fulfilled location/lot.
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted from rejected units; no posting occurs.
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
-- Shop owns delivery zones, fees, promises, taxes, and payment eligibility. Ecommerce and Shop retain exact decisions; Shop rechecks authority before reservation.
+- Shop owns Ecommerce delivery, tax, and payment eligibility; Shop rechecks authority before reservation.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
-- Plant controls up to 20 job-bound plans. Priority-and-due MRP consumes Shop stock and open POs once and exposes per-order exceptions.
-- Plant maintenance binds due work, results, findings, corrective action, and human disposition; it performs no automatic dispatch or equipment control.
+- Plant MRP handles up to 20 job plans against Shop stock and open POs.
+- Plant maintenance retains reviewed due work and findings; no automatic dispatch or machine control.
 - Plant quality problems now require structured CAPA evidence before an actionable record can close. Recurrence is Unicode-safe; release, stock blocks, customer contact, certificates, and effectiveness follow-up stay separate.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
-- Shop, Plant, Website, and Ecommerce render the real workspace before one collapsed `More tools` drawer; workflow and setup access remain available without internal counts or a redundant product-entry button (`058c2914`).
-- Plant's state-aware mobile action carries one shift through output, same-shift material, blocker review, accountable close, and next output; reload restores the shift and closed metrics (`2909fd66`).
-- Public states the offer: four browser-local products stay free; managed adds approved cross-product context, company history and roles, reviewed actions, recovery, and support only after identity, tenant, recovery, and write controls pass (`25cac2f5`).
+- Four real product workspaces precede one collapsed `More tools` drawer; no duplicate entry button (`058c2914`).
+- Plant mobile carries one shift through output, material, blockers, close, and reload (`2909fd66`).
+- Website has one **Customize demo**; empty Shop catalogs route to one safe import (`69068054`, `757cd3b6`).
+- Local candidate keeps one product per entry and focused public pages (`47fd933c`).
+- Candidate `c5d0b39b` passes 28 routes and fourteen workflows; live `25cac2f5` still serves the old entry.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- Checks: 106 Ecommerce, 342 Commerce, 327 Production, 10 Shop next-action, 109 Website, 95 security, 241 onboarding, 11 backup, 85 managed import, and 52 PostgreSQL 17 checks across ten migrations.
-- The deterministic 12-profile rehearsal passes 24 rows. Live Shop reaches the counter; Plant mobile passes output through next output; Website mobile passes edit through standalone file; Ecommerce mobile passes sample start, cart, quote, review, Shop order, return, and reload. All four product missions are overflow-free on desktop. Rendered mobile Website and Ecommerce mission acceptance is complete.
+- Checks: 106 Ecommerce, 347 Commerce, 332 Production, 10 Shop next-action, 118 Website, 95 security, 241 onboarding, 11 backup, 85 managed import, 5 focused Supabase Auth tests, and 56 PostgreSQL 17 checks across eleven migrations plus the public browser quarantine.
+- The deterministic 12-profile rehearsal passes 24 rows. All four desktop missions are overflow-free. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
-- Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1` after guarded release `30823422205`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Responsive public-offer QA also passes.
+- Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1`; paired brand, context, and catalog identities match at `jade-v2-2026-07` / `2026-07-31.3`. Paired release metadata is internally consistent; current-head page-contract checks report drift. The strict candidate audit remains local.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
-- Working-set trim is non-terminating and stops no process. The Ally remains under `memory_pressure_critical` with zero run admission, zero loaded models, and local subagents disabled. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
+- Working-set trim is non-terminating; loaded models and local subagents remain off. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
@@ -68,9 +72,10 @@ No external send, payment, refund, publish, domain change, connector write, merg
 ## Blockers
 
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
-- Read-only hosted audit: `supermegabase` is PostgreSQL 17.6, private schema v7, 14 private policies, and zero workspace data; its 27 Security Advisor notices are INFO-only default-deny legacy public tables. v8-v9 remain code-only, and writes stay off pending isolated backup/restore, target binding, tenant/Auth/Storage proof, and owner authorization.
+- Hosted audit: `supermegabase` is PostgreSQL 17.6 at private schema v7 with 27 INFO notices. Browser object/default grants, v8-v10, and the quarantine remain hosted blockers pending an approved isolated clone, private Storage, tenant isolation, revocation, and recovery proof.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `25cac2f5`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
+- Both domains remain on accepted live `25cac2f5`; exact current-head verification reports release drift. Local integration now contains current main and the candidate; full verification remains pending, and external handoffs require `release:handoff:verify`.
+- The live public `/website/` and `/ecommerce/` routes intermittently returned `404` during the 2026-08-04 candidate verification; public availability remains unproven until a protected release and exact live check both pass.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
@@ -87,5 +92,6 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
-2. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.
+1. Finish the integrated-tree gate and prepare its exact-commit release handoff.
+2. After separate owner approval, require protected paired release, rollback, and exact live evidence.
+3. Then prove Supabase security on an isolated clone and recruit one Shop design partner; AI and scheduling stay dormant.

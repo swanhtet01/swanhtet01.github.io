@@ -13,7 +13,7 @@ const targetProjectRef = 'abcdefghijklmnopqrst'
 const releaseCommit = 'a'.repeat(40)
 const generatedAt = '2026-08-03T00:00:00.000Z'
 
-test('builds an exact non-mutating v9 rehearsal packet', async () => {
+test('builds an exact non-mutating v10 rehearsal packet', async () => {
   const manifest = JSON.parse(await readFile(resolve(repositoryRoot, 'package.json'), 'utf8'))
   const ignoreRules = await readFile(resolve(repositoryRoot, '.gitignore'), 'utf8')
   const runbook = await readFile(resolve(repositoryRoot, 'docs', 'supermega-enterprise-activation.md'), 'utf8')
@@ -27,9 +27,18 @@ test('builds an exact non-mutating v9 rehearsal packet', async () => {
 
   assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v1')
   assert.equal(packet.state, 'prepared-not-executed')
-  assert.equal(packet.release.schemaVersion, 9)
-  assert.equal(packet.release.migrationCount, 10)
-  assert.equal(packet.release.migrations.at(-1).name, '20260803063822_private_trial_backend_v9_metadata_rls.sql')
+  assert.equal(packet.release.schemaVersion, 10)
+  assert.equal(packet.release.migrationCount, 11)
+  assert.equal(packet.release.migrations.at(-1).name, '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql')
+  assert.equal(packet.release.browserQuarantine.contract, 'supermega.public-browser-quarantine.v1')
+  assert.equal(packet.release.browserQuarantine.scope, 'isolated-rehearsal-only')
+  assert.equal(packet.release.browserQuarantine.sourceAudit.publicTableCount, 27)
+  assert.equal(packet.release.browserQuarantine.sourceAudit.publicSequenceCount, 2)
+  assert.match(packet.release.browserQuarantine.script.sha256, /^[0-9a-f]{64}$/)
+  assert.deepEqual(packet.release.browserQuarantine.browserRolesDenied, ['anon', 'authenticated'])
+  assert.equal(packet.release.browserQuarantine.serviceRolePreserved, true)
+  assert.ok(packet.requiredEvidence.includes('public-browser-table-and-sequence-denial'))
+  assert.ok(packet.requiredEvidence.includes('service-role-contact-path-retained'))
   assert.equal(packet.authority.rehearsalProjectRef, targetProjectRef)
   assert.equal(packet.controls.activationAllowed, false)
   assert.equal(packet.controls.externalMutationPerformed, false)
@@ -37,9 +46,10 @@ test('builds an exact non-mutating v9 rehearsal packet', async () => {
   assert.doesNotMatch(JSON.stringify(packet), /postgres(?:ql)?:\/\//i)
   assert.equal(manifest.scripts['database:supabase:packet'], 'node tools/prepare_supabase_rehearsal_packet.mjs')
   assert.match(ignoreRules, /^\.tmp\/$/m)
-  assert.match(runbook, /all ten migrations/)
-  assert.match(runbook, /Runtime readiness requires schema version 9/)
+  assert.match(runbook, /all eleven migrations/)
+  assert.match(runbook, /Runtime readiness requires schema version 10/)
   assert.match(runbook, /database:supabase:packet:verify/)
+  assert.match(runbook, /public browser quarantine/i)
 })
 
 test('rejects the protected production project', async () => {

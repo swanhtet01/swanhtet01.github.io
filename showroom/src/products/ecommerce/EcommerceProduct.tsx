@@ -282,6 +282,7 @@ export function EcommerceProduct() {
     error: '',
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
+  const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
   const [orderImportReview, setOrderImportReview] = useState<EcommerceOrderImportReview | null>(null)
@@ -531,27 +532,6 @@ export function EcommerceProduct() {
         ? current.filter((candidate) => candidate !== sku)
         : current.length < 8 ? [...current, sku] : current
     ))
-  }
-
-  function recommendedSellableSkus() {
-    return [...catalog.items]
-      .filter((item) => item.onHand > 0)
-      .sort((left, right) => right.onHand - left.onHand || right.price - left.price || left.sku.localeCompare(right.sku))
-      .slice(0, 4)
-      .map((item) => item.sku)
-  }
-
-  function applyProductAutopilot() {
-    const nextSkus = recommendedSellableSkus()
-    if (!nextSkus.length) {
-      setDraftNotice('Product recommendation needs at least one in-stock Shop item before it can prepare the storefront.')
-      return
-    }
-    setSelectedSkus(nextSkus)
-    setMerchandising(null)
-    setBuyingCart([])
-    if (missingSavedSkus.length) setMissingSelectionReviewed(true)
-    setDraftNotice(`Product recommendation selected ${nextSkus.length} in-stock products. Save to confirm the storefront; no catalog, order, payment, delivery, stock, or Shop write ran.`)
   }
 
   function downloadOrderImportTemplate() {
@@ -1124,15 +1104,6 @@ export function EcommerceProduct() {
     : []
   const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))
   const activeCommerceState = managedIdentity ? managedInbox?.state ?? null : localCommerceState
-  const autopilotSkus = recommendedSellableSkus()
-  const autopilotMatchesSelection = selectedSkus.length === autopilotSkus.length
-    && autopilotSkus.every((sku) => selectedSkus.includes(sku))
-  const productAutopilotRows = [
-    ['Source', catalog.source === 'sample' ? 'Sample Shop' : catalog.source === 'managed-shop' ? 'Company Shop' : catalog.source === 'shop-local' ? 'Local Shop' : 'No catalog'],
-    ['Pick', autopilotSkus.length ? `${autopilotSkus.length} in stock` : 'Needs stock'],
-    ['Mode', autopilotMatchesSelection ? 'Applied' : 'Ready'],
-    ['Boundary', 'Local selection'],
-  ] as const
   const managedOrderTimeline = managedInbox
     ? commerceStorefrontOrderTimeline(managedInbox.state)
     : []
@@ -1544,10 +1515,12 @@ export function EcommerceProduct() {
     ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
     ['Merchandise', selectedSkus.length ? `${selectedSkus.length} selected` : 'Pick products'],
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
-    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : 'No queue'],
+    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? 'Request sent' : 'No queue'],
   ] as const
   const aiAgentJob = pendingManagedRequests.length
     ? 'Review Ecommerce requests in Shop'
+    : customerRequestState === 'waiting_shop_review'
+      ? 'View the customer request receipt'
     : ecommerceActiveOrderCount
       ? 'Continue Ecommerce order in Shop'
     : importNeeded
@@ -1561,6 +1534,8 @@ export function EcommerceProduct() {
             : 'Start sample order'
   const aiAgentReason = pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
+    : customerRequestState === 'waiting_shop_review'
+      ? 'The customer request is retained separately from the Shop operator review.'
     : ecommerceActiveOrderCount
       ? `${ecommerceActiveOrderCount} Ecommerce order${ecommerceActiveOrderCount === 1 ? '' : 's'} now use the Shop-owned fulfilment record.`
     : importNeeded
@@ -1574,6 +1549,8 @@ export function EcommerceProduct() {
             : 'The sample store is ready for one customer-order walkthrough.'
   const aiOwnerGate = pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
+    : customerRequestState === 'waiting_shop_review'
+      ? 'The Shop operator confirms stock, promise, payment, and delivery.'
     : ecommerceActiveOrderCount
       ? 'Shop remains authoritative for fulfilment, payment, cancellation, and returns.'
     : importNeeded
@@ -1598,6 +1575,8 @@ export function EcommerceProduct() {
           ? 'Repair order batch'
           : pendingManagedRequests.length
             ? 'Open Shop review'
+            : customerRequestState === 'waiting_shop_review'
+              ? 'View request receipt'
             : ecommerceActiveOrderCount
               ? 'Continue fulfilment'
             : buyingReady
@@ -1606,7 +1585,7 @@ export function EcommerceProduct() {
   const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
   const ecommerceTodayState = importNeeded || storefrontSetupRequired
     ? 'setup'
-    : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || pendingManagedRequests.length
+    : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || pendingManagedRequests.length || customerRequestState === 'waiting_shop_review'
       ? 'attention'
       : 'ready'
   const ecommerceTodayHeadline = importNeeded
@@ -1619,6 +1598,8 @@ export function EcommerceProduct() {
           ? `${ecommercePaymentAttentionCount} payment${ecommercePaymentAttentionCount === 1 ? '' : 's'} need confirmation`
           : pendingManagedRequests.length
             ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
+            : customerRequestState === 'waiting_shop_review'
+              ? 'Order request sent for Shop review'
             : ecommerceActiveOrderCount
               ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
               : ecommerceTodayCartUnits
@@ -1632,6 +1613,8 @@ export function EcommerceProduct() {
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
+        : customerRequestState === 'waiting_shop_review'
+          ? 'The customer sees a receipt. Shop operator review stays separate until stock, promise, payment, and delivery are confirmed.'
         : ecommerceActiveOrderCount
           ? 'Continue fulfilment from the Shop-owned order record; no duplicate order ledger is created here.'
           : managedIdentity
@@ -1647,6 +1630,8 @@ export function EcommerceProduct() {
           ? 'Fix order import'
           : pendingManagedRequests.length
             ? 'Review orders in Shop'
+            : customerRequestState === 'waiting_shop_review'
+              ? 'View request receipt'
             : ecommerceActiveOrderCount
               ? 'Continue in Shop'
             : ecommerceTodayCartUnits
@@ -1659,6 +1644,8 @@ export function EcommerceProduct() {
     ['2. Cart', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['3. Shop', pendingManagedRequests.length
       ? `${pendingManagedRequests.length} to review`
+      : customerRequestState === 'waiting_shop_review'
+        ? 'Review waiting'
       : ecommerceActiveOrderCount
         ? `${ecommerceActiveOrderCount} in progress`
         : ecommerceCompletedOrderCount
@@ -1686,6 +1673,10 @@ export function EcommerceProduct() {
     }
     if (pendingManagedRequests.length) {
       navigate('/shop/?tab=orders&source=ecommerce')
+      return
+    }
+    if (customerRequestState === 'waiting_shop_review') {
+      prepareQuoteRecovery()
       return
     }
     if (ecommerceActiveOrderCount) {
@@ -1948,6 +1939,18 @@ export function EcommerceProduct() {
       </section>
         </div>
       </details>
+
+      <details className="ecommerce-verification" open={digestError ? true : undefined}>
+        <summary>
+          <span><strong>Preview verification</strong><small>Local currentness check</small></span>
+          <b>{digestError ? 'Attention' : digest ? 'Ready' : 'Checking'}</b>
+        </summary>
+        <div className="ecommerce-digest" aria-live="polite">
+          <span>Preview fingerprint</span>
+          <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
+          <small>{digestError || 'The same store fields and Shop snapshot produce the same local check.'}</small>
+        </div>
+      </details>
         </div>
       </details>
 
@@ -1992,16 +1995,6 @@ export function EcommerceProduct() {
           <div className="ecommerce-catalog-head">
             <strong>Shop products</strong>
             <small>Select 1–8. Price and availability stay locked.</small>
-          </div>
-          <div aria-label="Product recommendation" className="ecommerce-product-autopilot" role="group">
-            <div>
-              <strong>Product recommendation</strong>
-              <small>Choose the simplest sellable set from in-stock Shop items. You only save after review.</small>
-            </div>
-            <div className="ecommerce-product-autopilot-rows">
-              {productAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
-            </div>
-            <button className="core-button secondary" disabled={catalogHydrating || draftBusy || !autopilotSkus.length || autopilotMatchesSelection} onClick={applyProductAutopilot} type="button">Use recommended products</button>
           </div>
           {catalog.error ? <p className="form-notice warning-text">{catalog.error}</p> : null}
           <div className="ecommerce-catalog-list">
@@ -2191,6 +2184,7 @@ export function EcommerceProduct() {
               onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}
               onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
               onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}
+              onRequestStateChange={setCustomerRequestState}
               preview={previewResult.preview}
               scope={buyingScope}
               sourcePreviewDigest={digest}
@@ -2200,17 +2194,6 @@ export function EcommerceProduct() {
             />
           ) : null}
 
-          <details className="ecommerce-verification" open={digestError ? true : undefined}>
-            <summary>
-              <span><strong>Preview verification</strong><small>Local currentness check</small></span>
-              <b>{digestError ? 'Attention' : digest ? 'Ready' : 'Checking'}</b>
-            </summary>
-            <div className="ecommerce-digest" aria-live="polite">
-              <span>Preview fingerprint</span>
-              <code>{digest || (digestError ? 'Unavailable' : 'Calculating…')}</code>
-              <small>{digestError || 'The same store fields and Shop snapshot produce the same local check.'}</small>
-            </div>
-          </details>
         </section>
       </div>
     </div>

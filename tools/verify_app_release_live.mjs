@@ -17,7 +17,7 @@ export function verifyCurrentReleaseAssets({
   assetCorpus,
   operationsChunk,
   productSystemNavigatorChunk,
-  productHomeReadinessCorpus,
+  productOnboardingChunk,
   settingsChunk,
   ecommerceProductCorpus,
   websiteChunk,
@@ -28,13 +28,15 @@ export function verifyCurrentReleaseAssets({
   activationRunbookChunk,
 }) {
   const groups = [
-    ['launcher', assetCorpus, ['SUPERMEGA', 'Start with one product.', 'Pick one product and use the working demo first. Add your data only after the flow makes sense.', 'Sales and inventory', 'Production and quality', 'Pages and inquiries', 'Storefront and checkout', 'Try demo', 'Add your data', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Products, prices, and stock', 'Jobs, materials, and equipment', 'Business details and pages', 'Catalog and customer orders', 'Nothing changes business records until review.', 'Later', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Each product opens as its own working sample. Setup is optional when you are ready to use your business data.', 'supermega.last-product.v1', 'Sell and manage stock', 'Run production', 'Publish your business', 'Take online orders', 'Counter sales, inventory, orders, and daily close.', 'Jobs, materials, output, quality, and traceability.', 'Pages, services, inquiries, and launch preview.', 'Storefront, checkout, delivery, and Shop handoff.', 'Your product workspaces stay separate. Opening a sample does not change another product.', 'Open', manifest.brand.colors.accent, manifest.brand.colors.ink]],
+    ['guided_outcomes', productOnboardingChunk, ['Complete a sample sale', 'Create Shop and start selling', 'Run a sample production job', 'Create Plant and open the job', 'Preview a business website', 'Create Website and preview it', 'Open a working online store', 'Create Ecommerce and open the store']],
+    ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'We will add realistic sample records now; replace them with your data whenever you are ready.', 'First useful result:', 'Creates local sample records, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
     ['shop_plant', operationsChunk, ['Create order', 'Finish payment and handoff in Orders.', 'Stock reserved. Finish fulfilment and reconcile payment before completion.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
-    ['secondary_tools', productSystemNavigatorChunk, ['More tools', 'Workflows and setup', 'Choose another task.', 'Open a working sample flow, or set up your data when you are ready.', 'Set up ', 'Setup and imports', 'Use these tools only when the main workflow needs them.']],
-    ['support_helper', productHomeReadinessCorpus, ['Support helper', 'Uses Shop, Plant, Website, and Ecommerce records.', 'Readiness review status', 'Mark reviewed', 'Acknowledgement confirms review only.', 'Company workspace status', 'Browser-local sample', 'Review launch gates', 'No managed customer action runs from this checklist.', 'supermega.local_business_snapshot.v1', 'supermega.local_business_answer.v1']],
-    ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence']],
-    ['website', websiteChunk, ['Make this website yours', 'Download site', 'Website starter brief generated', 'Not online yet', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
-    ['ecommerce', ecommerceProductCorpus, ['Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Payment and customer messages stay locked.', 'Shop review', 'supermega.ecommerce.order_import_review_packet.v1']],
+    ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose another working flow, use your data, or make this sample yours.', 'Make ', ' mine', 'Your data', 'Upload a CSV or try a sample.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'Only ', 'next_steps_opened', 'data_setup_opened']],
+    ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
+    ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
+    ['website', websiteChunk, ['Make this website yours', 'Download site', 'Website starter brief generated', 'Not online yet', 'Edit sample', 'Edit page', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
+    ['ecommerce', ecommerceProductCorpus, ['Extra order tools', 'Preview verification', 'Review an order batch', 'Upload CSV or paste channel orders only when needed.', 'Payment and customer messages stay locked.', 'Shop review', 'supermega.ecommerce.order_import_review_packet.v1']],
     ['data_onboarding', clientDataOnboardingChunk, ['Start with a CSV or sample so SuperMega can map columns and inspect rows locally.', 'No customer message, payment, website publish, or automation runs from this check.']],
     ['company_login', managedLoginChunk, ['Open your company.', 'Try free demo', 'Request company account']],
     ['account_recovery', managedAccountChunk, ['Recover your account.', 'Secure your account.', 'Save password and continue']],
@@ -51,6 +53,14 @@ export function verifyCurrentReleaseAssets({
   for (const forbidden of ['Complete sale', 'Stock updated. Receipt saved.']) {
     checks += 1
     if (operationsChunk.includes(forbidden)) throw new Error(`misleading_shop_release_asset:${forbidden}`)
+  }
+  for (const forbidden of ['Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
+    checks += 1
+    if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
+  }
+  for (const forbidden of ['Workflows and setup', 'Choose another task.', 'Set up ', 'Setup and imports']) {
+    checks += 1
+    if (productSystemNavigatorChunk.includes(forbidden)) throw new Error(`retired_secondary_tools_release_asset:${forbidden}`)
   }
   for (const forbidden of ['Use Plant in 3 steps.', 'Choose a job, record output, then fix blockers.', 'Plant guided jobs']) {
     checks += 1
@@ -74,6 +84,15 @@ async function readArtifactChunk(assetsDir, assetNames, pattern) {
   return readFile(join(assetsDir, name), 'utf8')
 }
 
+export function extractRelativeJavascriptDependencies(value) {
+  return [...new Set([...String(value || '').matchAll(/(?:from|import)\s*["']\.\/([A-Za-z0-9_-]+\.js)["']/g)].map((match) => match[1]))]
+}
+
+async function readOptionalArtifactChunk(assetsDir, assetNames, pattern) {
+  const name = assetNames.find((candidate) => pattern.test(candidate))
+  return name ? readFile(join(assetsDir, name), 'utf8') : ''
+}
+
 if (artifactSelfTest) {
   const root = resolve(import.meta.dirname, '..')
   const distDir = resolve(root, 'showroom', 'dist')
@@ -88,11 +107,13 @@ if (artifactSelfTest) {
     ...rootHtml.matchAll(/<link[^>]+href="([^"]+\.(?:js|css))"/g),
   ].map((match) => match[1].replace(/^\//, ''))
   const assetCorpus = (await Promise.all(rootAssetPaths.map((path) => readFile(resolve(distDir, path), 'utf8')))).join('\n')
+  if (assetNames.some((name) => /^ProductHomeReadiness-[A-Za-z0-9_-]+\.js$/.test(name))) {
+    throw new Error('retired_product_home_readiness_chunk_present')
+  }
   const [
     operationsChunk,
     productSystemNavigatorChunk,
-    productHomeReadinessChunk,
-    businessCommandChunk,
+    productOnboardingChunk,
     settingsChunk,
     ecommerceChunk,
     ecommercePacketChunk,
@@ -106,13 +127,12 @@ if (artifactSelfTest) {
   ] = await Promise.all([
     readArtifactChunk(assetsDir, assetNames, /^(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ProductSystemNavigator-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^ProductHomeReadiness-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^business-command-[A-Za-z0-9_-]+\.js$/),
+    readArtifactChunk(assetsDir, assetNames, /^ProductOnboardingPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^SettingsPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^EcommerceProduct-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ecommerce-order-review-packet-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^WebsiteProduct-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^website-model-[A-Za-z0-9_-]+\.js$/),
+    readOptionalArtifactChunk(assetsDir, assetNames, /^website-model-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ClientDataOnboarding-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedLoginPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ManagedAccountPage-[A-Za-z0-9_-]+\.js$/),
@@ -121,15 +141,18 @@ if (artifactSelfTest) {
   ])
   const evidenceVersion = extractTrialEvidenceVersion(settingsChunk)
   if (!Number.isInteger(evidenceVersion)) throw new Error('artifact_settings_evidence_version_missing')
+  const websiteDependencyCorpus = (await Promise.all(
+    extractRelativeJavascriptDependencies(websiteChunk).map((name) => readFile(join(assetsDir, name), 'utf8')),
+  )).join('\n')
   const result = verifyCurrentReleaseAssets({
     manifest: artifactManifest,
     assetCorpus,
     operationsChunk,
     productSystemNavigatorChunk,
-    productHomeReadinessCorpus: `${productHomeReadinessChunk}\n${businessCommandChunk}`,
+    productOnboardingChunk,
     settingsChunk,
     ecommerceProductCorpus: `${ecommerceChunk}\n${ecommercePacketChunk}`,
-    websiteChunk: `${websiteChunk}\n${websiteModelChunk}`,
+    websiteChunk: `${websiteChunk}\n${websiteModelChunk}\n${websiteDependencyCorpus}`,
     clientDataOnboardingChunk,
     managedLoginChunk,
     managedAccountChunk,
@@ -343,19 +366,18 @@ const rootHtml = pages.get('/')
 const scriptPaths = [...rootHtml.matchAll(/<script[^>]+src="([^"]+)"/g)].map((match) => match[1])
 const cssPaths = [...rootHtml.matchAll(/<link[^>]+href="([^"]+\.css)"/g)].map((match) => match[1])
 const assetCorpus = (await Promise.all([...scriptPaths, ...cssPaths].map(async (path) => (await get(path)).body))).join('\n')
-const productHomeReadinessChunkPath = /assets\/ProductHomeReadiness-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
-if (!productHomeReadinessChunkPath) throw new Error('product_home_readiness_chunk_missing')
-const productHomeReadinessChunk = (await get(`/${productHomeReadinessChunkPath}`)).body
-const businessCommandChunkName = /business-command-[A-Za-z0-9_-]+\.js/.exec(productHomeReadinessChunk)?.[0]
-if (!businessCommandChunkName) throw new Error('business_command_chunk_missing')
-const businessCommandChunk = (await get(`/assets/${businessCommandChunkName}`)).body
-const productHomeReadinessCorpus = `${productHomeReadinessChunk}\n${businessCommandChunk}`
+if (/assets\/ProductHomeReadiness-[A-Za-z0-9_-]+\.js/.test(assetCorpus)) {
+  throw new Error('retired_product_home_readiness_chunk_present')
+}
 const operationsChunkPath = /assets\/(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!operationsChunkPath) throw new Error('operations_chunk_missing')
 const operationsChunk = (await get(`/${operationsChunkPath}`)).body
 const productSystemNavigatorChunkPath = /assets\/ProductSystemNavigator-[A-Za-z0-9_-]+\.js/.exec(`${assetCorpus}\n${operationsChunk}`)?.[0]
 if (!productSystemNavigatorChunkPath) throw new Error('product_system_navigator_chunk_missing')
 const productSystemNavigatorChunk = (await get(`/${productSystemNavigatorChunkPath}`)).body
+const productOnboardingChunkPath = /assets\/ProductOnboardingPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
+if (!productOnboardingChunkPath) throw new Error('product_onboarding_chunk_missing')
+const productOnboardingChunk = (await get(`/${productOnboardingChunkPath}`)).body
 const settingsChunkPath = /assets\/SettingsPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!settingsChunkPath) throw new Error('settings_chunk_missing')
 const settingsChunk = (await get(`/${settingsChunkPath}`)).body
@@ -391,9 +413,11 @@ const websiteChunkPath = /assets\/WebsiteProduct-[A-Za-z0-9_-]+\.js/.exec(assetC
 if (!websiteChunkPath) throw new Error('website_chunk_missing')
 const websiteProductChunk = (await get(`/${websiteChunkPath}`)).body
 const websiteModelChunkPath = /assets\/website-model-[A-Za-z0-9_-]+\.js/.exec(`${assetCorpus}\n${websiteProductChunk}`)?.[0]
-if (!websiteModelChunkPath) throw new Error('website_model_chunk_missing')
-const websiteModelChunk = (await get(`/${websiteModelChunkPath}`)).body
-const websiteChunk = `${websiteProductChunk}\n${websiteModelChunk}`
+const websiteModelChunk = websiteModelChunkPath ? (await get(`/${websiteModelChunkPath}`)).body : ''
+const websiteDependencyCorpus = (await Promise.all(
+  extractRelativeJavascriptDependencies(websiteProductChunk).map(async (name) => (await get(`/assets/${name}`)).body),
+)).join('\n')
+const websiteChunk = `${websiteProductChunk}\n${websiteModelChunk}\n${websiteDependencyCorpus}`
 const activationRunbookChunkPath = /assets\/ManagedActivationRunbook-[A-Za-z0-9_-]+\.js/.exec(settingsChunk)?.[0]
 if (!activationRunbookChunkPath) throw new Error('managed_activation_runbook_chunk_missing')
 const activationRunbookChunk = (await get(`/${activationRunbookChunkPath}`)).body
@@ -402,7 +426,7 @@ const releaseAssetVerification = verifyCurrentReleaseAssets({
   assetCorpus,
   operationsChunk,
   productSystemNavigatorChunk,
-  productHomeReadinessCorpus,
+  productOnboardingChunk,
   settingsChunk,
   ecommerceProductCorpus,
   websiteChunk,
@@ -434,36 +458,6 @@ for (const required of ['supermega.operating_baseline.v1', 'supermega.operating_
 }
 for (const required of ['AI learned', 'Managed company brief', 'Keep approved context', 'I approve retention of this exact summary and accepted outcome for managed AI recommendations.']) {
   if (!settingsChunk.includes(required)) throw new Error(`missing_live_operating_learning_ui:${required}`)
-}
-const productHomeLiveCopyUpdates = new Map([
-  ['Export evidence', 'Export setup'],
-  ['Ask SuperMega', 'Support helper'],
-  ['Ask what needs attention.', 'Find the next customer-ready step.'],
-  ['Free mode answers from validated local Shop, Plant, Website, and Ecommerce records.', 'Uses Shop, Plant, Website, and Ecommerce records.'],
-  ['Premium can add approved managed history and cross-workflow context.', 'Company history is used only after approval.'],
-  ['Business question', 'Ask about today'],
-  ['Ask a business question', 'Ask about today'],
-  ['Raw questions stay in this field and are not written to behavior memory.', 'Your question stays on this screen unless you choose a saved managed review.'],
-  ['Owner Control run', 'Readiness review status'],
-  ['Free local control', 'Local review'],
-  ['Premium managed control', 'Company review'],
-  ['Acknowledge review', 'Mark reviewed'],
-  ['AI learned', 'Saved learning'],
-  ['Why this answer', 'Why this step'],
-  ['Owner pattern', 'Recent product'],
-  ['Operate products', 'Product coverage'],
-  ['Package setup, imports, behavior, decisions, and go-live proof before premium starts.', 'Package setup, imports, decisions, and go-live proof before support starts.'],
-  ['Starter paths', 'Choose a product'],
-  ['Start one product in 2 clicks.', 'Start one product.'],
-  ['Choose a local template, then open the working app.', 'Pick a template or open the working sample.'],
-  ['AI prepares the setup and keeps business changes behind owner approval.', 'Setup stays in review before business records change.'],
-  ['Product starter paths', 'Product setup paths'],
-  ['Product starter actions', 'Product start actions'],
-  ['Open setup hub', 'Set up data'],
-])
-for (const required of ['Ask SuperMega', 'Ask what needs attention.', 'Free mode answers from validated local Shop, Plant, Website, and Ecommerce records.', 'Premium can add approved managed history and cross-workflow context.', 'Business question', 'Ask a business question', 'What needs attention?', 'What stock is low?', 'What blocks production?', 'Is the website ready?', 'Are online orders ready?', 'Raw questions stay in this field and are not written to behavior memory.', 'supermega.local_business_snapshot.v1', 'supermega.local_business_answer.v1', 'supermega.local_owner_control_run.v1', 'supermega.local_owner_control_acknowledgement.v1', 'sourceFingerprint', 'Owner Control run', 'Free local control', 'Premium managed control', 'Acknowledge review', 'Acknowledgement confirms review only.', 'Missing evidence cannot be acknowledged. Open a working sample or import records first.', 'Changed records will reopen the run.', 'Owner control refreshed from current managed evidence.', 'Keep learning checkpoint', 'Checkpoint retained', 'AI learned', 'Reading approved managed context...', 'Managed context is unavailable. The validated local answer remains on screen.', 'validated product sources', 'This answer reads validated local records only.', 'It does not send messages, publish, charge, move stock, write production, or train models.', 'Why this answer', 'Finish setup', 'Export evidence', 'Continue ', 'Owner pattern', 'Operate products', 'Shop, Plant, Website, and Ecommerce stay separate apps but share one evidence and approval system.', 'Starter paths', 'Start one product in 2 clicks.', 'Choose a local template, then open the working app.', 'AI prepares the setup and keeps business changes behind owner approval.', 'Product starter paths', 'Product starter actions', 'Prepare catalog', 'Prepare jobs', 'Prepare brand brief', 'Prepare orders', 'Open setup hub', 'Open Shop', 'Open Plant', 'Open Website', 'Open Ecommerce', 'Open Shop sample', 'agent_job_chosen']) {
-  const currentRequired = productHomeLiveCopyUpdates.get(required) ?? required
-  if (!productHomeReadinessCorpus.includes(currentRequired)) throw new Error(`missing_live_launch_readiness_context:${required}`)
 }
 for (const required of ['supermega.behavior-trail.v1', 'supermega.behavior_preference.v1', 'agent_job_seen', 'agent_job_chosen']) {
   if (!assetCorpus.includes(required)) throw new Error(`missing_live_behavior_context:${required}`)
@@ -517,9 +511,37 @@ if (!operationsChunk.includes('plant-production-module')
   || !assetCorpus.includes('.operations-screen:not(.commerce-screen) .workspace-view')
   || !assetCorpus.includes('.plant-production-module>.production-view')
   || !assetCorpus.includes('scrollbar-gutter:stable')) throw new Error('missing_live_plant_execution_layout_contract')
+if (!operationsChunk.includes('Stock replenishment')
+  || !operationsChunk.includes('Plan replenishment')
+  || !operationsChunk.includes('Stock replenishment to Plant')
+  || !operationsChunk.includes('data-demand-kind')) throw new Error('missing_live_plant_active_work_hierarchy_contract')
 if (!operationsChunk.includes('shop-counter-module')
   || !assetCorpus.includes('.shop-counter-module{overflow-y:auto;scrollbar-gutter:stable}')
   || !assetCorpus.includes('.shop-counter-module>.shop-counter-surface')) throw new Error('missing_live_shop_counter_layout_contract')
+if (!operationsChunk.includes('data-active-tab')
+  || !assetCorpus.includes('.commerce-screen[data-active-tab=today] .workspace-view')
+  || !assetCorpus.includes('.commerce-screen[data-active-tab=orders] .workspace-view')
+  || !assetCorpus.includes('.commerce-screen[data-active-tab=inventory] .workspace-view')) throw new Error('missing_live_shop_task_scroll_contract')
+if (!assetCorpus.includes('More Shop tools')
+  || !assetCorpus.includes('Customers, finance, channels, and purchasing')
+  || assetCorpus.includes('Use Shop in 3 steps.')
+  || !assetCorpus.includes('.shop-today-workspaces>summary')) throw new Error('missing_live_shop_today_hierarchy_contract')
+if (!operationsChunk.includes('More options for ')
+  || !operationsChunk.includes('Cancel order')
+  || operationsChunk.includes('Need help choosing?')
+  || operationsChunk.includes('Shows the next safe Shop step')
+  || !assetCorpus.includes('.order-row-more>summary')
+  || assetCorpus.includes('.shop-agent-queue{')) throw new Error('missing_live_shop_order_action_hierarchy_contract')
+if (!operationsChunk.includes('Other products')
+  || !operationsChunk.includes('Healthy stock, pricing, and reorder levels')
+  || !operationsChunk.includes('No stock needs action.')
+  || !operationsChunk.includes('Stock records')
+  || !operationsChunk.includes('actions on demand')
+  || !operationsChunk.includes('data-stock-list')
+  || !assetCorpus.includes('.stock-attention-table>.table-head')
+  || !assetCorpus.includes('.stock-catalog-content')
+  || !assetCorpus.includes('.stock-record-content')
+  || !assetCorpus.includes('.data-row.stock-empty-row')) throw new Error('missing_live_shop_stock_worklist_contract')
 for (const required of ['Browser-local sample only.', 'sample order and sample stock change in this browser', 'No payment is captured', 'no customer is contacted', 'no server or managed workspace is written', 'no real stock is moved']) {
   if (!operationsChunk.includes(required)) throw new Error(`missing_live_shop_counter_local_boundary:${required}`)
 }

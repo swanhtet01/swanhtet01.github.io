@@ -16,5 +16,10 @@ create table if not exists public.supermega_payment_events (
   primary key (provider, event_id)
 );
 
+-- Server-only ledger. Keep browser-facing roles closed even if project defaults change.
+alter table public.supermega_payment_events enable row level security;
+revoke all on table public.supermega_payment_events from public, anon, authenticated;
+grant select, insert on table public.supermega_payment_events to service_role;
+
 -- Optional housekeeping — dedup only needs a reasonable replay window:
 -- delete from public.supermega_payment_events where at < now() - interval '90 days';

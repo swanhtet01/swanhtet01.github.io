@@ -19,9 +19,10 @@ from supermega_runtime.shop_inventory_runtime import (
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 9
+TRIAL_SCHEMA_VERSION = 10
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
+TRUSTED_IDENTITY_PROVIDERS = frozenset({"gateway", "supabase"})
 HUMAN_ACTOR_KIND = "human"
 _MAX_SAFE_INTEGER = 9_007_199_254_740_991
 _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
@@ -304,6 +305,8 @@ class TrialPrincipal:
     actor_id: str
     actor_kind: str = "unknown"
     authenticated: bool = True
+    session_id: str = ""
+    identity_provider: str = "gateway"
 
     def normalized(self) -> "TrialPrincipal":
         return TrialPrincipal(
@@ -311,6 +314,8 @@ class TrialPrincipal:
             actor_id=str(self.actor_id or "").strip(),
             actor_kind=str(self.actor_kind or "").strip().lower(),
             authenticated=bool(self.authenticated),
+            session_id=str(self.session_id or "").strip().lower(),
+            identity_provider=str(self.identity_provider or "").strip().lower(),
         )
 
 
@@ -470,9 +475,8 @@ class TrialStore(Protocol):
 
     def list_actor_workspaces(
         self,
-        actor_id: str,
+        principal: TrialPrincipal,
         *,
-        actor_kind: str = HUMAN_ACTOR_KIND,
         limit: int = 50,
     ) -> tuple[list[ManagedWorkspaceAccess], bool]: ...
 
@@ -2772,12 +2776,25 @@ def _principal_auth_ready(principal: TrialPrincipal | None) -> bool:
     if principal is None:
         return False
     normalized = principal.normalized()
-    return bool(
+    base_ready = bool(
         normalized.authenticated
         and normalized.workspace_id
         and normalized.actor_id
         and normalized.actor_kind in TRUSTED_ACTOR_KINDS
+        and normalized.identity_provider in TRUSTED_IDENTITY_PROVIDERS
     )
+    if not base_ready:
+        return False
+    if normalized.identity_provider != "supabase":
+        return True
+    try:
+        return bool(
+            normalized.actor_kind == HUMAN_ACTOR_KIND
+            and str(UUID(normalized.actor_id)) == normalized.actor_id
+            and str(UUID(normalized.session_id)) == normalized.session_id
+        )
+    except (ValueError, AttributeError, TypeError):
+        return False
 
 
 def _iso_timestamp(value: Any) -> str:
@@ -2872,6 +2889,18 @@ class PostgresTrialStore:
             "select set_config('app.workspace_id', %s, true), set_config('app.actor_id', %s, true), set_config('app.actor_kind', %s, true)",
             (principal.workspace_id, principal.actor_id, principal.actor_kind),
         )
+
+    @staticmethod
+    def _assert_active_identity_session(cursor: Any, principal: TrialPrincipal) -> None:
+        if principal.identity_provider != "supabase":
+            return
+        cursor.execute(
+            "select app_private.supabase_session_is_active(%s::uuid, %s::uuid) as active",
+            (principal.actor_id, principal.session_id),
+        )
+        row = cursor.fetchone() or {}
+        if not bool(row.get("active")):
+            raise TrialNotReadyError(("auth_session_active",))
 
     @staticmethod
     def _assert_schema(cursor: Any) -> None:
@@ -3150,14 +3179,16 @@ class PostgresTrialStore:
 
     def list_actor_workspaces(
         self,
-        actor_id: str,
+        principal: TrialPrincipal,
         *,
-        actor_kind: str = HUMAN_ACTOR_KIND,
         limit: int = 50,
     ) -> tuple[list[ManagedWorkspaceAccess], bool]:
-        normalized_actor_id = str(actor_id or "").strip()
-        normalized_actor_kind = str(actor_kind or "").strip().lower()
-        if not normalized_actor_id or normalized_actor_kind not in TRUSTED_ACTOR_KINDS:
+        normalized = principal.normalized()
+        if (
+            not _principal_auth_ready(normalized)
+            or normalized.identity_provider != "supabase"
+            or normalized.actor_kind != HUMAN_ACTOR_KIND
+        ):
             raise TrialNotReadyError(("auth_ready",))
         if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
             raise TrialValidationError("Workspace discovery limit must be between 1 and 50.")
@@ -3175,13 +3206,8 @@ class PostgresTrialStore:
                         cursor.execute("set transaction read only")
                         self._assert_runtime_role(cursor)
                         self._assert_schema(cursor)
-                        discovery_principal = TrialPrincipal(
-                            workspace_id="workspace-discovery",
-                            actor_id=normalized_actor_id,
-                            actor_kind=normalized_actor_kind,
-                            authenticated=True,
-                        )
-                        self._set_context(cursor, discovery_principal)
+                        self._set_context(cursor, normalized)
+                        self._assert_active_identity_session(cursor, normalized)
                         cursor.execute(
                             """
                             select workspace_id, capabilities, display_name
@@ -3255,6 +3281,7 @@ class PostgresTrialStore:
                         self._assert_runtime_role(cursor)
                         self._assert_schema(cursor)
                         self._set_context(cursor, normalized)
+                        self._assert_active_identity_session(cursor, normalized)
                         capabilities = self._load_membership(cursor, normalized)
                         if write:
                             self._assert_audit(cursor)

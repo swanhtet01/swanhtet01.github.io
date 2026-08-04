@@ -157,6 +157,13 @@ export type WebsiteOpeningPlan = {
   pageIds: string[]
 }
 
+export type WebsiteWorkingSample = {
+  contract: 'supermega.website.working-sample.v1'
+  templateId: WebsiteOpeningPlan['workflowTemplateId']
+  contentFingerprint: string
+  installedAt: string
+}
+
 export type WebsiteWorkspace = {
   schema: typeof WEBSITE_SCHEMA
   version: 2
@@ -170,6 +177,7 @@ export type WebsiteWorkspace = {
   localPublishes: LocalPublishRecord[]
   events: WebsiteWorkflowEvent[]
   openingPlan?: WebsiteOpeningPlan
+  workingSample?: WebsiteWorkingSample
   releaseRecords?: WebsiteReleaseState[]
   leadLedger?: WebsiteLeadLedger
 }
@@ -696,15 +704,14 @@ export function websiteSource(workspace: WebsiteWorkspace): WebsiteSourceRef {
   return { contentRevision: workspace.contentRevision, digest: workspaceFingerprint(workspace) }
 }
 
-export function createWebsiteArtifact(workspace: WebsiteWorkspace): WebsiteArtifact {
+function createWebsiteArtifactFromPages(workspace: WebsiteWorkspace, pages: WebsitePage[]): WebsiteArtifact {
   const source = websiteSource(workspace)
   const content: Omit<WebsiteArtifact, 'contentDigest'> = {
     schema: 'supermega.website.artifact.v1',
     siteName: workspace.siteName,
     fingerprint: source.digest,
     source,
-    pages: workspace.pages
-      .filter((page) => page.stage === 'ready')
+    pages: pages
       .map((page) => ({
         id: page.id,
         slug: normalizeSlug(page.slug),
@@ -720,6 +727,14 @@ export function createWebsiteArtifact(workspace: WebsiteWorkspace): WebsiteArtif
   }
   if (!isWebsiteArtifact(artifact)) throw new Error('Approved Website content could not be retained safely.')
   return artifact
+}
+
+export function createWebsiteArtifact(workspace: WebsiteWorkspace): WebsiteArtifact {
+  return createWebsiteArtifactFromPages(workspace, workspace.pages.filter((page) => page.stage === 'ready'))
+}
+
+export function createWebsitePreviewArtifact(workspace: WebsiteWorkspace): WebsiteArtifact {
+  return createWebsiteArtifactFromPages(workspace, workspace.pages)
 }
 
 function sameSource(left: WebsiteSourceRef, right: WebsiteSourceRef) {
@@ -1392,6 +1407,7 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
     'evidence', 'approvals', 'localPublishes', 'events',
   ]
   if (Object.hasOwn(value, 'openingPlan')) workspaceKeys.push('openingPlan')
+  if (Object.hasOwn(value, 'workingSample')) workspaceKeys.push('workingSample')
   if (Object.hasOwn(value, 'releaseRecords')) workspaceKeys.push('releaseRecords')
   if (Object.hasOwn(value, 'leadLedger')) workspaceKeys.push('leadLedger')
   if (!hasExactKeys(value, workspaceKeys)) return false
@@ -1418,6 +1434,15 @@ function isWebsiteWorkspace(value: unknown, pendingReleaseRecords = 0): value is
       || value.openingPlan.pageIds.length > MAX_WEBSITE_PAGES
       || !value.openingPlan.pageIds.every((pageId) => isText(pageId, 80))
       || !hasUniqueStrings(value.openingPlan.pageIds)) return false
+  }
+  if (Object.hasOwn(value, 'workingSample')) {
+    if (!isRecord(value.workingSample)
+      || !hasExactKeys(value.workingSample, ['contract', 'templateId', 'contentFingerprint', 'installedAt'])
+      || value.workingSample.contract !== 'supermega.website.working-sample.v1'
+      || !['business-presence', 'lead-generation', 'catalog-showcase'].includes(String(value.workingSample.templateId))
+      || typeof value.workingSample.contentFingerprint !== 'string'
+      || !fingerprintPattern.test(value.workingSample.contentFingerprint)
+      || !isIsoTimestamp(value.workingSample.installedAt)) return false
   }
   if (Object.hasOwn(value, 'releaseRecords')) {
     if (!Array.isArray(value.releaseRecords)

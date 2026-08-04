@@ -910,9 +910,9 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
           : `Your CSV stays in this browser. Nothing is sent to AI or added to ${productName} while you review it.`}</p>
         <div aria-label={`${productName} import next step`} className="catalog-import-next-step">
           <div><span className="core-eyebrow">Next</span><strong>{importCoachAction}</strong><small>{importStageMessage}</small></div>
-          <div className="catalog-import-stage-list">
+          {state.preview ? <div className="catalog-import-stage-list">
             {importStageRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}
-          </div>
+          </div> : null}
         </div>
         {state.preview ? <details className="catalog-import-advanced">
           <summary><span>Import details</span><small>Setup checks and review</small></summary>

@@ -30,7 +30,7 @@ from supermega_runtime.order_intake_provider import (
     OrderIntakeProviderError,
 )
 from supermega_runtime.production_runtime import reduce_production_state
-from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_token
+from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_identity
 from supermega_runtime.trial_runtime import create_trial_router
 from supermega_runtime.trial_store import (
     PostgresTrialStore,
@@ -303,6 +303,7 @@ def _resolve_gateway_principal(request: Request) -> TrialPrincipal | None:
         actor_id=actor_id,
         actor_kind=actor_kind,
         authenticated=True,
+        identity_provider="gateway",
     )
 
 
@@ -332,27 +333,36 @@ def resolve_trial_principal(request: Request) -> TrialPrincipal | None:
     token = _bearer_token(request)
     if not token or not _IDENTIFIER.fullmatch(workspace_id):
         return None
-    actor_id = verify_supabase_user_token(token, SupabaseAuthConfig.from_environment())
-    if not actor_id or not _IDENTIFIER.fullmatch(actor_id):
+    identity = verify_supabase_user_identity(token, SupabaseAuthConfig.from_environment())
+    if identity is None or not _IDENTIFIER.fullmatch(identity.user_id):
         return None
     return TrialPrincipal(
         workspace_id=workspace_id,
-        actor_id=actor_id,
+        actor_id=identity.user_id,
         actor_kind="human",
         authenticated=True,
+        session_id=identity.session_id,
+        identity_provider="supabase",
     )
 
 
-def resolve_workspace_discovery_actor(request: Request) -> str | None:
-    """Resolve only a verified named user for cross-workspace discovery."""
+def resolve_workspace_discovery_principal(request: Request) -> TrialPrincipal | None:
+    """Resolve a verified named user and session for workspace discovery."""
 
     token = _bearer_token(request)
     if not token:
         return None
-    actor_id = verify_supabase_user_token(token, SupabaseAuthConfig.from_environment())
-    if not actor_id or not _IDENTIFIER.fullmatch(actor_id):
+    identity = verify_supabase_user_identity(token, SupabaseAuthConfig.from_environment())
+    if identity is None or not _IDENTIFIER.fullmatch(identity.user_id):
         return None
-    return actor_id
+    return TrialPrincipal(
+        workspace_id="workspace-discovery",
+        actor_id=identity.user_id,
+        actor_kind="human",
+        authenticated=True,
+        session_id=identity.session_id,
+        identity_provider="supabase",
+    )
 
 
 def _activation_requirements(*, database_ready: bool, role_ready: bool, schema_ready: bool, audit_ready: bool) -> list[str]:
@@ -1103,14 +1113,14 @@ def create_app() -> FastAPI:
 
     @app.get("/api/trial/v1/workspaces")
     def discover_managed_workspaces(request: Request) -> dict[str, Any]:
-        actor_id = resolve_workspace_discovery_actor(request)
-        if actor_id is None:
+        principal = resolve_workspace_discovery_principal(request)
+        if principal is None:
             raise HTTPException(
                 status_code=401,
                 detail={"code": "managed_auth_required", "message": "Sign in with a managed account."},
             )
         try:
-            workspaces, truncated = store.list_actor_workspaces(actor_id, actor_kind="human", limit=50)
+            workspaces, truncated = store.list_actor_workspaces(principal, limit=50)
         except TrialNotReadyError as exc:
             raise HTTPException(
                 status_code=503,

@@ -9,6 +9,10 @@ export type BehaviorTrailEvent =
   | 'settings_opened'
   | 'agent_job_seen'
   | 'agent_job_chosen'
+  | 'first_value_completed'
+  | 'next_steps_opened'
+  | 'data_setup_opened'
+  | 'product_requested'
 
 export type BehaviorTrailEntry = {
   id: string
@@ -39,6 +43,29 @@ export type BehaviorPreferenceSnapshot = {
   } | null
 }
 
+export type ProductActivationFunnelSnapshot = {
+  contract: 'supermega.product_activation_funnel.v1'
+  version: 1
+  product: BehaviorPreferenceProduct
+  nextStepsOpened: number
+  dataSetupsOpened: number
+  productRequests: number
+  completionPercent: 0 | 33 | 67 | 100
+  nextAction: 'Open next steps' | 'Try your data' | 'Request this product' | 'Journey complete'
+  lastSignalAt: string | null
+}
+
+export type ProductFirstValueSnapshot = {
+  contract: 'supermega.product_first_value.v1'
+  version: 1
+  product: BehaviorPreferenceProduct
+  status: 'not_started' | 'in_progress' | 'completed'
+  startedAt: string | null
+  completedAt: string | null
+  elapsedSeconds: number | null
+  detail: string | null
+}
+
 const behaviorTrailLimit = 80
 
 function behaviorId() {
@@ -63,6 +90,10 @@ function normalizeBehaviorTrail(value: unknown): BehaviorTrailEntry[] {
         || source.event === 'settings_opened'
         || source.event === 'agent_job_seen'
         || source.event === 'agent_job_chosen'
+        || source.event === 'first_value_completed'
+        || source.event === 'next_steps_opened'
+        || source.event === 'data_setup_opened'
+        || source.event === 'product_requested'
         ? source.event
         : null
       if (!event) return null
@@ -130,6 +161,72 @@ export function summarizeBehaviorPreferences(entries: BehaviorTrailEntry[]): Beh
     latest: latestEntry
       ? { product: latestEntry.product, detail: latestEntry.detail, createdAt: latestEntry.createdAt }
       : null,
+  }
+}
+
+export function summarizeProductActivationFunnel(
+  entries: BehaviorTrailEntry[],
+  product: BehaviorPreferenceProduct,
+): ProductActivationFunnelSnapshot {
+  const productSignals = entries.filter((entry) => entry.product === product && (
+    entry.event === 'next_steps_opened'
+    || entry.event === 'data_setup_opened'
+    || entry.event === 'product_requested'
+  ))
+  const nextStepsOpened = productSignals.filter((entry) => entry.event === 'next_steps_opened').length
+  const dataSetupsOpened = productSignals.filter((entry) => entry.event === 'data_setup_opened').length
+  const productRequests = productSignals.filter((entry) => entry.event === 'product_requested').length
+  const lastSignalAt = [...productSignals]
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id))[0]
+    ?.createdAt ?? null
+
+  const completion = productRequests > 0
+    ? { completionPercent: 100 as const, nextAction: 'Journey complete' as const }
+    : dataSetupsOpened > 0
+      ? { completionPercent: 67 as const, nextAction: 'Request this product' as const }
+      : nextStepsOpened > 0
+        ? { completionPercent: 33 as const, nextAction: 'Try your data' as const }
+        : { completionPercent: 0 as const, nextAction: 'Open next steps' as const }
+
+  return {
+    contract: 'supermega.product_activation_funnel.v1',
+    version: 1,
+    product,
+    nextStepsOpened,
+    dataSetupsOpened,
+    productRequests,
+    ...completion,
+    lastSignalAt,
+  }
+}
+
+export function summarizeProductFirstValue(
+  entries: BehaviorTrailEntry[],
+  product: BehaviorPreferenceProduct,
+): ProductFirstValueSnapshot {
+  const productEntries = entries
+    .filter((entry) => entry.product === product && Number.isFinite(Date.parse(entry.createdAt)))
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+  const latestOnboardingStart = productEntries.filter((entry) => entry.event === 'setup_opened').at(-1) ?? null
+  const firstProductOpen = productEntries.find((entry) => entry.event === 'product_opened') ?? null
+  const started = latestOnboardingStart ?? firstProductOpen
+  const completed = started
+    ? productEntries.find((entry) => entry.event === 'first_value_completed'
+      && Date.parse(entry.createdAt) >= Date.parse(started.createdAt)) ?? null
+    : null
+  const elapsedSeconds = started && completed
+    ? Math.max(0, Math.round((Date.parse(completed.createdAt) - Date.parse(started.createdAt)) / 1_000))
+    : null
+
+  return {
+    contract: 'supermega.product_first_value.v1',
+    version: 1,
+    product,
+    status: completed ? 'completed' : started ? 'in_progress' : 'not_started',
+    startedAt: started?.createdAt ?? null,
+    completedAt: completed?.createdAt ?? null,
+    elapsedSeconds,
+    detail: completed?.detail ?? null,
   }
 }
 

@@ -17,6 +17,7 @@ const expectedMigrations = [
   '20260730123000_private_trial_backend_v7_workspace_discovery.sql',
   '20260802161500_private_trial_backend_v8_rls_initplan.sql',
   '20260803063822_private_trial_backend_v9_metadata_rls.sql',
+  '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
 ]
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
@@ -135,6 +136,12 @@ const expectedDirectoryFunction = {
   resultType: 'TABLE(workspace_id text, capabilities text[], display_name text)',
   language: 'sql',
   sourceHash: '6f7002c211b52aef98a7dd702a1ca112163570ceb03446883ee3d332bea867d0',
+}
+const expectedSessionFunction = {
+  name: 'supabase_session_is_active',
+  identityArguments: 'target_user_id uuid, target_session_id uuid',
+  resultType: 'boolean',
+  language: 'sql',
 }
 const expectedConstraintFingerprints = {
   approval_requests_decision_packet_v2_check:
@@ -290,7 +297,16 @@ const normalizedSourceHash = (value) =>
     .digest('hex')
 const seedSupabaseRoles = (database) =>
   database.exec(
-    'create role anon nologin; create role authenticated nologin; create role service_role nologin;',
+    `
+      create role anon nologin;
+      create role authenticated nologin;
+      create role service_role nologin;
+      create schema auth authorization postgres;
+      create table auth.sessions (
+        id uuid primary key,
+        user_id uuid not null
+      );
+    `,
   )
 const applyMigrations = async (database, names = expectedMigrations) => {
   for (const name of names) {
@@ -322,7 +338,7 @@ await applyMigrations(database)
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('schema version nine', version.rows[0]?.schema_version === 9)
+requireCheck('schema version ten', version.rows[0]?.schema_version === 10)
 
 const relations = await database.query(`
   select relation.relname as relation_name, relation.relkind::text as relation_kind,
@@ -470,6 +486,92 @@ requireCheck(
     directoryFunctionRows.rows[0].security_definer === true &&
     JSON.stringify(directoryFunctionRows.rows[0].function_config) ===
       JSON.stringify(['search_path=pg_catalog, app_private']),
+)
+
+const sessionFunctionRows = await database.query(`
+  select function_record.proname as function_name,
+         pg_get_function_identity_arguments(function_record.oid) as identity_arguments,
+         pg_get_function_result(function_record.oid) as result_type,
+         function_record.prosrc as function_source,
+         function_record.prosecdef as security_definer,
+         function_record.provolatile as volatility,
+         function_record.proconfig as function_config,
+         language_record.lanname as function_language
+  from pg_proc function_record
+  join pg_namespace schema_record on schema_record.oid = function_record.pronamespace
+  join pg_language language_record on language_record.oid = function_record.prolang
+  where schema_record.nspname = 'app_private'
+    and function_record.proname = 'supabase_session_is_active'
+`)
+requireCheck(
+  'exact private Supabase session function',
+  sessionFunctionRows.rows.length === 1 &&
+    sessionFunctionRows.rows[0].function_name === expectedSessionFunction.name &&
+    sessionFunctionRows.rows[0].identity_arguments === expectedSessionFunction.identityArguments &&
+    sessionFunctionRows.rows[0].result_type === expectedSessionFunction.resultType &&
+    sessionFunctionRows.rows[0].function_language === expectedSessionFunction.language &&
+    sessionFunctionRows.rows[0].security_definer === true &&
+    sessionFunctionRows.rows[0].volatility === 's' &&
+    JSON.stringify(sessionFunctionRows.rows[0].function_config) ===
+      JSON.stringify(['search_path=""']) &&
+    /from auth\.sessions as session_record/.test(
+      String(sessionFunctionRows.rows[0].function_source).toLowerCase(),
+    ),
+)
+
+const sessionPrivileges = await database.query(`
+  select
+    has_function_privilege(
+      'supermega_trial_backend',
+      'app_private.supabase_session_is_active(uuid,uuid)',
+      'EXECUTE'
+    ) as backend_execute,
+    has_function_privilege(
+      'anon',
+      'app_private.supabase_session_is_active(uuid,uuid)',
+      'EXECUTE'
+    ) as anon_execute,
+    has_function_privilege(
+      'authenticated',
+      'app_private.supabase_session_is_active(uuid,uuid)',
+      'EXECUTE'
+    ) as authenticated_execute,
+    has_function_privilege(
+      'service_role',
+      'app_private.supabase_session_is_active(uuid,uuid)',
+      'EXECUTE'
+    ) as service_execute
+`)
+requireCheck(
+  'session revocation function is server-only',
+  sessionPrivileges.rows[0]?.backend_execute === true &&
+    sessionPrivileges.rows[0]?.anon_execute === false &&
+    sessionPrivileges.rows[0]?.authenticated_execute === false &&
+    sessionPrivileges.rows[0]?.service_execute === false,
+)
+
+const sessionUserId = '2f8d24d8-308c-4dc8-a352-7b61df756728'
+const sessionId = 'd8aaab28-a5a7-4a0d-9d75-7a6265a969c3'
+await database.query(
+  'insert into auth.sessions (id, user_id) values ($1::uuid, $2::uuid)',
+  [sessionId, sessionUserId],
+)
+await database.exec('set role supermega_trial_backend')
+const activeSession = await database.query(
+  'select app_private.supabase_session_is_active($1::uuid, $2::uuid) as active',
+  [sessionUserId, sessionId],
+)
+await database.exec('reset role')
+await database.query('delete from auth.sessions where id = $1::uuid', [sessionId])
+await database.exec('set role supermega_trial_backend')
+const revokedSession = await database.query(
+  'select app_private.supabase_session_is_active($1::uuid, $2::uuid) as active',
+  [sessionUserId, sessionId],
+)
+await database.exec('reset role')
+requireCheck(
+  'active session accepted and deleted session revoked',
+  activeSession.rows[0]?.active === true && revokedSession.rows[0]?.active === false,
 )
 
 const constraintRows = await database.query(`
@@ -656,7 +758,7 @@ const hostedVersion = await hostedDatabase.query(
 )
 requireCheck(
   'exact Supabase hosted administrative membership accepted',
-  hostedVersion.rows[0]?.schema_version === 9,
+  hostedVersion.rows[0]?.schema_version === 10,
 )
 
 const memberDatabase = new PGlite()

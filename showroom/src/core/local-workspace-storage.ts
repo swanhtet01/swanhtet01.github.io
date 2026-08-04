@@ -3,6 +3,7 @@ const exactWorkspaceKeys = new Set([
   'supermega.production.workspace.v2',
   'supermega.approvals.v3',
   'supermega.setup.v3',
+  'supermega.product_setups.v1',
   'supermega.accountable.actions.v1',
   'supermega.behavior-trail.v1',
   'supermega.shop.order_draft_reset.v1',
