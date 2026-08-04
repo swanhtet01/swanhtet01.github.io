@@ -295,8 +295,8 @@ export const ECOMMERCE_REQUIREMENTS = [
 
 export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   {
-    id: 'upstream-managed-activation-runbook', authority: 'upstream', file: 'docs/supermega-enterprise-activation.md', tokens: [
-      'all nine migrations as `postgres`', 'schema version 8', 'Owner approved this exact plan and release.',
+    id: 'current-managed-activation-runbook', authority: 'candidate', file: 'docs/supermega-enterprise-activation.md', tokens: [
+      'all ten migrations as `postgres`', 'schema version 9', 'Owner approved this exact plan and release.',
       'Activation compensation after a downstream release gate failure.', '`SUPERMEGA_TRIAL_WRITES_ENABLED=true` is written last',
     ],
   },
@@ -307,14 +307,14 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
     ],
   },
   {
-    id: 'upstream-live-usability-gates', authority: 'upstream', file: 'tools/verify_app_release_live.mjs', tokens: [
-      'Start one product in 2 clicks.', 'Acknowledgement confirms review only.',
-      '.operations-screen:not(.commerce-screen) .workspace-view', 'Browser-local sample only.', 'no real stock is moved',
+    id: 'current-product-first-live-gates', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
+      'Name your workspace', 'Creates local sample records, then opens the first task.',
+      'Nothing is sent or published.', 'No customer message, payment capture, delivery booking, stock move, refund, or Shop write runs from setup.',
     ],
   },
   {
-    id: 'upstream-security-and-activation-gates', authority: 'upstream', file: 'tools/verify_app_security_contract.mjs', tokens: [
-      'managed schema contract advances through additive v2 through v8 migrations',
+    id: 'current-security-and-activation-gates', authority: 'candidate', file: 'tools/verify_app_security_contract.mjs', tokens: [
+      'managed schema contract advances through additive v2 through v9 migrations',
       'managed recovery is non-enumerating and password setup remains named-user only',
       'managed activation requires durable named-owner authorization and encrypted admin transport',
       'managed AI context is owner-consented, summary-only, tenant-bound, and revision-bound',
@@ -334,14 +334,17 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-four-product-build-depth', authority: 'candidate', file: 'tools/verify_app_build.mjs', tokens: [
-      'Run the whole shop', 'Services and resources', 'Ecommerce today status', 'Order lifecycle queue',
-      'Shop controls prices, stock, payment, delivery, and the accountable order record.',
+      'Name this ${onboardingProduct.name} workspace once. SuperMega prepares a working copy and opens one useful first task.',
+      'First useful result: {onboardingJourney.outcome}.',
+      'This setup affects {onboardingProduct.name} only. Your other products stay separate.',
+      'Services and resources', 'Ecommerce today status', 'Order lifecycle queue',
     ],
   },
   {
-    id: 'candidate-demo-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
-      'Business starter tracks', 'AI operating tracks', 'Separate products, one simple operating model.',
-      'Ecommerce order review packet checked locally.', 'No order import, customer message, payment, delivery, stock write, Shop write, or managed activation ran.',
+    id: 'candidate-product-specific-onboarding-and-safe-handoff', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
+      'Name your workspace', 'Creates local sample records, then opens the first task.', 'This setup affects',
+      'Opening it will not run setup again.', 'Nothing is sent or published.',
+      'Ecommerce order review packet checked locally. No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.',
     ],
   },
   {
@@ -384,7 +387,7 @@ const BATCH_POLICIES = new Map([
   [RELEASE_SECURITY_HQ_BATCH, {
     batch: RELEASE_SECURITY_HQ_BATCH,
     requirements: RELEASE_SECURITY_HQ_REQUIREMENTS,
-    firstAuthority: 'upstream-managed-activation-security-and-release-evidence',
+    firstAuthority: 'current-managed-activation-security-and-release-evidence',
     forbiddenIdentityFiles: [],
   }],
 ].map(([batch, policy]) => [batch, {
