@@ -17,6 +17,7 @@ const routeIndex = process.argv.indexOf('--route')
 const routeFilter = routeIndex >= 0 ? process.argv[routeIndex + 1] : null
 const viewportIndex = process.argv.indexOf('--viewport')
 const viewportFilter = viewportIndex >= 0 ? process.argv[viewportIndex + 1] : null
+const workflowOnly = process.argv.includes('--workflow')
 
 function fail(message) {
   throw new Error(message)
@@ -347,14 +348,138 @@ async function auditRoute(browser, baseUrl, route, viewport, settleMs) {
   }
 }
 
+async function expectOne(locator, failure) {
+  const count = await locator.count()
+  if (count !== 1) fail(`${failure}:${count}`)
+  return locator
+}
+
+async function expectOneVisible(locator, failure, timeout = 5_000) {
+  try {
+    await locator.waitFor({ state: 'visible', timeout })
+  } catch {
+    fail(`${failure}_not_visible`)
+  }
+  return expectOne(locator, failure)
+}
+
+async function waitForProduct(page, name) {
+  await page.waitForFunction((expected) => document.querySelector('h1')?.textContent?.trim() === expected, name, { timeout: 8_000 })
+}
+
+async function auditEcommerceShopOrderWorkflow(browser, baseUrl) {
+  const context = await browser.newContext({
+    colorScheme: 'light',
+    deviceScaleFactor: 1,
+    hasTouch: true,
+    isMobile: true,
+    locale: 'en-US',
+    reducedMotion: 'reduce',
+    viewport: { width: 390, height: 844 },
+  })
+  const page = await context.newPage()
+  const checkpoints = []
+  const consoleErrors = []
+  const externalRequests = []
+  const pageErrors = []
+  const baseOrigin = new URL(baseUrl).origin
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 400))
+  })
+  page.on('pageerror', (error) => pageErrors.push(error.message.slice(0, 400)))
+  await page.route('**/*', async (intercept) => {
+    const url = intercept.request().url()
+    const parsed = new URL(url)
+    if (parsed.origin === baseOrigin || ['blob:', 'data:'].includes(parsed.protocol)) {
+      await intercept.continue()
+      return
+    }
+    externalRequests.push(`${intercept.request().method()} ${parsed.origin}${parsed.pathname}`.slice(0, 400))
+    await intercept.abort('blockedbyclient')
+  })
+  const failures = []
+  try {
+    const response = await page.goto(`${baseUrl}/ecommerce/`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
+    if (!response || response.status() < 200 || response.status() >= 400) fail(`workflow_ecommerce_http_status:${response?.status() ?? 'none'}`)
+    await waitForProduct(page, 'Ecommerce')
+
+    await (await expectOne(page.getByRole('button', { name: 'Start sample order', exact: true }), 'workflow_start_sample_order_count')).click()
+    await (await expectOne(page.getByLabel('Name', { exact: true }), 'workflow_customer_name_count')).fill('QA Customer')
+    await (await expectOne(page.getByLabel('Phone', { exact: true }), 'workflow_customer_phone_count')).fill('09123456789')
+    checkpoints.push('sample_cart_ready')
+
+    const preSubmitShopActions = await page.getByRole('button', { name: 'Open Shop operator review', exact: true }).count()
+    if (preSubmitShopActions !== 0) fail(`workflow_shop_review_visible_before_request:${preSubmitShopActions}`)
+    checkpoints.push('no_shop_order_before_request')
+
+    const sendRequest = await expectOneVisible(page.getByRole('button', { name: 'Send order request', exact: true }), 'workflow_send_request_count')
+    if (!await sendRequest.isEnabled()) fail('workflow_send_request_disabled')
+    await sendRequest.click()
+    await expectOneVisible(page.getByRole('heading', { name: 'Order request sent for Shop review', exact: true }), 'workflow_request_receipt_heading_count')
+    const requestReceipt = await expectOneVisible(page.locator('article').filter({ hasText: 'Request for QA Customer' }), 'workflow_request_receipt_count')
+    const requestReceiptText = await requestReceipt.innerText()
+    const requestReference = requestReceiptText.match(/Reference (ECR-[A-F0-9-]+)/)?.[1]
+    if (!requestReference) fail('workflow_request_reference_missing')
+    if (!requestReceiptText.includes('Payment Cash') && !requestReceiptText.includes('Pay on pickup')) fail('workflow_payment_boundary_missing')
+    checkpoints.push('recoverable_request_receipt')
+
+    await (await expectOne(page.getByRole('button', { name: 'Open Shop operator review', exact: true }), 'workflow_open_shop_review_count')).click()
+    await page.waitForURL((url) => url.pathname === '/shop/', { timeout: 10_000 })
+    await waitForProduct(page, 'Shop')
+    await (await expectOne(page.getByRole('heading', { name: '2 orders need action', exact: true }), 'workflow_preconfirm_order_count')).waitFor({ state: 'visible', timeout: 5_000 })
+    const addOrderDialog = await expectOneVisible(page.getByRole('dialog', { name: 'Add an order', exact: true }), 'workflow_add_order_dialog_count')
+    const addOrderText = await addOrderDialog.innerText()
+    if (!addOrderText.includes(requestReference) || !addOrderText.includes('no stock reserved')) fail('workflow_source_locked_handoff_missing')
+    checkpoints.push('shop_handoff_without_write')
+
+    await (await expectOne(addOrderDialog.getByRole('button', { name: 'Review order', exact: true }), 'workflow_review_order_count')).click()
+    const reviewDialog = await expectOneVisible(page.getByRole('dialog', { name: 'Review Ecommerce order', exact: true }), 'workflow_review_dialog_count')
+    const reviewText = await reviewDialog.innerText()
+    if (!reviewText.includes(requestReference) || !reviewText.includes('Stock SM-1001 34 → 33') || !reviewText.includes('Owner confirming operator')) fail('workflow_accountable_review_evidence_missing')
+    checkpoints.push('accountable_stock_review')
+
+    await (await expectOne(reviewDialog.getByRole('button', { name: 'Confirm change', exact: true }), 'workflow_confirm_change_count')).click()
+    await expectOneVisible(page.getByRole('heading', { name: '3 orders need action', exact: true }), 'workflow_postconfirm_order_count')
+    await expectOneVisible(page.getByText('QA Customer · Daily essentials basket × 1', { exact: true }), 'workflow_confirmed_customer_count')
+    await expectOneVisible(page.getByRole('button', { name: 'Start preparing', exact: true }), 'workflow_confirmed_next_action_count')
+    checkpoints.push('shop_order_confirmed')
+
+    await page.goto(`${baseUrl}/ecommerce/`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
+    await waitForProduct(page, 'Ecommerce')
+    const tracking = await expectOneVisible(page.getByRole('region', { name: 'Customer order tracking', exact: true }), 'workflow_tracking_region_count')
+    const trackingText = await tracking.innerText()
+    if (!trackingText.includes(requestReference) || !trackingText.includes('Confirmed') || !trackingText.includes('Payment pending')) fail('workflow_customer_tracking_not_reconciled')
+    await expectOne(page.getByRole('button', { name: 'Continue in Shop', exact: true }), 'workflow_continue_in_shop_count')
+    checkpoints.push('customer_tracking_reconciled')
+  } catch (error) {
+    failures.push(`workflow_exception:${error instanceof Error ? error.message : String(error)}`.slice(0, 500))
+  } finally {
+    await context.close()
+  }
+  if (consoleErrors.length) failures.push(`console_errors:${consoleErrors.length}`)
+  if (pageErrors.length) failures.push(`page_errors:${pageErrors.length}`)
+  if (externalRequests.length) failures.push(`external_requests:${externalRequests.length}`)
+  return {
+    workflowId: 'ecommerce-request-shop-confirmation',
+    viewport: 'mobile',
+    ok: failures.length === 0,
+    checkpoints,
+    failures,
+    consoleErrors,
+    pageErrors,
+    externalRequests,
+  }
+}
+
 const policySource = await readFile(policyPath, 'utf8')
 const policy = JSON.parse(policySource)
 validatePolicy(policy)
 if (outputIndex >= 0 && !process.argv[outputIndex + 1]) fail('route_quality_output_path_missing')
+if (workflowOnly && (routeFilter || viewportFilter)) fail('route_quality_workflow_filter_conflict')
 if (routeIndex >= 0 && (!routeFilter || !policy.routes.some((route) => route.id === routeFilter))) fail('route_quality_route_filter_invalid')
 if (viewportIndex >= 0 && (!viewportFilter || !policy.viewports.some((viewport) => viewport.id === viewportFilter))) fail('route_quality_viewport_filter_invalid')
-const selectedRoutes = policy.routes.filter((route) => !routeFilter || route.id === routeFilter)
-const selectedViewports = policy.viewports.filter((viewport) => !viewportFilter || viewport.id === viewportFilter)
+const selectedRoutes = workflowOnly ? [] : policy.routes.filter((route) => !routeFilter || route.id === routeFilter)
+const selectedViewports = workflowOnly ? [] : policy.viewports.filter((viewport) => !viewportFilter || viewport.id === viewportFilter)
 const executablePath = browserExecutable()
 if (!executablePath) fail('route_quality_system_browser_missing:set SUPERMEGA_QA_BROWSER_PATH to Chrome, Edge, or Chromium')
 const browser = await chromium.launch({
@@ -363,14 +488,18 @@ const browser = await chromium.launch({
   args: ['--disable-background-networking', '--disable-component-update', '--disable-default-apps'],
 })
 const results = []
+const workflowResults = []
 try {
-  for (const scope of ['public', 'app']) {
+  for (const scope of workflowOnly ? ['app'] : ['public', 'app']) {
     const server = await startStaticServer(scope === 'app' ? appRoot : publicRoot, { spaFallback: scope === 'app' })
     try {
       for (const viewport of selectedViewports) {
         for (const route of selectedRoutes.filter((candidate) => candidate.scope === scope)) {
           results.push(await auditRoute(browser, server.baseUrl, route, viewport, policy.settleMs))
         }
+      }
+      if (scope === 'app' && !routeFilter && !viewportFilter) {
+        workflowResults.push(await auditEcommerceShopOrderWorkflow(browser, server.baseUrl))
       }
     } finally {
       await server.close()
@@ -380,7 +509,10 @@ try {
   await browser.close()
 }
 
-const failures = results.flatMap((result) => result.failures.map((failure) => `${result.routeId}/${result.viewport}:${failure}`))
+const failures = [
+  ...results.flatMap((result) => result.failures.map((failure) => `${result.routeId}/${result.viewport}:${failure}`)),
+  ...workflowResults.flatMap((result) => result.failures.map((failure) => `${result.workflowId}/${result.viewport}:${failure}`)),
+]
 const targetGaps = results.flatMap((result) => {
   const route = policy.routes.find((candidate) => candidate.id === result.routeId)
   return route?.targetVisibleActions != null && result.metrics.visibleActionCount > route.targetVisibleActions
@@ -394,11 +526,13 @@ const reportBasis = {
   routes: selectedRoutes.length,
   viewports: selectedViewports.length,
   checks: results.length,
+  workflowChecks: workflowResults.length,
   ok: failures.length === 0,
   simplicityTargetsMet: targetGaps.length === 0,
   failures,
   targetGaps,
   results,
+  workflows: workflowResults,
 }
 const report = { ...reportBasis, reportDigest: sha256(JSON.stringify(reportBasis)) }
 const serialized = `${JSON.stringify(report, null, 2)}\n`
@@ -412,9 +546,20 @@ const summary = {
   routes: report.routes,
   viewports: report.viewports,
   checks: report.checks,
+  workflowChecks: report.workflowChecks,
   failures: report.failures,
   simplicityTargetsMet: report.simplicityTargetsMet,
   targetGaps: report.targetGaps,
+  workflows: report.workflows.map((workflow) => ({
+    workflowId: workflow.workflowId,
+    viewport: workflow.viewport,
+    ok: workflow.ok,
+    checkpoints: workflow.checkpoints,
+    failures: workflow.failures,
+    consoleErrors: workflow.consoleErrors.length,
+    pageErrors: workflow.pageErrors.length,
+    externalRequests: workflow.externalRequests.length,
+  })),
   results: report.results.map((result) => ({
     routeId: result.routeId,
     viewport: result.viewport,
