@@ -367,6 +367,141 @@ async function waitForProduct(page, name) {
   await page.waitForFunction((expected) => document.querySelector('h1')?.textContent?.trim() === expected, name, { timeout: 8_000 })
 }
 
+const onboardingJourneys = [
+  {
+    id: 'shop',
+    behaviorProduct: 'commerce',
+    heading: 'Make Shop yours',
+    businessName: 'QA Shop',
+    submitLabel: 'Create Shop and start selling',
+    destination: '/shop/?tab=counter',
+    outcome: 'Complete a sample sale',
+    firstActionLabel: 'Add Daily essentials basket to this sale',
+  },
+  {
+    id: 'plant',
+    behaviorProduct: 'production',
+    heading: 'Make Plant yours',
+    businessName: 'QA Plant',
+    submitLabel: 'Create Plant and open the job',
+    destination: '/plant/?tab=production',
+    outcome: 'Run a sample production job',
+    firstActionLabel: 'Record output',
+  },
+  {
+    id: 'website',
+    behaviorProduct: 'website',
+    heading: 'Make Website yours',
+    businessName: 'QA Website',
+    submitLabel: 'Create Website and preview it',
+    destination: '/website/',
+    outcome: 'Preview a business website',
+    firstActionLabel: 'Download preview',
+  },
+  {
+    id: 'ecommerce',
+    behaviorProduct: 'ecommerce',
+    heading: 'Make Ecommerce yours',
+    businessName: 'QA Ecommerce',
+    submitLabel: 'Create Ecommerce and open the store',
+    destination: '/ecommerce/',
+    outcome: 'Open a working online store',
+    firstActionLabel: 'Start sample order',
+  },
+]
+
+async function auditFourProductOnboardingFirstTaskWorkflow(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    colorScheme: 'light',
+    deviceScaleFactor: 1,
+    hasTouch: viewport.touch,
+    isMobile: viewport.touch,
+    locale: 'en-US',
+    reducedMotion: 'reduce',
+    viewport: { width: viewport.width, height: viewport.height },
+  })
+  const page = await context.newPage()
+  const checkpoints = []
+  const consoleErrors = []
+  const externalRequests = []
+  const pageErrors = []
+  const baseOrigin = new URL(baseUrl).origin
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 400))
+  })
+  page.on('pageerror', (error) => pageErrors.push(error.message.slice(0, 400)))
+  await page.route('**/*', async (intercept) => {
+    const url = intercept.request().url()
+    const parsed = new URL(url)
+    if (parsed.origin === baseOrigin || ['blob:', 'data:'].includes(parsed.protocol)) {
+      await intercept.continue()
+      return
+    }
+    externalRequests.push(`${intercept.request().method()} ${parsed.origin}${parsed.pathname}`.slice(0, 400))
+    await intercept.abort('blockedbyclient')
+  })
+  const failures = []
+  try {
+    for (const journey of onboardingJourneys) {
+      const setupPath = `/settings/?product=${journey.id}`
+      const response = await page.goto(`${baseUrl}${setupPath}`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
+      if (!response || response.status() < 200 || response.status() >= 400) fail(`workflow_${journey.id}_onboarding_http_status:${response?.status() ?? 'none'}`)
+      await expectOneVisible(page.getByRole('heading', { name: journey.heading, exact: true }), `workflow_${journey.id}_onboarding_heading_count`, 8_000)
+
+      const businessName = await expectOneVisible(page.getByLabel('Business name', { exact: true }), `workflow_${journey.id}_business_name_count`)
+      await businessName.fill('')
+      const submit = await expectOneVisible(page.getByRole('button', { name: journey.submitLabel, exact: true }), `workflow_${journey.id}_submit_count`)
+      if (await submit.isEnabled()) fail(`workflow_${journey.id}_empty_setup_enabled`)
+      await businessName.fill(journey.businessName)
+      if (!await submit.isEnabled()) fail(`workflow_${journey.id}_named_setup_disabled`)
+      await submit.click()
+      await page.waitForURL((url) => `${url.pathname}${url.search}` === journey.destination, { timeout: 15_000 })
+      const firstAction = journey.id === 'plant'
+        ? page.locator('.plant-today-priority').getByRole('button', { name: journey.firstActionLabel, exact: true })
+        : journey.id === 'website'
+          ? page.locator('.website-today-priority').getByRole('button', { name: journey.firstActionLabel, exact: true })
+          : page.getByRole('button', { name: journey.firstActionLabel, exact: true })
+      await expectOneVisible(firstAction, `workflow_${journey.id}_first_action_count`, 10_000)
+
+      const trail = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? '[]'), 'supermega.behavior-trail.v1')
+      const setupIndex = trail.findLastIndex((entry) => entry.event === 'setup_opened'
+        && entry.product === journey.behaviorProduct
+        && entry.route === setupPath)
+      const chosenIndex = trail.findIndex((entry, index) => index > setupIndex
+        && entry.event === 'agent_job_chosen'
+        && entry.product === journey.behaviorProduct
+        && entry.route === journey.destination
+        && entry.detail === journey.outcome)
+      const openedIndex = trail.findIndex((entry, index) => index > chosenIndex
+        && entry.event === 'product_opened'
+        && entry.product === journey.behaviorProduct
+        && entry.route === journey.destination)
+      if (setupIndex < 0 || chosenIndex <= setupIndex || openedIndex <= chosenIndex) fail(`workflow_${journey.id}_behavior_order_invalid:${setupIndex}:${chosenIndex}:${openedIndex}`)
+      const orderedEntries = [trail[setupIndex], trail[chosenIndex], trail[openedIndex]]
+      if (orderedEntries.some((entry) => !Number.isFinite(Date.parse(entry?.createdAt)))) fail(`workflow_${journey.id}_behavior_timestamp_invalid`)
+      if (orderedEntries.some((entry, index) => index > 0 && Date.parse(entry.createdAt) < Date.parse(orderedEntries[index - 1].createdAt))) fail(`workflow_${journey.id}_behavior_timestamp_order_invalid`)
+      checkpoints.push(`${journey.id}_onboarding_first_task_ready`)
+    }
+  } catch (error) {
+    failures.push(`workflow_exception:${error instanceof Error ? error.message : String(error)}`.slice(0, 500))
+  } finally {
+    await context.close()
+  }
+  if (consoleErrors.length) failures.push(`console_errors:${consoleErrors.length}`)
+  if (pageErrors.length) failures.push(`page_errors:${pageErrors.length}`)
+  if (externalRequests.length) failures.push(`external_requests:${externalRequests.length}`)
+  return {
+    workflowId: 'four-product-onboarding-first-task',
+    viewport: viewport.id,
+    ok: failures.length === 0,
+    checkpoints,
+    failures,
+    consoleErrors,
+    pageErrors,
+    externalRequests,
+  }
+}
+
 async function auditEcommerceShopOrderWorkflow(browser, baseUrl, viewport) {
   const context = await browser.newContext({
     colorScheme: 'light',
@@ -1166,6 +1301,7 @@ try {
         }
       }
       if (scope === 'app' && !routeFilter && !viewportFilter) {
+        for (const viewport of policy.viewports) workflowResults.push(await auditFourProductOnboardingFirstTaskWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditEcommerceShopOrderWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditShopSaleCloseWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditShopSyncRecoveryWorkflow(browser, server.baseUrl, viewport))

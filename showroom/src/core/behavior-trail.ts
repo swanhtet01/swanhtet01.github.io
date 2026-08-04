@@ -207,9 +207,13 @@ export function summarizeProductFirstValue(
   const productEntries = entries
     .filter((entry) => entry.product === product && Number.isFinite(Date.parse(entry.createdAt)))
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
-  const completed = productEntries.find((entry) => entry.event === 'first_value_completed') ?? null
-  const started = productEntries.find((entry) => entry.event === 'product_opened'
-    && (!completed || Date.parse(entry.createdAt) <= Date.parse(completed.createdAt))) ?? null
+  const latestOnboardingStart = productEntries.filter((entry) => entry.event === 'setup_opened').at(-1) ?? null
+  const firstProductOpen = productEntries.find((entry) => entry.event === 'product_opened') ?? null
+  const started = latestOnboardingStart ?? firstProductOpen
+  const completed = started
+    ? productEntries.find((entry) => entry.event === 'first_value_completed'
+      && Date.parse(entry.createdAt) >= Date.parse(started.createdAt)) ?? null
+    : null
   const elapsedSeconds = started && completed
     ? Math.max(0, Math.round((Date.parse(completed.createdAt) - Date.parse(started.createdAt)) / 1_000))
     : null

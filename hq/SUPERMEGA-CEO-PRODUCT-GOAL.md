@@ -20,6 +20,19 @@ SuperMega succeeds when:
 
 This charter refines the active company goal; it does not declare the current release complete.
 
+## Current CEO decision
+
+The local candidate now proves that Shop, Plant, Website, and Ecommerce each move from a one-field product setup to the correct separate workspace and one useful first task on mobile and desktop. The complete local browser matrix has fourteen workflow gates and 98 deterministic checkpoints. First-value timing is now bound to the latest product-onboarding journey, so an old demo completion cannot make a new workspace appear activated.
+
+The company constraint is no longer a missing fifth product, framework, or menu. Seven managed-pilot gates remain blocked: hosted Postgres rehearsal, private storage proof, live managed product contract, managed persistence, security, a named pilot, and production activation. The current CEO priority is therefore:
+
+1. Preserve the simple four-product first session and its browser evidence.
+2. Close managed tenant isolation, explicit grants/RLS, idempotency, conflict, backup, restore, and observability proof on an approved isolated target.
+3. Run five named operator sessions and measure first value, time to value, correction effort, and repeat useful work.
+4. Fund only the product depth or adapter that the evidence identifies as the next constraint.
+
+Production, provider, connector, payment, publish, and customer-message authority remain separately gated.
+
 ## Portfolio boundary
 
 SuperMega has four customer products. Do not add a fifth product until all four pass the activation and reliability gates below.
@@ -116,6 +129,21 @@ These capabilities are internal platform layers. Customers should still see only
 
 ## Resource decisions
 
+### Investment scorecard
+
+| Resource or integration | Customer job and KPI | Smallest useful experiment | Decision now |
+| --- | --- | --- | --- |
+| Supabase Auth, Postgres, Storage, and RLS | Durable managed workspaces; verified first value without cross-tenant access or data loss | Apply and verify local v8/v9 plus explicit browser grants on one isolated non-production target | Highest priority managed foundation; do not touch protected production before every hosted gate passes |
+| Playwright Core and system browser | Prevent release regressions in first-session completion, mobile usability, and recovery | Keep the 14-workflow, 98-checkpoint matrix serial and deterministic | Adopted release authority for browser behavior |
+| Existing Vercel deployment and function observability | Diagnose live release, latency, failure, and cost without adding client complexity | Read the exact release's existing logs and metrics during a bounded pilot | Use before adding a second observability vendor or browser SDK |
+| PostHog custom product events | Verified first-value funnel, time to value, and retention | Mirror only the approved first-party event schema in an isolated consented pilot; no autocapture or session replay | Defer until hosted identity, consent, retention, and privacy review exist |
+| Supabase Queues versus Vercel Workflow | Durable server-owned import, connector retry, or release-package job | Run the same idempotent, tenant-bound, failure-injected job on each candidate | Prototype after managed security; select at most one orchestration authority |
+| OpenAI Agents SDK or another model provider | Source-backed drafts and recommendations that reduce operator effort | One read-only or draft-only workflow with explicit approval, rejection, cost, and quality evidence | Provider-neutral prototype only; deterministic product contracts retain authority |
+| React Aria, XState, and PGlite | Better complex controls, transition safety, or relational offline behavior | Replace or model one measured problem, benchmark bundle/startup/device cost, then remove the losing path | Trigger-based evaluation, never a broad migration |
+| Messenger, Viber, payment, delivery, hardware, GS1, and read-only OPC UA adapters | Faster request intake and fewer duplicate or manual records | One versioned no-write import or simulated adapter with provenance and duplicate recovery | Defer live connection until managed identity, privacy, safety, and named-operator proof pass |
+
+An integration does not become strategy merely because it is capable. It must improve one primary KPI or driver, replace existing complexity, preserve a clean product surface, and pass a failure-and-recovery test. If two tools would own the same queue, workflow, analytics, or system-of-record responsibility, SuperMega chooses one authority and removes the duplicate.
+
 ### Adopt now
 
 - Keep React, React Router, Vite, TypeScript, and the current design tokens. A framework migration would not fix the present information-architecture problem.
@@ -123,6 +151,8 @@ These capabilities are internal platform layers. Customers should still see only
 - Use React Aria selectively when replacing repeated complex primitives such as dialogs, menus, selects, and comboboxes. Do not restyle or migrate the whole app at once.
 - Continue the Supabase/Postgres managed foundation with Auth, tenant-scoped RLS, grants, idempotent commands, and auditable migrations. Hosted activation remains gated until production evidence exists.
 - Instrument a small first-party behavior trail for activation and task outcomes before adding a broad analytics SDK.
+- Use explicit Data API grants as well as RLS in every managed migration. Supabase's 2026 exposure-default change makes grants a separate, deliberate contract; it does not repair existing broad grants or replace tenant policies.
+- Use existing Vercel release, function, and cost observability before adding another monitoring SDK. Add a second tool only for a measured diagnostic gap.
 
 ### Prototype behind an adapter
 
@@ -132,6 +162,8 @@ These capabilities are internal platform layers. Customers should still see only
 - Evaluate Supabase Queues only for server-owned durable import, connector-retry, and release-package jobs after managed tenant security is proven. Keep its default private boundary, require idempotent consumers, and do not expose queue functions to customer browsers; Data API exposure would add queue-table RLS and function-grant obligations SuperMega does not presently need.
 - Keep AI execution provider-neutral. The OpenAI Agents SDK is only an optional managed adapter candidate for resumable, human-approved work after privacy, cost, quality, and local-fallback evaluation; product contracts remain the authority and models receive no direct consequential write permission. Version, encrypt, tenant-bind, and minimize any serialized run state because it can include application context as well as approval state.
 - Evaluate Vercel Workflow only for managed, long-running, resumable tasks after hosted activation and cost limits are defined. Benchmark its persisted steps, retries, versioning, and observability against the same bounded server-owned job as Supabase Queues, then adopt at most one orchestration authority for that job.
+- Evaluate privacy-minimized PostHog custom events only after the first-party event contract, consent, retention, tenant identity, and deletion behavior are proven. Autocapture and session replay remain off by default because product screens can contain customer, order, payment-status, and production data.
+- Prototype conversational commerce as a `SuperMega Connect` adapter that produces the existing Ecommerce request contract with source-message provenance and duplicate-safe recovery. Start with a no-send import fixture; Messenger, Viber, or other live channel authority remains gated.
 
 ### Defer or reject for now
 
@@ -203,7 +235,7 @@ A product release is not ready because the build passes. It is ready only when t
 
 1. Preserve Ecommerce-to-Shop, Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file proof at both viewports.
 2. Preserve the now-proven Blueprint no-write preview inside each product's existing `Next steps` data tool. Keep its deterministic mapping, repair, digest, review lock, and `staged_not_applied` contracts; do not create another public setup page.
-3. Instrument the three CEO KPIs around the existing useful samples and first-value records, then run five moderated Shop/Plant sessions before expanding product scope.
+3. Preserve the now-proven current-journey first-value attribution and four-product one-field onboarding-to-first-task browser gate. Instrument the three CEO KPIs around those records, then run five moderated Shop/Plant sessions before expanding product scope.
 4. Preserve the now-proven Shop local write-ahead and reload-recovery contract at both viewports. Measure receipt growth, startup cost, conflict frequency, and low-end Android behavior before extending the same bounded contract to Plant.
 5. Close managed-persistence evidence in this order: tenant isolation, authenticated tenant-bound idempotency, conflict handling, backup/restore rehearsal, then production activation readiness. Never treat browser-stored outbox state as managed write authority. Provider writes and live activation remain owner-gated.
 6. Only after those gates pass, compare private Supabase Queues and Vercel Workflow against one bounded durable-job contract; adopt at most one execution path for that job and keep customer browsers away from queue authority.
@@ -216,8 +248,10 @@ A product release is not ready because the build passes. It is ready only when t
 - PGlite: https://pglite.dev/docs/about
 - XState: https://stately.ai/docs
 - Supabase Row Level Security: https://supabase.com/docs/guides/database/postgres/row-level-security
+- Supabase explicit Data API grants change: https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically
 - Supabase Queues: https://supabase.com/docs/guides/queues
 - OpenAI Agents SDK human approval and resumable state: https://openai.github.io/openai-agents-js/guides/human-in-the-loop/
+- PostHog product analytics and privacy controls: https://posthog.com/docs/product-analytics and https://posthog.com/docs/session-replay/privacy
 - GS1 Global Traceability Standard: https://www.gs1.org/standards/gs1-global-traceability-standard/current-standard
 - OPC UA: https://opcfoundation.org/about/opc-technologies/opc-ua/
 - Vercel Workflows: https://vercel.com/workflows

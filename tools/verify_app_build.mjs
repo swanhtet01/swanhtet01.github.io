@@ -1307,6 +1307,10 @@ if (!settingsPageSource.includes('const learningRows = [')
   || !behaviorTrailSource.includes('export function summarizeProductActivationFunnel(')
   || !behaviorTrailSource.includes("contract: 'supermega.product_first_value.v1'")
   || !behaviorTrailSource.includes('export function summarizeProductFirstValue(')
+  || !behaviorTrailSource.includes("entry.event === 'setup_opened'")
+  || !behaviorTrailSource.includes('const latestOnboardingStart =')
+  || !behaviorTrailSource.includes("entry.event === 'first_value_completed'")
+  || !behaviorTrailSource.includes('Date.parse(entry.createdAt) >= Date.parse(started.createdAt)')
   || !productSystemNavigatorSource.includes("recordActivationSignal('next_steps_opened'")
   || !productSystemNavigatorSource.includes("recordActivationSignal('data_setup_opened'")
   || !productOnboardingPageSource.includes("event: 'product_requested'")
@@ -18445,6 +18449,12 @@ async function verifyBehaviorTrailRuntime() {
       { id: 'B-6', event: 'product_opened', product: 'ecommerce', route: '/ecommerce/?view=store', detail: 'Ecommerce store viewed.', createdAt: '2026-08-03T01:05:00.000Z' },
       { id: 'B-7', event: 'first_value_completed', product: 'ecommerce', route: '/ecommerce/', detail: 'Saved a reviewed Ecommerce order request for Shop review.', createdAt: '2026-08-03T01:06:00.000Z' },
       { id: 'B-8', event: 'first_value_completed', product: 'ecommerce', route: '/ecommerce/', detail: 'Later Ecommerce request.', createdAt: '2026-08-03T01:07:00.000Z' },
+      { id: 'B-9', event: 'setup_opened', product: 'ecommerce', route: '/settings/?product=ecommerce', detail: 'Ecommerce setup viewed.', createdAt: '2026-08-03T01:08:00.000Z' },
+      { id: 'B-10', event: 'product_opened', product: 'ecommerce', route: '/ecommerce/', detail: 'Personalized Ecommerce workspace viewed.', createdAt: '2026-08-03T01:09:00.000Z' },
+      { id: 'B-11', event: 'first_value_completed', product: 'ecommerce', route: '/ecommerce/', detail: 'Saved the first request for the current Ecommerce workspace.', createdAt: '2026-08-03T01:11:00.000Z' },
+      { id: 'B-12', event: 'product_opened', product: 'production', route: '/plant/', detail: 'Plant product viewed.', createdAt: '2026-08-03T01:12:00.000Z' },
+      { id: 'B-13', event: 'first_value_completed', product: 'production', route: '/plant/', detail: 'Old Plant completion.', createdAt: '2026-08-03T01:13:00.000Z' },
+      { id: 'B-14', event: 'setup_opened', product: 'production', route: '/settings/?product=plant', detail: 'New Plant setup viewed.', createdAt: '2026-08-03T01:14:00.000Z' },
     ]
     const shop = model.summarizeProductActivationFunnel(entries, 'commerce')
     assert(shop.contract === 'supermega.product_activation_funnel.v1'
@@ -18465,10 +18475,16 @@ async function verifyBehaviorTrailRuntime() {
     const ecommerceFirstValue = model.summarizeProductFirstValue(entries, 'ecommerce')
     assert(ecommerceFirstValue.contract === 'supermega.product_first_value.v1'
       && ecommerceFirstValue.status === 'completed'
-      && ecommerceFirstValue.startedAt === '2026-08-03T01:04:00.000Z'
-      && ecommerceFirstValue.completedAt === '2026-08-03T01:06:00.000Z'
-      && ecommerceFirstValue.elapsedSeconds === 120
-      && ecommerceFirstValue.detail === 'Saved a reviewed Ecommerce order request for Shop review.', 'behavior_first_value_summary_wrong')
+      && ecommerceFirstValue.startedAt === '2026-08-03T01:08:00.000Z'
+      && ecommerceFirstValue.completedAt === '2026-08-03T01:11:00.000Z'
+      && ecommerceFirstValue.elapsedSeconds === 180
+      && ecommerceFirstValue.detail === 'Saved the first request for the current Ecommerce workspace.', 'behavior_first_value_summary_wrong')
+    const plantFirstValue = model.summarizeProductFirstValue(entries, 'production')
+    assert(plantFirstValue.status === 'in_progress'
+      && plantFirstValue.startedAt === '2026-08-03T01:14:00.000Z'
+      && plantFirstValue.completedAt === null
+      && plantFirstValue.elapsedSeconds === null
+      && plantFirstValue.detail === null, 'behavior_new_onboarding_reused_stale_completion')
     const websiteFirstValue = model.summarizeProductFirstValue(entries, 'website')
     assert(websiteFirstValue.status === 'not_started'
       && websiteFirstValue.startedAt === null

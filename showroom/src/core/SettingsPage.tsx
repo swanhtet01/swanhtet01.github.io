@@ -593,8 +593,8 @@ export function SettingsPage() {
     ['First value', productFirstValue.status === 'completed' ? 'Complete' : productFirstValue.status === 'in_progress' ? 'In progress' : 'Not started', productFirstValue.status === 'completed'
       ? `${productFirstValue.detail ?? 'A useful product workflow was completed.'}${firstValueElapsed ? ` First value took ${firstValueElapsed} in this browser.` : ''}`
       : productFirstValue.status === 'in_progress'
-        ? 'The product was opened. Complete its guided first workflow to prove useful value.'
-        : 'Open this product and complete its guided first workflow to begin.'],
+        ? 'The product journey started. Complete its guided first workflow to prove useful value.'
+        : 'Open onboarding or the product sample, then complete its guided first workflow to begin.'],
     ['Next steps', productActivationFunnel.nextStepsOpened ? `${productActivationFunnel.nextStepsOpened} opened` : 'Not opened', 'The user opened this product\'s optional next-step panel.'],
     ['Own data', productActivationFunnel.dataSetupsOpened ? `${productActivationFunnel.dataSetupsOpened} started` : 'Not started', 'The user opened local CSV or sample-data setup for this product.'],
     ['Product request', productActivationFunnel.productRequests ? `${productActivationFunnel.productRequests} intent` : 'No intent yet', 'The user chose the product-specific setup handoff. No message was sent by this scorecard.'],
