@@ -1176,7 +1176,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const commerceLocation = useLocation()
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
-  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite] = useCommerceWorkspace(managedIdentity)
+  const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync] = useCommerceWorkspace(managedIdentity)
   const shopSampleCatalogActive = Boolean(shopPack && commerceWorkingSampleCatalogId(commerce) === shopPack.id)
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
@@ -2434,16 +2434,24 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     </section>
   })() : null
 
-  const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
+  const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Sample data'}</span>
     <p>{commerceStorageError
       ? `Writes paused: ${commerceStorageError}`
+      : commerceSync.status === 'checking'
+        ? commerceSync.message
+        : commerceSync.status === 'pending' || commerceSync.status === 'conflict' || commerceSync.status === 'unavailable'
+          ? `Writes paused: ${commerceSync.message}`
       : !commerceCanWrite
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
-        : notice || (managedIdentity
+        : commerceSync.message || notice || (managedIdentity
           ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the company account.`
           : 'Sample data on this device. Sign in for team data.')}</p>
-    {!commerceCanWrite ? <Link to="/settings/#controls">Open Settings</Link> : null}
+    {commerceSync.status === 'pending'
+      ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
+      : !commerceCanWrite && commerceSync.status !== 'checking'
+        ? <Link to="/settings/#controls">Open Settings</Link>
+        : null}
   </div>
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)

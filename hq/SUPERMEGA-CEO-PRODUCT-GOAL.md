@@ -126,18 +126,18 @@ These capabilities are internal platform layers. Customers should still see only
 
 ### Prototype behind an adapter
 
-- Build a native IndexedDB outbox and recovery proof for Shop first. Compare PGlite only after measuring bundle size, startup time, storage behavior, and low-end Android performance.
+- Preserve the now-proven native IndexedDB write-ahead outbox for reviewed local Shop actions. It stages an attributed, digest-bound intent before the local write, reconciles interrupted acknowledgement on reload, and fails closed on conflicting state. Extend it to Plant only after measuring storage growth, startup time, low-end Android behavior, and a bounded receipt-retention policy. Compare PGlite only if a measured relational/offline requirement justifies its payload and startup cost; its browser IndexedDB filesystem loads database files into memory and flushes changed files, while its OPFS path still has a material Safari compatibility constraint.
 - Keep workflow transitions as explicit TypeScript contracts. Evaluate XState when at least three independently complex flows need the same state-machine semantics or current transition bugs justify the dependency.
 - Model Shop/Plant item, lot, location, and trace events so a future GS1 adapter does not require a data rewrite.
-- Evaluate Supabase Queues only for server-owned durable import, connector-retry, and release-package jobs after managed tenant security is proven. Keep queues private, require idempotent consumers, and do not expose queue functions to customer browsers.
-- Keep AI execution provider-neutral. The OpenAI Agents SDK is only an optional managed adapter candidate for resumable, human-approved work after privacy, cost, quality, and local-fallback evaluation; product contracts remain the authority and models receive no direct consequential write permission.
-- Evaluate Vercel Workflow only for managed, long-running, resumable tasks after hosted activation and cost limits are defined.
+- Evaluate Supabase Queues only for server-owned durable import, connector-retry, and release-package jobs after managed tenant security is proven. Keep its default private boundary, require idempotent consumers, and do not expose queue functions to customer browsers; Data API exposure would add queue-table RLS and function-grant obligations SuperMega does not presently need.
+- Keep AI execution provider-neutral. The OpenAI Agents SDK is only an optional managed adapter candidate for resumable, human-approved work after privacy, cost, quality, and local-fallback evaluation; product contracts remain the authority and models receive no direct consequential write permission. Version, encrypt, tenant-bind, and minimize any serialized run state because it can include application context as well as approval state.
+- Evaluate Vercel Workflow only for managed, long-running, resumable tasks after hosted activation and cost limits are defined. Benchmark its persisted steps, retries, versioning, and observability against the same bounded server-owned job as Supabase Queues, then adopt at most one orchestration authority for that job.
 
 ### Defer or reject for now
 
 - No new component library, broad design-system rewrite, or framework migration.
 - No standalone AI-agent customer product.
-- No client-side durable queue, autonomous customer message, payment, publish, stock, or production transition.
+- No client-side queue may authorize or automatically replay a managed-tenant write, customer message, payment, publish, stock, or production transition. The bounded local recovery outbox has local-workspace authority only.
 - No direct OPC UA machine commands; Plant may ingest read-only observations only after a client-specific safety review.
 - No experimental browser-wide OpenTelemetry rollout. Prefer server-side observability and bounded first-party product events until browser support and privacy requirements justify it.
 - No fifth customer product, public HQ dashboard, or agent-team navigation.
@@ -204,8 +204,8 @@ A product release is not ready because the build passes. It is ready only when t
 1. Preserve Ecommerce-to-Shop, Shop sale-to-fulfilment-to-close, Plant reviewed-import-to-output-to-quality-close, and Website brief-to-responsive-preview-to-review-file proof at both viewports.
 2. Preserve the now-proven Blueprint no-write preview inside each product's existing `Next steps` data tool. Keep its deterministic mapping, repair, digest, review lock, and `staged_not_applied` contracts; do not create another public setup page.
 3. Instrument the three CEO KPIs around the existing useful samples and first-value records, then run five moderated Shop/Plant sessions before expanding product scope.
-4. Build the smallest SuperMega Sync slice: a native IndexedDB outbox and deterministic recovery proof for Shop. Compare PGlite only if measured relational/offline requirements justify its payload and startup cost.
-5. Close local managed-persistence evidence in this order: tenant isolation, idempotent replay, conflict handling, backup/restore rehearsal, then production activation readiness. Provider writes and live activation remain owner-gated.
+4. Preserve the now-proven Shop local write-ahead and reload-recovery contract at both viewports. Measure receipt growth, startup cost, conflict frequency, and low-end Android behavior before extending the same bounded contract to Plant.
+5. Close managed-persistence evidence in this order: tenant isolation, authenticated tenant-bound idempotency, conflict handling, backup/restore rehearsal, then production activation readiness. Never treat browser-stored outbox state as managed write authority. Provider writes and live activation remain owner-gated.
 6. Only after those gates pass, compare private Supabase Queues and Vercel Workflow against one bounded durable-job contract; adopt at most one execution path for that job and keep customer browsers away from queue authority.
 
 ## Evidence and references

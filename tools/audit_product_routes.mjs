@@ -440,7 +440,12 @@ async function auditEcommerceShopOrderWorkflow(browser, baseUrl, viewport) {
     checkpoints.push('accountable_stock_review')
 
     await (await expectOne(reviewDialog.getByRole('button', { name: 'Confirm change', exact: true }), 'workflow_confirm_change_count')).click()
-    await expectOneVisible(page.getByRole('heading', { name: '3 orders need action', exact: true }), 'workflow_postconfirm_order_count')
+    try {
+      await expectOneVisible(page.getByRole('heading', { name: '3 orders need action', exact: true }), 'workflow_postconfirm_order_count')
+    } catch (error) {
+      const notices = await page.locator('.form-notice, .form-error, [role="alert"]').allInnerTexts()
+      fail(`${error instanceof Error ? error.message : String(error)}:${notices.join(' | ').replace(/\s+/g, ' ').slice(0, 500)}`)
+    }
     await expectOneVisible(page.getByText('QA Customer · Daily essentials basket × 1', { exact: true }), 'workflow_confirmed_customer_count')
     await expectOneVisible(page.getByRole('button', { name: 'Start preparing', exact: true }), 'workflow_confirmed_next_action_count')
     checkpoints.push('shop_order_confirmed')
@@ -602,6 +607,156 @@ async function auditShopSaleCloseWorkflow(browser, baseUrl, viewport) {
   if (externalRequests.length) failures.push(`external_requests:${externalRequests.length}`)
   return {
     workflowId: 'shop-counter-sale-daily-close',
+    viewport: viewport.id,
+    ok: failures.length === 0,
+    checkpoints,
+    failures,
+    consoleErrors,
+    pageErrors,
+    externalRequests,
+  }
+}
+
+async function readShopSyncDatabase(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('supermega-sync-v1', 1)
+    request.onerror = () => reject(request.error ?? new Error('sync_database_open_failed'))
+    request.onblocked = () => reject(new Error('sync_database_open_blocked'))
+    request.onsuccess = () => {
+      const database = request.result
+      if (!database.objectStoreNames.contains('commerce-outbox') || !database.objectStoreNames.contains('commerce-receipts')) {
+        database.close()
+        reject(new Error('sync_database_stores_missing'))
+        return
+      }
+      const transaction = database.transaction(['commerce-outbox', 'commerce-receipts'], 'readonly')
+      const outboxRequest = transaction.objectStore('commerce-outbox').getAll()
+      const receiptRequest = transaction.objectStore('commerce-receipts').getAll()
+      transaction.onerror = () => reject(transaction.error ?? new Error('sync_database_read_failed'))
+      transaction.onabort = () => reject(transaction.error ?? new Error('sync_database_read_aborted'))
+      transaction.oncomplete = () => {
+        database.close()
+        resolve({ outbox: outboxRequest.result, receipts: receiptRequest.result })
+      }
+    }
+  }))
+}
+
+async function auditShopSyncRecoveryWorkflow(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    colorScheme: 'light',
+    deviceScaleFactor: 1,
+    hasTouch: viewport.touch,
+    isMobile: viewport.touch,
+    locale: 'en-US',
+    reducedMotion: 'reduce',
+    viewport: { width: viewport.width, height: viewport.height },
+  })
+  const page = await context.newPage()
+  const checkpoints = []
+  const consoleErrors = []
+  const externalRequests = []
+  const pageErrors = []
+  const baseOrigin = new URL(baseUrl).origin
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 400))
+  })
+  page.on('pageerror', (error) => pageErrors.push(error.message.slice(0, 400)))
+  await page.route('**/*', async (intercept) => {
+    const url = intercept.request().url()
+    const parsed = new URL(url)
+    if (parsed.origin === baseOrigin || ['blob:', 'data:'].includes(parsed.protocol)) {
+      await intercept.continue()
+      return
+    }
+    externalRequests.push(`${intercept.request().method()} ${parsed.origin}${parsed.pathname}`.slice(0, 400))
+    await intercept.abort('blockedbyclient')
+  })
+  const failures = []
+  const customer = `QA Sync Recovery ${viewport.id}`
+  try {
+    const response = await page.goto(`${baseUrl}/shop/?tab=counter`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
+    if (!response || response.status() < 200 || response.status() >= 400) fail(`workflow_shop_sync_http_status:${response?.status() ?? 'none'}`)
+    await waitForProduct(page, 'Shop')
+    await page.waitForFunction(() => document.querySelector('.commerce-mode-banner')?.getAttribute('data-sync') === 'ready', undefined, { timeout: 8_000 })
+    const initialSync = await readShopSyncDatabase(page)
+    if (initialSync.outbox.length !== 0 || initialSync.receipts.length !== 0) fail('workflow_shop_sync_initial_database_not_empty')
+    checkpoints.push('sync_ready_before_write')
+
+    await page.evaluate(() => {
+      const originalDelete = IDBObjectStore.prototype.delete
+      Object.defineProperty(globalThis, '__supermegaSyncOriginalDelete', { configurable: true, value: originalDelete })
+      IDBObjectStore.prototype.delete = function interruptedDelete(key) {
+        if (this.name === 'commerce-outbox') throw new DOMException('QA interrupted the outbox acknowledgement.', 'AbortError')
+        return originalDelete.call(this, key)
+      }
+    })
+
+    const product = await expectOneVisible(page.getByRole('button', { name: 'Add Daily essentials basket to this sale', exact: true }), 'workflow_shop_sync_product_count')
+    await product.click()
+    if (viewport.touch) await (await expectOneVisible(page.locator('button.shop-mobile-cart'), 'workflow_shop_sync_mobile_cart_count')).click()
+    const currentSale = await expectOneVisible(page.locator('aside[aria-label="Current sale"]'), 'workflow_shop_sync_current_sale_count')
+    await (await expectOne(currentSale.getByPlaceholder('Guest', { exact: true }), 'workflow_shop_sync_customer_count')).fill(customer)
+    await (await expectOne(currentSale.getByRole('button', { name: 'Review order', exact: true }), 'workflow_shop_sync_review_count')).click()
+    const review = await expectOneVisible(page.locator('dialog.accountable-action-gate'), 'workflow_shop_sync_review_dialog_count')
+    await (await expectOne(review.getByRole('button', { name: 'Create order', exact: true }), 'workflow_shop_sync_create_count')).click()
+    await review.waitFor({ state: 'hidden', timeout: 8_000 })
+    checkpoints.push('approved_order_applied_locally')
+
+    await page.waitForFunction(() => document.querySelector('.commerce-mode-banner')?.getAttribute('data-sync') === 'pending', undefined, { timeout: 8_000 })
+    const pendingBanner = await expectOneVisible(page.locator('.commerce-mode-banner[data-sync="pending"]'), 'workflow_shop_sync_pending_banner_count')
+    if (!(await pendingBanner.innerText()).includes('recovery receipt was interrupted')) fail('workflow_shop_sync_pending_message_missing')
+    const interruptedSync = await readShopSyncDatabase(page)
+    if (interruptedSync.outbox.length !== 1 || interruptedSync.receipts.length !== 0) fail(`workflow_shop_sync_interrupted_counts:${interruptedSync.outbox.length}:${interruptedSync.receipts.length}`)
+    const pendingIntent = interruptedSync.outbox[0]
+    if (pendingIntent?.contract !== 'supermega.commerce.sync-outbox.v1'
+      || pendingIntent?.eventType !== 'commerce.order.created'
+      || pendingIntent?.evidence?.actor !== 'Sample cashier'
+      || !String(pendingIntent?.baseDigest ?? '').startsWith('sha256:')
+      || !String(pendingIntent?.candidateDigest ?? '').startsWith('sha256:')) fail('workflow_shop_sync_pending_intent_invalid')
+    checkpoints.push('ack_interruption_left_durable_intent')
+
+    await page.evaluate(() => {
+      const originalDelete = globalThis.__supermegaSyncOriginalDelete
+      if (typeof originalDelete === 'function') IDBObjectStore.prototype.delete = originalDelete
+      delete globalThis.__supermegaSyncOriginalDelete
+    })
+    const reloadShop = await expectOneVisible(page.getByRole('button', { name: 'Reload Shop', exact: true }), 'workflow_shop_sync_reload_action_count')
+    await reloadShop.click({ timeout: 20_000 })
+    await waitForProduct(page, 'Shop')
+    await page.waitForFunction(() => document.querySelector('.commerce-mode-banner')?.getAttribute('data-sync') === 'ready', undefined, { timeout: 8_000 })
+    const recoveredBanner = await expectOneVisible(page.locator('.commerce-mode-banner[data-sync="ready"]'), 'workflow_shop_sync_recovered_banner_count')
+    if (!(await recoveredBanner.innerText()).includes('Recovered 1 reviewed Shop change') || !(await recoveredBanner.innerText()).includes('without duplicating it')) fail('workflow_shop_sync_recovered_message_missing')
+    checkpoints.push('reload_reconciled_applied_intent')
+
+    const recoveredSync = await readShopSyncDatabase(page)
+    if (recoveredSync.outbox.length !== 0 || recoveredSync.receipts.length !== 1) fail(`workflow_shop_sync_recovered_counts:${recoveredSync.outbox.length}:${recoveredSync.receipts.length}`)
+    const receipt = recoveredSync.receipts[0]
+    if (receipt?.contract !== 'supermega.commerce.sync-outbox.v1'
+      || receipt?.status !== 'local_applied'
+      || receipt?.recovered !== true
+      || receipt?.candidateDigest !== pendingIntent.candidateDigest) fail('workflow_shop_sync_receipt_invalid')
+    checkpoints.push('outbox_drained_to_receipt')
+
+    await (await expectOne(page.getByRole('button', { name: 'Orders', exact: true }), 'workflow_shop_sync_orders_tab_count')).click()
+    await page.waitForURL((url) => url.pathname === '/shop/' && url.searchParams.get('tab') === 'orders', { timeout: 8_000 })
+    const recoveredOrders = page.locator('.order-list article').filter({ hasText: customer })
+    if (await recoveredOrders.count() !== 1) fail(`workflow_shop_sync_order_count:${await recoveredOrders.count()}`)
+    const recoveredOrderText = await recoveredOrders.first().innerText()
+    if (!recoveredOrderText.toLowerCase().includes('confirmed') || !recoveredOrderText.toLowerCase().includes('payment pending')) {
+      fail(`workflow_shop_sync_order_state_invalid:${recoveredOrderText.replaceAll(/\s+/g, ' ').slice(0, 240)}`)
+    }
+    checkpoints.push('order_not_duplicated')
+  } catch (error) {
+    failures.push(`workflow_exception:${error instanceof Error ? error.message : String(error)}`.slice(0, 500))
+  } finally {
+    await context.close()
+  }
+  if (consoleErrors.length) failures.push(`console_errors:${consoleErrors.length}`)
+  if (pageErrors.length) failures.push(`page_errors:${pageErrors.length}`)
+  if (externalRequests.length) failures.push(`external_requests:${externalRequests.length}`)
+  return {
+    workflowId: 'shop-indexeddb-outbox-reload-recovery',
     viewport: viewport.id,
     ok: failures.length === 0,
     checkpoints,
@@ -1013,6 +1168,7 @@ try {
       if (scope === 'app' && !routeFilter && !viewportFilter) {
         for (const viewport of policy.viewports) workflowResults.push(await auditEcommerceShopOrderWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditShopSaleCloseWorkflow(browser, server.baseUrl, viewport))
+        for (const viewport of policy.viewports) workflowResults.push(await auditShopSyncRecoveryWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditPlantPlanShiftCloseWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditWebsiteEditReleaseWorkflow(browser, server.baseUrl, viewport))
         for (const viewport of policy.viewports) workflowResults.push(await auditBlueprintPreviewWorkflow(browser, server.baseUrl, viewport))
