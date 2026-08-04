@@ -611,6 +611,143 @@ async function auditShopSaleCloseWorkflow(browser, baseUrl, viewport) {
   }
 }
 
+async function confirmPlantWorkflowAction(page, trigger, stage, expectedText) {
+  await trigger.click()
+  const dialog = await expectOneVisible(page.locator('dialog.accountable-action-gate'), `workflow_plant_${stage}_dialog_count`)
+  const dialogText = await dialog.innerText()
+  if (expectedText.some((value) => !dialogText.toLowerCase().includes(value.toLowerCase()))) fail(`workflow_plant_${stage}_review_evidence_missing`)
+  const fields = [
+    ['Your name', 'QA Plant operator'],
+    ['Reason', `QA ${stage.replaceAll('_', ' ')} review`],
+    ['Reference', `QA-PLANT-${stage.toUpperCase()}`],
+  ]
+  for (const [label, value] of fields) {
+    const field = await expectOne(dialog.getByLabel(label, { exact: true }), `workflow_plant_${stage}_${label.toLowerCase().replaceAll(' ', '_')}_count`)
+    if (await field.isEditable()) await field.fill(value)
+    else if (!(await field.inputValue()).trim()) fail(`workflow_plant_${stage}_${label.toLowerCase().replaceAll(' ', '_')}_empty`)
+  }
+  await (await expectOne(dialog.getByRole('button', { name: 'Confirm change', exact: true }), `workflow_plant_${stage}_confirm_count`)).click()
+  await dialog.waitFor({ state: 'hidden', timeout: 8_000 })
+}
+
+async function auditPlantPlanShiftCloseWorkflow(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    colorScheme: 'light',
+    deviceScaleFactor: 1,
+    hasTouch: viewport.touch,
+    isMobile: viewport.touch,
+    locale: 'en-US',
+    reducedMotion: 'reduce',
+    viewport: { width: viewport.width, height: viewport.height },
+  })
+  const page = await context.newPage()
+  const checkpoints = []
+  const consoleErrors = []
+  const externalRequests = []
+  const pageErrors = []
+  const baseOrigin = new URL(baseUrl).origin
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 400))
+  })
+  page.on('pageerror', (error) => pageErrors.push(error.message.slice(0, 400)))
+  await page.route('**/*', async (intercept) => {
+    const url = intercept.request().url()
+    const parsed = new URL(url)
+    if (parsed.origin === baseOrigin || ['blob:', 'data:'].includes(parsed.protocol)) {
+      await intercept.continue()
+      return
+    }
+    externalRequests.push(`${intercept.request().method()} ${parsed.origin}${parsed.pathname}`.slice(0, 400))
+    await intercept.abort('blockedbyclient')
+  })
+  const failures = []
+  const shiftReference = `QA-SHIFT-${viewport.id.toUpperCase()}`
+  const jobId = 'JOB-AI-101'
+  try {
+    const response = await page.goto(`${baseUrl}/plant/?tab=production`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
+    if (!response || response.status() < 200 || response.status() >= 400) fail(`workflow_plant_http_status:${response?.status() ?? 'none'}`)
+    await waitForProduct(page, 'Plant')
+
+    const addJob = await expectOneVisible(page.locator('details.catalog-disclosure').filter({ has: page.locator('summary').filter({ hasText: 'Add job' }) }), 'workflow_plant_add_job_count')
+    if (!await addJob.evaluate((element) => element.open)) await (await expectOne(addJob.locator(':scope > summary'), 'workflow_plant_add_job_summary_count')).click()
+    await (await expectOneVisible(addJob.getByRole('button', { name: 'Load sample job batch', exact: true }), 'workflow_plant_sample_job_count')).click()
+    const importReview = await expectOneVisible(addJob.getByRole('status').filter({ hasText: 'Ready for review' }), 'workflow_plant_import_review_count')
+    const importReviewText = await importReview.innerText()
+    if (!importReviewText.includes('2 ready') || !importReviewText.includes(jobId) || !importReviewText.includes('no Plant write')) fail('workflow_plant_import_review_evidence_missing')
+    checkpoints.push('job_import_reviewed')
+
+    await confirmPlantWorkflowAction(page, await expectOne(addJob.getByRole('button', { name: 'Review job', exact: true }), 'workflow_plant_review_job_count'), 'create_job', [jobId, 'No production job', 'Line A', 'Plant supervisor', 'target 120'])
+    const job = await expectOneVisible(page.locator('.job-list article').filter({ hasText: jobId }), 'workflow_plant_created_job_count')
+    const createdJobText = await job.innerText()
+    if (!createdJobText.includes('First production run') || !createdJobText.includes('0 good') || !createdJobText.includes('0 / 120')) fail('workflow_plant_created_job_evidence_missing')
+    checkpoints.push('production_job_created')
+
+    await (await expectOne(job.getByRole('button', { name: 'Record output', exact: true }), 'workflow_plant_record_output_count')).click()
+    const outputPanel = await expectOneVisible(page.locator('#plant-output-panel'), 'workflow_plant_output_panel_count')
+    await (await expectOne(outputPanel.locator('input[name="plant-output-shift-reference"]'), 'workflow_plant_shift_reference_count')).fill(shiftReference)
+    await (await expectOne(outputPanel.locator('input[name="plant-output-quantity"]'), 'workflow_plant_output_quantity_count')).fill('10')
+    checkpoints.push('output_review_ready')
+
+    await confirmPlantWorkflowAction(page, await expectOne(outputPanel.getByRole('button', { name: 'Review good output', exact: true }), 'workflow_plant_review_output_count'), 'record_output', [jobId, shiftReference, '0 good', '10 good'])
+    const materialDisclosure = await expectOneVisible(outputPanel.locator('details').filter({ hasText: 'Material use' }), 'workflow_plant_material_disclosure_count')
+    if (!(await job.innerText()).includes('10 good')) fail('workflow_plant_output_not_persisted')
+    checkpoints.push('good_output_recorded')
+
+    await (await expectOne(materialDisclosure.locator('select').first(), 'workflow_plant_material_job_count')).selectOption(jobId)
+    await (await expectOneVisible(outputPanel.getByRole('button', { name: 'Fill sample trace', exact: true }), 'workflow_plant_fill_trace_count')).click()
+    await confirmPlantWorkflowAction(page, await expectOne(outputPanel.getByRole('button', { name: 'Review material use', exact: true }), 'workflow_plant_review_material_count'), 'record_material', [jobId, shiftReference, 'RM-SAMPLE-01', 'LOT-SAMPLE-01'])
+    await outputPanel.waitFor({ state: 'hidden', timeout: 8_000 })
+    checkpoints.push('same_shift_material_recorded')
+
+    await (await expectOne(page.getByRole('button', { name: 'Problems', exact: true }), 'workflow_plant_problems_tab_count')).click()
+    await page.waitForURL((url) => url.pathname === '/plant/' && url.searchParams.get('tab') === 'control', { timeout: 8_000 })
+    const qualityIssue = await expectOneVisible(page.locator('.issue-list article').filter({ hasText: 'Temperature drift requires supervisor review' }), 'workflow_plant_quality_issue_count')
+    await (await expectOne(qualityIssue.getByRole('button', { name: 'Review CAPA', exact: true }), 'workflow_plant_review_capa_count')).click()
+    const capa = await expectOneVisible(page.getByRole('dialog', { name: 'Verify corrective action', exact: true }), 'workflow_plant_capa_dialog_count')
+    await (await expectOne(capa.getByLabel('Verified root cause', { exact: true }), 'workflow_plant_root_cause_count')).fill('Reviewed calibration method caused the recorded temperature drift.')
+    await (await expectOne(capa.getByLabel('Corrective action', { exact: true }), 'workflow_plant_corrective_action_count')).fill('Calibrated the process and reviewed the standard work with the line owner.')
+    await (await expectOne(capa.getByLabel('Effectiveness evidence', { exact: true }), 'workflow_plant_effectiveness_count')).fill('Three reviewed checks remained within the accepted operating limit.')
+    await confirmPlantWorkflowAction(page, await expectOne(capa.getByRole('button', { name: 'Review CAPA closeout', exact: true }), 'workflow_plant_capa_closeout_count'), 'resolve_quality', ['Resolve ISS-301', 'effective CAPA', 'no inventory or customer action'])
+    await qualityIssue.waitFor({ state: 'hidden', timeout: 8_000 })
+    checkpoints.push('quality_capa_resolved')
+
+    const shiftClose = await expectOneVisible(page.locator('details.production-history').filter({ has: page.locator('summary').filter({ hasText: 'Shift close' }) }), 'workflow_plant_shift_close_count')
+    if (!await shiftClose.evaluate((element) => element.open)) await (await expectOne(shiftClose.locator(':scope > summary'), 'workflow_plant_shift_close_summary_count')).click()
+    const shiftInput = await expectOneVisible(shiftClose.getByLabel('Shift reference', { exact: true }), 'workflow_plant_close_shift_reference_count')
+    if (await shiftInput.inputValue() !== shiftReference) await shiftInput.fill(shiftReference)
+    await (await expectOne(shiftClose.getByRole('button', { name: 'Prepare shift close file', exact: true }), 'workflow_plant_prepare_close_count')).click()
+    const checklist = await expectOneVisible(shiftClose.locator('[aria-label="Shift close checklist"]'), 'workflow_plant_close_checklist_count')
+    const checklistText = await checklist.innerText()
+    if (!checklistText.includes('10 good / 1 entries')
+      || !checklistText.includes('1 traced')
+      || (checklistText.match(/Clear/g)?.length ?? 0) < 3) fail('workflow_plant_close_checklist_not_ready')
+    checkpoints.push('shift_close_packet_ready')
+
+    await confirmPlantWorkflowAction(page, await expectOneVisible(shiftClose.getByRole('button', { name: 'Review shift close', exact: true }), 'workflow_plant_review_shift_close_count'), 'shift_close', [shiftReference, '10 good', '1 material entries', 'quality clear', 'WCM clear'])
+    const closedState = await expectOneVisible(shiftClose.getByText('Shift closed by QA Plant operator', { exact: true }), 'workflow_plant_closed_state_count')
+    const closedText = await closedState.locator('..').innerText()
+    if (!closedText.includes(shiftReference) || !closedText.includes('10 good') || !closedText.includes('1 material entries')) fail('workflow_plant_saved_close_evidence_missing')
+    checkpoints.push('shift_close_saved')
+  } catch (error) {
+    failures.push(`workflow_exception:${error instanceof Error ? error.message : String(error)}`.slice(0, 500))
+  } finally {
+    await context.close()
+  }
+  if (consoleErrors.length) failures.push(`console_errors:${consoleErrors.length}`)
+  if (pageErrors.length) failures.push(`page_errors:${pageErrors.length}`)
+  if (externalRequests.length) failures.push(`external_requests:${externalRequests.length}`)
+  return {
+    workflowId: 'plant-plan-output-material-quality-shift-close',
+    viewport: viewport.id,
+    ok: failures.length === 0,
+    checkpoints,
+    failures,
+    consoleErrors,
+    pageErrors,
+    externalRequests,
+  }
+}
+
 const policySource = await readFile(policyPath, 'utf8')
 const policy = JSON.parse(policySource)
 validatePolicy(policy)
@@ -641,6 +778,7 @@ try {
       if (scope === 'app' && !routeFilter && !viewportFilter) {
         workflowResults.push(await auditEcommerceShopOrderWorkflow(browser, server.baseUrl))
         for (const viewport of policy.viewports) workflowResults.push(await auditShopSaleCloseWorkflow(browser, server.baseUrl, viewport))
+        for (const viewport of policy.viewports) workflowResults.push(await auditPlantPlanShiftCloseWorkflow(browser, server.baseUrl, viewport))
       }
     } finally {
       await server.close()
