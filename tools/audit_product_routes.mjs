@@ -471,6 +471,146 @@ async function auditEcommerceShopOrderWorkflow(browser, baseUrl) {
   }
 }
 
+async function confirmShopWorkflowAction(page, trigger, stage, expectedText) {
+  await trigger.click()
+  const dialog = await expectOneVisible(page.locator('dialog.accountable-action-gate'), `workflow_shop_${stage}_dialog_count`)
+  const dialogText = await dialog.innerText()
+  if (expectedText.some((value) => !dialogText.includes(value))) fail(`workflow_shop_${stage}_review_evidence_missing`)
+  await (await expectOne(dialog.getByLabel('Your name', { exact: true }), `workflow_shop_${stage}_actor_count`)).fill('QA Shop operator')
+  await (await expectOne(dialog.getByLabel('Reason', { exact: true }), `workflow_shop_${stage}_reason_count`)).fill(`QA ${stage.replaceAll('_', ' ')} review`)
+  await (await expectOne(dialog.getByLabel('Reference', { exact: true }), `workflow_shop_${stage}_reference_count`)).fill(`QA-SHOP-${stage.toUpperCase()}`)
+  await (await expectOne(dialog.getByRole('button', { name: 'Confirm change', exact: true }), `workflow_shop_${stage}_confirm_count`)).click()
+  await dialog.waitFor({ state: 'hidden', timeout: 8_000 })
+}
+
+async function auditShopSaleCloseWorkflow(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    colorScheme: 'light',
+    deviceScaleFactor: 1,
+    hasTouch: viewport.touch,
+    isMobile: viewport.touch,
+    locale: 'en-US',
+    reducedMotion: 'reduce',
+    viewport: { width: viewport.width, height: viewport.height },
+  })
+  const page = await context.newPage()
+  const checkpoints = []
+  const consoleErrors = []
+  const externalRequests = []
+  const pageErrors = []
+  const baseOrigin = new URL(baseUrl).origin
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 400))
+  })
+  page.on('pageerror', (error) => pageErrors.push(error.message.slice(0, 400)))
+  await page.route('**/*', async (intercept) => {
+    const url = intercept.request().url()
+    const parsed = new URL(url)
+    if (parsed.origin === baseOrigin || ['blob:', 'data:'].includes(parsed.protocol)) {
+      await intercept.continue()
+      return
+    }
+    externalRequests.push(`${intercept.request().method()} ${parsed.origin}${parsed.pathname}`.slice(0, 400))
+    await intercept.abort('blockedbyclient')
+  })
+  const failures = []
+  const customer = `QA Counter ${viewport.id}`
+  try {
+    const response = await page.goto(`${baseUrl}/shop/?tab=counter`, { timeout: 20_000, waitUntil: 'domcontentloaded' })
+    if (!response || response.status() < 200 || response.status() >= 400) fail(`workflow_shop_http_status:${response?.status() ?? 'none'}`)
+    await waitForProduct(page, 'Shop')
+
+    const product = await expectOneVisible(page.getByRole('button', { name: 'Add Daily essentials basket to this sale', exact: true }), 'workflow_shop_product_count')
+    if (!(await product.innerText()).includes('34 in stock')) fail('workflow_shop_opening_stock_missing')
+    await product.click()
+    if (viewport.touch) await (await expectOneVisible(page.locator('button.shop-mobile-cart'), 'workflow_shop_mobile_cart_count')).click()
+    const currentSale = await expectOneVisible(page.locator('aside[aria-label="Current sale"]'), 'workflow_shop_current_sale_count')
+    await (await expectOne(currentSale.getByPlaceholder('Guest', { exact: true }), 'workflow_shop_customer_count')).fill(customer)
+    const cash = await expectOne(currentSale.getByRole('button', { name: 'Cash', exact: true }), 'workflow_shop_cash_count')
+    if (await cash.getAttribute('aria-pressed') !== 'true') await cash.click()
+    checkpoints.push('counter_sale_ready')
+
+    await (await expectOne(currentSale.getByRole('button', { name: 'Review order', exact: true }), 'workflow_shop_review_sale_count')).click()
+    const counterReview = await expectOneVisible(page.locator('dialog.accountable-action-gate'), 'workflow_shop_counter_review_dialog_count')
+    const counterReviewText = await counterReview.innerText()
+    if (!counterReviewText.includes('18,500 MMK')
+      || !/stock SM-1001 34\s*[^0-9]+\s*33/i.test(counterReviewText)
+      || !counterReviewText.includes('Payment and fulfilment stay pending')) fail('workflow_shop_counter_review_evidence_missing')
+    checkpoints.push('accountable_counter_review')
+    await (await expectOne(counterReview.getByRole('button', { name: 'Create order', exact: true }), 'workflow_shop_create_order_count')).click()
+    await counterReview.waitFor({ state: 'hidden', timeout: 8_000 })
+    await (await expectOne(page.getByRole('button', { name: 'Stock', exact: true }), 'workflow_shop_stock_tab_count')).click()
+    await page.waitForURL((url) => url.pathname === '/shop/' && url.searchParams.get('tab') === 'inventory', { timeout: 8_000 })
+    await (await expectOneVisible(page.locator('details.stock-catalog-disclosure > summary'), 'workflow_shop_other_products_count')).click()
+    const stockRow = await expectOneVisible(page.locator('.data-row').filter({ hasText: 'Daily essentials basket' }), 'workflow_shop_updated_stock_count')
+    const onHand = await expectOne(stockRow.locator('[role="cell"]').first(), 'workflow_shop_on_hand_cell_count')
+    if ((await onHand.textContent())?.trim() !== '33') fail(`workflow_shop_stock_reservation_missing:${(await onHand.textContent())?.trim() ?? 'none'}`)
+    checkpoints.push('stock_reservation_persisted')
+
+    await (await expectOne(page.getByRole('button', { name: 'Orders', exact: true }), 'workflow_shop_orders_tab_count')).click()
+    await page.waitForURL((url) => url.pathname === '/shop/' && url.searchParams.get('tab') === 'orders', { timeout: 8_000 })
+    const order = await expectOneVisible(page.locator('.order-list article').filter({ hasText: customer }), 'workflow_shop_confirmed_order_count')
+    const confirmedOrderText = await order.innerText()
+    if (!confirmedOrderText.toLowerCase().includes('payment pending')) fail(`workflow_shop_confirmed_payment_state_missing:${confirmedOrderText.replace(/\s+/g, ' ').slice(0, 300)}`)
+    checkpoints.push('confirmed_order_visible')
+
+    await confirmShopWorkflowAction(page, await expectOne(order.getByRole('button', { name: 'Start preparing', exact: true }), 'workflow_shop_start_preparing_count'), 'start_preparing', ['confirmed', 'preparing'])
+    await expectOneVisible(order.getByText('preparing', { exact: true }), 'workflow_shop_preparing_state_count')
+    checkpoints.push('preparing_recorded')
+
+    await confirmShopWorkflowAction(page, await expectOne(order.getByRole('button', { name: 'Mark ready', exact: true }), 'workflow_shop_mark_ready_count'), 'mark_ready', ['preparing', 'ready'])
+    await expectOneVisible(order.getByText('ready', { exact: true }), 'workflow_shop_ready_state_count')
+    await expectOneVisible(order.getByRole('button', { name: 'Reconcile payment', exact: true }), 'workflow_shop_payment_gate_count')
+    checkpoints.push('payment_gate_before_completion')
+
+    await confirmShopWorkflowAction(page, await expectOne(order.getByRole('button', { name: 'Reconcile payment', exact: true }), 'workflow_shop_reconcile_payment_count'), 'reconcile_payment', ['pending', 'reconciled'])
+    await expectOneVisible(order.getByText('payment reconciled', { exact: true }), 'workflow_shop_payment_reconciled_state_count')
+    checkpoints.push('payment_reconciled')
+
+    await confirmShopWorkflowAction(page, await expectOne(order.getByRole('button', { name: 'Complete', exact: true }), 'workflow_shop_complete_count'), 'complete_fulfilment', ['ready', 'completed'])
+    await order.waitFor({ state: 'hidden', timeout: 8_000 })
+    const archive = await expectOneVisible(page.locator('details.order-archive'), 'workflow_shop_archive_count')
+    await (await expectOne(archive.locator(':scope > summary'), 'workflow_shop_archive_summary_count')).click()
+    const archivedOrder = await expectOneVisible(archive.locator('article').filter({ hasText: customer }), 'workflow_shop_archived_order_count')
+    if (!(await archivedOrder.innerText()).includes('completed') || !(await archivedOrder.innerText()).includes('payment reconciled')) fail('workflow_shop_completed_record_missing')
+    checkpoints.push('fulfilment_completed')
+
+    const closeControls = await expectOneVisible(page.locator('#shop-close-controls'), 'workflow_shop_close_controls_count')
+    await (await expectOne(closeControls.locator(':scope > summary'), 'workflow_shop_close_summary_count')).click()
+    const settlement = await expectOneVisible(closeControls.locator('details[data-close-settlement="matched"]'), 'workflow_shop_settlement_count')
+    const cashCount = await expectOneVisible(settlement.getByLabel('Cash counted', { exact: true }), 'workflow_shop_cash_counted_count')
+    if (await cashCount.inputValue() !== '41000') fail(`workflow_shop_cash_count_drift:${await cashCount.inputValue()}`)
+    checkpoints.push('matched_settlement_ready')
+
+    const closeButton = await expectOneVisible(closeControls.getByRole('button', { name: 'Review and save close', exact: true }), 'workflow_shop_review_close_count')
+    await confirmShopWorkflowAction(page, closeButton, 'daily_close', ['2 orders', '41,000 MMK', 'settlement matched'])
+    await expectOneVisible(closeControls.getByRole('button', { name: 'Today is closed', exact: true }), 'workflow_shop_closed_button_count')
+    const lastClose = await expectOneVisible(closeControls.locator('summary').filter({ hasText: 'Last close' }), 'workflow_shop_last_close_count')
+    const lastCloseText = await lastClose.innerText()
+    if (!lastCloseText.includes('2 orders') || !lastCloseText.includes('41,000 MMK')) fail('workflow_shop_saved_close_evidence_missing')
+    await lastClose.click()
+    await expectOneVisible(closeControls.getByRole('link', { name: 'Download close CSV', exact: true }), 'workflow_shop_close_export_count')
+    checkpoints.push('daily_close_saved')
+  } catch (error) {
+    failures.push(`workflow_exception:${error instanceof Error ? error.message : String(error)}`.slice(0, 500))
+  } finally {
+    await context.close()
+  }
+  if (consoleErrors.length) failures.push(`console_errors:${consoleErrors.length}`)
+  if (pageErrors.length) failures.push(`page_errors:${pageErrors.length}`)
+  if (externalRequests.length) failures.push(`external_requests:${externalRequests.length}`)
+  return {
+    workflowId: 'shop-counter-sale-daily-close',
+    viewport: viewport.id,
+    ok: failures.length === 0,
+    checkpoints,
+    failures,
+    consoleErrors,
+    pageErrors,
+    externalRequests,
+  }
+}
+
 const policySource = await readFile(policyPath, 'utf8')
 const policy = JSON.parse(policySource)
 validatePolicy(policy)
@@ -500,6 +640,7 @@ try {
       }
       if (scope === 'app' && !routeFilter && !viewportFilter) {
         workflowResults.push(await auditEcommerceShopOrderWorkflow(browser, server.baseUrl))
+        for (const viewport of policy.viewports) workflowResults.push(await auditShopSaleCloseWorkflow(browser, server.baseUrl, viewport))
       }
     } finally {
       await server.close()

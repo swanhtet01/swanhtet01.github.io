@@ -201,7 +201,7 @@ A product release is not ready because the build passes. It is ready only when t
 
 ## Immediate sequence
 
-1. Preserve the proven mobile Ecommerce-to-Shop request, accountable confirmation, and customer-tracking gate; add its desktop proof and seal Shop sale-to-fulfilment-to-close at both viewports.
+1. Preserve the proven mobile Ecommerce-to-Shop journey and the Shop sale-to-fulfilment-to-close journey at both viewports; add Ecommerce desktop proof without duplicating Shop authority.
 2. Seal Plant plan-to-output-to-quality-close and Website edit-to-responsive-preview-to-release-review at both viewports without increasing first-screen action density.
 3. Instrument the three CEO KPIs around the existing useful samples and first-value records, then run five moderated Shop/Plant sessions before expanding product scope.
 4. Prototype Blueprint as a no-write import preview over the existing client-preparation contract, using messy catalog and production fixtures; measure mapping accuracy, repair burden, and time to first value.

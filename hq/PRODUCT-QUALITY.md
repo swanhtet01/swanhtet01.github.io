@@ -5,7 +5,7 @@ Status: local candidate; production not verified by this report
 
 ## Current result
 
-`npm run qa:routes` passes the committed regression and usability policy across 14 public/app routes at 390 x 844 and 1280 x 900: 28 checks, zero horizontal overflow, zero unnamed visible actions, zero duplicate IDs, zero placeholder links, zero mobile touch targets below 44 px, zero console errors, zero page errors, zero external requests, and zero disclosure interaction failures. It also passes one mobile Ecommerce-to-Shop workflow gate with seven deterministic checkpoints: sample cart, pre-request no-write state, recoverable request receipt, source-locked Shop handoff, accountable stock review, confirmed Shop order, and reconciled customer tracking. `simplicityTargetsMet` is true, so the stricter `npm run qa:routes:strict` gate is now expected to pass.
+`npm run qa:routes` passes the committed regression and usability policy across 14 public/app routes at 390 x 844 and 1280 x 900: 28 checks, zero horizontal overflow, zero unnamed visible actions, zero duplicate IDs, zero placeholder links, zero mobile touch targets below 44 px, zero console errors, zero page errors, zero external requests, and zero disclosure interaction failures. It also passes three browser workflow gates with 27 deterministic checkpoints: the seven-step mobile Ecommerce-to-Shop journey plus the ten-step Shop counter-sale-to-daily-close journey at mobile and desktop. `simplicityTargetsMet` is true, so the stricter `npm run qa:routes:strict` gate is now expected to pass.
 
 This is a browser-local artifact check. It does not prove hosted persistence, production activation, payment execution, deployment identity, or production security readiness.
 
@@ -39,13 +39,14 @@ The regression ceiling stops action density from increasing. The lower target is
 - Closed native disclosure content is explicitly hidden at the author CSS layer, preventing component layout rules from exposing every advanced form at once.
 - Shop Orders now verifies that Daily tools, Order overview, and Appointments each start closed, open through their summary control, and close again.
 - Ecommerce now proves a rendered request can cross into Shop without an early order or stock write, bind the exact request and stock change to a named review, create one confirmed Shop order, and return the confirmed status to customer tracking.
+- Shop now proves a counter sale can reserve exact stock, enter the fulfilment queue, require payment reconciliation before completion, retain the completed record, match the settlement count, save an accountable daily close, and expose a reviewable close export at both viewports.
 
 ## Next product slice
 
-Open a useful sample workspace before asking a prospect to configure or import anything, then measure first value from sample entry and imported data. Ecommerce-to-Shop is now proven on mobile; preserve the newly sealed action-density ceilings while proving Shop sale-to-fulfilment, Plant plan-to-output, and Website edit-to-publish-preview at both viewports, then add the Ecommerce journey at desktop.
+Open a useful sample workspace before asking a prospect to configure or import anything, then measure first value from sample entry and imported data. Ecommerce-to-Shop is proven on mobile and Shop sale-to-close is proven at both viewports; preserve the action-density ceilings while proving Plant plan-to-output and Website edit-to-release-review at both viewports, then add the Ecommerce journey at desktop.
 
 After first-value proof, close managed persistence, tenant isolation, recovery rehearsal, and hosted activation gates. Do not add a fifth customer product or a component-framework migration while those production boundaries remain open.
 
 ## Reproduce
 
-Run `npm run qa:routes`. A full run includes the Ecommerce-to-Shop action journey; use `node tools/audit_product_routes.mjs --workflow` for that journey alone or `node tools/audit_product_routes.mjs --route <route-id> --viewport mobile --details` for one route. Set `SUPERMEGA_QA_BROWSER_PATH` only when Edge, Chrome, or Chromium is not in a supported system location. The runner uses Playwright Core and the installed system browser, starts one local static server at a time, launches one browser, blocks external requests, and writes no report unless an explicit unused `--out` path is supplied.
+Run `npm run qa:routes`. A full run includes all three action journeys; use `node tools/audit_product_routes.mjs --workflow` for the journeys alone or `node tools/audit_product_routes.mjs --route <route-id> --viewport mobile --details` for one route. Set `SUPERMEGA_QA_BROWSER_PATH` only when Edge, Chrome, or Chromium is not in a supported system location. The runner uses Playwright Core and the installed system browser, starts one local static server at a time, launches one browser, blocks external requests, and writes no report unless an explicit unused `--out` path is supplied.
