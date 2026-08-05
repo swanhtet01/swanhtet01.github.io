@@ -32,6 +32,13 @@ npm run database:supabase:packet -- --target-project-ref <NON_PRODUCTION_PROJECT
 npm run database:supabase:packet:verify -- .tmp\supermega-supabase-rehearsal-packet.json
 ```
 
+For an unpublished reviewed candidate, bind both commands to its current owner-review handoff receipt. This validates the exact candidate and current live/remote relationship; it does not approve a push, merge, deployment, provider mutation, or database write.
+
+```powershell
+npm run database:supabase:packet -- --target-project-ref <NON_PRODUCTION_PROJECT_REF> --release-handoff <SUPERMEGA-RELEASE-HANDOFF.json> --output .tmp\supermega-supabase-rehearsal-packet.json
+npm run database:supabase:packet:verify -- .tmp\supermega-supabase-rehearsal-packet.json --release-handoff <SUPERMEGA-RELEASE-HANDOFF.json>
+```
+
 The packet rejects the protected production ref and any checkout that differs from `origin/main`. It binds the target to schema v10, the exact reviewed commit, all eleven ordered migration hashes, the public browser quarantine hash and source-audit hash, the backup/restore evidence contract, and the read-only preflight command. It contains no credential, enables no write, and cannot apply a migration. Regenerate it after any migration, public-catalog audit, or release change.
 
 Supabase currently documents daily backups for Pro, Team, and Enterprise projects. Before the hosted rehearsal, confirm an actual backup exists for the source, record its non-secret identifier and time, and prove restoration to an isolated target. Physical backups do not preserve custom-role passwords, and database backups do not restore Storage objects; role-password recovery and private-object recovery therefore remain separate checks.

@@ -4,9 +4,14 @@ import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { dirname, extname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { RELEASE_HANDOFF_CONTRACT, verifyCurrentReleaseHandoff } from './prepare_release_handoff.mjs'
+
 const root = resolve(import.meta.dirname, '..')
+export const SUPABASE_REHEARSAL_CONTRACT = 'supermega.supabase-rehearsal-packet.v2'
 const projectRefPattern = /^[a-z0-9]{20}$/
 const commitPattern = /^[0-9a-f]{40}$/
+const digestPattern = /^sha256:[0-9a-f]{64}$/
+const branchPattern = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
 const expectedSchemaVersion = 10
 const expectedMigrationCount = 11
 const expectedFinalMigration = '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql'
@@ -83,10 +88,121 @@ function digestPacket(payload) {
   return `sha256:${sha256(JSON.stringify(payload))}`
 }
 
+export function originMainReleaseReview(releaseCommit) {
+  if (!commitPattern.test(releaseCommit || '')) fail('supabase_rehearsal_release_commit_invalid')
+  return {
+    mode: 'origin_main',
+    branch: 'main',
+    commit: releaseCommit,
+  }
+}
+
+export function candidateReleaseReviewFromReceipt(receipt) {
+  const candidate = receipt?.candidate
+  const nextAction = receipt?.nextAction
+  const authority = receipt?.authority
+  if (receipt?.ok !== true
+    || receipt?.contract !== RELEASE_HANDOFF_CONTRACT
+    || receipt?.mode !== 'owner_review_only'
+    || candidate?.clean !== true
+    || !branchPattern.test(candidate?.branch || '')
+    || !commitPattern.test(candidate?.commit || '')
+    || !digestPattern.test(receipt?.digest || '')
+    || !digestPattern.test(receipt?.packetDigest || '')
+    || !['unpublished', 'exact', 'different'].includes(receipt?.remoteCandidateState)
+    || !['owner_review_initial_branch_push', 'owner_review_fast_forward_branch_push'].includes(nextAction?.kind)
+    || (receipt?.remoteCandidateState === 'unpublished') !== (nextAction?.kind === 'owner_review_initial_branch_push')
+    || nextAction?.exactCommit !== candidate.commit
+    || nextAction?.forcePushAllowed !== false
+    || nextAction?.mergeIncluded !== false
+    || nextAction?.deploymentIncluded !== false
+    || authority?.pushApproved !== false
+    || authority?.mergeApproved !== false
+    || authority?.workflowDispatchApproved !== false
+    || authority?.deploymentApproved !== false
+    || authority?.domainChangeApproved !== false
+    || authority?.providerMutationApproved !== false
+    || authority?.remoteWritesPerformed !== false
+    || authority?.providerWritesPerformed !== false
+    || authority?.credentialValuesInspected !== false) {
+    fail('supabase_rehearsal_release_handoff_invalid')
+  }
+  return {
+    mode: 'owner_review_handoff',
+    branch: candidate.branch,
+    commit: candidate.commit,
+    handoffContract: RELEASE_HANDOFF_CONTRACT,
+    handoffFileDigest: receipt.digest,
+    handoffPacketDigest: receipt.packetDigest,
+    remoteCandidateState: receipt.remoteCandidateState,
+    nextAction: nextAction.kind,
+    pushApproved: false,
+    mergeApproved: false,
+    workflowDispatchApproved: false,
+    deploymentApproved: false,
+    domainChangeApproved: false,
+    providerMutationApproved: false,
+    remoteWritesPerformed: false,
+    providerWritesPerformed: false,
+    credentialValuesInspected: false,
+  }
+}
+
+function validateReleaseReview(review, releaseCommit) {
+  let canonical
+  if (review?.mode === 'origin_main') {
+    canonical = originMainReleaseReview(releaseCommit)
+  } else if (review?.mode === 'owner_review_handoff') {
+    if (!branchPattern.test(review.branch || '')
+      || review.commit !== releaseCommit
+      || review.handoffContract !== RELEASE_HANDOFF_CONTRACT
+      || !digestPattern.test(review.handoffFileDigest || '')
+      || !digestPattern.test(review.handoffPacketDigest || '')
+      || !['unpublished', 'exact', 'different'].includes(review.remoteCandidateState)
+      || !['owner_review_initial_branch_push', 'owner_review_fast_forward_branch_push'].includes(review.nextAction)
+      || (review.remoteCandidateState === 'unpublished') !== (review.nextAction === 'owner_review_initial_branch_push')
+      || review.pushApproved !== false
+      || review.mergeApproved !== false
+      || review.workflowDispatchApproved !== false
+      || review.deploymentApproved !== false
+      || review.domainChangeApproved !== false
+      || review.providerMutationApproved !== false
+      || review.remoteWritesPerformed !== false
+      || review.providerWritesPerformed !== false
+      || review.credentialValuesInspected !== false) {
+      fail('supabase_rehearsal_release_review_invalid')
+    }
+    canonical = {
+      mode: 'owner_review_handoff',
+      branch: review.branch,
+      commit: releaseCommit,
+      handoffContract: RELEASE_HANDOFF_CONTRACT,
+      handoffFileDigest: review.handoffFileDigest,
+      handoffPacketDigest: review.handoffPacketDigest,
+      remoteCandidateState: review.remoteCandidateState,
+      nextAction: review.nextAction,
+      pushApproved: false,
+      mergeApproved: false,
+      workflowDispatchApproved: false,
+      deploymentApproved: false,
+      domainChangeApproved: false,
+      providerMutationApproved: false,
+      remoteWritesPerformed: false,
+      providerWritesPerformed: false,
+      credentialValuesInspected: false,
+    }
+  } else {
+    fail('supabase_rehearsal_release_review_required')
+  }
+  if (JSON.stringify(review) !== JSON.stringify(canonical)) fail('supabase_rehearsal_release_review_invalid')
+  return canonical
+}
+
 export async function buildSupabaseRehearsalPacket({
   repositoryRoot = root,
   targetProjectRef,
   releaseCommit,
+  releaseReview,
   generatedAt = new Date().toISOString(),
 } = {}) {
   if (!projectRefPattern.test(targetProjectRef || '')) fail('supabase_rehearsal_target_ref_invalid')
@@ -100,16 +216,18 @@ export async function buildSupabaseRehearsalPacket({
   if (productionTargetStatus !== 'protected-unapproved') fail('supabase_rehearsal_production_guard_invalid')
   if (targetProjectRef === productionProjectRef) fail('supabase_rehearsal_target_is_production')
 
+  const reviewedRelease = validateReleaseReview(releaseReview, releaseCommit)
   const [migrations, browserQuarantine] = await Promise.all([
     migrationInventory(repositoryRoot),
     browserQuarantineInventory(repositoryRoot),
   ])
   const payload = {
-    contract: 'supermega.supabase-rehearsal-packet.v1',
+    contract: SUPABASE_REHEARSAL_CONTRACT,
     state: 'prepared-not-executed',
     generatedAt,
     release: {
       commit: releaseCommit,
+      review: reviewedRelease,
       schemaVersion: expectedSchemaVersion,
       migrationCount: migrations.length,
       migrations,
@@ -173,17 +291,22 @@ export async function buildSupabaseRehearsalPacket({
 export async function validateSupabaseRehearsalPacket(packet, {
   repositoryRoot = root,
   expectedReleaseCommit,
+  expectedReleaseReview,
 } = {}) {
-  if (!packet || packet.contract !== 'supermega.supabase-rehearsal-packet.v1') fail('supabase_rehearsal_packet_contract_invalid')
+  if (!packet || packet.contract !== SUPABASE_REHEARSAL_CONTRACT) fail('supabase_rehearsal_packet_contract_invalid')
   if (packet.state !== 'prepared-not-executed') fail('supabase_rehearsal_packet_state_invalid')
   if (expectedReleaseCommit && packet.release?.commit !== expectedReleaseCommit) fail('supabase_rehearsal_packet_release_stale')
   const expected = await buildSupabaseRehearsalPacket({
     repositoryRoot,
     targetProjectRef: packet.authority?.rehearsalProjectRef,
     releaseCommit: packet.release?.commit,
+    releaseReview: packet.release?.review,
     generatedAt: packet.generatedAt,
   })
   if (JSON.stringify(packet) !== JSON.stringify(expected)) fail('supabase_rehearsal_packet_evidence_stale')
+  if (expectedReleaseReview && JSON.stringify(packet.release.review) !== JSON.stringify(expectedReleaseReview)) {
+    fail('supabase_rehearsal_release_review_stale')
+  }
   const serialized = JSON.stringify(packet).toLowerCase()
   if (serialized.includes('postgresql://') || serialized.includes('postgres://') || serialized.includes('sb_secret_')) {
     fail('supabase_rehearsal_packet_contains_credential')
@@ -198,28 +321,47 @@ function git(repositoryRoot, ...args) {
   return execFileSync('git', ['-C', repositoryRoot, ...args], { encoding: 'utf8' }).trim()
 }
 
-function reviewedMainCommit(repositoryRoot) {
+function reviewedMainRelease(repositoryRoot) {
   if (git(repositoryRoot, 'status', '--porcelain')) fail('supabase_rehearsal_checkout_dirty')
   const head = git(repositoryRoot, 'rev-parse', 'HEAD')
   const main = git(repositoryRoot, 'rev-parse', 'origin/main')
   if (head !== main) fail('supabase_rehearsal_head_not_origin_main_fetch_first')
-  return head
+  return { commit: head, review: originMainReleaseReview(head) }
+}
+
+async function reviewedRelease(repositoryRoot, releaseHandoff) {
+  if (!releaseHandoff) return reviewedMainRelease(repositoryRoot)
+  if (git(repositoryRoot, 'status', '--porcelain')) fail('supabase_rehearsal_checkout_dirty')
+  const receipt = await verifyCurrentReleaseHandoff(resolve(releaseHandoff))
+  const review = candidateReleaseReviewFromReceipt(receipt)
+  if (git(repositoryRoot, 'rev-parse', 'HEAD') !== review.commit) fail('supabase_rehearsal_release_handoff_stale')
+  return { commit: review.commit, review }
 }
 
 function parseArguments(args) {
-  if (args[0] === '--verify' && args.length === 2) return { mode: 'verify', input: args[1] }
+  if (args[0] === '--verify') {
+    if (args.length === 2) return { mode: 'verify', input: args[1], releaseHandoff: null }
+    if (args.length === 4 && args[2] === '--release-handoff' && args[3]) {
+      return { mode: 'verify', input: args[1], releaseHandoff: args[3] }
+    }
+    fail('supabase_rehearsal_arguments_invalid')
+  }
   const values = new Map()
   for (let index = 0; index < args.length; index += 2) {
     if (!args[index]?.startsWith('--') || !args[index + 1]) fail('supabase_rehearsal_arguments_invalid')
     values.set(args[index], args[index + 1])
   }
-  if (values.size !== 2 || !values.has('--target-project-ref') || !values.has('--output')) {
+  if (![2, 3].includes(values.size)
+    || !values.has('--target-project-ref')
+    || !values.has('--output')
+    || (values.size === 3 && !values.has('--release-handoff'))) {
     fail('supabase_rehearsal_arguments_invalid')
   }
   return {
     mode: 'prepare',
     targetProjectRef: values.get('--target-project-ref'),
     output: values.get('--output'),
+    releaseHandoff: values.get('--release-handoff') || null,
   }
 }
 
@@ -243,18 +385,25 @@ function requireIgnoredOutput(repositoryRoot, destination) {
 
 async function main() {
   const command = parseArguments(process.argv.slice(2))
-  const releaseCommit = reviewedMainCommit(root)
   if (command.mode === 'verify') {
     const input = resolveOutput(root, command.input)
     requireIgnoredOutput(root, input)
-    const packet = await validateSupabaseRehearsalPacket(JSON.parse(await readFile(input, 'utf8')), {
-      expectedReleaseCommit: releaseCommit,
+    const source = JSON.parse(await readFile(input, 'utf8'))
+    if (source?.release?.review?.mode === 'owner_review_handoff' && !command.releaseHandoff) {
+      fail('supabase_rehearsal_release_handoff_required')
+    }
+    const release = await reviewedRelease(root, command.releaseHandoff)
+    const packet = await validateSupabaseRehearsalPacket(source, {
+      expectedReleaseCommit: release.commit,
+      expectedReleaseReview: release.review,
     })
     console.log(JSON.stringify({
       ok: true,
       contract: packet.contract,
       state: packet.state,
       targetProjectRef: packet.authority.rehearsalProjectRef,
+      releaseCommit: packet.release.commit,
+      releaseReviewMode: packet.release.review.mode,
       schemaVersion: packet.release.schemaVersion,
       migrationCount: packet.release.migrationCount,
       activationAllowed: false,
@@ -265,11 +414,13 @@ async function main() {
 
   const destination = resolveOutput(root, command.output)
   requireIgnoredOutput(root, destination)
+  const release = await reviewedRelease(root, command.releaseHandoff)
   const packet = await buildSupabaseRehearsalPacket({
     targetProjectRef: command.targetProjectRef,
-    releaseCommit,
+    releaseCommit: release.commit,
+    releaseReview: release.review,
   })
-  await validateSupabaseRehearsalPacket(packet, { expectedReleaseCommit: releaseCommit })
+  await validateSupabaseRehearsalPacket(packet, { expectedReleaseCommit: release.commit, expectedReleaseReview: release.review })
   await mkdir(dirname(destination), { recursive: true })
   const staged = resolve(dirname(destination), `.${randomUUID()}.tmp`)
   await writeFile(staged, `${JSON.stringify(packet, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
@@ -280,6 +431,8 @@ async function main() {
     state: packet.state,
     output: relative(root, destination).split(sep).join('/'),
     targetProjectRef: packet.authority.rehearsalProjectRef,
+    releaseCommit: packet.release.commit,
+    releaseReviewMode: packet.release.review.mode,
     schemaVersion: packet.release.schemaVersion,
     migrationCount: packet.release.migrationCount,
     activationAllowed: false,

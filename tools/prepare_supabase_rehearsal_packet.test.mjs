@@ -5,6 +5,8 @@ import test from 'node:test'
 
 import {
   buildSupabaseRehearsalPacket,
+  candidateReleaseReviewFromReceipt,
+  originMainReleaseReview,
   validateSupabaseRehearsalPacket,
 } from './prepare_supabase_rehearsal_packet.mjs'
 
@@ -12,6 +14,7 @@ const repositoryRoot = resolve(import.meta.dirname, '..')
 const targetProjectRef = 'abcdefghijklmnopqrst'
 const releaseCommit = 'a'.repeat(40)
 const generatedAt = '2026-08-03T00:00:00.000Z'
+const releaseReview = originMainReleaseReview(releaseCommit)
 
 test('builds an exact non-mutating v10 rehearsal packet', async () => {
   const manifest = JSON.parse(await readFile(resolve(repositoryRoot, 'package.json'), 'utf8'))
@@ -21,14 +24,16 @@ test('builds an exact non-mutating v10 rehearsal packet', async () => {
     repositoryRoot,
     targetProjectRef,
     releaseCommit,
+    releaseReview,
     generatedAt,
   })
   await validateSupabaseRehearsalPacket(packet, { repositoryRoot, expectedReleaseCommit: releaseCommit })
 
-  assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v1')
+  assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v2')
   assert.equal(packet.state, 'prepared-not-executed')
   assert.equal(packet.release.schemaVersion, 10)
   assert.equal(packet.release.migrationCount, 11)
+  assert.deepEqual(packet.release.review, releaseReview)
   assert.equal(packet.release.migrations.at(-1).name, '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql')
   assert.equal(packet.release.browserQuarantine.contract, 'supermega.public-browser-quarantine.v1')
   assert.equal(packet.release.browserQuarantine.scope, 'isolated-rehearsal-only')
@@ -59,6 +64,7 @@ test('rejects the protected production project', async () => {
       repositoryRoot,
       targetProjectRef: manifest.supermega.productionSupabaseProjectRef,
       releaseCommit,
+      releaseReview,
       generatedAt,
     }),
     /supabase_rehearsal_target_is_production/,
@@ -67,7 +73,7 @@ test('rejects the protected production project', async () => {
 
 test('rejects malformed target refs and stale evidence', async () => {
   await assert.rejects(
-    buildSupabaseRehearsalPacket({ repositoryRoot, targetProjectRef: 'not-a-ref', releaseCommit, generatedAt }),
+    buildSupabaseRehearsalPacket({ repositoryRoot, targetProjectRef: 'not-a-ref', releaseCommit, releaseReview, generatedAt }),
     /supabase_rehearsal_target_ref_invalid/,
   )
 
@@ -75,11 +81,64 @@ test('rejects malformed target refs and stale evidence', async () => {
     repositoryRoot,
     targetProjectRef,
     releaseCommit,
+    releaseReview,
     generatedAt,
   })
   packet.release.migrations[0].sha256 = '0'.repeat(64)
   await assert.rejects(
     validateSupabaseRehearsalPacket(packet, { repositoryRoot, expectedReleaseCommit: releaseCommit }),
     /supabase_rehearsal_packet_evidence_stale/,
+  )
+})
+
+test('binds an unpublished candidate only through an exact owner-review handoff receipt', async () => {
+  const receipt = {
+    ok: true,
+    contract: 'supermega.release-handoff.v2',
+    mode: 'owner_review_only',
+    digest: `sha256:${'1'.repeat(64)}`,
+    packetDigest: `sha256:${'2'.repeat(64)}`,
+    candidate: { branch: 'codex/reviewed-candidate', commit: releaseCommit, clean: true },
+    remoteCandidateState: 'unpublished',
+    nextAction: {
+      kind: 'owner_review_initial_branch_push',
+      exactCommit: releaseCommit,
+      forcePushAllowed: false,
+      mergeIncluded: false,
+      deploymentIncluded: false,
+    },
+    authority: {
+      pushApproved: false,
+      mergeApproved: false,
+      workflowDispatchApproved: false,
+      deploymentApproved: false,
+      domainChangeApproved: false,
+      providerMutationApproved: false,
+      remoteWritesPerformed: false,
+      providerWritesPerformed: false,
+      credentialValuesInspected: false,
+    },
+  }
+  const candidateReview = candidateReleaseReviewFromReceipt(receipt)
+  const packet = await buildSupabaseRehearsalPacket({
+    repositoryRoot,
+    targetProjectRef,
+    releaseCommit,
+    releaseReview: candidateReview,
+    generatedAt,
+  })
+  await validateSupabaseRehearsalPacket(packet, {
+    repositoryRoot,
+    expectedReleaseCommit: releaseCommit,
+    expectedReleaseReview: candidateReview,
+  })
+  assert.equal(packet.release.review.mode, 'owner_review_handoff')
+  assert.equal(packet.release.review.handoffPacketDigest, receipt.packetDigest)
+  assert.equal(packet.release.review.pushApproved, false)
+  assert.equal(packet.controls.externalMutationPerformed, false)
+
+  assert.throws(
+    () => candidateReleaseReviewFromReceipt({ ...receipt, authority: { ...receipt.authority, providerMutationApproved: true } }),
+    /supabase_rehearsal_release_handoff_invalid/,
   )
 })
