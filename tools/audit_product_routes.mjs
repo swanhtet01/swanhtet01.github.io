@@ -590,12 +590,14 @@ async function auditEcommerceShopOrderWorkflow(browser, baseUrl, viewport) {
     const sendRequest = await expectOneVisible(page.getByRole('button', { name: 'Send order request', exact: true }), 'workflow_send_request_count')
     if (!await sendRequest.isEnabled()) fail('workflow_send_request_disabled')
     await sendRequest.click()
-    await expectOneVisible(page.getByRole('heading', { name: 'Order request sent for Shop review', exact: true }), 'workflow_request_receipt_heading_count')
+    await expectOneVisible(page.getByRole('heading', { name: 'Request sent to Shop', exact: true }), 'workflow_request_receipt_heading_count')
     const requestReceipt = await expectOneVisible(page.locator('article').filter({ hasText: `Request for ${customer}` }), 'workflow_request_receipt_count')
     const requestReceiptText = await requestReceipt.innerText()
     const requestReference = requestReceiptText.match(/Reference (ECR-[A-F0-9-]+)/)?.[1]
     if (!requestReference) fail('workflow_request_reference_missing')
     if (!requestReceiptText.includes('Payment Cash') && !requestReceiptText.includes('Pay on pickup')) fail('workflow_payment_boundary_missing')
+    await (await expectOne(page.getByRole('button', { name: 'View request receipt', exact: true }), 'workflow_view_request_receipt_count')).click()
+    if (!await requestReceipt.evaluate((element) => element === document.activeElement)) fail('workflow_request_receipt_not_focused')
     checkpoints.push('recoverable_request_receipt')
 
     await (await expectOne(page.getByRole('button', { name: 'Open Shop operator review', exact: true }), 'workflow_open_shop_review_count')).click()

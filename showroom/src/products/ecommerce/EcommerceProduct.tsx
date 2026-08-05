@@ -934,6 +934,20 @@ export function EcommerceProduct() {
     addToCart(customerPreviewItems[0].sku)
   }
 
+  function focusCurrentRequestReceipt() {
+    const receipt = document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="true"]')
+    if (!receipt) {
+      prepareQuoteRecovery()
+      return
+    }
+    const workspace = document.getElementById('ecommerce-buying-workspace')
+    if (workspace instanceof HTMLDetailsElement) workspace.open = true
+    requestAnimationFrame(() => {
+      receipt.scrollIntoView({ block: 'center' })
+      receipt.focus({ preventScroll: true })
+    })
+  }
+
   function prepareCustomerFollowUpDraft() {
     if (!pendingManagedRequests.length) {
       if (!buyingReady) {
@@ -1599,7 +1613,7 @@ export function EcommerceProduct() {
           : pendingManagedRequests.length
             ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
             : customerRequestState === 'waiting_shop_review'
-              ? 'Order request sent for Shop review'
+              ? 'Request sent to Shop'
             : ecommerceActiveOrderCount
               ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
               : ecommerceTodayCartUnits
@@ -1614,9 +1628,9 @@ export function EcommerceProduct() {
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
         : customerRequestState === 'waiting_shop_review'
-          ? 'The customer sees a receipt. Shop operator review stays separate until stock, promise, payment, and delivery are confirmed.'
+          ? 'No charge or stock change happens until Shop confirms the order.'
         : ecommerceActiveOrderCount
-          ? 'Continue fulfilment from the Shop-owned order record; no duplicate order ledger is created here.'
+          ? 'Shop owns fulfilment for this order. The storefront stays ready for the next customer.'
           : managedIdentity
             ? 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
             : 'Add one sample item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.'
@@ -1633,7 +1647,7 @@ export function EcommerceProduct() {
             : customerRequestState === 'waiting_shop_review'
               ? 'View request receipt'
             : ecommerceActiveOrderCount
-              ? 'Continue in Shop'
+              ? 'Open Shop'
             : ecommerceTodayCartUnits
               ? 'Review checkout'
               : managedIdentity
@@ -1652,6 +1666,7 @@ export function EcommerceProduct() {
           ? `${ecommerceCompletedOrderCount} completed`
           : 'No order yet'],
   ] as const
+  const ecommerceTodayGuided = importNeeded || storefrontSetupRequired
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -1676,7 +1691,7 @@ export function EcommerceProduct() {
       return
     }
     if (customerRequestState === 'waiting_shop_review') {
-      prepareQuoteRecovery()
+      focusCurrentRequestReceipt()
       return
     }
     if (ecommerceActiveOrderCount) {
@@ -1705,19 +1720,21 @@ export function EcommerceProduct() {
         </div>
       </header>
 
-      <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-state={ecommerceTodayState}>
+      <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-density={ecommerceTodayGuided ? 'guided' : 'compact'} data-state={ecommerceTodayState}>
         <div className="ecommerce-today-priority">
           <span className="core-eyebrow">Start here</span>
           <h2 id="ecommerce-today-title">{ecommerceTodayHeadline}</h2>
           <p>{ecommerceTodaySummary}</p>
           <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
         </div>
-        <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
-          {ecommerceTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-        </div>
+        {ecommerceTodayGuided ? (
+          <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
+            {ecommerceTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+        ) : null}
         <div className="ecommerce-today-source" role="status">
           <span>{sourceLabel}</span>
-          <small>Shop keeps the real stock, payment, delivery, and order record behind this store.</small>
+          <small>Stock, payment, delivery, and the final order stay in Shop.</small>
         </div>
       </section>
 
