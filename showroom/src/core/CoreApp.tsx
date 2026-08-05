@@ -944,7 +944,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
         inventory: 'Count stock, replenish items, and review location availability.',
       }[commerceTab]
     : {
-        production: 'Choose jobs, record output, and keep material trace current.',
+        production: 'Plan jobs, record output, and track the materials each shift used.',
         control: 'Contain quality, equipment, downtime, and maintenance problems.',
       }[productionTab]
 
@@ -6984,6 +6984,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const outputJobSelectRef = useRef<HTMLSelectElement>(null)
   const outputTriggerRef = useRef<HTMLButtonElement | null>(null)
   const materialDisclosureRef = useRef<HTMLDetailsElement>(null)
+  const materialRefInputRef = useRef<HTMLInputElement>(null)
   const shiftCloseDisclosureRef = useRef<HTMLDetailsElement>(null)
   const openIssues = production.issues
     .filter((issue) => issue.status === 'open')
@@ -7370,7 +7371,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : plantTodayStep === 'problems'
         ? 'Clear shift blockers'
         : plantTodayStep === 'material'
-          ? 'Add material trace'
+          ? 'Record materials used'
           : plantTodayStep === 'shift-close'
             ? 'Close this shift'
             : plantTodayStep === 'plan'
@@ -7385,9 +7386,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : plantTodayStep === 'problems'
         ? `${shiftCloseProblemCount} quality or maintenance blocker${shiftCloseProblemCount === 1 ? '' : 's'} must be cleared before owner close.`
         : plantTodayStep === 'material'
-          ? `Good output is recorded for ${canonicalShiftRef}. Add one same-shift material record before owner close.`
+          ? `Good output is recorded for ${canonicalShiftRef}. Record the materials used in this shift before owner close.`
           : plantTodayStep === 'shift-close'
-            ? `${canonicalShiftRef} has output, material trace, and clear quality and maintenance gates. Prepare the accountable close.`
+            ? `${canonicalShiftRef} has output, materials used, and clear quality and maintenance gates. Prepare the accountable close.`
             : plantTodayStep === 'plan'
               ? 'No active production job is waiting. Add the next owned job and due time.'
               : currentShiftClose
@@ -7402,7 +7403,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       : plantTodayStep === 'problems'
         ? 'Review blockers'
         : plantTodayStep === 'material'
-          ? 'Add material trace'
+          ? 'Record materials used'
           : plantTodayStep === 'shift-close'
             ? 'Close shift'
             : plantTodayStep === 'plan'
@@ -7415,7 +7416,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Shift output', currentShiftHasOutput ? `${currentShiftOutput.goodUnits.toLocaleString()} good` : currentShiftClose ? `${(currentShiftClose.goodUnits ?? 0).toLocaleString()} closed` : 'Not started'],
     ['Problems & quality', openIssues.length + heldJobs.length ? `${openIssues.length + heldJobs.length} open` : 'Clear'],
     ['Maintenance', openWcmCount ? `${openWcmCount} open` : overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : 'Clear'],
-    ['Material trace', currentShiftMaterialEntries.length ? `${currentShiftMaterialEntries.length} records` : currentShiftClose ? `${currentShiftClose.materialEntryCount ?? 0} closed` : currentShiftHasOutput ? 'Next step' : 'Not started'],
+    ['Materials used', currentShiftMaterialEntries.length ? `${currentShiftMaterialEntries.length} records` : currentShiftClose ? `${currentShiftClose.materialEntryCount ?? 0} closed` : currentShiftHasOutput ? 'Next step' : 'Not started'],
     ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Not closed'],
   ] as const
   const plantTodaySource = managedIdentity
@@ -7537,7 +7538,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             const disclosure = materialDisclosureRef.current
             if (!disclosure) return
             disclosure.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            disclosure.querySelector<HTMLInputElement>('input[placeholder="RM-001 or Resin A"]')?.focus({ preventScroll: true })
+            materialRefInputRef.current?.focus({ preventScroll: true })
           })
         })
       }
@@ -7737,7 +7738,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         const disclosure = materialDisclosureRef.current
         if (!disclosure) return
         disclosure.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        disclosure.querySelector<HTMLInputElement>('input[placeholder="RM-001 or Resin A"]')?.focus({ preventScroll: true })
+        materialRefInputRef.current?.focus({ preventScroll: true })
       })
     })
   }
@@ -8769,8 +8770,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </section>
       <button aria-label="Close job output" className={`plant-output-backdrop${outputOpen ? ' is-open' : ''}`} onClick={closeJobOutput} type="button" />
       <section aria-labelledby="plant-output-title" aria-modal={outputOpen} className={`core-panel output-panel${outputOpen ? ' is-open' : ''}`} id="plant-output-panel" onKeyDown={handleOutputDialogKeyDown} ref={outputPanelRef} role="dialog">
-        <div className="plant-output-head"><div><span className="core-eyebrow">{materialGuideOpen ? 'Material trace' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Add material trace' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
-        <form autoComplete="off" className="core-form compact-form" id="plant-output-form" onSubmit={recordOutput}>
+        <div className="plant-output-head"><div><span className="core-eyebrow">{materialGuideOpen ? 'Materials used' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Record materials used' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
+        {!materialGuideOpen ? <form autoComplete="off" className="core-form compact-form" id="plant-output-form" onSubmit={recordOutput}>
           <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
           <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
@@ -8781,9 +8782,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             <button aria-describedby="plant-short-close-boundary" className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} onClick={(event) => closeSelectedJobShort(event.currentTarget)} type="button">Review short close</button>
           </div>
           <p className="panel-copy" id="plant-short-close-boundary">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only. Short close ends the selected job without changing its target, output, hold, inventory, costing, or accounting.</p>
-        </form>
+        </form> : null}
         <details className="compact-disclosure production-history" onToggle={(event) => setMaterialGuideOpen(event.currentTarget.open)} open={materialGuideOpen} ref={materialDisclosureRef}>
-          <summary>Material use <span>{materialEntries.length}</span></summary>
+          <summary>Materials used <span>{materialEntries.length}</span></summary>
           <form autoComplete="off" className="core-form compact-form" onSubmit={recordMaterialUse}>
             <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} onChange={(event) => setMaterialDraft((current) => ({ ...current, jobId: event.target.value }))} value={materialDraft.jobId}>
               {!materialDraft.jobId ? <option value="">Choose an active job</option> : null}
@@ -8791,7 +8792,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               {activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>)}
             </select></label>
             {materialJobIsStale ? <p className="form-notice" role="alert">The selected job {materialDraft.jobId} is no longer active. Your draft is preserved; choose another job before review.</p> : null}
-            <label>Material reference<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialRef: event.target.value }))} placeholder="RM-001 or Resin A" required value={materialDraft.materialRef} /></label>
+            <label>Material used<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialRef: event.target.value }))} placeholder="e.g. Resin A or RM-001" ref={materialRefInputRef} required value={materialDraft.materialRef} /></label>
             <label>Lot or batch (optional)<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialLot: event.target.value }))} placeholder="LOT-24" value={materialDraft.materialLot} /></label>
             <div className="form-row">
               <label>Quantity<input aria-describedby={materialQuantityError ? 'plant-material-quantity-error' : undefined} aria-invalid={materialQuantityError ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} min="0.001" onChange={(event) => setMaterialDraft((current) => ({ ...current, quantity: event.target.value }))} required step="0.001" type="number" value={materialDraft.quantity} /></label>
@@ -8805,15 +8806,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               setShiftRef(sampleShiftRef)
               setHandoffShiftRef(sampleShiftRef)
               setMaterialDraft((current) => ({ ...current, materialRef: 'RM-SAMPLE-01', materialLot: 'LOT-SAMPLE-01', quantity: '1', materialUnit: 'pcs' }))
-              setNotice('Sample material trace filled locally. Review and confirm it before any Plant record changes.')
-            }} type="button">Fill sample trace</button> : null}
-            <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob || !materialDraft.materialRef.trim() || materialDraft.materialRef.trim().length > 120 || materialDraft.materialLot.trim().length > 120 || !shiftRef.trim() || shiftRef.trim().length > 80 || parsedMaterialQuantity === null} type="submit">Review material use</button>
-            <p className="panel-copy">Creates one job-linked material-use record with up to three decimal places. It does not adjust raw-material inventory, purchasing, costing, accounting, or equipment.</p>
+              setNotice('Sample material details filled locally. Review and confirm them before any Plant record changes.')
+            }} type="button">Use sample material</button> : null}
+            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob || !materialDraft.materialRef.trim() || materialDraft.materialRef.trim().length > 120 || materialDraft.materialLot.trim().length > 120 || !shiftRef.trim() || shiftRef.trim().length > 80 || parsedMaterialQuantity === null} type="submit">Review material record</button>
+            <p className="panel-copy">Records one material and quantity against this job. Stock, purchasing, costing, accounting, and equipment stay unchanged.</p>
           </form>
           {recentMaterialEntries.length ? <div className="issue-list">{recentMaterialEntries.map((entry) => <article key={entry.actionId}>
             <span aria-hidden="true" className="issue-mark resolved">M</span>
             <div><strong>{entry.quantity?.toLocaleString(undefined, { maximumFractionDigits: 3 })} {entry.materialUnit} · {entry.materialRef}{entry.materialLot ? ` · lot ${entry.materialLot}` : ''}</strong><small style={wrappedIssueDetail}>{entry.subjectId} · {entry.shiftRef} · {formatIssueDue(entry.createdAt)} · {entry.actor}</small><small style={wrappedIssueDetail}>Evidence: {entry.evidenceReference} · Action: {entry.actionId}</small></div>
-          </article>)}</div> : <Empty>No material use is recorded yet.</Empty>}
+          </article>)}</div> : <Empty>No materials are recorded for this shift yet.</Empty>}
           {materialEntries.length > recentMaterialEntries.length ? <p className="panel-copy">Showing the latest {recentMaterialEntries.length} material entries. The complete attributed record remains in Plant record.</p> : null}
         </details>
       </section>

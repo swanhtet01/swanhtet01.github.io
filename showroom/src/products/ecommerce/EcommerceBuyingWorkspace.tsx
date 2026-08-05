@@ -63,6 +63,7 @@ type EcommerceBuyingWorkspaceProps = {
   currentCatalog: CommerceItem[]
   disabled: boolean
   onCartChange: (cart: EcommerceCartLine[]) => void
+  onContinueInShop: (requestId: string) => void
   onDraft: (draft: EcommerceShopDraftV2) => void
   onOpenManagedRequest?: (requestId: string) => void
   onOpenCancellation: (intent: EcommerceCancellationIntent) => void
@@ -132,6 +133,7 @@ export function EcommerceBuyingWorkspace({
   currentCatalog,
   disabled,
   onCartChange,
+  onContinueInShop,
   onDraft,
   onOpenManagedRequest,
   onOpenCancellation,
@@ -1285,6 +1287,7 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Promise</small><b>{latestRequestOrder.promisedAt ? new Date(latestRequestOrder.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not set'}</b></span>
               </div>
               <small>Request {latestRequest.id} · Shop recorded the order and stock reservation.</small>
+              <button className="core-button primary" disabled={disabled} onClick={() => onContinueInShop(latestRequest.id)} type="button">Continue in Shop</button>
               <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
             </article>
           ) : quoteCurrent ? (

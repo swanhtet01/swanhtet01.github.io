@@ -942,6 +942,7 @@ export function EcommerceProduct() {
     }
     const workspace = document.getElementById('ecommerce-buying-workspace')
     if (workspace instanceof HTMLDetailsElement) workspace.open = true
+    receipt.focus({ preventScroll: true })
     requestAnimationFrame(() => {
       receipt.scrollIntoView({ block: 'center' })
       receipt.focus({ preventScroll: true })
@@ -1971,10 +1972,13 @@ export function EcommerceProduct() {
         </div>
       </details>
 
-      <div aria-label="Storefront view" className="ecommerce-workspace-switch" role="group">
-        <button aria-controls="ecommerce-preview-panel" aria-pressed={workspaceView === 'preview'} onClick={() => showWorkspace('preview')} type="button">Store</button>
-        <button aria-controls="ecommerce-setup-panel" aria-pressed={workspaceView === 'setup'} onClick={() => showWorkspace('setup')} type="button">Edit store</button>
-      </div>
+      <label className="ecommerce-workspace-switch">
+        <span>View</span>
+        <select aria-controls={workspaceView === 'preview' ? 'ecommerce-preview-panel' : 'ecommerce-setup-panel'} aria-label="Storefront view" onChange={(event) => showWorkspace(event.target.value as 'setup' | 'preview')} value={workspaceView}>
+          <option value="preview">Store</option>
+          <option value="setup">Edit store</option>
+        </select>
+      </label>
 
       <div className="ecommerce-workspace" data-view={workspaceView}>
         <section className="core-panel ecommerce-setup" aria-busy={catalogHydrating || draftBusy} aria-labelledby="ecommerce-setup-title" id="ecommerce-setup-panel">
@@ -2107,10 +2111,13 @@ export function EcommerceProduct() {
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
             <div><span className="core-eyebrow">Store demo</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Shop the sample</h2></div>
-            <div className="segmented-control" role="group" aria-label="Preview size">
-              <button aria-pressed={device === 'phone'} onClick={() => setDevice('phone')} type="button">Phone</button>
-              <button aria-pressed={device === 'desktop'} onClick={() => setDevice('desktop')} type="button">Desktop</button>
-            </div>
+            <label className="ecommerce-preview-size">
+              <span>Preview</span>
+              <select aria-label="Preview size" onChange={(event) => setDevice(event.target.value as PreviewDevice)} value={device}>
+                <option value="phone">Phone</option>
+                <option value="desktop">Desktop</option>
+              </select>
+            </label>
           </div>
 
           {!buyingReady && !catalogHydrating ? (
@@ -2192,6 +2199,7 @@ export function EcommerceProduct() {
               currentCatalog={catalog.items}
               disabled={catalogHydrating}
               onCartChange={setBuyingCart}
+              onContinueInShop={(requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`)}
               onDraft={openShopDraft}
               onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`) : undefined}
               onOpenCancellation={(intent: EcommerceCancellationIntent) => navigate('/shop/?tab=orders', { state: { ecommerceCancellationIntent: intent } })}

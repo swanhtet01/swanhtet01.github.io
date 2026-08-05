@@ -597,6 +597,11 @@ async function auditEcommerceShopOrderWorkflow(browser, baseUrl, viewport) {
     if (!requestReference) fail('workflow_request_reference_missing')
     if (!requestReceiptText.includes('Payment Cash') && !requestReceiptText.includes('Pay on pickup')) fail('workflow_payment_boundary_missing')
     await (await expectOne(page.getByRole('button', { name: 'View request receipt', exact: true }), 'workflow_view_request_receipt_count')).click()
+    await page.waitForFunction(
+      () => document.querySelector('.ecommerce-quote-receipt[data-current="true"]') === document.activeElement,
+      undefined,
+      { timeout: 2_000 },
+    ).catch(() => null)
     if (!await requestReceipt.evaluate((element) => element === document.activeElement)) fail('workflow_request_receipt_not_focused')
     checkpoints.push('recoverable_request_receipt')
 
@@ -1025,13 +1030,15 @@ async function auditPlantPlanShiftCloseWorkflow(browser, baseUrl, viewport) {
     checkpoints.push('output_review_ready')
 
     await confirmPlantWorkflowAction(page, await expectOne(outputPanel.getByRole('button', { name: 'Review good output', exact: true }), 'workflow_plant_review_output_count'), 'record_output', [jobId, shiftReference, '0 good', '10 good'])
-    const materialDisclosure = await expectOneVisible(outputPanel.locator('details').filter({ hasText: 'Material use' }), 'workflow_plant_material_disclosure_count')
+    const materialDisclosure = await expectOneVisible(outputPanel.locator('details').filter({ hasText: 'Materials used' }), 'workflow_plant_material_disclosure_count')
     if (!(await job.innerText()).includes('10 good')) fail('workflow_plant_output_not_persisted')
+    if (await outputPanel.locator('#plant-output-form').count()) fail('workflow_plant_output_form_not_hidden_for_material_task')
+    if (await (await expectOne(outputPanel.getByRole('heading', { name: 'Record materials used', exact: true }), 'workflow_plant_material_heading_count')).innerText() !== 'Record materials used') fail('workflow_plant_material_heading_missing')
     checkpoints.push('good_output_recorded')
 
     await (await expectOne(materialDisclosure.locator('select').first(), 'workflow_plant_material_job_count')).selectOption(jobId)
-    await (await expectOneVisible(outputPanel.getByRole('button', { name: 'Fill sample trace', exact: true }), 'workflow_plant_fill_trace_count')).click()
-    await confirmPlantWorkflowAction(page, await expectOne(outputPanel.getByRole('button', { name: 'Review material use', exact: true }), 'workflow_plant_review_material_count'), 'record_material', [jobId, shiftReference, 'RM-SAMPLE-01', 'LOT-SAMPLE-01'])
+    await (await expectOneVisible(outputPanel.getByRole('button', { name: 'Use sample material', exact: true }), 'workflow_plant_fill_trace_count')).click()
+    await confirmPlantWorkflowAction(page, await expectOne(outputPanel.getByRole('button', { name: 'Review material record', exact: true }), 'workflow_plant_review_material_count'), 'record_material', [jobId, shiftReference, 'RM-SAMPLE-01', 'LOT-SAMPLE-01'])
     await outputPanel.waitFor({ state: 'hidden', timeout: 8_000 })
     checkpoints.push('same_shift_material_recorded')
 
