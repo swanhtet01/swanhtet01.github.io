@@ -47,6 +47,13 @@ company-wide UTC-day cost bound before provider I/O. Concurrent calls and retrie
 atomic budget; provider failures remain conservatively charged, while cache hits consume no new
 reservation. Hosted runtimes fail closed when the durable reservation store is unavailable.
 
+The response cache is not an authority store. Sign-in codes, operator sessions, missions, work
+orders, customer reviews, and internal evaluations use versioned `supermega_control_records` rows
+with tenant metadata plus append-only `supermega_control_transitions` evidence. Compatibility calls
+route only fixed control-key prefixes to that store; matching legacy rows in `supermega_ai_cache`
+are never read as authority. Apply `supabase/control-records-migration.sql` only after review. Its
+rollback fixture refuses to drop non-empty authority or transition tables.
+
 ## Workcells
 
 Workcells are the unit of recurring client value above connectors. Their tool plan is declared in
@@ -148,7 +155,7 @@ the `running` state plus the first dispatch timestamp through the same atomic tr
 cancellation, so only dispatch or cancellation can win and storage failure blocks model spend.
 A concurrent or lost-response retry hits
 the cycle runner's durable claim and either returns the saved result or reports the existing run.
-Queued evidence remains inside the service-role-only cache record until an explicit dispatch or
+Queued evidence remains inside the service-role-only control record until an explicit dispatch or
 cancel decision. Terminal dispatch and cancellation both scrub the raw input while preserving its
 fingerprints.
 Operator-recorded customer reviews are explicitly `operator_recorded_customer_review` with

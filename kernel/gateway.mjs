@@ -5,7 +5,7 @@
 // ONE file, not every caller. Every build agent, the Deal Desk, and the per-client operator
 // call complete() — never the Anthropic SDK directly.
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
 const API_URL = 'https://api.anthropic.com/v1/messages'
 const API_VERSION = '2023-06-01'
@@ -29,8 +29,34 @@ const FALLBACK = { deep: 'reason', reason: 'bulk', bulk: null }
 // span every instance. The store is imported lazily so memory-mode/dev with no deps still works.
 const ledger = new Map() // clientId -> { inTokens, outTokens, calls } (this instance, current process life)
 const cache = new Map() // cacheKey -> { ...out, _exp }
+const localSpendReservations = new Map() // reservationId -> fail-closed dispatch state
+const localSpendCaps = new Map() // tenant::window -> immutable server-owned cap
 const CACHE_TTL_MS = Number(process.env.SUPERMEGA_AI_CACHE_TTL_MS || 3_600_000) // 1h default; keys are tenant-scoped
-const DEFAULT_CAP_TOKENS = Number(process.env.SUPERMEGA_CLIENT_TOKEN_CAP || 150_000) // P0: free-tier cap (was 2M — 2M/mo kills margin at scale)
+const SPEND_RESERVATION_TTL_MS = Math.max(60_000, Number(process.env.SUPERMEGA_SPEND_RESERVATION_TTL_MS) || 900_000)
+const MAX_PROVIDER_REQUEST_BYTES = Math.min(262_144, Math.max(4_096, Number(process.env.SUPERMEGA_MAX_PROVIDER_REQUEST_BYTES) || 131_072))
+const PROVIDER_FRAMING_TOKEN_ALLOWANCE = 4_096
+const REQUIRE_DURABLE_SPEND = process.env.SUPERMEGA_REQUIRE_DURABLE_SPEND === undefined
+  ? process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL)
+  : String(process.env.SUPERMEGA_REQUIRE_DURABLE_SPEND) === '1'
+const RESPONSE_CACHE_PREFIX = 'ai-response:v2:'
+const RESPONSE_CACHE_POLICY_VERSION = 'gateway-policy:v1'
+const RESERVED_CONTROL_CACHE_PREFIXES = [
+  'agent-company:',
+  'agent-company-sign-in-code:',
+  'agent-company-operator-session:',
+  'company-mission-record:',
+  'company-work-order-record:',
+  'company-work-order-review-record:',
+  'company-work-order-evaluation:',
+  'ceo-outcome-operation:',
+  'ceo-outcome-evaluation:',
+  'ceo-outcome-delivery:',
+  'ceo-outcome-action:',
+]
+const PLATFORM_TENANT_ID = 'supermega-platform'
+const PLATFORM_PLAN = 'platform' // server-owned internal plan: requested tier honored, cap still enforced
+const configuredDefaultCap = Number(process.env.SUPERMEGA_CLIENT_TOKEN_CAP || 150_000)
+const DEFAULT_CAP_TOKENS = Number.isSafeInteger(configuredDefaultCap) && configuredDefaultCap > 0 ? configuredDefaultCap : 150_000
 
 // Company-wide admission budget. Every provider attempt reserves a conservative upper-bound before
 // network I/O, so concurrent tenants and retries cannot race past the daily ceiling. The environment
@@ -99,16 +125,21 @@ export async function resolvePlan(clientId) {
   return plan
 }
 
-// Pure policy: the tier + cap a tenant on `plan` actually gets, given what the caller asked for.
-// Free tenants are FORCED to bulk and caller-supplied capTokens overrides are rejected (the
-// default cap stands) — otherwise any client could hand itself Sonnet and an unlimited budget.
-// Paid plans keep their requested tier and may override the cap.
+// Pure policy: the tier and server-configured cap a tenant on `plan` actually gets. Requests cannot
+// raise or replace their own budget.
+function configuredPlanCap(plan) {
+  const envName = `SUPERMEGA_PLAN_CAP_${String(plan || FREE_PLAN).toUpperCase().replace(/[^A-Z0-9]/g, '_')}`
+  const configured = Number(process.env[envName])
+  return Number.isSafeInteger(configured) && configured > 0 ? configured : DEFAULT_CAP_TOKENS
+}
+
 export function policyFor(plan, { tier, capTokens } = {}) {
   const requested = tier && TIERS[tier] ? tier : 'reason'
   if (!plan || String(plan).toLowerCase() === FREE_PLAN) {
     return { plan: FREE_PLAN, tier: 'bulk', cap: DEFAULT_CAP_TOKENS, overridesRejected: Boolean((tier && tier !== 'bulk') || capTokens) }
   }
-  return { plan: String(plan).toLowerCase(), tier: requested, cap: Number(capTokens || DEFAULT_CAP_TOKENS), overridesRejected: false }
+  const normalizedPlan = String(plan).toLowerCase()
+  return { plan: normalizedPlan, tier: requested, cap: configuredPlanCap(normalizedPlan), overridesRejected: capTokens !== undefined }
 }
 
 // Persistent ledger/cache toggle. On by default; set SUPERMEGA_GATEWAY_PERSIST=0 to force pure in-memory.
@@ -192,10 +223,175 @@ function weightedUsageUnits(usage, tier) {
   return Math.max(0, Math.ceil(((Number(usage?.input_tokens) || 0) + (Number(usage?.output_tokens) || 0)) * weight))
 }
 
-function hash(str) {
-  let h = 5381
-  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0
-  return (h >>> 0).toString(36)
+function canonicalJson(value) {
+  const ancestors = new Set()
+  const normalize = (item, inArray = false) => {
+    if (item === null || typeof item === 'string' || typeof item === 'boolean') return item
+    if (typeof item === 'number') return Number.isFinite(item) ? item : null
+    if (typeof item === 'bigint') throw new TypeError('gateway_cache_context_not_json')
+    if (typeof item === 'undefined' || typeof item === 'function' || typeof item === 'symbol') return inArray ? null : undefined
+    if (typeof item?.toJSON === 'function') {
+      if (ancestors.has(item)) throw new TypeError('gateway_cache_context_circular')
+      ancestors.add(item)
+      const serialized = item.toJSON()
+      if (serialized === item) throw new TypeError('gateway_cache_context_circular')
+      const out = normalize(serialized, inArray)
+      ancestors.delete(item)
+      return out
+    }
+    if (ancestors.has(item)) throw new TypeError('gateway_cache_context_circular')
+    ancestors.add(item)
+    const out = Array.isArray(item)
+      ? item.map((entry) => normalize(entry, true))
+      : Object.fromEntries(Object.keys(item).sort().flatMap((key) => {
+        const normalized = normalize(item[key], false)
+        return normalized === undefined ? [] : [[key, normalized]]
+      }))
+    ancestors.delete(item)
+    return out
+  }
+  return JSON.stringify(normalize(value))
+}
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function effectiveMaxTokens(value, tier) {
+  if (value === undefined || value === null) return TIERS[tier].maxTokens
+  const tokens = Number(value)
+  if (!Number.isSafeInteger(tokens) || tokens <= 0 || tokens > TIERS[tier].maxTokens) throw new TypeError('gateway_invalid_max_tokens')
+  return tokens
+}
+
+// Bound the exact provider JSON envelope before dispatch. Twice the UTF-8 bytes plus a fixed framing
+// allowance is intentionally conservative for weighted-token budget enforcement.
+function reservationUnitsFor({ provider, system, messages, schema, tier, maxTokens }) {
+  if (!Array.isArray(messages) || messages.length > 64) throw new TypeError('gateway_invalid_messages')
+  const tierDef = TIERS[tier]
+  const tool = schema ? { name: 'emit', description: 'Return the result in this exact shape.', input_schema: schema } : null
+  const body = provider.name === 'openrouter'
+    ? {
+        model: tierDef.fallbackModel,
+        max_tokens: maxTokens,
+        messages: [...(system ? [{ role: 'system', content: system }] : []), ...messages.map((message) => ({ role: message.role, content: flattenContent(message.content) }))],
+        ...(tool ? { tools: [{ type: 'function', function: { name: 'emit', description: tool.description, parameters: tool.input_schema } }], tool_choice: { type: 'function', function: { name: 'emit' } } } : {}),
+      }
+    : {
+        model: tierDef.model,
+        max_tokens: maxTokens,
+        system,
+        messages,
+        ...(tool ? { tools: [tool], tool_choice: { type: 'tool', name: 'emit' } } : {}),
+      }
+  const requestBytes = Buffer.byteLength(canonicalJson(body), 'utf8')
+  if (requestBytes > MAX_PROVIDER_REQUEST_BYTES) throw new Error('gateway_request_too_large')
+  const inputUpperBound = requestBytes * 2 + PROVIDER_FRAMING_TOKEN_ALLOWANCE
+  const weighted = (inputUpperBound + maxTokens) * (TIER_COST_WEIGHTS[tier] || 1)
+  if (!Number.isSafeInteger(weighted) || weighted <= 0) throw new TypeError('gateway_invalid_reservation_units')
+  return weighted
+}
+
+function activeLocalReserved(clientId, window) {
+  let total = 0
+  for (const reservation of localSpendReservations.values()) {
+    if (reservation.clientId === clientId && reservation.window === window && ['reserved', 'dispatched', 'indeterminate'].includes(reservation.status)) total += reservation.reservedTokens
+  }
+  return total
+}
+
+function reserveLocalSpend({ reservationId, clientId, window, reservedTokens, cap, dispatchToken, context, expiresAt }) {
+  const capKey = `${clientId}::${window}`
+  const pinnedCap = localSpendCaps.get(capKey)
+  if (pinnedCap === undefined) localSpendCaps.set(capKey, cap)
+  else if (pinnedCap !== cap) return { accepted: false, reason: 'cap_mismatch', reservation_id: reservationId, durable: false, spend_total: usageFor(clientId).inTokens + usageFor(clientId).outTokens + activeLocalReserved(clientId, window) }
+  const existing = localSpendReservations.get(reservationId)
+  if (existing) {
+    const sameScope = existing.clientId === clientId && existing.window === window && existing.reservedTokens === reservedTokens && canonicalJson(existing.context || {}) === canonicalJson(context || {})
+    let accepted = false
+    let reason = 'reservation_exists'
+    if (sameScope && existing.status === 'reserved' && existing.dispatchToken === dispatchToken) {
+      accepted = true
+      reason = 'idempotent'
+    } else if (sameScope && existing.status === 'reserved' && Date.parse(existing.expiresAt) <= Date.now()) {
+      localSpendReservations.set(reservationId, { ...existing, dispatchToken, context, expiresAt })
+      accepted = true
+      reason = 'reservation_reclaimed'
+    } else if (sameScope && ['dispatched', 'indeterminate'].includes(existing.status)) reason = 'reconciliation_required'
+    else if (sameScope && existing.status === 'reserved') reason = 'reservation_in_progress'
+    return { accepted, reason, reservation_id: reservationId, status: existing.status, durable: false, spend_total: (usageFor(clientId).inTokens + usageFor(clientId).outTokens + activeLocalReserved(clientId, window)) }
+  }
+  const used = usageFor(clientId)
+  const spendTotal = used.inTokens + used.outTokens + activeLocalReserved(clientId, window)
+  if (cap > 0 && spendTotal + reservedTokens > cap) return { accepted: false, reason: 'cap_reached', reservation_id: reservationId, durable: false, spend_total: spendTotal, in_tokens: used.inTokens, out_tokens: used.outTokens, calls: used.calls }
+  localSpendReservations.set(reservationId, { clientId, window, reservedTokens, dispatchToken, context, expiresAt, status: 'reserved' })
+  return { accepted: true, reason: 'reserved', reservation_id: reservationId, status: 'reserved', durable: false, spend_total: spendTotal + reservedTokens, in_tokens: used.inTokens, out_tokens: used.outTokens, calls: used.calls, reserved_tokens: activeLocalReserved(clientId, window) }
+}
+
+function operationIdentity(value) {
+  if (value === undefined || value === null || value === '') return randomUUID()
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 160) throw new TypeError('gateway_invalid_operation_id')
+  return value.trim()
+}
+
+function explicitCacheHint(value) {
+  if (value === undefined || value === null || value === '') return ''
+  if (typeof value !== 'string') throw new TypeError('gateway_invalid_cache_key')
+  const hint = value.trim()
+  if (!hint) return ''
+  const normalized = hint.toLowerCase()
+  if (RESERVED_CONTROL_CACHE_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
+    throw new Error('gateway_reserved_cache_key')
+  }
+  return value
+}
+
+function tenantIdentity(value) {
+  if (value === undefined || value === null || value === '') return PLATFORM_TENANT_ID
+  if (typeof value !== 'string') throw new TypeError('gateway_invalid_client_id')
+  const tenant = value.trim()
+  if (!tenant || tenant.length > 200) throw new TypeError('gateway_invalid_client_id')
+  return tenant
+}
+
+function routeModel(provider, tier) {
+  const tierDef = TIERS[tier]
+  return provider.name === 'openrouter' ? tierDef.fallbackModel : tierDef.model
+}
+
+function responseCacheKey({
+  system,
+  messages,
+  clientId,
+  schema,
+  cacheHint,
+  maxTokens,
+  policy,
+  provider,
+  tier,
+  model,
+}) {
+  const context = {
+    version: 2,
+    tenant: clientId
+      ? { type: typeof clientId, id: clientId }
+      : { type: 'anonymous', id: '' },
+    policy: {
+      version: RESPONSE_CACHE_POLICY_VERSION,
+      plan: policy.plan,
+      requestedTier: policy.requestedTier,
+      effectiveTier: tier,
+    },
+    route: {
+      provider,
+      model,
+      maxTokens: maxTokens || TIERS[tier].maxTokens,
+    },
+    output: { schema: schema ?? null },
+    request: { system: system ?? '', messages: messages ?? [], cacheHint: cacheHint || null },
+    retention: { class: 'ephemeral-response', ttlMs: CACHE_TTL_MS },
+  }
+  return `${RESPONSE_CACHE_PREFIX}${sha256(canonicalJson(context))}`
 }
 
 // Strip assistant/system framing from client-supplied text before it reaches the model.
@@ -211,23 +407,57 @@ export function stripInjectionFrames(text) {
 
 // Ledger units are COST-WEIGHTED (bulk-equivalent) tokens: raw tokens × TIER_COST_WEIGHTS[tier].
 // This makes the monthly cap a spend ceiling — a Sonnet call burns 3x what the same Haiku call would.
-async function recordUsage(clientId, usage, tier) {
-  if (!clientId || !usage) return
+async function recordUsage(clientId, usage, tier, reservation = null) {
+  const usageComplete = usage
+    && Object.prototype.hasOwnProperty.call(usage, 'input_tokens')
+    && Object.prototype.hasOwnProperty.call(usage, 'output_tokens')
+  if (!clientId || !usageComplete) {
+    await markSpendIndeterminate(reservation)
+    return false
+  }
   const w = TIER_COST_WEIGHTS[tier] || 1
-  const inTokens = (usage.input_tokens || 0) * w
-  const outTokens = (usage.output_tokens || 0) * w
-  // Always update the fast in-memory ledger (synchronous source for usageFor()).
+  const rawIn = usage.input_tokens
+  const rawOut = usage.output_tokens
+  if (!Number.isSafeInteger(rawIn) || rawIn < 0 || !Number.isSafeInteger(rawOut) || rawOut < 0) {
+    await markSpendIndeterminate(reservation)
+    return false
+  }
+  const inTokens = rawIn * w
+  const outTokens = rawOut * w
+  if (!Number.isSafeInteger(inTokens) || !Number.isSafeInteger(outTokens)) {
+    await markSpendIndeterminate(reservation)
+    return false
+  }
+  if (reservation?.backend === 'local') {
+    const current = localSpendReservations.get(reservation.id)
+    if (!current || current.dispatchToken !== reservation.dispatchToken || !['dispatched', 'indeterminate'].includes(current.status) || inTokens + outTokens > reservation.reservedTokens) return false
+    localSpendReservations.set(reservation.id, { ...current, status: 'settled', inTokens, outTokens, calls: 1 })
+  } else {
+    // Settle the durable maximum reservation to actual usage. A failed settlement deliberately
+    // leaves the active maximum counted, so another request cannot spend the same capacity.
+    const store = await spine()
+    if (reservation?.backend === 'store' && store?.settleTokenSpend) {
+      let settled = null
+      for (let retry = 0; retry < 3; retry++) {
+        try {
+          settled = await store.settleTokenSpend(reservation.id, { inTokens, outTokens, calls: 1, dispatchToken: reservation.dispatchToken })
+          if (settled?.settled) break
+        } catch { /* retry the same idempotent settlement */ }
+        if (retry < 2) await sleep(25 * (retry + 1))
+      }
+      if (!settled?.settled) {
+        await markSpendIndeterminate(reservation)
+        return false
+      }
+    } else return false
+  }
+  // Update the fast local view only after settlement succeeds.
   const e = ledger.get(clientId) || { inTokens: 0, outTokens: 0, calls: 0 }
   e.inTokens += inTokens
   e.outTokens += outTokens
   e.calls += 1
   ledger.set(clientId, e)
-  // Best-effort persist to the spine so the cap survives cold starts / spans instances.
-  const store = await spine()
-  if (store?.addTokenUsage) {
-    try { await store.addTokenUsage(clientId, currentWindow(), { inTokens, outTokens, calls: 1 }) }
-    catch { /* never break a completed call on a ledger write */ }
-  }
+  return true
 }
 
 // Synchronous, in-memory view (this instance only). Kept for back-compat with existing callers.
@@ -250,10 +480,106 @@ export async function monthlyUsageFor(clientId) {
       const inTokens = Math.max(Number(r.in_tokens) || 0, Number(local.inTokens) || 0)
       const outTokens = Math.max(Number(r.out_tokens) || 0, Number(local.outTokens) || 0)
       const calls = Math.max(Number(r.calls) || 0, Number(local.calls) || 0)
-      return { inTokens, outTokens, calls, total: inTokens + outTokens, window, source: 'spine+local-max' }
+      const reservedTokens = Math.max(Number(r.reserved_tokens) || 0, 0)
+      return { inTokens, outTokens, calls, total: inTokens + outTokens, reservedTokens, spendTotal: inTokens + outTokens + reservedTokens, window, source: 'spine+local-max' }
     } catch { /* fall through to in-memory */ }
   }
-  return { ...local, total: local.inTokens + local.outTokens, window, source: 'memory' }
+  const reservedTokens = activeLocalReserved(clientId, window)
+  return { ...local, total: local.inTokens + local.outTokens, reservedTokens, spendTotal: local.inTokens + local.outTokens + reservedTokens, window, source: 'memory' }
+}
+
+async function reserveSpend({ reservationId, dispatchToken, context, clientId, window, reservedTokens, cap }) {
+  const store = await spine()
+  let result
+  const expiresAt = new Date(Date.now() + SPEND_RESERVATION_TTL_MS).toISOString()
+  try {
+    if (store?.reserveTokenSpend) {
+      result = await store.reserveTokenSpend(reservationId, clientId, window, {
+        reservedTokens,
+        capTokens: cap,
+        expiresAt,
+        dispatchToken,
+        context,
+      })
+    } else if (!PERSIST) {
+      result = reserveLocalSpend({ reservationId, clientId, window, reservedTokens, cap, dispatchToken, context, expiresAt })
+    } else {
+      throw new Error('reservation_store_missing')
+    }
+  } catch (cause) {
+    const error = new Error('gateway_spend_reservation_unavailable', { cause })
+    error.clientId = clientId
+    error.window = window
+    throw error
+  }
+  const reservation = { id: reservationId, dispatchToken, backend: store?.reserveTokenSpend ? 'store' : 'local', durable: Boolean(result?.durable), reservedTokens }
+  if (!result?.accepted) {
+    const message = result?.reason === 'cap_reached'
+      ? 'gateway_client_cap_reached'
+      : result?.reason === 'reconciliation_required'
+        ? 'gateway_spend_reconciliation_required'
+        : result?.reason === 'reservation_in_progress'
+          ? 'gateway_spend_reservation_in_progress'
+          : 'gateway_spend_reservation_rejected'
+    const error = new Error(message)
+    error.clientId = clientId
+    error.used = Number(result?.spend_total) || 0
+    error.cap = cap
+    error.window = window
+    error.reason = result?.reason || 'reservation_rejected'
+    throw error
+  }
+  if (REQUIRE_DURABLE_SPEND && !result.durable) {
+    await releaseSpendReservation(reservation)
+    const error = new Error('gateway_durable_spend_required')
+    error.clientId = clientId
+    error.window = window
+    throw error
+  }
+  return reservation
+}
+
+async function markSpendDispatched(reservation) {
+  if (!reservation) return false
+  if (reservation.backend === 'local') {
+    const current = localSpendReservations.get(reservation.id)
+    if (!current || current.dispatchToken !== reservation.dispatchToken || !['reserved', 'dispatched'].includes(current.status)) return false
+    if (current.status === 'reserved' && Date.parse(current.expiresAt) <= Date.now()) return false
+    if (current.status === 'reserved') localSpendReservations.set(reservation.id, { ...current, status: 'dispatched' })
+    return true
+  }
+  const store = await spine()
+  if (!store?.markTokenSpendDispatched) return false
+  try { return Boolean((await store.markTokenSpendDispatched(reservation.id, reservation.dispatchToken))?.changed) }
+  catch { return false }
+}
+
+async function markSpendIndeterminate(reservation) {
+  if (!reservation) return false
+  if (reservation.backend === 'local') {
+    const current = localSpendReservations.get(reservation.id)
+    if (!current || current.dispatchToken !== reservation.dispatchToken) return false
+    if (current.status === 'dispatched') localSpendReservations.set(reservation.id, { ...current, status: 'indeterminate' })
+    return current.status === 'dispatched' || current.status === 'indeterminate'
+  }
+  const store = await spine()
+  if (!store?.markTokenSpendIndeterminate) return false
+  try { return Boolean((await store.markTokenSpendIndeterminate(reservation.id, reservation.dispatchToken))?.changed) }
+  catch { return false }
+}
+
+async function releaseSpendReservation(reservation, { definitive = false } = {}) {
+  if (!reservation) return false
+  if (reservation.backend === 'local') {
+    const current = localSpendReservations.get(reservation.id)
+    if (!current || current.dispatchToken !== reservation.dispatchToken || current.status === 'indeterminate' || current.status === 'settled' || (current.status === 'dispatched' && !definitive)) return false
+    if (current.status !== 'released') localSpendReservations.set(reservation.id, { ...current, status: 'released' })
+    return true
+  }
+  const store = await spine()
+  if (!store?.releaseTokenSpend) return false
+  try { return Boolean((await store.releaseTokenSpend(reservation.id, { dispatchToken: reservation.dispatchToken, definitive }))?.released) }
+  catch { return false }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -432,8 +758,10 @@ const OPENROUTER = {
     })
     if (!res.ok) throw providerError('openrouter', res.status, await res.text().catch(() => ''))
     const json = await res.json()
-    const u = json.usage || {}
-    const usage = { input_tokens: u.prompt_tokens || 0, output_tokens: u.completion_tokens || 0 }
+    const u = json.usage
+    const usage = u && Object.prototype.hasOwnProperty.call(u, 'prompt_tokens') && Object.prototype.hasOwnProperty.call(u, 'completion_tokens')
+      ? { input_tokens: u.prompt_tokens, output_tokens: u.completion_tokens }
+      : null
     const msg = json.choices?.[0]?.message || {}
     if (tool) {
       const call = (msg.tool_calls || [])[0]
@@ -457,58 +785,73 @@ export function providerChain() {
  * @param {string}   o.system            system prompt
  * @param {Array}    o.messages          [{role, content}]
  * @param {string}   [o.tier='reason']   'bulk' | 'reason' | 'deep' — a REQUEST, not a right: free-plan tenants are forced to 'bulk' server-side
- * @param {string}   [o.clientId]        tenant id — enables server-side plan resolution + the per-tenant monthly cost cap + logging
+ * @param {string}   [o.clientId]        tenant id; omitted calls use the capped platform tenant
  * @param {object}   [o.schema]          JSON Schema -> forces validated structured output (tool-use)
- * @param {string}   [o.cacheKey]        explicit cache key; else derived from the request
+ * @param {string}   [o.cacheKey]        optional cache hint/salt; it never replaces the tenant-safe derived key
  * @param {number}   [o.maxTokens]       override the tier default
- * @param {number}   [o.capTokens]       override the monthly cap for THIS tenant (else DEFAULT_CAP_TOKENS) — REJECTED for free-plan tenants
+ * @param {number}   [o.capTokens]       deprecated caller override; always rejected
+ * @param {string}   [o.operationId]     stable caller operation id for fail-closed retry identity
  * @param {number}   [o.timeoutMs=45000]
  * @returns {Promise<{text?:string, data?:object, usage:object, model:string, tier:string}>}
  */
 export async function complete(o) {
-  const { system, messages, clientId, schema, maxTokens, timeoutMs = 45_000 } = o
+  const { system, messages, clientId: requestedClientId, schema, maxTokens, timeoutMs = 45_000 } = o
+  const clientId = tenantIdentity(requestedClientId)
+  const operationId = operationIdentity(o.operationId)
+  const operationHash = sha256(`${clientId}\0${operationId}`)
   let tier = o.tier && TIERS[o.tier] ? o.tier : 'reason'
+  let cachePolicy = { plan: 'unscoped', requestedTier: tier }
+  let spendCap = 0
+  let spendWindow = currentWindow()
 
   // Per-tenant monthly cost cap, enforced against the persisted ledger (survives cold starts /
   // spans instances). Over the hard cap → refuse. Over the soft threshold → downgrade to a cheaper
   // tier so the client stays under budget instead of being cut off mid-month.
   // The tenant's PLAN is resolved server-side first: free tenants are forced to the bulk (Haiku)
-  // tier and their capTokens override is rejected — tier/cap are never trusted from the caller.
+  // tier; spend caps come from server configuration, not the request.
   if (clientId) {
-    const plan = await resolvePlan(clientId)
+    // Internal calls without an explicit tenant are charged to the capped platform tenant. The
+    // platform tenant is server-owned: it keeps its requested tier (internal agents legitimately
+    // use reason/deep) but can never raise its server-configured cap.
+    const plan = clientId === PLATFORM_TENANT_ID ? PLATFORM_PLAN : await resolvePlan(clientId)
     const policy = policyFor(plan, { tier: o.tier, capTokens: o.capTokens })
     tier = policy.tier
-    const cap = policy.cap
+    cachePolicy = { plan: policy.plan, requestedTier: o.tier && TIERS[o.tier] ? o.tier : 'reason' }
+    spendCap = policy.cap
     const used = await monthlyUsageFor(clientId)
-    if (cap > 0 && used.total >= cap) {
-      const err = new Error('gateway_client_cap_reached')
-      err.clientId = clientId
-      err.used = used.total
-      err.cap = cap
-      err.window = used.window
-      throw err
-    }
+    spendWindow = used.window
     // Soft downgrade band (default: last 20% of the cap). One step down the tier ladder.
-    const softAt = cap > 0 ? cap * Number(process.env.SUPERMEGA_CLIENT_CAP_SOFT_RATIO || 0.8) : Infinity
-    if (used.total >= softAt && FALLBACK[tier]) tier = FALLBACK[tier]
+    const softAt = spendCap > 0 ? spendCap * Number(process.env.SUPERMEGA_CLIENT_CAP_SOFT_RATIO || 0.8) : Infinity
+    if (used.spendTotal >= softAt && FALLBACK[tier]) tier = FALLBACK[tier]
   }
 
-  // Tenant-scoped (clientId in the key) + TTL-bounded, so tenants never share a cached response and a
-  // stale entry can't live forever.
-  const key = o.cacheKey || hash(JSON.stringify({ system, messages, tier, schema: schema?.title || !!schema, clientId: clientId || '', maxTokens: boundedMaxTokens(maxTokens, tier) }))
+  const requestMaxTokens = effectiveMaxTokens(maxTokens, tier)
+
+  // A caller-supplied cacheKey is only a hashed hint. It can never become the storage key or collide
+  // with control records that currently share the backing table. The full request/schema plus the
+  // resolved tenant policy, provider/model route, and retention policy form the cache identity.
+  const cacheHint = explicitCacheHint(o.cacheKey)
+  const providers = providerChain()
+  if (!providers.length) throw new Error('gateway_missing_api_key')
   const nowMs = Date.now()
   const fresh = (v) => v && (!v._exp || nowMs < v._exp)
   const unwrap = (v) => { const { _exp, ...out } = v; return { ...out, cached: true } }
-  const memHit = cache.get(key)
-  if (fresh(memHit)) return unwrap(memHit)
-  if (memHit) cache.delete(key) // expired
-  // Shared cache: a hit on another instance still saves the spend.
   const store = await spine()
-  if (store?.getCachedResponse) {
-    try {
-      const hit = await store.getCachedResponse(key)
-      if (fresh(hit)) { cache.set(key, hit); return unwrap(hit) }
-    } catch { /* cache is best-effort; fall through to a live call */ }
+  for (const provider of providers) {
+    const key = responseCacheKey({
+      system, messages, clientId, schema, cacheHint, maxTokens: requestMaxTokens, policy: cachePolicy,
+      provider: provider.name, tier, model: routeModel(provider, tier),
+    })
+    const memHit = cache.get(key)
+    if (fresh(memHit)) return unwrap(memHit)
+    if (memHit) cache.delete(key) // expired
+    // Shared cache: a hit on another instance still saves the spend.
+    if (store?.getCachedResponse) {
+      try {
+        const hit = await store.getCachedResponse(key)
+        if (fresh(hit)) { cache.set(key, hit); return unwrap(hit) }
+      } catch { /* cache is best-effort; fall through to a live call */ }
+    }
   }
 
   // Structured output is done via forced tool-use, NOT JSON-from-text.
@@ -518,50 +861,113 @@ export async function complete(o) {
     : null
 
   const startTier = tier
-  const providers = providerChain()
-  if (!providers.length) throw new Error('gateway_missing_api_key')
 
   // Try each provider in turn (local when enabled, then paid failover). Provider-specific retry
   // ceilings apply; paid providers retain backoff and tier fallback while local inference attempts once.
   let lastErr
+  let attemptOrdinal = 0
   for (const provider of providers) {
     let curTier = startTier
     const maxAttempts = provider.maxAttempts || 4
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const tierDef = TIERS[curTier]
-      const attemptMaxTokens = boundedMaxTokens(maxTokens, curTier)
-      const reservation = await reserveProviderBudget({
-        system,
-        messages,
-        schema,
-        tier: curTier,
-        maxTokens: attemptMaxTokens,
-        clientId,
-        provider: provider.name,
-      })
+      const attemptMaxTokens = Math.min(requestMaxTokens, tierDef.maxTokens)
+      let spendReservation = null
+      attemptOrdinal += 1
+      if (clientId) {
+        try {
+          const reservationId = `spend:${sha256(`${operationHash}\0${attemptOrdinal}`)}`
+          const dispatchToken = randomUUID()
+          spendReservation = await reserveSpend({
+            reservationId,
+            dispatchToken,
+            context: {
+              operation_hash: operationHash,
+              request_hash: sha256(canonicalJson({ system, messages, schema, maxTokens: attemptMaxTokens })),
+              attempt: attemptOrdinal,
+              provider: provider.name,
+              model: routeModel(provider, curTier),
+              tier: curTier,
+            },
+            clientId,
+            window: spendWindow,
+            reservedTokens: reservationUnitsFor({ provider, system, messages, schema, tier: curTier, maxTokens: attemptMaxTokens }),
+            cap: spendCap,
+          })
+        } catch (error) {
+          if (lastErr && error?.message === 'gateway_client_cap_reached') {
+            const blocked = new Error('gateway_retry_blocked_by_reserved_spend', { cause: lastErr })
+            blocked.clientId = clientId
+            blocked.used = error.used
+            blocked.cap = error.cap
+            blocked.window = error.window
+            throw blocked
+          }
+          throw error
+        }
+      }
+      // Company-wide daily admission budget (fail closed) — reserved AFTER the tenant spend
+      // reservation so a tenant-cap rejection never consumes company budget. If the company
+      // budget refuses this attempt, the still-undispatched tenant reservation is released.
+      let budgetReservation = null
+      try {
+        budgetReservation = await reserveProviderBudget({
+          system,
+          messages,
+          schema,
+          tier: curTier,
+          maxTokens: attemptMaxTokens,
+          clientId,
+          provider: provider.name,
+        })
+      } catch (error) {
+        await releaseSpendReservation(spendReservation, { definitive: true })
+        throw error
+      }
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), timeoutMs)
       try {
+        if (!(await markSpendDispatched(spendReservation))) {
+          await releaseSpendReservation(spendReservation)
+          throw new Error('gateway_dispatch_state_unavailable')
+        }
         const r = await provider.call({ tierDef, system, messages, tool, maxTokens: attemptMaxTokens }, controller.signal)
         clearTimeout(timer)
-        await settleProviderBudget(reservation, 'consumed', weightedUsageUnits(r.usage, curTier))
-        await recordUsage(clientId, r.usage, curTier)
+        await settleProviderBudget(budgetReservation, 'consumed', weightedUsageUnits(r.usage, curTier))
+        budgetReservation = null
+        const spendSettled = await recordUsage(clientId, r.usage, curTier, spendReservation)
         const out = tool
           ? { data: r.data, usage: r.usage, model: r.model, tier: curTier, provider: provider.name }
           : { text: r.text, usage: r.usage, model: r.model, tier: curTier, provider: provider.name }
+        if (!spendSettled) {
+          return { ...out, spend: { status: 'reconciliation_required', reservationId: spendReservation.id } }
+        }
         const cached = { ...out, _exp: Date.now() + CACHE_TTL_MS }
+        const key = responseCacheKey({
+          system, messages, clientId, schema, cacheHint, maxTokens: attemptMaxTokens, policy: cachePolicy,
+          provider: provider.name, tier: curTier, model: r.model,
+        })
         cache.set(key, cached)
         if (store?.putCachedResponse) { try { await store.putCachedResponse(key, cached) } catch { /* best-effort */ } }
         return out
       } catch (err) {
         clearTimeout(timer)
-        await settleProviderBudget(reservation, 'failed', reservation.reservedUnits)
+        // Failed or ambiguous provider attempts stay conservatively charged to the daily company
+        // budget; only a successful call re-prices its reservation down to actual usage.
+        if (budgetReservation) await settleProviderBudget(budgetReservation, 'failed', budgetReservation.reservedUnits)
         lastErr = err
-        if (err.providerUnavailable) break
-        if (err.noKey) break // provider unusable → next provider
-        if (err.status === 401 || err.status === 403) break // this provider's auth is broken → next provider
-        // Other 4xx (bad request) is a request problem — failing over won't help.
-        if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) throw err
+        if (err.message === 'gateway_dispatch_state_unavailable') throw err
+        if (err.providerUnavailable) { await releaseSpendReservation(spendReservation, { definitive: true }); break } // provider unreachable before acceptance → next provider
+        if (err.noKey) { await releaseSpendReservation(spendReservation, { definitive: true }); break } // no provider dispatch
+        if (err.status === 401 || err.status === 403) { await releaseSpendReservation(spendReservation, { definitive: true }); break }
+        // Only explicit request-rejection statuses release capacity; 408 and unusual 4xx responses
+        // remain indeterminate because an intermediary may already have accepted the work.
+        if ([400, 404, 405, 413, 415, 422].includes(err.status)) {
+          await releaseSpendReservation(spendReservation, { definitive: true })
+          throw err
+        }
+        if (err.status === 429) await releaseSpendReservation(spendReservation, { definitive: true })
+        else await markSpendIndeterminate(spendReservation)
         if (attempt + 1 >= maxAttempts) break
         // Retriable (429 / 5xx / timeout / network): back off with jitter, drop a tier on a later try.
         await sleep(400 * (attempt + 1) ** 2 + Math.floor(Math.random() * 250))

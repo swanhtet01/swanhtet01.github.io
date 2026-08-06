@@ -4,7 +4,7 @@
 //  - 'memory'   : in-process maps, for dev with no credentials.
 // Reads real `supermega_leads`; pipeline lives in additive `supermega_console_*` tables. See ../PLATFORM.md.
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '')
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || ''
@@ -41,6 +41,20 @@ async function pg() {
   return pool
 }
 async function q(sql, params = []) { return (await (await pg()).query(sql, params)).rows || [] }
+async function tx(run) {
+  const client = await (await pg()).connect()
+  try {
+    await client.query('begin')
+    const result = await run(async (sql, params = []) => (await client.query(sql, params)).rows || [])
+    await client.query('commit')
+    return result
+  } catch (error) {
+    await client.query('rollback').catch(() => {})
+    throw error
+  } finally {
+    client.release()
+  }
+}
 let tablesReady
 async function ensurePgTables() {
   if (!tablesReady) tablesReady = q(`
@@ -49,7 +63,8 @@ async function ensurePgTables() {
     create table if not exists supermega_console_projects (id text primary key, client_id text, lead_id text, offer text, scope_summary text, price_mmk bigint, deposit_status text default 'unpaid', deposit_method text, status text default 'scoping', live_url text, created_at timestamptz default now());
     create table if not exists supermega_console_deals (id text primary key, lead_id text, project_id text, packet jsonb, status text default 'draft', created_at timestamptz default now());
     create table if not exists supermega_console_activity (id text primary key, at timestamptz default now(), kind text, summary text, ref text);
-    create table if not exists supermega_token_ledger (tenant_id text not null, "window" text not null, in_tokens bigint default 0, out_tokens bigint default 0, calls bigint default 0, updated_at timestamptz default now(), primary key (tenant_id, "window"));
+    create table if not exists supermega_token_ledger (tenant_id text not null, "window" text not null, cap_tokens bigint, in_tokens bigint default 0, out_tokens bigint default 0, calls bigint default 0, updated_at timestamptz default now(), primary key (tenant_id, "window"));
+    alter table supermega_token_ledger add column if not exists cap_tokens bigint;
     create table if not exists supermega_ai_budget_reservations (reservation_id text primary key, "window" text not null, reserved_units bigint not null check (reserved_units > 0), actual_units bigint, status text not null default 'reserved' check (status in ('reserved','consumed','failed','released')), tenant_id text, tier text, provider text, created_at timestamptz not null default now(), settled_at timestamptz);
     create index if not exists supermega_ai_budget_window_status_idx on supermega_ai_budget_reservations ("window", status);
     create or replace function public.supermega_reserve_ai_budget(
@@ -119,7 +134,153 @@ async function ensurePgTables() {
       where r."window" = p_window and r.status <> 'released'
     $supermega$;
     revoke all on function public.supermega_get_ai_budget_usage(text) from public;
+    create table if not exists supermega_spend_reservations (reservation_id text primary key, tenant_id text not null, "window" text not null, reserved_tokens bigint not null check (reserved_tokens > 0), status text not null default 'reserved' check (status in ('reserved','dispatched','indeterminate','settled','released')), dispatch_token text not null, context jsonb not null default '{}'::jsonb, actual_in_tokens bigint not null default 0, actual_out_tokens bigint not null default 0, actual_calls bigint not null default 0, reconciled_by text, reconciliation_evidence_hash text, reconciled_at timestamptz, expires_at timestamptz not null, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+    alter table supermega_spend_reservations add column if not exists dispatch_token text;
+    alter table supermega_spend_reservations add column if not exists context jsonb not null default '{}'::jsonb;
+    alter table supermega_spend_reservations add column if not exists reconciled_by text;
+    alter table supermega_spend_reservations add column if not exists reconciliation_evidence_hash text;
+    alter table supermega_spend_reservations add column if not exists reconciled_at timestamptz;
+    do $migration$
+    begin
+      if exists (select 1 from supermega_spend_reservations where status='active') then
+        raise exception 'legacy_active_reservations_require_reconciliation';
+      end if;
+      if exists (
+        select 1 from pg_constraint
+         where conrelid='supermega_spend_reservations'::regclass
+           and conname='supermega_spend_reservations_status_check'
+           and pg_get_constraintdef(oid) not like '%indeterminate%'
+      ) then
+        alter table supermega_spend_reservations drop constraint supermega_spend_reservations_status_check;
+      end if;
+      if not exists (
+        select 1 from pg_constraint
+         where conrelid='supermega_spend_reservations'::regclass
+           and conname='supermega_spend_reservations_status_check'
+           and pg_get_constraintdef(oid) like '%indeterminate%'
+      ) then
+        alter table supermega_spend_reservations alter column status set default 'reserved';
+        alter table supermega_spend_reservations add constraint supermega_spend_reservations_status_check check (status in ('reserved','dispatched','indeterminate','settled','released'));
+      end if;
+      update supermega_spend_reservations
+         set dispatch_token='legacy-terminal:' || md5(reservation_id)
+       where dispatch_token is null and status in ('settled','released');
+      if exists (select 1 from supermega_spend_reservations where dispatch_token is null) then
+        raise exception 'reservation_dispatch_token_reconciliation_required';
+      end if;
+      alter table supermega_spend_reservations alter column dispatch_token set not null;
+      if not exists (
+        select 1 from pg_constraint
+         where conrelid='supermega_spend_reservations'::regclass
+           and conname='supermega_spend_reservations_dispatch_token_check'
+      ) then
+        alter table supermega_spend_reservations add constraint supermega_spend_reservations_dispatch_token_check check (char_length(dispatch_token) between 1 and 160);
+      end if;
+      if not exists (
+        select 1 from pg_constraint
+         where conrelid='supermega_spend_reservations'::regclass
+           and conname='supermega_spend_reservations_reconciliation_check'
+      ) then
+        alter table supermega_spend_reservations add constraint supermega_spend_reservations_reconciliation_check check (
+          (reconciled_by is null and reconciliation_evidence_hash is null and reconciled_at is null)
+          or (char_length(reconciled_by) between 1 and 80 and reconciliation_evidence_hash ~ '^[a-f0-9]{64}$' and reconciled_at is not null)
+        );
+      end if;
+    end;
+    $migration$;
+    create index if not exists supermega_spend_reservations_active_idx on supermega_spend_reservations (tenant_id, "window", status);
     create table if not exists supermega_ai_cache (cache_key text primary key, payload jsonb not null, created_at timestamptz default now());
+    create table if not exists supermega_control_records (
+      record_key text primary key,
+      record_type text not null,
+      tenant_id text not null,
+      status text not null,
+      plan_hash text not null,
+      payload jsonb not null,
+      payload_hash text not null,
+      record_version bigint not null default 1 check (record_version >= 1),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint supermega_control_records_key_check check (char_length(record_key) between 1 and 240),
+      constraint supermega_control_records_type_check check (record_type in ('sign_in_code','operator_session','mission','work_order','work_order_review','work_order_evaluation','ceo_outcome_operation','ceo_outcome_evaluation','ceo_outcome_delivery','ceo_outcome_action')),
+      constraint supermega_control_records_tenant_check check (char_length(tenant_id) between 1 and 80),
+      constraint supermega_control_records_status_check check (status ~ '^[a-z][a-z_]{0,39}$'),
+      constraint supermega_control_records_plan_hash_check check (plan_hash ~ '^[a-f0-9]{64}$'),
+      constraint supermega_control_records_payload_hash_check check (payload_hash ~ '^[a-f0-9]{64}$')
+    );
+    create index if not exists supermega_control_records_tenant_type_status_idx on supermega_control_records (tenant_id, record_type, status, updated_at desc);
+    create table if not exists supermega_control_transitions (
+      transition_id bigint generated always as identity primary key,
+      record_key text not null references supermega_control_records(record_key) on delete restrict,
+      record_type text not null,
+      tenant_id text not null,
+      event_type text not null check (event_type in ('created','replaced','transitioned')),
+      from_status text,
+      to_status text not null,
+      from_record_version bigint,
+      to_record_version bigint not null,
+      prior_payload_hash text,
+      next_payload_hash text not null,
+      created_at timestamptz not null default now()
+    );
+    create unique index if not exists supermega_control_transitions_record_version_uidx on supermega_control_transitions (record_key, to_record_version);
+    create or replace function supermega_reject_control_transition_mutation()
+    returns trigger language plpgsql security definer set search_path = '' as $immutable$
+    begin raise exception 'control_transition_history_is_immutable'; end;
+    $immutable$;
+    drop trigger if exists supermega_control_transitions_immutable on supermega_control_transitions;
+    create trigger supermega_control_transitions_immutable before update or delete on supermega_control_transitions
+    for each row execute function supermega_reject_control_transition_mutation();
+    create or replace function supermega_put_control_record(
+      p_record_key text, p_record_type text, p_tenant_id text, p_status text,
+      p_plan_hash text, p_payload jsonb, p_payload_hash text
+    ) returns table (updated boolean, version bigint)
+    language plpgsql security definer set search_path = '' as $control$
+    declare existing public.supermega_control_records%rowtype; next_version bigint;
+    begin
+      select * into existing from public.supermega_control_records where record_key=p_record_key for update;
+      if not found then
+        insert into public.supermega_control_records (record_key,record_type,tenant_id,status,plan_hash,payload,payload_hash,record_version)
+        values (p_record_key,p_record_type,p_tenant_id,p_status,p_plan_hash,p_payload,p_payload_hash,1);
+        insert into public.supermega_control_transitions (record_key,record_type,tenant_id,event_type,to_status,to_record_version,next_payload_hash)
+        values (p_record_key,p_record_type,p_tenant_id,'created',p_status,1,p_payload_hash);
+        return query select true, 1::bigint;
+        return;
+      end if;
+      if existing.record_type<>p_record_type or existing.tenant_id<>p_tenant_id then
+        raise exception 'control_record_identity_conflict';
+      end if;
+      next_version := existing.record_version + 1;
+      update public.supermega_control_records set status=p_status,plan_hash=p_plan_hash,payload=p_payload,payload_hash=p_payload_hash,record_version=next_version,updated_at=now() where record_key=p_record_key;
+      insert into public.supermega_control_transitions (record_key,record_type,tenant_id,event_type,from_status,to_status,from_record_version,to_record_version,prior_payload_hash,next_payload_hash)
+      values (p_record_key,p_record_type,p_tenant_id,'replaced',existing.status,p_status,existing.record_version,next_version,existing.payload_hash,p_payload_hash);
+      return query select true, next_version;
+    end;
+    $control$;
+    create or replace function supermega_transition_control_record(
+      p_record_key text, p_expected_status text, p_expected_plan_hash text,
+      p_has_revision boolean, p_expected_revision bigint,
+      p_record_type text, p_tenant_id text, p_status text, p_plan_hash text,
+      p_payload jsonb, p_payload_hash text
+    ) returns table (updated boolean, version bigint)
+    language plpgsql security definer set search_path = '' as $control$
+    declare existing public.supermega_control_records%rowtype; next_version bigint;
+    begin
+      select * into existing from public.supermega_control_records
+       where record_key=p_record_key and status=p_expected_status and plan_hash=p_expected_plan_hash
+         and (not p_has_revision or payload->>'revision'=p_expected_revision::text)
+       for update;
+      if not found then return query select false, null::bigint; return; end if;
+      if existing.record_type<>p_record_type or existing.tenant_id<>p_tenant_id then
+        raise exception 'control_record_identity_conflict';
+      end if;
+      next_version := existing.record_version + 1;
+      update public.supermega_control_records set status=p_status,plan_hash=p_plan_hash,payload=p_payload,payload_hash=p_payload_hash,record_version=next_version,updated_at=now() where record_key=p_record_key;
+      insert into public.supermega_control_transitions (record_key,record_type,tenant_id,event_type,from_status,to_status,from_record_version,to_record_version,prior_payload_hash,next_payload_hash)
+      values (p_record_key,p_record_type,p_tenant_id,'transitioned',existing.status,p_status,existing.record_version,next_version,existing.payload_hash,p_payload_hash);
+      return query select true, next_version;
+    end;
+    $control$;
     create table if not exists supermega_action_queue (id text primary key, client_id text not null, action_type text not null, title text not null, payload jsonb not null, payload_hash text not null, source jsonb not null default '{}'::jsonb, status text not null default 'draft', version int not null default 0, approved_by text, approved_at timestamptz, rejected_by text, rejected_at timestamptz, executing_at timestamptz, lease_expires_at timestamptz, attempts int not null default 0, provider_ref text, result jsonb, last_error text, executed_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), constraint supermega_action_queue_status check (status in ('draft','approved','executing','succeeded','failed','rejected')));
     create table if not exists supermega_graduation (signature text primary key, label text, count int not null default 1, sources jsonb default '[]'::jsonb, modules jsonb default '[]'::jsonb, productized boolean not null default false, graduated_at timestamptz, updated_at timestamptz default now());
     create table if not exists supermega_build_modules (id text primary key, project_id text, signature text, modules jsonb default '[]'::jsonb, shipped_at timestamptz default now());
@@ -129,7 +290,7 @@ async function ensurePgTables() {
 }
 
 // ---------- in-memory fallback ----------
-const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), aiBudgetReservations: new Map(), aiCache: new Map(), approval: new Map(), graduation: new Map(), buildModules: new Map(), paymentEvents: new Set() }
+const mem = { lead: new Map(), client: new Map(), project: new Map(), deal: new Map(), activity: new Map(), tokenLedger: new Map(), spendReservation: new Map(), aiBudgetReservations: new Map(), aiCache: new Map(), controlRecords: new Map(), controlTransitions: [], approval: new Map(), graduation: new Map(), buildModules: new Map(), paymentEvents: new Set() }
 const memSort = (rows) => rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
 
 // ---------- leads (real supermega_leads) ----------
@@ -468,52 +629,97 @@ export async function listActivity(limit = 30, filter = {}) {
 // Backs gateway.mjs so per-client spend caps + caching survive cold starts / multiple instances.
 // memory mode keeps the same shape so nothing breaks locally without credentials.
 
-// Read one tenant's usage for a window (e.g. '2026-06'). Always returns a row shape.
-export async function getTokenUsage(tenantId, window) {
-  const empty = { tenant_id: tenantId, window, in_tokens: 0, out_tokens: 0, calls: 0 }
-  if (!tenantId || !window) return empty
-  if (mode === 'supabase') {
-    const r = await rest('GET', `supermega_token_ledger?tenant_id=eq.${encodeURIComponent(tenantId)}&window=eq.${encodeURIComponent(window)}&limit=1`)
-    return r[0] ? { ...empty, ...r[0] } : empty
+function spendSnapshot(row, reservedTokens = 0) {
+  const inTokens = Number(row?.in_tokens) || 0
+  const outTokens = Number(row?.out_tokens) || 0
+  const calls = Number(row?.calls) || 0
+  const reserved = Number(reservedTokens) || 0
+  return {
+    ...row,
+    cap_tokens: row?.cap_tokens === null || row?.cap_tokens === undefined ? null : Number(row.cap_tokens),
+    in_tokens: inTokens,
+    out_tokens: outTokens,
+    calls,
+    reserved_tokens: reserved,
+    committed_tokens: inTokens + outTokens,
+    spend_total: inTokens + outTokens + reserved,
   }
-  if (mode === 'postgres') {
-    await ensurePgTables()
-    const r = await q('select tenant_id, "window", in_tokens, out_tokens, calls from supermega_token_ledger where tenant_id=$1 and "window"=$2 limit 1', [tenantId, window])
-    return r[0] ? { ...empty, ...r[0] } : empty
-  }
-  return mem.tokenLedger.get(`${tenantId}::${window}`) || empty
 }
 
-// Atomically add spend to a tenant's window and return the new running totals.
-export async function addTokenUsage(tenantId, window, { inTokens = 0, outTokens = 0, calls = 1 } = {}) {
-  if (!tenantId || !window) return null
+function counter(value, name, { positive = false } = {}) {
+  const n = Number(value)
+  if (!Number.isSafeInteger(n) || n < (positive ? 1 : 0)) throw new TypeError(`invalid_${name}`)
+  return n
+}
+
+function reservationIdentity(reservationId, tenantId, window) {
+  const id = String(reservationId || '').trim()
+  const tenant = String(tenantId || '').trim()
+  const month = String(window || '').trim()
+  if (!id || id.length > 120) throw new TypeError('invalid_reservation_id')
+  if (!tenant || tenant.length > 200) throw new TypeError('invalid_tenant_id')
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new TypeError('invalid_usage_window')
+  return { id, tenant, month }
+}
+
+const ACTIVE_SPEND_STATUSES = new Set(['reserved', 'dispatched', 'indeterminate'])
+const ACTIVE_SPEND_SQL = "('reserved','dispatched','indeterminate')"
+
+function dispatchCredential(value) {
+  const token = String(value || '').trim()
+  if (!token || token.length > 160) throw new TypeError('invalid_dispatch_token')
+  return token
+}
+
+function safeReservationContext(value) {
+  if (value === undefined) return {}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('invalid_reservation_context')
+  const encoded = JSON.stringify(value)
+  if (encoded.length > 4096) throw new TypeError('invalid_reservation_context')
+  return JSON.parse(encoded)
+}
+
+function sameReservationContext(left, right) {
+  return JSON.stringify(left || {}) === JSON.stringify(right || {})
+}
+
+function memoryActiveReserved(tenantId, window) {
+  let total = 0
+  for (const row of mem.spendReservation.values()) {
+    if (row.tenant_id === tenantId && row.window === window && ACTIVE_SPEND_STATUSES.has(row.status)) total += row.reserved_tokens
+  }
+  return total
+}
+
+async function pgActiveReserved(query, tenantId, window) {
+  const rows = await query(`select coalesce(sum(reserved_tokens),0) as reserved_tokens from supermega_spend_reservations where tenant_id=$1 and "window"=$2 and status in ${ACTIVE_SPEND_SQL}`, [tenantId, window])
+  return Number(rows[0]?.reserved_tokens) || 0
+}
+
+// Read one tenant's committed and in-flight usage for a window (e.g. '2026-06').
+// spend_total is the cap-safe value: committed usage plus every active reservation.
+export async function getTokenUsage(tenantId, window) {
+  const empty = spendSnapshot({ tenant_id: tenantId, window, in_tokens: 0, out_tokens: 0, calls: 0 })
+  if (!tenantId || !window) return empty
   if (mode === 'supabase') {
-    // PostgREST has no native UPSERT-with-increment; read-modify-write (best-effort, monthly granularity).
-    const cur = await getTokenUsage(tenantId, window)
-    const row = { tenant_id: tenantId, window, in_tokens: Number(cur.in_tokens) + inTokens, out_tokens: Number(cur.out_tokens) + outTokens, calls: Number(cur.calls) + calls, updated_at: new Date().toISOString() }
-    const r = await rest('POST', 'supermega_token_ledger?on_conflict=tenant_id,window', row).catch(async () => rest('PATCH', `supermega_token_ledger?tenant_id=eq.${encodeURIComponent(tenantId)}&window=eq.${encodeURIComponent(window)}`, row))
-    return r?.[0] ? r[0] : row
+    const rows = await rest('POST', 'rpc/supermega_get_token_usage', { p_tenant_id: tenantId, p_window: window })
+    return rows?.[0] ? spendSnapshot({ ...empty, ...rows[0] }, rows[0].reserved_tokens) : empty
   }
   if (mode === 'postgres') {
     await ensurePgTables()
     const r = await q(
-      `insert into supermega_token_ledger (tenant_id, "window", in_tokens, out_tokens, calls, updated_at)
-       values ($1,$2,$3,$4,$5, now())
-       on conflict (tenant_id, "window") do update set
-         in_tokens = supermega_token_ledger.in_tokens + excluded.in_tokens,
-         out_tokens = supermega_token_ledger.out_tokens + excluded.out_tokens,
-         calls = supermega_token_ledger.calls + excluded.calls,
-         updated_at = now()
-       returning tenant_id, "window", in_tokens, out_tokens, calls`,
-      [tenantId, window, inTokens, outTokens, calls],
+      `select l.tenant_id, l."window", l.cap_tokens, l.in_tokens, l.out_tokens, l.calls,
+              coalesce(sum(r.reserved_tokens) filter (where r.status in ('reserved','dispatched','indeterminate')), 0) as reserved_tokens
+         from supermega_token_ledger l
+         left join supermega_spend_reservations r on r.tenant_id=l.tenant_id and r."window"=l."window"
+        where l.tenant_id=$1 and l."window"=$2
+        group by l.tenant_id, l."window", l.cap_tokens, l.in_tokens, l.out_tokens, l.calls
+        limit 1`,
+      [tenantId, window],
     )
-    return r[0] || null
+    return r[0] ? spendSnapshot({ ...empty, ...r[0] }, r[0].reserved_tokens) : empty
   }
-  const key = `${tenantId}::${window}`
-  const cur = mem.tokenLedger.get(key) || { tenant_id: tenantId, window, in_tokens: 0, out_tokens: 0, calls: 0 }
-  const next = { ...cur, in_tokens: cur.in_tokens + inTokens, out_tokens: cur.out_tokens + outTokens, calls: cur.calls + calls }
-  mem.tokenLedger.set(key, next)
-  return next
+  return spendSnapshot(mem.tokenLedger.get(`${tenantId}::${window}`) || empty, memoryActiveReserved(tenantId, window))
 }
 
 // ---------- company-wide daily AI admission budget ----------
@@ -703,9 +909,386 @@ export async function settleAiBudgetReservation(reservationIdInput, statusInput,
   }
 }
 
-// AI response cache (optional). Returns the stored payload or null.
-export async function getCachedResponse(cacheKey) {
+// Legacy post-dispatch increments bypass atomic admission and are intentionally disabled.
+export async function addTokenUsage() {
+  throw new Error('unreserved_token_usage_disabled')
+}
+
+// Reserve the maximum weighted units a model call can consume before any provider is contacted.
+// Every durable implementation serializes on the tenant/window ledger row. Active reservations are
+// deliberately not auto-expired: a crashed process must fail closed until an operator reconciles it.
+export async function reserveTokenSpend(reservationId, tenantId, window, { reservedTokens, capTokens, expiresAt, dispatchToken, context } = {}) {
+  const { id, tenant, month } = reservationIdentity(reservationId, tenantId, window)
+  const requested = counter(reservedTokens, 'reserved_tokens', { positive: true })
+  const cap = counter(capTokens, 'cap_tokens', { positive: true })
+  const token = dispatchCredential(dispatchToken)
+  const safeContext = safeReservationContext(context)
+  const expiry = new Date(expiresAt)
+  if (!Number.isFinite(expiry.getTime()) || expiry.getTime() <= Date.now()) throw new TypeError('invalid_reservation_expiry')
+
+  if (mode === 'supabase') {
+    const rows = await rest('POST', 'rpc/supermega_reserve_token_spend', {
+      p_reservation_id: id,
+      p_tenant_id: tenant,
+      p_window: month,
+      p_reserved_tokens: requested,
+      p_cap_tokens: cap,
+      p_expires_at: expiry.toISOString(),
+      p_dispatch_token: token,
+      p_context: safeContext,
+    })
+    return { ...(rows?.[0] || { accepted: false, reason: 'reservation_store_empty' }), durable: true }
+  }
+
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    return tx(async (query) => {
+      await query('insert into supermega_token_ledger (tenant_id, "window", cap_tokens) values ($1,$2,$3) on conflict do nothing', [tenant, month, cap])
+      let ledgerRow = (await query('select tenant_id, "window", cap_tokens, in_tokens, out_tokens, calls from supermega_token_ledger where tenant_id=$1 and "window"=$2 for update', [tenant, month]))[0]
+      if (ledgerRow.cap_tokens === null) ledgerRow = (await query('update supermega_token_ledger set cap_tokens=$3,updated_at=now() where tenant_id=$1 and "window"=$2 returning tenant_id,"window",cap_tokens,in_tokens,out_tokens,calls', [tenant, month, cap]))[0]
+      const existingRows = await query('select * from supermega_spend_reservations where reservation_id=$1', [id])
+      const existing = existingRows[0]
+      const active = await pgActiveReserved(query, tenant, month)
+      const snapshot = spendSnapshot(ledgerRow, active)
+      if (Number(ledgerRow.cap_tokens) !== cap) return { accepted: false, reason: 'cap_mismatch', reservation_id: id, status: 'rejected', ...snapshot, durable: true }
+      if (existing) {
+        const sameScope = existing.tenant_id === tenant && existing.window === month && Number(existing.reserved_tokens) === requested && sameReservationContext(existing.context, safeContext)
+        if (sameScope && existing.status === 'reserved' && existing.dispatch_token === token) return { accepted: true, reason: 'idempotent', reservation_id: id, status: existing.status, ...snapshot, durable: true }
+        if (sameScope && existing.status === 'reserved' && Date.parse(existing.expires_at) <= Date.now()) {
+          await query('update supermega_spend_reservations set dispatch_token=$2,context=$3::jsonb,expires_at=$4,updated_at=now() where reservation_id=$1', [id, token, JSON.stringify(safeContext), expiry.toISOString()])
+          return { accepted: true, reason: 'reservation_reclaimed', reservation_id: id, status: 'reserved', ...snapshot, durable: true }
+        }
+        const reason = sameScope && ['dispatched', 'indeterminate'].includes(existing.status)
+          ? 'reconciliation_required'
+          : sameScope && existing.status === 'reserved'
+            ? 'reservation_in_progress'
+            : 'reservation_exists'
+        return { accepted: false, reason, reservation_id: id, status: existing.status, ...snapshot, durable: true }
+      }
+      if (snapshot.spend_total + requested > cap) return { accepted: false, reason: 'cap_reached', reservation_id: id, status: 'rejected', ...snapshot, durable: true }
+      await query(
+        `insert into supermega_spend_reservations (reservation_id,tenant_id,"window",reserved_tokens,status,expires_at,dispatch_token,context) values ($1,$2,$3,$4,'reserved',$5,$6,$7::jsonb)`,
+        [id, tenant, month, requested, expiry.toISOString(), token, JSON.stringify(safeContext)],
+      )
+      return { accepted: true, reason: 'reserved', reservation_id: id, status: 'reserved', ...spendSnapshot(ledgerRow, active + requested), durable: true }
+    })
+  }
+
+  const ledgerKey = `${tenant}::${month}`
+  let ledgerRow = mem.tokenLedger.get(ledgerKey) || { tenant_id: tenant, window: month, cap_tokens: cap, in_tokens: 0, out_tokens: 0, calls: 0 }
+  if (ledgerRow.cap_tokens === null || ledgerRow.cap_tokens === undefined) ledgerRow = { ...ledgerRow, cap_tokens: cap }
+  mem.tokenLedger.set(ledgerKey, ledgerRow)
+  const existing = mem.spendReservation.get(id)
+  const active = memoryActiveReserved(tenant, month)
+  const snapshot = spendSnapshot(ledgerRow, active)
+  if (Number(ledgerRow.cap_tokens) !== cap) return { accepted: false, reason: 'cap_mismatch', reservation_id: id, status: 'rejected', ...snapshot, durable: false }
+  if (existing) {
+    const sameScope = existing.tenant_id === tenant && existing.window === month && existing.reserved_tokens === requested && sameReservationContext(existing.context, safeContext)
+    if (sameScope && existing.status === 'reserved' && existing.dispatch_token === token) return { accepted: true, reason: 'idempotent', reservation_id: id, status: existing.status, ...snapshot, durable: false }
+    if (sameScope && existing.status === 'reserved' && Date.parse(existing.expires_at) <= Date.now()) {
+      mem.spendReservation.set(id, { ...existing, dispatch_token: token, context: safeContext, expires_at: expiry.toISOString(), updated_at: new Date().toISOString() })
+      return { accepted: true, reason: 'reservation_reclaimed', reservation_id: id, status: 'reserved', ...snapshot, durable: false }
+    }
+    const reason = sameScope && ['dispatched', 'indeterminate'].includes(existing.status)
+      ? 'reconciliation_required'
+      : sameScope && existing.status === 'reserved'
+        ? 'reservation_in_progress'
+        : 'reservation_exists'
+    return { accepted: false, reason, reservation_id: id, status: existing.status, ...snapshot, durable: false }
+  }
+  if (snapshot.spend_total + requested > cap) return { accepted: false, reason: 'cap_reached', reservation_id: id, status: 'rejected', ...snapshot, durable: false }
+  mem.spendReservation.set(id, { reservation_id: id, tenant_id: tenant, window: month, reserved_tokens: requested, status: 'reserved', dispatch_token: token, context: safeContext, actual_in_tokens: 0, actual_out_tokens: 0, actual_calls: 0, expires_at: expiry.toISOString() })
+  return { accepted: true, reason: 'reserved', reservation_id: id, status: 'reserved', ...spendSnapshot(ledgerRow, active + requested), durable: false }
+}
+
+async function transitionTokenSpend(reservationId, dispatchToken, target) {
+  const id = String(reservationId || '').trim()
+  if (!id || id.length > 120) throw new TypeError('invalid_reservation_id')
+  const token = dispatchCredential(dispatchToken)
+  const rpc = target === 'dispatched' ? 'supermega_mark_token_spend_dispatched' : 'supermega_mark_token_spend_indeterminate'
+  if (mode === 'supabase') {
+    const rows = await rest('POST', `rpc/${rpc}`, { p_reservation_id: id, p_dispatch_token: token })
+    return { ...(rows?.[0] || { changed: false, reason: 'reservation_store_empty' }), durable: true }
+  }
+  const from = target === 'dispatched' ? 'reserved' : 'dispatched'
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    return tx(async (query) => {
+      const reservation = (await query('select * from supermega_spend_reservations where reservation_id=$1 for update', [id]))[0]
+      if (!reservation) return { changed: false, reason: 'reservation_not_found', reservation_id: id, durable: true }
+      if (reservation.dispatch_token !== token) return { changed: false, reason: 'dispatch_token_mismatch', reservation_id: id, status: reservation.status, durable: true }
+      if (reservation.status === target) return { changed: true, reason: 'idempotent', reservation_id: id, status: target, durable: true }
+      if (reservation.status !== from) return { changed: false, reason: 'invalid_reservation_state', reservation_id: id, status: reservation.status, durable: true }
+      if (target === 'dispatched' && Date.parse(reservation.expires_at) <= Date.now()) return { changed: false, reason: 'reservation_stale', reservation_id: id, status: reservation.status, durable: true }
+      await query('update supermega_spend_reservations set status=$2,updated_at=now() where reservation_id=$1', [id, target])
+      return { changed: true, reason: target, reservation_id: id, status: target, durable: true }
+    })
+  }
+  const reservation = mem.spendReservation.get(id)
+  if (!reservation) return { changed: false, reason: 'reservation_not_found', reservation_id: id, durable: false }
+  if (reservation.dispatch_token !== token) return { changed: false, reason: 'dispatch_token_mismatch', reservation_id: id, status: reservation.status, durable: false }
+  if (reservation.status === target) return { changed: true, reason: 'idempotent', reservation_id: id, status: target, durable: false }
+  if (reservation.status !== from) return { changed: false, reason: 'invalid_reservation_state', reservation_id: id, status: reservation.status, durable: false }
+  if (target === 'dispatched' && Date.parse(reservation.expires_at) <= Date.now()) return { changed: false, reason: 'reservation_stale', reservation_id: id, status: reservation.status, durable: false }
+  mem.spendReservation.set(id, { ...reservation, status: target, updated_at: new Date().toISOString() })
+  return { changed: true, reason: target, reservation_id: id, status: target, durable: false }
+}
+
+export async function markTokenSpendDispatched(reservationId, dispatchToken) {
+  return transitionTokenSpend(reservationId, dispatchToken, 'dispatched')
+}
+
+export async function markTokenSpendIndeterminate(reservationId, dispatchToken) {
+  return transitionTokenSpend(reservationId, dispatchToken, 'indeterminate')
+}
+
+// Settle exactly once. If the durable write fails, the active maximum reservation remains counted,
+// which over-counts safely instead of allowing a second request to spend the same budget.
+export async function settleTokenSpend(reservationId, { inTokens = 0, outTokens = 0, calls = 1, dispatchToken } = {}) {
+  const id = String(reservationId || '').trim()
+  if (!id || id.length > 120) throw new TypeError('invalid_reservation_id')
+  const token = dispatchCredential(dispatchToken)
+  const input = counter(inTokens, 'input_tokens')
+  const output = counter(outTokens, 'output_tokens')
+  const callCount = counter(calls, 'calls')
+
+  if (mode === 'supabase') {
+    const rows = await rest('POST', 'rpc/supermega_settle_token_spend', { p_reservation_id: id, p_dispatch_token: token, p_in_tokens: input, p_out_tokens: output, p_calls: callCount })
+    return { ...(rows?.[0] || { settled: false, reason: 'reservation_store_empty' }), durable: true }
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    return tx(async (query) => {
+      const identities = await query('select tenant_id, "window" from supermega_spend_reservations where reservation_id=$1', [id])
+      if (!identities[0]) return { settled: false, reason: 'reservation_not_found', reservation_id: id, durable: true }
+      const { tenant_id: tenant, window: month } = identities[0]
+      await query('insert into supermega_token_ledger (tenant_id, "window") values ($1,$2) on conflict do nothing', [tenant, month])
+      let ledgerRow = (await query('select tenant_id, "window", cap_tokens, in_tokens, out_tokens, calls from supermega_token_ledger where tenant_id=$1 and "window"=$2 for update', [tenant, month]))[0]
+      const reservation = (await query('select * from supermega_spend_reservations where reservation_id=$1 for update', [id]))[0]
+      const snapshot = async () => spendSnapshot(ledgerRow, await pgActiveReserved(query, tenant, month))
+      if (reservation.dispatch_token !== token) return { settled: false, reason: 'dispatch_token_mismatch', reservation_id: id, status: reservation.status, ...(await snapshot()), durable: true }
+      if (reservation.status === 'released') {
+        return { settled: false, reason: 'reservation_released', reservation_id: id, status: reservation.status, ...(await snapshot()), durable: true }
+      }
+      if (reservation.status === 'settled' && (Number(reservation.actual_in_tokens) !== input || Number(reservation.actual_out_tokens) !== output || Number(reservation.actual_calls) !== callCount)) {
+        return { settled: false, reason: 'settlement_conflict', reservation_id: id, status: reservation.status, ...(await snapshot()), durable: true }
+      }
+      if (reservation.status === 'reserved') return { settled: false, reason: 'reservation_not_dispatched', reservation_id: id, status: reservation.status, ...(await snapshot()), durable: true }
+      if (ACTIVE_SPEND_STATUSES.has(reservation.status) && input + output > Number(reservation.reserved_tokens)) {
+        return { settled: false, reason: 'actual_exceeds_reservation', reservation_id: id, status: reservation.status, ...(await snapshot()), durable: true }
+      }
+      const settleable = reservation.status === 'dispatched' || reservation.status === 'indeterminate'
+      if (settleable) {
+        ledgerRow = (await query(
+          `update supermega_token_ledger set in_tokens=in_tokens+$3, out_tokens=out_tokens+$4, calls=calls+$5, updated_at=now() where tenant_id=$1 and "window"=$2 returning tenant_id,"window",cap_tokens,in_tokens,out_tokens,calls`,
+          [tenant, month, input, output, callCount],
+        ))[0]
+        await query(`update supermega_spend_reservations set status='settled',actual_in_tokens=$2,actual_out_tokens=$3,actual_calls=$4,updated_at=now() where reservation_id=$1`, [id, input, output, callCount])
+      }
+      return { settled: reservation.status === 'settled' || settleable, reason: settleable ? 'settled' : 'idempotent', reservation_id: id, status: 'settled', ...(await snapshot()), durable: true }
+    })
+  }
+
+  const reservation = mem.spendReservation.get(id)
+  if (!reservation) return { settled: false, reason: 'reservation_not_found', reservation_id: id, durable: false }
+  const ledgerKey = `${reservation.tenant_id}::${reservation.window}`
+  let ledgerRow = mem.tokenLedger.get(ledgerKey) || { tenant_id: reservation.tenant_id, window: reservation.window, in_tokens: 0, out_tokens: 0, calls: 0 }
+  if (reservation.dispatch_token !== token) return { settled: false, reason: 'dispatch_token_mismatch', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (reservation.status === 'released') return { settled: false, reason: 'reservation_released', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (reservation.status === 'settled' && (reservation.actual_in_tokens !== input || reservation.actual_out_tokens !== output || reservation.actual_calls !== callCount)) return { settled: false, reason: 'settlement_conflict', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (reservation.status === 'reserved') return { settled: false, reason: 'reservation_not_dispatched', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (ACTIVE_SPEND_STATUSES.has(reservation.status) && input + output > reservation.reserved_tokens) return { settled: false, reason: 'actual_exceeds_reservation', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  const settleable = reservation.status === 'dispatched' || reservation.status === 'indeterminate'
+  if (settleable) {
+    ledgerRow = { ...ledgerRow, in_tokens: ledgerRow.in_tokens + input, out_tokens: ledgerRow.out_tokens + output, calls: ledgerRow.calls + callCount }
+    mem.tokenLedger.set(ledgerKey, ledgerRow)
+    mem.spendReservation.set(id, { ...reservation, status: 'settled', actual_in_tokens: input, actual_out_tokens: output, actual_calls: callCount })
+  }
+  return { settled: reservation.status === 'settled' || settleable, reason: settleable ? 'settled' : 'idempotent', reservation_id: id, status: 'settled', ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+}
+
+export async function releaseTokenSpend(reservationId, { dispatchToken, definitive = false } = {}) {
+  const id = String(reservationId || '').trim()
+  if (!id || id.length > 120) throw new TypeError('invalid_reservation_id')
+  const token = dispatchCredential(dispatchToken)
+  if (mode === 'supabase') {
+    const rows = await rest('POST', 'rpc/supermega_release_token_spend', { p_reservation_id: id, p_dispatch_token: token, p_definitive: Boolean(definitive) })
+    return { ...(rows?.[0] || { released: false, reason: 'reservation_store_empty' }), durable: true }
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    return tx(async (query) => {
+      const identities = await query('select tenant_id, "window" from supermega_spend_reservations where reservation_id=$1', [id])
+      if (!identities[0]) return { released: false, reason: 'reservation_not_found', reservation_id: id, durable: true }
+      const { tenant_id: tenant, window: month } = identities[0]
+      await query('insert into supermega_token_ledger (tenant_id, "window") values ($1,$2) on conflict do nothing', [tenant, month])
+      const ledgerRow = (await query('select tenant_id, "window", cap_tokens, in_tokens, out_tokens, calls from supermega_token_ledger where tenant_id=$1 and "window"=$2 for update', [tenant, month]))[0]
+      const reservation = (await query('select * from supermega_spend_reservations where reservation_id=$1 for update', [id]))[0]
+      const snapshot = async () => spendSnapshot(ledgerRow, await pgActiveReserved(query, tenant, month))
+      if (reservation.dispatch_token !== token) return { released: false, reason: 'dispatch_token_mismatch', reservation_id: id, status: reservation.status, ...(await snapshot()), durable: true }
+      if (reservation.status === 'settled') {
+        return { released: false, reason: 'reservation_settled', reservation_id: id, status: reservation.status, ...(await snapshot()), durable: true }
+      }
+      if (reservation.status === 'indeterminate') return { released: false, reason: 'reservation_indeterminate', reservation_id: id, status: reservation.status, ...(await snapshot()), durable: true }
+      if (reservation.status === 'dispatched' && !definitive) return { released: false, reason: 'dispatch_not_definitive', reservation_id: id, status: reservation.status, ...(await snapshot()), durable: true }
+      const releasable = reservation.status === 'reserved' || reservation.status === 'dispatched'
+      if (releasable) await query(`update supermega_spend_reservations set status='released',updated_at=now() where reservation_id=$1`, [id])
+      return { released: reservation.status === 'released' || releasable, reason: releasable ? 'released' : 'idempotent', reservation_id: id, status: 'released', ...(await snapshot()), durable: true }
+    })
+  }
+  const reservation = mem.spendReservation.get(id)
+  if (!reservation) return { released: false, reason: 'reservation_not_found', reservation_id: id, durable: false }
+  const ledgerRow = mem.tokenLedger.get(`${reservation.tenant_id}::${reservation.window}`) || { tenant_id: reservation.tenant_id, window: reservation.window, in_tokens: 0, out_tokens: 0, calls: 0 }
+  if (reservation.dispatch_token !== token) return { released: false, reason: 'dispatch_token_mismatch', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (reservation.status === 'settled') return { released: false, reason: 'reservation_settled', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (reservation.status === 'indeterminate') return { released: false, reason: 'reservation_indeterminate', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (reservation.status === 'dispatched' && !definitive) return { released: false, reason: 'dispatch_not_definitive', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  const releasable = reservation.status === 'reserved' || reservation.status === 'dispatched'
+  if (releasable) mem.spendReservation.set(id, { ...reservation, status: 'released' })
+  return { released: reservation.status === 'released' || releasable, reason: releasable ? 'released' : 'idempotent', reservation_id: id, status: 'released', ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+}
+
+// Privileged operator recovery for a provider outcome proven outside the request process. This is
+// intentionally separate from dispatch credentials and requires a hash of reviewed evidence.
+export async function reconcileTokenSpend(reservationId, { action, inTokens = 0, outTokens = 0, calls = 0, actor, evidenceHash } = {}) {
+  const id = String(reservationId || '').trim()
+  if (!id || id.length > 120) throw new TypeError('invalid_reservation_id')
+  const resolution = String(action || '').trim().toLowerCase()
+  if (!['settle', 'release'].includes(resolution)) throw new TypeError('invalid_reconciliation_action')
+  const reconciledBy = String(actor || '').trim()
+  if (!reconciledBy || reconciledBy.length > 80) throw new TypeError('invalid_reconciliation_actor')
+  const proof = String(evidenceHash || '').trim().toLowerCase()
+  if (!/^[a-f0-9]{64}$/.test(proof)) throw new TypeError('invalid_reconciliation_evidence_hash')
+  const input = counter(inTokens, 'input_tokens')
+  const output = counter(outTokens, 'output_tokens')
+  const callCount = counter(calls, 'calls')
+  if (resolution === 'release' && (input !== 0 || output !== 0 || callCount !== 0)) throw new TypeError('invalid_release_reconciliation_usage')
+
+  if (mode === 'supabase') {
+    const rows = await rest('POST', 'rpc/supermega_reconcile_token_spend', {
+      p_reservation_id: id,
+      p_action: resolution,
+      p_in_tokens: input,
+      p_out_tokens: output,
+      p_calls: callCount,
+      p_actor: reconciledBy,
+      p_evidence_hash: proof,
+    })
+    return { ...(rows?.[0] || { reconciled: false, reason: 'reservation_store_empty' }), durable: true }
+  }
+
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    return tx(async (query) => {
+      const identity = (await query('select tenant_id,"window" from supermega_spend_reservations where reservation_id=$1', [id]))[0]
+      if (!identity) return { reconciled: false, reason: 'reservation_not_found', reservation_id: id, durable: true }
+      const { tenant_id: tenant, window: month } = identity
+      const ledgerRow = (await query('select tenant_id,"window",cap_tokens,in_tokens,out_tokens,calls from supermega_token_ledger where tenant_id=$1 and "window"=$2 for update', [tenant, month]))[0]
+      const reservation = (await query('select * from supermega_spend_reservations where reservation_id=$1 for update', [id]))[0]
+      const terminalStatus = resolution === 'settle' ? 'settled' : 'released'
+      const sameTerminal = reservation.status === terminalStatus
+        && reservation.reconciled_by === reconciledBy
+        && reservation.reconciliation_evidence_hash === proof
+        && (resolution === 'release' || (Number(reservation.actual_in_tokens) === input && Number(reservation.actual_out_tokens) === output && Number(reservation.actual_calls) === callCount))
+      if (sameTerminal) return { reconciled: true, reason: 'idempotent', reservation_id: id, status: terminalStatus, ...spendSnapshot(ledgerRow, await pgActiveReserved(query, tenant, month)), durable: true }
+      if (['settled', 'released'].includes(reservation.status)) return { reconciled: false, reason: 'reconciliation_conflict', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, await pgActiveReserved(query, tenant, month)), durable: true }
+      if (!['dispatched', 'indeterminate'].includes(reservation.status)) return { reconciled: false, reason: 'invalid_reservation_state', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, await pgActiveReserved(query, tenant, month)), durable: true }
+      if (resolution === 'settle' && input + output > Number(reservation.reserved_tokens)) return { reconciled: false, reason: 'actual_exceeds_reservation', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, await pgActiveReserved(query, tenant, month)), durable: true }
+      let nextLedger = ledgerRow
+      if (resolution === 'settle') {
+        nextLedger = (await query('update supermega_token_ledger set in_tokens=in_tokens+$3,out_tokens=out_tokens+$4,calls=calls+$5,updated_at=now() where tenant_id=$1 and "window"=$2 returning tenant_id,"window",cap_tokens,in_tokens,out_tokens,calls', [tenant, month, input, output, callCount]))[0]
+      }
+      await query(`update supermega_spend_reservations set status=$2,actual_in_tokens=$3,actual_out_tokens=$4,actual_calls=$5,reconciled_by=$6,reconciliation_evidence_hash=$7,reconciled_at=now(),updated_at=now() where reservation_id=$1`, [id, terminalStatus, input, output, callCount, reconciledBy, proof])
+      return { reconciled: true, reason: 'reconciled', reservation_id: id, status: terminalStatus, ...spendSnapshot(nextLedger, await pgActiveReserved(query, tenant, month)), durable: true }
+    })
+  }
+
+  const reservation = mem.spendReservation.get(id)
+  if (!reservation) return { reconciled: false, reason: 'reservation_not_found', reservation_id: id, durable: false }
+  const ledgerKey = `${reservation.tenant_id}::${reservation.window}`
+  let ledgerRow = mem.tokenLedger.get(ledgerKey) || { tenant_id: reservation.tenant_id, window: reservation.window, in_tokens: 0, out_tokens: 0, calls: 0 }
+  const terminalStatus = resolution === 'settle' ? 'settled' : 'released'
+  const sameTerminal = reservation.status === terminalStatus
+    && reservation.reconciled_by === reconciledBy
+    && reservation.reconciliation_evidence_hash === proof
+    && (resolution === 'release' || (reservation.actual_in_tokens === input && reservation.actual_out_tokens === output && reservation.actual_calls === callCount))
+  if (sameTerminal) return { reconciled: true, reason: 'idempotent', reservation_id: id, status: terminalStatus, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (['settled', 'released'].includes(reservation.status)) return { reconciled: false, reason: 'reconciliation_conflict', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (!['dispatched', 'indeterminate'].includes(reservation.status)) return { reconciled: false, reason: 'invalid_reservation_state', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (resolution === 'settle' && input + output > reservation.reserved_tokens) return { reconciled: false, reason: 'actual_exceeds_reservation', reservation_id: id, status: reservation.status, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+  if (resolution === 'settle') {
+    ledgerRow = { ...ledgerRow, in_tokens: ledgerRow.in_tokens + input, out_tokens: ledgerRow.out_tokens + output, calls: ledgerRow.calls + callCount }
+    mem.tokenLedger.set(ledgerKey, ledgerRow)
+  }
+  mem.spendReservation.set(id, { ...reservation, status: terminalStatus, actual_in_tokens: input, actual_out_tokens: output, actual_calls: callCount, reconciled_by: reconciledBy, reconciliation_evidence_hash: proof, reconciled_at: new Date().toISOString() })
+  return { reconciled: true, reason: 'reconciled', reservation_id: id, status: terminalStatus, ...spendSnapshot(ledgerRow, memoryActiveReserved(reservation.tenant_id, reservation.window)), durable: false }
+}
+
+const CONTROL_RECORD_PREFIXES = Object.freeze([
+  ['agent-company-sign-in-code:', 'sign_in_code'],
+  ['agent-company-operator-session:', 'operator_session'],
+  ['company-mission-record:', 'mission'],
+  ['company-work-order-record:', 'work_order'],
+  ['company-work-order-review-record:', 'work_order_review'],
+  ['company-work-order-evaluation:', 'work_order_evaluation'],
+  // CEO outcome records are execution authority (completions, evaluations, deliveries, follow-up
+  // actions) recorded by agent-company-operations.mjs. They must never live in the response cache.
+  ['ceo-outcome-operation:', 'ceo_outcome_operation'],
+  ['ceo-outcome-evaluation:', 'ceo_outcome_evaluation'],
+  ['ceo-outcome-delivery:', 'ceo_outcome_delivery'],
+  ['ceo-outcome-action:', 'ceo_outcome_action'],
+])
+const CONTROL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/
+const CONTROL_STATUS_RE = /^[a-z][a-z_]{0,39}$/
+const CONTROL_HASH_RE = /^[a-f0-9]{64}$/
+
+function controlRecordType(key) {
+  const normalized = String(key || '')
+  return CONTROL_RECORD_PREFIXES.find(([prefix]) => normalized.startsWith(prefix))?.[1] || ''
+}
+
+function controlRecordTypeForPrefix(prefix) {
+  const normalized = String(prefix || '')
+  return CONTROL_RECORD_PREFIXES.find(([candidate]) => normalized === candidate)?.[1] || ''
+}
+
+function stableJson(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value ?? null)
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`
+}
+
+function controlEnvelope(recordKey, payload) {
+  const key = String(recordKey || '').trim()
+  const recordType = controlRecordType(key)
+  if (!recordType || key.length > 240 || !payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const tenantId = String(payload.clientId || payload.tenantId || '').trim()
+  const status = String(payload.status || 'recorded').trim()
+  const planHash = String(payload.planHash || payload.reviewHash || payload.recordHash || payload.deliveryHash || payload.actionHash || payload.evaluationHash || '').trim()
+  const revision = Number.isInteger(payload.revision) && payload.revision >= 1 ? payload.revision : 1
+  if (!CONTROL_ID_RE.test(tenantId) || !CONTROL_STATUS_RE.test(status) || !CONTROL_HASH_RE.test(planHash)) return null
+  let serialized
+  try { serialized = stableJson(payload) } catch { return null }
+  return {
+    record_key: key,
+    record_type: recordType,
+    tenant_id: tenantId,
+    status,
+    plan_hash: planHash,
+    payload,
+    payload_hash: createHash('sha256').update(serialized).digest('hex'),
+    revision,
+  }
+}
+
+function rpcRow(result) {
+  return Array.isArray(result) ? result[0] : result
+}
+
+// AI response cache (optional). Control-plane keys are never accepted by these explicit APIs.
+export async function getResponseCache(cacheKey) {
   if (!cacheKey) return null
+  if (controlRecordType(cacheKey)) return null
   if (mode === 'supabase') {
     const r = await rest('GET', `supermega_ai_cache?cache_key=eq.${encodeURIComponent(cacheKey)}&select=payload&limit=1`)
     return r[0]?.payload || null
@@ -718,8 +1301,9 @@ export async function getCachedResponse(cacheKey) {
   return mem.aiCache.get(cacheKey) || null
 }
 
-export async function putCachedResponse(cacheKey, payload) {
+export async function putResponseCache(cacheKey, payload) {
   if (!cacheKey) return null
+  if (controlRecordType(cacheKey)) return null
   if (mode === 'supabase') {
     return rest('POST', 'supermega_ai_cache?on_conflict=cache_key', { cache_key: cacheKey, payload }).catch(() => null)
   }
@@ -733,7 +1317,7 @@ export async function putCachedResponse(cacheKey, payload) {
 
 // Bounded internal index for cache-backed control records. Callers must still validate every
 // payload before using it; this only narrows the durable read by key prefix and tenant metadata.
-export async function listCachedResponseRecords({
+async function listResponseCacheRecords({
   prefix,
   clientId = '',
   status = '',
@@ -804,7 +1388,7 @@ export async function listCachedResponseRecords({
 // Atomically replace one cached payload only while its status, plan hash, and optional revision
 // still match. Work orders use status + planHash; staged missions also bind every transition to a
 // monotonically increasing revision so concurrent operators cannot both advance the same stage.
-export async function transitionCachedResponse(cacheKey, expected, payload) {
+async function transitionResponseCache(cacheKey, expected, payload) {
   const key = String(cacheKey || '').trim()
   const status = String(expected?.status || '').trim()
   const planHash = String(expected?.planHash || '').trim()
@@ -870,6 +1454,239 @@ export async function transitionCachedResponse(cacheKey, expected, payload) {
   }
   mem.aiCache.set(key, payload)
   return { updated: true, durable: false }
+}
+
+// ---------- versioned Agent Company control records ----------
+// These records are physically separate from model-response cache entries. The compatibility
+// exports below route only a fixed set of authority-bearing key prefixes into this store, so an
+// old cache row with the same key is inert and can never be read as current authority.
+export async function getControlRecord(recordKey) {
+  const key = String(recordKey || '').trim()
+  if (!controlRecordType(key)) return null
+  if (mode === 'supabase') {
+    const rows = await rest('GET', `supermega_control_records?record_key=eq.${encodeURIComponent(key)}&select=payload&limit=1`)
+    return rows[0]?.payload || null
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const rows = await q('select payload from supermega_control_records where record_key=$1 limit 1', [key])
+    return rows[0]?.payload || null
+  }
+  return mem.controlRecords.get(key)?.payload || null
+}
+
+export async function putControlRecord(recordKey, payload) {
+  const envelope = controlEnvelope(recordKey, payload)
+  if (!envelope) return null
+  const params = [
+    envelope.record_key,
+    envelope.record_type,
+    envelope.tenant_id,
+    envelope.status,
+    envelope.plan_hash,
+    JSON.stringify(envelope.payload),
+    envelope.payload_hash,
+  ]
+  if (mode === 'supabase') {
+    const row = rpcRow(await rest('POST', 'rpc/supermega_put_control_record', {
+      p_record_key: envelope.record_key,
+      p_record_type: envelope.record_type,
+      p_tenant_id: envelope.tenant_id,
+      p_status: envelope.status,
+      p_plan_hash: envelope.plan_hash,
+      p_payload: envelope.payload,
+      p_payload_hash: envelope.payload_hash,
+    }))
+    return row?.updated === true
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const row = (await q('select * from supermega_put_control_record($1,$2,$3,$4,$5,$6::jsonb,$7)', params))[0]
+    return row?.updated === true
+  }
+  const current = mem.controlRecords.get(envelope.record_key)
+  if (current && (current.record_type !== envelope.record_type || current.tenant_id !== envelope.tenant_id)) return null
+  const version = Number(current?.record_version || 0) + 1
+  const now = new Date().toISOString()
+  mem.controlRecords.set(envelope.record_key, {
+    ...envelope,
+    record_version: version,
+    created_at: current?.created_at || now,
+    updated_at: now,
+  })
+  mem.controlTransitions.push({
+    record_key: envelope.record_key,
+    record_type: envelope.record_type,
+    tenant_id: envelope.tenant_id,
+    event_type: current ? 'replaced' : 'created',
+    from_status: current?.status || null,
+    to_status: envelope.status,
+    from_record_version: current?.record_version || null,
+    to_record_version: version,
+    prior_payload_hash: current?.payload_hash || null,
+    next_payload_hash: envelope.payload_hash,
+    created_at: now,
+  })
+  return true
+}
+
+export async function listControlRecords({
+  prefix,
+  clientId = '',
+  status = '',
+  expiresAfter = '',
+  limit = 200,
+} = {}) {
+  const normalizedPrefix = String(prefix || '').trim()
+  const recordType = controlRecordTypeForPrefix(normalizedPrefix)
+  const normalizedClientId = String(clientId || '').trim()
+  const normalizedStatus = String(status || '').trim()
+  const normalizedExpiry = String(expiresAfter || '').trim()
+  const boundedLimit = Number(limit)
+  const validExpiry = !normalizedExpiry
+    || (Number.isFinite(new Date(normalizedExpiry).getTime()) && new Date(normalizedExpiry).toISOString() === normalizedExpiry)
+  if (!recordType
+    || (normalizedClientId && !CONTROL_ID_RE.test(normalizedClientId))
+    || (normalizedStatus && !CONTROL_STATUS_RE.test(normalizedStatus))
+    || !validExpiry
+    || !Number.isInteger(boundedLimit)
+    || boundedLimit < 1
+    || boundedLimit > 250) {
+    throw new Error('invalid_control_record_list_query')
+  }
+  if (mode === 'supabase') {
+    const query = [
+      `record_type=eq.${encodeURIComponent(recordType)}`,
+      normalizedClientId ? `tenant_id=eq.${encodeURIComponent(normalizedClientId)}` : '',
+      normalizedStatus ? `status=eq.${encodeURIComponent(normalizedStatus)}` : '',
+      normalizedExpiry ? `payload->>expiresAt=gt.${encodeURIComponent(normalizedExpiry)}` : '',
+      'select=record_key,payload',
+      'order=updated_at.desc',
+      `limit=${boundedLimit}`,
+    ].filter(Boolean).join('&')
+    const rows = await rest('GET', `supermega_control_records?${query}`)
+    return { durable: true, records: rows.map((row) => ({ key: row.record_key, payload: row.payload })) }
+  }
+  if (mode === 'postgres') {
+    await ensurePgTables()
+    const clauses = ['record_type=$1']
+    const values = [recordType]
+    if (normalizedClientId) { values.push(normalizedClientId); clauses.push(`tenant_id=$${values.length}`) }
+    if (normalizedStatus) { values.push(normalizedStatus); clauses.push(`status=$${values.length}`) }
+    if (normalizedExpiry) { values.push(normalizedExpiry); clauses.push(`payload->>'expiresAt'>$${values.length}`) }
+    values.push(boundedLimit)
+    const rows = await q(
+      `select record_key, payload from supermega_control_records where ${clauses.join(' and ')} order by updated_at desc limit $${values.length}`,
+      values,
+    )
+    return { durable: true, records: rows.map((row) => ({ key: row.record_key, payload: row.payload })) }
+  }
+  let records = [...mem.controlRecords.values()]
+    .filter((record) => record.record_type === recordType)
+  if (normalizedClientId) records = records.filter((record) => record.tenant_id === normalizedClientId)
+  if (normalizedStatus) records = records.filter((record) => record.status === normalizedStatus)
+  if (normalizedExpiry) records = records.filter((record) => String(record.payload?.expiresAt || '') > normalizedExpiry)
+  records.sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)))
+  return { durable: false, records: records.slice(0, boundedLimit).map((record) => ({ key: record.record_key, payload: record.payload })) }
+}
+
+export async function transitionControlRecord(recordKey, expected, payload) {
+  const key = String(recordKey || '').trim()
+  const envelope = controlEnvelope(key, payload)
+  const status = String(expected?.status || '').trim()
+  const planHash = String(expected?.planHash || '').trim()
+  const hasRevision = expected?.revision !== undefined
+  const revision = Number(expected?.revision)
+  if (!envelope
+    || !CONTROL_STATUS_RE.test(status)
+    || !CONTROL_HASH_RE.test(planHash)
+    || (hasRevision && (!Number.isInteger(revision) || revision < 1))) {
+    return { updated: false, durable: mode !== 'memory', reason: 'invalid_transition' }
+  }
+  if (mode === 'supabase') {
+    try {
+      const row = rpcRow(await rest('POST', 'rpc/supermega_transition_control_record', {
+        p_record_key: key,
+        p_expected_status: status,
+        p_expected_plan_hash: planHash,
+        p_has_revision: hasRevision,
+        p_expected_revision: hasRevision ? revision : null,
+        p_record_type: envelope.record_type,
+        p_tenant_id: envelope.tenant_id,
+        p_status: envelope.status,
+        p_plan_hash: envelope.plan_hash,
+        p_payload: envelope.payload,
+        p_payload_hash: envelope.payload_hash,
+      }))
+      return row?.updated === true
+        ? { updated: true, durable: true }
+        : { updated: false, durable: true, reason: 'transition_conflict' }
+    } catch {
+      return { updated: false, durable: false, reason: 'store_unavailable' }
+    }
+  }
+  if (mode === 'postgres') {
+    try {
+      await ensurePgTables()
+      const row = (await q(
+        'select * from supermega_transition_control_record($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11)',
+        [key, status, planHash, hasRevision, hasRevision ? revision : null, envelope.record_type, envelope.tenant_id, envelope.status, envelope.plan_hash, JSON.stringify(envelope.payload), envelope.payload_hash],
+      ))[0]
+      return row?.updated === true
+        ? { updated: true, durable: true }
+        : { updated: false, durable: true, reason: 'transition_conflict' }
+    } catch {
+      return { updated: false, durable: false, reason: 'store_unavailable' }
+    }
+  }
+  const current = mem.controlRecords.get(key)
+  if (!current
+    || current.status !== status
+    || current.plan_hash !== planHash
+    || current.record_type !== envelope.record_type
+    || current.tenant_id !== envelope.tenant_id
+    || (hasRevision && current.payload?.revision !== revision)) {
+    return { updated: false, durable: false, reason: 'transition_conflict' }
+  }
+  const version = current.record_version + 1
+  const now = new Date().toISOString()
+  mem.controlRecords.set(key, { ...envelope, record_version: version, created_at: current.created_at, updated_at: now })
+  mem.controlTransitions.push({
+    record_key: key,
+    record_type: envelope.record_type,
+    tenant_id: envelope.tenant_id,
+    event_type: 'transitioned',
+    from_status: current.status,
+    to_status: envelope.status,
+    from_record_version: current.record_version,
+    to_record_version: version,
+    prior_payload_hash: current.payload_hash,
+    next_payload_hash: envelope.payload_hash,
+    created_at: now,
+  })
+  return { updated: true, durable: false }
+}
+
+// Compatibility adapter for existing Agent Company modules. Non-control keys retain response-cache
+// behavior; recognized authority keys are never read from or written to supermega_ai_cache.
+export async function getCachedResponse(cacheKey) {
+  return controlRecordType(cacheKey) ? getControlRecord(cacheKey) : getResponseCache(cacheKey)
+}
+
+export async function putCachedResponse(cacheKey, payload) {
+  return controlRecordType(cacheKey) ? putControlRecord(cacheKey, payload) : putResponseCache(cacheKey, payload)
+}
+
+export async function listCachedResponseRecords(query = {}) {
+  return controlRecordTypeForPrefix(String(query.prefix || '').trim())
+    ? listControlRecords(query)
+    : listResponseCacheRecords(query)
+}
+
+export async function transitionCachedResponse(cacheKey, expected, payload) {
+  return controlRecordType(cacheKey)
+    ? transitionControlRecord(cacheKey, expected, payload)
+    : transitionResponseCache(cacheKey, expected, payload)
 }
 
 // ---------- approval queue ----------
@@ -1112,4 +1929,4 @@ export async function ping() {
   return { ok: false, mode, detail: 'unknown_mode' }
 }
 
-export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, reserveAiBudget, getAiBudgetUsage, settleAiBudgetReservation, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
+export default { mode, listLeads, getLead, insertLead, updateLead, listClients, listProjects, createClient, getClient, createProject, updateProject, getProject, markDepositPaid, convertedLeadIds, saveDeal, listDeals, updateDeal, logActivity, claimActivity, releaseActivityClaim, getActivityClaim, transitionActivityClaim, listActivity, getTokenUsage, addTokenUsage, reserveAiBudget, getAiBudgetUsage, settleAiBudgetReservation, reserveTokenSpend, markTokenSpendDispatched, markTokenSpendIndeterminate, settleTokenSpend, releaseTokenSpend, reconcileTokenSpend, getResponseCache, putResponseCache, getControlRecord, putControlRecord, listControlRecords, transitionControlRecord, getCachedResponse, putCachedResponse, listCachedResponseRecords, transitionCachedResponse, createApprovalRecord, getApprovalRecord, listApprovalRecords, transitionApprovalRecord, recordPaymentEvent, ping, bumpGraduation, recordBuildModules, listGraduation }
