@@ -257,6 +257,7 @@ const sharedStyle = `
   .compact-solution h3 { margin: 20px 0 9px; font-size: 30px; }
   .compact-solution > p { min-height: 44px; color: var(--muted); font-size: 13px; }
   .compact-solution > .card-link { margin-top: auto; }
+  .compact-solution > .card-link + .card-link { margin-top: 2px; }
   .product-roadmap { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin-top: 14px; }
   .roadmap-solution { min-height: 228px; display: flex; flex-direction: column; }
   .roadmap-solution > p { min-height: 0; }
@@ -353,6 +354,7 @@ function productCardHtml(product, index) {
     <h3>${escapeHtml(product.name)}</h3>
     <p>${escapeHtml(product.headline)}</p>
     <div class="module-tags" role="group" aria-label="Core capabilities">${capabilities.map((capability) => `<span>${escapeHtml(capability)}</span>`).join('')}</div>
+    <a class="card-link" href="/${escapeHtml(product.id)}/">${escapeHtml(product.name)} overview</a>
     <a class="card-link" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a>
   </article>`
 }
@@ -368,6 +370,25 @@ const homeHtml = documentHtml({
     <section class="frame trust-strip" id="trust" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
   </main>`,
 })
+
+function productLandingHtml(product, page) {
+  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
+  const description = page.description || product.description
+  const moduleItems = product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views
+  return documentHtml({
+    route: page.route,
+    title: page.title,
+    description,
+    content: `<main>
+    <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${escapeHtml(setupLabel)}</a></div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
+    <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">${escapeHtml(product.name)} modules</span><h2>What the working sample covers.</h2></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} modules">${moduleItems.map((item, index) => `<span><i>0${index + 1}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
+    <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Operate without a stripped-down plan.</h2><p>Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.</p></div><ul class="offer-model-list"><li>Full local operating modules and imports</li><li>Grounded answers from validated local records</li><li>Approvals, evidence, backup, and export</li><li>No account or model call required</li></ul></section>
+    <section class="frame trust-strip" aria-label="Security boundary"><div class="control-line"><span class="eyebrow">Secure by default</span><p>Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.</p></div></section>
+    <section class="frame section"><div class="closing-strip"><div><h2>Free product. Managed intelligence.</h2><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p></div><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a></div></section>
+  </main>`,
+  })
+}
 
 const contactScript = `<script>(function(){
   var form=document.querySelector('[data-contact-form]');if(!form)return;
@@ -942,6 +963,14 @@ const pageFiles = new Map([
   ['404.html', notFoundHtml],
 ])
 
+for (const page of manifest.pages.filter((entry) => entry.productId)) {
+  const product = publicProducts.find((candidate) => candidate.id === page.productId)
+  assert(product, `landing_page_product_missing:${page.productId}`)
+  assert(page.route === `/${product.id}/` && page.file === `${product.id}/index.html`, `landing_page_route_drift:${page.route}`)
+  assert(page.liveGate === 'post-release', `landing_page_live_gate_missing:${page.route}`)
+  pageFiles.set(page.file, productLandingHtml(product, page))
+}
+
 const vercelConfig = {
   version: 3,
   routes: [
@@ -980,7 +1009,7 @@ for (const [relativePath, content] of pageFiles) await writeStatic(relativePath,
 await writeStatic('favicon.svg', faviconSvg)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)
 await writeStatic('robots.txt', 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
-await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${manifest.pages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)
+await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${manifest.pages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><lastmod>${release.generatedAt.slice(0, 10)}</lastmod><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)
 await writeStatic('site.webmanifest', `${JSON.stringify({ name: 'SuperMega', short_name: 'SuperMega', start_url: '/', display: 'browser', background_color: brand.colors.background, theme_color: brand.colors.background, icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }] }, null, 2)}\n`)
 
 await writeFunction('health.js', healthFunction)

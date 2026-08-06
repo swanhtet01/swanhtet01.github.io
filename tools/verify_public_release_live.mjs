@@ -105,8 +105,25 @@ async function verifyRedirect(path, destination) {
   assert(actual === expected, 'redirect_destination_wrong', { path, expected, actual })
 }
 
+// Pages marked liveGate: "post-release" ship with a release, so before that release is
+// promoted the deployed site legitimately serves a redirect or 404 for them. Without an
+// exact expected commit (availability scope) those routes are skipped while pending; the
+// post-deploy release verification always runs with EXPECTED_RELEASE_COMMIT set, which
+// asserts every manifest page — including gated landing pages — against the promoted build.
+async function readPageOrPending(page, pendingRoutes) {
+  if (page.liveGate === 'post-release' && !expectedCommit) {
+    const probe = await request(page.route, { redirect: 'manual' })
+    if (probe.status !== 200) {
+      pendingRoutes.add(page.route)
+      return [page.route, null]
+    }
+  }
+  return [page.route, await readPage(page.route)]
+}
+
 async function verifyOnce() {
-  const pageResults = await Promise.all(manifest.pages.map(async (page) => [page.route, await readPage(page.route)]))
+  const pendingRoutes = new Set()
+  const pageResults = await Promise.all(manifest.pages.map(async (page) => readPageOrPending(page, pendingRoutes)))
   const pages = new Map(pageResults)
   assert(pages.get('/')?.includes(manifest.company.headline), 'homepage_headline_wrong')
   assert(pages.get('/')?.includes('href="#products">Choose a product</a>'), 'homepage_product_cta_missing')
@@ -120,6 +137,14 @@ async function verifyOnce() {
     assert(homepage.includes(`href="${guidedSampleRoute}"`), 'guided_product_route_missing', { product: product.id, guidedSampleRoute })
     assert(!homepage.includes(`href="${product.appRoute}"`), 'direct_product_route_remains_primary', { product: product.id, appRoute: product.appRoute })
     for (const template of product.templates) assert(!homepage.includes(template.name), 'template_catalog_exposed', { template: template.id })
+    const landingRoute = `/${product.id}/`
+    const landing = pages.get(landingRoute)
+    if (pendingRoutes.has(landingRoute) || landing == null) continue
+    assert(landing.includes(product.headline), 'landing_headline_missing', { product: product.id })
+    assert(landing.includes(`href="${guidedSampleRoute}"`), 'landing_guided_product_route_missing', { product: product.id })
+    assert(!landing.includes(`href="${product.appRoute}"`), 'landing_direct_product_route_present', { product: product.id })
+    assert(landing.includes(`href="/contact/?product=${product.id}"`), 'landing_contact_route_missing', { product: product.id })
+    assert(homepage.includes(`href="${landingRoute}"`), 'landing_route_link_missing_on_home', { product: product.id })
   }
   for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Gated R&amp;D']) assert(!pages.get('/')?.includes(internalLabel), 'internal_system_exposed', { internalLabel })
   assert(pages.get('/')?.includes('id="trust"'), 'control_boundary_missing')
@@ -175,7 +200,12 @@ async function verifyOnce() {
   const wwwHtml = await www.text()
   assert(wwwHtml.includes(manifest.company.headline), 'www_release_drift')
 
-  return { pages: manifest.pages.map((page) => page.route), release, contact: contact.status }
+  return {
+    pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),
+    pendingGatedRoutes: [...pendingRoutes],
+    release,
+    contact: contact.status,
+  }
 }
 
 let lastError

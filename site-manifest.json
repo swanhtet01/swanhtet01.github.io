@@ -407,14 +407,20 @@
   ],
   "pages": [
     { "route": "/", "file": "index.html", "title": "SuperMega | Four products" },
+    { "route": "/shop/", "file": "shop/index.html", "title": "Shop | Sell, track stock, and close the day | SuperMega", "productId": "shop", "liveGate": "post-release" },
+    { "route": "/plant/", "file": "plant/index.html", "title": "Plant | Plan jobs, record output, and close shifts | SuperMega", "productId": "plant", "liveGate": "post-release" },
+    { "route": "/website/", "file": "website/index.html", "title": "Website | Build a simple company website from a brief | SuperMega", "productId": "website", "liveGate": "post-release", "description": "Answer a short business brief, edit finite pages, review a responsive preview, and download a standalone website. Request managed hosting when needed." },
+    { "route": "/ecommerce/", "file": "ecommerce/index.html", "title": "Ecommerce | Online ordering connected to Shop | SuperMega", "productId": "ecommerce", "liveGate": "post-release", "description": "Choose Shop-backed products, build a cart, review a deterministic 15-minute quote, and save a recoverable request receipt. Payment, fulfilment, returns, and refunds are completed in Shop." },
     { "route": "/contact/", "file": "contact/index.html", "title": "Contact | SuperMega" },
     { "route": "/privacy/", "file": "privacy/index.html", "title": "Privacy | SuperMega" }
   ],
   "redirects": [
     { "source": "^/solutions/?$", "destination": "/#products" },
     { "source": "^/trust/?$", "destination": "/#trust" },
-    { "source": "^/shop(?:/.*)?$", "destination": "/#shop" },
-    { "source": "^/plant(?:/.*)?$", "destination": "/#plant" },
+    { "source": "^/shop(?:/.+)?$", "destination": "/shop/" },
+    { "source": "^/plant(?:/.+)?$", "destination": "/plant/" },
+    { "source": "^/website(?:/.+)?$", "destination": "/website/" },
+    { "source": "^/ecommerce(?:/.+)?$", "destination": "/ecommerce/" },
     { "source": "^/templates(?:/.*)?$", "destination": "/#products" },
     { "source": "^/work(?:/.*)?$", "destination": "/#products" },
     { "source": "^/(?:products?|offers|pricing|plans|packages)/?$", "destination": "/#products" },

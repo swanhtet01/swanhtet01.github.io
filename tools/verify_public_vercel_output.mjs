@@ -70,7 +70,11 @@ for (const product of publicProducts) {
     if (!template.outcome?.trim() || !template.metric?.trim() || template.workflow?.length < 5 || template.entryPoints?.length < 3) fail('public_template_contract_incomplete', { product: product.id, template: template.id })
   }
 }
-if (manifest.pages?.map((page) => page.route).join(',') !== '/,/contact/,/privacy/') fail('public_page_surface_not_minimal')
+if (manifest.pages?.map((page) => page.route).join(',') !== '/,/shop/,/plant/,/website/,/ecommerce/,/contact/,/privacy/') fail('public_page_surface_not_minimal')
+for (const landingPage of manifest.pages.filter((page) => page.productId)) {
+  if (landingPage.route !== `/${landingPage.productId}/` || landingPage.file !== `${landingPage.productId}/index.html`) fail('landing_page_route_drift', { route: landingPage.route })
+  if (landingPage.liveGate !== 'post-release') fail('landing_page_live_gate_missing', { route: landingPage.route })
+}
 
 const expectedStaticFiles = new Set([
   ...manifest.pages.map((page) => page.file),
@@ -153,8 +157,14 @@ for (const [route, page] of pages) {
   if (/target\s*=\s*["']?_blank/i.test(page.html) || page.html.includes('window.open(')) fail('new_tab_navigation_present', { route })
   if (page.html.includes('href="/solutions/"') || page.html.includes('href="/trust/"')) fail('retired_public_navigation_present', { route })
   if (!page.html.includes(`<link rel="canonical" href="${new URL(route, `${manifest.release.productionDomain}/`).href}"`)) fail('canonical_url_wrong', { route })
+  if (!/<meta name="description" content="[^"]{20,}" \/>/.test(page.html)) fail('page_description_missing', { route })
+  for (const token of ['<meta property="og:type" content="website" />', '<meta property="og:site_name" content="SuperMega" />', `<meta property="og:url" content="${new URL(route, `${manifest.release.productionDomain}/`).href}" />`, '<meta name="twitter:card" content="summary" />']) {
+    if (!page.html.includes(token)) fail('page_open_graph_missing', { route, token })
+  }
   if (route !== '/' && !page.html.includes('href="/contact/">Contact</a>')) fail('support_footer_contact_missing', { route })
 }
+const pageTitles = manifest.pages.map((page) => page.title)
+if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique')
 
 const home = pages.get('/')?.html || ''
 if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
@@ -212,6 +222,7 @@ if ((home.match(/>Request managed pilot<\/a>/g) || []).length !== 1) fail('manag
 if (home.includes('Start guided trial') || home.includes('aria-label="Templates"')) fail('retired_public_setup_copy_returned')
 for (const product of publicProducts) {
   if (home.includes(`href="${product.appRoute}"`)) fail('direct_product_route_remains_primary', { product: product.id })
+  if (!home.includes(`href="/${product.id}/">${product.name} overview</a>`)) fail('landing_route_link_missing', { product: product.id })
 }
 for (const internalLabel of ['SuperMega HQ', 'One next action for the company', 'Owners, evidence, review, and release', 'Gated R&amp;D']) {
   if (home.includes(internalLabel)) fail('internal_system_exposed_on_public_home', { internalLabel })
@@ -220,7 +231,37 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-if ((home.match(/<a\b/g) || []).length > 9) fail('homepage_link_surface_too_large')
+if ((home.match(/<a\b/g) || []).length > 13) fail('homepage_link_surface_too_large')
+
+for (const product of publicProducts) {
+  const landingRoute = `/${product.id}/`
+  const landing = pages.get(landingRoute)?.html || ''
+  const guidedSampleRoute = `https://app.supermega.dev/settings/?product=${encodeURIComponent(product.id)}`
+  const setupLabel = product.secondaryCta?.label || `Set up ${product.name} data`
+  for (const token of [
+    product.eyebrow,
+    `<h1>${product.headline}</h1>`,
+    `href="${guidedSampleRoute}"`,
+    '>Start free sample</a>',
+    `href="/contact/?product=${product.id}">${setupLabel}</a>`,
+    'Free browser sample',
+    'Mobile-ready workflows',
+    'What the working sample covers.',
+    'Operate without a stripped-down plan.',
+    'Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.',
+    'No account or model call required',
+    'aria-label="Security boundary"',
+    'Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.',
+    'Free product. Managed intelligence.',
+    'Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.',
+  ]) {
+    if (!landing.includes(token)) fail('landing_page_contract_missing', { route: landingRoute, token })
+  }
+  if (landing.includes(`href="${product.appRoute}"`)) fail('landing_direct_product_route_present', { route: landingRoute })
+  for (const capability of (product.modules?.length ? product.modules : product.id === 'website' ? product.workflow : product.views)) {
+    if (!landing.includes(capability)) fail('landing_module_missing', { route: landingRoute, capability })
+  }
+}
 
 const contact = pages.get('/contact/')?.html || ''
 for (const token of ['data-contact-form', 'action="/api/contact-submissions"', 'name="name"', 'name="email"', 'name="company"', 'name="product"', 'value="shop"', 'value="plant"', 'value="website"', 'value="ecommerce"', 'name="template"', 'name="goal"', 'name="idempotency_key"', 'name="proof_contract"', 'name="proof_version"', 'name="proof_digest"', 'name="proof_product"', 'name="proof_template"', 'name="proof_readiness"', 'name="proof_sources"', 'name="proof_behavior"', 'name="proof_decisions"', 'proof_outcome', 'proof_outcome_digest', 'proof_outcome_accepted', 'name="proof_raw_records"', 'class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert', 'x-idempotency-key', 'rate_limited', 'trial_proof_invalid', 'Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share.', '>Shop<', '>Plant<', '>Website<', '>Ecommerce<', 'No account, data connection, automation, or external action begins from this form.', 'Reply email', 'data-contact-heading', 'data-contact-lede', 'data-contact-copy-heading', 'data-contact-copy', 'data-trial-proof', 'Client-provided trial proof', 'Reviewed setup summary', 'it does not verify a managed account.', 'digest-bound aggregate summary', 'location.hash.slice(1)', '/^(guide|shop|plant|website|ecommerce)$/.test(requestedProduct||\'\')', "handoff.get('company')", "handoff.get('goal')", "history.replaceState(null,'',location.pathname+location.search)", "heading.textContent='Finish your '+productName+' request.'", 'Your company and goal are already filled. Add your name and reply email, review the request, then send it.', 'Only this summary moves forward. No raw product records, account connection, automation, or external action begins from this form.', 'Raw records, questions, approval contents, and account details stay out.', 'Trial summary attached for review. Nothing has been sent.', 'Trial summary detached. Review the updated request before sending.', 'Company and goal are ready for review from your AI memory.', 'Request received:', 'Keep this ID for follow-up.', 'Too many requests from this connection. Please wait ten minutes and try again.', 'Could not route the request here. Please wait and try again.']) {
