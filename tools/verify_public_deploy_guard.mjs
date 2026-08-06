@@ -49,6 +49,10 @@ for (const [label, verifier] of Object.entries({ previewVerifier, liveVerifier }
     failures.push(`guided_product_route_contract_missing:${label}`)
   }
 }
+// The retired ops endpoints (for example /api/pipeline-control/status) must stay
+// pinned to 404 {"status":"not_found"} in the live health contract — never the
+// retired ops-key 401 — so the mismatch cannot silently reappear.
+if (!liveVerifier.includes('retired_api_status_wrong') || !liveVerifier.includes('retired_api_body_wrong') || !liveVerifier.includes('/api/pipeline-control/status')) failures.push('retired_api_live_contract_missing')
 if (previewVerifier.includes("'--silent'") || previewVerifier.includes("'--show-error'") || previewVerifier.includes("'--location'")) failures.push('preview_verifier_uses_platform_specific_curl_flags')
 if (previewVerifier.includes("'--token'") || !previewVerifier.includes('protected_preview_inspect_failed:') || !previewVerifier.includes('process.env.VERCEL_TOKEN')) failures.push('preview_verifier_credential_handling_unsafe')
 if (!rollbackResolver.includes("mode === 'alias'") || !rollbackResolver.includes("mode === 'deployment'") || !rollbackResolver.includes("state.projectId !== expectedProjectId") || !rollbackResolver.includes("nestedDeploymentId !== deploymentId") || !rollbackResolver.includes("state.id !== expectedDeploymentId") || !rollbackResolver.includes("state.target !== 'production'") || !rollbackResolver.includes("state.readyState !== 'READY'")) failures.push('rollback_alias_resolver_incomplete')
@@ -65,7 +69,7 @@ for (const [name, expected] of Object.entries({
   'vercel:deploy': 'node tools/deny_stale_public_deploy.mjs',
   'vercel:deploy:prod': 'node tools/deny_stale_public_deploy.mjs',
   'public:build': 'node tools/create_public_vercel_output.mjs',
-  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && npm run vercel:contracts:test && npm run hq:verify',
+  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && node tools/test_public_retired_api_function.mjs && npm run vercel:contracts:test && npm run hq:verify',
   'public:prebuilt': 'npm run public:build && npm run public:verify',
   'public:verify:live': 'node tools/verify_public_release_live.mjs',
   'deploy:public:prod': 'node tools/deny_stale_public_deploy.mjs',

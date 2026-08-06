@@ -470,6 +470,12 @@ module.exports = async function handler(_req, res) {
 }
 `
 
+// Retired public API surface. The legacy ops endpoints (pipeline-control,
+// commercial-control, checkout-start, product-activation, sales-daily,
+// behavior-events, campaign-clicks, public-app-handoff) were deliberately
+// removed in the public-site consolidation (f8c5299e). Their old ops-key 401
+// contract is retired with them: every unknown /api/* request — anonymous or
+// credentialed — answers 404 {"status":"not_found"} with no auth semantics.
 const notFoundFunction = `'use strict'
 module.exports = function handler(_req, res) {
   res.statusCode = 404

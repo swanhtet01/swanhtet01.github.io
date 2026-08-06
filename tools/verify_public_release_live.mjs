@@ -147,6 +147,18 @@ async function verifyOnce() {
   assert(contact.status === 'ready' && contact.accepting === true, 'contact_not_accepting', contact)
   assert(contact.controls?.idempotency === 'required' && contact.controls?.edge_rate_limit === 'required' && contact.controls?.trial_proof === 'optional_client_provided', 'contact_controls_wrong', contact)
 
+  // Retired public API surface. The legacy ops endpoints (for example
+  // /api/pipeline-control/status) were deliberately removed in the public-site
+  // consolidation (f8c5299e). The live contract for anonymous requests is
+  // 404 {"status":"not_found"} — not the retired ops-key 401 — because the
+  // endpoints no longer exist and carry no auth surface.
+  await Promise.all(['/api/pipeline-control/status', '/api/pipeline-control'].map(async (path) => {
+    const retired = await request(path, { accept: 'application/json' })
+    assert(retired.status === 404, 'retired_api_status_wrong', { path, status: retired.status })
+    const retiredBody = await retired.json().catch(() => null)
+    assert(retiredBody !== null && retiredBody.status === 'not_found' && Object.keys(retiredBody).length === 1, 'retired_api_body_wrong', { path, retiredBody })
+  }))
+
   await Promise.all([
     verifyRedirect('/products/shop/', '/#shop'),
     verifyRedirect('/products/factory/', '/#plant'),
