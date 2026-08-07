@@ -1,10 +1,10 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v2",
-  "recordedAt": "2026-08-03T07:01:07.469Z",
+  "recordedAt": "2026-08-04T11:04:24.490Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "26b1865b5e25f51ce4dd8905a37feb2bb0f77dfe",
+  "implementationCommit": "b9cc091089420ff8a5fa32948378ac71af51edd2",
   "implementation": {
-    "digest": "sha256:4864ccb0fbd1fee9845d7a6a1b1b867c15799336c9e9c4031a8f46c87e8d2deb",
+    "digest": "sha256:eb6d75f4bb5c53c2034b3a594922e49efaee0a2955334479531d5f6b77c59c36",
     "paths": [
       "supermega_runtime/managed_context.py",
       "supermega_runtime/managed_activation.py",
@@ -15,14 +15,17 @@
       "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
       "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
       "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
+      "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+      "supabase/rehearsal/20260804_public_browser_quarantine.sql",
       "tools/activate_supermega_database.ps1",
       "tools/rehearse_supermega_postgres17.py",
       "tools/validate_supermega_database_url.py",
+      "tools/verify_public_browser_quarantine.mjs",
       "tools/verify_managed_runtime_environment_values.mjs"
     ]
   },
-  "implementationDigest": "sha256:4864ccb0fbd1fee9845d7a6a1b1b867c15799336c9e9c4031a8f46c87e8d2deb",
-  "implementationFileCount": 13,
+  "implementationDigest": "sha256:eb6d75f4bb5c53c2034b3a594922e49efaee0a2955334479531d5f6b77c59c36",
+  "implementationFileCount": 16,
   "localVerification": {
     "command": "npm run database:postgres17:record",
     "conclusion": "success",
@@ -47,8 +50,8 @@
     "loopbackOnly": true
   },
   "migration": {
-    "count": 10,
-    "schemaVersion": 9,
+    "count": 11,
+    "schemaVersion": 10,
     "productionValidatorReady": true
   },
   "runtime": {
@@ -83,6 +86,7 @@
     "managedExactRetry": true,
     "managedHumanAttribution": true,
     "managedOwnerAuthorizationDurable": true,
+    "managedSupabaseSessionRevocationEnforced": true,
     "managedActivationAtomicRollback": true,
     "managedActivationIdempotentReplay": true,
     "managedContextActivationEvidenceBound": true,
@@ -102,9 +106,12 @@
     "migrationChainApplied": true,
     "mismatchedIdentityDenied": true,
     "optimisticConcurrency": true,
+    "publicBrowserQuarantineEnforced": true,
+    "publicBrowserQuarantineIdempotent": true,
     "restoreCompletedOnFreshCluster": true,
     "restoredDataPreserved": true,
     "restoredDatabaseValidated": true,
+    "restoredPublicBrowserQuarantinePreserved": true,
     "revocation": true,
     "runtimeRoleSettingsEmpty": true,
     "runtimeSetRoleDenied": true,
@@ -116,7 +123,7 @@
   "recovery": {
     "backupNonempty": true,
     "format": "pg_dump_custom",
-    "restoredSchemaVersion": 9
+    "restoredSchemaVersion": 10
   },
   "storage": {
     "catalogMode": "local_private_fixture",
