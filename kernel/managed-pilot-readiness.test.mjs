@@ -60,14 +60,18 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.doesNotMatch(JSON.stringify(ledger), /app_product_contract_drift/)
   assert.equal(ledger.products.length, 4)
   assert.equal(ledger.controls.modelCallsRequiredToBuild, 0)
-  assert.equal(ledger.founderDecision.target.environment, 'preview_branch')
-  assert.equal(ledger.founderDecision.target.maximumLifetimeHours, 24)
-  assert.equal(ledger.founderDecision.target.startsWithProductionData, false)
-  assert.equal(ledger.founderDecision.operator.productId, 'shop')
-  assert.equal(ledger.founderDecision.authority, 'proposal_only')
-  assert.equal(ledger.founderDecision.createsAuthority, false)
-  assert.equal(ledger.founderDecision.approvalReceipt, null)
-  assert.ok(ledger.founderDecision.doesNotAuthorize.includes('production_database_change'))
+  assert.equal(ledger.asOf, '2026-08-04T05:28:37.850Z')
+  assert.equal(
+    ledger.overall.nextAction,
+    'Approve one isolated non-production Supabase target and one named Shop pilot operator; protected production remains unchanged.',
+  )
+  assert.equal(ledger.gates.at(-1)?.id, 'production_activation')
+  assert.equal(ledger.gates.at(-1)?.status, 'blocked')
+  assert.equal(ledger.controls.productionWritesEnabled, false)
+  assert.equal(ledger.controls.ownerApprovalRequired, true)
+  assert.ok(ledger.controls.forbiddenUntilReady.includes('production_write'))
+  assert.ok(ledger.controls.forbiddenUntilReady.includes('deploy'))
+  assert.ok(ledger.controls.forbiddenUntilReady.includes('hosted_scheduler_activation'))
   assert.equal(validateManagedPilotReadiness(ledger), ledger)
 })
 
@@ -84,36 +88,46 @@ test('rejects hosted overclaims and product authority drift', () => {
   assert.throws(() => buildManagedPilotReadiness(ungated), /managed_pilot_readiness_product_invalid/)
 })
 
-test('rejects a founder decision that can touch production or outlive the bounded rehearsal', () => {
-  const ledger = buildManagedPilotReadiness(input)
-  ledger.founderDecision.target.production = true
-  assert.throws(() => validateManagedPilotReadiness(ledger), /managed_pilot_readiness_founder_decision_invalid/)
+test('rejects evidence or ledger state that could touch protected production', () => {
+  const approvedTarget = structuredClone(input)
+  approvedTarget.packageManifest.supermega.productionSupabaseTargetStatus = 'approved'
+  assert.throws(() => buildManagedPilotReadiness(approvedTarget), /managed_pilot_readiness_production_boundary_invalid/)
 
-  const longLived = buildManagedPilotReadiness(input)
-  longLived.founderDecision.target.maximumLifetimeHours = 168
-  assert.throws(() => validateManagedPilotReadiness(longLived), /managed_pilot_readiness_founder_decision_invalid/)
+  const mutationAuthorized = structuredClone(input)
+  mutationAuthorized.securityAudit.conclusion.productionMutationAuthorized = true
+  assert.throws(() => buildManagedPilotReadiness(mutationAuthorized), /managed_pilot_readiness_security_audit_invalid/)
+
+  const writesPerformed = structuredClone(input)
+  writesPerformed.securityAudit.controls.databaseWrites = 1
+  assert.throws(() => buildManagedPilotReadiness(writesPerformed), /managed_pilot_readiness_security_audit_invalid/)
+
+  const productionEnabled = buildManagedPilotReadiness(input)
+  productionEnabled.controls.productionWritesEnabled = true
+  assert.throws(() => validateManagedPilotReadiness(productionEnabled), /managed_pilot_readiness_controls_invalid/)
+
+  const activationUnlocked = buildManagedPilotReadiness(input)
+  activationUnlocked.gates.at(-1).status = 'ready-hosted'
+  assert.throws(() => validateManagedPilotReadiness(activationUnlocked), /managed_pilot_readiness_gates_invalid/)
 })
 
-test('rejects broadened, incomplete, or contradictory proposal authority', () => {
+test('rejects broadened, incomplete, or contradictory ledger authority', () => {
   const broadened = buildManagedPilotReadiness(input)
-  broadened.founderDecision.proposedActions.push('production_deploy')
-  assert.throws(() => validateManagedPilotReadiness(broadened), /managed_pilot_readiness_founder_decision_invalid/)
+  broadened.controls.ownerApprovalRequired = false
+  assert.throws(() => validateManagedPilotReadiness(broadened), /managed_pilot_readiness_controls_invalid/)
+
+  const selfDirected = buildManagedPilotReadiness(input)
+  selfDirected.products[0].automationStatus = 'autonomous'
+  assert.throws(() => validateManagedPilotReadiness(selfDirected), /managed_pilot_readiness_products_invalid/)
 
   const incomplete = buildManagedPilotReadiness(input)
-  incomplete.founderDecision.doesNotAuthorize.pop()
-  assert.throws(() => validateManagedPilotReadiness(incomplete), /managed_pilot_readiness_founder_decision_invalid/)
+  incomplete.gates.pop()
+  assert.throws(() => validateManagedPilotReadiness(incomplete), /managed_pilot_readiness_gates_invalid/)
 
   const contradictory = buildManagedPilotReadiness(input)
-  contradictory.founderDecision.doesNotAuthorize[0] = contradictory.founderDecision.proposedActions[0]
-  assert.throws(() => validateManagedPilotReadiness(contradictory), /managed_pilot_readiness_founder_decision_invalid/)
+  contradictory.overall.hostedActivationReady = true
+  assert.throws(() => validateManagedPilotReadiness(contradictory), /managed_pilot_readiness_overall_invalid/)
 
-  const authoritative = buildManagedPilotReadiness(input)
-  authoritative.founderDecision.createsAuthority = true
-  authoritative.founderDecision.approvalReceipt = { approvedBy: 'founder' }
-  assert.throws(() => validateManagedPilotReadiness(authoritative), /managed_pilot_readiness_founder_decision_invalid/)
-
-  const collapsed = buildManagedPilotReadiness(input)
-  collapsed.founderDecision.proposedActions = [collapsed.founderDecision.proposedActions.join(',')]
-  collapsed.founderDecision.doesNotAuthorize = [collapsed.founderDecision.doesNotAuthorize.join(',')]
-  assert.throws(() => validateManagedPilotReadiness(collapsed), /managed_pilot_readiness_founder_decision_invalid/)
+  const tampered = buildManagedPilotReadiness(input)
+  tampered.sourceReceipts = tampered.sourceReceipts.slice(0, -1)
+  assert.throws(() => validateManagedPilotReadiness(tampered), /managed_pilot_readiness_digest_invalid/)
 })

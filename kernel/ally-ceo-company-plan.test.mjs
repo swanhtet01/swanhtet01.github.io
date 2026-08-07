@@ -63,20 +63,37 @@ function portfolio(overrides = {}, automationOverrides = {}) {
 }
 
 function managedReadiness() {
-  const sourceReceipts = ['portfolio', 'database', 'storage', 'now', 'package', 'kernel']
+  const sourceReceipts = ['portfolio', 'database', 'storage', 'security', 'now', 'package', 'kernel']
     .map((path) => ({ path, digest: readinessDigest(path) }))
   return JSON.stringify(buildManagedPilotReadiness({
     portfolio: JSON.parse(portfolio({}, { ecommerce: { status: 'owner-gated' } })),
     databaseEvidence: {
       schemaVersion: 'supermega.hq.database-rehearsal.v2',
       recordedAt: '2026-07-31T10:00:00.000Z',
-      checks: Object.fromEntries(Array.from({ length: 52 }, (_, index) => [`check${index}`, true])),
+      checks: {
+        ...Object.fromEntries(Array.from({ length: 53 }, (_, index) => [`check${index}`, true])),
+        publicBrowserQuarantineEnforced: true,
+        publicBrowserQuarantineIdempotent: true,
+        restoredPublicBrowserQuarantinePreserved: true,
+      },
       storage: { hostedStoragePrivacyProofRequired: true },
       localVerification: { externallyHosted: false },
     },
     storageAudit: 'Status: local verifier ready; hosted proof blocked',
-    hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\nno release drift is present\nNo named pilot customer',
-    packageManifest: { supermega: { productionSupabaseTargetStatus: 'protected-unapproved' } },
+    securityAudit: {
+      contract: 'supermega.supabase-security-advisor-audit.v1',
+      asOf: '2026-07-31T10:00:00.000Z',
+      projectRef: 'abcdefghijklmnopqrst',
+      targetClassification: 'protected-production',
+      postgres: { major: 17 },
+      advisor: { status: 'blocked', findingCount: 27 },
+      catalog: { sequenceCount: 2, nonTableRelationCount: 0, publicRoutineCount: 0, browserCallableRoutineCount: 0 },
+      managedBackend: { liveSchemaVersion: 7, localTargetVersion: 10, versionDrift: 3, browserRolesDenied: true, metadataRlsEnabled: false, storageBucketCount: 0 },
+      conclusion: { productionMutationAuthorized: false, indirectExposureAudited: true, nextAction: 'Rehearse hardening on an isolated target.' },
+      controls: { databaseWrites: 0 },
+    },
+    hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\nexact current-head verification reports release drift\nNo named pilot customer',
+    packageManifest: { supermega: { productionSupabaseTargetStatus: 'protected-unapproved', productionSupabaseProjectRef: 'abcdefghijklmnopqrst' } },
     sourceReceipts,
   }))
 }
