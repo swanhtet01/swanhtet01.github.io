@@ -7,6 +7,8 @@ import assert from 'node:assert/strict'
 // Force memory-mode store + deterministic cap BEFORE the modules load (both read env at import).
 for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY', 'POSTGRES_URL_NON_POOLING', 'POSTGRES_URL', 'DATABASE_URL_UNPOOLED', 'POSTGRES_PRISMA_URL', 'SUPERMEGA_DATABASE_URL', 'DATABASE_URL']) delete process.env[k]
 process.env.SUPERMEGA_CLIENT_TOKEN_CAP = '150000'
+process.env.SUPERMEGA_PLAN_CAP_PRO = '10000000'
+delete process.env.SUPERMEGA_ALLOW_TRUSTED_CAP_OVERRIDE
 process.env.ANTHROPIC_API_KEY = 'sk-ant-test-not-a-real-key'
 delete process.env.CLAUDE_API_KEY
 delete process.env.OPENROUTER_API_KEY
@@ -33,15 +35,25 @@ globalThis.fetch = async (url, opts = {}) => {
 after(() => { globalThis.fetch = realFetch })
 
 const ask = (q, opts = {}) => complete({ system: 'test', messages: [{ role: 'user', content: q }], ...opts })
+let seedCounter = 0
+async function seedCommittedUsage(tenant, amount, cap) {
+  const id = `policy-seed-${++seedCounter}`
+  const dispatchToken = `policy-dispatch-${seedCounter}`
+  await store.reserveTokenSpend(id, tenant, WINDOW, { reservedTokens: amount, capTokens: cap, dispatchToken, expiresAt: new Date(Date.now() + 60_000).toISOString(), context: { test_seed: seedCounter } })
+  await store.markTokenSpendDispatched(id, dispatchToken)
+  const settled = await store.settleTokenSpend(id, { inTokens: amount, outTokens: 0, calls: 1, dispatchToken })
+  assert.equal(settled.settled, true)
+}
 
-test('policyFor: free plan → forced bulk + default cap, overrides rejected (pure)', () => {
+test('policyFor: tier and spend caps are server-owned (pure)', () => {
   const pol = policyFor('free', { tier: 'deep', capTokens: 5_000_000 })
   assert.equal(pol.tier, 'bulk', 'free is forced to the bulk (Haiku) tier')
   assert.equal(pol.cap, CAP, 'caller capTokens is rejected — default cap stands')
   assert.equal(pol.overridesRejected, true)
   const pro = policyFor('pro', { tier: 'deep', capTokens: 5_000_000 })
   assert.equal(pro.tier, 'deep', 'paid plans keep their requested tier')
-  assert.equal(pro.cap, 5_000_000, 'paid plans may override the cap')
+  assert.equal(pro.cap, 10_000_000, 'paid plans use the configured server-side plan cap')
+  assert.equal(pro.overridesRejected, true, 'a request cannot raise or replace its own cap')
 })
 
 test('resolvePlan: unknown tenant / no row → free (fail closed)', async () => {
@@ -60,7 +72,7 @@ test('free tenant gets Haiku regardless of the tier it requests', async () => {
 })
 
 test('free tenant capTokens override is rejected — cap still enforced at the default', async () => {
-  await store.addTokenUsage('tenant-free-capped', WINDOW, { inTokens: CAP, outTokens: 1, calls: 1 })
+  await seedCommittedUsage('tenant-free-capped', CAP, CAP)
   await assert.rejects(
     () => ask('q-free-cap-override', { clientId: 'tenant-free-capped', capTokens: 99_999_999 }),
     /gateway_client_cap_reached/,
@@ -68,14 +80,14 @@ test('free tenant capTokens override is rejected — cap still enforced at the d
   )
 })
 
-test('paid tenant keeps its requested tier and its cap override is honored', async () => {
+test('paid tenant keeps its requested tier while the server plan cap remains authoritative', async () => {
   await store.createClient({ id: 'tenant-pro-a', name: 'Pro tenant A', plan: 'pro' })
   const r = await ask('q-pro-tier', { clientId: 'tenant-pro-a', tier: 'deep' })
   assert.equal(r.tier, 'deep')
   assert.equal(captured.at(-1).model, TIERS.deep.model)
   // over the default cap but under its own override → still served
   await store.createClient({ id: 'tenant-pro-b', name: 'Pro tenant B', plan: 'pro' })
-  await store.addTokenUsage('tenant-pro-b', WINDOW, { inTokens: CAP + 50_000, outTokens: 0, calls: 1 })
+  await seedCommittedUsage('tenant-pro-b', CAP + 50_000, 10_000_000)
   const r2 = await ask('q-pro-cap-override', { clientId: 'tenant-pro-b', tier: 'bulk', capTokens: 10_000_000 })
   assert.equal(r2.text, 'ok')
 })

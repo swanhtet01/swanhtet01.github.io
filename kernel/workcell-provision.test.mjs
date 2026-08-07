@@ -528,7 +528,10 @@ test('client SQL bootstrap contains the exact durable workcell contract', async 
   assert.match(sql, /create or replace function public\.supermega_get_ai_budget_usage/)
   assert.match(sql, /pg_advisory_xact_lock/)
   assert.match(sql, /security invoker/)
-  assert.doesNotMatch(sql, /security definer/)
+  // The company budget functions stay security invoker. The tenant spend/ledger RPCs are
+  // security definer BY DESIGN (direct table access is revoked from service_role), so every
+  // definer function must pin an empty search_path — an unpinned definer is still forbidden.
+  assert.doesNotMatch(sql, /security definer(?!\s+set search_path = '')/)
   assert.match(sql, /grant execute on function public\.supermega_reserve_ai_budget\(text,text,bigint,bigint,text,text,text\) to service_role/)
   assert.match(sql, /grant execute on function public\.supermega_get_ai_budget_usage\(text\) to service_role/)
   assert.match(sql, /grant select, insert on public\.supermega_owner_evidence to service_role/)
