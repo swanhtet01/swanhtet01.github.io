@@ -27,7 +27,8 @@ test('kernel production uses one owner-gated immutable candidate and exact rollb
   )
   assert.match(workflow, /environment: kernel-production/)
   assert.match(workflow, /permissions:\s*\n\s*contents: read/)
-  assert.match(workflow, /cancel-in-progress: false/)
+  assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/)
+  assert.doesNotMatch(workflow, /cancel-in-progress: true/)
 
   assert.match(workflow, /RELEASE_SHA: \$\{\{ inputs\.release_sha \}\}/)
   assert.match(workflow, /RELEASE_CONFIRMATION: \$\{\{ inputs\.confirmation \}\}/)
