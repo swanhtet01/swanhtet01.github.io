@@ -89,6 +89,12 @@ MIGRATION_V9 = (
     / "migrations"
     / "20260803063822_private_trial_backend_v9_metadata_rls.sql"
 )
+MIGRATION_V10 = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql"
+)
 MIGRATIONS = (
     MIGRATION_PREFLIGHT,
     MIGRATION_V1,
@@ -100,6 +106,7 @@ MIGRATIONS = (
     MIGRATION_V7,
     MIGRATION_V8,
     MIGRATION_V9,
+    MIGRATION_V10,
 )
 
 PRIVATE_SCHEMA = "app_private"
@@ -214,7 +221,7 @@ def _first_sql_token(statement: str) -> str:
 
 
 class MigrationSecurityEvidenceTests(unittest.TestCase):
-    def test_historical_migrations_are_unchanged_and_v8_v9_are_additive(self) -> None:
+    def test_historical_migrations_are_unchanged_and_v8_v9_v10_are_additive(self) -> None:
         preflight = _normalized_sql(MIGRATION_PREFLIGHT)
         v1 = _normalized_sql(MIGRATION_V1)
         v2 = _normalized_sql(MIGRATION_V2)
@@ -225,6 +232,7 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         v7 = _normalized_sql(MIGRATION_V7)
         v8 = _normalized_sql(MIGRATION_V8)
         v9 = _normalized_sql(MIGRATION_V9)
+        v10 = _normalized_sql(MIGRATION_V10)
         self.assertIn("pre-existing supermega trial backend role attributes are unsafe", preflight)
         self.assertIn("membership.roleid = backend_record.oid", preflight)
         self.assertIn("dependency.refclassid = 'pg_authid'::regclass", preflight)
@@ -285,6 +293,17 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
         self.assertIn("to supermega_trial_backend", v9)
         self.assertIn("using (component = 'private_trial_backend')", v9)
         self.assertIn("set schema_version = 9", v9)
+        self.assertIn("private trial backend v10 requires schema version 9", v10)
+        self.assertIn("create function app_private.supabase_session_is_active", v10)
+        self.assertIn("from auth.sessions as session_record", v10)
+        self.assertIn("security definer", v10)
+        self.assertIn("set search_path = ''", v10)
+        self.assertIn(
+            "revoke all on function app_private.supabase_session_is_active(uuid, uuid)",
+            v10,
+        )
+        self.assertIn("to supermega_trial_backend", v10)
+        self.assertIn("set schema_version = 10", v10)
 
     def test_private_schema_and_runtime_role_are_restricted(self) -> None:
         sql = _normalized_sql()
@@ -362,7 +381,7 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
             self.assertIn(f"create trigger {trigger}", sql)
         for index in EXPLICIT_INDEXES:
             self.assertIn(f"create index {index}", sql)
-        self.assertEqual(sql.count("security definer"), 1)
+        self.assertEqual(sql.count("security definer"), 2)
         self.assertIn(
             "create function app_private.actor_workspace_directory() returns table",
             sql,
@@ -371,6 +390,11 @@ class MigrationSecurityEvidenceTests(unittest.TestCase):
             "security definer set search_path = pg_catalog, app_private",
             sql,
         )
+        self.assertIn(
+            "create function app_private.supabase_session_is_active",
+            sql,
+        )
+        self.assertIn("security definer set search_path = ''", sql)
         self.assertGreaterEqual(sql.count("security invoker"), 3)
 
     def test_approval_decisions_require_a_trusted_human_actor_kind(self) -> None:
@@ -1498,6 +1522,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                     ("table", "workspace_access_controls", "supermega_trial_backend", "SELECT"),
                     ("function", "workspace_is_active", "supermega_trial_backend", "EXECUTE"),
                     ("function", "actor_workspace_directory", "supermega_trial_backend", "EXECUTE"),
+                    ("function", "supabase_session_is_active", "supermega_trial_backend", "EXECUTE"),
                 ]
 
                 class Row(dict):
@@ -1537,7 +1562,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         schema_exists=scenario != "missing_schema",
                         schema_ready=scenario != "missing_schema",
                         component="private_trial_backend",
-                        schema_version=0 if scenario == "wrong_version" else 9,
+                        schema_version=0 if scenario == "wrong_version" else 10,
                         tables=tables,
                         table_names=tables,
                         table_count=len(tables),
@@ -1646,6 +1671,11 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                                 0,
                             ),
                             ("function", "app_private.actor_workspace_directory()", 0),
+                            (
+                                "function",
+                                "app_private.supabase_session_is_active(target_user_id uuid, target_session_id uuid)",
+                                0,
+                            ),
                         ]
                         if scenario == "backend_outside_grant":
                             dependencies.append(("relation", "public.sensitive_data", 0))
@@ -1709,7 +1739,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             return []
                         return [
                             _snapshot(
-                                schema_version=0 if scenario == "wrong_version" else 9,
+                                schema_version=0 if scenario == "wrong_version" else 10,
                             )
                         ]
                     if "buckets_table_exists" in q and "objects_table_exists" in q:
@@ -1960,6 +1990,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                             "guard_workspace_access_control",
                             "workspace_is_active",
                             "actor_workspace_directory",
+                            "supabase_session_is_active",
                         ]
                         if scenario == "extra_function":
                             names.append("unexpected_private_function")
@@ -1967,24 +1998,43 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
                         for name in names:
                             access_function = name == "workspace_is_active"
                             directory_function = name == "actor_workspace_directory"
+                            session_function = name == "supabase_session_is_active"
                             rows.append(_snapshot(
                                 function_name=name,
                                 owner_name="runtime_login" if scenario == "wrong_owner" else "postgres",
                                 function_kind="f",
                                 identity_arguments=(
-                                    "target_workspace_id text" if access_function else ""
+                                    "target_workspace_id text"
+                                    if access_function
+                                    else "target_user_id uuid, target_session_id uuid"
+                                    if session_function
+                                    else ""
                                 ),
-                                result_type="boolean" if access_function else "trigger",
+                                result_type="boolean" if access_function or session_function else "trigger",
                                 function_source=(
                                     "select exists ( select 1 from "
                                     "app_private.workspace_access_controls access_control "
                                     "where access_control.workspace_id = target_workspace_id "
                                     "and access_control.status = 'active' )"
-                                    if access_function else FUNCTION_SOURCES.get(name, "")
+                                    if access_function
+                                    else "select exists ( select 1 from auth.sessions as session_record "
+                                    "where session_record.user_id = target_user_id "
+                                    "and session_record.id = target_session_id )"
+                                    if session_function
+                                    else FUNCTION_SOURCES.get(name, "")
                                 ),
-                                security_definer=directory_function,
-                                function_config=["search_path=pg_catalog, app_private"],
-                                function_language="sql" if access_function or directory_function else "plpgsql",
+                                security_definer=directory_function or session_function,
+                                volatility="s" if session_function else "v",
+                                function_config=(
+                                    ['search_path=""']
+                                    if session_function
+                                    else ["search_path=pg_catalog, app_private"]
+                                ),
+                                function_language=(
+                                    "sql"
+                                    if access_function or directory_function or session_function
+                                    else "plpgsql"
+                                ),
                             ))
                             if directory_function:
                                 rows[-1]["result_type"] = "TABLE(workspace_id text, capabilities text[], display_name text)"
@@ -2361,7 +2411,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         payload = _extract_json(result.stdout + result.stderr)
         serialized = json.dumps(payload, sort_keys=True).lower()
         self.assertTrue(payload.get("ok") is True or payload.get("status") == "ready")
-        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v9")
+        self.assertEqual(payload.get("contract"), "supermega_private_trial_database_v10")
         checks = payload.get("checks")
         self.assertIsInstance(checks, dict)
         assert isinstance(checks, dict)
@@ -2413,7 +2463,7 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
             {
                 "name": PRIVATE_SCHEMA,
                 "component": "private_trial_backend",
-                "version": 9,
+                "version": 10,
             },
         )
         self.assertEqual(
@@ -2439,8 +2489,8 @@ class ValidatorBehaviorContractTests(unittest.TestCase):
         self.assertEqual(
             evidence.get("grant"),
             {
-                "runtime_acl_entries": 14,
-                "expected_runtime_acl_entries": 14,
+                "runtime_acl_entries": 15,
+                "expected_runtime_acl_entries": 15,
                 "default_acl_entries": 0,
             },
         )

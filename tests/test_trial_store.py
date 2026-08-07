@@ -576,6 +576,15 @@ class TrialStoreTests(unittest.TestCase):
 
     def test_workspace_discovery_is_read_only_bounded_and_uses_private_directory(self) -> None:
         statements: list[tuple[str, tuple[object, ...]]] = []
+        session_active = True
+        principal = TrialPrincipal(
+            "workspace-discovery",
+            "2f8d24d8-308c-4dc8-a352-7b61df756728",
+            "human",
+            True,
+            "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3",
+            "supabase",
+        )
 
         class Cursor:
             def __init__(self):
@@ -601,6 +610,11 @@ class TrialStoreTests(unittest.TestCase):
                         "display_name": "Mingalar Fresh Mart",
                     },
                 ]
+
+            def fetchone(self):
+                if "supabase_session_is_active" in self.query:
+                    return {"active": session_active}
+                return None
 
         class Transaction:
             def __enter__(self):
@@ -633,7 +647,7 @@ class TrialStoreTests(unittest.TestCase):
                 return None
 
         store = DirectoryStore("postgresql://runtime.invalid/db", reducer=self.reducer)
-        workspaces, truncated = store.list_actor_workspaces("actor-a", limit=2)
+        workspaces, truncated = store.list_actor_workspaces(principal, limit=2)
 
         self.assertFalse(truncated)
         self.assertEqual(
@@ -643,13 +657,26 @@ class TrialStoreTests(unittest.TestCase):
         self.assertEqual(statements[0][0], "set transaction read only")
         self.assertTrue(any("limit %s" in query and parameters[-1] == 3 for query, parameters in statements))
         self.assertTrue(any("actor_workspace_directory()" in query for query, _parameters in statements))
+        session_position = next(
+            index for index, (query, _parameters) in enumerate(statements)
+            if "supabase_session_is_active" in query
+        )
+        directory_position = next(
+            index for index, (query, _parameters) in enumerate(statements)
+            if "actor_workspace_directory()" in query
+        )
+        self.assertLess(session_position, directory_position)
         self.assertFalse(any("workspace_memberships" in query for query, _parameters in statements))
         self.assertFalse(any(query.startswith(("insert ", "update ", "delete ")) for query, _parameters in statements))
 
         with self.assertRaises(TrialValidationError):
-            store.list_actor_workspaces("actor-a", limit=51)
+            store.list_actor_workspaces(principal, limit=51)
 
-    def test_postgres_schema_probe_requires_version_9_and_hardening_controls(self) -> None:
+        session_active = False
+        with self.assertRaisesRegex(TrialNotReadyError, "auth_session_active"):
+            store.list_actor_workspaces(principal, limit=2)
+
+    def test_postgres_schema_probe_requires_version_10_and_hardening_controls(self) -> None:
         def canonical_trigger_rows() -> list[dict[str, object]]:
             return [
                 {
@@ -698,7 +725,7 @@ class TrialStoreTests(unittest.TestCase):
                 return self.trigger_rows
 
         ready = {
-            "schema_version": 9,
+            "schema_version": 10,
             "actor_decision_columns_ready": True,
             "workspace_access_control_ready": True,
             "security_constraints_ready": True,

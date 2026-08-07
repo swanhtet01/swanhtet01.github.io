@@ -12,7 +12,13 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from supermega_runtime.runtime import create_app, reduce_trial_state
-from supermega_runtime.trial_store import ManagedWorkspaceAccess, TrialNotReadyError, TrialValidationError
+from supermega_runtime.supabase_auth import VerifiedSupabaseUser
+from supermega_runtime.trial_store import (
+    ManagedWorkspaceAccess,
+    TrialNotReadyError,
+    TrialPrincipal,
+    TrialValidationError,
+)
 
 
 STRONG_TEST_IDENTITY_SECRET = "mN7!qP2#vR9$kT4@xC8&dF5*zH1_wS6+"
@@ -154,8 +160,11 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_abcdefghijklmnopqrstuvwxyz",
         }
         with patch(
-            "supermega_runtime.runtime.verify_supabase_user_token",
-            return_value="2f8d24d8-308c-4dc8-a352-7b61df756728",
+            "supermega_runtime.runtime.verify_supabase_user_identity",
+            return_value=VerifiedSupabaseUser(
+                "2f8d24d8-308c-4dc8-a352-7b61df756728",
+                "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3",
+            ),
         ) as verify:
             with self._client(**environment) as client:
                 health = client.get("/api/health")
@@ -180,8 +189,11 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_abcdefghijklmnopqrstuvwxyz",
         }
         with patch(
-            "supermega_runtime.runtime.verify_supabase_user_token",
-            return_value="2f8d24d8-308c-4dc8-a352-7b61df756728",
+            "supermega_runtime.runtime.verify_supabase_user_identity",
+            return_value=VerifiedSupabaseUser(
+                "2f8d24d8-308c-4dc8-a352-7b61df756728",
+                "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3",
+            ),
         ) as verify, patch(
             "supermega_runtime.trial_store.PostgresTrialStore.list_actor_workspaces",
             return_value=([ManagedWorkspaceAccess("company-a", "Mingalar Fresh Mart", "owner")], False),
@@ -212,8 +224,14 @@ class CanonicalRuntimeTests(unittest.TestCase):
         )
         verify.assert_called_once()
         discover.assert_called_once_with(
-            "2f8d24d8-308c-4dc8-a352-7b61df756728",
-            actor_kind="human",
+            TrialPrincipal(
+                workspace_id="workspace-discovery",
+                actor_id="2f8d24d8-308c-4dc8-a352-7b61df756728",
+                actor_kind="human",
+                authenticated=True,
+                session_id="d8aaab28-a5a7-4a0d-9d75-7a6265a969c3",
+                identity_provider="supabase",
+            ),
             limit=50,
         )
 
@@ -234,7 +252,13 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "SUPERMEGA_SUPABASE_URL": "https://example.supabase.co",
             "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_abcdefghijklmnopqrstuvwxyz",
         }
-        with patch("supermega_runtime.runtime.verify_supabase_user_token", return_value="owner-a"), patch(
+        with patch(
+            "supermega_runtime.runtime.verify_supabase_user_identity",
+            return_value=VerifiedSupabaseUser(
+                "2f8d24d8-308c-4dc8-a352-7b61df756728",
+                "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3",
+            ),
+        ), patch(
             "supermega_runtime.trial_store.PostgresTrialStore.list_actor_workspaces",
             side_effect=TrialNotReadyError(("schema_ready",)),
         ):
@@ -252,7 +276,7 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "SUPERMEGA_SUPABASE_URL": "https://example.supabase.co",
             "SUPERMEGA_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_abcdefghijklmnopqrstuvwxyz",
         }
-        with patch("supermega_runtime.runtime.verify_supabase_user_token", return_value=None):
+        with patch("supermega_runtime.runtime.verify_supabase_user_identity", return_value=None):
             with self._client(**environment) as client:
                 rejected_token = client.get(
                     "/api/trial/v1/readiness",
