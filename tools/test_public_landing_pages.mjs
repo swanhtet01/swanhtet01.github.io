@@ -49,6 +49,15 @@ for (const page of landingPages) {
   check(html.includes(`<meta name="description" content="${description}" />`), `landing_meta_description:${page.route}`)
   check(html.includes(`<meta property="og:title" content="${page.title}" />`), `landing_og_title:${page.route}`)
   check(html.includes(`<meta property="og:url" content="${canonical}" />`), `landing_og_url:${page.route}`)
+  const shareImage = new URL('/og-card.png', `${manifest.release.productionDomain}/`).href
+  check(html.includes(`<meta property="og:image" content="${shareImage}" />`), `landing_og_image:${page.route}`)
+  check(html.includes('<meta property="og:image:width" content="1200" />') && html.includes('<meta property="og:image:height" content="630" />'), `landing_og_image_dimensions:${page.route}`)
+  check(html.includes('<meta name="twitter:card" content="summary_large_image" />') && html.includes(`<meta name="twitter:image" content="${shareImage}" />`), `landing_twitter_card:${page.route}`)
+  check(html.includes('<a class="skip-link" href="#content">Skip to content</a>') && html.includes('id="content"'), `landing_skip_link:${page.route}`)
+  const schemaBlocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+  check(schemaBlocks.length === 1, `landing_structured_data_count:${page.route}`)
+  const schema = JSON.parse(schemaBlocks[0]?.[1] || '{}')
+  check(schema['@context'] === 'https://schema.org' && schema['@type'] === 'Product' && schema.name === product.name && schema.url === canonical && schema.description === description, `landing_structured_data:${page.route}`)
   check(html.includes('<meta name="robots" content="index,follow" />'), `landing_indexable:${page.route}`)
   check(html.includes(`<h1>${product.headline}</h1>`), `landing_headline:${page.route}`)
   check(html.includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`), `landing_primary_cta:${page.route}`)
@@ -68,6 +77,16 @@ for (const page of landingPages) {
   check(home.includes(`href="${page.route}">${product.name} overview</a>`), `home_links_landing:${page.route}`)
   check(home.includes(`href="https://app.supermega.dev/settings/?product=${product.id}"`), `home_keeps_guided_cta:${product.id}`)
 }
+
+// Homepage carries exactly one Organization JSON-LD block sourced from the manifest.
+const homeSchemaBlocks = [...home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+check(homeSchemaBlocks.length === 1, 'home_structured_data_count')
+const homeSchema = JSON.parse(homeSchemaBlocks[0]?.[1] || '{}')
+check(homeSchema['@context'] === 'https://schema.org'
+  && homeSchema['@type'] === 'Organization'
+  && homeSchema.name === 'SuperMega'
+  && homeSchema.url === new URL('/', `${manifest.release.productionDomain}/`).href
+  && homeSchema.description === manifest.company.statement, 'home_structured_data')
 
 // Sitemap covers every public route exactly once with a well-formed lastmod.
 const sitemap = readStatic('sitemap.xml')
