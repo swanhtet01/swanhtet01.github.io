@@ -18668,7 +18668,7 @@ else {
     fail('product_operations_eagerly_loaded_on_home')
   }
 }
-if (files.some((path) => /[\\/]VisionProduct-[^\\/]+\.(?:js|css)$/.test(path))) fail('retired_service_product_shipped_in_production')
+if (files.some((path) => /[\\/]VisionProduct-[^\\/]+\.(?:js|css)$/.test(path))) fail('private_vision_preview_shipped_in_production')
 const largestJavascriptBytes = Math.max(...await Promise.all(javascriptFiles.map(async (path) => (await stat(path)).size)))
 const operationsArtifactPath = javascriptFiles.find((path) => /[\\/]core-app-[^\\/]+\.js$/.test(path))
 if (!operationsArtifactPath) fail('operations_route_artifact_missing')
