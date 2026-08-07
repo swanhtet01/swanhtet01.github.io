@@ -160,12 +160,13 @@ async function verifyCanonicalPythonBundle() {
     ]) {
       await copyFile(resolve(root, relativePath), resolve(bundleRoot, relativePath))
     }
+    const overridePython = process.env.SUPERMEGA_LOCAL_PYTHON?.trim()
     const localPython = process.platform === 'win32'
       ? resolve(root, '.venv/Scripts/python.exe')
       : resolve(root, '.venv/bin/python')
-    const python = existsSync(localPython)
+    const python = overridePython || (existsSync(localPython)
       ? localPython
-      : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3'))
+      : (process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3')))
     return spawnSync(
       python,
       ['-c', [
