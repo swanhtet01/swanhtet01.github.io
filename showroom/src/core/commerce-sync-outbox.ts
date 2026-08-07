@@ -4,7 +4,7 @@ import {
   validateCommerceState,
   type CommerceActionProof,
   type CommerceState,
-} from './commerce-workspace'
+} from './commerce-workspace.ts'
 
 export const COMMERCE_SYNC_OUTBOX_CONTRACT = 'supermega.commerce.sync-outbox.v1' as const
 export const COMMERCE_SYNC_DATABASE = 'supermega-sync-v1'

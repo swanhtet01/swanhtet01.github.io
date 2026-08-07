@@ -158,15 +158,12 @@ export const APP_SHELL_REQUIREMENTS = [
     ],
   },
   {
-    id: 'upstream-source-backed-command-center', authority: 'upstream', file: 'showroom/src/core/ProductHomeReadiness.tsx', tokens: [
-      'summarizeBehaviorPreferences',
-      'const productContinuations',
-      'loadManagedCompanyBrief',
-      'loadManagedOwnerControlRun',
-      'acknowledgeManagedOwnerControlItem',
-      'aria-label="Ask SuperMega business command center"',
-      'Acknowledgement confirms review only. It does not claim resolution or run any product or external action.',
-      'Why this answer',
+    id: 'upstream-onboarding-consequence-boundary', authority: 'upstream', file: 'showroom/src/core/ProductOnboardingPage.tsx', tokens: [
+      'Stays on this device. Nothing is sent or published.',
+      'This setup affects {onboardingProduct.name} only. Your other products stay separate.',
+      'Creates local sample records, then opens the first task.',
+      'Ask SuperMega to set up {onboardingProduct.name}',
+      'managedTrialRequestUrl(product, onboardingTemplate.id)',
     ],
   },
   {
@@ -191,15 +188,14 @@ export const APP_SHELL_REQUIREMENTS = [
     ],
   },
   {
-    id: 'candidate-accountable-ai-readiness', authority: 'candidate', file: 'showroom/src/core/ProductHomeReadiness.tsx', tokens: [
-      'aria-label="Ask SuperMega business command center"',
-      'aria-label="Owner Control run"',
-      'Ask what needs attention.',
-      'Acknowledgement confirms review only. It does not claim resolution or run any product or external action.',
-      'aria-label="Suggested business questions"',
-      'Why this answer',
-      'aria-label="Product starter paths"',
-      'Start one product in 2 clicks.',
+    id: 'candidate-one-step-product-onboarding', authority: 'candidate', file: 'showroom/src/core/ProductOnboardingPage.tsx', tokens: [
+      'export function ProductOnboardingPage',
+      'async function startGuidedWorkspace',
+      'provisionLocalShopWorkingSample',
+      'provisionLocalPlantWorkingSample',
+      'activateLocalWebsiteWorkingSample',
+      'startPilotOutcome',
+      "firstTaskPath: '/shop/?tab=counter'",
     ],
   },
   {
