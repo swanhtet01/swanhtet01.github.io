@@ -123,7 +123,7 @@ requireContract('ordered integration batches preserve production safeguards and 
   && releaseIntegrationBatch.includes('const ProductSystemNavigator = lazy(')
   && releaseIntegrationBatch.includes('Choose what you want to run.')
   && releaseIntegrationBatch.includes('.product-system-workflows { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }')
-  && releaseIntegrationBatch.includes('aria-label="Ask SuperMega business command center"')
+  && releaseIntegrationBatch.includes('startGuidedWorkspace')
   && releaseIntegrationBatch.includes('function ecommerceOrderAmendmentSummary')
   && releaseIntegrationBatch.includes('Already saved for this company as revision')
   && releaseIntegrationBatch.includes('<details aria-label="Enterprise order controls"')
