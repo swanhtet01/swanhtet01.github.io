@@ -11,8 +11,15 @@ import {
 } from './commerce-workspace'
 import { plantImportDueAt } from './managed-trial'
 import {
+  PRODUCTION_KEY,
+  appendGuidedSampleProductionActivity,
+  createSeedProduction,
+  hasGuidedSampleProductionActivity,
   installProductionWorkingSampleJobs,
+  isGuidedSampleProduction,
+  mutateProductionWorkspace,
   mutateProductionWorkingSample,
+  validateProductionState,
   type ProductionJob,
 } from './production-workspace'
 import {
@@ -149,7 +156,20 @@ export async function provisionLocalPlantWorkingSample(industryPackId: PlantIndu
     priority: 'normal',
     dueAt: plantImportDueAt(row.values.dueDate),
   }))
-  let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
+  // A pure guided-sample workspace may be replaced when switching packs; real
+  // operator evidence keeps the existing preservation behavior.
+  try {
+    const stored = window.localStorage.getItem(PRODUCTION_KEY)
+    if (stored) {
+      const current = validateProductionState(JSON.parse(stored))
+      if (isGuidedSampleProduction(current) && hasGuidedSampleProductionActivity(current)) {
+        window.localStorage.setItem(PRODUCTION_KEY, JSON.stringify(createSeedProduction()))
+      }
+    }
+  } catch {
+    // Unreadable production data keeps its existing recovery path.
+  }
+  const outcome: { disposition: 'installed' | 'current' | 'preserved' } = { disposition: 'preserved' }
   const result = await mutateProductionWorkingSample((current) => {
     const next = installProductionWorkingSampleJobs(current, {
       sampleId: pack.id,
@@ -158,9 +178,17 @@ export async function provisionLocalPlantWorkingSample(industryPackId: PlantIndu
       capturedAt: new Date().toISOString(),
     })
     if (!next) return current
-    disposition = next === current ? 'current' : 'installed'
+    outcome.disposition = next === current ? 'current' : 'installed'
     return next
   })
   if (!result.ok) throw new Error(result.error)
-  return disposition
+  if (outcome.disposition === 'installed') {
+    const planningDay = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date())
+    await mutateProductionWorkspace((current) => appendGuidedSampleProductionActivity(current, {
+      planningDay,
+      materialRef: pack.setup.materialId,
+      materialUnit: pack.setup.materialUnit,
+    }))
+  }
+  return outcome.disposition
 }

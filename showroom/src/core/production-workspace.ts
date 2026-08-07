@@ -3786,3 +3786,69 @@ export function completeProductionMaintenance(
     events: [event, ...next.events],
   })
 }
+
+export const GUIDED_SAMPLE_PRODUCTION_ACTOR = 'Guided sample'
+const WORKING_SAMPLE_SETUP_ACTOR = 'Demo setup'
+const guidedSampleActionPrefix = 'ACT-GUIDED-SAMPLE-'
+
+export function isGuidedSampleProduction(stateValue: ProductionState) {
+  let state: ProductionState
+  try { state = validateProductionState(stateValue) } catch { return false }
+  return state.events.every((event) => event.actor === WORKING_SAMPLE_SETUP_ACTOR || event.actor === GUIDED_SAMPLE_PRODUCTION_ACTOR)
+}
+
+export function hasGuidedSampleProductionActivity(stateValue: ProductionState) {
+  let state: ProductionState
+  try { state = validateProductionState(stateValue) } catch { return false }
+  return state.events.some((event) => event.actionId.startsWith(guidedSampleActionPrefix))
+}
+
+export function appendGuidedSampleProductionActivity(stateValue: ProductionState, input: {
+  planningDay: string
+  materialRef: string
+  materialUnit: ProductionMaterialUnit
+}): ProductionState | null {
+  let state: ProductionState
+  try { state = validateProductionState(stateValue) } catch { return null }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.planningDay) || !Number.isFinite(Date.parse(`${input.planningDay}T00:00:00.000Z`))) return null
+  if (!isGuidedSampleProduction(state) || hasGuidedSampleProductionActivity(state)) return null
+  const activeJobs = state.jobs
+    .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+    .slice(0, 2)
+  if (!activeJobs.length) return null
+  const shiftRef = `${input.planningDay} Day`
+  const latestEventAt = state.events.length ? Date.parse(state.events[0].createdAt) : 0
+  const base = Math.max(latestEventAt + 60_000, Date.parse(`${input.planningDay}T01:30:00.000Z`))
+  let step = 0
+  const proof = (reason: string): ProductionActionProof => ({
+    actionId: `${guidedSampleActionPrefix}${String(step += 1).padStart(3, '0')}`,
+    capturedAt: new Date(base + step * 90_000).toISOString(),
+    actor: GUIDED_SAMPLE_PRODUCTION_ACTOR,
+    reason,
+    evidenceReference: 'GUIDED-SAMPLE-DEMO',
+  })
+  const primary = activeJobs[0]
+  const primaryOutput = Math.max(1, Math.floor(primary.target * 0.4))
+  const primaryScrap = Math.max(1, Math.floor(primary.target * 0.02))
+  let next = recordProductionOutput(state, primary.id, primaryOutput, shiftRef, proof('Guided sample shift output for the demo workspace.'))
+  if (!next) return null
+  next = recordProductionScrap(next, primary.id, primaryScrap, shiftRef, proof('Guided sample scrap entry for a realistic yield line.'))
+  if (!next) return null
+  next = recordProductionMaterialConsumption(
+    next,
+    primary.id,
+    input.materialRef,
+    undefined,
+    primaryOutput * 2,
+    input.materialUnit,
+    shiftRef,
+    proof('Guided sample material issue tied to the shift output.'),
+  )
+  if (!next) return null
+  const secondary = activeJobs[1]
+  if (secondary) {
+    next = recordProductionOutput(next, secondary.id, Math.max(1, Math.floor(secondary.target * 0.25)), shiftRef, proof('Guided sample output on the second demo job.'))
+    if (!next) return null
+  }
+  try { return validateProductionState(next) } catch { return null }
+}

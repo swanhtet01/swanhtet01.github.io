@@ -1,0 +1,126 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import {
+  GUIDED_SAMPLE_PRODUCTION_ACTOR,
+  appendGuidedSampleProductionActivity,
+  createSeedProduction,
+  hasGuidedSampleProductionActivity,
+  installProductionWorkingSampleJobs,
+  isGuidedSampleProduction,
+  productionShiftOutput,
+  recordProductionOutput,
+  validateProductionState,
+} from '../showroom/src/core/production-workspace.ts'
+import { plantIndustryPacks } from '../showroom/src/core/plant-industry-packs.ts'
+
+const PLANNING_DAY = '2026-08-07'
+const INSTALLED_AT = `${PLANNING_DAY}T01:00:00.000Z`
+const SHIFT_REF = `${PLANNING_DAY} Day`
+
+function installedSample(pack) {
+  const jobs = [
+    {
+      id: `${pack.setup.outputPrefix}-101`,
+      line: `${pack.setup.workCentrePrefix}-1`,
+      product: `${pack.name} demo order A`,
+      target: 200,
+      output: 0,
+      owner: 'Demo owner',
+      priority: 'normal',
+      dueAt: '2026-08-21T10:00:00.000Z',
+    },
+    {
+      id: `${pack.setup.outputPrefix}-102`,
+      line: `${pack.setup.workCentrePrefix}-1`,
+      product: `${pack.name} demo order B`,
+      target: 120,
+      output: 0,
+      owner: 'Demo owner',
+      priority: 'normal',
+      dueAt: '2026-08-28T10:00:00.000Z',
+    },
+  ]
+  const installed = installProductionWorkingSampleJobs(createSeedProduction(), {
+    sampleId: pack.id,
+    sampleName: pack.name,
+    jobs,
+    capturedAt: INSTALLED_AT,
+  })
+  assert.ok(installed, `${pack.id} working sample must install`)
+  return installed
+}
+
+function demoActivity(pack) {
+  return appendGuidedSampleProductionActivity(installedSample(pack), {
+    planningDay: PLANNING_DAY,
+    materialRef: pack.setup.materialId,
+    materialUnit: pack.setup.materialUnit,
+  })
+}
+
+test('every plant pack gains valid guided-sample shift activity', () => {
+  for (const pack of plantIndustryPacks) {
+    const state = demoActivity(pack)
+    assert.ok(state, `${pack.id} guided sample must append`)
+    validateProductionState(state)
+    assert.ok(isGuidedSampleProduction(state))
+    assert.ok(hasGuidedSampleProductionActivity(state))
+
+    const shift = productionShiftOutput(state, SHIFT_REF)
+    assert.ok(shift.goodUnits >= 1, `${pack.id} shift good units`)
+    assert.ok(shift.entryCount >= 1, `${pack.id} shift entry count`)
+    const materialEntries = state.events.filter((event) => event.kind === 'material_consumed')
+    assert.equal(materialEntries.length, 1)
+    assert.equal(materialEntries[0].materialRef, pack.setup.materialId)
+    const outputs = state.events.filter((event) => event.kind === 'output_recorded')
+    assert.ok(outputs.length >= 2)
+    assert.ok(outputs.every((event) => event.shiftRef === SHIFT_REF))
+    assert.ok(state.events
+      .filter((event) => event.actionId.startsWith('ACT-GUIDED-SAMPLE-'))
+      .every((event) => event.actor === GUIDED_SAMPLE_PRODUCTION_ACTOR))
+  }
+})
+
+test('the guided sample is deterministic for a fixed planning day', () => {
+  for (const pack of plantIndustryPacks) {
+    assert.deepEqual(demoActivity(pack), demoActivity(pack))
+  }
+})
+
+test('the guided sample refuses invalid days, empty workspaces, and double application', () => {
+  const pack = plantIndustryPacks[0]
+  const installed = installedSample(pack)
+  const invalidDay = { planningDay: 'today', materialRef: pack.setup.materialId, materialUnit: pack.setup.materialUnit }
+  assert.equal(appendGuidedSampleProductionActivity(installed, invalidDay), null)
+  assert.equal(appendGuidedSampleProductionActivity(createSeedProduction(), {
+    planningDay: PLANNING_DAY,
+    materialRef: pack.setup.materialId,
+    materialUnit: pack.setup.materialUnit,
+  }), null)
+  const once = demoActivity(pack)
+  assert.equal(appendGuidedSampleProductionActivity(once, {
+    planningDay: PLANNING_DAY,
+    materialRef: pack.setup.materialId,
+    materialUnit: pack.setup.materialUnit,
+  }), null)
+})
+
+test('real operator evidence blocks the guided sample and stays distinguishable', () => {
+  const pack = plantIndustryPacks[0]
+  const installed = installedSample(pack)
+  const withOperatorOutput = recordProductionOutput(installed, `${pack.setup.outputPrefix}-101`, 5, SHIFT_REF, {
+    actionId: 'ACT-OPERATOR-001',
+    capturedAt: `${PLANNING_DAY}T02:00:00.000Z`,
+    actor: 'Shift operator',
+    reason: 'Real recorded output.',
+    evidenceReference: 'SHIFT-LOG-001',
+  })
+  assert.ok(withOperatorOutput)
+  assert.equal(isGuidedSampleProduction(withOperatorOutput), false)
+  assert.equal(appendGuidedSampleProductionActivity(withOperatorOutput, {
+    planningDay: PLANNING_DAY,
+    materialRef: pack.setup.materialId,
+    materialUnit: pack.setup.materialUnit,
+  }), null)
+})
