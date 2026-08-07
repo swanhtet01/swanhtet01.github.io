@@ -310,6 +310,38 @@ for (const route of [
 if (!config.routes.some((entry) => entry.handle === 'filesystem')) fail('filesystem_route_missing')
 if (!config.routes.some((entry) => entry.src === '^/(.*)$' && entry.status === 404 && entry.dest === '/404.html')) fail('not_found_route_missing')
 
+// Retired public API surface. The legacy ops endpoints were deliberately removed
+// in the public-site consolidation (f8c5299e); their old ops-key 401 contract is
+// retired with them. Every unknown /api/* path must resolve to the not-found
+// function, which answers 404 {"status":"not_found"} with no auth semantics.
+const apiFallthrough = config.routes.find((entry) => entry.src === '^/api/(.*)$')
+if (apiFallthrough?.dest !== '/api/not-found.js') fail('retired_api_fallthrough_route_missing', { apiFallthrough })
+const firstApiMatch = (path) => config.routes.find((entry) => typeof entry.src === 'string' && entry.continue !== true && new RegExp(entry.src).test(path))
+const retiredApiPaths = [
+  '/api/pipeline-control/status',
+  '/api/pipeline-control',
+  '/api/commercial-control/status',
+  '/api/commercial-control',
+  '/api/checkout-start',
+  '/api/product-activation',
+  '/api/sales-daily',
+  '/api/behavior-events',
+  '/api/campaign-clicks',
+  '/api/public-app-handoff',
+]
+for (const path of retiredApiPaths) {
+  const match = firstApiMatch(path)
+  if (match?.dest !== '/api/not-found.js') fail('retired_api_path_not_retired', { path, match })
+}
+for (const path of ['/api/health', '/api/contact-submissions', '/api/contact-submissions/status']) {
+  const match = firstApiMatch(path)
+  if (match?.dest === '/api/not-found.js' || !match?.dest) fail('active_api_path_retired', { path, match })
+}
+const notFoundFunction = readFileSync(resolve(functionsDir, 'not-found.js.func', 'index.js'), 'utf8')
+if (!notFoundFunction.includes('res.statusCode = 404')
+  || !notFoundFunction.includes("JSON.stringify({ status: 'not_found' })")) fail('retired_api_not_found_contract_drift')
+if (/\b401\b|unauthorized|SUPERMEGA_OPS_KEY|authorization|x-ops-key/i.test(notFoundFunction)) fail('retired_api_function_carries_auth_semantics')
+
 console.log(JSON.stringify({
   ok: true,
   contract: 'supermega_public_output',
