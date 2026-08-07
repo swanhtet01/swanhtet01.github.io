@@ -420,6 +420,72 @@
   min-height: 44px;
 }
 
+.website-go-live {
+  overflow: hidden;
+  margin: 0 14px 14px;
+  border: 1px solid color-mix(in srgb, var(--publish-accent) 22%, var(--website-line));
+  border-radius: 10px;
+  background: var(--website-panel-raised);
+}
+
+.website-go-live > header {
+  padding: 14px 14px 8px;
+}
+
+.website-go-live > header h4 {
+  margin: 2px 0 0;
+  color: var(--website-ink);
+  font-size: 16px;
+}
+
+.website-go-live > header p {
+  margin: 4px 0 0;
+  color: var(--website-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.website-go-live-option {
+  border-top: 1px solid var(--website-line);
+  padding: 0 14px;
+}
+
+.website-go-live-option > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--website-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.website-go-live-option ol {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding-left: 20px;
+  color: var(--website-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.website-go-live-option ol code {
+  color: var(--website-ink);
+  font-size: 12px;
+}
+
+.website-go-live-option p {
+  margin: 0 0 12px;
+  color: var(--website-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.website-go-live-option .website-button {
+  margin-bottom: 12px;
+}
+
 .website-release-loading,
 .website-release-foundation {
   margin: 0 14px 14px;
@@ -745,8 +811,13 @@
 
   .website-release-loading,
   .website-release-foundation,
+  .website-go-live,
   .website-publish-history-disclosure {
     margin-inline: 10px;
+  }
+
+  .website-go-live-option .website-button {
+    width: 100%;
   }
 
   .website-release-foundation > header,
