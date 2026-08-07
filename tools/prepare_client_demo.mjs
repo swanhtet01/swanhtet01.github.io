@@ -14,13 +14,23 @@ export const CLIENT_DEMO_REHEARSAL_PLAN_MAX_BYTES = 512 * 1024
 export const CLIENT_DEMO_REHEARSAL_OBSERVATIONS_CONTRACT = 'supermega.client_demo_rehearsal_observations.v1'
 export const CLIENT_DEMO_REHEARSAL_RESULT_CONTRACT = 'supermega.client_demo_rehearsal_result.v1'
 export const CLIENT_DEMO_REHEARSAL_RESULT_MAX_BYTES = 512 * 1024
+export const CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT = 'supermega.client_contact_intake_review.v1'
+export const CLIENT_CONTACT_INTAKE_CONTRACT = 'supermega.client_contact_intake.v1'
+export const CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT = 'supermega.client_contact_intake_workspace.v1'
 const CLIENT_DEMO_REHEARSAL_OBSERVATIONS_MAX_BYTES = 256 * 1024
 const CLIENT_DEMO_KIT_MAX_BYTES = 128 * 1024
 const CLIENT_PROFILE_MAX_BYTES = 16 * 1024
 const CLIENT_DATA_MAX_BYTES = 512 * 1024
+const CLIENT_CONTACT_EVENT_MAX_BYTES = 256 * 1024
+const CLIENT_CONTACT_REVIEW_MAX_BYTES = 32 * 1024
+const CLIENT_CONTACT_INTAKE_MAX_BYTES = 32 * 1024
+const CLIENT_CONTACT_INTAKE_FILE = 'CONTACT-INTAKE.json'
 const PRODUCT_ORDER = Object.freeze(['commerce', 'production', 'website', 'ecommerce'])
 const PRODUCT_FILE = Object.freeze(Object.fromEntries(PRODUCT_ORDER.map((product) => [product, `${product}.csv`])))
 const PRODUCT_LABEL = Object.freeze({ commerce: 'Shop', production: 'Plant', website: 'Website', ecommerce: 'Ecommerce' })
+const CONTACT_PRODUCT = Object.freeze({ shop: 'commerce', commerce: 'commerce', plant: 'production', production: 'production', website: 'website', ecommerce: 'ecommerce', guide: 'guide' })
+const CONTACT_PRODUCT_SUGGESTION = Object.freeze({ commerce: ['shop'], production: ['plant'], website: ['website'], ecommerce: ['shop', 'ecommerce'], guide: [] })
+const CONTACT_PRESET_SUGGESTION = Object.freeze({ commerce: 'retail-network', production: 'manufacturing', website: 'service-business', ecommerce: 'retail-network', guide: 'service-business' })
 const PRODUCT_PATHS = Object.freeze({
   commerce: { demoPath: '/shop/?tab=counter', setupPath: '/settings/?product=shop' },
   production: { demoPath: '/plant/?tab=production', setupPath: '/settings/?product=plant' },
@@ -111,6 +121,154 @@ function canonicalIntegrations(products) {
 function canonicalTimestamp(value) {
   if (typeof value !== 'string' || value.length > 32) return null
   try { return new Date(value).toISOString() === value ? value : null } catch { return null }
+}
+
+function boundedPrivateText(value, code, maximum, { optional = false, singleLine = false } = {}) {
+  if (typeof value !== 'string') fail(code)
+  const normalized = value.replace(/\r\n?/g, '\n').trim()
+  if ((!normalized && !optional) || normalized.length > maximum) fail(code)
+  const forbidden = singleLine ? /[\u0000-\u001f\u007f]/ : /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/
+  if (forbidden.test(normalized)) fail(code)
+  return normalized
+}
+
+function canonicalContactProducts(values) {
+  if (!Array.isArray(values) || values.length < 1 || values.length > PRODUCT_ORDER.length) fail('client_contact_products_invalid')
+  const mapped = values.map((value) => CONTACT_PRODUCT[String(value || '').trim().toLowerCase()]).filter((value) => value && value !== 'guide')
+  if (mapped.length !== values.length || new Set(mapped).size !== mapped.length) fail('client_contact_products_invalid')
+  const canonical = PRODUCT_ORDER.filter((product) => mapped.includes(product))
+  if (JSON.stringify(canonical) !== JSON.stringify(mapped)) fail('client_contact_products_invalid')
+  if (canonical.includes('ecommerce') && !canonical.includes('commerce')) fail('client_contact_ecommerce_requires_shop')
+  return canonical
+}
+
+function normalizedClientContactEvent(event) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)
+    || event.event !== 'supermega.contact.created'
+    || !event.record || typeof event.record !== 'object' || Array.isArray(event.record)) fail('client_contact_event_invalid')
+  const leadId = boundedPrivateText(event.record.lead_id, 'client_contact_lead_invalid', 80, { singleLine: true })
+  if (!/^LEAD-[A-Z0-9]{8,72}$/.test(leadId)) fail('client_contact_lead_invalid')
+  const requestedProduct = CONTACT_PRODUCT[String(event.record.workflow || '').trim().toLowerCase()]
+  if (!requestedProduct) fail('client_contact_product_invalid')
+  const company = boundedPrivateText(event.record.company, 'client_contact_company_invalid', 180, { singleLine: true })
+  const goal = boundedPrivateText(event.record.goal, 'client_contact_goal_invalid', 4_000)
+  const requestedTemplate = boundedPrivateText(String(event.record.requested_package || ''), 'client_contact_template_invalid', 120, { optional: true, singleLine: true })
+  const submittedAt = canonicalTimestamp(event.record.submitted_at)
+  if (!submittedAt) fail('client_contact_submitted_time_invalid')
+  return { leadId, requestedProduct, company, goal, requestedTemplate, submittedAt }
+}
+
+export function buildClientContactReviewTemplate(event) {
+  const contact = normalizedClientContactEvent(event)
+  return {
+    contract: CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT,
+    leadId: contact.leadId,
+    workspace: 'REPLACE WITH REVIEWED WORKSPACE',
+    implementationOwner: 'REPLACE WITH IMPLEMENTATION OWNER',
+    presetId: CONTACT_PRESET_SUGGESTION[contact.requestedProduct],
+    products: [...CONTACT_PRODUCT_SUGGESTION[contact.requestedProduct]],
+    companyReviewed: false,
+    goalReviewed: false,
+    privateWorkspaceApproved: false,
+    reviewedAt: 'REPLACE WITH REVIEW TIME ISO',
+  }
+}
+
+export function buildClientContactIntake(event, review) {
+  const contact = normalizedClientContactEvent(event)
+  if (!review || typeof review !== 'object' || Array.isArray(review)
+    || !hasExactKeys(review, ['contract', 'leadId', 'workspace', 'implementationOwner', 'presetId', 'products', 'companyReviewed', 'goalReviewed', 'privateWorkspaceApproved', 'reviewedAt'])
+    || review.contract !== CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT) fail('client_contact_review_invalid')
+
+  if (review.leadId !== contact.leadId) fail('client_contact_lead_mismatch')
+  const reviewedAt = canonicalTimestamp(review.reviewedAt)
+  if (!reviewedAt || Date.parse(reviewedAt) < Date.parse(contact.submittedAt)) fail('client_contact_review_time_invalid')
+  if (review.companyReviewed !== true || review.goalReviewed !== true || review.privateWorkspaceApproved !== true) fail('client_contact_review_approval_required')
+
+  const workspace = boundedPrivateText(review.workspace, 'client_contact_workspace_invalid', 60, { singleLine: true })
+  const implementationOwner = boundedPrivateText(review.implementationOwner, 'client_contact_owner_invalid', 80, { singleLine: true })
+  const presetId = boundedPrivateText(review.presetId, 'client_contact_preset_invalid', 60, { singleLine: true })
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(presetId)) fail('client_contact_preset_invalid')
+  const products = canonicalContactProducts(review.products)
+  if (contact.requestedProduct !== 'guide' && !products.includes(contact.requestedProduct)) fail('client_contact_requested_product_missing')
+
+  const body = {
+    contract: CLIENT_CONTACT_INTAKE_CONTRACT,
+    source: {
+      event: 'supermega.contact.created',
+      leadDigest: sha256(contact.leadId),
+      companyDigest: sha256(contact.company),
+      submittedAt: contact.submittedAt,
+    },
+    client: {
+      workspace,
+      implementationOwner,
+      presetId,
+      products,
+      requestedProduct: contact.requestedProduct,
+    },
+    request: {
+      goal: contact.goal,
+      requestedTemplate: contact.requestedTemplate,
+    },
+    review: {
+      reviewedAt,
+      companyReviewed: true,
+      goalReviewed: true,
+      privateWorkspaceApproved: true,
+    },
+    controls: {
+      privateArtifact: true,
+      requesterNameRetained: false,
+      requesterEmailRetained: false,
+      rawContactRetained: false,
+      externalWritesPerformed: false,
+      modelCallsPerformed: false,
+      activationStatus: 'not_applied',
+    },
+  }
+  const packet = { ...body, digest: sha256(JSON.stringify(body)) }
+  if (Buffer.byteLength(JSON.stringify(packet), 'utf8') > CLIENT_CONTACT_INTAKE_MAX_BYTES) fail('client_contact_intake_too_large')
+  return packet
+}
+
+export function verifyClientContactIntake(value) {
+  if (!hasExactKeys(value, ['contract', 'source', 'client', 'request', 'review', 'controls', 'digest'])
+    || value.contract !== CLIENT_CONTACT_INTAKE_CONTRACT
+    || !hasExactKeys(value.source, ['event', 'leadDigest', 'companyDigest', 'submittedAt'])
+    || value.source.event !== 'supermega.contact.created'
+    || !/^sha256:[0-9a-f]{64}$/.test(value.source.leadDigest)
+    || !/^sha256:[0-9a-f]{64}$/.test(value.source.companyDigest)
+    || !canonicalTimestamp(value.source.submittedAt)
+    || !hasExactKeys(value.client, ['workspace', 'implementationOwner', 'presetId', 'products', 'requestedProduct'])
+    || !hasExactKeys(value.request, ['goal', 'requestedTemplate'])
+    || !hasExactKeys(value.review, ['reviewedAt', 'companyReviewed', 'goalReviewed', 'privateWorkspaceApproved'])
+    || !hasExactKeys(value.controls, ['privateArtifact', 'requesterNameRetained', 'requesterEmailRetained', 'rawContactRetained', 'externalWritesPerformed', 'modelCallsPerformed', 'activationStatus'])
+    || value.controls.privateArtifact !== true
+    || value.controls.requesterNameRetained !== false
+    || value.controls.requesterEmailRetained !== false
+    || value.controls.rawContactRetained !== false
+    || value.controls.externalWritesPerformed !== false
+    || value.controls.modelCallsPerformed !== false
+    || value.controls.activationStatus !== 'not_applied'
+    || value.review.companyReviewed !== true
+    || value.review.goalReviewed !== true
+    || value.review.privateWorkspaceApproved !== true
+    || !canonicalTimestamp(value.review.reviewedAt)
+    || Date.parse(value.review.reviewedAt) < Date.parse(value.source.submittedAt)
+    || !CONTACT_PRODUCT[value.client.requestedProduct]
+    || typeof value.digest !== 'string') fail('client_contact_intake_invalid')
+  boundedPrivateText(value.client.workspace, 'client_contact_intake_invalid', 60, { singleLine: true })
+  boundedPrivateText(value.client.implementationOwner, 'client_contact_intake_invalid', 80, { singleLine: true })
+  boundedPrivateText(value.client.presetId, 'client_contact_intake_invalid', 60, { singleLine: true })
+  boundedPrivateText(value.request.goal, 'client_contact_intake_invalid', 4_000)
+  boundedPrivateText(value.request.requestedTemplate, 'client_contact_intake_invalid', 120, { optional: true, singleLine: true })
+  const products = canonicalContactProducts(value.client.products)
+  if (JSON.stringify(products) !== JSON.stringify(value.client.products)
+    || (value.client.requestedProduct !== 'guide' && !products.includes(value.client.requestedProduct))) fail('client_contact_intake_invalid')
+  const { digest, ...body } = value
+  if (digest !== sha256(JSON.stringify(body)) || Buffer.byteLength(JSON.stringify(value), 'utf8') > CLIENT_CONTACT_INTAKE_MAX_BYTES) fail('client_contact_intake_invalid')
+  return value
 }
 
 function operatingFoundationValid(value, client) {
@@ -244,12 +402,39 @@ async function writePrivateStarterFile(path, content) {
   }
 }
 
-export async function initializeClientWorkspace({ directory, presetId = 'manufacturing', products = PRODUCT_ORDER }) {
+export async function writeClientContactReviewTemplate(event, outputPath) {
+  if (typeof outputPath !== 'string' || !outputPath.trim()) fail('client_contact_review_output_invalid')
+  const template = buildClientContactReviewTemplate(event)
+  await writePrivateStarterFile(resolve(outputPath), `${JSON.stringify(template, null, 2)}\n`)
+  return {
+    ok: true,
+    contract: CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT,
+    suggestedProductCount: template.products.length,
+    reviewApproved: false,
+    requesterNameRetained: false,
+    requesterEmailRetained: false,
+    rawContactRetained: false,
+    externalWritesPerformed: false,
+    modelCallsPerformed: false,
+  }
+}
+
+async function initializeClientWorkspaceFiles({ directory, presetId, products, workspace, owner, contactIntake = null }) {
   if (typeof directory !== 'string' || !directory.trim() || typeof presetId !== 'string'
     || !Array.isArray(products) || products.length < 1 || products.length > PRODUCT_ORDER.length
     || products.some((product) => !PRODUCT_ORDER.includes(product)) || new Set(products).size !== products.length
     || JSON.stringify(products) !== JSON.stringify(PRODUCT_ORDER.filter((product) => products.includes(product)))) {
     fail('client_workspace_init_arguments_invalid')
+  }
+  const contactBound = contactIntake !== null
+  if (contactBound) {
+    verifyClientContactIntake(contactIntake)
+    if (workspace !== contactIntake.client.workspace || owner !== contactIntake.client.implementationOwner
+      || presetId !== contactIntake.client.presetId || JSON.stringify(products) !== JSON.stringify(contactIntake.client.products)) {
+      fail('client_contact_workspace_binding_invalid')
+    }
+  } else if (workspace !== CLIENT_PROFILE_WORKSPACE_PLACEHOLDER || owner !== CLIENT_PROFILE_OWNER_PLACEHOLDER) {
+    fail('client_workspace_init_profile_unreviewed')
   }
   const target = resolve(directory)
   const parent = dirname(target)
@@ -268,8 +453,8 @@ export async function initializeClientWorkspace({ directory, presetId = 'manufac
   }))
   if (selections.some((selection) => !selection.templateId)) fail('client_workspace_init_preset_invalid')
   const blueprint = model.buildClientDemoBlueprint({
-    workspace: CLIENT_PROFILE_WORKSPACE_PLACEHOLDER,
-    owner: CLIENT_PROFILE_OWNER_PLACEHOLDER,
+    workspace,
+    owner,
     presetId: preset.id,
     shopIndustryPackId: preset.shopIndustryPackId,
     plantIndustryPackId: preset.plantIndustryPackId,
@@ -283,17 +468,21 @@ export async function initializeClientWorkspace({ directory, presetId = 'manufac
     await chmod(templateDirectory, 0o700).catch(() => null)
     const profile = {
       schema: CLIENT_PROFILE_SCHEMA,
-      workspace: CLIENT_PROFILE_WORKSPACE_PLACEHOLDER,
-      owner: CLIENT_PROFILE_OWNER_PLACEHOLDER,
+      workspace,
+      owner,
       presetId: preset.id,
       products: [...products],
     }
     await writePrivateStarterFile(resolve(target, 'client.json'), `${JSON.stringify(profile, null, 2)}\n`)
+    if (contactBound) await writePrivateStarterFile(resolve(target, CLIENT_CONTACT_INTAKE_FILE), `${JSON.stringify(contactIntake, null, 2)}\n`)
     for (const product of blueprint.products) {
       await writePrivateStarterFile(resolve(templateDirectory, PRODUCT_FILE[product.product]), product.sampleCsv)
     }
     const selectedFiles = blueprint.products.map((product) => `- ${PRODUCT_LABEL[product.product]}: copy _templates/${PRODUCT_FILE[product.product]} to ${PRODUCT_FILE[product.product]}, then replace every sample row with reviewed client data.`).join('\n')
-    const guide = `# SuperMega private client intake\n\nThis folder is local and private. It contains no client data yet and is not safe to share after real data is added.\n\n1. Edit client.json and replace both uppercase placeholders.\n2. Use only the products listed in client.json.\n3. For each client-supplied dataset you want to use:\n${selectedFiles}\n4. Leave a product CSV absent to use its clearly labelled demo fixture.\n5. Prepare and verify without applying anything:\n\n   npm run client:prepare -- --data-dir "<this-folder>" --out "<private-review.json>"\n   npm run client:prepare:verify -- "<private-review.json>"\n\nNo model, connector, hosted write, activation, inventory change, order, or production action occurs during preparation.\n`
+    const firstStep = contactBound
+      ? `1. Review client.json and ${CLIENT_CONTACT_INTAKE_FILE}. The requester name, email, and raw contact record were not copied into this folder.`
+      : '1. Edit client.json and replace both uppercase placeholders.'
+    const guide = `# SuperMega private client intake\n\nThis folder is local and private.${contactBound ? ' It contains the reviewed company request and must not be shared.' : ' It contains no client data yet and is not safe to share after real data is added.'}\n\n${firstStep}\n2. Use only the products listed in client.json.\n3. For each client-supplied dataset you want to use:\n${selectedFiles}\n4. Leave a product CSV absent to use its clearly labelled demo fixture.\n5. Prepare and verify without applying anything:\n\n   npm run client:prepare -- --data-dir "<this-folder>" --out "<private-review.json>"\n   npm run client:prepare:verify -- "<private-review.json>"\n\nNo model, connector, hosted write, activation, inventory change, order, or production action occurs during preparation.\n`
     await writePrivateStarterFile(resolve(target, 'START-HERE.md'), guide)
   } catch (error) {
     if (error instanceof PreparationError) throw error
@@ -305,7 +494,78 @@ export async function initializeClientWorkspace({ directory, presetId = 'manufac
     presetId: preset.id,
     productCount: products.length,
     templateCount: products.length,
-    containsClientData: false,
+    containsClientData: contactBound,
+    externalWritesPerformed: false,
+    modelCallsPerformed: false,
+    activationStatus: 'not_applied',
+  }
+}
+
+export async function initializeClientWorkspace({ directory, presetId = 'manufacturing', products = PRODUCT_ORDER }) {
+  return initializeClientWorkspaceFiles({
+    directory,
+    presetId,
+    products,
+    workspace: CLIENT_PROFILE_WORKSPACE_PLACEHOLDER,
+    owner: CLIENT_PROFILE_OWNER_PLACEHOLDER,
+  })
+}
+
+export async function initializeClientWorkspaceFromContact({ directory, event, review }) {
+  const contactIntake = buildClientContactIntake(event, review)
+  const initialized = await initializeClientWorkspaceFiles({
+    directory,
+    presetId: contactIntake.client.presetId,
+    products: contactIntake.client.products,
+    workspace: contactIntake.client.workspace,
+    owner: contactIntake.client.implementationOwner,
+    contactIntake,
+  })
+  return {
+    ...initialized,
+    contract: CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT,
+    contactIntakeDigest: contactIntake.digest,
+    requestedProduct: contactIntake.client.requestedProduct,
+  }
+}
+
+export async function verifyContactClientWorkspace(directory) {
+  const target = await clientDataDirectory(resolve(directory))
+  const intakeText = await readableFile(resolve(target, CLIENT_CONTACT_INTAKE_FILE), CLIENT_CONTACT_INTAKE_MAX_BYTES, 'client_contact_intake')
+  const profileText = await readableFile(resolve(target, 'client.json'), CLIENT_PROFILE_MAX_BYTES, 'client_profile')
+  let intake
+  let profile
+  try { intake = verifyClientContactIntake(JSON.parse(intakeText)) } catch (error) {
+    if (error instanceof PreparationError) throw error
+    fail('client_contact_intake_json_invalid')
+  }
+  try { profile = JSON.parse(profileText) } catch { fail('client_profile_json_invalid') }
+  if (!hasExactKeys(profile, ['schema', 'workspace', 'owner', 'presetId', 'products'])
+    || profile.schema !== CLIENT_PROFILE_SCHEMA
+    || profile.workspace !== intake.client.workspace
+    || profile.owner !== intake.client.implementationOwner
+    || profile.presetId !== intake.client.presetId
+    || JSON.stringify(profile.products) !== JSON.stringify(intake.client.products)) fail('client_contact_workspace_binding_invalid')
+  const templateDirectory = resolve(target, '_templates')
+  const templateMetadata = await lstat(templateDirectory).catch(() => fail('client_contact_workspace_templates_invalid'))
+  if (!templateMetadata.isDirectory() || templateMetadata.isSymbolicLink()) fail('client_contact_workspace_templates_invalid')
+  const expectedTemplates = intake.client.products.map((product) => PRODUCT_FILE[product]).sort()
+  const actualTemplates = (await readdir(templateDirectory, { withFileTypes: true }).catch(() => fail('client_contact_workspace_templates_invalid')))
+    .map((entry) => entry.isFile() && !entry.isSymbolicLink() ? entry.name : '')
+    .sort()
+  if (JSON.stringify(actualTemplates) !== JSON.stringify(expectedTemplates)) fail('client_contact_workspace_templates_invalid')
+  for (const file of expectedTemplates) await readableFile(resolve(templateDirectory, file), CLIENT_DATA_MAX_BYTES, 'client_contact_workspace_template')
+  await readableFile(resolve(target, 'START-HERE.md'), CLIENT_PROFILE_MAX_BYTES, 'client_contact_workspace_guide')
+  return {
+    ok: true,
+    contract: CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT,
+    contactIntakeDigest: intake.digest,
+    requestedProduct: intake.client.requestedProduct,
+    productCount: intake.client.products.length,
+    containsClientData: true,
+    requesterNameRetained: false,
+    requesterEmailRetained: false,
+    rawContactRetained: false,
     externalWritesPerformed: false,
     modelCallsPerformed: false,
     activationStatus: 'not_applied',
@@ -895,6 +1155,14 @@ export function clientDemoRehearsalResultSummary(result, outputPath) {
 
 function parseArguments(argv) {
   if (argv.length === 1 && argv[0] === '--help') return { mode: 'help' }
+  if (argv.length === 4 && argv[0] === '--contact-review-template' && argv[1] && argv[2] === '--out' && argv[3]) {
+    return { mode: 'contact-review-template', contactEventPath: argv[1], outputPath: argv[3] }
+  }
+  if (argv.length === 6 && argv[0] === '--init-from-contact' && argv[1]
+    && argv[2] === '--contact-event' && argv[3] && argv[4] === '--owner-review' && argv[5]) {
+    return { mode: 'init-from-contact', directory: argv[1], contactEventPath: argv[3], ownerReviewPath: argv[5] }
+  }
+  if (argv.length === 2 && argv[0] === '--verify-contact-workspace' && argv[1]) return { mode: 'verify-contact-workspace', directory: argv[1] }
   if (argv.length === 2 && argv[0] === '--verify' && argv[1]) return { mode: 'verify', artifactPath: argv[1] }
   if (argv.length === 4 && argv[0] === '--rehearse' && argv[1] && argv[2] === '--out' && argv[3]) return { mode: 'rehearse', preparationPath: argv[1], outputPath: argv[3] }
   if (argv.length === 4 && argv[0] === '--verify-rehearsal' && argv[1] && argv[2] === '--preparation' && argv[3]) return { mode: 'verify-rehearsal', artifactPath: argv[1], preparationPath: argv[3] }
@@ -939,10 +1207,33 @@ async function main() {
   let outputContract = CLIENT_DEMO_PREPARATION_CONTRACT
   try {
     const options = parseArguments(process.argv.slice(2))
+    if (options.mode === 'contact-review-template') outputContract = CLIENT_CONTACT_INTAKE_REVIEW_CONTRACT
+    if (options.mode === 'init-from-contact' || options.mode === 'verify-contact-workspace') outputContract = CLIENT_CONTACT_INTAKE_WORKSPACE_CONTRACT
     if (options.mode === 'rehearse' || options.mode === 'verify-rehearsal') outputContract = CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT
     if (options.mode === 'record-rehearsal' || options.mode === 'verify-rehearsal-result') outputContract = CLIENT_DEMO_REHEARSAL_RESULT_CONTRACT
     if (options.mode === 'help') {
-      console.log('Create private intake: npm run client:workspace:init -- <new-private-directory> [--preset manufacturing] [--products shop,plant,website,ecommerce]\nOne-folder prepare: put client.json and selected product CSVs in a private directory, then run npm run client:prepare -- --data-dir <private-client-directory> --out <private-review.json>\nExisting-kit prepare: npm run client:prepare -- --kit <setup-kit.json> [--data-dir <private-csv-directory>] --out <private-review.json>\nVerify preparation: npm run client:prepare:verify -- <private-review.json>\nPlan rehearsal: npm run client:rehearse:plan -- <private-review.json> --out <rehearsal-plan.json>\nVerify rehearsal plan: npm run client:rehearse:verify -- <rehearsal-plan.json> --preparation <private-review.json>\nRecord explicit browser observations: npm run client:rehearse:record -- <rehearsal-plan.json> --preparation <private-review.json> --observations <observations.json> --out <result.json>\nVerify result: npm run client:rehearse:result:verify -- <result.json> --plan <rehearsal-plan.json> --preparation <private-review.json>')
+      console.log('Create private intake: npm run client:workspace:init -- <new-private-directory> [--preset manufacturing] [--products shop,plant,website,ecommerce]\nCreate owner review template: npm run client:workspace:contact:review-template -- <private-event.json> --out <private-owner-review.json>\nCreate owner-reviewed contact intake: npm run client:workspace:from-contact -- <new-private-directory> --contact-event <private-event.json> --owner-review <private-review.json>\nVerify contact intake: npm run client:workspace:contact:verify -- <private-client-directory>\nOne-folder prepare: put client.json and selected product CSVs in a private directory, then run npm run client:prepare -- --data-dir <private-client-directory> --out <private-review.json>\nExisting-kit prepare: npm run client:prepare -- --kit <setup-kit.json> [--data-dir <private-csv-directory>] --out <private-review.json>\nVerify preparation: npm run client:prepare:verify -- <private-review.json>\nPlan rehearsal: npm run client:rehearse:plan -- <private-review.json> --out <rehearsal-plan.json>\nVerify rehearsal plan: npm run client:rehearse:verify -- <rehearsal-plan.json> --preparation <private-review.json>\nRecord explicit browser observations: npm run client:rehearse:record -- <rehearsal-plan.json> --preparation <private-review.json> --observations <observations.json> --out <result.json>\nVerify result: npm run client:rehearse:result:verify -- <result.json> --plan <rehearsal-plan.json> --preparation <private-review.json>')
+      return
+    }
+    if (options.mode === 'contact-review-template') {
+      const eventText = await readableFile(resolve(options.contactEventPath), CLIENT_CONTACT_EVENT_MAX_BYTES, 'client_contact_event')
+      let event
+      try { event = JSON.parse(eventText) } catch { fail('client_contact_event_json_invalid') }
+      console.log(JSON.stringify(await writeClientContactReviewTemplate(event, options.outputPath)))
+      return
+    }
+    if (options.mode === 'init-from-contact') {
+      const eventText = await readableFile(resolve(options.contactEventPath), CLIENT_CONTACT_EVENT_MAX_BYTES, 'client_contact_event')
+      const reviewText = await readableFile(resolve(options.ownerReviewPath), CLIENT_CONTACT_REVIEW_MAX_BYTES, 'client_contact_review')
+      let event
+      let review
+      try { event = JSON.parse(eventText) } catch { fail('client_contact_event_json_invalid') }
+      try { review = JSON.parse(reviewText) } catch { fail('client_contact_review_json_invalid') }
+      console.log(JSON.stringify(await initializeClientWorkspaceFromContact({ directory: options.directory, event, review })))
+      return
+    }
+    if (options.mode === 'verify-contact-workspace') {
+      console.log(JSON.stringify(await verifyContactClientWorkspace(options.directory)))
       return
     }
     if (options.mode === 'init') {
