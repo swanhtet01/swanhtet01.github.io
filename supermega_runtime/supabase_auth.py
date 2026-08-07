@@ -127,7 +127,7 @@ def _authenticated_token_identity(
 
     payload = _decode_jwt_payload(token)
     if not payload:
-        return ""
+        return None
     audience = payload.get("aud")
     authenticated_audience = audience == "authenticated" or (
         isinstance(audience, list)
