@@ -1,0 +1,50 @@
+# Shop — client demo playbook
+
+## 1. Client and the 30-second pitch
+
+Who this is for: counter-first businesses that sell and track stock — the manifest ships internal template packs for `Retail`, `Cafe`, `Restaurant`, `Spa`, `Gym`, and `School`, over the workflow templates `Social commerce`, `Retail and wholesale`, and `Restaurant ordering`.
+
+The pitch, verbatim from approved copy (eyebrow `Shop operations`):
+
+- `Operating software for Myanmar companies.`
+- `Sell, track stock, and close the day.`
+- `Use the working Shop sample for counter sales, orders, stock, purchases, receipts, returns, and daily close. Real payments, messages, delivery, and stock writes stay behind review.`
+
+## 2. Pre-demo setup
+
+1. Open `https://app.supermega.dev/settings/?product=shop` — the same destination as the `Start free sample` button on the public `/shop/` landing page.
+2. Under `Name your workspace`, enter the client's name in `Business name` (the field shows `Example: Golden Valley Trading`).
+3. Press `Create Shop and start selling`. The app provisions the industry sample and opens the first task at `/shop/?tab=counter`. The stated first result is `Complete a sample sale`.
+4. Confirm the sidebar badge reads `Demo mode` and the counter heading shows the working-sample pack context.
+
+Parallel-lane note: a Shop business-template deep link into guided setup is landing in a parallel lane; its planned format is a "?template=" query parameter added to the settings route (for example "?product=shop&template=retail"). It is not in the app at this commit — do not add a template parameter to app URLs in a live demo. Template selection happens inside setup today. The only live `template` parameters are on the public contact page (the `Template, if known` field) and in the app-generated contact links quoted in section 5.
+
+## 3. Demo script
+
+1. Start on the `Sell` tab (`/shop/?tab=counter`). Read the heading: `Tap an item to add it`. Point out the sample catalog tiles with prices and stock counts.
+2. Tap two or three items. The `Current sale` panel fills; on a phone the cart is the bottom bar. Optionally show `Search or scan SKU`.
+3. In the sale panel, leave Customer as `Guest` or type a name, then pick a payment method: `Cash`, `KBZPay`, or `WavePay`.
+4. Tap `Review order`. The accountable gate opens (`Review counter order`) and asks for the `Cashier` name. Read the boundary line under the form aloud — it is the privacy pitch (quoted in section 4).
+5. Tap `Create order`. The order is created and sample stock is reserved. The footer already told the client: `Confirm to create the order. Finish payment and handoff in Orders.`
+6. Open the `Orders` tab (`/shop/?tab=orders`). Advance the new order through its owned steps: `Start preparing`, then `Mark ready`, then `Reconcile payment` when payment review becomes the primary action, then `Complete`.
+7. Open the `Stock` tab (`/shop/?tab=inventory`). Show that the sale moved stock and where low-stock items surface; imports live at `/shop/?tab=inventory#shop-catalog-import`.
+8. Finish on the `Today` tab: the next job with `Open next step` and `New sale`, the metrics `Open orders`, `Catalog items`, `Stock alerts`, `Outstanding`, and the disclosures `More Shop tools` and `Shop safeguards`. For an owner-focused client, show `Save daily close` under finance controls at `/shop/?tab=orders#shop-close-controls`.
+
+## 4. Objection handling: the boundary
+
+"Is this touching my real money or messaging my customers?" — read the gate's own line:
+
+- `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
+
+"Where does my data go?" — setup says `Stays on this device. Nothing is sent or published.` Nothing in the demo requires an account.
+
+"What do I get free, and what is paid?" — use the approved framing only: `Free product. Managed intelligence.` and `Run the products free. Add managed company intelligence when the workflow proves value.` The free lane is `Operate without a stripped-down plan.` with `No account or model call required`. Managed service is gated: `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.` Never quote a price; the public site carries none.
+
+"What stops a mistake from going live?" — `Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.`
+
+## 5. The close
+
+- Self-serve close: send them to the public `/shop/` page and have them press `Start free sample` (`https://app.supermega.dev/settings/?product=shop`) on their own phone before they leave.
+- Assisted close: the public landing page's second button `Set up Shop data` opens `/contact/?product=shop`, pre-selecting Shop in the `Starting point` field. The form asks `What happens now, and what should be better?` and submits with `Send workflow`; the confirmation starts with `Request received: ` and an ID to keep.
+- From inside the app: the setup page's "Ask SuperMega to set up Shop" link carries the workflow template, for example `https://supermega.dev/contact/?product=shop&template=social-commerce&utm_source=app&utm_medium=guided_trial`.
+- Managed pilot close (multi-product or AI-context interest): `/contact/?product=guide&source=managed-intelligence` — the contact page retitles itself and the submit button becomes `Request managed pilot`.
