@@ -447,3 +447,90 @@ export function provisionEmptyShopServiceSchedule(state: ShopServiceSchedule, in
   }
   return createShopServiceSchedule(industryPackId)
 }
+
+export const GUIDED_SAMPLE_SCHEDULE_ACTOR = 'Guided sample'
+
+type GuidedSampleBookingPlan = {
+  customerName: string
+  contact: string
+  note: string
+}
+
+const guidedSampleBookingPlans: Record<ShopIndustryPackId, readonly [GuidedSampleBookingPlan, GuidedSampleBookingPlan, GuidedSampleBookingPlan]> = {
+  retail: [
+    { customerName: 'Ma Thandar', contact: '09 450 210 331', note: 'Weekly personal shopping visit.' },
+    { customerName: 'U Kyaw Zin', contact: '09 795 114 208', note: 'Bulk order pickup window.' },
+    { customerName: 'Daw Khin Mar', contact: '09 262 448 190', note: 'Reserved pickup for phone order.' },
+  ],
+  cafe: [
+    { customerName: 'Ko Aung Myat', contact: '09 421 077 615', note: 'Office catering tasting.' },
+    { customerName: 'Ma Ei Phyu', contact: '09 970 333 484', note: 'Birthday cake collection.' },
+    { customerName: 'U Tun Lin', contact: '09 253 901 772', note: 'Large preorder for meeting.' },
+  ],
+  restaurant: [
+    { customerName: 'Daw Nilar', contact: '09 799 442 156', note: 'Family lunch table for six.' },
+    { customerName: 'U Zaw Htet', contact: '09 448 015 923', note: 'Anniversary dinner reservation.' },
+    { customerName: 'Ma Su Myat', contact: '09 664 270 388', note: 'Private event walkthrough.' },
+  ],
+  spa: [
+    { customerName: 'Ma Hnin Wai', contact: '09 450 623 917', note: 'First-visit consultation.' },
+    { customerName: 'Daw Aye Aye', contact: '09 262 380 445', note: 'Monthly standard treatment.' },
+    { customerName: 'Ko Thiha', contact: '09 977 105 236', note: 'Gift-voucher treatment.' },
+  ],
+  gym: [
+    { customerName: 'Ko Nay Lin', contact: '09 421 908 350', note: 'Program review consultation.' },
+    { customerName: 'Ma Phyo Thiri', contact: '09 795 663 128', note: 'Personal training session.' },
+    { customerName: 'U Min Khant', contact: '09 448 237 566', note: 'Strength session with trainer.' },
+  ],
+  school: [
+    { customerName: 'Ma Yoon Nadi', contact: '09 970 481 259', note: 'New student enrollment talk.' },
+    { customerName: 'Ko Htet Aung', contact: '09 253 774 016', note: 'Weekend class session.' },
+    { customerName: 'Daw Mya Sandar', contact: '09 664 590 843', note: 'Parent consultation booking.' },
+  ],
+}
+
+function guidedSampleProof(planningDayUtcStart: number, step: number, reason: string): ShopServiceScheduleProof {
+  return {
+    actor: GUIDED_SAMPLE_SCHEDULE_ACTOR,
+    reason,
+    happenedAt: new Date(planningDayUtcStart + step * 60_000).toISOString(),
+  }
+}
+
+export function isGuidedSampleShopSchedule(state: ShopServiceSchedule) {
+  validateShopServiceSchedule(state)
+  if (!state.events.length) return true
+  return state.events.every((event) => event.actor === GUIDED_SAMPLE_SCHEDULE_ACTOR)
+}
+
+export function createShopServiceScheduleDemo(industryPackId: ShopIndustryPackId, planningDay: string): ShopServiceSchedule {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(planningDay) || !Number.isFinite(Date.parse(`${planningDay}T00:00:00.000Z`))) {
+    throw new Error('Planning day must be an exact YYYY-MM-DD date.')
+  }
+  const pack = shopIndustryPack(industryPackId)
+  const dayStart = Date.parse(`${planningDay}T00:00:00.000Z`)
+  const plans = guidedSampleBookingPlans[pack.id]
+  // Local demo times, Myanmar day: 08:00, 09:30, and 14:00 MMT expressed as UTC.
+  const slots = [
+    { plan: plans[0], serviceIndex: 0, resourceIndex: 0, startsAt: `${planningDay}T01:30:00.000Z`, advances: 3 },
+    { plan: plans[1], serviceIndex: 1, resourceIndex: 0, startsAt: `${planningDay}T03:00:00.000Z`, advances: 2 },
+    { plan: plans[2], serviceIndex: 1, resourceIndex: 1, startsAt: `${planningDay}T07:30:00.000Z`, advances: 1 },
+  ] as const
+  let state = createShopServiceSchedule(pack.id)
+  let step = 0
+  for (const slot of slots) {
+    state = scheduleShopServiceBooking(state, {
+      customerName: slot.plan.customerName,
+      contact: slot.plan.contact,
+      serviceId: state.services[slot.serviceIndex].id,
+      resourceId: state.resources[slot.resourceIndex].id,
+      startsAt: slot.startsAt,
+      note: slot.plan.note,
+    }, guidedSampleProof(dayStart, step += 1, `Guided sample appointment for the ${pack.name} demo schedule.`))
+    const bookingId = state.bookings[state.bookings.length - 1].id
+    for (let advance = 0; advance < slot.advances; advance += 1) {
+      state = advanceShopServiceBooking(state, bookingId, guidedSampleProof(dayStart, step += 1, 'Guided sample status walk-through.'))
+    }
+  }
+  return validateShopServiceSchedule(state)
+}

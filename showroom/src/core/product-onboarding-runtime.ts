@@ -17,7 +17,8 @@ import {
 } from './production-workspace'
 import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
-  createShopServiceSchedule,
+  createShopServiceScheduleDemo,
+  isGuidedSampleShopSchedule,
   provisionEmptyShopServiceSchedule,
   readShopServiceSchedule,
   shopIndustryPack,
@@ -42,9 +43,12 @@ export function readLocalShopIndustryPackId() {
 
 export function provisionLocalShopIndustryPack(industryPackId: ShopIndustryPackId) {
   const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
-  const next = stored
-    ? provisionEmptyShopServiceSchedule(readShopServiceSchedule(stored), industryPackId)
-    : createShopServiceSchedule(industryPackId)
+  if (stored) {
+    const current = readShopServiceSchedule(stored)
+    // Guided-sample evidence may be replaced; real appointment evidence keeps the strict guard.
+    if (!isGuidedSampleShopSchedule(current)) provisionEmptyShopServiceSchedule(current, industryPackId)
+  }
+  const next = createShopServiceScheduleDemo(industryPackId, new Date().toISOString().slice(0, 10))
   window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
   return next
 }
