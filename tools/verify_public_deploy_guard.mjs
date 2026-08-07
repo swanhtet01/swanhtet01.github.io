@@ -69,7 +69,7 @@ for (const [name, expected] of Object.entries({
   'vercel:deploy': 'node tools/deny_stale_public_deploy.mjs',
   'vercel:deploy:prod': 'node tools/deny_stale_public_deploy.mjs',
   'public:build': 'node tools/create_public_vercel_output.mjs',
-  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && node tools/test_public_retired_api_function.mjs && npm run vercel:contracts:test && npm run hq:verify',
+  'public:verify': 'node tools/verify_public_vercel_artifact_budget.mjs && node tools/verify_public_vercel_output.mjs && node tools/test_public_contact_function.mjs && node tools/test_public_retired_api_function.mjs && node tools/test_public_landing_pages.mjs && npm run vercel:contracts:test && npm run hq:verify',
   'public:prebuilt': 'npm run public:build && npm run public:verify',
   'public:verify:live': 'node tools/verify_public_release_live.mjs',
   'deploy:public:prod': 'node tools/deny_stale_public_deploy.mjs',
