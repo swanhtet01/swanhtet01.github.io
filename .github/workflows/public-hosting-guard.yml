@@ -21,7 +21,7 @@ on:
       - 'tools/deploy_website_actions.ps1'
   workflow_dispatch:
   schedule:
-    - cron: '5 2 * * *'
+    - cron: '5 2 * * 1'
 
 permissions:
   contents: read
