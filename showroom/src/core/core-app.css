@@ -784,6 +784,8 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-form { min-height: 0; }
 .product-onboarding-form > label { display: grid; gap: 6px; }
 .product-onboarding-business-name input { min-height: 50px; font-size: 15px; }
+.product-onboarding-business-type > summary small { color: var(--core-quiet); font-size: 9px; font-weight: 600; }
+.product-onboarding-business-type > .demo-pack-select { margin-top: 8px; }
 .product-onboarding-primary { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--core-line); padding-top: 13px; }
 .product-onboarding-primary .core-button { flex: 0 0 auto; }
 .product-onboarding-primary small { color: var(--core-quiet); font-size: 10px; line-height: 1.4; }
