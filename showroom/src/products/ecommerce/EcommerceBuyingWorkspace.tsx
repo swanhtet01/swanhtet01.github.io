@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
+import { recordBehaviorSignal } from '../../core/behavior-trail'
+
 import {
   buildEcommerceCheckoutQuote,
   buildEcommerceCancellationIntent,
@@ -61,6 +63,7 @@ type EcommerceBuyingWorkspaceProps = {
   currentCatalog: CommerceItem[]
   disabled: boolean
   onCartChange: (cart: EcommerceCartLine[]) => void
+  onContinueInShop: (requestId: string) => void
   onDraft: (draft: EcommerceShopDraftV2) => void
   onOpenManagedRequest?: (requestId: string) => void
   onOpenCancellation: (intent: EcommerceCancellationIntent) => void
@@ -70,6 +73,7 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenReturns: (intent: EcommerceReturnIntent) => void
   onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
+  onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void
   preview: StorefrontPreview
   scope: string
   sourcePreviewDigest: string
@@ -129,6 +133,7 @@ export function EcommerceBuyingWorkspace({
   currentCatalog,
   disabled,
   onCartChange,
+  onContinueInShop,
   onDraft,
   onOpenManagedRequest,
   onOpenCancellation,
@@ -138,6 +143,7 @@ export function EcommerceBuyingWorkspace({
   onOpenReturns,
   onOpenSupport,
   onRecordManagedRequest,
+  onRequestStateChange,
   preview,
   scope,
   sourcePreviewDigest,
@@ -161,7 +167,6 @@ export function EcommerceBuyingWorkspace({
   const [open, setOpen] = useState(false)
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
-  const [handoffConfirmed, setHandoffConfirmed] = useState(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
   const [quoteClock, setQuoteClock] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
@@ -209,7 +214,7 @@ export function EcommerceBuyingWorkspace({
   const [amendmentBusy, setAmendmentBusy] = useState(false)
   const [rescheduleDraft, setRescheduleDraft] = useState<{ orderId: string; requestedPromisedAt: string; reason: string } | null>(null)
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
-  const confirmationRef = useRef<HTMLInputElement>(null)
+  const requestReceiptRef = useRef<HTMLElement>(null)
   const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
@@ -242,7 +247,6 @@ export function EcommerceBuyingWorkspace({
       setPaymentAdapter('pay_on_pickup')
       setPromotionCode('')
       setOpen(false)
-      setHandoffConfirmed(false)
       setFreshQuoteId('')
       setReturnDraft(null)
       setSupportDraft(null)
@@ -281,7 +285,6 @@ export function EcommerceBuyingWorkspace({
         const recoveredState = result.state ?? createEmptyEcommerceBuyingState(scope)
         setRecoveryRead({ scope, status: result.status, issue: result.error })
         setBuyingState(recoveredState)
-        setHandoffConfirmed(false)
         const latest = recoveredState.requests[0]
         setFreshQuoteId(latest && Date.parse(latest.quote.expiresAt) > Date.now() ? latest.id : '')
         setQuoteClock(Date.now())
@@ -303,7 +306,6 @@ export function EcommerceBuyingWorkspace({
     const remainingMs = Date.parse(latest.quote.expiresAt) - Date.now()
     const timeoutId = window.setTimeout(() => {
       setFreshQuoteId((current) => current === latest.id ? '' : current)
-      setHandoffConfirmed(false)
     }, Math.max(0, remainingMs))
     return () => window.clearTimeout(timeoutId)
   }, [activeBuyingState.requests, freshQuoteId])
@@ -325,6 +327,8 @@ export function EcommerceBuyingWorkspace({
     ? combinedOrderTimeline.find((entry) => entry.request.id === latestRequest.id) ?? null
     : null
   const latestRequestOrder = latestRequestEntry?.order ?? null
+  const customerRequestState = latestRequestOrder ? 'confirmed' : latestRequest ? 'waiting_shop_review' : 'idle'
+  useEffect(() => onRequestStateChange(customerRequestState), [customerRequestState, onRequestStateChange])
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
   const replacementRequestIds = new Set([
@@ -497,33 +501,9 @@ export function EcommerceBuyingWorkspace({
     && cartMatchesRequest(cart, latestRequest))
   const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
-  const quoteMinutesRemaining = latestRequest
-    ? Math.max(0, Math.ceil((Date.parse(latestRequest.quote.expiresAt) - quoteClock) / 60000))
-    : 0
-  const orderAutopilotNext = recoveryBlocked
-    ? 'Repair checkout recovery'
-    : latestRequestConfirmed
-      ? 'Order confirmed in Shop'
-      : !cart.length
-        ? 'Add product'
-        : !quoteCurrent
-          ? 'Review order'
-          : !handoffConfirmed
-            ? 'Confirm reviewed quote'
-            : 'Continue to Shop review'
-  const orderAutopilotBoundary = onRecordManagedRequest
-    ? 'Shop review inbox only. Stock, delivery, message, and payment still need Shop review.'
-    : 'Browser-local quote only. No stock, delivery, message, payment, or Shop record changes here.'
-  const orderAutopilotRows = [
-    ['Cart', cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : 'Empty'],
-    ['Quote', latestRequestConfirmed ? 'Confirmed' : quoteCurrent ? `${quoteMinutesRemaining} min left` : latestRequest ? 'Review again' : 'Not quoted'],
-    ['Recovery', recoveryBlocked ? 'Blocked' : recoveryStatus === 'ready' ? 'Ready' : 'Local'],
-    ['Shop review', latestRequestOrder ? 'Confirmed' : quoteCurrent ? handoffConfirmed ? 'Ready for Shop review' : 'Needs review' : 'Locked'],
-    ['Payment', latestRequestEntry?.paymentStatus === 'reconciled' ? 'Confirmed' : latestRequestOrder ? 'Pending' : 'Not charged'],
-  ] as const
   const recoveredCheckoutNotice = latestRequest
     ? Date.parse(latestRequest.quote.expiresAt) > quoteClock
-      ? `${latestRequest.id} recovered on this device. Review current Shop values before Shop review.`
+      ? `${latestRequest.id} recovered on this device. It remains waiting for Shop review.`
       : `${latestRequest.id} was recovered, but its quote expired. Review a new total.`
     : ''
   const checkoutNotice = latestRequestConfirmed && latestRequestOrder
@@ -548,7 +528,6 @@ export function EcommerceBuyingWorkspace({
   function beginAnotherOrder() {
     onCartChange([])
     setFreshQuoteId('')
-    setHandoffConfirmed(false)
     setNotice('Ready for a new order. Add products, then review the current total.')
   }
 
@@ -567,7 +546,6 @@ export function EcommerceBuyingWorkspace({
     setPaymentAdapter((current) => nextPaymentAdapters.includes(current)
       ? current
       : nextPaymentAdapters[0] ?? (next === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup'))
-    setHandoffConfirmed(false)
   }
 
   function reorder(entry: CommerceStorefrontOrderTimelineEntry) {
@@ -592,7 +570,6 @@ export function EcommerceBuyingWorkspace({
     setDeliveryInstructions(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.deliveryAddress?.instructions ?? '' : '')
     changeFulfilment(entry.request.fulfilment)
     setPromotionCode('')
-    setHandoffConfirmed(false)
     setFreshQuoteId('')
     setOpen(true)
     setNotice(blockedCount
@@ -1109,13 +1086,12 @@ export function EcommerceBuyingWorkspace({
         && cartMatchesRequest(cart, retained))
       if (retainedMatches && retained && onRecordManagedRequest) {
         await onRecordManagedRequest(retained)
-        setHandoffConfirmed(false)
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
-        setNotice('This quote is confirmed in the Company Shop inbox. No order, stock, message, or charge changed.')
+        setNotice('This order request is in the Company Shop inbox. No order, stock, message, or charge changed.')
         requestAnimationFrame(() => {
-          confirmationRef.current?.scrollIntoView({ block: 'center' })
-          confirmationRef.current?.focus({ preventScroll: true })
+          requestReceiptRef.current?.scrollIntoView({ block: 'center' })
+          requestReceiptRef.current?.focus({ preventScroll: true })
         })
         return
       }
@@ -1146,17 +1122,22 @@ export function EcommerceBuyingWorkspace({
       const saved = await saveEcommerceOrderRequestV2(scope, request, activeBuyingState.headDigest)
       setBuyingState(saved)
       setRecoveryRead({ scope, status: 'ready', issue: '' })
-      setHandoffConfirmed(false)
       setFreshQuoteId('')
       if (onRecordManagedRequest) await onRecordManagedRequest(request)
+      recordBehaviorSignal(window.localStorage, {
+        event: 'first_value_completed',
+        product: 'ecommerce',
+        route: window.location.pathname + window.location.search,
+        detail: 'Saved a reviewed Ecommerce order request for Shop review.',
+      })
       setFreshQuoteId(request.id)
       setQuoteClock(quotedAt.getTime())
       setNotice(onRecordManagedRequest
-        ? 'This quote is saved to the Company Shop inbox and local recovery. No order, stock, message, or charge changed.'
-        : 'This quote is saved on this device for 15 minutes. No order, stock, message, or charge changed.')
+        ? 'This order request is in the Company Shop inbox and local recovery. No order, stock, message, or charge changed.'
+        : 'This sample order request is saved on this device for Shop review. No order, stock, message, or charge changed.')
       requestAnimationFrame(() => {
-        confirmationRef.current?.scrollIntoView({ block: 'center' })
-        confirmationRef.current?.focus({ preventScroll: true })
+        requestReceiptRef.current?.scrollIntoView({ block: 'center' })
+        requestReceiptRef.current?.focus({ preventScroll: true })
       })
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Checkout review failed closed.')
@@ -1165,8 +1146,8 @@ export function EcommerceBuyingWorkspace({
     }
   }
 
-  async function openInShop() {
-    if (!latestRequest || latestRequestConfirmed || !quoteCurrent || !handoffConfirmed || handoffBusy) return
+  async function openOperatorReview() {
+    if (!latestRequest || latestRequestConfirmed || !quoteCurrent || handoffBusy) return
     setHandoffBusy(true)
     setNotice('')
     try {
@@ -1214,7 +1195,7 @@ export function EcommerceBuyingWorkspace({
         </summary>
         <div className="ecommerce-buying-body">
           {cart.length ? (
-            <div className="ecommerce-cart" aria-label="Cart items">
+            <div aria-label="Cart items" className="ecommerce-cart" role="group">
               {cartItems.map(({ item, quantity, sku }) => (
                 <div className="ecommerce-cart-line" key={sku}>
                   <span>
@@ -1241,11 +1222,11 @@ export function EcommerceBuyingWorkspace({
           <form onSubmit={(event) => void reviewOrder(event)}>
             <label>
               <span>Name</span>
-              <input autoComplete="name" maxLength={80} onChange={(event) => { setCustomerName(event.target.value); setHandoffConfirmed(false) }} placeholder="e.g. Ma Su" required value={customerName} />
+              <input autoComplete="name" maxLength={80} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Ma Su" required value={customerName} />
             </label>
             <label>
               <span>Phone</span>
-              <input autoComplete="tel" inputMode="tel" maxLength={32} onChange={(event) => { setCustomerPhone(event.target.value); setHandoffConfirmed(false) }} placeholder="e.g. 09 123 456 789" required value={customerPhone} />
+              <input autoComplete="tel" inputMode="tel" maxLength={32} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="e.g. 09 123 456 789" required value={customerPhone} />
             </label>
             <label>
               <span>Receive order</span>
@@ -1257,24 +1238,24 @@ export function EcommerceBuyingWorkspace({
             {fulfilment === 'delivery' ? <>
               <label>
                 <span>Address</span>
-                <input autoComplete="street-address" maxLength={120} onChange={(event) => { setAddressLine1(event.target.value); setHandoffConfirmed(false) }} placeholder="Building, street, ward" required value={addressLine1} />
+                <input autoComplete="street-address" maxLength={120} onChange={(event) => setAddressLine1(event.target.value)} placeholder="Building, street, ward" required value={addressLine1} />
               </label>
               <label>
                 <span>Township</span>
-                <input autoComplete="address-level2" maxLength={80} onChange={(event) => { setAddressTownship(event.target.value); setHandoffConfirmed(false) }} placeholder="e.g. Hlaing" required value={addressTownship} />
+                <input autoComplete="address-level2" maxLength={80} onChange={(event) => setAddressTownship(event.target.value)} placeholder="e.g. Hlaing" required value={addressTownship} />
               </label>
               <label>
                 <span>City</span>
-                <input autoComplete="address-level1" maxLength={80} onChange={(event) => { setAddressCity(event.target.value); setHandoffConfirmed(false) }} placeholder="e.g. Yangon" required value={addressCity} />
+                <input autoComplete="address-level1" maxLength={80} onChange={(event) => setAddressCity(event.target.value)} placeholder="e.g. Yangon" required value={addressCity} />
               </label>
               <label>
                 <span>Delivery note <small>optional</small></span>
-                <input maxLength={160} onChange={(event) => { setDeliveryInstructions(event.target.value); setHandoffConfirmed(false) }} placeholder="Landmark or safe handoff note" value={deliveryInstructions} />
+                <input maxLength={160} onChange={(event) => setDeliveryInstructions(event.target.value)} placeholder="Landmark or safe handoff note" value={deliveryInstructions} />
               </label>
             </> : null}
             <label>
               <span>Payment</span>
-              <select disabled={!availablePaymentAdapters.length} onChange={(event) => { setPaymentAdapter(event.target.value as EcommercePaymentAdapter); setHandoffConfirmed(false) }} value={paymentPolicyReady ? effectivePaymentAdapter : ''}>
+              <select disabled={!availablePaymentAdapters.length} onChange={(event) => setPaymentAdapter(event.target.value as EcommercePaymentAdapter)} value={paymentPolicyReady ? effectivePaymentAdapter : ''}>
                 {availablePaymentAdapters.length
                   ? availablePaymentAdapters.map((adapter) => <option key={adapter} value={adapter}>{paymentLabel(adapter)}</option>)
                   : <option value="">No Shop payment method</option>}
@@ -1287,10 +1268,10 @@ export function EcommerceBuyingWorkspace({
                 : null}
             <label>
               <span>Promotion code <small>optional · Shop checks it</small></span>
-              <input maxLength={40} onChange={(event) => { setPromotionCode(event.target.value); setHandoffConfirmed(false) }} placeholder="Optional" value={promotionCode} />
+              <input maxLength={40} onChange={(event) => setPromotionCode(event.target.value)} placeholder="Optional" value={promotionCode} />
             </label>
             {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
-              {quoteBusy ? 'Checking…' : 'Review order'}
+              {quoteBusy ? 'Sending…' : 'Send order request'}
             </button> : null}
           </form>
 
@@ -1306,12 +1287,13 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Promise</small><b>{latestRequestOrder.promisedAt ? new Date(latestRequestOrder.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not set'}</b></span>
               </div>
               <small>Request {latestRequest.id} · Shop recorded the order and stock reservation.</small>
+              <button className="core-button primary" disabled={disabled} onClick={() => onContinueInShop(latestRequest.id)} type="button">Continue in Shop</button>
               <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
             </article>
           ) : quoteCurrent ? (
-            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true">
-              <span className="status-pill bounded">Ready for Shop</span>
-              <strong>Quote for {latestRequest.customerReference}</strong>
+            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={requestReceiptRef} tabIndex={-1}>
+              <span className="status-pill ready">Request sent</span>
+              <strong>Request for {latestRequest.customerReference}</strong>
               <b>{formatMmk(latestRequest.totalMmk)}</b>
               <div className="ecommerce-quote-boundaries">
                 <span><small>Receive order</small><b>{receiveOrderLabel(latestRequest.fulfilment)}</b></span>
@@ -1319,13 +1301,10 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Tax</small><b>Included in listed price</b></span>
                 <span><small>Payment</small><b>{paymentLabel(latestRequest.quote.payment.adapter)} · not charged</b></span>
               </div>
-              <small>Reference {latestRequest.id} · valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
-              <label className="website-intake-confirm ecommerce-quote-confirm">
-                <input checked={handoffConfirmed} disabled={!quoteCurrent || handoffBusy} onChange={(event) => setHandoffConfirmed(event.target.checked)} ref={confirmationRef} type="checkbox" />
-                <span>I checked the items, total, fulfilment, and payment.</span>
-              </label>
-              <button className="core-button primary" disabled={!quoteCurrent || !handoffConfirmed || handoffBusy} onClick={() => void openInShop()} type="button">
-                {handoffBusy ? 'Checking Shop…' : 'Continue to Shop review'}
+              <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
+              <p>{onRecordManagedRequest ? 'Company Shop received this request.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
+              <button className="core-button secondary" disabled={!quoteCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
+                {handoffBusy ? 'Opening Shop…' : 'Open Shop operator review'}
               </button>
             </article>
           ) : (
@@ -1363,14 +1342,6 @@ export function EcommerceBuyingWorkspace({
               </div>
             ) : <p>Use the same name and phone as checkout to see request, fulfilment, and payment status here.</p>}
           </section>
-
-          <details className="ecommerce-checkout-help">
-            <summary><span><strong>How checkout stays safe</strong><small>Quote, stock, and payment checks</small></span></summary>
-            <section className="ecommerce-order-autopilot" aria-label="Checkout checks">
-              <div><span>Checkout checks</span><strong>{orderAutopilotNext}</strong><small>{orderAutopilotBoundary}</small></div>
-              <div className="ecommerce-order-autopilot-rows">{orderAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-            </section>
-          </details>
 
           <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
             ? 'Checking saved checkout recovery…'

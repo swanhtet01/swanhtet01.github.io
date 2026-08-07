@@ -33,13 +33,6 @@ const capabilityGroups = [
 ] as const
 
 export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDetail, nextTo }: ShopTodayProps) {
-  const guidedJobs = [
-    catalogReady
-      ? ['1', 'Make a sale', 'Tap items, choose payment, and save a receipt.', '/shop/?tab=counter']
-      : ['1', 'Add your products', 'Load a sample or map a product file before the first sale.', '/shop/?tab=inventory#shop-catalog-import'],
-    ['2', 'Finish orders', 'Check online orders, payment, delivery, returns, and cancellations.', '/shop/?tab=orders'],
-    ['3', 'Check stock', 'See low stock, counts, receiving, and buying.', '/shop/?tab=inventory'],
-  ] as const
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Next Shop action">
       <div>
@@ -53,13 +46,6 @@ export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDeta
       </div>
     </section>
 
-    <section className="shop-today-guide" aria-label="Shop guided jobs">
-      <header><span className="core-eyebrow">Start here</span><h3>Use Shop in 3 steps.</h3></header>
-      <div>
-        {guidedJobs.map(([step, label, detail, to]) => <Link key={label} to={to}><b>{step}</b><span><strong>{label}</strong><small>{detail}</small></span></Link>)}
-      </div>
-    </section>
-
     <section className="shop-today-metrics" aria-label="Shop summary">
       {metrics.map((metric) => <article data-tone={metric.tone ?? 'ready'} key={metric.label}>
         <small>{metric.label}</small>
@@ -67,18 +53,15 @@ export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDeta
       </article>)}
     </section>
 
-    <section className="shop-today-workspaces" aria-labelledby="shop-workspaces-title">
-      <header>
-        <div><span className="core-eyebrow">Shop areas</span><h2 id="shop-workspaces-title">Run the whole shop</h2></div>
-        <p>Open the area for the job. Orders, stock, customers, and receipts stay connected.</p>
-      </header>
+    <details className="shop-today-workspaces">
+      <summary><span><strong>More Shop tools</strong><small>Customers, finance, channels, and purchasing</small></span><b>{modules.length} connected areas</b></summary>
       <div className="shop-today-module-grid">
         {modules.map((module) => <Link data-tone={module.tone ?? 'ready'} key={module.label} to={module.to}>
           <span><strong>{module.label}</strong><small>{module.detail}</small></span>
           <b>{module.status}</b>
         </Link>)}
       </div>
-    </section>
+    </details>
 
     <details className="shop-today-coverage">
       <summary><span><strong>Shop safeguards</strong><small>What SuperMega checks while the screen stays simple</small></span><b>6 areas</b></summary>

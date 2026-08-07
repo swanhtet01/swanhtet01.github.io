@@ -6327,6 +6327,84 @@ export type CommerceCatalogImportResult = {
   replayed: boolean
 }
 
+const commerceWorkingSampleActionPrefix = 'ACT-DEMO-WORKING-SAMPLE-'
+
+export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, input: {
+  sampleId: string
+  sampleName: string
+  items: CommerceItem[]
+  capturedAt: string
+}) {
+  let source: CommerceState
+  try { source = validateCommerceState(stateValue) } catch { return null }
+  const sampleId = optionalText(input?.sampleId)?.toLowerCase()
+  const sampleName = optionalText(input?.sampleName)
+  if (!sampleId || !/^[a-z][a-z0-9-]{1,39}$/.test(sampleId)
+    || !sampleName || sampleName.length > 80
+    || !Array.isArray(input?.items) || input.items.length < 1 || input.items.length > 20
+    || typeof input.capturedAt !== 'string' || !validTimestamp(input.capturedAt)) return null
+  const uniqueSkus = new Set(input.items.map((item) => item.sku))
+  if (uniqueSkus.size !== input.items.length) return null
+
+  const sampleBaselines = commerceCatalogBaselines(source).filter((baseline) => baseline.proof.actionId.startsWith(commerceWorkingSampleActionPrefix))
+  const sampleMovements = source.movements.filter((movement) => movement.actionId.startsWith(commerceWorkingSampleActionPrefix))
+  const sampleSkus = new Set([
+    ...sampleBaselines.map((baseline) => baseline.sku),
+    ...sampleMovements.map((movement) => movement.sku),
+  ])
+  const requestedPrefix = `${commerceWorkingSampleActionPrefix}${sampleId.toUpperCase()}-`
+  const currentSampleItems = source.items.filter((item) => sampleSkus.has(item.sku)).sort((left, right) => left.sku.localeCompare(right.sku))
+  const requestedItems = input.items.map((item) => ({ ...item })).sort((left, right) => left.sku.localeCompare(right.sku))
+  if (sampleSkus.size === requestedItems.length
+    && sampleBaselines.length === requestedItems.length
+    && sampleMovements.length === requestedItems.length
+    && sampleBaselines.every((baseline) => baseline.proof.actionId.startsWith(requestedPrefix))
+    && sampleMovements.every((movement) => movement.actionId.startsWith(requestedPrefix))
+    && JSON.stringify(currentSampleItems) === JSON.stringify(requestedItems)) return source
+
+  let base = source
+  if (sampleSkus.size || sampleBaselines.length || sampleMovements.length) {
+    try {
+      base = validateCommerceState({
+        ...source,
+        items: source.items.filter((item) => !sampleSkus.has(item.sku)),
+        movements: source.movements.filter((movement) => !movement.actionId.startsWith(commerceWorkingSampleActionPrefix)),
+        catalogBaselines: commerceCatalogBaselines(source).filter((baseline) => !baseline.proof.actionId.startsWith(commerceWorkingSampleActionPrefix)),
+      })
+    } catch {
+      return null
+    }
+  }
+  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce())) return null
+  if (requestedItems.some((item) => base.items.some((existing) => existing.sku === item.sku))) return null
+
+  let next = base
+  for (const [index, item] of requestedItems.entries()) {
+    const registered = registerCommerceItem(next, item, {
+      actionId: `${requestedPrefix}${String(index + 1).padStart(3, '0')}`,
+      capturedAt: input.capturedAt,
+      actor: 'Demo setup',
+      reason: `Seed the ${sampleName} working sample.`,
+      evidenceReference: `DEMO-WORKING-SAMPLE-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
+    })
+    if (!registered) return null
+    next = registered
+  }
+  return next
+}
+
+export function commerceWorkingSampleCatalogId(stateValue: CommerceState) {
+  let state: CommerceState
+  try { state = validateCommerceState(stateValue) } catch { return null }
+  const sampleIds = new Set(commerceCatalogBaselines(state).flatMap((baseline) => {
+    if (!baseline.proof.actionId.startsWith(commerceWorkingSampleActionPrefix)) return []
+    const suffix = baseline.proof.actionId.slice(commerceWorkingSampleActionPrefix.length)
+    const match = /^([A-Z][A-Z0-9-]{1,39})-\d{3}$/.exec(suffix)
+    return match ? [match[1].toLowerCase()] : []
+  }))
+  return sampleIds.size === 1 ? [...sampleIds][0] : null
+}
+
 export function importCommerceCatalog(stateValue: CommerceState, input: {
   items: CommerceItem[]
   sourceDigest: string
