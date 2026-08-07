@@ -52,6 +52,7 @@ const RESERVED_CONTROL_CACHE_PREFIXES = [
   'ceo-outcome-evaluation:',
   'ceo-outcome-delivery:',
   'ceo-outcome-action:',
+  'console-lead-review-record:',
 ]
 const PLATFORM_TENANT_ID = 'supermega-platform'
 const PLATFORM_PLAN = 'platform' // server-owned internal plan: requested tier honored, cap still enforced

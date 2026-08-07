@@ -6,6 +6,7 @@ import { generateDeal } from './deal.mjs'
 import { onDealSaved, onProjectShipped } from './graduation.mjs'
 import connectors from '../connectors/index.mjs'
 import { companyDailyBudgetCap, currentDailyBudgetWindow, providerChain } from '../gateway.mjs'
+import { listLeadsForReview, markLeadReviewed } from './leads-review.mjs'
 import crypto from 'node:crypto'
 
 const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
@@ -117,6 +118,29 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
 
     // ---- LEADS ----
     if (seg[0] === 'leads') {
+      // Founder review surface. Fail-closed: without a durable leads source this returns 503
+      // `leads_source_not_configured` (never a silent empty list). Read + record only.
+      if (method === 'GET' && seg[1] === 'review' && !seg[2]) {
+        const limit = query.limit != null && String(query.limit).trim() !== '' ? Number(query.limit) : 50
+        const result = await listLeadsForReview({ limit })
+        if (!result.ok) return { status: result.reason === 'leads_source_not_configured' ? 503 : 400, json: result }
+        return ok(result)
+      }
+      if (method === 'POST' && seg[1] && seg[1] !== 'review' && seg[2] === 'review' && !seg[3]) {
+        const result = await markLeadReviewed({
+          leadId: seg[1],
+          reviewedBy: body.reviewedBy != null ? String(body.reviewedBy).slice(0, 80) : undefined,
+        })
+        if (!result.ok) {
+          const status = result.reason === 'leads_source_not_configured' ? 503
+            : result.reason === 'lead_not_found' ? 404
+            : result.reason === 'lead_review_store_unavailable' ? 503
+            : 400
+          return { status, json: result }
+        }
+        if (!result.replayed) log('review', 'Lead marked reviewed', seg[1])
+        return ok(result)
+      }
       if (method === 'GET' && !seg[1]) {
         try {
           const [leads, converted] = await Promise.all([store.listLeads(), store.convertedLeadIds()])

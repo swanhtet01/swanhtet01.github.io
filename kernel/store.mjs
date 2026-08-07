@@ -202,7 +202,7 @@ async function ensurePgTables() {
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       constraint supermega_control_records_key_check check (char_length(record_key) between 1 and 240),
-      constraint supermega_control_records_type_check check (record_type in ('sign_in_code','operator_session','mission','work_order','work_order_review','work_order_evaluation','ceo_outcome_operation','ceo_outcome_evaluation','ceo_outcome_delivery','ceo_outcome_action')),
+      constraint supermega_control_records_type_check check (record_type in ('sign_in_code','operator_session','mission','work_order','work_order_review','work_order_evaluation','ceo_outcome_operation','ceo_outcome_evaluation','ceo_outcome_delivery','ceo_outcome_action','lead_review')),
       constraint supermega_control_records_tenant_check check (char_length(tenant_id) between 1 and 80),
       constraint supermega_control_records_status_check check (status ~ '^[a-z][a-z_]{0,39}$'),
       constraint supermega_control_records_plan_hash_check check (plan_hash ~ '^[a-f0-9]{64}$'),
@@ -1231,6 +1231,8 @@ const CONTROL_RECORD_PREFIXES = Object.freeze([
   ['company-work-order-record:', 'work_order'],
   ['company-work-order-review-record:', 'work_order_review'],
   ['company-work-order-evaluation:', 'work_order_evaluation'],
+  // Founder lead-review decisions (console Leads view). Authority evidence, never response cache.
+  ['console-lead-review-record:', 'lead_review'],
   // CEO outcome records are execution authority (completions, evaluations, deliveries, follow-up
   // actions) recorded by agent-company-operations.mjs. They must never live in the response cache.
   ['ceo-outcome-operation:', 'ceo_outcome_operation'],
