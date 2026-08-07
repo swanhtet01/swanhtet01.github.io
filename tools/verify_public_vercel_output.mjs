@@ -82,6 +82,7 @@ const expectedStaticFiles = new Set([
   '__release.json',
   'favicon.svg',
   'og-card.png',
+  ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`),
   'robots.txt',
   'site.webmanifest',
   'sitemap.xml',
@@ -162,18 +163,21 @@ for (const [route, page] of pages) {
   if (page.html.includes('href="/solutions/"') || page.html.includes('href="/trust/"')) fail('retired_public_navigation_present', { route })
   if (!page.html.includes(`<link rel="canonical" href="${new URL(route, `${manifest.release.productionDomain}/`).href}"`)) fail('canonical_url_wrong', { route })
   if (!/<meta name="description" content="[^"]{20,}" \/>/.test(page.html)) fail('page_description_missing', { route })
+  // Landing pages carry their per-product share card; every other page keeps the generic card.
+  const pageShareImage = new URL(page.productId ? `/og-card-${page.productId}.png` : '/og-card.png', `${manifest.release.productionDomain}/`).href
   for (const token of [
     '<meta property="og:type" content="website" />',
     '<meta property="og:site_name" content="SuperMega" />',
     `<meta property="og:url" content="${new URL(route, `${manifest.release.productionDomain}/`).href}" />`,
-    `<meta property="og:image" content="${new URL('/og-card.png', `${manifest.release.productionDomain}/`).href}" />`,
+    `<meta property="og:image" content="${pageShareImage}" />`,
     '<meta property="og:image:width" content="1200" />',
     '<meta property="og:image:height" content="630" />',
     '<meta name="twitter:card" content="summary_large_image" />',
-    `<meta name="twitter:image" content="${new URL('/og-card.png', `${manifest.release.productionDomain}/`).href}" />`,
+    `<meta name="twitter:image" content="${pageShareImage}" />`,
   ]) {
     if (!page.html.includes(token)) fail('page_open_graph_missing', { route, token })
   }
+  if (page.productId && page.html.includes(`content="${new URL('/og-card.png', `${manifest.release.productionDomain}/`).href}"`)) fail('landing_page_generic_share_card_present', { route })
   if (route !== '/' && !page.html.includes('href="/contact/">Contact</a>')) fail('support_footer_contact_missing', { route })
 }
 const pageTitles = manifest.pages.map((page) => page.title)
@@ -333,11 +337,13 @@ for (const token of ['SuperMega terminal mark', manifest.brand.colors.background
   if (!favicon.includes(token)) fail('brand_mark_contract_missing', { token })
 }
 
-const ogCardPath = resolve(staticDir, 'og-card.png')
-requireFile(ogCardPath, 'og-card.png')
-const ogCard = readFileSync(ogCardPath)
-if (!ogCard.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) fail('og_card_not_png')
-if (ogCard.readUInt32BE(16) !== 1200 || ogCard.readUInt32BE(20) !== 630) fail('og_card_dimensions_wrong', { width: ogCard.readUInt32BE(16), height: ogCard.readUInt32BE(20) })
+for (const cardFile of ['og-card.png', ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`)]) {
+  const ogCardPath = resolve(staticDir, cardFile)
+  requireFile(ogCardPath, cardFile)
+  const ogCard = readFileSync(ogCardPath)
+  if (!ogCard.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) fail('og_card_not_png', { cardFile })
+  if (ogCard.readUInt32BE(16) !== 1200 || ogCard.readUInt32BE(20) !== 630) fail('og_card_dimensions_wrong', { cardFile, width: ogCard.readUInt32BE(16), height: ogCard.readUInt32BE(20) })
+}
 
 const release = JSON.parse(readStatic('__release.json'))
 for (const [key, value] of Object.entries({
@@ -401,7 +407,7 @@ for (const route of [
 ]) {
   if (!config.routes.some((entry) => entry.src === route[0] && entry.dest === route[1])) fail('public_api_route_missing', { route })
 }
-if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
+if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
 if (!config.routes.some((entry) => entry.handle === 'filesystem')) fail('filesystem_route_missing')
 if (!config.routes.some((entry) => entry.src === '^/(.*)$' && entry.status === 404 && entry.dest === '/404.html')) fail('not_found_route_missing')
 

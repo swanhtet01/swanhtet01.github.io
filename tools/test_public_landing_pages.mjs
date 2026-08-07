@@ -49,8 +49,9 @@ for (const page of landingPages) {
   check(html.includes(`<meta name="description" content="${description}" />`), `landing_meta_description:${page.route}`)
   check(html.includes(`<meta property="og:title" content="${page.title}" />`), `landing_og_title:${page.route}`)
   check(html.includes(`<meta property="og:url" content="${canonical}" />`), `landing_og_url:${page.route}`)
-  const shareImage = new URL('/og-card.png', `${manifest.release.productionDomain}/`).href
+  const shareImage = new URL(`/og-card-${page.productId}.png`, `${manifest.release.productionDomain}/`).href
   check(html.includes(`<meta property="og:image" content="${shareImage}" />`), `landing_og_image:${page.route}`)
+  check(!html.includes(`content="${new URL('/og-card.png', `${manifest.release.productionDomain}/`).href}"`), `landing_generic_share_card_absent:${page.route}`)
   check(html.includes('<meta property="og:image:width" content="1200" />') && html.includes('<meta property="og:image:height" content="630" />'), `landing_og_image_dimensions:${page.route}`)
   check(html.includes('<meta name="twitter:card" content="summary_large_image" />') && html.includes(`<meta name="twitter:image" content="${shareImage}" />`), `landing_twitter_card:${page.route}`)
   check(html.includes('<a class="skip-link" href="#content">Skip to content</a>') && html.includes('id="content"'), `landing_skip_link:${page.route}`)
