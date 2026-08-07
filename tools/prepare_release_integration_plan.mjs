@@ -91,7 +91,7 @@ export function classifyIntegrationConflict(path) {
   if (candidate.includes('/ecommerce/') || candidate.toLowerCase().includes('ecommerce')) return 'ecommerce'
   if (candidate === 'showroom/src/core/CoreApp.tsx'
     || candidate === 'showroom/src/core/CoreShell.tsx'
-    || candidate === 'showroom/src/core/ProductHomeReadiness.tsx'
+    || candidate === 'showroom/src/core/ProductOnboardingPage.tsx'
     || candidate === 'showroom/src/core/core-app.css') return 'app-shell'
   if (candidate === 'showroom/src/core/ClientDataOnboarding.tsx'
     || candidate === 'showroom/src/core/SettingsPage.tsx'

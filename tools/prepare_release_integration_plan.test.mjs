@@ -21,7 +21,7 @@ const conflicts = [
   'showroom/src/core/ClientDataOnboarding.tsx',
   'showroom/src/core/CoreApp.tsx',
   'showroom/src/core/CoreShell.tsx',
-  'showroom/src/core/ProductHomeReadiness.tsx',
+  'showroom/src/core/ProductOnboardingPage.tsx',
   'showroom/src/core/SettingsPage.tsx',
   'showroom/src/core/core-app.css',
   'showroom/src/core/managed-trial.ts',
@@ -60,6 +60,7 @@ test('merge-tree parser is exact, sorted, and duplicate safe', () => {
 test('conflicts route to bounded accountable batches', () => {
   assert.equal(classifyIntegrationConflict('showroom/src/core/managed-trial.ts'), 'identity-data-onboarding')
   assert.equal(classifyIntegrationConflict('showroom/src/core/CoreApp.tsx'), 'app-shell')
+  assert.equal(classifyIntegrationConflict('showroom/src/core/ProductOnboardingPage.tsx'), 'app-shell')
   assert.equal(classifyIntegrationConflict('showroom/src/products/ecommerce/EcommerceProduct.tsx'), 'ecommerce')
   assert.equal(classifyIntegrationConflict('tools/verify_app_security_contract.mjs'), 'release-security-hq')
   assert.equal(classifyIntegrationConflict('unknown/new-contract.ts'), 'cross-cutting')
