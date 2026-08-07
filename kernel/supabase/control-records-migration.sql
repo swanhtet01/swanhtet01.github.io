@@ -16,26 +16,26 @@ create table if not exists public.supermega_control_records (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint supermega_control_records_key_check check (char_length(record_key) between 1 and 240),
-  constraint supermega_control_records_type_check check (record_type in ('sign_in_code','operator_session','mission','work_order','work_order_review','work_order_evaluation','ceo_outcome_operation','ceo_outcome_evaluation','ceo_outcome_delivery','ceo_outcome_action')),
+  constraint supermega_control_records_type_check check (record_type in ('sign_in_code','operator_session','mission','work_order','work_order_review','work_order_evaluation','ceo_outcome_operation','ceo_outcome_evaluation','ceo_outcome_delivery','ceo_outcome_action','lead_review')),
   constraint supermega_control_records_tenant_check check (char_length(tenant_id) between 1 and 80),
   constraint supermega_control_records_status_check check (status ~ '^[a-z][a-z_]{0,39}$'),
   constraint supermega_control_records_plan_hash_check check (plan_hash ~ '^[a-f0-9]{64}$'),
   constraint supermega_control_records_payload_hash_check check (payload_hash ~ '^[a-f0-9]{64}$')
 );
 
--- Databases migrated before the CEO outcome record types existed carry the narrower constraint;
--- widen it idempotently so re-running this migration upgrades them in place.
+-- Databases migrated before the CEO outcome or lead-review record types existed carry a narrower
+-- constraint; widen it idempotently so re-running this migration upgrades them in place.
 do $widen$
 begin
   if exists (
     select 1 from pg_constraint
      where conrelid='public.supermega_control_records'::regclass
        and conname='supermega_control_records_type_check'
-       and pg_get_constraintdef(oid) not like '%ceo_outcome_operation%'
+       and pg_get_constraintdef(oid) not like '%lead_review%'
   ) then
     alter table public.supermega_control_records drop constraint supermega_control_records_type_check;
     alter table public.supermega_control_records add constraint supermega_control_records_type_check
-      check (record_type in ('sign_in_code','operator_session','mission','work_order','work_order_review','work_order_evaluation','ceo_outcome_operation','ceo_outcome_evaluation','ceo_outcome_delivery','ceo_outcome_action'));
+      check (record_type in ('sign_in_code','operator_session','mission','work_order','work_order_review','work_order_evaluation','ceo_outcome_operation','ceo_outcome_evaluation','ceo_outcome_delivery','ceo_outcome_action','lead_review'));
   end if;
 end;
 $widen$;

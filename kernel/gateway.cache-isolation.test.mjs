@@ -88,6 +88,7 @@ test('reserved control-record prefixes are rejected case-insensitively', async (
     'company-work-order-record:customer-controlled',
     ' AGENT-COMPANY-SIGN-IN-CODE:customer-controlled ',
     'company-mission-record:customer-controlled',
+    'console-lead-review-record:customer-controlled',
   ]) {
     await assert.rejects(
       () => ask('reserved prefix', { clientId: 'tenant-reserved-prefix', cacheKey }),
