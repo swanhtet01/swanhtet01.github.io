@@ -1565,22 +1565,27 @@ async function loadOverview(){
 async function loadLeads(){
   const box=$('#leads');box.innerHTML='<div class="loading-pulse">Loading leads…</div>'
   let r
-  try{r=await api('GET','/api/leads')}catch(e){box.innerHTML=`<div class="err-banner">Could not load leads — ${esc(String(e.message||'network error'))}</div>`;return}
+  try{r=await api('GET','/api/leads/review')}catch(e){box.innerHTML=`<div class="err-banner">Could not load leads — ${esc(String(e.message||'network error'))}</div>`;return}
+  if(r.reason==='leads_source_not_configured'){$('#addLead').hidden=true;box.innerHTML=`<div class="err-banner">Leads source not configured — this console cannot see contact-form leads. Set ${esc((r.requiredEnv||['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY']).join(' + '))} on the kernel deployment (the same Supabase project the /contact/ form writes to), then reload.</div>`;return}
+  if(!r.ok){box.innerHTML=`<div class="err-banner">Could not load leads — ${esc(String(r.reason||'error'))}</div>`;return}
   $('#addLead').hidden=(r.mode!=='memory')
   box.innerHTML=''
   if(!r.leads||!r.leads.length){box.innerHTML='<div class="empty">No leads yet. They arrive here from the /contact/ form.</div>';return}
   for(const l of r.leads){
     const el=document.createElement('div');el.className='lead'
     const stage=l.stage?`<span class="pill">${esc(l.stage)}</span>`:''
-    el.innerHTML=`<div><h3>${esc(l.company||l.name||'—')} ${stage} <span class="muted" style="font-size:12px;font-weight:600">${l.score?'· '+l.score+'/100':''}</span></h3>
+    const reviewed=l.reviewed?`<span class="pill">✓ reviewed</span>`:''
+    el.innerHTML=`<div><h3>${esc(l.company||l.name||'—')} ${stage} ${reviewed} <span class="muted" style="font-size:12px;font-weight:600">${l.score?'· '+l.score+'/100':''}</span></h3>
       <div class="meta">${esc(l.name||'')}${l.contact?' · '+esc(l.contact):''}${l.package?' · '+esc(l.package):''} · ${esc(String(l.source||'').replace('-',' '))}</div>
       ${l.message?`<div class="msg">${esc(l.message)}</div>`:''}</div>
       <div class="row" style="align-items:flex-start">
+        ${l.reviewed?'':`<button class="sm" data-review="${esc(l.id)}">Mark reviewed</button>`}
         ${l.converted?`<span class="pill won">✓ in pipeline</span>`:`<button class="sm primary" data-conv="${esc(l.id)}">Win → project</button>`}
         <button class="sm" data-deal="${esc(l.id)}">Run a deal</button>
       </div>`
     box.appendChild(el)
   }
+  box.querySelectorAll('[data-review]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.review)+'/review',{});if(x.ok){toast('Review recorded');loadLeads()}})
   box.querySelectorAll('[data-conv]').forEach(b=>b.onclick=async()=>{const x=await api('POST','/api/leads/'+encodeURIComponent(b.dataset.conv)+'?action=convert',{});if(x.ok){toast('Project created');loadLeads()}})
   box.querySelectorAll('[data-deal]').forEach(b=>b.onclick=()=>{const l=r.leads.find(x=>x.id===b.dataset.deal);dealLead=l;openConsoleView('deal');$('#d-name').value=l.name||'';$('#d-company').value=l.company||'';$('#d-contact').value=l.contact||'';$('#d-workflow').value=l.message||'';$('#d-leadtag').textContent='for '+(l.company||l.name||'request')})
 }

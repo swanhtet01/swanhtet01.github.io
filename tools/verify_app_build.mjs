@@ -34,6 +34,7 @@ let operatingBaselineRuntimeChecks = 0
 let plantEquipmentImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let shopServiceScheduleRuntimeChecks = 0
+let shopBusinessTemplateRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
 let websiteReleaseRuntimeChecks = 0
 let shopOperatingFlowRuntimeChecks = 0
@@ -127,6 +128,7 @@ const ecommerceBuyingWorkspaceSource = await readFile(resolve(root, 'showroom', 
 const workspaceControlsPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'WorkspaceControlsPage.tsx'), 'utf8')
 const productOnboardingPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ProductOnboardingPage.tsx'), 'utf8')
 const productOnboardingRuntimeSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'product-onboarding-runtime.ts'), 'utf8')
+const shopBusinessTemplatesSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts'), 'utf8')
 const publicGeneratorSource = await readFile(resolve(root, 'tools', 'create_public_vercel_output.mjs'), 'utf8')
 const managedLoginPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedLoginPage.tsx'), 'utf8')
 const managedAccountPageSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedAccountPage.tsx'), 'utf8')
@@ -7129,6 +7131,85 @@ async function verifyShopServiceScheduleRuntime() {
     assertThrows(() => model.readShopServiceSchedule('{"schema":"wrong"}'), 'shop_service_invalid_storage_accepted')
   } catch (error) {
     fail(`shop_service_schedule_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyShopBusinessTemplateRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopBusinessTemplateRuntimeChecks += 1
+  }
+  const assertThrows = (action, reason) => {
+    try { action() } catch { shopBusinessTemplateRuntimeChecks += 1; return }
+    throw new Error(reason)
+  }
+  if (!shopBusinessTemplatesSource.includes("SHOP_BUSINESS_TEMPLATE_SCHEMA = 'supermega.shop.business_template.v1'")
+    || !shopBusinessTemplatesSource.includes('export function validateShopBusinessTemplates()')
+    || !shopBusinessTemplatesSource.includes('export function shopBusinessTemplateFromQuery(')
+    || !shopBusinessTemplatesSource.includes('export function shopBusinessTemplateCatalogCsv(')
+    || !shopBusinessTemplatesSource.includes('export function shopBusinessTemplateCommerceItems(')
+    || ['Date.now', 'Math.random', 'new Date()', 'crypto.randomUUID', 'performance.now', 'fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource(', 'localStorage'].some((marker) => shopBusinessTemplatesSource.includes(marker))
+    || !productOnboardingRuntimeSource.includes('export async function provisionLocalShopBusinessTemplateSample')
+    || !productOnboardingPageSource.includes('provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)')
+    || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))")
+    || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
+    || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
+    || !productOnboardingPageSource.includes('Standard sample (current industry pack)')
+    || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)')
+    || !coreCssSource.includes('.product-onboarding-business-type')) fail('shop_business_template_contract_missing')
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')).href}?shop-business-template-verify=${Date.now()}`)
+    const onboardingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?shop-business-template-import-verify=${Date.now()}`)
+    const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-business-template-commerce-verify=${Date.now()}`)
+    assert(model.validateShopBusinessTemplates() === model.shopBusinessTemplates, 'shop_business_template_registry_invalid')
+    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts'
+      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 7, 'shop_business_template_catalog_wrong')
+    const commerceUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
+    assert(model.shopBusinessTemplateUnits.length === commerceUnits.size && model.shopBusinessTemplateUnits.every((unit) => commerceUnits.has(unit)), 'shop_business_template_unit_set_drifted')
+    for (const template of model.shopBusinessTemplates) {
+      assert(template.catalog.length >= 12 && template.catalog.length <= 20
+        && new Set(template.catalog.map((item) => item.sku)).size === template.catalog.length
+        && template.catalog.every((item) => commerceUnits.has(item.unit)
+          && Number.isSafeInteger(item.costMmk) && item.costMmk >= 1
+          && Number.isSafeInteger(item.priceMmk) && item.priceMmk > item.costMmk
+          && Number.isSafeInteger(item.openingStock) && item.openingStock >= 0
+          && Number.isSafeInteger(item.reorderAt) && item.reorderAt >= 0), `shop_business_template_${template.id}_catalog_invalid`)
+      assert(model.shopBusinessTemplateLowStockItems(template.id).length === 1, `shop_business_template_${template.id}_low_stock_missing`)
+      const catalogSkus = new Set(template.catalog.map((item) => item.sku))
+      assert(template.counterSales.length >= 2 && template.counterSales.length <= 3
+        && template.counterSales.every((sale) => sale.lines.length >= 1
+          && sale.lines.every((line) => catalogSkus.has(line.sku) && Number.isSafeInteger(line.quantity) && line.quantity >= 1)
+          && model.shopBusinessTemplateSaleTotalMmk(template.id, sale) >= 1), `shop_business_template_${template.id}_sales_invalid`)
+      assert(template.pendingOrder.status === 'pending'
+        && template.pendingOrder.lines.length >= 1
+        && template.pendingOrder.lines.every((line) => catalogSkus.has(line.sku) && Number.isSafeInteger(line.quantity) && line.quantity >= 1)
+        && Date.parse(template.pendingOrder.promisedFor) > Date.parse(template.pendingOrder.requestedAt), `shop_business_template_${template.id}_pending_order_invalid`)
+      const preview = await onboardingModel.createClientImportPreview(
+        model.shopBusinessTemplateCatalogCsv(template.id),
+        'commerce',
+        undefined,
+        `sample-${template.id}.csv`,
+        template.workflowTemplateId,
+      )
+      assert(preview.readyForStaging && preview.totals.rows === template.catalog.length && preview.rows.every((row) => row.status === 'ready'), `shop_business_template_${template.id}_import_not_ready`)
+      const installed = commerceModel.installCommerceWorkingSampleCatalog(commerceModel.createSeedCommerce(), {
+        sampleId: template.id,
+        sampleName: template.name.en,
+        items: model.shopBusinessTemplateCommerceItems(template.id),
+        capturedAt: '2026-08-03T09:00:00.000Z',
+      })
+      assert(installed && commerceModel.commerceWorkingSampleCatalogId(installed) === template.id, `shop_business_template_${template.id}_install_failed`)
+    }
+    const reimported = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')).href}?shop-business-template-determinism=${Date.now()}`)
+    assert(JSON.stringify(reimported.shopBusinessTemplates) === JSON.stringify(model.shopBusinessTemplates), 'shop_business_template_output_not_deterministic')
+    assert(model.shopBusinessTemplateFromQuery('pharmacy') === 'pharmacy'
+      && model.shopBusinessTemplateFromQuery(' PHARMACY ') === 'pharmacy'
+      && model.shopBusinessTemplateFromQuery('unknown-type') === null
+      && model.shopBusinessTemplateFromQuery(null) === null, 'shop_business_template_query_selection_wrong')
+    assert(model.shopBusinessTemplateSetupPath('pharmacy') === '/settings/?product=shop&template=pharmacy', 'shop_business_template_setup_path_wrong')
+    assertThrows(() => model.shopBusinessTemplate('unknown'), 'shop_business_unknown_template_accepted')
+  } catch (error) {
+    fail(`shop_business_template_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -18628,6 +18709,7 @@ await verifyShopNextActionRuntime()
 await verifyChannelOrderRuntime()
 await verifyShopInventoryRuntime()
 await verifyShopServiceScheduleRuntime()
+await verifyShopBusinessTemplateRuntime()
 await verifyShopProductionDemandRuntime()
 await verifyShopDemandIntelligenceRuntime()
 await verifyPlantOrderRuntime()
@@ -19156,4 +19238,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

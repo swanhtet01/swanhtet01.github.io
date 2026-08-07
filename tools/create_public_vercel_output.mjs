@@ -12,10 +12,13 @@ const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 'utf8'))
 
-// Branded 1200x630 social share card, committed at tools/public-assets/og-card.png
-// and emitted verbatim as /og-card.png on every release.
+// Branded 1200x630 social share cards, committed at tools/public-assets/ and
+// emitted verbatim on every release: og-card.png for the shared pages plus one
+// og-card-<productId>.png per customer product for its landing page
+// (regenerate the product cards via tools/generate_og_product_cards.ps1).
 const OG_CARD_WIDTH = 1200
 const OG_CARD_HEIGHT = 630
+const OG_CARD_PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const ogCardPng = await readFile(resolve(root, 'tools', 'public-assets', 'og-card.png'))
 
 function assert(condition, message) {
@@ -28,8 +31,17 @@ assert(manifest.customerProducts?.map((product) => product.id).join(',') === 'sh
 assert(manifest.customerProducts?.map((product) => product.runtimeId).join(',') === 'commerce,production,website,ecommerce', 'site_manifest_runtime_identity_changed')
 assert(manifest.sharedCapabilities?.map((capability) => capability.id).join(',') === 'ai-assistance', 'site_manifest_shared_capability_missing')
 assert(manifest.company?.publicPricing === false, 'public_pricing_must_remain_hidden')
-assert(ogCardPng.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), 'og_card_not_png')
+assert(ogCardPng.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), 'og_card_not_png')
 assert(ogCardPng.readUInt32BE(16) === OG_CARD_WIDTH && ogCardPng.readUInt32BE(20) === OG_CARD_HEIGHT, 'og_card_dimensions_wrong')
+
+const productOgCards = new Map()
+for (const product of manifest.customerProducts) {
+  const fileName = `og-card-${product.id}.png`
+  const cardPng = await readFile(resolve(root, 'tools', 'public-assets', fileName))
+  assert(cardPng.subarray(0, 8).equals(OG_CARD_PNG_SIGNATURE), `og_card_not_png:${fileName}`)
+  assert(cardPng.readUInt32BE(16) === OG_CARD_WIDTH && cardPng.readUInt32BE(20) === OG_CARD_HEIGHT, `og_card_dimensions_wrong:${fileName}`)
+  productOgCards.set(fileName, cardPng)
+}
 
 const publicProducts = manifest.customerProducts
 
@@ -338,9 +350,9 @@ function structuredDataHtml(schema) {
   return `\n    <script type="application/ld+json">${json}</script>`
 }
 
-function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow' }) {
+function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow', shareImage = '/og-card.png' }) {
   const url = canonical(route)
-  const shareImage = canonical('/og-card.png')
+  const shareImageUrl = canonical(shareImage)
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -360,11 +372,11 @@ function documentHtml({ route, title, description, content, schema = null, robot
     <meta property="og:title" content="${escapeHtml(title)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:url" content="${escapeHtml(url)}" />
-    <meta property="og:image" content="${escapeHtml(shareImage)}" />
+    <meta property="og:image" content="${escapeHtml(shareImageUrl)}" />
     <meta property="og:image:width" content="${OG_CARD_WIDTH}" />
     <meta property="og:image:height" content="${OG_CARD_HEIGHT}" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="${escapeHtml(shareImage)}" />${structuredDataHtml(schema)}
+    <meta name="twitter:image" content="${escapeHtml(shareImageUrl)}" />${structuredDataHtml(schema)}
     <style>${sharedStyle}</style>
   </head>
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
@@ -409,6 +421,7 @@ function productLandingHtml(product, page) {
     route: page.route,
     title: page.title,
     description,
+    shareImage: `/og-card-${product.id}.png`,
     schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
     content: `<main id="content">
     <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${escapeHtml(setupLabel)}</a></div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
@@ -1011,7 +1024,7 @@ const vercelConfig = {
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
     ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: redirect.destination } })),
     { src: '^/__release\\.json$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
-    { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
+    { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card(?:-(?:shop|plant|website|ecommerce))?\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
     { handle: 'filesystem' },
     { src: '^/(.*)$', status: 404, dest: '/404.html' },
   ],
@@ -1038,6 +1051,7 @@ await mkdir(functionsDir, { recursive: true })
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
 await writeStatic('favicon.svg', faviconSvg)
 await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
+for (const [fileName, cardPng] of productOgCards) await writeFile(resolve(staticDir, fileName), cardPng)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)
 await writeStatic('robots.txt', 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
 await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${manifest.pages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><lastmod>${release.generatedAt.slice(0, 10)}</lastmod><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)
