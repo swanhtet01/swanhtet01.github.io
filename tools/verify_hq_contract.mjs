@@ -207,7 +207,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerFiles === 30
   && portfolio.agentOperatingModel?.scheduledFunctionMaxEagerBytes === 409600
   && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles === 13
-  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 251096
+  && portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes === 322190
   && portfolio.agentOperatingModel?.companyOperationsDeferredForStartup === true
   && portfolio.agentOperatingModel?.optionalToolConnectorsDeferredForStartup === true
   && portfolio.agentOperatingModel?.fullPlatformStatusTeams?.join(',') === 'engineering,finance-risk'
@@ -1575,7 +1575,7 @@ requireContract('scheduled CEO function keeps the full connector fleet deferred 
   && kernelFootprintVerifier.includes('connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS')
   && workboard.includes('| OPS-041 | CEO + Agent Operations / Vercel Efficiency Codex | done-local |')
   && workboard.includes('Checkpoint `6bad4e7` defers full status from the operator tool import')
-  && now.includes('CEO brief startup is 13 files/250,926 bytes')
+  && now.includes('CEO brief startup is 13 files/322,190 bytes')
   && now.includes('unchanged evidence uses zero model work'))
 
 for (const forbidden of ['Yangon Tyre', 'ytf.supermega.dev', 'pos.supermega.dev', 'twelve product']) {
