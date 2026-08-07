@@ -31,7 +31,12 @@ from supermega_runtime.managed_activation import (
 )
 
 
-NOW = datetime(2026, 7, 30, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _fixture_timestamp(minutes_before_now: int) -> str:
+    moment = NOW - timedelta(minutes=minutes_before_now)
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 OWNER_ID = "c63af44e-b7c1-4dbf-970d-389d5bba93a7"
 APPROVAL_ID = "7f201a3b-d6d9-4c1a-b6c6-3d0d1e123731"
 PROJECT_REF = "zvtzwcimpvvtkowflhda"
@@ -43,8 +48,8 @@ def pilot_outcome_report(product: str = "commerce") -> dict[str, object]:
     workspace = "Mingalar Fresh Mart"
     owner = "Swan Htet"
     template = "production-control" if product == "production" else "retail-wholesale"
-    started_at = "2026-07-30T11:30:00.000Z"
-    reviewed_at = "2026-07-30T11:35:00.000Z"
+    started_at = _fixture_timestamp(30)
+    reviewed_at = _fixture_timestamp(25)
     checkpoint_digest = "sha256:" + "2" * 64
     baseline = {
         "metricId": "shop-exceptions",
@@ -139,7 +144,7 @@ def approved_ai_context(outcome: dict[str, object]) -> dict[str, object]:
         "ownerReview": {
             "status": "approved_for_managed_review",
             "reviewedBy": "Swan Htet",
-            "reviewedAt": "2026-07-30T11:36:00.000Z",
+            "reviewedAt": _fixture_timestamp(24),
         },
         "privacyBoundary": {
             "rawProductRecordsIncluded": False,
@@ -168,7 +173,7 @@ def managed_trial_request() -> dict[str, object]:
     provisioning = {
         "contract": "supermega.managed_workspace_provisioning.v1",
         "version": 1,
-        "createdAt": "2026-07-30T11:40:00.000Z",
+        "createdAt": _fixture_timestamp(20),
         "evidenceVersion": 24,
         "workspace": "Mingalar Fresh Mart",
         "owner": "Swan Htet",
@@ -196,7 +201,7 @@ def managed_trial_request() -> dict[str, object]:
     return {
         "contract": "supermega.managed_trial_request.v1",
         "version": 1,
-        "createdAt": "2026-07-30T11:40:00.000Z",
+        "createdAt": _fixture_timestamp(20),
         "product": "Shop",
         "productSlug": "shop",
         "templateId": "retail-wholesale",
@@ -239,7 +244,7 @@ def activation_plan(product_slug: str = "shop") -> dict[str, object]:
         owner_actor_id=OWNER_ID,
         approval_id=APPROVAL_ID,
         approved_by="Swan Htet",
-        approved_at="2026-07-30T11:55:00.000Z",
+        approved_at=_fixture_timestamp(5),
         project_ref=PROJECT_REF,
         release_commit=RELEASE_COMMIT,
         admin_ca_sha256=ADMIN_CA_SHA256,
@@ -513,7 +518,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
                         owner_actor_id=OWNER_ID,
                         approval_id=APPROVAL_ID,
                         approved_by="Swan Htet",
-                        approved_at="2026-07-30T11:55:00.000Z",
+                        approved_at=_fixture_timestamp(5),
                         project_ref=PROJECT_REF,
                         release_commit=RELEASE_COMMIT,
                         admin_ca_sha256=ADMIN_CA_SHA256,
@@ -533,7 +538,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
                 owner_actor_id=OWNER_ID,
                 approval_id=APPROVAL_ID,
                 approved_by="Swan Htet",
-                approved_at="2026-07-30T11:55:00.000Z",
+                approved_at=_fixture_timestamp(5),
                 project_ref=PROJECT_REF,
                 release_commit=RELEASE_COMMIT,
                 admin_ca_sha256=ADMIN_CA_SHA256,
@@ -545,7 +550,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
         first = activation_plan()
         updated = deepcopy(request)
         updated_context = updated["approvedAiContext"]
-        updated_context["ownerReview"]["reviewedAt"] = "2026-07-30T11:37:00.000Z"  # type: ignore[index]
+        updated_context["ownerReview"]["reviewedAt"] = _fixture_timestamp(23)  # type: ignore[index]
         updated_context["contextDigest"] = managed_ai_context_export_digest(updated_context)  # type: ignore[index]
         second = compile_activation_plan(
             updated,
@@ -553,7 +558,7 @@ class ManagedActivationPlanTests(unittest.TestCase):
             owner_actor_id=OWNER_ID,
             approval_id=APPROVAL_ID,
             approved_by="Swan Htet",
-            approved_at="2026-07-30T11:55:00.000Z",
+            approved_at=_fixture_timestamp(5),
             project_ref=PROJECT_REF,
             release_commit=RELEASE_COMMIT,
             admin_ca_sha256=ADMIN_CA_SHA256,
