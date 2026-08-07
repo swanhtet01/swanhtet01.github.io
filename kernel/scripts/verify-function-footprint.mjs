@@ -9,6 +9,21 @@ const CONNECTOR_INDEX = resolve(root, 'connectors', 'index.mjs')
 const MAX_EAGER_FILES = 30
 const MAX_EAGER_BYTES = 400 * 1024
 const EXPECTED_CONNECTORS = 69
+const EXPECTED_EAGER_MANIFEST = Object.freeze([
+  'agent-company.mjs',
+  'alert.mjs',
+  'api/brief.mjs',
+  'api/operator.mjs',
+  'crew-run.mjs',
+  'crew-runner.mjs',
+  'gateway.mjs',
+  'owner-evidence.mjs',
+  'store.mjs',
+  'supermega-hq-authority.mjs',
+  'tools.mjs',
+  'workcell-run.mjs',
+  'workcells.mjs',
+])
 const OPTIONAL_TOOL_CONNECTORS = Object.freeze([
   'connectors/infra-http.mjs',
   'connectors/data-cbm-rate.mjs',
@@ -97,6 +112,7 @@ const checks = {
   connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS,
   recordedEagerFilesMatchMeasurement: recordedEagerFiles === eager.files.length,
   recordedEagerBytesMatchMeasurement: recordedEagerBytes === eager.bytes,
+  eagerManifestExact: JSON.stringify(relativeFiles) === JSON.stringify([...EXPECTED_EAGER_MANIFEST]),
 }
 const failed = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name)
 const output = {
