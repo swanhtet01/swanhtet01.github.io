@@ -4,13 +4,15 @@ This package is the canonical application for `app.supermega.dev`. It is one com
 
 ## Routes
 
-- `/` - Home: one accountable next action and direct entry to Commerce, Production, and Website.
-- `/work/?team=product&view=work` - Product, Engineering, Growth, and Finance workspaces with outcomes, lifecycle, owners, evidence, decisions, and release checks.
-- `/operations/commerce/?tab=today` - Website and customer-channel orders, accountable confirmation, fulfilment, inventory, local payment status, and close.
-- `/operations/production/?tab=today` - Production plan, output, quality, materials, equipment, maintenance, and issues.
+- `/` - Home: one accountable next action and direct entry to Shop, Plant, Website, and Ecommerce.
+- `/shop/?tab=today` - counter sales, customer-channel orders, accountable confirmation, fulfilment, inventory, local payment status, and close through the `today`, `counter`, `orders`, and `inventory` tabs.
+- `/plant/?tab=production` - production jobs, output, quality, materials, equipment, maintenance, and issues through the `production` (Jobs) and `control` (Problems) tabs; Plant has no `today` tab.
+- `/website/` - structured pages, approved content, responsive proof, and release evidence.
+- `/ecommerce/` - Shop-connected storefront, order requests, and reviewed handoff into Shop.
 - `/settings/` - compact pilot definition, evidence export, reset, runtime readiness, and authority boundaries.
+- `/login` - managed named-user access.
 
-Capability is organized through internal views rather than more routes. Legacy Shop, Plant, Ecommerce, Agents, Assist, Setup, and Trust URLs redirect into the canonical areas. Website remains the only local product prototype, and its order handoff is completed inside Commerce rather than a second order app.
+Capability is organized through internal views rather than more routes. Legacy Work, Operations, Products, Agents, Assist, Setup, and Trust URLs redirect into the canonical areas: `/operations/commerce/*` opens `/shop/`, `/operations/production/*` opens `/plant/`, and `/work/*` returns Home. Website and Ecommerce remain local product prototypes, and the Ecommerce order handoff is completed inside Shop rather than a second order app.
 
 ## Core files
 
