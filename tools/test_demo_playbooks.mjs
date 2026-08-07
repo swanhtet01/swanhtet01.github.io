@@ -1,10 +1,14 @@
-// Drift guard for docs/demo-playbooks/. Every backticked token in a playbook is
-// a verbatim contract: it must exist in the app source (showroom/src), the
-// public-site generator (tools/create_public_vercel_output.mjs), the site
-// manifest, or package.json — or be derivable from a pattern that is itself
-// pinned here (product-parameterised links the generator or app builds at
-// runtime). If a route, query parameter, button label, or copy string drifts,
-// this test fails and the playbook must be re-grounded.
+// Drift guard for docs/demo-playbooks/ and docs/pilot-kit/. Every backticked
+// token in a playbook or pilot-kit document is a verbatim contract: it must
+// exist in the app source (showroom/src), the public-site generator
+// (tools/create_public_vercel_output.mjs), the site manifest, or package.json —
+// or be derivable from a pattern that is itself pinned here (product-
+// parameterised links the generator or app builds at runtime). Pilot-kit
+// documents additionally ground against the managed-pilot readiness kernel and
+// ledger, the portfolio work order, the sales-agent guide, and the pilot
+// handoff generator. If a route, query parameter, button label, copy string,
+// or contract field drifts, this test fails and the document must be
+// re-grounded.
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -112,4 +116,64 @@ for (const name of ['shop.md', 'plant.md', 'website.md', 'ecommerce.md']) {
   check(readme.includes(name), `readme_indexes:${name}`)
 }
 
-console.log(JSON.stringify({ ok: true, contract: 'supermega_demo_playbooks', playbooks: files.length, checks }))
+// docs/pilot-kit/: the Shop design-partner pilot kit. Same token discipline,
+// with an extended corpus: the readiness kernel and ledger, the portfolio work
+// order, the sales-agent guide, and the pilot handoff generator. Reading each
+// source also proves the cited file path exists, so those paths become tokens.
+const kitSourcePaths = [
+  'kernel/managed-pilot-readiness.mjs',
+  'hq/readiness/managed-pilot-readiness.json',
+  'hq/portfolio.json',
+  'docs/supermega-shop-sales-agent.md',
+  'tools/create_shop_pilot_handoff.mjs',
+]
+const kitCorpus = kitSourcePaths.map(read).join('\n')
+const kitDerived = new Set(kitSourcePaths)
+const kitTokenOk = (token) => kitDerived.has(token) || kitCorpus.includes(token) || tokenOk(token)
+
+// Pins for the contract facts the kit states in prose: the decision id, its
+// two inputs, the 24-hour preview-branch bound, the five-day duration, the
+// review-date closure rule, and the no-payment commercial draft.
+const readinessKernel = read('kernel/managed-pilot-readiness.mjs')
+check(readinessKernel.includes("const NEXT_ACTION_DECISION_ID = 'bounded-managed-pilot-rehearsal'"), 'kit_kernel_decision_id_pin')
+check(readinessKernel.includes("const NEXT_ACTION_REQUIREMENTS = ['approve_preview_branch_target', 'name_shop_pilot_operator']"), 'kit_kernel_decision_inputs_pin')
+check(readinessKernel.includes('maximumLifetimeHours: 24'), 'kit_kernel_lifetime_pin')
+check(readinessKernel.includes("environment: 'preview_branch'"), 'kit_kernel_environment_pin')
+const handoffGenerator = read('tools/create_shop_pilot_handoff.mjs')
+check(handoffGenerator.includes('durationDays: 5'), 'kit_handoff_duration_pin')
+check(handoffGenerator.includes("throw new Error('review_date_must_close_five_day_plan')"), 'kit_handoff_review_date_pin')
+check(handoffGenerator.includes('paymentAccepted: false'), 'kit_handoff_no_payment_pin')
+
+const kitDir = 'docs/pilot-kit'
+const kitFiles = readdirSync(resolve(root, kitDir)).sort()
+check(kitFiles.join(',') === 'README.md,acceptance-checklist.md,baseline-measurement.md,pilot-agreement-outline.md', `pilot_kit_file_set:${kitFiles.join(',')}`)
+
+for (const file of kitFiles) {
+  const text = read(`${kitDir}/${file}`)
+  const tokens = [...text.matchAll(/`([^`\n]+)`/g)].map((match) => match[1])
+  check(tokens.length >= 5, `pilot-kit/${file}:token_floor:${tokens.length}`)
+  for (const token of tokens) check(kitTokenOk(token), `pilot-kit/${file}:unknown_token:${token}`)
+}
+
+const kitReadme = read(`${kitDir}/README.md`)
+check(kitReadme.includes('bounded-managed-pilot-rehearsal'), 'pilot_kit_readme_names_decision_id')
+for (const name of ['baseline-measurement.md', 'acceptance-checklist.md', 'pilot-agreement-outline.md']) {
+  check(kitReadme.includes(name), `pilot_kit_readme_indexes:${name}`)
+}
+
+const kitBaseline = read(`${kitDir}/baseline-measurement.md`)
+for (const fieldName of ['weekly_orders', 'median_minutes_per_order', 'weekly_exception_count', 'close_minutes_per_day']) {
+  check(kitBaseline.includes(`\`${fieldName}\``), `pilot_kit_baseline_field:${fieldName}`)
+}
+
+const kitAcceptance = read(`${kitDir}/acceptance-checklist.md`)
+for (const measurement of ['median_minutes_per_order', 'weekly_exception_rate', 'close_minutes_per_day', 'operator_corrections', 'reload_and_retry_result']) {
+  check(kitAcceptance.includes(`\`${measurement}\``), `pilot_kit_acceptance_measurement:${measurement}`)
+}
+for (const gateName of ['isolatedNonProductionTenantApproved', 'namedOperatorAuthorized', 'pilotDataHandlingApproved', 'ownerReviewedCommercialDraft']) {
+  check(kitAcceptance.includes(`\`${gateName}\``), `pilot_kit_acceptance_gate:${gateName}`)
+}
+
+check(read(`${kitDir}/pilot-agreement-outline.md`).includes('NOT LEGAL ADVICE'), 'pilot_kit_agreement_disclaimer')
+
+console.log(JSON.stringify({ ok: true, contract: 'supermega_demo_playbooks', playbooks: files.length, pilotKitDocs: kitFiles.length, checks }))
