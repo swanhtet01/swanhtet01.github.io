@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
-import { managedAccountPath, managedAccountRequestUrl, PageHeading, type RuntimeHealth } from './CoreApp'
+import { PageHeading, type RuntimeHealth } from './CoreShell'
+import { managedAccountPath, managedAccountRequestUrl } from './account-routes'
 import {
   beginManagedAccountSetup,
   completeManagedAccountPassword,

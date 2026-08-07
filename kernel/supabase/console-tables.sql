@@ -298,6 +298,18 @@ revoke all on public.supermega_spend_reservations from public, anon, authenticat
 grant select, insert, update, delete on public.supermega_action_queue to service_role;
 revoke all on public.supermega_ai_budget_reservations from anon, authenticated;
 grant select, insert, update, delete on public.supermega_ai_budget_reservations to service_role;
+revoke all on table public.supermega_console_clients from public, anon, authenticated;
+revoke all on table public.supermega_console_projects from public, anon, authenticated;
+revoke all on table public.supermega_console_deals from public, anon, authenticated;
+revoke all on table public.supermega_console_activity from public, anon, authenticated;
+revoke all on table public.supermega_ai_cache from public, anon, authenticated;
+revoke all on table public.supermega_graduation from public, anon, authenticated;
+grant select, insert on table public.supermega_console_clients to service_role;
+grant select, insert, update on table public.supermega_console_projects to service_role;
+grant select, insert, update on table public.supermega_console_deals to service_role;
+grant select, insert, update, delete on table public.supermega_console_activity to service_role;
+grant select, insert, update on table public.supermega_ai_cache to service_role;
+grant select, insert, update on table public.supermega_graduation to service_role;
 revoke all on function public.supermega_reserve_ai_budget(text,text,bigint,bigint,text,text,text) from public, anon, authenticated;
 grant execute on function public.supermega_reserve_ai_budget(text,text,bigint,bigint,text,text,text) to service_role;
 revoke all on function public.supermega_get_ai_budget_usage(text) from public, anon, authenticated;

@@ -8,6 +8,7 @@ import binascii
 import json
 import os
 from typing import Any
+from uuid import UUID
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request as UrlRequest, build_opener
@@ -58,6 +59,14 @@ class SupabaseAuthConfig:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class VerifiedSupabaseUser:
+    """A named Supabase user bound to the exact signed Auth session."""
+
+    user_id: str
+    session_id: str
+
+
 def _normalize_base_url(value: str) -> str:
     if not value:
         return ""
@@ -95,23 +104,71 @@ def _is_publishable_key(value: str) -> bool:
     return bool(payload and payload.get("role") == "anon")
 
 
-def verify_supabase_user_token(
+def _canonical_uuid(value: object) -> str:
+    candidate = str(value or "").strip()
+    try:
+        parsed = UUID(candidate)
+    except (ValueError, AttributeError, TypeError):
+        return ""
+    return str(parsed) if str(parsed) == candidate.casefold() else ""
+
+
+def _authenticated_token_identity(
+    token: str,
+    config: SupabaseAuthConfig,
+) -> VerifiedSupabaseUser | None:
+    """Return signed identity claims only for this project's named session.
+
+    Supabase Auth remains the signature and freshness authority through the
+    server-side ``/user`` request below. These checks bind that response to the
+    configured project and reject anonymous, service, static custom, or
+    malformed tokens before they can reach workspace authorization.
+    """
+
+    payload = _decode_jwt_payload(token)
+    if not payload:
+        return None
+    audience = payload.get("aud")
+    authenticated_audience = audience == "authenticated" or (
+        isinstance(audience, list)
+        and audience
+        and all(isinstance(item, str) for item in audience)
+        and "authenticated" in audience
+    )
+    subject = _canonical_uuid(payload.get("sub"))
+    session_id = _canonical_uuid(payload.get("session_id"))
+    if (
+        payload.get("iss") != f"{config.base_url}/auth/v1"
+        or not authenticated_audience
+        or payload.get("role") != "authenticated"
+        or payload.get("is_anonymous") is not False
+        or not subject
+        or not session_id
+    ):
+        return None
+    return VerifiedSupabaseUser(user_id=subject, session_id=session_id)
+
+
+def verify_supabase_user_identity(
     token: str,
     config: SupabaseAuthConfig,
     *,
     timeout_seconds: float = 4.0,
-) -> str | None:
-    """Return a fresh, server-confirmed user id or reject the token.
+) -> VerifiedSupabaseUser | None:
+    """Return a fresh user and signed session pair confirmed by Supabase Auth.
 
-    The Auth ``/user`` endpoint supports both legacy symmetric and current
-    asymmetric Supabase signing keys. Authorization still happens in the
-    private trial store through explicit workspace membership and capabilities.
+    The caller must still confirm that ``session_id`` exists in
+    ``auth.sessions`` before authorizing managed data. That second check makes
+    sign-out and administrative session revocation effective before JWT expiry.
     """
 
     candidate = str(token or "").strip()
     if not config.ready:
         return None
     if not candidate or len(candidate) > _MAX_TOKEN_LENGTH or len(candidate.split(".")) != 3:
+        return None
+    token_identity = _authenticated_token_identity(candidate, config)
+    if token_identity is None:
         return None
 
     request = UrlRequest(
@@ -120,7 +177,7 @@ def verify_supabase_user_token(
             "accept": "application/json",
             "apikey": config.publishable_key,
             "authorization": f"Bearer {candidate}",
-            "user-agent": "supermega-trial-runtime/1.1",
+            "user-agent": "supermega-trial-runtime/1.2",
         },
         method="GET",
     )
@@ -143,12 +200,35 @@ def verify_supabase_user_token(
         raise SupabaseAuthUnavailable("Supabase Auth returned invalid JSON.") from exc
     if not isinstance(user, dict) or user.get("is_anonymous") is not False:
         return None
-    user_id = str(user.get("id") or "").strip()
-    return user_id if user_id else None
+    user_id = _canonical_uuid(user.get("id"))
+    return token_identity if user_id == token_identity.user_id else None
+
+
+def verify_supabase_user_token(
+    token: str,
+    config: SupabaseAuthConfig,
+    *,
+    timeout_seconds: float = 4.0,
+) -> str | None:
+    """Return a fresh, server-confirmed user id or reject the token.
+
+    The Auth ``/user`` endpoint supports both legacy symmetric and current
+    asymmetric Supabase signing keys. Authorization still happens in the
+    private trial store through explicit workspace membership and capabilities.
+    """
+
+    identity = verify_supabase_user_identity(
+        token,
+        config,
+        timeout_seconds=timeout_seconds,
+    )
+    return identity.user_id if identity is not None else None
 
 
 __all__ = [
     "SupabaseAuthConfig",
     "SupabaseAuthUnavailable",
+    "VerifiedSupabaseUser",
+    "verify_supabase_user_identity",
     "verify_supabase_user_token",
 ]

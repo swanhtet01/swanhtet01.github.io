@@ -1,8 +1,14 @@
 import {
   createInitialWorkspace,
+  loadWebsiteWorkspace,
+  mutateWebsiteWorkspace,
+  WEBSITE_EDIT_SESSION_KEY,
   workspaceFingerprint,
+  type WebsiteLockManager,
+  type WebsiteStorage,
   type WebsiteWorkspace,
 } from './website-model.ts'
+import { restoreWebsiteLeadLedger, WEBSITE_LEAD_LEDGER_KEY } from './website-leads.ts'
 
 export const websiteStarterTemplates = [
   { id: 'business-presence', label: 'Business presence', detail: 'Home, About, and Contact for a clear company website.' },
@@ -25,6 +31,16 @@ export type WebsiteStarterBriefIssue = {
   field: keyof WebsiteStarterBrief
   message: string
 }
+
+export type WebsiteWorkingSampleInput = {
+  templateId: WebsiteStarterTemplateId
+  businessName: string
+  capturedAt: string
+}
+
+export type WebsiteWorkingSampleActivationResult =
+  | { ok: true; status: 'installed' | 'current'; workspace: WebsiteWorkspace }
+  | { ok: false; error: string }
 
 function normalizedLine(value: string) {
   return value.trim().replace(/\s+/gu, ' ')
@@ -65,8 +81,8 @@ export function websiteStarterBriefIssues(brief: WebsiteStarterBrief) {
   if (!websiteStarterTemplates.some((template) => template.id === brief.templateId)) {
     issues.push({ field: 'templateId', message: 'Choose a supported website layout.' })
   }
-  if (!isBoundedLine(brief.businessName, 50)) {
-    issues.push({ field: 'businessName', message: 'Add a business name of 50 characters or fewer.' })
+  if (!isBoundedLine(brief.businessName, 60)) {
+    issues.push({ field: 'businessName', message: 'Add a business name of 60 characters or fewer.' })
   }
   if (!isBoundedLine(brief.audience, 70)) {
     issues.push({ field: 'audience', message: 'Describe the customer in 70 characters or fewer.' })
@@ -182,4 +198,112 @@ export function applyWebsiteStarterBrief(
       },
     ],
   }
+}
+
+function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteStarterBrief {
+  const businessName = normalizedLine(input.businessName)
+  if (input.templateId === 'lead-generation') {
+    return {
+      templateId: input.templateId,
+      businessName,
+      audience: 'customers ready to ask for help or a quote',
+      offer: `Tell ${businessName} what you need and get one clear next step.`,
+      proof: 'Demo proof placeholder: replace this with one approved result, credential, or customer fact before release.',
+      contactHref: '',
+    }
+  }
+  if (input.templateId === 'catalog-showcase') {
+    return {
+      templateId: input.templateId,
+      businessName,
+      audience: 'customers comparing products or packages',
+      offer: `Explore what ${businessName} offers and ask about the right option.`,
+      proof: 'Demo catalog placeholder: replace this with approved products, buying details, and availability before release.',
+      contactHref: '',
+    }
+  }
+  return {
+    templateId: 'business-presence',
+    businessName,
+    audience: 'customers looking for clear company information',
+    offer: `Meet ${businessName} and understand the easiest way to get help.`,
+    proof: 'Demo company placeholder: replace this with one approved fact about the business before release.',
+    contactHref: '',
+  }
+}
+
+function replaceableWebsiteWorkingSample(workspace: WebsiteWorkspace) {
+  if (isUntouchedWebsiteStarter(workspace)) return true
+  const marker = workspace.workingSample
+  const releaseRecords = workspace.releaseRecords ?? []
+  const workspaceLeads = workspace.leadLedger
+  return Boolean(marker
+    && marker.contentFingerprint === workspaceFingerprint(workspace)
+    && workspace.evidence.length === 0
+    && workspace.approvals.length === 0
+    && workspace.localPublishes.length === 0
+    && workspace.events.length === 0
+    && releaseRecords.every((record) => record.revision === 0)
+    && (!workspaceLeads || (workspaceLeads.revision === 0 && workspaceLeads.leads.length === 0)))
+}
+
+export function installWebsiteWorkingSample(workspace: WebsiteWorkspace, input: WebsiteWorkingSampleInput) {
+  const brief = websiteWorkingSampleBrief(input)
+  if (websiteStarterBriefIssues(brief).length > 0 || !isCanonicalTimestamp(input.capturedAt)) return null
+  const seed = createInitialWorkspace()
+  const preparedDraft = applyWebsiteStarterBrief(seed, brief, input.capturedAt)
+  if (preparedDraft === seed) return null
+  const prepared = {
+    ...preparedDraft,
+    pages: preparedDraft.pages.map((page) => ({ ...page, stage: 'ready' as const })),
+  }
+  const contentFingerprint = workspaceFingerprint(prepared)
+  if (workspace.workingSample?.templateId === input.templateId
+    && workspace.workingSample.contentFingerprint === contentFingerprint
+    && workspaceFingerprint(workspace) === contentFingerprint) return workspace
+  if (!replaceableWebsiteWorkingSample(workspace)) return null
+  return {
+    ...prepared,
+    revision: workspace.revision,
+    contentRevision: workspace.contentRevision,
+    ...(workspace.releaseRecords ? { releaseRecords: workspace.releaseRecords } : {}),
+    ...(workspace.leadLedger ? { leadLedger: workspace.leadLedger } : {}),
+    workingSample: {
+      contract: 'supermega.website.working-sample.v1' as const,
+      templateId: input.templateId,
+      contentFingerprint,
+      installedAt: input.capturedAt,
+    },
+  }
+}
+
+export async function activateLocalWebsiteWorkingSample(
+  input: WebsiteWorkingSampleInput,
+  storage: WebsiteStorage | undefined = globalThis.localStorage,
+  locks: WebsiteLockManager | undefined = globalThis.navigator?.locks as WebsiteLockManager | undefined,
+): Promise<WebsiteWorkingSampleActivationResult> {
+  if (!storage) return { ok: false, error: 'Browser storage is unavailable.' }
+  const loaded = loadWebsiteWorkspace(storage)
+  if (!loaded.ok) return loaded
+  let storedLeads = null
+  try {
+    const raw = storage.getItem(WEBSITE_LEAD_LEDGER_KEY)
+    storedLeads = raw === null ? null : restoreWebsiteLeadLedger(JSON.parse(raw))
+    if (raw !== null && !storedLeads) return { ok: false, error: 'Website inquiry data needs recovery before the sample can change.' }
+  } catch {
+    return { ok: false, error: 'Website inquiry data needs recovery before the sample can change.' }
+  }
+  let installed: WebsiteWorkspace | null = null
+  const mutation = await mutateWebsiteWorkspace((current) => {
+    installed = installWebsiteWorkingSample(current, input)
+    if (!installed) throw new Error('Existing Website edits or release evidence were preserved.')
+    if (installed !== current
+      && (storage.getItem(WEBSITE_EDIT_SESSION_KEY) !== null
+        || storedLeads?.leads.some((lead) => lead.siteName === current.siteName))) {
+      throw new Error('Unsaved Website edits or inquiries were preserved.')
+    }
+    return installed
+  }, loaded.workspace.revision, loaded.workspace.contentRevision, storage, locks)
+  if (!mutation.ok) return mutation
+  return { ok: true, status: mutation.changed ? 'installed' : 'current', workspace: mutation.workspace }
 }

@@ -1,12 +1,10 @@
 import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation, useOutletContext } from 'react-router'
+import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
 import { recordBehaviorSignal } from './behavior-trail'
 import type { ClientSolutionId } from './client-onboarding'
 
-const ProductHomeReadiness = lazy(() => import('./ProductHomeReadiness').then((module) => ({ default: module.ProductHomeReadiness })))
-const ProductHomeToday = lazy(() => import('./ProductHomeToday').then((module) => ({ default: module.ProductHomeToday })))
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
@@ -87,15 +85,49 @@ const checkingRuntime: RuntimeHealth = {
   importProvisioning: null,
 }
 
-const navigation = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/shop/', label: 'Shop' },
-  { to: '/plant/', label: 'Plant' },
-  { to: '/website/', label: 'Website' },
-  { to: '/ecommerce/', label: 'Ecommerce' },
-] as const
+const LAST_PRODUCT_KEY = 'supermega.last-product.v1'
+const DEFAULT_ENTRY_PRODUCT: ClientSolutionId = 'commerce'
+const productWorkspacePaths: Record<ClientSolutionId, string> = {
+  commerce: '/shop/',
+  production: '/plant/',
+  website: '/website/',
+  ecommerce: '/ecommerce/',
+}
 
-const mobileNavigation = navigation.filter((item) => item.to !== '/')
+function isClientSolutionId(value: unknown): value is ClientSolutionId {
+  return value === 'commerce' || value === 'production' || value === 'website' || value === 'ecommerce'
+}
+
+function productWorkspacePath(product: ClientSolutionId) {
+  return productWorkspacePaths[product]
+}
+
+function readLastProduct(storage: Pick<Storage, 'getItem'>): ClientSolutionId | null {
+  try {
+    const product = storage.getItem(LAST_PRODUCT_KEY)
+    return isClientSolutionId(product) ? product : null
+  } catch {
+    return null
+  }
+}
+
+function rememberLastProduct(storage: Pick<Storage, 'setItem'>, product: ClientSolutionId) {
+  try {
+    storage.setItem(LAST_PRODUCT_KEY, product)
+  } catch {
+    // Product memory is optional; the launcher remains available when storage is blocked.
+  }
+}
+
+type NavigationItem = { to: string; label: string; end?: boolean }
+
+const productsNavigation: NavigationItem = { to: '/?choose=1', label: 'Switch product', end: true }
+const productNavigation: Record<ClientSolutionId, NavigationItem> = {
+  commerce: { to: '/shop/', label: 'Shop' },
+  production: { to: '/plant/', label: 'Plant' },
+  website: { to: '/website/', label: 'Website' },
+  ecommerce: { to: '/ecommerce/', label: 'Ecommerce' },
+}
 
 const THEME_KEY = 'supermega-interface-theme'
 const SETUP_KEY = 'supermega.setup.v3'
@@ -286,18 +318,36 @@ export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: strin
   return <header className="page-heading"><div>{eyebrow ? <span className="core-eyebrow">{eyebrow}</span> : null}<h1>{title}</h1><p>{copy}</p></div>{actions ? <div className="heading-actions">{actions}</div> : null}</header>
 }
 
+export function Empty({ children }: { children: ReactNode }) {
+  return <div className="empty-state"><span>&gt;_</span><p>{children}</p></div>
+}
+
 export function CoreLayout() {
   const location = useLocation()
   const runtime = useRuntimeHealth()
   const [theme, setTheme] = useState<InterfaceTheme>(initialInterfaceTheme)
   const workspaceMainRef = useRef<HTMLElement>(null)
   const routeProduct = productFromPathname(location.pathname)
-  const settingsProduct = location.pathname.startsWith('/settings/') ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
-  const storedSettingsSetup = location.pathname.startsWith('/settings/') ? readLocalSetupReadiness() : null
+  const customerSettingsRoute = location.pathname.startsWith('/settings/')
+  const internalBuilderRoute = location.pathname.startsWith('/internal/client-builder')
+  const settingsProduct = customerSettingsRoute ? setupProductFromQuery(new URLSearchParams(location.search).get('product')) : null
+  const storedSettingsSetup = customerSettingsRoute || internalBuilderRoute ? readLocalSetupReadiness() : null
   const sensitiveAccountRoute = location.pathname.startsWith('/account/')
   const loginRoute = location.pathname === '/login' || location.pathname === '/login/'
   const accountEntryRoute = loginRoute || sensitiveAccountRoute
   const companyLoginPath = managedLoginPath(routeProduct ?? settingsProduct ?? (storedSettingsSetup?.workspace && storedSettingsSetup.hasCanonicalProduct ? storedSettingsSetup.product : null))
+  const setupRoute = customerSettingsRoute || internalBuilderRoute
+  const setupNavigation: NavigationItem = internalBuilderRoute
+    ? { to: '/internal/client-builder/', label: 'Client builder' }
+    : settingsProduct
+      ? { to: `${location.pathname}${location.search}`, label: `${productDisplayName(settingsProduct)} setup` }
+      : { to: '/settings/#controls', label: 'Recovery' }
+  const activeNavigation: NavigationItem[] = routeProduct
+    ? [productNavigation[routeProduct], productsNavigation]
+    : setupRoute
+      ? [setupNavigation, productsNavigation]
+      : [productsNavigation]
+  const mobileNavigation = routeProduct || setupRoute ? activeNavigation : []
   const routeName = loginRoute
     ? 'Sign in'
     : sensitiveAccountRoute
@@ -308,37 +358,50 @@ export function CoreLayout() {
       ? 'Ecommerce'
       : location.pathname.startsWith('/vision/')
         ? 'Vision'
-      : location.pathname.startsWith('/settings/')
-        ? 'Setup'
+      : internalBuilderRoute
+        ? 'Client builder'
+      : customerSettingsRoute
+        ? (settingsProduct ? `${productDisplayName(settingsProduct)} setup` : 'Recovery')
         : location.pathname.startsWith('/shop/')
           ? 'Shop'
           : location.pathname.startsWith('/plant/')
             ? 'Plant'
-            : navigation.find((item) => item.to !== '/' && location.pathname.startsWith(item.to))?.label ?? 'Home'
+            : 'Products'
   const navigationClass = (_to: string, isActive: boolean) => isActive ? 'active' : ''
 
   useEffect(() => {
     document.title = `${routeName} | SuperMega`
     window.scrollTo({ top: 0, behavior: 'instant' })
-  }, [location.pathname, location.search, routeName])
+  }, [location.hash, location.pathname, location.search, routeName])
 
   useEffect(() => {
     if (location.pathname.startsWith('/vision/')) return
-    const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}`
+    const route = sensitiveAccountRoute ? location.pathname : `${location.pathname}${location.search}${location.hash}`
     const product = routeProduct ?? settingsProduct ?? 'unknown'
+    if (routeProduct) rememberLastProduct(window.localStorage, routeProduct)
     recordBehaviorSignal(window.localStorage, {
       event: location.pathname === '/'
         ? 'home_opened'
-        : location.pathname.startsWith('/settings/')
+        : customerSettingsRoute
           ? (settingsProduct ? 'setup_opened' : 'settings_opened')
           : routeProduct
             ? 'product_opened'
             : 'settings_opened',
       product,
       route,
-      detail: sensitiveAccountRoute ? 'Company account access viewed.' : routeProduct ? `${productDisplayName(routeProduct)} product viewed.` : location.pathname.startsWith('/settings/') ? 'Setup and activation controls viewed.' : 'Product launcher viewed.',
+      detail: sensitiveAccountRoute
+        ? 'Company account access viewed.'
+        : routeProduct
+          ? `${productDisplayName(routeProduct)} product viewed.`
+          : internalBuilderRoute
+            ? 'Internal client builder viewed.'
+            : settingsProduct
+              ? `${productDisplayName(settingsProduct)} onboarding viewed.`
+              : customerSettingsRoute
+                ? 'Recovery and activation controls viewed.'
+                : 'Product launcher viewed.',
     })
-  }, [location.pathname, location.search, routeProduct, sensitiveAccountRoute, settingsProduct])
+  }, [customerSettingsRoute, internalBuilderRoute, location.hash, location.pathname, location.search, routeProduct, sensitiveAccountRoute, settingsProduct])
 
   useEffect(() => {
     document.documentElement.dataset.supermegaTheme = theme
@@ -358,90 +421,62 @@ export function CoreLayout() {
       <aside className="core-sidebar">
         <Brand />
         <nav className="core-nav" aria-label="Application">
-          {navigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={'end' in item ? item.end : undefined} key={item.to} to={item.to}>{item.label}</NavLink>)}
+          {activeNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}
         </nav>
-        <div className="sidebar-foot"><RuntimeBadge status={runtime.status} />{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Company login</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
+        <div className="sidebar-foot">{routeProduct || setupRoute ? <RuntimeBadge status={runtime.status} /> : null}{!accountEntryRoute ? <Link className="account-shell-link" to={companyLoginPath}>Company login</Link> : null}<button aria-label={themeLabel} className="theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span>{theme === 'dark' ? 'Light' : 'Dark'}</button></div>
       </aside>
       <div className="core-stage">
         <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
-        <nav className="mobile-nav" aria-label="Mobile product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav>
+        {mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
           <div className="core-route-content"><Outlet context={runtime} /></div>
-          {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} product={routeProduct} /></Suspense> : null}
+          {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense> : null}
         </main>
       </div>
     </div>
   )
 }
 
-const customerTracks = [
-  ['Shop', 'Sales and inventory', 'Sell at the counter, track stock, fulfil orders, and close the day.', 'retail, cafe, restaurant, spa, gym, school', '/shop/?tab=counter'],
-  ['Plant', 'Production and quality', 'Choose a job, record output, trace materials, and handle problems.', 'food, packaging, printing, workshop, assembly', '/plant/?tab=production'],
-  ['Website', 'Pages and inquiries', 'Edit a real site preview, collect leads, and prepare launch.', 'business site, services, catalog, landing page', '/website/'],
-  ['Ecommerce', 'Storefront and checkout', 'Run online orders, delivery, and Shop review.', 'pickup, local delivery, preorder, social orders', '/ecommerce/'],
+const customerProducts = [
+  ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/'],
+  ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/'],
+  ['Website', 'Publish your business', 'Pages, services, inquiries, and launch preview.', '/website/'],
+  ['Ecommerce', 'Take online orders', 'Storefront, checkout, delivery, and Shop handoff.', '/ecommerce/'],
 ] as const
 
-const productDataTracks = [
-  ['Shop', 'Products, prices, and stock', '/settings/?product=shop'],
-  ['Plant', 'Jobs, materials, and equipment', '/settings/?product=plant'],
-  ['Website', 'Business details and pages', '/settings/?product=website'],
-  ['Ecommerce', 'Catalog and customer orders', '/settings/?product=ecommerce'],
-] as const
+export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
+  const location = useLocation()
+  const params = new URLSearchParams(location.search)
+  const route = productDemoPath(params.get('demo'))
+  const choosingProduct = params.get('choose') === '1'
+  const lastProduct = !route && !choosingProduct && typeof window !== 'undefined'
+    ? readLastProduct(window.localStorage)
+    : null
+  return route
+    ? <Navigate replace to={route} />
+    : choosingProduct
+      ? <ProductHomePage />
+      : <Navigate replace to={productWorkspacePath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
+}
 
 export function ProductHomePage() {
-  const runtime = useOutletContext<RuntimeHealth>()
-  const activationCoverage = runtime.activationManifest?.ready_percent ?? runtime.coverageScore
-  const hostedReady = runtime.operatingMode === 'managed_trial' && runtime.writesReady && runtime.requirements.length === 0
-  const nextHostedAction = runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Go-live proof is still required.'
-  const managedReadiness = runtime.importProvisioning ? {
-    ready: runtime.importProvisioning.ready,
-    checks: runtime.importProvisioning.checks,
-    forbiddenUntilReady: runtime.importProvisioning.forbidden_until_ready,
-    nextAction: runtime.importProvisioning.next_action,
-    safeEnable: runtime.activationManifest?.safe_enable ?? [],
-  } : null
   return (
     <div className="workspace-screen product-home-screen">
-      <PageHeading copy="Pick one product and use the working demo first. Add your data only after the flow makes sense." eyebrow="SuperMega" title="Start with one product." />
-      <nav aria-label="Business tracks" className="product-track-grid">
-        {customerTracks.map(([name, fit, outcome, examples, path]) => (
-          <article className="product-track-card" key={name}>
-            <div>
-              <span className="core-eyebrow">{fit}</span>
-              <h2>{name}</h2>
-              <p>{outcome}</p>
-              <small className="product-track-examples">{examples}</small>
-            </div>
-            <div className="product-track-actions">
-              <Link aria-label={`Try ${name} demo`} to={path}>Try demo</Link>
-            </div>
-          </article>
-        ))}
+      <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />
+      <nav aria-label="Choose a SuperMega product" className="product-track-grid">
+        {customerProducts.map(([name, job, outcome, path], index) => {
+          return <Link aria-label={`Open ${name} workspace`} className="product-track-card" key={name} to={path}>
+              <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
+              <span className="product-track-copy">
+                <small>{job}</small>
+                <h2>{name}</h2>
+                <p>{outcome}</p>
+              </span>
+              <strong className="product-track-open">Open {name} <span aria-hidden="true">→</span></strong>
+            </Link>
+        })}
       </nav>
-      <section aria-label="Company workspace readiness" className="product-home-managed-overview">
-        {hostedReady ? <Suspense fallback={<section aria-label="Today across SuperMega" className="product-home-today"><p className="form-notice" role="status">Preparing business overview...</p></section>}><ProductHomeToday runtimeStatus={runtime.status} /></Suspense> : null}
-        <Suspense fallback={<p className="form-notice" role="status">Loading company readiness...</p>}>
-          <ProductHomeReadiness activationCoverage={activationCoverage} hostedReady={hostedReady} managedReadiness={managedReadiness} nextHostedAction={nextHostedAction} progress={hostedReady ? 100 : activationCoverage} ready={hostedReady} />
-        </Suspense>
-      </section>
-      <details className="product-home-setup">
-        <summary><span><strong>Add your data</strong><small>Choose one product when its demo makes sense</small></span><b>Later</b></summary>
-        <div aria-label="Product data setup" className="product-home-data-start" role="region">
-          <div className="product-home-data-intro">
-            <span className="core-eyebrow">Add data later</span>
-            <strong>Prepare one product at a time.</strong>
-            <p>Sample data stays on this device. Import data after the demo makes sense. Nothing changes business records until review.</p>
-          </div>
-          <nav aria-label="Data setup by product" className="product-home-data-grid">
-            {productDataTracks.map(([name, records, path]) => (
-              <Link aria-label={`Prepare ${name} data`} key={name} to={path}>
-                <span><strong>{name}</strong><small>{records}</small></span>
-                <b>Prepare</b>
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </details>
+      <p className="product-home-note">Your product workspaces stay separate. Opening a sample does not change another product.</p>
     </div>
   )
 }

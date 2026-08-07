@@ -10,6 +10,15 @@ import {
   type CommerceState,
 } from './commerce-workspace'
 import {
+  abandonLocalCommerceSyncIntent,
+  acknowledgeLocalCommerceSyncIntent,
+  checkingCommerceSyncStatus,
+  managedCommerceSyncStatus,
+  recoverLocalCommerceSyncOutbox,
+  stageLocalCommerceSyncIntent,
+  type CommerceSyncStatus,
+} from './commerce-sync-outbox'
+import {
   currentManagedIdentity,
   loadManagedBootstrap,
   ManagedTrialError,
@@ -488,11 +497,53 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
   }))
   const snapshotRef = useRef(localSnapshot)
   const identityRef = useRef(managedIdentity)
+  const [syncStatus, setSyncStatus] = useState<CommerceSyncStatus>(() => managedIdentity ? managedCommerceSyncStatus : checkingCommerceSyncStatus)
+  const syncStatusRef = useRef(syncStatus)
+
+  const updateSyncStatus = useCallback((next: CommerceSyncStatus) => {
+    syncStatusRef.current = next
+    setSyncStatus(next)
+  }, [])
 
   useEffect(() => {
     identityRef.current = managedIdentity
     snapshotRef.current = managedIdentity ? managedSnapshot : localSnapshot
   }, [localSnapshot, managedIdentity, managedSnapshot])
+
+  useEffect(() => {
+    if (managedIdentity) {
+      let active = true
+      const statusTimer = window.setTimeout(() => {
+        if (active) updateSyncStatus(managedCommerceSyncStatus)
+      }, 0)
+      return () => {
+        active = false
+        window.clearTimeout(statusTimer)
+      }
+    }
+    let active = true
+    recoverLocalCommerceSyncOutbox()
+      .then((status) => {
+        if (!active || identityRef.current) return
+        const local = loadCommerceWorkspace()
+        const next = { state: local.state, mode: 'local' as const, workspaceId: '', version: null, error: local.error, writeReady: !local.error && commerceWorkspaceCanWrite() }
+        snapshotRef.current = next
+        setLocalSnapshot(next)
+        updateSyncStatus(status)
+      })
+      .catch((error) => {
+        if (!active || identityRef.current) return
+        updateSyncStatus({
+          status: 'unavailable',
+          pendingCount: 0,
+          recoveredCount: 0,
+          replayedCount: 0,
+          conflictCount: 0,
+          message: error instanceof Error ? error.message : 'Shop recovery could not be checked.',
+        })
+      })
+    return () => { active = false }
+  }, [managedIdentity, updateSyncStatus])
 
   useEffect(() => {
     if (!managedIdentity) return undefined
@@ -523,9 +574,51 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
   ) {
     if (!managedIdentity) {
       if (eventType === 'commerce.workspace.initialized') throw new Error('Browser demo Shop is already initialized.')
-      const result = await mutateCommerceWorkspace(transition)
+      const current = snapshotRef.current
+      if (current.mode !== 'local' || current.error || !current.writeReady) throw new Error(current.error || 'Browser demo Shop is not ready for writes.')
+      if (syncStatusRef.current.status !== 'ready') throw new Error(syncStatusRef.current.message || 'Shop recovery is not ready for another change.')
+      const next = transition(current.state)
+      if (!next) throw new Error('The Shop state changed or this lifecycle step is no longer valid. Nothing was written.')
+      if (next === current.state) return
+      const candidate = validateCommerceState(next)
+      const baseRaw = JSON.stringify(validateCommerceState(current.state))
+      let staged: Awaited<ReturnType<typeof stageLocalCommerceSyncIntent>>
+      try {
+        staged = await stageLocalCommerceSyncIntent({
+          commandId,
+          eventType,
+          evidence,
+          baseState: current.state,
+          candidateState: candidate,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Shop recovery could not stage this change.'
+        updateSyncStatus({ status: 'unavailable', pendingCount: 0, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message })
+        throw error
+      }
+      if (staged.status === 'acknowledged_replay') {
+        const latest = loadCommerceWorkspace()
+        if (latest.error || JSON.stringify(latest.state) !== staged.intent.candidateRaw) {
+          const message = 'This reviewed Shop command was already acknowledged against a different current workspace. Nothing was written.'
+          updateSyncStatus({ status: 'conflict', pendingCount: 0, recoveredCount: 0, replayedCount: 0, conflictCount: 1, message })
+          throw new ShopReviewRequiredError(message)
+        }
+        const accepted = { state: latest.state, mode: 'local' as const, workspaceId: '', version: null, error: '', writeReady: commerceWorkspaceCanWrite() }
+        snapshotRef.current = accepted
+        setLocalSnapshot(accepted)
+        updateSyncStatus({ status: 'ready', pendingCount: 0, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: '' })
+        return
+      }
+      updateSyncStatus({ status: 'pending', pendingCount: 1, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: 'The reviewed Shop change is saved for crash recovery.' })
+      const result = await mutateCommerceWorkspace((latest) => JSON.stringify(validateCommerceState(latest)) === baseRaw ? candidate : null)
       if (!result.ok) {
         if (result.error === 'The Commerce state changed or the requested transition is not valid. Nothing was written.') {
+          try {
+            await abandonLocalCommerceSyncIntent(commandId)
+            updateSyncStatus({ status: 'ready', pendingCount: 0, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: '' })
+          } catch (syncError) {
+            updateSyncStatus({ status: 'pending', pendingCount: 1, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: syncError instanceof Error ? syncError.message : 'The stale Shop recovery record could not be closed.' })
+          }
           const latest = loadCommerceWorkspace()
           const refreshed = { state: latest.state, mode: 'local' as const, workspaceId: '', version: null, error: latest.error, writeReady: !latest.error && commerceWorkspaceCanWrite() }
           snapshotRef.current = refreshed
@@ -534,6 +627,7 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
             ? `Shop changed before this action was applied. Nothing was written; reload to recover the current record. ${latest.error}`
             : 'Shop changed before this action was applied. Nothing was written; the latest record is loaded for fresh review.')
         }
+        updateSyncStatus({ status: 'pending', pendingCount: 1, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: 'The reviewed Shop change is retained for recovery because the workspace write was not confirmed.' })
         const rejected = { ...snapshotRef.current, error: result.error }
         snapshotRef.current = rejected
         setLocalSnapshot(rejected)
@@ -542,6 +636,19 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       const accepted = { state: result.state, mode: 'local' as const, workspaceId: '', version: null, error: '', writeReady: true }
       snapshotRef.current = accepted
       setLocalSnapshot(accepted)
+      try {
+        await acknowledgeLocalCommerceSyncIntent(commandId)
+        updateSyncStatus({ status: 'ready', pendingCount: 0, recoveredCount: 0, replayedCount: 0, conflictCount: 0, message: '' })
+      } catch {
+        updateSyncStatus({
+          status: 'pending',
+          pendingCount: 1,
+          recoveredCount: 0,
+          replayedCount: 0,
+          conflictCount: 0,
+          message: 'The Shop change was saved, but its recovery receipt was interrupted. Reload to reconcile it safely.',
+        })
+      }
       return
     }
 
@@ -619,8 +726,8 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
   const visible = managedIdentity ? managedSnapshot : localSnapshot
   const canWrite = managedIdentity
     ? visible.mode === 'managed-ready' && visible.version !== null && !visible.error
-    : visible.mode === 'local' && !visible.error && visible.writeReady
-  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite] as const
+    : visible.mode === 'local' && !visible.error && visible.writeReady && syncStatus.status === 'ready'
+  return [visible.state, mutate, visible.error, visible.mode, visible.version, visible.workspaceId, canWrite, syncStatus] as const
 }
 
 type ProductionWorkspaceMode = 'local' | 'managed-loading' | 'managed-ready' | 'managed-unprovisioned' | 'managed-error'

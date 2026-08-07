@@ -1,23 +1,24 @@
 import { lazy, Suspense, type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import {
   LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
 } from '../products/product-handoff'
-import { readBehaviorTrail, recordBehaviorSignal, summarizeBehaviorPreferences } from './behavior-trail'
+import {
+  readBehaviorTrail,
+  summarizeBehaviorPreferences,
+  summarizeProductActivationFunnel,
+  summarizeProductFirstValue,
+} from './behavior-trail'
 import { ManagedContextConsent } from './ManagedContextConsent'
 import { buildManagedAiContextExport, buildManagedContextProfileRequest, managedContextProductLabel } from './managed-context'
 import { operatingChangeCopy } from './operating-baseline'
 import { getCurrentPublish, loadWebsiteWorkspace } from '../products/website/website-model'
 import { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } from '../products/ecommerce/storefront-draft'
-import {
-  PageHeading,
-  RuntimeBadge,
-  managedTrialRequestUrl,
-  type RuntimeHealth,
-} from './CoreApp'
+import { managedTrialRequestUrl } from './CoreApp'
+import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
 import {
   mergeManagedApprovals,
   toManagedApprovalRequest,
@@ -29,14 +30,12 @@ import {
   useSetupWorkspace,
 } from './workspace-runtime'
 import {
-  clientSetupPath,
   collectLocalProductRecords,
   LEGACY_STOREFRONT_DRAFT_RESET_PREFIX,
   pilotProgress,
   pilotReady,
   productContracts,
   productDisplayName,
-  setupProductFromQuery,
   setupProductPreviewPath,
   STOREFRONT_DRAFT_RESET_PREFIX,
   templateFor,
@@ -82,7 +81,6 @@ import { buildPilotOutcomeDecisionApproval } from './pilot-outcome-decision'
 import {
   buildPlantGuidedShiftCloseOutcomeMetric,
   buildShopGuidedSaleOutcomeMetric,
-  startPilotOutcome,
   type PilotOutcomeReport,
   type PilotOutcomeReview,
 } from './pilot-outcome'
@@ -119,10 +117,6 @@ import {
 import { projectPlantOrder } from './plant-order-foundation'
 import { productionOrderPortfolioEntries } from './production-order-portfolio'
 import {
-  SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
-  createShopServiceSchedule,
-  provisionEmptyShopServiceSchedule,
-  readShopServiceSchedule,
   shopIndustryPack,
   shopIndustryPacks,
   type ShopIndustryPackId,
@@ -134,6 +128,7 @@ import {
   savePlantIndustryPackId,
   type PlantIndustryPackId,
 } from './plant-industry-packs'
+import { provisionLocalShopIndustryPack, readLocalShopIndustryPackId } from './product-onboarding-runtime'
 import {
   LOCAL_WORKSPACE_BACKUP_MAX_BYTES,
   LOCAL_WORKSPACE_RESTORE_POINT_KEY,
@@ -166,15 +161,6 @@ function loadClientDemoWorkspace() {
 function loadLocalWorkspaceRestorePoint() {
   if (typeof window === 'undefined') return null
   try { return restoreLocalWorkspaceBackup(JSON.parse(window.sessionStorage.getItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY) || 'null')) } catch { return null }
-}
-
-function provisionLocalShopIndustryPack(industryPackId: ShopIndustryPackId) {
-  const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
-  const next = stored
-    ? provisionEmptyShopServiceSchedule(readShopServiceSchedule(stored), industryPackId)
-    : createShopServiceSchedule(industryPackId)
-  window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
-  return next
 }
 
 const demoProgressLabels: Record<ClientDemoProductProgress['status'], string> = {
@@ -308,7 +294,6 @@ export function SettingsPage() {
   const schedulerActivation = useSchedulerActivation()
   const location = useLocation()
   const navigate = useNavigate()
-  const [setupSearchParams] = useSearchParams()
   const [setup, setSetup] = useSetupWorkspace()
   const pilotOutcomeSetup = {
     product: setup.product,
@@ -357,7 +342,7 @@ export function SettingsPage() {
   const [demoWorkspaceSource, setDemoWorkspace] = useState<ClientDemoWorkspace | null>(loadClientDemoWorkspace)
   const demoWorkspace = useMemo(() => restoreClientDemoWorkspace(demoWorkspaceSource), [demoWorkspaceSource])
   const [demoPresetId, setDemoPresetId] = useState<ClientDemoPresetId>(() => demoWorkspace?.blueprint.client.presetId ?? 'social-seller')
-  const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(() => demoWorkspace?.blueprint.client.shopIndustryPackId ?? clientDemoPresets[0].shopIndustryPackId)
+  const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(() => demoWorkspace?.blueprint.client.shopIndustryPackId ?? readLocalShopIndustryPackId())
   const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => demoWorkspace?.blueprint.client.plantIndustryPackId ?? readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const [demoSelections, setDemoSelections] = useState<Partial<Record<SetupProductId, string>>>(() => Object.fromEntries((demoWorkspace?.blueprint.products ?? clientDemoPresets[0].selections).map((selection) => [selection.product, selection.templateId])))
   const [demoBlueprintSource, setDemoBlueprint] = useState<ClientDemoBlueprint | null>(() => demoWorkspace?.blueprint ?? null)
@@ -436,7 +421,6 @@ export function SettingsPage() {
   }, [managedIdentity, setup.savedAt])
   const completion = pilotProgress(setup)
   const isPilotReady = pilotReady(setup)
-  const requestedProduct = setupProductFromQuery(setupSearchParams.get('product'))
   const selectedDemoEntries = Object.entries(demoSelections).filter((entry): entry is [SetupProductId, string] => Boolean(entry[1]))
   const selectedDemoPreset = clientDemoPresets.find((preset) => preset.id === demoPresetId) ?? clientDemoPresets[0]
   const selectedShopIndustryPack = shopIndustryPack(shopIndustryPackId)
@@ -444,12 +428,8 @@ export function SettingsPage() {
   const selectedDemoProductNames = selectedDemoEntries.map(([product]) => productDisplayName(product))
   const selectedDemoProductSummary = selectedDemoProductNames.length ? selectedDemoProductNames.join(' · ') : 'Choose at least one'
   const demoInputReady = Boolean(setup.workspace.trim() && setup.owner.trim() && selectedDemoEntries.length)
-  const workflowReady = requestedProduct
-    ? Boolean(setup.workspace.trim() && setup.owner.trim())
-    : Boolean(demoWorkspace)
-  const workflowCompletion = requestedProduct
-    ? Math.round(([setup.templateId, setup.workspace.trim(), setup.owner.trim()].filter(Boolean).length / 3) * 100)
-    : Math.round(([setup.workspace.trim(), setup.owner.trim(), selectedDemoEntries.length ? 'products' : '', demoWorkspace ? 'created' : ''].filter(Boolean).length / 4) * 100)
+  const workflowReady = Boolean(demoWorkspace)
+  const workflowCompletion = Math.round(([setup.workspace.trim(), setup.owner.trim(), selectedDemoEntries.length ? 'products' : '', demoWorkspace ? 'created' : ''].filter(Boolean).length / 4) * 100)
   const displayedCompletion = settingsStep === 'workflow' ? workflowCompletion : completion
   const displayedReady = settingsStep === 'workflow' ? workflowReady : isPilotReady
   const selectedProduct = productContracts[setup.product]
@@ -592,6 +572,13 @@ export function SettingsPage() {
   const behaviorSignalCount = behaviorTrail.length
   const agentBehaviorSignals = behaviorTrail.filter((entry) => entry.event === 'agent_job_seen' || entry.event === 'agent_job_chosen')
   const behaviorPreference = summarizeBehaviorPreferences(behaviorTrail)
+  const productActivationFunnel = summarizeProductActivationFunnel(behaviorTrail, setup.product)
+  const productFirstValue = summarizeProductFirstValue(behaviorTrail, setup.product)
+  const firstValueElapsed = productFirstValue.elapsedSeconds == null
+    ? null
+    : productFirstValue.elapsedSeconds < 60
+      ? `${productFirstValue.elapsedSeconds}s`
+      : `${Math.ceil(productFirstValue.elapsedSeconds / 60)}m`
   const agentProductName = (product: string) => (
     product === 'commerce'
     || product === 'production'
@@ -602,10 +589,16 @@ export function SettingsPage() {
   )
   const topAgentJob = behaviorPreference.preferred
   const lastChosenAgentJob = behaviorPreference.latest
-  const agentBehaviorRows = [
-    ['Signals', agentBehaviorSignals.length ? `${agentBehaviorSignals.length} next-step signals` : 'No next-step signals', agentBehaviorSignals.length ? 'Seen and chosen recommendations are saved locally for export.' : 'Open a product and choose one next step to start behavior memory.'],
-    ['Preferred job', topAgentJob ? `${agentProductName(topAgentJob.product)}: ${topAgentJob.detail}` : 'No pattern yet', topAgentJob ? `${topAgentJob.chosenCount} chosen; last ${formatTime(topAgentJob.lastChosenAt)}.` : 'The system waits for owner choices before selecting a safe continuation.'],
-    ['Last chosen', lastChosenAgentJob ? `${agentProductName(lastChosenAgentJob.product)}: ${lastChosenAgentJob.detail}` : 'Nothing chosen yet', lastChosenAgentJob ? `Captured ${formatTime(lastChosenAgentJob.createdAt)}.` : 'Click a recommended next step to teach the next handoff.'],
+  const productActivationRows = [
+    ['First value', productFirstValue.status === 'completed' ? 'Complete' : productFirstValue.status === 'in_progress' ? 'In progress' : 'Not started', productFirstValue.status === 'completed'
+      ? `${productFirstValue.detail ?? 'A useful product workflow was completed.'}${firstValueElapsed ? ` First value took ${firstValueElapsed} in this browser.` : ''}`
+      : productFirstValue.status === 'in_progress'
+        ? 'The product journey started. Complete its guided first workflow to prove useful value.'
+        : 'Open onboarding or the product sample, then complete its guided first workflow to begin.'],
+    ['Next steps', productActivationFunnel.nextStepsOpened ? `${productActivationFunnel.nextStepsOpened} opened` : 'Not opened', 'The user opened this product\'s optional next-step panel.'],
+    ['Own data', productActivationFunnel.dataSetupsOpened ? `${productActivationFunnel.dataSetupsOpened} started` : 'Not started', 'The user opened local CSV or sample-data setup for this product.'],
+    ['Product request', productActivationFunnel.productRequests ? `${productActivationFunnel.productRequests} intent` : 'No intent yet', 'The user chose the product-specific setup handoff. No message was sent by this scorecard.'],
+    ['Next move', productActivationFunnel.nextAction, `${productActivationFunnel.completionPercent}% of the local activation journey observed in this browser.`],
   ] as const
   const learningRows = [
     ['Data', preparedRecordCount ? `${preparedRecordCount} records` : 'Import'],
@@ -1057,7 +1050,7 @@ export function SettingsPage() {
     ['Approved sources', managedPilotBrief ? `${managedPilotBrief.sourceCount} company` : preparedRecordCount ? `${preparedRecordCount} local prepared` : 'No source proof yet', managedPilotBrief ? 'Counts only; raw source records are not shown here.' : 'Open a company account to verify company-scoped sources.'],
     ['Learning checkpoint', premiumPilotProofKept ? 'Kept in audit' : managedPilotBrief ? 'Ready to keep' : 'Local preview only', premiumPilotProofKept ? 'The aggregate operating baseline has a managed audit receipt.' : 'No external action runs from this panel.'],
   ] as const
-  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 24, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review), setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, localWorkspaceBackup, behaviorTrail, behaviorPreference, agentBehaviorRows, pilotOutcomeReport, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
+  const evidenceHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ contract: 'supermega_trial_evidence', version: 24, exportedAt: new Date().toISOString(), environment: 'isolated_demo', pilotReady: isPilotReady && Boolean(pilotOutcomeReport?.review), setup, workflowProfile: selectedTemplate, launchPackManifest, commerce, production, accountableActions: actions, approvals, managedApprovalRequests, teams: teamWorkspace, localProductRecords, localWorkspaceBackup, behaviorTrail, behaviorPreference, productActivationFunnel, productFirstValue, pilotOutcomeReport, activationRows, activationSteps: runtime.activationSteps, activationEvidencePlan: runtime.evidencePlan, activationManifest: runtime.activationManifest, activationManifestRows, importProvisioning: runtime.importProvisioning, importProvisioningPacket, importProvisioningRows, schedulerActivation, schedulerActivationRows, managedTrialRequest, managedTrialRequestRows, learningRows, learningPlanRows, agentPlanRows, aiContextQualityRows, aiProductSourceRows, aiProductSourceMap, contextHandoffManifest, contextHandoffRows, aiContextReadinessScore, aiContextReadyGateCount, aiContextReadinessGates, aiContextReadinessScoreRows, managedWorkspaceProvisioningPacket, provisioningRows }, null, 2))}`
   const managedTrialRequestHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(managedTrialRequest, null, 2))}`
   const ecommerceOrderQueueReadinessFilename = ecommerceOrderQueueReadinessPacket
     ? `supermega-ecommerce-order-queue-${safePacketFilename(ecommerceOrderQueueReadinessPacket.storeName)}.json`
@@ -1156,37 +1149,6 @@ export function SettingsPage() {
       ]
 
   useEffect(() => {
-    if (!requestedProduct || requestedProduct === setup.product) return
-    const template = templateFor(requestedProduct, '')
-    const selectionTimer = window.setTimeout(() => {
-      setSetup((current) => ({
-        ...current,
-        product: requestedProduct,
-        templateId: template.id,
-        entryPoint: template.entryPoints.includes(current.entryPoint) ? current.entryPoint : template.entryPoints[0] ?? '',
-        startedAt: undefined,
-        savedAt: undefined,
-      }))
-      setSettingsStep('workflow')
-      setNotice(`Selected ${productDisplayName(requestedProduct)}. Your client details were kept.`)
-    }, 0)
-    return () => window.clearTimeout(selectionTimer)
-  }, [requestedProduct, setSetup, setup.product])
-
-  useEffect(() => {
-    if (requestedProduct !== 'commerce' || setup.product !== 'commerce') return
-    const template = templateFor('commerce', selectedShopIndustryPack.workflowTemplateId)
-    if (setup.templateId === template.id && setup.entryPoint === selectedShopIndustryPack.entryPoint) return
-    const packTimer = window.setTimeout(() => {
-      setSetup((current) => current.product !== 'commerce'
-        || (current.templateId === template.id && current.entryPoint === selectedShopIndustryPack.entryPoint)
-        ? current
-        : { ...current, templateId: template.id, entryPoint: selectedShopIndustryPack.entryPoint, startedAt: undefined, savedAt: undefined })
-    }, 0)
-    return () => window.clearTimeout(packTimer)
-  }, [requestedProduct, selectedShopIndustryPack.entryPoint, selectedShopIndustryPack.workflowTemplateId, setSetup, setup.entryPoint, setup.product, setup.templateId])
-
-  useEffect(() => {
     let failureNoticeTimer: number | undefined
     try {
       if (demoWorkspace) window.localStorage.setItem(CLIENT_DEMO_WORKSPACE_STORAGE_KEY, JSON.stringify(demoWorkspace))
@@ -1254,9 +1216,6 @@ export function SettingsPage() {
     const template = templateFor('commerce', pack.workflowTemplateId)
     setShopIndustryPackId(pack.id)
     setDemoSelections((current) => current.commerce ? { ...current, commerce: template.id } : current)
-    if (requestedProduct === 'commerce') {
-      updateSetup({ templateId: template.id, entryPoint: pack.entryPoint, startedAt: undefined })
-    }
     setDemoBlueprint(null)
     setDemoWorkspace(null)
     setNotice(`${pack.name} pack selected with the ${template.name} workflow.`)
@@ -1477,41 +1436,7 @@ export function SettingsPage() {
 
   function chooseSettingsStep(step: 'workflow' | 'success') {
     setSettingsStep(step)
-    if (location.hash) navigate('/settings/', { replace: true })
-  }
-
-  function changeTemplate(templateId: string) {
-    const template = templateFor(setup.product, templateId)
-    updateSetup({ templateId: template.id, entryPoint: template.entryPoints[0] ?? '', startedAt: undefined })
-  }
-
-  function startGuidedTrial() {
-    if (!workflowReady) {
-      setNotice('Name the trial workspace and responsible owner first.')
-      chooseSettingsStep('workflow')
-      return
-    }
-    if (setup.product === 'commerce') {
-      try { provisionLocalShopIndustryPack(shopIndustryPackId) } catch { /* Existing local evidence stays authoritative. */ }
-    }
-    if (setup.product === 'production') savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
-    const startedAt = new Date().toISOString()
-    setSetup((current) => ({ ...current, startedAt }))
-    if (setup.product === 'commerce' || setup.product === 'production') {
-      const metric = setup.product === 'commerce'
-        ? buildShopGuidedSaleOutcomeMetric(actions, startedAt)
-        : buildPlantGuidedShiftCloseOutcomeMetric(currentPlantShiftClose ? [currentPlantShiftClose] : [], startedAt)
-      if (metric) {
-        startPilotOutcome(window.localStorage, pilotOutcomeSetup, metric, new Date(startedAt))
-        recordBehaviorSignal(window.localStorage, {
-          event: 'agent_job_chosen',
-          product: setup.product,
-          route: clientSetupPath(setup.product),
-          detail: setup.product === 'commerce' ? 'Start Shop outcome proof' : 'Start Plant shift-close proof',
-        })
-      }
-    }
-    navigate(setupProductPreviewPath(setup.product))
+    if (location.hash) navigate('/internal/client-builder/', { replace: true })
   }
 
   function save(event: FormEvent) {
@@ -1891,7 +1816,7 @@ export function SettingsPage() {
     try {
       applyLocalWorkspaceBackup(window.localStorage, restorePoint)
       window.sessionStorage.removeItem(LOCAL_WORKSPACE_RESTORE_POINT_KEY)
-      window.location.assign('/settings/')
+      window.location.assign('/settings/#controls')
     } catch (error) {
       setRestoreNotice(error instanceof Error ? error.message : 'The previous local workspace could not be restored safely.')
       setRestoreBusy(false)
@@ -2039,30 +1964,15 @@ export function SettingsPage() {
 
   return (
     <div className="workspace-screen settings-screen">
-      <PageHeading eyebrow={requestedProduct ? 'Product setup' : 'Client setup'} title={requestedProduct ? `Set up ${selectedProduct.name}` : 'Set up a client demo'} copy={requestedProduct ? 'Enter the client and owner, adjust the suggested workflow only if needed, then open the safe local sample. Client data can wait.' : 'Name the client, choose the business, create one workspace, then open any selected product demo.'} />
+      <PageHeading eyebrow="Client setup" title="Set up a client demo" copy="Name the client, choose the business, create one workspace, then open any selected product demo." />
       {!preparedArtifact && preparedNotice ? <p className="form-notice" role="status">{preparedNotice}</p> : null}
       <div className="settings-grid settings-step-content">
         <form className="core-panel setup-form" onSubmit={save}>
-          <div className="panel-head"><div><span className="core-eyebrow">{requestedProduct ? selectedProduct.name : 'Client demo'}</span><h2>{settingsStep === 'workflow' ? requestedProduct ? 'Client details' : 'Client and business' : 'Define success'}</h2></div>{!requestedProduct || settingsStep === 'success' ? <span className={`status-pill ${displayedReady ? 'approved' : 'bounded'}`}>{displayedReady ? 'ready' : `${displayedCompletion}%`}</span> : null}</div>
-          {!requestedProduct || settingsStep === 'success' ? <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${displayedCompletion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Client - business - ready' : 'Record - target - evidence'}</small></div> : null}
+          <div className="panel-head"><div><span className="core-eyebrow">Client demo</span><h2>{settingsStep === 'workflow' ? 'Client and business' : 'Define success'}</h2></div><span className={`status-pill ${displayedReady ? 'approved' : 'bounded'}`}>{displayedReady ? 'ready' : `${displayedCompletion}%`}</span></div>
+          <div className="pilot-progress"><div className="progress-track"><i style={{ width: `${displayedCompletion}%` }} /></div><small>{settingsStep === 'workflow' ? 'Client - business - ready' : 'Record - target - evidence'}</small></div>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'workflow'} hidden={settingsStep !== 'workflow'}>
           <div className="form-row"><label>Client or workspace name<input maxLength={60} required value={setup.workspace} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" /></label><label>Responsible owner<input maxLength={80} required value={setup.owner} onChange={(event) => updateSetup({ owner: event.target.value })} placeholder="Name or role" /></label></div>
-          {requestedProduct === 'commerce' ? <div className="form-row"><label>Shop business pack<select onChange={(event) => changeShopIndustryPack(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="setup-pack-summary"><strong>{selectedShopIndustryPack.description}</strong><small>{selectedShopIndustryPack.firstWorkflow} Selected automatically from this pack.</small><span>{selectedShopIndustryPack.capabilities.slice(0, 3).join(' · ')}</span></div></div> : null}
-          {requestedProduct === 'production' ? <div className="form-row"><label>Plant industry pack<select onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select></label><div className="setup-pack-summary"><strong>{selectedPlantIndustryPack.description}</strong><small>{selectedPlantIndustryPack.firstWorkflow}</small><span>{selectedPlantIndustryPack.capabilities.slice(0, 3).join(' · ')}</span></div></div> : null}
-          {requestedProduct ? <>
-            {setup.product !== 'commerce' ? <div className="form-row"><label>Workflow<select value={setup.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templatesFor(setup.product).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></label></div> : null}
-            <div className="settings-step-actions"><span>{workflowReady ? `Ready to open the working ${selectedProduct.name} sample on this device.` : 'Enter the client name and responsible owner first.'}</span><div className="setup-action-group"><button className="core-button primary" disabled={!workflowReady} onClick={startGuidedTrial} type="button">Open working sample</button><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button></div></div>
-            <details className="compact-disclosure setup-workflow-review">
-              <summary><span>Review workflow and data</span><small>{selectedTemplate.name}</small></summary>
-              <div>
-                <div className="setup-template-summary"><div><span>Outcome</span><strong>{selectedTemplate.outcome}</strong></div><ol aria-label={`${selectedTemplate.name} workflow`}>{selectedTemplate.workflow.map((step) => <li key={step}>{step}</li>)}</ol><small>Measure success with {selectedTemplate.metric.toLowerCase()}.</small></div>
-                <section aria-label="Selected launch pack checklist" className="setup-launch-pack">
-                  <div><span className="core-eyebrow">Setup checklist</span><strong>{selectedProduct.name} setup</strong><small>Bring the starting data. SuperMega prepares a review file. You approve real changes.</small></div>
-                  <div className="setup-launch-pack-rows">{launchPackRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
-                </section>
-              </div>
-            </details>
-          </> : <>
+          <>
             <label className="demo-preset-select">Business type<select aria-label="Choose client business type" onChange={(event) => chooseDemoPreset(event.target.value as ClientDemoPresetId)} value={demoPresetId}>{clientDemoPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select><small>{selectedDemoPreset.description} Includes {selectedDemoProductSummary}.</small></label>
             <div className="settings-step-actions"><span>{demoBlueprint ? 'Updates the saved local setup package. No client data is sent.' : 'Creates a local setup package. No client data is sent.'}</span><button className="core-button primary" disabled={!demoInputReady} onClick={createDemoKit} type="button">{demoBlueprint ? 'Update client demo' : 'Create client demo'}</button></div>
             <details className="compact-disclosure demo-product-customizer">
@@ -2154,9 +2064,9 @@ export function SettingsPage() {
                 return <details data-status={mission.status} key={mission.product}><summary><span><small>Mission {index + 1} · {templateFor(mission.product, blueprintProduct?.templateId ?? '').name}</small><strong>{mission.label}: {mission.scenario}</strong></span><span className={`status-pill ${statusClass}`}>{demoRunbookLabels[mission.status]}</span></summary><div><ol>{mission.steps.map((step) => <li key={step}>{step}</li>)}</ol><div className="demo-proof-contract"><small>Required proof</small><strong>{mission.evidenceRequirement}</strong><em>Observed: {mission.evidenceObserved} · data {demoProgressLabels[mission.importStatus].toLowerCase()}</em></div>{mission.status === 'prepare_data' || mission.status === 'needs_fix' ? <button className="core-button" onClick={() => prepareDemoProduct(mission.product, blueprintProduct?.templateId ?? '')} type="button">{mission.actionLabel}</button> : <Link className="core-button" to={mission.actionPath}>{mission.actionLabel}</Link>}</div></details>
               })}</div></details>
             </section> : null}
-          </>}
-          {requestedProduct || (demoBlueprint && demoDataSetupOpen) ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Load data when ready</h3><p>The working sample is available first. Import the client's matching CSV only when you have it.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding managedIdentity={managedIdentity} initiallyOpen={!requestedProduct} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
-          {!requestedProduct && demoBlueprint && demoDataSetupOpen ? <div className="settings-step-actions"><span>Optional: add measurable success criteria after the demo works.</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button></div></div> : null}
+          </>
+          {demoBlueprint && demoDataSetupOpen ? <section className="demo-data-setup" id="client-data-setup"><div><span className="core-eyebrow">Client data</span><h3>Load data when ready</h3><p>The working sample is available first. Import the client's matching CSV only when you have it.</p></div><Suspense fallback={<p className="form-notice" role="status">Loading the client data template...</p>}><ClientDataOnboarding initiallyOpen managedIdentity={managedIdentity} onProgress={recordDemoProductProgress} owner={setup.owner} plantIndustryPackId={setup.product === 'production' ? plantIndustryPackId : undefined} product={setup.product} productName={selectedProduct.name} productSlug={selectedProduct.slug} shopIndustryPackId={setup.product === 'commerce' ? shopIndustryPackId : undefined} workflowTemplateId={selectedTemplate.id} workspace={setup.workspace} /></Suspense></section> : null}
+          {demoBlueprint && demoDataSetupOpen ? <div className="settings-step-actions"><span>Optional: add measurable success criteria after the demo works.</span><div className="setup-action-group"><button className="text-link" disabled={!workflowReady} onClick={() => chooseSettingsStep('success')} type="button">Add success criteria</button></div></div> : null}
           </fieldset>
           <fieldset className="settings-step-fields" disabled={settingsStep !== 'success'} hidden={settingsStep !== 'success'}>
           <div className="template-contract settings-workflow-summary"><span>{productDisplayName(setup.product)}</span><strong>{setup.workspace || 'Unnamed workspace'}</strong><small>{selectedTemplate.name} - {setup.owner || 'Owner needed'}</small></div>
@@ -2261,9 +2171,9 @@ export function SettingsPage() {
                   <div className="learning-plan-actions"><button className="core-button" onClick={loadSampleEcommerceActivationPacket} type="button">Load sample packet</button><button className="core-button" disabled={!ecommerceActivationPacketText.trim()} onClick={reviewEcommerceActivationPacket} type="button">Review packet locally</button><button className="text-link" disabled={!ecommerceActivationPacketText.trim()} onClick={clearEcommerceActivationPacketReview} type="button">Clear packet</button></div>
                 </div>
               </> : null}
-              <div aria-label="Behavior memory" className="learning-plan-agent">
-                <div><span className="core-eyebrow">Behavior memory</span><h3>What users keep choosing</h3><p>Free mode keeps this local. Premium can use approved queue behavior after company import.</p></div>
-                <div className="learning-plan-rows">{agentBehaviorRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
+              <div aria-label={`${selectedProduct.name} activation journey`} className="learning-plan-agent">
+                <div><span className="core-eyebrow">Selected product only</span><h3>{selectedProduct.name} activation journey</h3><p>Shows where this browser stopped between next steps, own data, and a product request. It stays local until the owner exports evidence.</p></div>
+                <div className="learning-plan-rows">{productActivationRows.map(([label, value, detail]) => <span key={label}><small>{label}</small><strong>{value}</strong><em>{detail}</em></span>)}</div>
               </div>
               <div aria-label="Go-live automation summary" className="learning-plan-agent">
                 <div><span className="core-eyebrow">Go-live summary</span><h3>What automation may do next</h3><p>{runtime.activationManifest?.automation_boundary ?? 'SuperMega may prepare evidence and drafts; managed writes stay locked until runtime health confirms activation.'}</p></div>
