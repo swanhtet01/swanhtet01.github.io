@@ -57,6 +57,8 @@
     "readiness:managed:self-test": "node --test kernel/managed-pilot-readiness.test.mjs",
     "readiness:supabase-security:verify": "node tools/verify_supabase_security_advisor_audit.mjs",
     "readiness:supabase-security:self-test": "node tools/verify_supabase_security_advisor_audit.mjs --self-test",
+    "billing:invoice:prepare": "node tools/prepare_managed_invoice.mjs",
+    "billing:invoice:self-test": "node tools/prepare_managed_invoice.mjs --self-test",
     "database:migrations:verify": "node tools/verify_private_trial_migrations.mjs",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "npm run public:prebuilt",
