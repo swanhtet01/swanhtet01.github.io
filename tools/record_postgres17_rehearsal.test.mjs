@@ -36,10 +36,10 @@ const context = {
 const raw = {
   contract: 'supermega_postgres17_rehearsal_v1', ok: true, ready: true, status: 'rehearsed',
   engine: { major: 17, version: '17.10', tls_active: true, loopback_only: true },
-  migrations: { count: 9, schema_version: 8, production_validator_ready: true },
+  migrations: { count: 10, schema_version: 9, production_validator_ready: true },
   authority: { actor_identity_source: 'trusted_backend_transaction_context', database_authenticates_individual_actors: false, runtime_credentials_must_remain_server_only: true },
   checks: Object.fromEntries(checkNames.map((name) => [name, true])),
-  recovery: { backup_nonempty: true, format: 'pg_dump_custom', restored_schema_version: 8 },
+  recovery: { backup_nonempty: true, format: 'pg_dump_custom', restored_schema_version: 9 },
   storage: { catalog_mode: 'local_private_fixture', hosted_storage_privacy_proof_required: true, policy_count: 0, public_bucket_count: 0 },
   cleanup_complete: true, secret_values_exposed: false, production_mutated: false, supabase_mutated: false, vercel_mutated: false,
 }
