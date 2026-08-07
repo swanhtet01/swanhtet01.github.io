@@ -30,6 +30,9 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_DIRECTORY = ROOT / "supabase" / "migrations"
+PUBLIC_BROWSER_QUARANTINE = (
+    ROOT / "supabase" / "rehearsal" / "20260804_public_browser_quarantine.sql"
+)
 MIGRATIONS = (
     "20260722004500_private_trial_backend_role_preflight.sql",
     "20260722005134_private_trial_backend_foundation.sql",
@@ -41,6 +44,7 @@ MIGRATIONS = (
     "20260730123000_private_trial_backend_v7_workspace_discovery.sql",
     "20260802161500_private_trial_backend_v8_rls_initplan.sql",
     "20260803063822_private_trial_backend_v9_metadata_rls.sql",
+    "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
 )
 VALIDATOR = ROOT / "tools" / "validate_supermega_database_url.py"
 CONTRACT = "supermega_postgres17_rehearsal_v1"
@@ -48,6 +52,39 @@ RUNTIME_ROLE = "supermega_trial_login"
 DATABASE_NAME = "supermega_rehearsal"
 RESTORE_DATABASE_NAME = "supermega_rehearsal_restore"
 EXPECTED_POSTGRES_MAJOR = 17
+PUBLIC_BROWSER_TABLES = (
+    "assets",
+    "enterprise_agent_runs",
+    "enterprise_audit_events",
+    "enterprise_connector_events",
+    "enterprise_knowledge_chunks",
+    "enterprise_knowledge_embeddings",
+    "enterprise_lead_activities",
+    "enterprise_lead_hunt_profiles",
+    "enterprise_leads",
+    "enterprise_memberships",
+    "enterprise_metric_records",
+    "enterprise_module_definitions",
+    "enterprise_sessions",
+    "enterprise_source_change_events",
+    "enterprise_source_records",
+    "enterprise_users",
+    "enterprise_workspace_domains",
+    "enterprise_workspace_modules",
+    "enterprise_workspace_profiles",
+    "enterprise_workspace_tasks",
+    "enterprise_workspaces",
+    "iot_telemetry",
+    "production_ledger",
+    "supermega_campaign_clicks",
+    "supermega_leads",
+    "supermega_sales_runs",
+    "wcm_incidents",
+)
+PUBLIC_BROWSER_SEQUENCES = (
+    "supermega_leads_id_seq",
+    "supermega_sales_runs_id_seq",
+)
 IMPLEMENTATION_PATHS = (
     "supermega_runtime/managed_context.py",
     "supermega_runtime/managed_activation.py",
@@ -58,9 +95,12 @@ IMPLEMENTATION_PATHS = (
     "supabase/migrations/20260730123000_private_trial_backend_v7_workspace_discovery.sql",
     "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
     "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
+    "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+    "supabase/rehearsal/20260804_public_browser_quarantine.sql",
     "tools/activate_supermega_database.ps1",
     "tools/rehearse_supermega_postgres17.py",
     "tools/validate_supermega_database_url.py",
+    "tools/verify_public_browser_quarantine.mjs",
     "tools/verify_managed_runtime_environment_values.mjs",
 )
 JOURNEY_PRODUCT_WORKSPACE = "rehearsal-product"
@@ -74,7 +114,9 @@ APPROVAL_HUMAN_ACTOR = "approval-owner"
 APPROVAL_IDENTITY_AUTHORITY = "trusted_backend_transaction_context"
 MANAGED_WORKSPACE = "rehearsal-managed"
 MANAGED_OWNER_ACTOR = "c63af44e-b7c1-4dbf-970d-389d5bba93a7"
+MANAGED_OWNER_SESSION = "1ed07925-e474-42e3-82f1-4387f1ae63f9"
 MANAGED_SECOND_ACTOR = "f3ea98a2-9954-413c-ad4d-c6dc7ce8a23c"
+MANAGED_SECOND_SESSION = "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3"
 MANAGED_APPROVAL_ID = "7f201a3b-d6d9-4c1a-b6c6-3d0d1e123731"
 DATABASE_REJECTION_SQLSTATES = frozenset({"23514", "40001", "42501", "55000"})
 
@@ -423,8 +465,168 @@ def _create_database_and_roles(admin_url: str, database_name: str) -> None:
     with _connect(admin_url, autocommit=True) as connection:
         with connection.cursor() as cursor:
             cursor.execute(f'create database "{database_name}"')
-            for role in ("anon", "authenticated", "service_role"):
+            for role in ("anon", "authenticated", "supabase_admin"):
                 cursor.execute(f'create role "{role}" nologin')
+            cursor.execute('create role "service_role" nologin bypassrls')
+
+
+def _create_auth_session_fixture(admin_database_url: str) -> None:
+    """Create the minimum local Auth catalog that Supabase owns when hosted."""
+
+    with _connect(admin_database_url, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("create schema auth authorization postgres")
+            cursor.execute(
+                "create table auth.sessions (id uuid primary key, user_id uuid not null)"
+            )
+
+
+def _create_public_browser_fixture(admin_database_url: str) -> None:
+    """Mirror the reviewed legacy public catalog without copying business rows."""
+
+    with _connect(admin_database_url, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            for owner in ("postgres", "supabase_admin"):
+                cursor.execute(
+                    f'alter default privileges for role "{owner}" in schema public '
+                    "grant all privileges on tables to anon, authenticated, service_role"
+                )
+                cursor.execute(
+                    f'alter default privileges for role "{owner}" in schema public '
+                    "grant all privileges on sequences to anon, authenticated, service_role"
+                )
+                cursor.execute(
+                    f'alter default privileges for role "{owner}" in schema public '
+                    "grant execute on functions to anon, authenticated, service_role"
+                )
+            for table in PUBLIC_BROWSER_TABLES:
+                cursor.execute(f'create table public."{table}" (id bigint)')
+                cursor.execute(f'alter table public."{table}" enable row level security')
+            for sequence in PUBLIC_BROWSER_SEQUENCES:
+                cursor.execute(f'create sequence public."{sequence}"')
+            cursor.execute(
+                "grant all privileges on all tables in schema public "
+                "to anon, authenticated, service_role"
+            )
+            cursor.execute(
+                "grant all privileges on all sequences in schema public "
+                "to anon, authenticated, service_role"
+            )
+
+
+def _apply_public_browser_quarantine(
+    *,
+    postgres_bin: Path,
+    admin_password: str,
+    port: int,
+    database_name: str,
+    environment: dict[str, str],
+) -> None:
+    if not PUBLIC_BROWSER_QUARANTINE.is_file():
+        raise RehearsalFailure("public_browser_quarantine_missing")
+    quarantine_environment = dict(environment)
+    quarantine_environment["PGPASSWORD"] = admin_password
+    result = _run(
+        [
+            str(_binary(postgres_bin, "psql")),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--username",
+            "postgres",
+            "--dbname",
+            database_name,
+            "--no-password",
+            "--set",
+            "ON_ERROR_STOP=1",
+            "--file",
+            str(PUBLIC_BROWSER_QUARANTINE),
+        ],
+        environment=quarantine_environment,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        raise RehearsalFailure("public_browser_quarantine_application_failed")
+
+
+def _verify_public_browser_quarantine(admin_database_url: str) -> None:
+    table_privileges = (
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER",
+    )
+    sequence_privileges = ("USAGE", "SELECT", "UPDATE")
+    with _connect(admin_database_url, autocommit=True) as connection:
+        with connection.cursor() as cursor:
+            for browser_role in ("anon", "authenticated"):
+                for table in PUBLIC_BROWSER_TABLES:
+                    for privilege in table_privileges:
+                        cursor.execute(
+                            "select has_table_privilege(%s, %s, %s)",
+                            (browser_role, f"public.{table}", privilege),
+                        )
+                        if cursor.fetchone()[0] is True:
+                            raise RehearsalFailure(
+                                "public_browser_quarantine_table_grant_retained"
+                            )
+                for sequence in PUBLIC_BROWSER_SEQUENCES:
+                    for privilege in sequence_privileges:
+                        cursor.execute(
+                            "select has_sequence_privilege(%s, %s, %s)",
+                            (browser_role, f"public.{sequence}", privilege),
+                        )
+                        if cursor.fetchone()[0] is True:
+                            raise RehearsalFailure(
+                                "public_browser_quarantine_sequence_grant_retained"
+                            )
+            for table in PUBLIC_BROWSER_TABLES:
+                for privilege in table_privileges:
+                    cursor.execute(
+                        "select has_table_privilege('service_role', %s, %s)",
+                        (f"public.{table}", privilege),
+                    )
+                    if cursor.fetchone()[0] is not True:
+                        raise RehearsalFailure(
+                            "public_browser_quarantine_service_table_grant_changed"
+                        )
+            for sequence in PUBLIC_BROWSER_SEQUENCES:
+                for privilege in sequence_privileges:
+                    cursor.execute(
+                        "select has_sequence_privilege('service_role', %s, %s)",
+                        (f"public.{sequence}", privilege),
+                    )
+                    if cursor.fetchone()[0] is not True:
+                        raise RehearsalFailure(
+                            "public_browser_quarantine_service_sequence_grant_changed"
+                        )
+            cursor.execute(
+                """
+                select count(*)
+                from pg_default_acl default_acl
+                join pg_roles owner_role on owner_role.oid = default_acl.defaclrole
+                join pg_namespace schema_record
+                  on schema_record.oid = default_acl.defaclnamespace
+                cross join lateral aclexplode(default_acl.defaclacl) privilege_record
+                left join pg_roles grantee_role
+                  on grantee_role.oid = privilege_record.grantee
+                where owner_role.rolname in ('postgres', 'supabase_admin')
+                  and schema_record.nspname = 'public'
+                  and default_acl.defaclobjtype in ('r', 'S', 'f')
+                  and (
+                    privilege_record.grantee = 0
+                    or grantee_role.rolname in ('anon', 'authenticated')
+                  )
+                """
+            )
+            if cursor.fetchone()[0] != 0:
+                raise RehearsalFailure(
+                    "public_browser_quarantine_default_grant_retained"
+                )
 
 
 def _apply_migrations(
@@ -442,7 +644,7 @@ def _apply_migrations(
         migration_path = MIGRATION_DIRECTORY / migration
         if not migration_path.is_file():
             raise RehearsalFailure("migration_inventory_incomplete")
-        _require_success(
+        result = _run(
             [
                 str(psql),
                 "--host",
@@ -460,9 +662,18 @@ def _apply_migrations(
                 str(migration_path),
             ],
             environment=migration_environment,
-            failure_code="migration_application_failed",
             timeout=120,
         )
+        if result.returncode != 0:
+            error_match = re.search(r"ERROR:\s*([^\r\n]+)", result.stderr or "")
+            detail = re.sub(
+                r"[^a-z0-9]+",
+                "_",
+                str(error_match.group(1) if error_match else "postgres_error").casefold(),
+            ).strip("_")[:120]
+            raise RehearsalFailure(
+                f"migration_application_failed_{migration_path.stem}_{detail}"
+            )
         if position == 1:
             _seed_v1_upgrade_data(admin_database_url)
 
@@ -1121,7 +1332,11 @@ def _exercise_managed_activation_control(
         ManagedWorkspaceProvisioner,
         compile_activation_plan,
     )
-    from supermega_runtime.trial_store import PostgresTrialStore
+    from supermega_runtime.trial_store import (
+        PostgresTrialStore,
+        TrialNotReadyError,
+        TrialPrincipal,
+    )
 
     now = datetime.now(timezone.utc)
     activation_request = _managed_activation_request()
@@ -1147,10 +1362,16 @@ def _exercise_managed_activation_control(
         != approved_context.get("outcome", {}).get("digest")
     ):
         raise RehearsalFailure("managed_context_activation_evidence_unbound")
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        administrator.execute(
+            "insert into auth.sessions (id, user_id) values (%s::uuid, %s::uuid)",
+            (MANAGED_OWNER_SESSION, MANAGED_OWNER_ACTOR),
+        )
     provisioner = ManagedWorkspaceProvisioner(admin_database_url)
     authorization = provisioner.authorize(
         plan,
         verified_owner_actor_id=MANAGED_OWNER_ACTOR,
+        verified_owner_session_id=MANAGED_OWNER_SESSION,
         decision_note="Owner approved the bounded PostgreSQL rehearsal.",
     )
     if authorization.get("status") != "approved" or authorization.get("replayed") is not False:
@@ -1238,6 +1459,10 @@ def _exercise_managed_activation_control(
             """,
             (MANAGED_WORKSPACE, MANAGED_SECOND_ACTOR),
         )
+        administrator.execute(
+            "insert into auth.sessions (id, user_id) values (%s::uuid, %s::uuid)",
+            (MANAGED_SECOND_SESSION, MANAGED_SECOND_ACTOR),
+        )
 
     managed_context = _exercise_managed_context_postgres_route(
         runtime_database_url,
@@ -1250,13 +1475,52 @@ def _exercise_managed_activation_control(
         reducer=lambda _surface, _event_type, state, _payload: state,
         write_enabled=False,
     )
-    active_directory, active_directory_truncated = directory_store.list_actor_workspaces(
+    discovery_principal = TrialPrincipal(
+        "workspace-discovery",
         MANAGED_SECOND_ACTOR,
-        actor_kind="human",
+        "human",
+        True,
+        MANAGED_SECOND_SESSION,
+        "supabase",
+    )
+    managed_supabase_principal = TrialPrincipal(
+        MANAGED_WORKSPACE,
+        MANAGED_SECOND_ACTOR,
+        "human",
+        True,
+        MANAGED_SECOND_SESSION,
+        "supabase",
+    )
+    active_directory, active_directory_truncated = directory_store.list_actor_workspaces(
+        discovery_principal,
         limit=50,
     )
     if active_directory_truncated or [item.workspace_id for item in active_directory] != [MANAGED_WORKSPACE]:
         raise RehearsalFailure("managed_workspace_discovery_active_failed")
+    if directory_store.get_state(managed_supabase_principal, "company").workspace_id != MANAGED_WORKSPACE:
+        raise RehearsalFailure("managed_supabase_session_active_failed")
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        administrator.execute(
+            "delete from auth.sessions where id = %s::uuid",
+            (MANAGED_SECOND_SESSION,),
+        )
+    revoked_checks = 0
+    for operation in (
+        lambda: directory_store.list_actor_workspaces(discovery_principal, limit=50),
+        lambda: directory_store.get_state(managed_supabase_principal, "company"),
+    ):
+        try:
+            operation()
+        except TrialNotReadyError as exc:
+            if exc.reasons == ("auth_session_active",):
+                revoked_checks += 1
+    if revoked_checks != 2:
+        raise RehearsalFailure("managed_supabase_session_revocation_failed")
+    with _connect(admin_database_url, autocommit=True) as administrator:
+        administrator.execute(
+            "insert into auth.sessions (id, user_id) values (%s::uuid, %s::uuid)",
+            (MANAGED_SECOND_SESSION, MANAGED_SECOND_ACTOR),
+        )
 
     def visible_counts() -> tuple[int, int, int, int, int]:
         with _connect(runtime_database_url) as runtime:
@@ -1327,8 +1591,7 @@ def _exercise_managed_activation_control(
     if visible_counts() != (0, 0, 0, 0, 0):
         raise RehearsalFailure("managed_suspension_rls_bypass")
     suspended_directory, suspended_directory_truncated = directory_store.list_actor_workspaces(
-        MANAGED_SECOND_ACTOR,
-        actor_kind="human",
+        discovery_principal,
         limit=50,
     )
     if suspended_directory_truncated or suspended_directory:
@@ -1357,6 +1620,7 @@ def _exercise_managed_activation_control(
         "managed_owner_authorization_durable": True,
         "managed_activation_atomic_rollback": True,
         "managed_activation_idempotent_replay": True,
+        "managed_supabase_session_revocation_enforced": True,
         "managed_context_activation_evidence_bound": True,
         **managed_context,
         "managed_suspension_database_enforced": True,
@@ -3073,7 +3337,7 @@ def _verify_restored_data(
             """
         ).fetchone()
     if row != (
-        9,
+        10,
         11,
         7,
         20,
@@ -3180,6 +3444,24 @@ def _run_rehearsal(
 
             phase = "database_bootstrap"
             _create_database_and_roles(admin_root_url, DATABASE_NAME)
+            _create_auth_session_fixture(admin_database_url)
+            phase = "public_browser_quarantine"
+            _create_public_browser_fixture(admin_database_url)
+            _apply_public_browser_quarantine(
+                postgres_bin=postgres_bin,
+                admin_password=admin_password,
+                port=port,
+                database_name=DATABASE_NAME,
+                environment=environment,
+            )
+            _apply_public_browser_quarantine(
+                postgres_bin=postgres_bin,
+                admin_password=admin_password,
+                port=port,
+                database_name=DATABASE_NAME,
+                environment=environment,
+            )
+            _verify_public_browser_quarantine(admin_database_url)
             phase = "migration_application"
             _apply_migrations(
                 postgres_bin=postgres_bin,
@@ -3306,6 +3588,7 @@ def _run_rehearsal(
                 restore_admin_database_url,
                 expected_approval_authority_snapshot=approval_authority_snapshot,
             )
+            _verify_public_browser_quarantine(restore_admin_database_url)
 
             version = str(preflight["engine"]["version"])
             major = int(preflight["engine"]["major"])
@@ -3326,7 +3609,7 @@ def _run_rehearsal(
                 },
                 "migrations": {
                     "count": len(MIGRATIONS),
-                    "schema_version": 9,
+                    "schema_version": 10,
                     "production_validator_ready": primary_validation.get("ready") is True,
                 },
                 "storage": {
@@ -3337,6 +3620,8 @@ def _run_rehearsal(
                 },
                 "checks": {
                     "migration_chain_applied": True,
+                    "public_browser_quarantine_enforced": True,
+                    "public_browser_quarantine_idempotent": True,
                     "dedicated_runtime_role_validated": True,
                     **boundaries,
                     **product_journeys,
@@ -3347,6 +3632,7 @@ def _run_rehearsal(
                     "restore_completed": True,
                     "restored_database_validated": restored_validation.get("ready") is True,
                     "restored_data_preserved": True,
+                    "restored_public_browser_quarantine_preserved": True,
                 },
                 "authority": {
                     "actor_identity_source": APPROVAL_IDENTITY_AUTHORITY,
@@ -3356,7 +3642,7 @@ def _run_rehearsal(
                 "recovery": {
                     "format": "pg_dump_custom",
                     "backup_nonempty": True,
-                    "restored_schema_version": 9,
+                    "restored_schema_version": 10,
                 },
                 "cleanup_complete": False,
                 "secret_values_exposed": False,
