@@ -1,9 +1,10 @@
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const root = process.cwd()
 const outputDir = resolve(root, '.vercel/output')
 const functionsApiDir = resolve(outputDir, 'functions/api')
+const manifest = JSON.parse(readFileSync(resolve(root, 'site-manifest.json'), 'utf8'))
 
 function fail(code, detail = {}) {
   console.error(JSON.stringify({ ok: false, code, ...detail }, null, 2))
@@ -34,12 +35,16 @@ function walk(dir, visitor) {
 if (!existsSync(outputDir)) fail('public_output_missing', { path: outputDir })
 if (!existsSync(functionsApiDir)) fail('public_functions_missing', { path: functionsApiDir })
 
-// The social share card is the only binary static asset; keep it a small,
-// bounded fraction of the artifact budget.
-const ogCardPath = resolve(outputDir, 'static', 'og-card.png')
-if (!existsSync(ogCardPath)) fail('og_card_missing', { path: ogCardPath })
-const ogCardBytes = statSync(ogCardPath).size
-if (ogCardBytes < 1024 || ogCardBytes > 100 * 1024) fail('og_card_size_out_of_budget', { ogCardBytes, maxBytes: 100 * 1024 })
+// The social share cards (one generic plus one per customer product) are the
+// only binary static assets; keep each a small, bounded fraction of the budget.
+const ogCardBytes = {}
+for (const cardFile of ['og-card.png', ...manifest.customerProducts.map((product) => `og-card-${product.id}.png`)]) {
+  const ogCardPath = resolve(outputDir, 'static', cardFile)
+  if (!existsSync(ogCardPath)) fail('og_card_missing', { path: ogCardPath })
+  const bytes = statSync(ogCardPath).size
+  if (bytes < 1024 || bytes > 100 * 1024) fail('og_card_size_out_of_budget', { cardFile, ogCardBytes: bytes, maxBytes: 100 * 1024 })
+  ogCardBytes[cardFile] = bytes
+}
 
 let totalFiles = 0
 let totalBytes = 0

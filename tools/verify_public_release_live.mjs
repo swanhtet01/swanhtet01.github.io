@@ -176,13 +176,25 @@ async function verifyOnce() {
         return null
       }
     })
+    // Per-product share cards (og:image = /og-card-<productId>.png on each
+    // landing page) ship with a release under the same liveGate: "post-release"
+    // pattern: without an exact expected commit the previously released
+    // generic-card surface stays valid while the per-product release is
+    // pending; the post-deploy release verification always runs with
+    // EXPECTED_RELEASE_COMMIT set, which asserts the per-product surface.
+    const landingShareImages = new Map(manifest.pages.filter((entry) => entry.productId).map((entry) => [entry.route, new URL(`/og-card-${entry.productId}.png`, `${manifest.release.productionDomain}/`).href]))
+    const loadedLandingRoutes = [...landingShareImages.keys()].filter((route) => pages.get(route) != null)
+    const perProductCardsLive = loadedLandingRoutes.length > 0 && loadedLandingRoutes.every((route) => pages.get(route).includes(landingShareImages.get(route)))
+    const perProductCardsActive = Boolean(expectedCommit) || perProductCardsLive
+    if (!perProductCardsActive) pendingFeatures.add('per-product-share-cards')
     for (const [route, html] of pages) {
       if (html == null) continue
-      assert(html.includes(`<meta property="og:image" content="${shareImage}" />`)
+      const expectedShareImage = perProductCardsActive && landingShareImages.has(route) ? landingShareImages.get(route) : shareImage
+      assert(html.includes(`<meta property="og:image" content="${expectedShareImage}" />`)
         && html.includes('<meta property="og:image:width" content="1200" />')
         && html.includes('<meta property="og:image:height" content="630" />'), 'page_share_image_missing', { route })
       assert(html.includes('<meta name="twitter:card" content="summary_large_image" />')
-        && html.includes(`<meta name="twitter:image" content="${shareImage}" />`), 'page_twitter_card_wrong', { route })
+        && html.includes(`<meta name="twitter:image" content="${expectedShareImage}" />`), 'page_twitter_card_wrong', { route })
       assert(html.includes('<a class="skip-link" href="#content">Skip to content</a>') && html.includes('id="content"'), 'page_skip_link_missing', { route })
     }
     const [homeSchema, ...extraHomeSchemas] = jsonLdSchemas(pages.get('/') || '', '/')
@@ -202,9 +214,12 @@ async function verifyOnce() {
         && schema?.url === new URL(page.route, `${manifest.release.productionDomain}/`).href
         && schema?.description === (page.description || product.description), 'product_schema_wrong_live', { route: page.route, schema })
     }
-    const card = await request('/og-card.png', { accept: 'image/png' })
-    assert(card.status === 200, 'share_image_http_error', { status: card.status })
-    assert((card.headers.get('content-type') || '').includes('image/png'), 'share_image_content_type_wrong', { contentType: card.headers.get('content-type') })
+    const cardPaths = ['/og-card.png', ...(perProductCardsActive ? manifest.pages.filter((entry) => entry.productId).map((entry) => `/og-card-${entry.productId}.png`) : [])]
+    await Promise.all(cardPaths.map(async (path) => {
+      const card = await request(path, { accept: 'image/png' })
+      assert(card.status === 200, 'share_image_http_error', { path, status: card.status })
+      assert((card.headers.get('content-type') || '').includes('image/png'), 'share_image_content_type_wrong', { path, contentType: card.headers.get('content-type') })
+    }))
   }
 
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
