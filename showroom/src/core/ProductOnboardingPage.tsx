@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router'
+import { useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
 import { recordBehaviorSignal } from './behavior-trail'
@@ -22,10 +22,17 @@ import {
 } from './product-setup'
 import {
   provisionLocalPlantWorkingSample,
+  provisionLocalShopBusinessTemplateSample,
   provisionLocalShopIndustryPack,
   provisionLocalShopWorkingSample,
   readLocalShopIndustryPackId,
 } from './product-onboarding-runtime'
+import {
+  shopBusinessTemplate,
+  shopBusinessTemplateFromQuery,
+  shopBusinessTemplates,
+  type ShopBusinessTemplateId,
+} from '../products/shop/business-templates'
 import {
   readPlantIndustryPackId,
   savePlantIndustryPackId,
@@ -76,6 +83,7 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
 export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const runtime = useOutletContext<RuntimeHealth>()
   const navigate = useNavigate()
+  const location = useLocation()
   const [setup, setSetup] = useSetupWorkspace()
   const [actions] = useAccountableActions()
   const [production] = useProductionWorkspace()
@@ -84,10 +92,15 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
   const [shopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
   const [plantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+  const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
+    () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
+  )
+  const [businessTypeOpen, setBusinessTypeOpen] = useState(() => businessTemplateId !== null)
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]
-  const selectedShopIndustryPack = shopIndustryPack(shopIndustryPackId)
+  const selectedBusinessTemplate = product === 'commerce' && businessTemplateId ? shopBusinessTemplate(businessTemplateId) : null
+  const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
   const onboardingTemplate = setup.product === product
     ? templateFor(product, setup.templateId)
     : product === 'commerce'
@@ -137,6 +150,12 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     return () => window.clearTimeout(packTimer)
   }, [product, selectedShopIndustryPack.entryPoint, selectedShopIndustryPack.workflowTemplateId, setSetup, setup.entryPoint, setup.product, setup.templateId])
 
+  function changeBusinessTemplate(value: string) {
+    const next = shopBusinessTemplateFromQuery(value)
+    setBusinessTemplateId(next)
+    setSetup((current) => (current.product === 'commerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
+  }
+
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => {
       const template = current.product === product
@@ -171,8 +190,12 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     setNotice(`Preparing the working ${onboardingProduct.name} workspace...`)
     try {
       if (product === 'commerce') {
-        provisionLocalShopIndustryPack(shopIndustryPackId)
-        await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)
+        provisionLocalShopIndustryPack(selectedShopIndustryPack.id)
+        if (selectedBusinessTemplate) {
+          await provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)
+        } else {
+          await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)
+        }
       }
       if (product === 'production') {
         savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
@@ -244,6 +267,18 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>We will add realistic sample records now; replace them with your data whenever you are ready.</p></div>
           <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
+          {product === 'commerce' ? (
+            <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setBusinessTypeOpen(event.currentTarget.open)} open={businessTypeOpen}>
+              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : 'Standard retail sample'}</small></summary>
+              <label className="demo-pack-select">Starter data
+                <select onChange={(event) => changeBusinessTemplate(event.target.value)} value={businessTemplateId ?? ''}>
+                  <option value="">Standard sample (current industry pack)</option>
+                  {shopBusinessTemplates.map((template) => <option key={template.id} value={template.id}>{template.name.en} · {template.name.my}</option>)}
+                </select>
+                <small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.` : 'Keep the standard sample, or pick a business type for a fuller starter catalog.'}</small>
+              </label>
+            </details>
+          ) : null}
           <div className="product-onboarding-primary">
             <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
             <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
