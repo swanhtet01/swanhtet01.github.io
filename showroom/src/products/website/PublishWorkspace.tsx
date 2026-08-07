@@ -42,6 +42,8 @@ type PublishWorkspaceProps = {
 
 type PublishStep = 'checks' | 'evidence' | 'approval' | 'snapshot'
 
+const GO_LIVE_CONTACT_URL = 'https://supermega.dev/contact/?product=website&source=go-live&utm_source=app&utm_medium=guided_trial'
+
 const publishSteps: Array<{ id: PublishStep; label: string }> = [
   { id: 'checks', label: 'Checks' },
   { id: 'evidence', label: 'Evidence' },
@@ -527,6 +529,31 @@ export function PublishWorkspace({
                 </button>
               </div>
             </div>
+
+            {publishIsCurrent ? (
+              <section className="website-go-live" aria-labelledby="go-live-title">
+                <header>
+                  <span className="website-eyebrow">Next step</span>
+                  <h4 id="go-live-title">Get this live</h4>
+                  <p>The downloaded site file is the whole website. Put it online yourself, or ask about managed hosting.</p>
+                </header>
+                <details className="website-go-live-option" open>
+                  <summary>Host it yourself</summary>
+                  <ol>
+                    <li>Download the site file above.</li>
+                    <li>If your host expects a home page named <code>index.html</code>, rename the file to match.</li>
+                    <li>Upload the file to the public folder of any static file host you already use.</li>
+                    <li>Open your site address and check every page and link once.</li>
+                  </ol>
+                  <p>Any host that serves plain HTML files works. The upload happens outside this app.</p>
+                </details>
+                <details className="website-go-live-option">
+                  <summary>Request managed hosting</summary>
+                  <p>Describe the site and where it should live. We reply with the smallest useful next step. Nothing deploys from this app.</p>
+                  <a className="website-button is-secondary" href={GO_LIVE_CONTACT_URL} rel="noreferrer" target="_blank">Open the contact form</a>
+                </details>
+              </section>
+            ) : null}
 
             <Suspense fallback={<div className="website-release-loading">Loading client release controls...</div>}>
               <WebsiteReleaseFoundation
