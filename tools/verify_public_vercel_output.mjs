@@ -81,6 +81,7 @@ const expectedStaticFiles = new Set([
   '404.html',
   '__release.json',
   'favicon.svg',
+  'og-card.png',
   'robots.txt',
   'site.webmanifest',
   'sitemap.xml',
@@ -98,6 +99,9 @@ const sharedRequired = [
   `meta name="supermega-context-version" content="${manifest.contextVersion}"`,
   `data-brand-version="${manifest.brand.version}"`,
   'href="/favicon.svg?v=',
+  '<a class="skip-link" href="#content">Skip to content</a>',
+  'id="content"',
+  '.skip-link:focus { transform: translateY(0); }',
   'aria-label="SuperMega home"',
   '<span class="brand-mark" aria-hidden="true">&gt;_</span>',
   '<span class="brand-name">SUPERMEGA</span>',
@@ -158,13 +162,55 @@ for (const [route, page] of pages) {
   if (page.html.includes('href="/solutions/"') || page.html.includes('href="/trust/"')) fail('retired_public_navigation_present', { route })
   if (!page.html.includes(`<link rel="canonical" href="${new URL(route, `${manifest.release.productionDomain}/`).href}"`)) fail('canonical_url_wrong', { route })
   if (!/<meta name="description" content="[^"]{20,}" \/>/.test(page.html)) fail('page_description_missing', { route })
-  for (const token of ['<meta property="og:type" content="website" />', '<meta property="og:site_name" content="SuperMega" />', `<meta property="og:url" content="${new URL(route, `${manifest.release.productionDomain}/`).href}" />`, '<meta name="twitter:card" content="summary" />']) {
+  for (const token of [
+    '<meta property="og:type" content="website" />',
+    '<meta property="og:site_name" content="SuperMega" />',
+    `<meta property="og:url" content="${new URL(route, `${manifest.release.productionDomain}/`).href}" />`,
+    `<meta property="og:image" content="${new URL('/og-card.png', `${manifest.release.productionDomain}/`).href}" />`,
+    '<meta property="og:image:width" content="1200" />',
+    '<meta property="og:image:height" content="630" />',
+    '<meta name="twitter:card" content="summary_large_image" />',
+    `<meta name="twitter:image" content="${new URL('/og-card.png', `${manifest.release.productionDomain}/`).href}" />`,
+  ]) {
     if (!page.html.includes(token)) fail('page_open_graph_missing', { route, token })
   }
   if (route !== '/' && !page.html.includes('href="/contact/">Contact</a>')) fail('support_footer_contact_missing', { route })
 }
 const pageTitles = manifest.pages.map((page) => page.title)
 if (new Set(pageTitles).size !== pageTitles.length) fail('page_titles_not_unique')
+
+// JSON-LD structured data: the homepage carries one Organization schema and each
+// product landing page one Product schema, sourced verbatim from the manifest.
+// Every JSON-LD element must keep type="application/ld+json" so it remains an
+// HTML data block that browsers never execute — that is what keeps the pinned
+// single-hash script-src contract valid without hashing these blocks.
+const jsonLdBlocks = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => match[1])
+const executableScriptCount = (html) => (html.match(/<script(?![^>]*type="application\/ld\+json")[\s>]/g) || []).length
+for (const [route, page] of pages) {
+  const expectedExecutable = route === '/contact/' ? 1 : 0
+  if (executableScriptCount(page.html) !== expectedExecutable) fail('unexpected_executable_script_element', { route, expected: expectedExecutable })
+  const blocks = jsonLdBlocks(page.html)
+  const landingProduct = publicProducts.find((product) => `/${product.id}/` === route)
+  const expectedBlocks = route === '/' || landingProduct ? 1 : 0
+  if (blocks.length !== expectedBlocks) fail('structured_data_block_count_wrong', { route, expected: expectedBlocks, actual: blocks.length })
+  if (!expectedBlocks) continue
+  let schema
+  try { schema = JSON.parse(blocks[0]) } catch { fail('structured_data_not_json', { route }) }
+  if (schema['@context'] !== 'https://schema.org') fail('structured_data_context_wrong', { route, schema })
+  if (Object.keys(schema).sort().join(',') !== '@context,@type,description,name,url') fail('structured_data_field_surface_drift', { route, keys: Object.keys(schema) })
+  if (route === '/') {
+    if (schema['@type'] !== 'Organization'
+      || schema.name !== 'SuperMega'
+      || schema.url !== new URL('/', `${manifest.release.productionDomain}/`).href
+      || schema.description !== manifest.company.statement) fail('organization_schema_drift', { route, schema })
+  } else {
+    const pageEntry = manifest.pages.find((entry) => entry.route === route)
+    if (schema['@type'] !== 'Product'
+      || schema.name !== landingProduct.name
+      || schema.url !== new URL(route, `${manifest.release.productionDomain}/`).href
+      || schema.description !== (pageEntry.description || landingProduct.description)) fail('product_schema_drift', { route, schema })
+  }
+}
 
 const home = pages.get('/')?.html || ''
 if (/\.brand-name\s*\{[^}]*display\s*:\s*none/i.test(home)) fail('mobile_brand_name_hidden')
@@ -231,7 +277,8 @@ for (const retiredLabel of ['>Open Commerce<', '>Open Production<']) {
   if (home.includes(retiredLabel)) fail('ambiguous_demo_cta_present', { retiredLabel })
 }
 if (home.includes('Commerce and Production carry real records and actions.')) fail('unsupported_live_record_claim_present')
-if ((home.match(/<a\b/g) || []).length > 13) fail('homepage_link_surface_too_large')
+// 13 content links plus the shared skip-to-content link on every page.
+if ((home.match(/<a\b/g) || []).length > 14) fail('homepage_link_surface_too_large')
 
 for (const product of publicProducts) {
   const landingRoute = `/${product.id}/`
@@ -285,6 +332,12 @@ const favicon = readStatic('favicon.svg')
 for (const token of ['SuperMega terminal mark', manifest.brand.colors.background, manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!favicon.includes(token)) fail('brand_mark_contract_missing', { token })
 }
+
+const ogCardPath = resolve(staticDir, 'og-card.png')
+requireFile(ogCardPath, 'og-card.png')
+const ogCard = readFileSync(ogCardPath)
+if (!ogCard.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) fail('og_card_not_png')
+if (ogCard.readUInt32BE(16) !== 1200 || ogCard.readUInt32BE(20) !== 630) fail('og_card_dimensions_wrong', { width: ogCard.readUInt32BE(16), height: ogCard.readUInt32BE(20) })
 
 const release = JSON.parse(readStatic('__release.json'))
 for (const [key, value] of Object.entries({
@@ -348,6 +401,7 @@ for (const route of [
 ]) {
   if (!config.routes.some((entry) => entry.src === route[0] && entry.dest === route[1])) fail('public_api_route_missing', { route })
 }
+if (!config.routes.some((entry) => entry.src === '^/(?:favicon\\.svg|site\\.webmanifest|og-card\\.png)$' && entry.continue === true && entry.headers?.['cache-control'])) fail('static_asset_cache_route_missing')
 if (!config.routes.some((entry) => entry.handle === 'filesystem')) fail('filesystem_route_missing')
 if (!config.routes.some((entry) => entry.src === '^/(.*)$' && entry.status === 404 && entry.dest === '/404.html')) fail('not_found_route_missing')
 

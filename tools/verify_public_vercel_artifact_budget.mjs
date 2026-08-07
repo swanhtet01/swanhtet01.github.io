@@ -34,6 +34,13 @@ function walk(dir, visitor) {
 if (!existsSync(outputDir)) fail('public_output_missing', { path: outputDir })
 if (!existsSync(functionsApiDir)) fail('public_functions_missing', { path: functionsApiDir })
 
+// The social share card is the only binary static asset; keep it a small,
+// bounded fraction of the artifact budget.
+const ogCardPath = resolve(outputDir, 'static', 'og-card.png')
+if (!existsSync(ogCardPath)) fail('og_card_missing', { path: ogCardPath })
+const ogCardBytes = statSync(ogCardPath).size
+if (ogCardBytes < 1024 || ogCardBytes > 100 * 1024) fail('og_card_size_out_of_budget', { ogCardBytes, maxBytes: 100 * 1024 })
+
 let totalFiles = 0
 let totalBytes = 0
 let duplicateApiNodeModules = 0
@@ -75,6 +82,7 @@ console.log(
       contract: 'public_vercel_artifact_budget',
       totalFiles,
       totalMb: Number((totalBytes / 1024 / 1024).toFixed(2)),
+      ogCardBytes,
       worstFunction,
     },
     null,

@@ -155,6 +155,58 @@ async function verifyOnce() {
   const privacyPage = pages.get('/privacy/') || ''
   assert(privacyPage.includes('optional trial proof summary, outcome status, and digest') && privacyPage.includes('digest-bound aggregate outcome') && privacyPage.includes('excludes raw product records, questions, approval contents, and account details'), 'trial_proof_privacy_copy_missing')
 
+  // The share-and-schema surface (og-card asset, og:image/twitter metadata,
+  // JSON-LD structured data, skip-to-content link) ships with a release, exactly
+  // like liveGate: "post-release" landing pages above: before that release is
+  // promoted the deployed site legitimately serves pages without it. Without an
+  // exact expected commit (availability scope) the surface is probed and skipped
+  // while pending; the post-deploy release verification always runs with
+  // EXPECTED_RELEASE_COMMIT set, which asserts the full surface.
+  const pendingFeatures = new Set()
+  const shareImage = new URL('/og-card.png', `${manifest.release.productionDomain}/`).href
+  const shareSchemaLive = (pages.get('/') || '').includes('/og-card.png')
+  if (!shareSchemaLive && !expectedCommit) {
+    pendingFeatures.add('share-and-schema')
+  } else {
+    const jsonLdSchemas = (html, route) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((match) => {
+      try {
+        return JSON.parse(match[1])
+      } catch {
+        assert(false, 'structured_data_not_json', { route })
+        return null
+      }
+    })
+    for (const [route, html] of pages) {
+      if (html == null) continue
+      assert(html.includes(`<meta property="og:image" content="${shareImage}" />`)
+        && html.includes('<meta property="og:image:width" content="1200" />')
+        && html.includes('<meta property="og:image:height" content="630" />'), 'page_share_image_missing', { route })
+      assert(html.includes('<meta name="twitter:card" content="summary_large_image" />')
+        && html.includes(`<meta name="twitter:image" content="${shareImage}" />`), 'page_twitter_card_wrong', { route })
+      assert(html.includes('<a class="skip-link" href="#content">Skip to content</a>') && html.includes('id="content"'), 'page_skip_link_missing', { route })
+    }
+    const [homeSchema, ...extraHomeSchemas] = jsonLdSchemas(pages.get('/') || '', '/')
+    assert(extraHomeSchemas.length === 0
+      && homeSchema?.['@type'] === 'Organization'
+      && homeSchema?.name === 'SuperMega'
+      && homeSchema?.url === new URL('/', `${manifest.release.productionDomain}/`).href
+      && homeSchema?.description === manifest.company.statement, 'organization_schema_wrong_live', { homeSchema })
+    for (const page of manifest.pages.filter((entry) => entry.productId)) {
+      const landing = pages.get(page.route)
+      if (landing == null) continue
+      const product = manifest.customerProducts.find((candidate) => candidate.id === page.productId)
+      const [schema, ...extraSchemas] = jsonLdSchemas(landing, page.route)
+      assert(extraSchemas.length === 0
+        && schema?.['@type'] === 'Product'
+        && schema?.name === product.name
+        && schema?.url === new URL(page.route, `${manifest.release.productionDomain}/`).href
+        && schema?.description === (page.description || product.description), 'product_schema_wrong_live', { route: page.route, schema })
+    }
+    const card = await request('/og-card.png', { accept: 'image/png' })
+    assert(card.status === 200, 'share_image_http_error', { status: card.status })
+    assert((card.headers.get('content-type') || '').includes('image/png'), 'share_image_content_type_wrong', { contentType: card.headers.get('content-type') })
+  }
+
   const [{ body: release, headers: releaseHeaders }, { body: health }, { body: contact }] = await Promise.all([
     readJson(manifest.release.releaseEndpoint),
     readJson('/api/health'),
@@ -203,6 +255,7 @@ async function verifyOnce() {
   return {
     pages: manifest.pages.map((page) => page.route).filter((route) => !pendingRoutes.has(route)),
     pendingGatedRoutes: [...pendingRoutes],
+    pendingGatedFeatures: [...pendingFeatures],
     release,
     contact: contact.status,
   }

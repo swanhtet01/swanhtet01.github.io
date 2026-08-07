@@ -12,6 +12,12 @@ const staticDir = resolve(outputDir, 'static')
 const functionsDir = resolve(outputDir, 'functions', 'api')
 const manifest = JSON.parse(await readFile(resolve(root, 'site-manifest.json'), 'utf8'))
 
+// Branded 1200x630 social share card, committed at tools/public-assets/og-card.png
+// and emitted verbatim as /og-card.png on every release.
+const OG_CARD_WIDTH = 1200
+const OG_CARD_HEIGHT = 630
+const ogCardPng = await readFile(resolve(root, 'tools', 'public-assets', 'og-card.png'))
+
 function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
@@ -22,6 +28,8 @@ assert(manifest.customerProducts?.map((product) => product.id).join(',') === 'sh
 assert(manifest.customerProducts?.map((product) => product.runtimeId).join(',') === 'commerce,production,website,ecommerce', 'site_manifest_runtime_identity_changed')
 assert(manifest.sharedCapabilities?.map((capability) => capability.id).join(',') === 'ai-assistance', 'site_manifest_shared_capability_missing')
 assert(manifest.company?.publicPricing === false, 'public_pricing_must_remain_hidden')
+assert(ogCardPng.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), 'og_card_not_png')
+assert(ogCardPng.readUInt32BE(16) === OG_CARD_WIDTH && ogCardPng.readUInt32BE(20) === OG_CARD_HEIGHT, 'og_card_dimensions_wrong')
 
 const publicProducts = manifest.customerProducts
 
@@ -95,6 +103,8 @@ const sharedStyle = `
   a { color: inherit; }
   button, input, select, textarea { font: inherit; }
   img, svg { display: block; max-width: 100%; }
+  .skip-link { position: fixed; z-index: 60; top: 12px; left: 12px; padding: 10px 14px; border-radius: 10px; background: var(--ink); color: #ffffff; font-size: 13px; font-weight: 720; text-decoration: none; transform: translateY(-160%); }
+  .skip-link:focus { transform: translateY(0); }
   .shell { min-height: 100svh; }
   .frame { width: min(calc(100% - 48px), 1200px); margin-inline: auto; }
   .site-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid var(--line); background: rgba(246,244,238,.9); backdrop-filter: blur(18px); }
@@ -316,8 +326,21 @@ function footerHtml(route) {
   return `<footer class="site-footer"><div class="frame footer-inner"><span>© ${new Date().getUTCFullYear()} SuperMega · Accountable company software.</span><span class="footer-links">${contactLink}<a href="/privacy/">Privacy</a></span></div></footer>`
 }
 
-function documentHtml({ route, title, description, content, robots = 'index,follow' }) {
+// JSON-LD structured data ships as <script type="application/ld+json"> blocks.
+// Those are HTML data blocks, not scripts: the "prepare a script element" HTML
+// algorithm bails out before any CSP check because application/ld+json is not a
+// JavaScript MIME type, so browsers never execute them and the script-src
+// directive (pinned to the single contact-script hash) does not apply to them.
+// Verified against the built output served with the exact production CSP.
+function structuredDataHtml(schema) {
+  if (!schema) return ''
+  const json = JSON.stringify({ '@context': 'https://schema.org', ...schema }).replaceAll('<', '\\u003c')
+  return `\n    <script type="application/ld+json">${json}</script>`
+}
+
+function documentHtml({ route, title, description, content, schema = null, robots = 'index,follow' }) {
   const url = canonical(route)
+  const shareImage = canonical('/og-card.png')
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -337,10 +360,15 @@ function documentHtml({ route, title, description, content, robots = 'index,foll
     <meta property="og:title" content="${escapeHtml(title)}" />
     <meta property="og:description" content="${escapeHtml(description)}" />
     <meta property="og:url" content="${escapeHtml(url)}" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="${escapeHtml(shareImage)}" />
+    <meta property="og:image:width" content="${OG_CARD_WIDTH}" />
+    <meta property="og:image:height" content="${OG_CARD_HEIGHT}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="${escapeHtml(shareImage)}" />${structuredDataHtml(schema)}
     <style>${sharedStyle}</style>
   </head>
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
+    <a class="skip-link" href="#content">Skip to content</a>
     <div class="shell">${headerHtml(route)}${content}${footerHtml(route)}</div>
   </body>
 </html>`
@@ -363,7 +391,8 @@ const homeHtml = documentHtml({
   route: '/',
   title: 'SuperMega | Four products',
   description: manifest.company.statement,
-  content: `<main>
+  schema: { '@type': 'Organization', name: 'SuperMega', url: canonical('/'), description: manifest.company.statement },
+  content: `<main id="content">
     <section class="frame hero"><div class="hero-copy"><span class="eyebrow">${escapeHtml(manifest.company.positioning)}</span><h1>${escapeHtml(manifest.company.headline)}</h1><p class="lede">${escapeHtml(manifest.company.supporting)}</p><div class="actions"><a class="button primary" href="#products">Choose a product</a></div><div class="hero-note"><span>Four focused products</span><span>Working samples</span><span>Mobile-ready workflows</span></div></div></section>
     <section class="frame section" id="products"><div class="section-head"><span class="eyebrow">Products</span><h2>Choose one product to try.</h2><p>Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.</p></div><div class="compact-solutions">${publicProducts.map(productCardHtml).join('')}</div></section>
     <section class="frame section offer-model" id="model" aria-label="Free and managed SuperMega"><div class="section-head"><span class="eyebrow">Free product. Managed intelligence.</span><h2>Run the products free. Add managed company intelligence when the workflow proves value.</h2><p>The free workspace keeps the operating software useful on its own. Managed service adds approved AI context and company controls without replacing the underlying record.</p></div><div class="offer-model-grid"><div class="offer-model-lane"><span class="eyebrow">Free local workspace</span><h3>Operate without a stripped-down plan.</h3><p>Every workflow visible in Shop, Plant, Website, and Ecommerce remains available in the browser workspace.</p><ul class="offer-model-list"><li>Full local operating modules and imports</li><li>Grounded answers from validated local records</li><li>Approvals, evidence, backup, and export</li><li>No account or model call required</li></ul></div><div class="offer-model-lane"><span class="eyebrow">Managed company intelligence</span><h3>Use approved context across products.</h3><p>SuperMega can retain reviewed context, rank next actions, and prepare controlled work only after company controls pass.</p><ul class="offer-model-list"><li>Approved AI context across all four products</li><li>Persistent company history and role-aware access</li><li>Reviewed recommendations and accountable actions</li><li>Managed setup, recovery, and support</li></ul></div></div><div class="offer-model-action"><p>Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.</p><a class="button primary" href="/contact/?product=guide&amp;source=managed-intelligence">Request managed pilot</a></div></section>
@@ -380,7 +409,8 @@ function productLandingHtml(product, page) {
     route: page.route,
     title: page.title,
     description,
-    content: `<main>
+    schema: { '@type': 'Product', name: product.name, description, url: canonical(page.route) },
+    content: `<main id="content">
     <section class="frame page-hero"><span class="eyebrow">${escapeHtml(product.eyebrow)}</span><h1>${escapeHtml(product.headline)}</h1><p class="lede">${escapeHtml(description)}</p><div class="actions"><a class="button primary" href="${escapeHtml(guidedSampleRoute)}">Start free sample</a><a class="button" href="/contact/?product=${escapeHtml(product.id)}">${escapeHtml(setupLabel)}</a></div><div class="hero-note"><span>Free browser sample</span><span>No account or model call required</span><span>Mobile-ready workflows</span></div></section>
     <section class="frame section" id="modules"><div class="section-head"><span class="eyebrow">${escapeHtml(product.name)} modules</span><h2>What the working sample covers.</h2></div><div class="solution-modules" aria-label="${escapeHtml(product.name)} modules">${moduleItems.map((item, index) => `<span><i>0${index + 1}</i>${escapeHtml(item)}</span>`).join('')}</div></section>
     <section class="frame section" id="free-sample"><div class="section-head"><span class="eyebrow">Free local workspace</span><h2>Operate without a stripped-down plan.</h2><p>Start a free browser sample with a client name and owner. Your data stays optional until the workflow makes sense.</p></div><ul class="offer-model-list"><li>Full local operating modules and imports</li><li>Grounded answers from validated local records</li><li>Approvals, evidence, backup, and export</li><li>No account or model call required</li></ul></section>
@@ -463,14 +493,14 @@ const contactHtml = documentHtml({
   route: '/contact/',
   title: 'Contact | SuperMega',
   description: 'Tell SuperMega which company workflow should run better.',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Start a system</span><h1 data-contact-heading>What should run better?</h1><p class="lede" data-contact-lede>Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2 data-contact-copy-heading>Start with the work.</h2><p data-contact-copy>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Client-provided trial proof</span><h3>Reviewed setup summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Start a system</span><h1 data-contact-heading>What should run better?</h1><p class="lede" data-contact-lede>Describe one real workflow or recurring handoff, and note any screenshot or spreadsheet you can share. We will reply with the smallest useful system step.</p></section><section class="contact-layout"><div class="contact-copy"><h2 data-contact-copy-heading>Start with the work.</h2><p data-contact-copy>No account, data connection, automation, or external action begins from this form. We first identify the operating records, owner, acceptance test, and authority boundary.</p><section class="trial-proof-summary" data-trial-proof hidden><span class="eyebrow">Client-provided trial proof</span><h3>Reviewed setup summary</h3><p>Attached from this browser. SuperMega checks that the summary belongs to this request after you send; it does not verify a managed account.</p><dl class="trial-proof-metrics"><div><dt>Readiness</dt><dd data-proof-readiness>0%</dd></div><div><dt>Sources</dt><dd data-proof-sources>0</dd></div><div><dt>Behavior</dt><dd data-proof-behavior>0</dd></div><div><dt>Decisions</dt><dd data-proof-decisions>0</dd></div></dl></section></div><form class="contact-form" action="/api/contact-submissions" method="post" data-contact-form><h3>Send the workflow</h3><div class="field-grid"><label>Name<input name="name" autocomplete="name" required maxlength="120" /></label><label>Reply email<input name="email" type="email" autocomplete="email" required maxlength="180" /></label><label class="wide">Company<input name="company" autocomplete="organization" required maxlength="180" /></label><label>Starting point<select name="product"><option value="guide">Help me choose</option><option value="shop">Shop</option><option value="plant">Plant</option><option value="website">Website</option><option value="ecommerce">Ecommerce</option></select></label><label>Template, if known<input name="template" maxlength="120" /></label><label class="wide">What happens now, and what should be better?<textarea name="goal" required maxlength="4000"></textarea></label></div><input type="hidden" name="source_url" /><input type="hidden" name="referrer" /><input type="hidden" name="idempotency_key" /><input type="hidden" name="proof_contract" /><input type="hidden" name="proof_version" /><input type="hidden" name="proof_digest" /><input type="hidden" name="proof_product" /><input type="hidden" name="proof_template" /><input type="hidden" name="proof_readiness" /><input type="hidden" name="proof_sources" /><input type="hidden" name="proof_behavior" /><input type="hidden" name="proof_decisions" /><input type="hidden" name="proof_raw_records" /><input type="hidden" name="proof_context_contract" /><input type="hidden" name="proof_context_digest" /><input type="hidden" name="proof_context_outcome_digest" /><input type="hidden" name="proof_context_approved" /><input type="hidden" name="proof_context_raw_records" /><input class="contact-honeypot" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" inert /><button class="button primary" type="submit">Send workflow</button><p class="form-note">Your note is used only to respond and prepare the agreed next step.</p><p class="form-status" data-form-status aria-live="polite"></p></form></section></main>${contactScript}`,
 })
 
 const privacyHtml = documentHtml({
   route: '/privacy/',
   title: 'Privacy | SuperMega',
   description: 'How SuperMega handles public contact requests and product implementation data.',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">Privacy</span><h1>Collect what the work requires. Protect the rest.</h1><p class="lede">The public site uses the details you choose to send so SuperMega can respond to your request.</p></section><div class="prose"><section><h3>Contact requests</h3><p>We receive your name, work email, company, selected product or template, request, source page, referrer, and an optional trial proof summary, outcome status, and digest, plus an approved AI context digest and no-raw-record boundary when you attach them. We use them to reply, qualify the workflow, and prepare the next agreed step.</p></section><section><h3>Product data</h3><p>Trial proof includes bounded readiness, source, behavior, reviewed-decision counts, and a digest-bound aggregate outcome. It excludes raw product records, questions, approval contents, and account details. Sending a request does not create an account or connect a source.</p></section><section><h3>AI processing</h3><p>Governed assistance is configured only against approved sources and roles. Consequential external actions remain behind explicit approval.</p></section><section><h3>Sharing</h3><p>We do not sell contact details. Service providers are used only where needed to host, secure, communicate, or deliver the agreed system.</p></section><section><h3>Deletion</h3><p>Email <a href="mailto:swanhtet@supermega.dev">swanhtet@supermega.dev</a> to request correction or deletion of a public contact record.</p></section></div></main>`,
 })
 
 const notFoundHtml = documentHtml({
@@ -478,7 +508,7 @@ const notFoundHtml = documentHtml({
   title: 'Page not found | SuperMega',
   description: 'The requested SuperMega route does not exist.',
   robots: 'noindex,nofollow',
-  content: `<main class="frame"><section class="page-hero"><span class="eyebrow">404 / route retired</span><h1>That page is no longer part of SuperMega.</h1><p class="lede">The public product is now one focused page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
+  content: `<main class="frame" id="content"><section class="page-hero"><span class="eyebrow">404 / route retired</span><h1>That page is no longer part of SuperMega.</h1><p class="lede">The public product is now one focused page.</p><div class="actions"><a class="button primary" href="/">Return home</a></div></section></main>`,
 })
 
 const healthFunction = `'use strict'
@@ -981,7 +1011,7 @@ const vercelConfig = {
     { src: '^/api/(.*)$', dest: '/api/not-found.js' },
     ...manifest.redirects.map((redirect) => ({ src: redirect.source, status: 308, headers: { Location: redirect.destination } })),
     { src: '^/__release\\.json$', headers: { 'cache-control': 'no-store, max-age=0' }, continue: true },
-    { src: '^/(?:favicon\\.svg|site\\.webmanifest)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
+    { src: '^/(?:favicon\\.svg|site\\.webmanifest|og-card\\.png)$', headers: { 'cache-control': 'public, max-age=86400, stale-while-revalidate=604800' }, continue: true },
     { handle: 'filesystem' },
     { src: '^/(.*)$', status: 404, dest: '/404.html' },
   ],
@@ -1007,6 +1037,7 @@ await mkdir(functionsDir, { recursive: true })
 
 for (const [relativePath, content] of pageFiles) await writeStatic(relativePath, content)
 await writeStatic('favicon.svg', faviconSvg)
+await writeFile(resolve(staticDir, 'og-card.png'), ogCardPng)
 await writeStatic('__release.json', `${JSON.stringify(release, null, 2)}\n`)
 await writeStatic('robots.txt', 'User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://supermega.dev/sitemap.xml\n')
 await writeStatic('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${manifest.pages.map((page) => `  <url><loc>${escapeHtml(canonical(page.route))}</loc><lastmod>${release.generatedAt.slice(0, 10)}</lastmod><changefreq>${page.route === '/privacy/' ? 'yearly' : 'weekly'}</changefreq></url>`).join('\n')}\n</urlset>\n`)
