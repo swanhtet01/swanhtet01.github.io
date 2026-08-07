@@ -25,6 +25,7 @@ import {
   validateEcommerceComparison,
   validateReleaseSecurityHqComparison,
   validateIdentityDataComparison,
+  verifyRequirementTokens,
   writeExclusiveJson,
 } from './prepare_release_integration_batch.mjs'
 
@@ -186,7 +187,7 @@ test('app shell requires production safeguards and candidate task-first UX toget
   assert.equal(integrated.ok, true)
 
   const withoutSignIn = appShellSources()
-  withoutSignIn['showroom/src/core/CoreShell.tsx'] = withoutSignIn['showroom/src/core/CoreShell.tsx'].replaceAll('Company sign in', '')
+  withoutSignIn['showroom/src/core/CoreShell.tsx'] = withoutSignIn['showroom/src/core/CoreShell.tsx'].replaceAll('Company login', '')
   assert.equal(assessAppShellSources(withoutSignIn).ok, false)
 
   const withoutBoundary = appShellSources()
@@ -200,9 +201,9 @@ test('app shell requires production safeguards and candidate task-first UX toget
   assert.equal(assessAppShellSources(detachedShopSizing).ok, false)
 
   const detachedMobileSetup = appShellSources()
-  const mobileSetupRule = '.product-home-setup > summary { align-items: flex-start; padding-block: 12px; }'
+  const mobileSetupRule = '.product-track-grid { grid-template-columns: 1fr; gap: 8px; }'
   detachedMobileSetup['showroom/src/core/core-app.css'] = detachedMobileSetup['showroom/src/core/core-app.css']
-    .replace(mobileSetupRule, '.product-home-setup > summary { align-items: flex-start; }\n.decoy { padding-block: 12px; }')
+    .replace(mobileSetupRule, '.product-track-grid { grid-template-columns: 1fr; }\n.decoy { gap: 8px; }')
   assert.equal(assessAppShellSources(detachedMobileSetup).ok, false)
 })
 
@@ -232,7 +233,7 @@ test('Ecommerce requires simple private UX and governed lifecycle depth together
   assert.equal(integrated.ok, true)
 
   const exposed = ecommerceSources()
-  exposed['showroom/src/products/ecommerce/EcommerceProduct.tsx'] = exposed['showroom/src/products/ecommerce/EcommerceProduct.tsx'].replace('Managed Shop - connected company', '')
+  exposed['showroom/src/products/ecommerce/EcommerceProduct.tsx'] = exposed['showroom/src/products/ecommerce/EcommerceProduct.tsx'].replace('Company Shop - connected', '')
   assert.equal(assessEcommerceSources(exposed).ok, false)
 
   const shallow = ecommerceSources()
@@ -247,11 +248,11 @@ test('Ecommerce requires simple private UX and governed lifecycle depth together
   const unrelatedCleanup = ecommerceSources()
   const quoteLifecycle = `useEffect(() => {
     if (!freshQuoteId) return
-    const intervalId = window.setInterval(() => setQuoteClockMs(Date.now()), 1_000)
+    const intervalId = window.setInterval(() => setQuoteClock(Date.now()), 60_000)
     return () => window.clearInterval(intervalId)
   }, [freshQuoteId])`
   unrelatedCleanup['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx'] = unrelatedCleanup['showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx']
-    .replace(quoteLifecycle, 'window.setInterval(() => setQuoteClockMs(Date.now()), 1_000)\nreturn () => window.clearInterval(intervalId)\n}, [freshQuoteId])')
+    .replace(quoteLifecycle, 'window.setInterval(() => setQuoteClock(Date.now()), 60_000)\nreturn () => window.clearInterval(intervalId)\n}, [freshQuoteId])')
   assert.equal(assessEcommerceSources(unrelatedCleanup).ok, false)
 })
 
@@ -295,4 +296,18 @@ test('final batch comparison is exact and no-write', () => {
   assert.match(packet.decision.acceptanceCommand, /--batch release-security-hq$/)
   assert.equal(validateReleaseSecurityHqComparison(packet).digest, packet.digest)
   assert.throws(() => validateEcommerceComparison(packet), /release_integration_batch_packet_invalid/)
+})
+
+test('every requirement token exists verbatim in its file at HEAD (drift guard)', () => {
+  const verification = verifyRequirementTokens('HEAD')
+  const drift = verification.batches
+    .filter((entry) => !entry.ok)
+    .flatMap((entry) => [
+      ...entry.staleGroups.map((group) => `${entry.batch}/${group.id} (${group.file}): missing ${JSON.stringify(group.missing)}`),
+      ...entry.forbiddenSourceFiles.map((file) => `${entry.batch}: forbidden identity content in ${file}`),
+    ])
+  assert.deepEqual(drift, [], `stale requirement tokens at HEAD - re-baseline tools/prepare_release_integration_batch.mjs:\n${drift.join('\n')}`)
+  assert.equal(verification.ok, true)
+  assert.equal(verification.mode, 'requirement_token_verification')
+  assert.equal(verification.batches.length, 4)
 })

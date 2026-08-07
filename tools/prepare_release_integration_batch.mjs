@@ -72,7 +72,7 @@ export const IDENTITY_DATA_REQUIREMENTS = [
   },
   {
     id: 'upstream-database-activation-tests', authority: 'upstream', file: 'tests/test_database_activation_contract.py', tokens: [
-      'def test_historical_migrations_are_unchanged_and_v7_is_additive',
+      'def test_historical_migrations_are_unchanged_and_v8_v9_v10_are_additive',
       'def test_production_activation_binds_tls_checkout_and_live_release_provenance',
       'def test_browser_auth_and_write_enablement_are_complete_and_ordered',
     ],
@@ -110,7 +110,7 @@ export const IDENTITY_DATA_REQUIREMENTS = [
       'buildClientCapabilityPlan',
       'function changeShopIndustryPack',
       'function changePlantIndustryPack',
-      '<ClientDataOnboarding managedIdentity=',
+      '<ClientDataOnboarding initiallyOpen managedIdentity=',
     ],
   },
   {
@@ -131,8 +131,8 @@ export const APP_SHELL_REQUIREMENTS = [
       'function managedLoginPath(product: string | null)',
       "const sensitiveAccountRoute = location.pathname.startsWith('/account/')",
       'const accountEntryRoute = loginRoute || sensitiveAccountRoute',
-      'Company sign in',
-      'aria-label="Company sign in"',
+      'Company login',
+      'aria-label="Company login"',
       'mobile-account-link',
     ],
   },
@@ -145,9 +145,9 @@ export const APP_SHELL_REQUIREMENTS = [
   {
     id: 'upstream-local-consequence-boundary', authority: 'upstream', file: 'showroom/src/core/CoreApp.tsx', tokens: [
       'counter-local-boundary',
-      'Browser-local sample only. Completing this records a sample order and sample stock change in this browser.',
-      'No payment is captured, no customer is contacted, no server or managed workspace is written, and no real stock is moved.',
-      "if (tab === 'production') return <div className=\"operation-module plant-production-module\">",
+      'Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser.',
+      'No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.',
+      "if (tab === 'production') return <div className=\"operation-module production-operation-module\">",
     ],
   },
   {
@@ -168,23 +168,23 @@ export const APP_SHELL_REQUIREMENTS = [
   },
   {
     id: 'candidate-task-first-four-product-shell', authority: 'candidate', file: 'showroom/src/core/CoreShell.tsx', tokens: [
-      'const ProductHomeToday = lazy(',
       'const ProductSystemNavigator = lazy(',
       'function productFromPathname(pathname: string): ClientSolutionId | null',
       "routeProduct ? ' has-system-navigator' : ''",
-      'Choose what you want to run.',
-      '<details className="product-home-setup">',
+      'export function ProductHomeEntry',
+      'export function ProductHomePage',
+      '<nav aria-label="Choose a SuperMega product" className="product-track-grid">',
     ],
   },
   {
     id: 'candidate-responsive-system-navigation', authority: 'candidate', file: 'showroom/src/core/core-app.css', tokens: [
       '.core-main.has-system-navigator { display: flex; flex-direction: column; }',
-      '.product-system-navigator > summary { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 20px; cursor: pointer; list-style: none; }',
+      '.product-system-navigator > summary { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 14px; cursor: pointer; list-style: none; }',
       '.product-system-workflows { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }',
-      '.product-home-setup > summary { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 15px; cursor: pointer; list-style: none; }',
-      '.product-system-navigator > summary { min-height: 52px; padding-inline: 12px; }',
+      '.product-track-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }',
+      '.product-system-navigator > summary { min-height: 46px; padding-inline: 12px; }',
       '.product-system-workflows { grid-template-columns: 1fr; }',
-      '.product-home-setup > summary { align-items: flex-start; padding-block: 12px; }',
+      '.product-track-grid { grid-template-columns: 1fr; gap: 8px; }',
     ],
   },
   {
@@ -211,21 +211,21 @@ export const APP_SHELL_REQUIREMENTS = [
 export const ECOMMERCE_REQUIREMENTS = [
   {
     id: 'upstream-live-quote-clock', authority: 'upstream', file: 'showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx', tokens: [
-      'const [quoteClockMs, setQuoteClockMs] = useState(Date.now)',
+      'const [quoteClock, setQuoteClock] = useState(() => Date.now())',
       `useEffect(() => {
     if (!freshQuoteId) return
-    const intervalId = window.setInterval(() => setQuoteClockMs(Date.now()), 1_000)
+    const intervalId = window.setInterval(() => setQuoteClock(Date.now()), 60_000)
     return () => window.clearInterval(intervalId)
   }, [freshQuoteId])`,
-      'Date.parse(latestRequest.quote.expiresAt) - quoteClockMs',
-      'setQuoteClockMs(quotedAt.getTime())',
+      'Date.parse(latestRequest.quote.expiresAt) > quoteClock',
+      'setQuoteClock(quotedAt.getTime())',
     ],
   },
   {
     id: 'upstream-private-company-labels', authority: 'upstream', file: 'showroom/src/products/ecommerce/EcommerceProduct.tsx', tokens: [
       'Already saved for this company as revision',
       'Saved for this company as revision',
-      'Managed Shop - connected company',
+      'Company Shop - connected',
     ],
   },
   {
@@ -233,8 +233,8 @@ export const ECOMMERCE_REQUIREMENTS = [
       '<details className="ecommerce-order-import-workspace"',
       'aria-label="Order batch review workspace"',
       'Upload CSV or paste channel orders only when needed.',
-      '<details aria-label="Enterprise order controls"',
-      'Inbox, payment, delivery, recovery, replies, and activation evidence.',
+      '<details aria-label="More order tools" className="ecommerce-enterprise-controls">',
+      'Inbox, payment, delivery, recovery, replies, and launch checks.',
     ],
   },
   {
@@ -284,7 +284,7 @@ export const ECOMMERCE_REQUIREMENTS = [
       'function parseOrderImportCsv',
       'function reviewOrderImportBatch',
       'function downloadOrderImportReviewPacket',
-      'No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or managed activation ran.',
+      'No order import, customer message, payment, delivery booking, stock move, refund, Shop write, or go-live action ran.',
     ],
   },
 ]
@@ -292,7 +292,7 @@ export const ECOMMERCE_REQUIREMENTS = [
 export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   {
     id: 'upstream-managed-activation-runbook', authority: 'upstream', file: 'docs/supermega-enterprise-activation.md', tokens: [
-      'all nine migrations as `postgres`', 'schema version 8', 'Owner approved this exact plan and release.',
+      'all eleven migrations as `postgres`', 'Runtime readiness requires schema version 10', 'Owner approved this exact plan and release.',
       'Activation compensation after a downstream release gate failure.', '`SUPERMEGA_TRIAL_WRITES_ENABLED=true` is written last',
     ],
   },
@@ -304,13 +304,13 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'upstream-live-usability-gates', authority: 'upstream', file: 'tools/verify_app_release_live.mjs', tokens: [
-      'Start one product in 2 clicks.', 'Acknowledgement confirms review only.',
+      'Start guided sample', 'Review only. No customer send, payment, stock move, production write, domain publish, or model training runs from this pilot.',
       '.operations-screen:not(.commerce-screen) .workspace-view', 'Browser-local sample only.', 'no real stock is moved',
     ],
   },
   {
     id: 'upstream-security-and-activation-gates', authority: 'upstream', file: 'tools/verify_app_security_contract.mjs', tokens: [
-      'managed schema contract advances through additive v2 through v8 migrations',
+      'managed schema contract advances through additive v2 through v10 migrations',
       'managed recovery is non-enumerating and password setup remains named-user only',
       'managed activation requires durable named-owner authorization and encrypted admin transport',
       'managed AI context is owner-consented, summary-only, tenant-bound, and revision-bound',
@@ -330,14 +330,16 @@ export const RELEASE_SECURITY_HQ_REQUIREMENTS = [
   },
   {
     id: 'candidate-four-product-build-depth', authority: 'candidate', file: 'tools/verify_app_build.mjs', tokens: [
-      'Run the whole shop', 'Services and resources', 'Ecommerce today status', 'Order lifecycle queue',
-      'Shop controls prices, stock, payment, delivery, and the accountable order record.',
+      '<details className="shop-today-workspaces">', 'Services and resources', 'Ecommerce today status', 'Order lifecycle queue',
+      'Review one quote. Shop confirms the order, stock, delivery, and payment.',
     ],
   },
   {
     id: 'candidate-demo-and-operating-tracks', authority: 'candidate', file: 'tools/verify_app_release_live.mjs', tokens: [
-      'Business starter tracks', 'AI operating tracks', 'Separate products, one simple operating model.',
-      'Ecommerce order review packet checked locally.', 'No order import, customer message, payment, delivery, stock write, Shop write, or managed activation ran.',
+      'Each product opens as its own working sample. Setup is optional when you are ready to use your business data.',
+      'supermega.last-product.v1', 'Your product workspaces stay separate. Opening a sample does not change another product.',
+      "'Choose what you want to run.'",
+      'Ecommerce order review packet checked locally.', 'No order import, customer message, payment, delivery, stock, Shop write, or managed activation ran.',
     ],
   },
   {
@@ -625,6 +627,31 @@ function readTree(ref, policy) {
   return { ref: canonicalRef, commit, sources, blobs }
 }
 
+export function verifyRequirementTokens(ref = 'HEAD') {
+  const canonicalRef = exactRef(ref)
+  const batches = [...BATCH_POLICIES.values()].map((policy) => {
+    const tree = readTree(canonicalRef, policy)
+    const assessment = assessSources(tree.sources, policy)
+    return {
+      batch: policy.batch,
+      ref: tree.ref,
+      commit: tree.commit,
+      ok: assessment.ok,
+      staleGroups: assessment.requirements
+        .filter((entry) => !entry.passed)
+        .map((entry) => ({ id: entry.id, authority: entry.authority, file: entry.file, missing: entry.missing })),
+      forbiddenSourceFiles: assessment.forbiddenSourceFiles,
+    }
+  })
+  return {
+    ok: batches.every((entry) => entry.ok),
+    contract: RELEASE_INTEGRATION_BATCH_CONTRACT,
+    mode: 'requirement_token_verification',
+    ref: canonicalRef,
+    batches,
+  }
+}
+
 export async function writeExclusiveJson(outputPath, packet) {
   const absolute = resolve(outputPath)
   await mkdir(dirname(absolute), { recursive: true })
@@ -647,6 +674,9 @@ function parseArgs(argv) {
     return { mode: 'prepare', path: core[1], upstream: core[3], candidate: core[5], batch }
   }
   if (core.length === 2 && core[0] === '--verify' && batchIndex < 0) return { mode: 'verify', path: core[1] }
+  if (core.length >= 1 && core.length <= 2 && core[0] === '--verify-tokens' && batchIndex < 0) {
+    return { mode: 'verify-tokens', ref: core[1] ?? 'HEAD' }
+  }
   fail('release_integration_batch_args_invalid')
 }
 
@@ -696,6 +726,9 @@ async function main() {
     const assessment = assessSources(tree.sources, policy)
     result = { ...assessment, mode: 'tree_check', ref: tree.ref, commit: tree.commit, blobs: tree.blobs }
     if (!assessment.ok) process.exitCode = 1
+  } else if (request.mode === 'verify-tokens') {
+    result = verifyRequirementTokens(request.ref)
+    if (!result.ok) process.exitCode = 1
   } else if (request.mode === 'prepare') result = await prepare(request)
   else result = await verify(request.path)
   process.stdout.write(`${JSON.stringify(result)}\n`)
