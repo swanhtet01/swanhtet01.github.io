@@ -18,6 +18,7 @@ __pycache__/
 *.pyc
 .venv-wsl/
 .venv/
+venv/
 swan-intelligence-hub/
 .vercel
 .vercel_python_packages/
