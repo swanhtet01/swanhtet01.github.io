@@ -139,7 +139,10 @@
 .ecommerce-today-priority h2 {
   max-width: 560px;
   margin: 0;
-  color: #17231d;
+  /* #17231d is the LIGHT theme's ink written as a literal, so in dark mode this heading —
+     the product's primary call to action — rendered near-black on the dark shell at 1.24:1.
+     The token carries the right value in both themes. */
+  color: var(--core-ink);
   font-size: clamp(22px, 2.4vw, 34px);
   line-height: 1.04;
   letter-spacing: -.035em;
@@ -177,7 +180,10 @@
 
 .ecommerce-today-metrics small,
 .ecommerce-today-source small {
-  color: #6b786f;
+  /* Was a hardcoded #6b786f measuring 4.2:1 on the page ground — under the 4.5:1 AA floor,
+     and unable to follow the dark theme because it bypassed the tokens entirely.
+     --core-quiet is the intended colour for this role and measures 4.83:1 here. */
+  color: var(--core-quiet);
   font-size: 9px;
   font-weight: 760;
   letter-spacing: .04em;
