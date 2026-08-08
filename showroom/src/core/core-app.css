@@ -1510,7 +1510,10 @@ textarea { min-height: 72px; resize: vertical; }
   --core-surface-soft: #111923;
   --core-ink: #f5f8fb;
   --core-muted: #a4b0be;
-  --core-quiet: #718093;
+  /* #718093 measured 4.31:1 against the raised panel behind the counter tiles — under the
+     4.5:1 AA floor for text this size, and it carries the stock reading. Lightened just far
+     enough to clear it at 4.91:1 rather than restyling the palette. */
+  --core-quiet: #7a8a9c;
   --core-line: rgba(166,190,214,.13);
   --core-line-strong: rgba(166,190,214,.24);
   --core-green: #56f0c1;
