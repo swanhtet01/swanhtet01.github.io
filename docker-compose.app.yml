@@ -19,37 +19,12 @@ services:
       - supermega-app-data:/app/data
     restart: unless-stopped
 
-  supermega-supervisor:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: supermega-supervisor
-    command:
-      - python
-      - -m
-      - mark1_pilot.supervisor
-      - --config
-      - /app/config.example.json
-      - --repo-root
-      - /app
-      - --base-url
-      - http://supermega-app:8080
-      - --interval-minutes
-      - "60"
-      - --poll-seconds
-      - "30"
-      - --max-cycles
-      - "0"
-      - --enqueue-defaults
-    environment:
-      SUPERMEGA_PILOT_DATA: /app/data/pilot-data
-      SUPERMEGA_RUNTIME_BASE_URL: http://supermega-app:8080
-      SUPERMEGA_INTERNAL_CRON_TOKEN: supermega-internal-demo-token
-    volumes:
-      - supermega-app-data:/app/data
-    depends_on:
-      - supermega-app
-    restart: unless-stopped
+# A supermega-supervisor service was removed here. It ran `python -m
+# mark1_pilot.supervisor` from this same Dockerfile, but the Dockerfile copies only
+# api, supermega_runtime, api_app.py and the built showroom — never mark1_pilot. The
+# container could therefore do nothing but ModuleNotFoundError and restart forever,
+# next to a healthy supermega-app, which reads as an outage during a demo.
+# Restore it by adding `COPY mark1_pilot /app/mark1_pilot` to the Dockerfile first.
 
 volumes:
   supermega-app-data:

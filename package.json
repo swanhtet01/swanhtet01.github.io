@@ -60,7 +60,6 @@
     "database:migrations:verify": "node tools/verify_private_trial_migrations.mjs",
     "smoke:local": "bash tools/run_local_smoke.sh",
     "smoke:public": "npm run public:prebuilt",
-    "audit:lead-ledger": "node tools/audit_lead_ledger.mjs",
     "client:prepare": "node tools/prepare_client_demo.mjs",
     "client:workspace:init": "node tools/prepare_client_demo.mjs --init",
     "client:workspace:contact:review-template": "node tools/prepare_client_demo.mjs --contact-review-template",

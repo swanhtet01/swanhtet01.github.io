@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from 'rea
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
+import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { recordBehaviorSignal } from './behavior-trail'
 import type { ClientSolutionId } from './client-onboarding'
 
@@ -429,7 +430,9 @@ export function CoreLayout() {
         <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
         {mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
         <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
-          <div className="core-route-content"><Outlet context={runtime} /></div>
+          <div className="core-route-content">
+            <RouteErrorBoundary resetKey={location.pathname}><Outlet context={runtime} /></RouteErrorBoundary>
+          </div>
           {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense> : null}
         </main>
       </div>

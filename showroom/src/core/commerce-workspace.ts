@@ -2270,6 +2270,16 @@ function sameAccountableActor(left: string, right: string) {
   return left.trim().toLowerCase() === right.trim().toLowerCase()
 }
 
+// Recovers the instant a seeded workspace was generated at, so pristine-workspace checks compare
+// against a seed rebuilt at that instant instead of assuming a fixed one. The catalog baseline
+// proof is captured at exactly the seed instant, so no offset arithmetic is involved.
+export function commerceSeedAnchor(state: CommerceState) {
+  const baseline = state.catalogBaselines?.find((candidate) => candidate.proof.actionId === 'ACT-DEMO-CATALOG-BASELINE')
+  if (!baseline) return null
+  const anchor = Date.parse(baseline.proof.capturedAt)
+  return Number.isFinite(anchor) ? anchor : null
+}
+
 export function upgradeCommerceSeedPolicies(stateValue: CommerceState) {
   const state = validateCommerceState(stateValue)
   const baseline = state.catalogBaselines?.find((candidate) => candidate.proof.actionId === 'ACT-DEMO-CATALOG-BASELINE')
@@ -4551,7 +4561,7 @@ export function loadCommerceWorkspace(storage = browserStorage()): CommerceWorks
     }
   }
   if (invalidLegacyFound) return { state: createEmptyCommerce(), source: 'recovery', error: 'Legacy Commerce data is malformed. Migration failed closed and did not create v2 data.' }
-  return persistInitialState(storage, createSeedCommerce(), 'seed')
+  return persistInitialState(storage, createSeedCommerce(Date.now()), 'seed')
 }
 
 export function commerceWorkspaceCanWrite(
@@ -6375,7 +6385,9 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
       return null
     }
   }
-  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce())) return null
+  const seedAnchor = commerceSeedAnchor(base)
+  if (seedAnchor === null) return null
+  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce(seedAnchor))) return null
   if (requestedItems.some((item) => base.items.some((existing) => existing.sku === item.sku))) return null
 
   let next = base

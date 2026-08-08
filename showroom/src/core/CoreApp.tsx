@@ -833,7 +833,13 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   returnFocus?: HTMLElement | null
 }) {
   const [trialSetup] = useSetupWorkspace()
-  const [actor, setActor] = useState(action?.actorSuggestion ?? trialSetup.owner)
+  // Only 7 of the 53 accountable actions carry an actorSuggestion, and setup leaves
+  // trialSetup.owner empty, so the person on the counter was retyping their own name for
+  // every routine step — mark ready, reconcile, close. The name is not the accountability;
+  // recording who did it is. Ask once, then default to whoever last confirmed, still
+  // editable when someone else takes over the till.
+  // '||' not '??': trialSetup.owner is an empty string when setup never captured one.
+  const [actor, setActor] = useState(() => action?.actorSuggestion || trialSetup.owner || readLastOperator())
   const [reason, setReason] = useState(action?.reasonSuggestion ?? '')
   const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
@@ -874,6 +880,9 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     setError('')
     try {
       await onConfirm({ actor: responsibleActor, reason: confirmedReason, evidenceReference: confirmedEvidence })
+      // Only after the change actually applied — a name that failed to commit should not
+      // become the default for the next person.
+      if (!authenticatedActor) rememberLastOperator(responsibleActor)
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'The change was not applied.')
       setBusy(false)
@@ -992,11 +1001,25 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   openOrderCount: number
   sampleCatalogActive: boolean
 }) {
-  const [cart, setCart] = useState<Record<string, number>>({})
-  const [customer, setCustomer] = useState('')
-  const [payment, setPayment] = useState('Cash')
+  const [restoredDraft] = useState(readShopCounterDraft)
+  const [cart, setCart] = useState<Record<string, number>>(() => restoredDraft?.cart ?? {})
+  const [customer, setCustomer] = useState(() => restoredDraft?.customer ?? '')
+  const [payment, setPayment] = useState(() => restoredDraft?.payment ?? 'Cash')
   const [query, setQuery] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
+
+  // clearSale() resets all three to their defaults, which this treats as "no draft" and
+  // removes — so a completed or cleared sale leaves nothing behind to resurrect.
+  useEffect(() => {
+    const empty = Object.keys(cart).length === 0 && !customer && payment === 'Cash'
+    try {
+      if (empty) window.localStorage.removeItem(SHOP_COUNTER_DRAFT_KEY)
+      else window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY, JSON.stringify({ cart, customer, payment }))
+    } catch {
+      // Storage full or blocked. The counter keeps working in memory; losing persistence
+      // must never cost the operator the sale they are ringing up right now.
+    }
+  }, [cart, customer, payment])
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const visibleItems = normalizedQuery
     ? items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
@@ -1100,6 +1123,65 @@ function localCommerceOrderDraftScope(workspaceId?: string) {
 
 function localCommerceOrderDraftStorageKey(scope: string) {
   return `${SHOP_ORDER_DRAFT_RESET_PREFIX}${encodeURIComponent(scope)}`
+}
+
+// The half-rung sale was the only counter state held purely in React. Every link in the
+// Shop header is a route change, and setTab replaces history rather than pushing, so one
+// mis-tap on "2 open orders" discarded the basket with no Back button to return to — at a
+// real counter, in front of a customer. Persisted per device, like every other workspace
+// record, so nothing leaves the browser.
+const SHOP_COUNTER_DRAFT_KEY = 'supermega.shop.counter_draft.v1'
+// Who is on the till. Remembered so the accountable-review sheet can default to them
+// instead of demanding the same name at every step of a shift. Kept on the device only,
+// like every other workspace record, and always editable at the moment of confirming.
+const LAST_OPERATOR_KEY = 'supermega.last_operator.v1'
+
+function readLastOperator() {
+  try {
+    return (window.localStorage.getItem(LAST_OPERATOR_KEY) ?? '').slice(0, 80)
+  } catch {
+    return ''
+  }
+}
+
+function rememberLastOperator(name: string) {
+  const trimmed = name.trim().slice(0, 80)
+  if (!trimmed) return
+  try {
+    window.localStorage.setItem(LAST_OPERATOR_KEY, trimmed)
+  } catch {
+    // Storage unavailable. The name still applied to this action; only the convenience
+    // of pre-filling the next one is lost.
+  }
+}
+
+type ShopCounterDraft = { cart: Record<string, number>; customer: string; payment: string }
+
+// Validates field by field rather than trusting the parse: this value survives upgrades and
+// hand-edited storage, and a malformed draft must degrade to an empty counter, never throw
+// on the way to rendering it. Quantities are re-clamped against live stock at render, so a
+// stale SKU here is inert.
+function readShopCounterDraft(): ShopCounterDraft | null {
+  try {
+    const raw = window.localStorage.getItem(SHOP_COUNTER_DRAFT_KEY)
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    const draft = parsed as Partial<ShopCounterDraft>
+    const cart: Record<string, number> = {}
+    if (draft.cart && typeof draft.cart === 'object' && !Array.isArray(draft.cart)) {
+      for (const [sku, quantity] of Object.entries(draft.cart)) {
+        if (sku && Number.isSafeInteger(quantity) && (quantity as number) > 0) cart[sku] = quantity as number
+      }
+    }
+    return {
+      cart,
+      customer: typeof draft.customer === 'string' ? draft.customer.slice(0, 120) : '',
+      payment: typeof draft.payment === 'string' && draft.payment ? draft.payment : 'Cash',
+    }
+  } catch {
+    return null
+  }
 }
 
 function localCommerceOrderDraftCatalogState(draft: CommerceOrderDraft, catalog: CommerceItem[]) {
@@ -3653,7 +3735,27 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
     const nextStatus = next[order.status]
-    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status, commerceActionProof(action), managedIdentity ? 'managed-server' : 'client')) })
+    // Moving an order along is the most repeated action in a shift. The reason and the
+    // evidence are both knowable from the transition itself, so state them rather than
+    // making the counter write them out every time — the operator can still edit either.
+    const fulfilmentReason: Record<CommerceOrderStatus, string> = {
+      confirmed: 'Started preparing this order.',
+      preparing: 'Order is packed and ready for handoff.',
+      ready: 'Customer received the order.',
+      completed: 'Order closed.',
+      cancelled: 'Order cancelled.',
+    }
+    const displayReference = commerceOrderDisplayReference(order.id)
+    queueAction({
+      kind: 'order_status',
+      subjectId: orderId,
+      summary: `Advance ${displayReference} fulfilment`,
+      before: order.status,
+      after: nextStatus,
+      reasonSuggestion: fulfilmentReason[order.status],
+      evidenceReferenceSuggestion: `Order ${displayReference}`,
+      apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status, commerceActionProof(action), managedIdentity ? 'managed-server' : 'client')),
+    })
   }
 
   function reconcilePayment(orderId: string) {
@@ -3663,7 +3765,19 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(`${order.id} payment is already reconciled.`)
       return
     }
-    queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
+    // The other action a counter repeats all day. Naming the method in the reason is more
+    // useful than a blank box, and the reference is the order it settles.
+    const paymentReference = commerceOrderDisplayReference(order.id)
+    queueAction({
+      kind: 'payment_reconcile',
+      subjectId: orderId,
+      summary: `Reconcile ${paymentReference} payment`,
+      before: `${order.payment} · ${order.paymentStatus}`,
+      after: `${order.payment} · reconciled`,
+      reasonSuggestion: `${order.payment} payment received and matched.`,
+      evidenceReferenceSuggestion: `Order ${paymentReference}`,
+      apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))),
+    })
   }
 
   function recordCollectionContact(orderId: string) {
@@ -6458,11 +6572,11 @@ function OrderList({
             : `${order.lines.length} items · ${order.quantity} units`
           : `${order.item} × ${order.quantity}`}</strong>
         <details className="order-record-details">
-          <summary><span>{order.id} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
+          <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
-            <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+            <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
           </div>
         </details>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
@@ -6641,7 +6755,7 @@ function ClosedOrderHistory({
           : `${order.item} × ${order.quantity}`}</strong>
         {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
         <OrderCalculationNote order={order} />
-        <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+        <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
         {order.status === 'completed' && order.completion ? <small role="note">Completed by {order.completion.actor} · {formatTime(order.completion.capturedAt)} · evidence {order.completion.evidenceReference}</small> : null}
         {order.status === 'completed' && !order.completion ? <small role="note">Return unavailable: this older order has no attributable completion proof.</small> : null}
