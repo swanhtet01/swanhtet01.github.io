@@ -1549,6 +1549,12 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-item-search { width: min(260px,38%); display: grid; gap: 5px; }
 .shop-item-search input { min-height: 44px; border-radius: 12px; padding-left: 13px; }
 .shop-item-search small { color: var(--core-quiet); font-size: 9px; line-height: 1.35; }
+.shop-clear-recovery { min-width: 0; min-height: 68px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 1px 12px; border: 1px solid color-mix(in srgb,var(--core-green) 35%,var(--core-line)); border-radius: 13px; padding: 10px 11px; background: var(--core-green-soft); }
+.shop-clear-recovery > span { min-width: 0; display: grid; gap: 4px; }
+.shop-clear-recovery strong { color: var(--core-ink); font-size: 12px; }
+.shop-clear-recovery small { overflow-wrap: anywhere; color: var(--core-muted); font-size: 9px; line-height: 1.45; }
+.shop-clear-recovery .core-button { min-width: 88px; min-height: 44px; flex: none; }
+.shop-clear-recovery .core-button:disabled { opacity: .5; cursor: not-allowed; }
 .shop-search-recovery { min-height: 220px; flex: 1; display: grid; place-items: center; align-content: center; gap: 8px; border: 1px dashed var(--core-line-strong); border-radius: 16px; padding: 24px; background: var(--core-panel-raised); text-align: center; }
 .shop-search-recovery .shop-product-art { width: 88px; height: 88px; }
 .shop-search-recovery strong { max-width: 420px; overflow-wrap: anywhere; font-size: 16px; }
@@ -2132,6 +2138,8 @@ textarea { min-height: 72px; resize: vertical; }
   .shop-product-copy strong { font-size: 12px; }
   .shop-product-copy b { font-size: 10px; }
   .shop-product-add, .shop-product-quantity { top: 14px; right: 14px; }
+  .shop-clear-recovery { align-items: stretch; flex-direction: column; }
+  .shop-clear-recovery .core-button { width: 100%; }
   .shop-current-sale { right: 0; bottom: calc(64px + env(safe-area-inset-bottom)); width: 100%; max-height: calc(100svh - 64px - env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; }
   .shop-current-sale > footer { position: sticky; bottom: 0; background: var(--core-panel); }
   .counter-confirm-proof { grid-template-columns: 1fr; }

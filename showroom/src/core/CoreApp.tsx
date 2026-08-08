@@ -964,6 +964,16 @@ type ShopCounterReview = {
   onCommitted: () => void
 }
 
+type ClearedShopSale = {
+  cart: Record<string, number>
+  customer: string
+  payment: string
+  cartOpen: boolean
+  lineCount: number
+  unitCount: number
+  total: number
+}
+
 function readLocalShopIndustryPack() {
   if (typeof window === 'undefined') return null
   const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
@@ -993,12 +1003,15 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   sampleCatalogActive: boolean
 }) {
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const clearSaleButtonRef = useRef<HTMLButtonElement>(null)
+  const undoClearSaleButtonRef = useRef<HTMLButtonElement>(null)
   const [cart, setCart] = useState<Record<string, number>>({})
   const [customer, setCustomer] = useState('')
   const [payment, setPayment] = useState('Cash')
   const [query, setQuery] = useState('')
   const [searchStatus, setSearchStatus] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
+  const [clearedSale, setClearedSale] = useState<ClearedShopSale | null>(null)
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const visibleItems = normalizedQuery
     ? items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
@@ -1009,6 +1022,9 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   })
   const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
+  const clearedSaleRestorable = Boolean(clearedSale && Object.entries(clearedSale.cart).every(([sku, quantity]) => (
+    items.some((item) => item.sku === sku && item.onHand >= quantity)
+  )))
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus())
@@ -1030,6 +1046,8 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
 
   function addItem(item: CommerceItem) {
     if (item.onHand < 1) return
+    setClearedSale(null)
+    setSearchStatus('')
     setCart((current) => ({ ...current, [item.sku]: Math.min((current[item.sku] ?? 0) + 1, item.onHand) }))
   }
 
@@ -1057,7 +1075,45 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
     window.requestAnimationFrame(() => searchInputRef.current?.focus())
   }
 
-  function clearSale() {
+  function clearSaleWithUndo() {
+    if (!unitCount) return
+    setClearedSale({
+      cart: Object.fromEntries(lines.map((line) => [line.item.sku, line.quantity])),
+      customer,
+      payment,
+      cartOpen,
+      lineCount: lines.length,
+      unitCount,
+      total,
+    })
+    setCart({})
+    setCustomer('')
+    setPayment('Cash')
+    setCartOpen(false)
+    setSearchStatus(`${unitCount} ${unitCount === 1 ? 'item was' : 'items were'} cleared from the current sale. Undo is available; no order or stock changed.`)
+    window.requestAnimationFrame(() => {
+      undoClearSaleButtonRef.current?.scrollIntoView({ block: 'nearest' })
+      undoClearSaleButtonRef.current?.focus({ preventScroll: true })
+    })
+  }
+
+  function undoClearSale() {
+    if (!clearedSale || !clearedSaleRestorable) return
+    const restoredSale = clearedSale
+    setCart({ ...restoredSale.cart })
+    setCustomer(restoredSale.customer)
+    setPayment(restoredSale.payment)
+    setCartOpen(restoredSale.cartOpen)
+    setClearedSale(null)
+    setSearchStatus(`${restoredSale.unitCount} ${restoredSale.unitCount === 1 ? 'item was' : 'items were'} restored. Customer and ${restoredSale.payment} are unchanged; no order or stock changed.`)
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const focusTarget = restoredSale.cartOpen ? clearSaleButtonRef.current : searchInputRef.current
+      focusTarget?.focus({ preventScroll: true })
+    }))
+  }
+
+  function finishCommittedSale() {
+    setClearedSale(null)
     setCart({})
     setCustomer('')
     setPayment('Cash')
@@ -1071,7 +1127,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
       customer: customer.trim(),
       payment,
       onCommitted: () => {
-        clearSale()
+        finishCommittedSale()
       },
     }, event.currentTarget)
   }
@@ -1084,6 +1140,10 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
           <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input aria-describedby="shop-counter-search-help shop-counter-search-status" autoComplete="off" data-shop-counter-primary-field="true" onChange={(event) => { setQuery(event.target.value); setSearchStatus('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" ref={searchInputRef} type="search" value={query} /><small id="shop-counter-search-help">Enter adds an exact SKU or the only match.</small></label>
         </header>
         <p aria-live="polite" className="sr-only" id="shop-counter-search-status">{searchStatus}</p>
+        {clearedSale ? <div className="shop-clear-recovery" data-shop-counter-recovery="cleared-sale" role="status">
+          <span><strong>{clearedSaleRestorable ? 'Sale cleared' : 'Sale changed'}</strong><small>{clearedSaleRestorable ? `${clearedSale.unitCount} ${clearedSale.unitCount === 1 ? 'item' : 'items'} across ${clearedSale.lineCount} ${clearedSale.lineCount === 1 ? 'line' : 'lines'} · ${clearedSale.customer.trim() || 'Guest'} · ${clearedSale.payment}. No order or stock changed.` : 'Current stock changed, so this sale cannot be restored exactly. Start a new sale.'}</small></span>
+          <button aria-label="Undo clear sale" className="core-button primary" disabled={!clearedSaleRestorable} onClick={undoClearSale} ref={undoClearSaleButtonRef} type="button">Undo</button>
+        </div> : null}
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item) => {
             const quantity = cart[item.sku] ?? 0
@@ -1101,7 +1161,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
       <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale">
-        <header><div><span className="core-eyebrow">Current sale</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : 'Ready for the first item'}</h2></div><div className="shop-cart-actions">{unitCount ? <button className="text-link" onClick={clearSale} type="button">Clear</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
+        <header><div><span className="core-eyebrow">Current sale</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : 'Ready for the first item'}</h2></div><div className="shop-cart-actions">{unitCount ? <button aria-label="Clear current sale" className="text-link" onClick={clearSaleWithUndo} ref={clearSaleButtonRef} type="button">Clear sale</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
         <div className="shop-cart-lines">
           {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong><small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>Your sale is empty</strong><small>Tap any product to begin.</small></div>}
         </div>
