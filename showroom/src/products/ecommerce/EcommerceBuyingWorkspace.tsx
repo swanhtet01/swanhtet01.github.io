@@ -20,6 +20,7 @@ import {
   projectEcommerceReturnOutcome,
   projectEcommerceCorrectionOutcome,
   projectEcommerceSupportOutcome,
+  recoverEcommerceCartRemoval,
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
   saveEcommerceCancellationIntent,
@@ -35,6 +36,7 @@ import {
   type EcommerceOrderAmendmentIntent,
   type EcommerceOrderRescheduleIntent,
   type EcommerceCartLine,
+  type EcommerceRemovedCartLine,
   type EcommerceFulfilment,
   type EcommercePaymentAdapter,
   type EcommerceReturnDisposition,
@@ -94,6 +96,10 @@ type EcommerceAmendmentStatus = {
 }
 
 type EcommerceCartQuantityIssues = Record<string, string>
+
+type EcommerceRemovedCartLineNotice = EcommerceRemovedCartLine & Readonly<{
+  itemName: string
+}>
 
 type EcommerceRescheduleStatus = {
   intent: EcommerceOrderRescheduleIntent
@@ -175,6 +181,7 @@ export function EcommerceBuyingWorkspace({
   const [notice, setNotice] = useState('')
   const [cartQuantityDrafts, setCartQuantityDrafts] = useState<Record<string, string>>({})
   const [cartQuantityIssues, setCartQuantityIssues] = useState<EcommerceCartQuantityIssues>({})
+  const [removedCartLine, setRemovedCartLine] = useState<EcommerceRemovedCartLineNotice | null>(null)
   const [returnDraft, setReturnDraft] = useState<{
     orderId: string
     sku: string
@@ -221,6 +228,7 @@ export function EcommerceBuyingWorkspace({
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
   const requestReceiptRef = useRef<HTMLElement>(null)
   const cartQuantityRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const cartRemovalUndoRef = useRef<HTMLButtonElement>(null)
   const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
@@ -241,6 +249,7 @@ export function EcommerceBuyingWorkspace({
       if (!current) return
       setCartQuantityDrafts({})
       setCartQuantityIssues({})
+      setRemovedCartLine(null)
       const recoveredState = result.state ?? createEmptyEcommerceBuyingState(scope)
       setRecoveryRead({ scope, status: result.status, issue: result.error })
       setBuyingState(recoveredState)
@@ -308,6 +317,12 @@ export function EcommerceBuyingWorkspace({
       window.removeEventListener('storage', refresh)
     }
   }, [scope])
+
+  useEffect(() => {
+    if (!removedCartLine) return
+    const frame = window.requestAnimationFrame(() => cartRemovalUndoRef.current?.focus({ preventScroll: true }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [removedCartLine])
 
   useEffect(() => {
     const latest = activeBuyingState.requests[0]
@@ -567,6 +582,11 @@ export function EcommerceBuyingWorkspace({
   }
 
   function removeFromCart(sku: string) {
+    const index = cart.findIndex((line) => line.sku === sku)
+    if (index < 0) return
+    const line = cart[index]
+    const itemName = preview.items.find((item) => item.sku === sku)?.name ?? sku
+    setRemovedCartLine({ line: { ...line }, index, itemName })
     setCartQuantityDrafts((current) => {
       const next = { ...current }
       delete next[sku]
@@ -578,12 +598,45 @@ export function EcommerceBuyingWorkspace({
       return next
     })
     onCartChange(cart.filter((line) => line.sku !== sku))
-    setNotice('Item removed. No Shop record or payment changed.')
+    setFreshQuoteId('')
+    setNotice(`${itemName} removed. Undo is available; your checkout details are still here. No quote, Shop request, payment, or stock changed.`)
+  }
+
+  function undoCartRemoval() {
+    if (!removedCartLine) return
+    const recovery = recoverEcommerceCartRemoval(cart, removedCartLine, currentCatalog)
+    if (!recovery.ok) {
+      if (recovery.reason === 'already_present') {
+        setRemovedCartLine(null)
+        setNotice(`${removedCartLine.itemName} is already in the cart. Nothing else changed.`)
+        return
+      }
+      if (recovery.reason === 'insufficient_stock') {
+        setNotice(`Cannot restore ${removedCartLine.line.quantity} ${recovery.available === 1 ? 'unit' : 'units'} of ${removedCartLine.itemName}; only ${recovery.available} available now. The item stays removed and your checkout details are unchanged. No quote or Shop request was created.`)
+        return
+      }
+      setRemovedCartLine(null)
+      setNotice('The removed cart line could not be verified. Nothing was restored or sent to Shop.')
+      return
+    }
+    onCartChange(recovery.cart)
+    setCartQuantityDrafts((current) => ({ ...current, [removedCartLine.line.sku]: String(removedCartLine.line.quantity) }))
+    setCartQuantityIssues((current) => {
+      if (!current[removedCartLine.line.sku]) return current
+      const next = { ...current }
+      delete next[removedCartLine.line.sku]
+      return next
+    })
+    setFreshQuoteId('')
+    setRemovedCartLine(null)
+    setNotice(`${removedCartLine.itemName} restored at quantity ${removedCartLine.line.quantity}. Your checkout details are still here; review a new total. No quote, Shop request, payment, or stock changed.`)
+    requestAnimationFrame(() => focusCartQuantity(removedCartLine.line.sku))
   }
 
   function beginAnotherOrder() {
     setCartQuantityDrafts({})
     setCartQuantityIssues({})
+    setRemovedCartLine(null)
     onCartChange([])
     setFreshQuoteId('')
     setNotice('Ready for a new order. Add products, then review the current total.')
@@ -621,6 +674,7 @@ export function EcommerceBuyingWorkspace({
     }
     setCartQuantityDrafts({})
     setCartQuantityIssues({})
+    setRemovedCartLine(null)
     onCartChange(nextCart)
     setCustomerName(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.customerProfile?.name ?? entry.request.customerReference : entry.request.customerReference)
     setCustomerPhone(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.customerProfile?.phone ?? '' : '')
@@ -1277,7 +1331,7 @@ export function EcommerceBuyingWorkspace({
                     <small className="ecommerce-cart-quantity-help" id={quantityHelpId}>{quantityLimit > 0 ? `1 to ${quantityLimit} available` : 'Unavailable now'}</small>
                   </label>
                   <b>{item ? formatMmk(item.unitPriceMmk * quantity) : '—'}</b>
-                  <button aria-label={`Remove ${itemName}`} onClick={() => removeFromCart(sku)} type="button">Remove</button>
+                  <button aria-label={`Remove ${itemName}`} disabled={disabled} onClick={() => removeFromCart(sku)} type="button">Remove</button>
                   {quantityIssue ? <p className="ecommerce-cart-quantity-issue" id={quantityIssueId} role="alert"><span>{quantityIssue}</span><button onClick={() => focusCartQuantity(sku)} type="button">Fix quantity</button></p> : null}
                 </div>
               })}
@@ -1289,6 +1343,16 @@ export function EcommerceBuyingWorkspace({
               <p>Add an available product above. Nothing goes to Shop until you review the exact quote.</p>
             </div>
           )}
+
+          {removedCartLine ? (
+            <div className="ecommerce-cart-remove-recovery" data-ecommerce-cart-remove-recovery={removedCartLine.line.sku} role="status">
+              <span>
+                <strong>{removedCartLine.itemName} removed</strong>
+                <small>Quantity {removedCartLine.line.quantity} can be restored after a current stock check. Checkout details stay here.</small>
+              </span>
+              <button aria-label={`Undo remove ${removedCartLine.itemName}`} disabled={disabled} onClick={undoCartRemoval} ref={cartRemovalUndoRef} type="button">Undo remove</button>
+            </div>
+          ) : null}
 
           <form onSubmit={(event) => void reviewOrder(event)}>
             <label>

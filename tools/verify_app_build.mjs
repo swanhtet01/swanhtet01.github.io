@@ -3027,6 +3027,39 @@ const prepareDeliveryAreaTemplateAction = ecommerceSource.slice(prepareDeliveryA
 const openFilteredRequestStart = ecommerceSource.indexOf('function openFilteredRequestInShop')
 const openFilteredRequestEnd = ecommerceSource.indexOf('async function recordManagedBuyingRequest', openFilteredRequestStart)
 const openFilteredRequestAction = ecommerceSource.slice(openFilteredRequestStart, openFilteredRequestEnd)
+const removeCartLineStart = ecommerceBuyingUiSource.indexOf('function removeFromCart')
+const undoCartRemovalStart = ecommerceBuyingUiSource.indexOf('function undoCartRemoval')
+const beginAnotherOrderStart = ecommerceBuyingUiSource.indexOf('function beginAnotherOrder')
+const removeCartLineAction = ecommerceBuyingUiSource.slice(removeCartLineStart, undoCartRemovalStart)
+const undoCartRemovalAction = ecommerceBuyingUiSource.slice(undoCartRemovalStart, beginAnotherOrderStart)
+const recoverCartRemovalStart = ecommerceBuyingLifecycleSource.indexOf('export function recoverEcommerceCartRemoval')
+const recoverCartRemovalEnd = ecommerceBuyingLifecycleSource.indexOf('export type EcommerceCustomerProfileSnapshot', recoverCartRemovalStart)
+const recoverCartRemovalAction = ecommerceBuyingLifecycleSource.slice(recoverCartRemovalStart, recoverCartRemovalEnd)
+const cartRemovalForbiddenActions = ['saveEcommerceOrderRequestV2', 'prepareEcommerceShopDraftV2', 'onRecordManagedRequest', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'reserveCommerceOrder', 'settleCommerce', 'chargePayment', 'authorizePayment']
+if (removeCartLineStart < 0
+  || undoCartRemovalStart < 0
+  || beginAnotherOrderStart < 0
+  || recoverCartRemovalStart < 0
+  || recoverCartRemovalEnd < 0
+  || !ecommerceBuyingUiSource.includes('const [removedCartLine, setRemovedCartLine] = useState<EcommerceRemovedCartLineNotice | null>(null)')
+  || !ecommerceBuyingUiSource.includes('const cartRemovalUndoRef = useRef<HTMLButtonElement>(null)')
+  || !ecommerceBuyingUiSource.includes('data-ecommerce-cart-remove-recovery={removedCartLine.line.sku}')
+  || !ecommerceBuyingUiSource.includes('onClick={undoCartRemoval} ref={cartRemovalUndoRef}')
+  || !removeCartLineAction.includes('setRemovedCartLine({ line: { ...line }, index, itemName })')
+  || removeCartLineAction.indexOf('setRemovedCartLine({ line: { ...line }, index, itemName })') > removeCartLineAction.indexOf('onCartChange(cart.filter')
+  || !removeCartLineAction.includes("setFreshQuoteId('')")
+  || !undoCartRemovalAction.includes('recoverEcommerceCartRemoval(cart, removedCartLine, currentCatalog)')
+  || !undoCartRemovalAction.includes("recovery.reason === 'insufficient_stock'")
+  || undoCartRemovalAction.indexOf('if (!recovery.ok)') > undoCartRemovalAction.indexOf('onCartChange(recovery.cart)')
+  || !undoCartRemovalAction.includes("setFreshQuoteId('')")
+  || !undoCartRemovalAction.includes('requestAnimationFrame(() => focusCartQuantity(removedCartLine.line.sku))')
+  || !recoverCartRemovalAction.includes("currentCatalog.find((candidate) => candidate.sku === line.sku)")
+  || !recoverCartRemovalAction.includes('if (available < line.quantity)')
+  || recoverCartRemovalAction.indexOf('if (available < line.quantity)') > recoverCartRemovalAction.indexOf('cart.splice(')
+  || !recoverCartRemovalAction.includes('cart.splice(Math.min(removed.index, cart.length), 0, { ...line })')
+  || cartRemovalForbiddenActions.some((marker) => removeCartLineAction.includes(marker) || undoCartRemovalAction.includes(marker) || recoverCartRemovalAction.includes(marker))
+  || !ecommerceCssSource.includes('.ecommerce-cart-remove-recovery')
+  || !/\.ecommerce-cart-remove-recovery button\s*\{[^}]*min-height:\s*44px;/s.test(ecommerceCssSource)) fail('ecommerce_cart_line_remove_recovery_contract_missing')
 const storefrontSaveStart = ecommerceSource.indexOf('async function saveCurrentStorefront')
 const storefrontSaveEnd = ecommerceSource.indexOf('function discardStorefrontChanges', storefrontSaveStart)
 const storefrontSaveAction = ecommerceSource.slice(storefrontSaveStart, storefrontSaveEnd)
@@ -14639,6 +14672,36 @@ async function verifyStorefrontRuntime() {
     }
     const buyingScope = 'ecommerce:runtime-client'
     const seededBuyingCommerce = commerce.createSeedCommerce(Date.parse('2026-07-24T08:00:00.000Z'))
+    const removedCartLine = { line: { sku: 'SM-1001', quantity: 2 }, index: 1 }
+    const cartAfterRemoval = [
+      { sku: 'SM-1003', quantity: 1 },
+      { sku: 'SM-CARE-01', quantity: 1 },
+    ]
+    const recoveredCartLine = buyingModel.recoverEcommerceCartRemoval(cartAfterRemoval, removedCartLine, seededBuyingCommerce.items)
+    buyingAssert(recoveredCartLine.ok
+      && JSON.stringify(recoveredCartLine.cart) === JSON.stringify([
+        { sku: 'SM-1003', quantity: 1 },
+        { sku: 'SM-1001', quantity: 2 },
+        { sku: 'SM-CARE-01', quantity: 1 },
+      ])
+      && cartAfterRemoval.length === 2,
+    'ecommerce_removed_cart_line_not_restored_at_exact_position')
+    const stockBlockedCartLine = buyingModel.recoverEcommerceCartRemoval(
+      cartAfterRemoval,
+      removedCartLine,
+      seededBuyingCommerce.items.map((item) => item.sku === 'SM-1001' ? { ...item, onHand: 1 } : item),
+    )
+    buyingAssert(!stockBlockedCartLine.ok
+      && stockBlockedCartLine.reason === 'insufficient_stock'
+      && stockBlockedCartLine.available === 1
+      && cartAfterRemoval.length === 2,
+    'ecommerce_removed_cart_line_ignored_current_stock')
+    const duplicateCartLine = buyingModel.recoverEcommerceCartRemoval(
+      [{ sku: 'SM-1001', quantity: 1 }, ...cartAfterRemoval],
+      removedCartLine,
+      seededBuyingCommerce.items,
+    )
+    buyingAssert(!duplicateCartLine.ok && duplicateCartLine.reason === 'already_present', 'ecommerce_removed_cart_line_duplicate_was_restored')
     const promotionPolicies = seededBuyingCommerce.promotionPolicies ?? []
     const shippingPolicies = seededBuyingCommerce.shippingPolicies ?? []
     const paymentPolicies = seededBuyingCommerce.paymentPolicies ?? []

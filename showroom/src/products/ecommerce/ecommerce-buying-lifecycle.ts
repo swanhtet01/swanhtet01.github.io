@@ -302,6 +302,46 @@ export type EcommerceCartLine = {
   quantity: number
 }
 
+export type EcommerceRemovedCartLine = Readonly<{
+  line: EcommerceCartLine
+  index: number
+}>
+
+export type EcommerceCartRemovalRecovery =
+  | Readonly<{ ok: true; available: number; cart: EcommerceCartLine[] }>
+  | Readonly<{ ok: false; available: number; reason: 'already_present' | 'insufficient_stock' | 'invalid_removal' }>
+
+export function recoverEcommerceCartRemoval(
+  currentCart: EcommerceCartLine[],
+  removed: EcommerceRemovedCartLine,
+  currentCatalog: Array<Pick<CommerceItem, 'sku' | 'onHand'>>,
+): EcommerceCartRemovalRecovery {
+  const line = removed?.line
+  const item = line ? currentCatalog.find((candidate) => candidate.sku === line.sku) : undefined
+  const onHand = item?.onHand
+  const available = typeof onHand === 'number' && Number.isSafeInteger(onHand)
+    ? Math.min(99, Math.max(0, onHand))
+    : 0
+  if (!line
+    || !line.sku.trim()
+    || !Number.isSafeInteger(line.quantity)
+    || line.quantity < 1
+    || line.quantity > 99
+    || !Number.isSafeInteger(removed.index)
+    || removed.index < 0) {
+    return { ok: false, available, reason: 'invalid_removal' }
+  }
+  if (currentCart.some((candidate) => candidate.sku === line.sku)) {
+    return { ok: false, available, reason: 'already_present' }
+  }
+  if (available < line.quantity) {
+    return { ok: false, available, reason: 'insufficient_stock' }
+  }
+  const cart = currentCart.map((candidate) => ({ ...candidate }))
+  cart.splice(Math.min(removed.index, cart.length), 0, { ...line })
+  return { ok: true, available, cart }
+}
+
 export type EcommerceCustomerProfileSnapshot = {
   schema: typeof ECOMMERCE_CUSTOMER_PROFILE_SCHEMA
   id: string
