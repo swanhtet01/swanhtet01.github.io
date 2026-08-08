@@ -1110,7 +1110,10 @@ function balancedSpecialistDelimiters(text) {
 }
 
 function specialistSectionHasSourceReference(text) {
-  return /[\\/`]/.test(text)
+  return /[\\`]/.test(text)
+    || /\b[a-z][a-z0-9+.-]*:\/\//i.test(text)
+    || /\b[A-Za-z]:[\\/]/.test(text)
+    || /(?:^|\s)\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+(?:\s|$)/.test(text)
     || /\b[A-Za-z0-9][A-Za-z0-9._-]{0,80}[.,;:](?:md|json|toml|ya?ml|csv|sql|html|css|tsx?|m?js|py|ps1)\b/i.test(text)
     || /\b(?:dot|comma|period)\s+(?:md|json|toml|ya?ml|csv|sql|html|css|tsx?|m?js|py|ps1)\b/i.test(text)
 }

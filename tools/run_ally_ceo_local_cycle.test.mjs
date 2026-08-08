@@ -1410,6 +1410,8 @@ test('quality-passed specialist text cannot smuggle filenames or source paths', 
     'hq\\NOW,md',
     'CURRENT dot md',
     '`CURRENT.md`',
+    '/tmp/current',
+    'https://example.test/current',
   ]
   for (const sourceReference of sourceReferences) {
     const state = harness({ modelEventCount: 2 })
@@ -1434,6 +1436,29 @@ test('quality-passed specialist text cannot smuggle filenames or source paths', 
     assert.equal(result.reason, 'ally_ceo_local_cycle_specialist_section_rejected')
     assert.equal(result.queueWrites, 1)
   }
+})
+
+test('ordinary slash-separated specialist terminology is not mistaken for a source path', async () => {
+  const state = harness({ modelEventCount: 2 })
+  const report = acceptedStructuredReport.replace(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: Proposed next action: review one bounded local evidence gap. Assumption: persistence/security remain unverified pending owner review. Missing proof: current evidence does not prove readiness.',
+  )
+  const result = await runAllyCeoLocalCycle(
+    { execute: true },
+    {
+      plan: plan(),
+      runCommand: state.runCommand,
+      inspectReport: async () => ({
+        path: 'C:\\state\\outputs\\ordinary-terminology.md',
+        bytes: Buffer.byteLength(report),
+        digest: 'sha256:' + 'c'.repeat(64),
+        text: report,
+      }),
+    },
+  )
+  assert.equal(result.status, 'accepted')
+  assert.equal(result.qualityPassed, true)
 })
 
 test('consequential proposals and dangling words before code-owned closings cannot advance', async () => {
