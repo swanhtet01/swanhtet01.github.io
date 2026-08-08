@@ -30,7 +30,7 @@ test('protected state exposes only truthful aggregate daily AI-budget metadata',
   const originalFetch = globalThis.fetch
   try {
     for (const name of ENV_KEYS) delete process.env[name]
-    process.env.SUPERMEGA_OPS_KEY = 'owner-budget-key'
+    process.env.SUPERMEGA_OPS_KEY = 'owner-budget-key-0123456789abcdef'
     process.env.SUPERMEGA_COMPANY_DAILY_AI_BUDGET_UNITS = '1000'
     process.env.OPENROUTER_API_KEY = 'openrouter-offline-test-key'
 
@@ -61,7 +61,7 @@ test('protected state exposes only truthful aggregate daily AI-budget metadata',
     assert.equal(denied.status, 401)
     assert.equal(Object.hasOwn(denied.json, 'aiBudget'), false)
 
-    const response = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key' } })
+    const response = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key-0123456789abcdef' } })
     assert.equal(response.status, 200)
     assert.equal(response.json.aiConfigured, true, 'OpenRouter-only gateway configuration is reported truthfully')
     assert.deepEqual(response.json.aiBudget, {
@@ -86,10 +86,10 @@ test('protected state exposes only truthful aggregate daily AI-budget metadata',
     delete process.env.OPENROUTER_API_KEY
     process.env.SUPERMEGA_OLLAMA_ENABLED = '1'
     process.env.SUPERMEGA_OLLAMA_MODEL = 'qwen3.5:0.8b'
-    const localResponse = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key' } })
+    const localResponse = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key-0123456789abcdef' } })
     assert.equal(localResponse.json.aiConfigured, true, 'explicit local Ollama configuration is reported truthfully')
     process.env.VERCEL = '1'
-    const hostedResponse = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key' } })
+    const hostedResponse = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key-0123456789abcdef' } })
     assert.equal(hostedResponse.json.aiConfigured, false, 'loopback Ollama is never reported as available in hosted runtime')
     delete process.env.VERCEL
 

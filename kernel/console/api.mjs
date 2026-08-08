@@ -10,6 +10,20 @@ import { listLeadsForReview, markLeadReviewed } from './leads-review.mjs'
 import crypto from 'node:crypto'
 
 const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
+// The ops key is typed by a human into a single "Owner key" field and it gates every
+// console surface. Nothing here can tell a strong key from a weak one, so refuse to run
+// below a floor rather than silently defending the whole console with a short passcode.
+// Mirrors the floor already enforced on the contact secret in
+// tools/create_public_vercel_output.mjs.
+const OPS_KEY_MINIMUM_LENGTH = 32
+// A rejected request is worth recording — a credential-stuffing run against the console
+// currently leaves no trace at all. But the log write happens BEFORE authentication, so
+// writing one row per failure would hand an unauthenticated caller a way to flood the
+// activity table. Collapse bursts to one row per window; sustained volume control belongs
+// at the WAF, not here.
+const AUTH_FAILURE_LOG_INTERVAL_MS = 60_000
+let lastAuthFailureLoggedAt = 0
+let suppressedAuthFailures = 0
 // Constant-time, length-safe equality (hash both to fixed-width digests so timingSafeEqual
 // never throws on unequal lengths and no length is leaked via timing).
 function constantTimeEqual(a, b) {
@@ -74,11 +88,42 @@ const ok = (json) => ({ status: 200, json })
 const bad = (status, reason) => ({ status, json: { ok: false, reason } })
 const log = (kind, summary, ref) => store.logActivity({ kind, summary, ref }).catch(() => {})
 
+// Packet fields are generated text seeded from public contact-form input and can contain
+// characters that are markup in HTML. Interpolating them raw does not just risk injection
+// — it routinely mangles ordinary content, e.g. a Burmese business name containing '&' or
+// an MMK range written with '<'. Escape before any deliberate markup is added.
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+// Records a rejected console request. Never logs the supplied key or any part of it —
+// only that a rejection happened, where, and how many were folded into this entry.
+function recordAuthFailure(method, path) {
+  suppressedAuthFailures += 1
+  const now = Date.now()
+  if (now - lastAuthFailureLoggedAt < AUTH_FAILURE_LOG_INTERVAL_MS) return
+  const collapsed = suppressedAuthFailures
+  lastAuthFailureLoggedAt = now
+  suppressedAuthFailures = 0
+  const route = String(path || '').slice(0, 120)
+  const summary = collapsed > 1
+    ? `Rejected ${collapsed} console requests (latest ${method} ${route})`
+    : `Rejected console request ${method} ${route}`
+  log('console.auth_rejected', summary, route)
+}
+
 /** @param {{method:string, path:string, query?:object, body?:object, headers?:object}} req */
 export async function handle({ method, path, query = {}, body = {}, headers = {} }) {
   // Fail CLOSED: a missing/blank ops key must DENY all requests — never authenticate everyone.
   if (!OPS_KEY) return bad(503, 'ops_key_not_configured')
-  if (!constantTimeEqual(String(headers['x-ops-key'] || ''), OPS_KEY)) return bad(401, 'unauthorized')
+  if (OPS_KEY.length < OPS_KEY_MINIMUM_LENGTH) return bad(503, 'ops_key_too_weak')
+  if (!constantTimeEqual(String(headers['x-ops-key'] || ''), OPS_KEY)) {
+    recordAuthFailure(method, path)
+    return bad(401, 'unauthorized')
+  }
   const seg = path.replace(/^\/api\//, '').replace(/\/+$/, '').split('/')
 
   try {
@@ -269,13 +314,15 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (!to) return bad(400, 'no_recipient_email')
         const p = deal.packet || {}
         const subject = p.headline ? `Proposal: ${String(p.headline).slice(0, 160)}` : 'A custom software proposal from SuperMega'
-        const modulesHtml = (p.modules || []).map((m) => `<li><strong>${m.name}</strong> — ${m.why}</li>`).join('')
+        const modulesHtml = (p.modules || []).map((m) => `<li><strong>${escapeHtml(m.name)}</strong> — ${escapeHtml(m.why)}</li>`).join('')
         const html = [
           '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;line-height:1.6">',
-          p.outreach_en ? `<p>${p.outreach_en.replace(/\n/g, '<br>')}</p>` : '',
+          // Escaped first, so only these <br> are markup — anything markup-shaped in the
+          // author's text stays visible text.
+          p.outreach_en ? `<p>${escapeHtml(p.outreach_en).replace(/\n/g, '<br>')}</p>` : '',
           modulesHtml ? `<p><strong>What we'd build for you:</strong></p><ul>${modulesHtml}</ul>` : '',
-          p.pricing?.build_fee_mmk ? `<p><strong>Build fee:</strong> ${p.pricing.build_fee_mmk}${p.pricing.pro_mrr_mmk ? ` &middot; Care: ${p.pricing.pro_mrr_mmk}/mo` : ''}</p>` : '',
-          p.first_proof ? `<p><strong>First result you'd see:</strong> ${p.first_proof}</p>` : '',
+          p.pricing?.build_fee_mmk ? `<p><strong>Build fee:</strong> ${escapeHtml(p.pricing.build_fee_mmk)}${p.pricing.pro_mrr_mmk ? ` &middot; Care: ${escapeHtml(p.pricing.pro_mrr_mmk)}/mo` : ''}</p>` : '',
+          p.first_proof ? `<p><strong>First result you'd see:</strong> ${escapeHtml(p.first_proof)}</p>` : '',
           '<p style="margin-top:24px">— Swan Htet, SuperMega<br><a href="https://supermega.dev">supermega.dev</a></p>',
           '</div>',
         ].filter(Boolean).join('\n')

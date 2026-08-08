@@ -199,13 +199,13 @@ test('store routes lead-review keys into the control-record store, never the res
 test('console API exposes the review surface behind the ops key and fails closed in memory mode', async () => {
   const savedKey = { present: Object.hasOwn(process.env, 'SUPERMEGA_OPS_KEY'), value: process.env.SUPERMEGA_OPS_KEY }
   try {
-    process.env.SUPERMEGA_OPS_KEY = 'leads-review-test-key'
+    process.env.SUPERMEGA_OPS_KEY = 'leads-review-test-key-0123456789ab'
     const { handle } = await import(`./console/api.mjs?leads-review=${Date.now()}`)
 
     const unauthorized = await handle({ method: 'GET', path: '/api/leads/review', headers: {} })
     assert.equal(unauthorized.status, 401)
 
-    const headers = { 'x-ops-key': 'leads-review-test-key' }
+    const headers = { 'x-ops-key': 'leads-review-test-key-0123456789ab' }
     const list = await handle({ method: 'GET', path: '/api/leads/review', headers })
     assert.equal(list.status, 503)
     assert.equal(list.json.reason, 'leads_source_not_configured')
