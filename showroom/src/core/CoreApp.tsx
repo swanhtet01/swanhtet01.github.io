@@ -833,7 +833,13 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   returnFocus?: HTMLElement | null
 }) {
   const [trialSetup] = useSetupWorkspace()
-  const [actor, setActor] = useState(action?.actorSuggestion ?? trialSetup.owner)
+  // Only 7 of the 53 accountable actions carry an actorSuggestion, and setup leaves
+  // trialSetup.owner empty, so the person on the counter was retyping their own name for
+  // every routine step — mark ready, reconcile, close. The name is not the accountability;
+  // recording who did it is. Ask once, then default to whoever last confirmed, still
+  // editable when someone else takes over the till.
+  // '||' not '??': trialSetup.owner is an empty string when setup never captured one.
+  const [actor, setActor] = useState(() => action?.actorSuggestion || trialSetup.owner || readLastOperator())
   const [reason, setReason] = useState(action?.reasonSuggestion ?? '')
   const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
@@ -874,6 +880,9 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     setError('')
     try {
       await onConfirm({ actor: responsibleActor, reason: confirmedReason, evidenceReference: confirmedEvidence })
+      // Only after the change actually applied — a name that failed to commit should not
+      // become the default for the next person.
+      if (!authenticatedActor) rememberLastOperator(responsibleActor)
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'The change was not applied.')
       setBusy(false)
@@ -1122,6 +1131,29 @@ function localCommerceOrderDraftStorageKey(scope: string) {
 // real counter, in front of a customer. Persisted per device, like every other workspace
 // record, so nothing leaves the browser.
 const SHOP_COUNTER_DRAFT_KEY = 'supermega.shop.counter_draft.v1'
+// Who is on the till. Remembered so the accountable-review sheet can default to them
+// instead of demanding the same name at every step of a shift. Kept on the device only,
+// like every other workspace record, and always editable at the moment of confirming.
+const LAST_OPERATOR_KEY = 'supermega.last_operator.v1'
+
+function readLastOperator() {
+  try {
+    return (window.localStorage.getItem(LAST_OPERATOR_KEY) ?? '').slice(0, 80)
+  } catch {
+    return ''
+  }
+}
+
+function rememberLastOperator(name: string) {
+  const trimmed = name.trim().slice(0, 80)
+  if (!trimmed) return
+  try {
+    window.localStorage.setItem(LAST_OPERATOR_KEY, trimmed)
+  } catch {
+    // Storage unavailable. The name still applied to this action; only the convenience
+    // of pre-filling the next one is lost.
+  }
+}
 
 type ShopCounterDraft = { cart: Record<string, number>; customer: string; payment: string }
 
@@ -3703,7 +3735,27 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
     const nextStatus = next[order.status]
-    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status, commerceActionProof(action), managedIdentity ? 'managed-server' : 'client')) })
+    // Moving an order along is the most repeated action in a shift. The reason and the
+    // evidence are both knowable from the transition itself, so state them rather than
+    // making the counter write them out every time — the operator can still edit either.
+    const fulfilmentReason: Record<CommerceOrderStatus, string> = {
+      confirmed: 'Started preparing this order.',
+      preparing: 'Order is packed and ready for handoff.',
+      ready: 'Customer received the order.',
+      completed: 'Order closed.',
+      cancelled: 'Order cancelled.',
+    }
+    const displayReference = commerceOrderDisplayReference(order.id)
+    queueAction({
+      kind: 'order_status',
+      subjectId: orderId,
+      summary: `Advance ${displayReference} fulfilment`,
+      before: order.status,
+      after: nextStatus,
+      reasonSuggestion: fulfilmentReason[order.status],
+      evidenceReferenceSuggestion: `Order ${displayReference}`,
+      apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status, commerceActionProof(action), managedIdentity ? 'managed-server' : 'client')),
+    })
   }
 
   function reconcilePayment(orderId: string) {
@@ -3713,7 +3765,19 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(`${order.id} payment is already reconciled.`)
       return
     }
-    queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
+    // The other action a counter repeats all day. Naming the method in the reason is more
+    // useful than a blank box, and the reference is the order it settles.
+    const paymentReference = commerceOrderDisplayReference(order.id)
+    queueAction({
+      kind: 'payment_reconcile',
+      subjectId: orderId,
+      summary: `Reconcile ${paymentReference} payment`,
+      before: `${order.payment} · ${order.paymentStatus}`,
+      after: `${order.payment} · reconciled`,
+      reasonSuggestion: `${order.payment} payment received and matched.`,
+      evidenceReferenceSuggestion: `Order ${paymentReference}`,
+      apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))),
+    })
   }
 
   function recordCollectionContact(orderId: string) {
