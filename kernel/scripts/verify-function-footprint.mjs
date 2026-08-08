@@ -9,6 +9,21 @@ const CONNECTOR_INDEX = resolve(root, 'connectors', 'index.mjs')
 const MAX_EAGER_FILES = 30
 const MAX_EAGER_BYTES = 400 * 1024
 const EXPECTED_CONNECTORS = 69
+const EXPECTED_EAGER_MANIFEST = Object.freeze([
+  'agent-company.mjs',
+  'alert.mjs',
+  'api/brief.mjs',
+  'api/operator.mjs',
+  'crew-run.mjs',
+  'crew-runner.mjs',
+  'gateway.mjs',
+  'owner-evidence.mjs',
+  'store.mjs',
+  'supermega-hq-authority.mjs',
+  'tools.mjs',
+  'workcell-run.mjs',
+  'workcells.mjs',
+])
 const OPTIONAL_TOOL_CONNECTORS = Object.freeze([
   'connectors/infra-http.mjs',
   'connectors/data-cbm-rate.mjs',
@@ -65,6 +80,9 @@ async function closure(entry, includeDynamic = false) {
 
 const eager = await closure(ENTRY)
 const fullStatus = await closure(FULL_STATUS)
+const portfolio = JSON.parse(await readFile(resolve(root, '..', 'hq', 'portfolio.json'), 'utf8'))
+const recordedEagerFiles = portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerFiles
+const recordedEagerBytes = portfolio.agentOperatingModel?.scheduledFunctionCurrentEagerBytes
 const briefSource = await readFile(ENTRY, 'utf8')
 const toolsSource = await readFile(TOOLS, 'utf8')
 const connectorIndexSource = await readFile(CONNECTOR_INDEX, 'utf8')
@@ -92,6 +110,9 @@ const checks = {
     && !new RegExp(`(?:from\\s+|import\\s+)['"]\\./${file.replaceAll('.', '\\.')}['"]`).test(toolsSource)
   )),
   connectorInventoryComplete: connectorImports === EXPECTED_CONNECTORS,
+  recordedEagerFilesMatchMeasurement: recordedEagerFiles === eager.files.length,
+  recordedEagerBytesMatchMeasurement: recordedEagerBytes === eager.bytes,
+  eagerManifestExact: JSON.stringify(relativeFiles) === JSON.stringify([...EXPECTED_EAGER_MANIFEST]),
 }
 const failed = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name)
 const output = {
@@ -103,6 +124,8 @@ const output = {
     bytes: eager.bytes,
     maxFiles: MAX_EAGER_FILES,
     maxBytes: MAX_EAGER_BYTES,
+    recordedFiles: recordedEagerFiles,
+    recordedBytes: recordedEagerBytes,
   },
   deferredFullStatus: {
     files: fullStatus.files.length,

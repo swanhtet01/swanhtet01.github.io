@@ -208,7 +208,7 @@ function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteSta
       businessName,
       audience: 'customers ready to ask for help or a quote',
       offer: `Tell ${businessName} what you need and get one clear next step.`,
-      proof: 'Demo proof placeholder: replace this with one approved result, credential, or customer fact before release.',
+      proof: 'Tell us what you need and get one clear next step. Every request is tracked from the first message to the final answer, so nothing is lost and nobody has to chase.',
       contactHref: '',
     }
   }
@@ -218,7 +218,7 @@ function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteSta
       businessName,
       audience: 'customers comparing products or packages',
       offer: `Explore what ${businessName} offers and ask about the right option.`,
-      proof: 'Demo catalog placeholder: replace this with approved products, buying details, and availability before release.',
+      proof: 'Browse what is available now and ask about the option that fits. Prices and availability come from the same record the team works from, so what you see is what we can supply.',
       contactHref: '',
     }
   }
@@ -227,7 +227,7 @@ function websiteWorkingSampleBrief(input: WebsiteWorkingSampleInput): WebsiteSta
     businessName,
     audience: 'customers looking for clear company information',
     offer: `Meet ${businessName} and understand the easiest way to get help.`,
-    proof: 'Demo company placeholder: replace this with one approved fact about the business before release.',
+    proof: 'Orders, questions, and delivery promises stay on one shared record, so you get a clear and consistent answer from whoever picks up.',
     contactHref: '',
   }
 }

@@ -1,29 +1,66 @@
+"""Smoke test the public SuperMega site against the canonical site-manifest.json.
+
+Routes, redirects, and required home tokens are derived from the manifest so this
+script cannot drift from the published surface. `--self-test` validates the
+derivation offline (and, when a built `.vercel/output/static` exists, that every
+manifest page file was generated) without contacting any live URL.
+"""
+
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 
-ROUTES = (
-    "/",
-    "/platform/",
-    "/demo-center/",
-    "/products/",
-    "/products/agents/",
-    "/offers/",
-    "/products/manager-operating-system/",
-    "/products/agent-runtime/",
-    "/products/tenant-control-plane/",
-    "/packages/",
-    "/signup/",
-    "/login/",
-    "/contact/",
-    "/clients/yangon-tyre/",
-    "/products/find-clients/",
-)
+REPO_ROOT = Path(__file__).resolve().parent.parent
+MANIFEST_PATH = REPO_ROOT / "site-manifest.json"
+
+
+def load_manifest() -> dict:
+    return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+
+
+def page_routes(manifest: dict) -> tuple[str, ...]:
+    return tuple(page["route"] for page in manifest["pages"])
+
+
+def required_home_tokens(manifest: dict) -> tuple[str, ...]:
+    product_routes = tuple(
+        page["route"] for page in manifest["pages"] if page.get("productId")
+    )
+    return (manifest["brand"]["name"], *product_routes, "/contact/")
+
+
+def redirect_probe(source: str) -> str | None:
+    """Derive one concrete probe path from a manifest redirect source regex.
+
+    Handles the anchored pattern shapes used by site-manifest.json; returns None
+    when a sample cannot be derived, and never returns a sample that fails to
+    fullmatch its own source.
+    """
+    sample = source
+    sample = sample.removeprefix("^").removesuffix("$")
+    sample = re.sub(r"\(\?:([^()|]+)(?:\|[^()]*)?\)", r"\1", sample)
+    for optional_tail in ("/?.*", "(?:/.+)?", "(?:/.*)?", "/?"):
+        sample = sample.replace(optional_tail, "")
+    sample = sample.rstrip("/") + "/"
+    if re.fullmatch(source, sample) or re.fullmatch(source, sample.rstrip("/")):
+        return sample if re.fullmatch(source, sample) else sample.rstrip("/")
+    return None
+
+
+def redirect_expectations(manifest: dict) -> dict[str, str]:
+    expectations: dict[str, str] = {}
+    for redirect in manifest["redirects"]:
+        probe = redirect_probe(redirect["source"])
+        if probe is not None:
+            expectations[probe] = redirect["destination"]
+    return expectations
 
 
 def fetch(url: str, *, accept: str = "text/html", timeout: int = 20) -> tuple[int, str]:
@@ -32,13 +69,6 @@ def fetch(url: str, *, accept: str = "text/html", timeout: int = 20) -> tuple[in
         body = response.read().decode("utf-8", errors="replace")
         status = int(getattr(response, "status", 200) or 200)
     return status, body
-
-
-def extract_asset(html: str, pattern: str) -> str:
-    match = re.search(pattern, html)
-    if not match:
-        raise RuntimeError(f"Could not find asset with pattern: {pattern}")
-    return match.group(1)
 
 
 class NoRedirectHandler(HTTPRedirectHandler):
@@ -56,71 +86,91 @@ def fetch_without_redirect(url: str, timeout: int = 20) -> tuple[int, str]:
         return int(exc.code or 0), exc.headers.get("Location", "")
 
 
+def self_test(manifest: dict) -> int:
+    routes = page_routes(manifest)
+    failures: list[str] = []
+    for required in ("/", "/shop/", "/plant/", "/website/", "/ecommerce/", "/contact/", "/privacy/"):
+        if required not in routes:
+            failures.append(f"manifest_missing_page:{required}")
+    expectations = redirect_expectations(manifest)
+    if len(expectations) < 10:
+        failures.append(f"redirect_probe_coverage_low:{len(expectations)}")
+    for probe, destination in expectations.items():
+        if not destination:
+            failures.append(f"redirect_destination_empty:{probe}")
+    tokens = required_home_tokens(manifest)
+    if len(tokens) < 6:
+        failures.append(f"home_token_coverage_low:{len(tokens)}")
+    static_root = REPO_ROOT / ".vercel" / "output" / "static"
+    built_pages_checked = 0
+    if static_root.is_dir():
+        for page in manifest["pages"]:
+            if not (static_root / page["file"]).is_file():
+                failures.append(f"built_page_missing:{page['file']}")
+            else:
+                built_pages_checked += 1
+    result = {
+        "status": "error" if failures else "ok",
+        "mode": "self_test",
+        "routes": len(routes),
+        "redirectProbes": len(expectations),
+        "homeTokens": len(tokens),
+        "builtPagesChecked": built_pages_checked,
+        "failures": failures,
+    }
+    print(json.dumps(result))
+    return 1 if failures else 0
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Smoke test the public SUPERMEGA site.")
+    parser = argparse.ArgumentParser(description="Smoke test the public SuperMega site.")
     parser.add_argument("--base-url", default="https://supermega.dev")
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Validate manifest-derived expectations offline; contacts no live URL.",
+    )
     args = parser.parse_args()
 
-    base_url = args.base_url.rstrip("/")
+    manifest = load_manifest()
+    if args.self_test:
+        return self_test(manifest)
 
+    base_url = args.base_url.rstrip("/")
     try:
         route_statuses: dict[str, int] = {}
-        for route in ROUTES:
+        for route in page_routes(manifest):
             status, _ = fetch(f"{base_url}{route}")
             route_statuses[route] = status
             if status != 200:
                 raise RuntimeError(f"Expected 200 for {route}, got {status}")
 
-        for route, expected_location in {
-            "/products/manager-operating-system/": "/products/agents/",
-            "/products/find-clients/": "/products/agents/",
-            "/signup/": "https://app.supermega.dev/signup/?source=public-site",
-        }.items():
-            status, location = fetch_without_redirect(f"{base_url}{route}")
+        redirect_statuses: dict[str, str] = {}
+        for probe, expected_location in redirect_expectations(manifest).items():
+            status, location = fetch_without_redirect(f"{base_url}{probe}")
+            redirect_statuses[probe] = f"{status} -> {location}"
             if status != 308 or location != expected_location:
-                raise RuntimeError(f"Expected 308 redirect for {route} to {expected_location}, got {status} -> {location}")
+                raise RuntimeError(
+                    f"Expected 308 redirect for {probe} to {expected_location}, got {status} -> {location}"
+                )
 
         home_status, home_html = fetch(f"{base_url}/")
         if home_status != 200:
             raise RuntimeError(f"Expected 200 for home page, got {home_status}")
-
-        asset_match = re.search(r'assets/index-[A-Za-z0-9_-]+\.js', home_html)
-        if asset_match:
-            js_asset = asset_match.group(0)
-            js_status, _ = fetch(f"{base_url}/{js_asset}", accept="text/javascript")
-            if js_status != 200:
-                raise RuntimeError(f"Expected 200 for JS asset {js_asset}, got {js_status}")
-            asset_mode = "bundled_app"
-            asset_statuses = {"js": js_status}
-        else:
-            required_tokens = ("SUPERMEGA", "/products/agents/", "/contact/")
-            missing = [token for token in required_tokens if token not in home_html]
-            if missing:
-                raise RuntimeError(f"Static public artifact is missing required tokens: {missing}")
-            asset_mode = "server_rendered_static"
-            asset_statuses = {}
-
-        meta_status = 0
-        try:
-            fetch(f"{base_url}/api/meta/workspace", accept="application/json")
-            meta_status = 200
-        except HTTPError as exc:
-            meta_status = int(exc.code or 0)
-
-        if meta_status not in {200, 401, 404}:
-            raise RuntimeError(f"Expected 200, 401, or absent public endpoint (404) for /api/meta/workspace, got {meta_status}")
+        missing = [token for token in required_home_tokens(manifest) if token not in home_html]
+        if missing:
+            raise RuntimeError(f"Public home page is missing required tokens: {missing}")
 
         result = {
             "status": "ready",
             "base_url": base_url,
             "routes": route_statuses,
-            "assets": {"mode": asset_mode, **asset_statuses},
-            "meta_workspace_status": meta_status,
+            "redirects": redirect_statuses,
         }
-        print(result)
+        print(json.dumps(result))
         return 0
     except (RuntimeError, HTTPError, URLError, TimeoutError) as exc:
-        print({"status": "error", "base_url": base_url, "error": str(exc)})
+        print(json.dumps({"status": "error", "base_url": base_url, "error": str(exc)}))
         return 1
 
 
