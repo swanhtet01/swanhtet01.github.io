@@ -103,6 +103,7 @@
     "company:ally:autonomy:status": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/manage_ally_ceo_task.ps1 -Mode Status",
     "company:ally:autonomy:install": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/manage_ally_ceo_task.ps1 -Mode Install",
     "company:ally:autonomy:repair": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/manage_ally_ceo_task.ps1 -Mode Repair",
+    "company:ally:autonomy:migrate": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/manage_ally_ceo_task.ps1 -Mode Migrate",
     "company:ally:autonomy:remove": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/manage_ally_ceo_task.ps1 -Mode Remove",
     "company:ally:autonomy:self-test": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/manage_ally_ceo_task.ps1 -SelfTest",
     "claude:eng001:preflight": "node tools/invoke_claude_eng001_review.mjs",

@@ -31,7 +31,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Implemented reality
 
-- Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation. Local `SuperMega Ally CEO Cycle` is source-pinned, six-hourly, idle-gated, limited, and single-flight.
+- Hosted scheduling stays dormant. Local `SuperMega Ally CEO Cycle` is source-pinned, four-hourly, idle-gated, limited, and single-flight. Six checks cover five outcomes; finished or gated work is zero-model.
 - Ally is Llama-only: local `llama3.2:1b`, 256-token maximum, immediate unload, and no cloud fallback.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.

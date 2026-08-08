@@ -1,6 +1,6 @@
 {
   "schemaVersion": "supermega.hq.portfolio.v3",
-  "updatedAt": "2026-07-31",
+  "updatedAt": "2026-08-09",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
   "completedLocalAutomations": [
@@ -73,6 +73,22 @@
       "productId": "ecommerce",
       "workOrderId": "ecommerce-contact-correction-request",
       "checkpoint": "ENG-146"
+    },
+    {
+      "productId": "website",
+      "workOrderId": "website-first-edit-focus",
+      "checkpoint": "OPS-166"
+    }
+  ],
+  "localImprovementQueue": [
+    {
+      "contract": "supermega.product-improvement-authority.v1",
+      "productId": "shop",
+      "workOrderId": "shop-counter-search-recovery",
+      "priority": 100,
+      "status": "ready-local",
+      "workOrder": "Shop: make counter search and scan the single fast first-sale entry, show deterministic no-match recovery, and retain the current cart across mobile and desktop without creating an order.",
+      "reason": "Website and Ecommerce now land their first actions on exact fields. Shop Counter can improve its browser-local search and recovery path without a named operator, managed tenant, stock write, payment, or customer action."
     }
   ],
   "agentOperatingModel": {

@@ -30,16 +30,30 @@ const workboard = `# Workboard
 `
 
 function portfolio(overrides = {}, automationOverrides = {}) {
-  const automation = {
+  const localImprovements = {
     shop: { workOrderId: 'shop-named-pilot', priority: 80, status: 'owner-gated', workOrder: 'Shop: run the named pilot.', reason: 'A named operator is required.' },
     plant: { workOrderId: 'plant-named-pilot', priority: 70, status: 'owner-gated', workOrder: 'Plant: run the named pilot.', reason: 'Operator timing evidence is required.' },
     website: { workOrderId: 'website-named-brief', priority: 60, status: 'owner-gated', workOrder: 'Website: run the named business brief.', reason: 'An accepted business brief is required.' },
     ecommerce: { workOrderId: 'ecommerce-support-case', priority: 100, status: 'ready-local', workOrder: 'Ecommerce: add one order-bound support case.', reason: 'Identity handoff is implemented and support remains local-ready.' },
   }
+  const managedPilots = {
+    shop: { workOrderId: 'shop-managed-pilot', priority: 80, workOrder: 'Shop: run one named managed pilot.', reason: 'A named managed operator is required.' },
+    plant: { workOrderId: 'plant-managed-pilot', priority: 70, workOrder: 'Plant: run one named managed pilot.', reason: 'Managed timing evidence is required.' },
+    website: { workOrderId: 'website-managed-pilot', priority: 60, workOrder: 'Website: retain one accepted managed brief.', reason: 'A named managed brief is required.' },
+    ecommerce: { workOrderId: 'ecommerce-managed-pilot', priority: 90, workOrder: 'Ecommerce: run one named managed exception.', reason: 'A named managed operator is required.' },
+  }
   return JSON.stringify({
     schemaVersion: 'supermega.hq.portfolio.v3',
     northStar: 'One real workflow reaches a measurable outcome through an accountable operating record.',
     completedLocalAutomations: [],
+    localImprovementQueue: ['shop', 'plant', 'website', 'ecommerce']
+      .map((id) => ({
+        contract: 'supermega.product-improvement-authority.v1',
+        productId: id,
+        ...localImprovements[id],
+        ...automationOverrides[id],
+      }))
+      .filter((entry) => entry.status === 'ready-local'),
     agentOperatingModel: {
       mode: 'bounded-demand-driven',
       registeredRoleLimit: 12,
@@ -57,7 +71,7 @@ function portfolio(overrides = {}, automationOverrides = {}) {
       id,
       status: 'release-candidate-local',
       nextGate: `Prove ${id} with one named operator.`,
-      localAutomation: { contract: 'supermega.product-work-authority.v2', productId: id, ...automation[id], ...automationOverrides[id] },
+      localAutomation: { contract: 'supermega.product-work-authority.v2', productId: id, status: 'owner-gated', ...managedPilots[id] },
     })),
   })
 }
@@ -321,7 +335,7 @@ test('product control skips gated priorities and records fully gated automation 
       portfolioText: portfolio({}, { ecommerce: { priority: 101 } }),
       completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
     }),
-    /ally_ceo_company_plan_product_automation_invalid/,
+    /ally_ceo_company_plan_local_improvement_invalid/,
   )
   const gated = await buildAllyCeoCompanyPlan({
     now: '2026-07-29T12:00:00.000Z',
@@ -351,7 +365,7 @@ test('product control skips gated priorities and records fully gated automation 
       portfolioText: portfolio({}, { ecommerce: { productId: 'plant' } }),
       completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
     }),
-    /ally_ceo_company_plan_product_routing_invalid/,
+    /ally_ceo_company_plan_local_improvement_invalid/,
   )
   await assert.rejects(
     buildAllyCeoCompanyPlan({
@@ -361,7 +375,7 @@ test('product control skips gated priorities and records fully gated automation 
       portfolioText: portfolio({}, { ecommerce: { workOrderId: 'shop-forged-work-order' } }),
       completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
     }),
-    /ally_ceo_company_plan_product_routing_invalid/,
+    /ally_ceo_company_plan_local_improvement_invalid/,
   )
   await assert.rejects(
     buildAllyCeoCompanyPlan({
@@ -384,7 +398,7 @@ test('product control skips gated priorities and records fully gated automation 
       portfolioText: portfolio({}, { ecommerce: { workOrder: 'Plant: revoke a material substitute.' } }),
       completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
     }),
-    /ally_ceo_company_plan_product_routing_invalid/,
+    /ally_ceo_company_plan_local_improvement_invalid/,
   )
 })
 

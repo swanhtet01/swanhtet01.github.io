@@ -235,14 +235,28 @@ requireContract('one bounded agent operating model is authoritative',
     && ['ready-local', 'owner-gated', 'external-blocked'].includes(product.localAutomation.status)
     && product.localAutomation.workOrder?.trim()
     && product.localAutomation.reason?.trim())
+  && Array.isArray(portfolio.localImprovementQueue)
+  && portfolio.localImprovementQueue.length === 1
+  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'shop'
+  && portfolio.localImprovementQueue.every((entry) =>
+    Object.keys(entry || {}).sort().join(',') === 'contract,priority,productId,reason,status,workOrder,workOrderId'
+    && entry.contract === 'supermega.product-improvement-authority.v1'
+    && portfolio.products.some((product) => product.id === entry.productId && entry.workOrder.startsWith(`${product.name}: `))
+    && entry.workOrderId.startsWith(`${entry.productId}-`)
+    && Number.isInteger(entry.priority)
+    && entry.priority >= 1
+    && entry.priority <= 100
+    && entry.status === 'ready-local'
+    && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 14
+  && portfolio.completedLocalAutomations.length === 15
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
     && /^[a-z0-9][a-z0-9-]{2,79}$/.test(entry.workOrderId)
     && /^(?:CEO|ENG|OPS|QA|UX)-\d{3}$/.test(entry.checkpoint)
-    && !portfolio.products.some((product) => product.id === entry.productId && product.localAutomation.workOrderId === entry.workOrderId))
+    && !portfolio.products.some((product) => product.id === entry.productId && product.localAutomation.workOrderId === entry.workOrderId)
+    && !portfolio.localImprovementQueue.some((queued) => queued.productId === entry.productId && queued.workOrderId === entry.workOrderId))
   && portfolio.completedLocalAutomations[0]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[0]?.workOrderId === 'ecommerce-today-surface'
   && portfolio.completedLocalAutomations[0]?.checkpoint === 'ENG-130'
@@ -285,8 +299,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[13]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[13]?.workOrderId === 'ecommerce-contact-correction-request'
   && portfolio.completedLocalAutomations[13]?.checkpoint === 'ENG-146'
+  && portfolio.completedLocalAutomations[14]?.productId === 'website'
+  && portfolio.completedLocalAutomations[14]?.workOrderId === 'website-first-edit-focus'
+  && portfolio.completedLocalAutomations[14]?.checkpoint === 'OPS-166'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
+  && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-counter-search-recovery'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -608,8 +627,8 @@ requireContract('agent roster consolidation is recorded',
   && now.includes('`multi_agent = false`; one lease blocks duplicates')
   && now.includes('unloaded roles/models consume no idle compute')
   && now.includes('YTF identities cannot render in core operations')
-  && now.includes('Hosted scheduling remains deliberately dormant')
-  && now.includes('flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation')
+  && now.includes('Hosted scheduling stays dormant')
+  && now.includes('Six checks cover five outcomes; finished or gated work is zero-model')
   && now.includes('Each CEO cycle selects one outcome')
   && now.includes('Owner-send uncertainty retains claims and is never auto-retried')
   && now.includes('Storage privacy now has a six-request owner-confirmed verifier')
@@ -1283,8 +1302,12 @@ requireContract('Ally CEO autonomy is source-pinned, Llama-only, idle-gated, and
   && allyCeoTaskText.includes("$PinnedFiles.Count -eq 8")
   && allyCeoTaskText.includes('function Get-OptionalProperty')
   && allyCeoTaskText.includes('$observedAt = [DateTimeOffset]$item.LastWriteTimeUtc')
-  && allyCeoTaskText.includes("-RepetitionInterval (New-TimeSpan -Hours 6)")
+  && allyCeoTaskText.includes("$Interval = 'PT4H'")
+  && allyCeoTaskText.includes("-RepetitionInterval (New-TimeSpan -Hours 4)")
   && allyCeoTaskText.includes("-RunOnlyIfIdle -IdleDuration (New-TimeSpan -Minutes 10)")
+  && allyCeoTaskText.includes("-IdleWaitTimeout (New-TimeSpan -Hours 4)")
+  && allyCeoTaskText.includes('cadenceHours = 4')
+  && allyCeoTaskText.includes('idleWaitHours = 4')
   && allyCeoTaskText.includes("-MultipleInstances IgnoreNew")
   && allyCeoTaskText.includes("-LogonType Interactive -RunLevel Limited")
   && allyCeoTaskText.includes('externalActionsAllowed = $false')
@@ -1293,15 +1316,29 @@ requireContract('Ally CEO autonomy is source-pinned, Llama-only, idle-gated, and
   && packageText.includes('"company:ally:autonomy:status"')
   && packageText.includes('"company:ally:autonomy:install"')
   && packageText.includes('"company:ally:autonomy:repair"')
+  && packageText.includes('"company:ally:autonomy:migrate"')
   && packageText.includes('"company:ally:autonomy:remove"')
   && packageText.includes('"company:ally:autonomy:self-test"')
+  && allyCeoTaskText.includes("function Test-CeoTaskLegacySixHourPolicy")
+  && allyCeoTaskText.includes("return Test-CeoTaskPolicyFor $Task 'PT6H' 'PT6H'")
+  && allyCeoTaskText.includes("function Test-CeoTaskMigratable")
+  && allyCeoTaskText.includes("ally_ceo_task_migrate_refused_untrusted_definition")
   && workboard.includes('| OPS-164 | CEO + Ally Autonomy Codex | done-local |')
-  && now.includes('Local `SuperMega Ally CEO Cycle` is source-pinned, six-hourly, idle-gated, limited, and single-flight'))
+  && now.includes('Local `SuperMega Ally CEO Cycle` is source-pinned, four-hourly, idle-gated, limited, and single-flight'))
 
 requireContract('Ecommerce checkout handoff targets the first required buyer field',
   workboard.includes('| OPS-165 | Ecommerce UX + Codex integrator | done-local |')
   && workboard.includes('active checkout target is the required Name input')
   && workboard.includes('The sample cart stayed browser-local and no order was submitted.'))
+
+requireContract('local product improvement stays separate from managed-pilot authority',
+  workboard.includes('| OPS-166 | CEO + Website UX / Agent Operations Codex | done-local |')
+  && workboard.includes('Product checkpoint `aa895353` makes `Customize demo` focus and select')
+  && workboard.includes('`shop-counter-search-recovery` is the sole ready local continuation')
+  && workboard.includes('Zero-provider Claude preflight reconfirmed authentication unavailable')
+  && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
+  && portfolio.localImprovementQueue.length === 1
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-counter-search-recovery')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
@@ -1309,6 +1346,9 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   && allyCeoPlannerText.includes("'product-portfolio-control': Object.freeze(['delivery-planner'])")
   && allyCeoPlannerText.includes("ALLY_CEO_PRODUCT_FOCUS_CONTRACT = 'supermega.ally-ceo-product-focus.v3'")
   && allyCeoPlannerText.includes("PRODUCT_WORK_AUTHORITY_CONTRACT = 'supermega.product-work-authority.v2'")
+  && allyCeoPlannerText.includes("PRODUCT_IMPROVEMENT_AUTHORITY_CONTRACT = 'supermega.product-improvement-authority.v1'")
+  && allyCeoPlannerText.includes('value.localImprovementQueue')
+  && allyCeoPlannerText.includes('portfolio.localImprovementQueue')
   && allyCeoPlannerText.includes('completedLocalAutomations')
   && allyCeoPlannerText.includes('completedLocalAutomationSummary')
   && allyCeoPlannerText.includes('digest(stableStringify(portfolio.completedLocalAutomations))')

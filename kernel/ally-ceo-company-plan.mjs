@@ -37,6 +37,7 @@ const PRODUCT_ACCEPTANCE_DIMENSIONS = Object.freeze([
 ])
 const PRODUCT_AUTOMATION_STATUSES = Object.freeze(new Set(['ready-local', 'owner-gated', 'external-blocked']))
 const PRODUCT_WORK_AUTHORITY_CONTRACT = 'supermega.product-work-authority.v2'
+const PRODUCT_IMPROVEMENT_AUTHORITY_CONTRACT = 'supermega.product-improvement-authority.v1'
 const PRODUCT_AUTOMATION_KEYS = Object.freeze(['contract', 'priority', 'productId', 'reason', 'status', 'workOrder', 'workOrderId'])
 const COMPLETED_AUTOMATION_KEYS = Object.freeze(['checkpoint', 'productId', 'workOrderId'])
 const WORK_ORDER_ID_RE = /^[a-z0-9][a-z0-9-]{2,79}$/
@@ -99,6 +100,42 @@ function portfolioView(value) {
   })
   const completedAutomationKeys = new Set(completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`))
   if (completedAutomationKeys.size !== completedLocalAutomations.length) fail('ally_ceo_company_plan_completed_automation_duplicate')
+
+  if (!Array.isArray(value.localImprovementQueue)) fail('ally_ceo_company_plan_local_improvement_invalid')
+  const localImprovementQueue = value.localImprovementQueue.map((entry) => {
+    const productId = String(entry?.productId || '')
+    const priority = entry?.priority
+    const status = String(entry?.status || '')
+    const workOrderId = String(entry?.workOrderId || '')
+    const workOrder = String(entry?.workOrder || '').trim()
+    const reason = String(entry?.reason || '').trim()
+    if (!isRecord(entry)
+      || Object.keys(entry).sort().join(',') !== PRODUCT_AUTOMATION_KEYS.join(',')
+      || entry.contract !== PRODUCT_IMPROVEMENT_AUTHORITY_CONTRACT
+      || !PRODUCT_NAMES[productId]
+      || !Number.isInteger(priority)
+      || priority < 1
+      || priority > 100
+      || status !== 'ready-local'
+      || !WORK_ORDER_ID_RE.test(workOrderId)
+      || !workOrderId.startsWith(`${productId}-`)
+      || !workOrder.startsWith(`${PRODUCT_NAMES[productId]}: `)
+      || workOrder.length > 1_200
+      || !reason
+      || reason.length > 600
+      || /\u0000/.test(`${workOrder}${reason}`)) {
+      fail('ally_ceo_company_plan_local_improvement_invalid')
+    }
+    if (completedAutomationKeys.has(`${productId}:${workOrderId}`)) fail('ally_ceo_company_plan_product_work_already_completed')
+    return { contract: PRODUCT_IMPROVEMENT_AUTHORITY_CONTRACT, productId, priority, status, workOrderId, workOrder, reason }
+  })
+  if (localImprovementQueue.length > REQUIRED_PRODUCTS.length
+    || new Set(localImprovementQueue.map((entry) => entry.productId)).size !== localImprovementQueue.length
+    || localImprovementQueue.map((entry) => entry.productId).join(',') !== [...localImprovementQueue]
+      .sort((left, right) => REQUIRED_PRODUCTS.indexOf(left.productId) - REQUIRED_PRODUCTS.indexOf(right.productId))
+      .map((entry) => entry.productId).join(',')) {
+    fail('ally_ceo_company_plan_local_improvement_invalid')
+  }
 
   const products = value.products.map((product) => {
     const productId = String(product?.id || '')
@@ -168,6 +205,7 @@ function portfolioView(value) {
     northStar: value.northStar.trim(),
     products,
     completedLocalAutomations,
+    localImprovementQueue,
     limits: {
       registeredRoles: 12,
       activeAssignments: 1,
@@ -187,22 +225,24 @@ function canonicalInstant(value) {
 
 function productFocusFor(portfolio, outcomeId) {
   if (outcomeId !== 'product-portfolio-control') return null
-  const candidates = portfolio.products
-    .filter((product) => product.localAutomation.status === 'ready-local')
-    .sort((left, right) => right.localAutomation.priority - left.localAutomation.priority
-      || REQUIRED_PRODUCTS.indexOf(left.id) - REQUIRED_PRODUCTS.indexOf(right.id))
-  const product = candidates[0]
-  if (!product) return null
+  const candidates = portfolio.localImprovementQueue
+    .filter((entry) => entry.status === 'ready-local')
+    .sort((left, right) => right.priority - left.priority
+      || REQUIRED_PRODUCTS.indexOf(left.productId) - REQUIRED_PRODUCTS.indexOf(right.productId))
+  const improvement = candidates[0]
+  if (!improvement) return null
+  const product = portfolio.products.find((entry) => entry.id === improvement.productId)
+  if (!product) fail('ally_ceo_company_plan_local_improvement_invalid')
   return {
     contract: ALLY_CEO_PRODUCT_FOCUS_CONTRACT,
     selection: 'portfolio_priority_ready',
     productId: product.id,
     status: product.status,
     nextGate: product.nextGate,
-    localPriority: product.localAutomation.priority,
-    workOrderId: product.localAutomation.workOrderId,
-    workOrder: product.localAutomation.workOrder,
-    selectionReason: product.localAutomation.reason,
+    localPriority: improvement.priority,
+    workOrderId: improvement.workOrderId,
+    workOrder: improvement.workOrder,
+    selectionReason: improvement.reason,
     readyCandidateCount: candidates.length,
     lifecycle: ['discover', 'define', 'build', 'release', 'learn'],
     acceptanceDimensions: [...PRODUCT_ACCEPTANCE_DIMENSIONS],
