@@ -5,7 +5,7 @@ Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
 Live release commit: `4ce500c29b1cca9617eeba83528293bc1af6c83e`
-Live state observed: `2026-08-08T11:59:10.523Z`
+Live state observed: `2026-08-08T12:23:36.370Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -62,11 +62,11 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 - Codex is the one active Ally integrator; local subagents and models stay at zero idle load. Claude Code 2.1.218 is installed but not authenticated, so its bounded read-only review stopped before reading files and no Claude worker remains running.
 - Review order: PR #411 pilot kit, PR #412 isolated rehearsal, then PR #413 manual billing. Each is one commit ahead of `main`; changed files do not overlap, GitHub exposes no commit statuses, and focused local tests pass.
-- Real lead accounts remain blocked. Production has the enterprise schema through v7, but the live app reports `isolated_demo`, writes disabled, and managed activation unproven. Do not issue credentials until the isolated preview rehearsal proves tenant isolation, session revocation, storage privacy, backup/restore, and exact release binding.
+- Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
 ## Blockers
 
-- Read-only hosted audit: `supermegabase` is PostgreSQL 17.6, private schema v7, 14 private policies, and zero workspace data; its 27 Security Advisor notices are INFO-only default-deny legacy public tables. v8-v10 and the digest-bound public browser quarantine remain code-only, and writes stay off pending isolated backup/restore, target binding, tenant/Auth/Storage proof, and owner authorization.
+- Read-only audit: production is healthy on PostgreSQL 17.6 at schema v7 with zero managed rows, legacy public RLS on, and managed writes off. Preview is `MIGRATIONS_FAILED`; PostgreSQL logged `permission denied to change default privileges`, and v8-v10 are absent. Treat it as unsafe until the direct-admin rehearsal passes.
 - Live HQ and both domains agree on `4ce500c2`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
 - The retired standalone POS host, legacy demo launcher, and internal Console still return 200 from separate projects. Canonical customer routing is public site to app; retire or redirect the two legacy customer hosts and rebaseline Console only through an owner-approved domain release.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
@@ -84,5 +84,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Review and integrate PR #411, then PR #412; on an owner-approved isolated Supabase preview branch, prove Storage, RLS, tenant isolation, session revocation, and exact restore before writes.
+1. Review and integrate PR #411, then PR #412. Repair or replace the failed preview branch only through PR #412's direct-admin, digest-bound sequence; do not use connector migration authority for the quarantine. Prove Storage, RLS, tenant isolation, session revocation, and exact restore before any invite, Vercel wiring, or write.
 2. Use the approved pilot kit with one founder-named Shop design partner and measured baseline. Integrate PR #413 only after the account and pilot gates pass. Keep AI provider execution and scheduling dormant until their gates pass.

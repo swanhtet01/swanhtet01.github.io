@@ -1102,8 +1102,18 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.securityAudit?.localTargetVersion === supabaseSecurityAudit.managedBackend?.localTargetVersion
   && managedPilotReadiness.securityAudit?.productionMutationAuthorized === false
   && managedPilotReadiness.securityAudit?.databaseWrites === 0
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === `${supabaseSecurityAudit.advisor?.findingCount} fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} trails local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === supabaseSecurityAudit.conclusion?.nextAction
+  && (
+    (managedPilotReadiness.securityAudit?.previewRehearsal?.status === 'not_proven'
+      && managedPilotReadiness.securityAudit?.previewRehearsal?.publicTableCount === null
+      && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === `${supabaseSecurityAudit.advisor?.findingCount} fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} trails local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`
+      && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === supabaseSecurityAudit.conclusion?.nextAction)
+    || (managedPilotReadiness.securityAudit?.previewRehearsal?.status === 'migration_failed'
+      && Number.isInteger(managedPilotReadiness.securityAudit?.previewRehearsal?.publicTableCount)
+      && managedPilotReadiness.gates?.find((gate) => gate.id === 'hosted_postgres17')?.evidence.includes('MIGRATIONS_FAILED')
+      && managedPilotReadiness.gates?.find((gate) => gate.id === 'hosted_postgres17')?.nextAction.includes('direct-admin rehearsal')
+      && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence.includes(`${managedPilotReadiness.securityAudit.previewRehearsal.publicTableCount} public tables without RLS`)
+      && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction.includes('direct-admin preview connection'))
+  )
   && supabaseSecurityAudit.projectRef === JSON.parse(packageText).supermega?.productionSupabaseProjectRef
   && supabaseSecurityAudit.targetClassification === 'protected-production'
   && supabaseSecurityAudit.managedBackend?.liveSchemaVersion === 7

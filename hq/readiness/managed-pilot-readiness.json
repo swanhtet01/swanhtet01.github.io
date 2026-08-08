@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
-  "asOf": "2026-08-04T11:04:24.490Z",
-  "sourceDigest": "sha256:847993aab3a98923775ae32c0191be6fc56f717996452b5c6c9ca372a0d8d20e",
+  "asOf": "2026-08-08T12:23:36.370Z",
+  "sourceDigest": "sha256:ec51dc144c30b28e3dc394c96ba128f4195686d1c1e01537a4df9e29e13cdd2e",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -76,7 +76,11 @@
     "metadataRlsEnabled": false,
     "storageBucketCount": 0,
     "productionMutationAuthorized": false,
-    "databaseWrites": 0
+    "databaseWrites": 0,
+    "previewRehearsal": {
+      "status": "migration_failed",
+      "publicTableCount": 27
+    }
   },
   "gates": [
     {
@@ -88,8 +92,8 @@
     {
       "id": "hosted_postgres17",
       "status": "blocked",
-      "evidence": "Protected production is PostgreSQL 17 at managed schema v7; no owner-approved isolated hosted rehearsal exists.",
-      "nextAction": "Apply v8 through v10 plus the digest-bound public browser quarantine on an approved isolated Supabase target, then rerun the hosted validator and session-revocation proof."
+      "evidence": "Protected production is PostgreSQL 17 at managed schema v7. The isolated preview is MIGRATIONS_FAILED after its public baseline; quarantine lacked default-privilege authority and the managed private schema is absent.",
+      "nextAction": "Keep the failed preview disconnected from Vercel and Auth invites. After PR #412 integration, repair or replace it through the direct-admin rehearsal, then apply v8 through v10 plus quarantine and rerun every hosted proof."
     },
     {
       "id": "hosted_storage_privacy",
@@ -112,8 +116,8 @@
     {
       "id": "security",
       "status": "blocked",
-      "evidence": "27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v10.",
-      "nextAction": "Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal."
+      "evidence": "Protected production remains fail-closed. The failed isolated preview has 27 public tables without RLS, no managed private schema, and no browser/default-grant quarantine.",
+      "nextAction": "Use PR #412 only through a direct-admin preview connection; prove relation and default grants, RLS, role boundaries, session revocation, Storage privacy, backup, and restore before any invite."
     },
     {
       "id": "named_pilot",
@@ -209,7 +213,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:3c497d54a3a0c23957f8ed8e9b917cf8f047a9e07b1dd7ff94e1d64b0d9873d0"
+      "digest": "sha256:d179cda86f2ed1cdb9b7f2ec12e331a93906a7d36bbb8bc3068efe8b795407f7"
     },
     {
       "path": "package.json",
@@ -217,7 +221,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:0ba0ac92c48fcc43ebd6418f7559291228f4692a03aedac93ec5264126c21b77"
+      "digest": "sha256:16c0edb568bd815f257e003103981cc30ac082e0019194d14f62e9cb7e8ce08f"
     }
   ]
 }

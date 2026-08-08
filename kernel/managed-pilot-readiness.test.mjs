@@ -99,6 +99,20 @@ test('text evidence digests are stable across Git line-ending normalization', ()
   assert.equal(readinessDigest('line one\r\nline two\r\n'), readinessDigest('line one\nline two\n'))
 })
 
+test('records a failed isolated preview without treating it as hosted readiness', () => {
+  const failedPreview = structuredClone(input)
+  failedPreview.hqNow += '\nLive state observed: `2026-08-08T12:23:36.370Z`\nThe managed-pilot-rehearsal branch is unsafe: 27 tables lack RLS.\nPreview is `MIGRATIONS_FAILED`; PostgreSQL logged `permission denied to change default privileges`.'
+  const ledger = buildManagedPilotReadiness(failedPreview)
+
+  assert.equal(ledger.asOf, '2026-08-08T12:23:36.370Z')
+  assert.deepEqual(ledger.securityAudit.previewRehearsal, { status: 'migration_failed', publicTableCount: 27 })
+  assert.match(ledger.gates.find((gate) => gate.id === 'hosted_postgres17')?.evidence || '', /MIGRATIONS_FAILED/)
+  assert.match(ledger.gates.find((gate) => gate.id === 'security')?.evidence || '', /27 public tables without RLS/)
+  assert.match(ledger.gates.find((gate) => gate.id === 'hosted_postgres17')?.nextAction || '', /direct-admin rehearsal/)
+  assert.equal(ledger.overall.hostedActivationReady, false)
+  assert.equal(validateManagedPilotReadiness(ledger), ledger)
+})
+
 test('rejects hosted overclaims and product authority drift', () => {
   const hosted = structuredClone(input)
   hosted.hqNow = hosted.hqNow.replace('`false`', '`true`')

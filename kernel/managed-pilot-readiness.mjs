@@ -78,11 +78,41 @@ function gate(id, status, evidence, nextAction) {
 }
 
 function securityGateEvidence(audit) {
+  if (audit.previewRehearsal?.status === 'migration_failed') {
+    return `Protected production remains fail-closed. The failed isolated preview has ${audit.previewRehearsal.publicTableCount} public tables without RLS, no managed private schema, and no browser/default-grant quarantine.`
+  }
   return `${audit.findingCount} fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v${audit.liveSchemaVersion} trails local target v${audit.localTargetVersion}.`
 }
 
 function hostedGateEvidence(audit) {
+  if (audit.previewRehearsal?.status === 'migration_failed') {
+    return `Protected production is PostgreSQL 17 at managed schema v${audit.liveSchemaVersion}. The isolated preview is MIGRATIONS_FAILED after its public baseline; quarantine lacked default-privilege authority and the managed private schema is absent.`
+  }
   return `Protected production is PostgreSQL 17 at managed schema v${audit.liveSchemaVersion}; no owner-approved isolated hosted rehearsal exists.`
+}
+
+function previewRehearsalFromHq(now) {
+  const publicTableCount = Number(/(\d+) (?:copied )?(?:public )?tables?(?: still)? (?:have RLS disabled|has RLS disabled|lack RLS)/i.exec(now)?.[1])
+  const failed = now.includes('Preview is `MIGRATIONS_FAILED`')
+    && now.includes('permission denied to change default privileges')
+    && Number.isInteger(publicTableCount)
+    && publicTableCount > 0
+  if (!failed) return { status: 'not_proven', publicTableCount: null }
+  return { status: 'migration_failed', publicTableCount }
+}
+
+function hostedGateNextAction(audit) {
+  if (audit.previewRehearsal?.status === 'migration_failed') {
+    return 'Keep the failed preview disconnected from Vercel and Auth invites. After PR #412 integration, repair or replace it through the direct-admin rehearsal, then apply v8 through v10 plus quarantine and rerun every hosted proof.'
+  }
+  return 'Apply v8 through v10 plus the digest-bound public browser quarantine on an approved isolated Supabase target, then rerun the hosted validator and session-revocation proof.'
+}
+
+function securityGateNextAction(audit, fallback) {
+  if (audit.previewRehearsal?.status === 'migration_failed') {
+    return 'Use PR #412 only through a direct-admin preview connection; prove relation and default grants, RLS, role boundaries, session revocation, Storage privacy, backup, and restore before any invite.'
+  }
+  return fallback
 }
 
 export function buildManagedPilotReadiness(input = {}) {
@@ -127,7 +157,9 @@ export function buildManagedPilotReadiness(input = {}) {
   const liveMode = field(now, 'Live operating mode')
   const managedPersistence = field(now, 'Live managed persistence ready')
   const securityReady = field(now, 'Live security ready')
+  const liveObservedAt = /^Live state observed:\s*`([^`]+)`$/m.exec(now)?.[1] || ''
   if (liveMode !== 'isolated_demo' || managedPersistence !== 'false' || securityReady !== 'false') fail('managed_pilot_readiness_live_boundary_invalid')
+  if (liveObservedAt && !Number.isFinite(Date.parse(liveObservedAt))) fail('managed_pilot_readiness_live_observed_at_invalid')
   if (!now.includes('no release drift is present') || !now.includes('No named pilot customer')) fail('managed_pilot_readiness_live_blockers_missing')
 
   const auditSummary = {
@@ -144,6 +176,7 @@ export function buildManagedPilotReadiness(input = {}) {
     storageBucketCount: 0,
     productionMutationAuthorized: false,
     databaseWrites: 0,
+    previewRehearsal: previewRehearsalFromHq(now),
   }
 
   const products = portfolio.products.map((product) => {
@@ -170,18 +203,18 @@ export function buildManagedPilotReadiness(input = {}) {
 
   const gates = [
     gate('local_postgres17', 'ready-local', LOCAL_GATE_EVIDENCE, 'Keep the digest-bound rehearsal current.'),
-    gate('hosted_postgres17', 'blocked', hostedGateEvidence(auditSummary), 'Apply v8 through v10 plus the digest-bound public browser quarantine on an approved isolated Supabase target, then rerun the hosted validator and session-revocation proof.'),
+    gate('hosted_postgres17', 'blocked', hostedGateEvidence(auditSummary), hostedGateNextAction(auditSummary)),
     gate('hosted_storage_privacy', 'blocked', 'The six-request verifier is ready, but hosted proof is absent.', 'Run the verifier against an owner-approved isolated private bucket.'),
     gate('live_product_contract', 'blocked', 'The exact paired release is verified, but its managed product contract remains isolated_demo.', 'Prove managed persistence and security on the approved isolated target before any managed-pilot claim.'),
     gate('managed_persistence', 'blocked', 'Live managed persistence ready is false.', 'Prove durable commands, recovery, and tenant isolation on the isolated target.'),
-    gate('security', 'blocked', securityGateEvidence(auditSummary), securityAudit.conclusion.nextAction),
+    gate('security', 'blocked', securityGateEvidence(auditSummary), securityGateNextAction(auditSummary, securityAudit.conclusion.nextAction)),
     gate('named_pilot', 'blocked', 'HQ records no named pilot customer or measured baseline.', 'Select one Shop design partner, named operator, baseline, and acceptance evidence.'),
     gate('production_activation', 'blocked', 'The production Supabase target remains protected-unapproved.', 'Keep writes disabled until separate founder approval after every hosted gate passes.'),
   ]
 
   const result = {
     contract: MANAGED_PILOT_READINESS_CONTRACT,
-    asOf: [String(database.recordedAt || ''), String(securityAudit.asOf || '')].sort().at(-1),
+    asOf: [String(database.recordedAt || ''), String(securityAudit.asOf || ''), liveObservedAt].filter(Boolean).sort().at(-1),
     sourceDigest: readinessDigest(sourceReceipts),
     overall: {
       status: 'blocked',
@@ -290,7 +323,11 @@ export function validateManagedPilotReadiness(value) {
     || audit.metadataRlsEnabled !== false
     || audit.storageBucketCount !== 0
     || audit.productionMutationAuthorized !== false
-    || audit.databaseWrites !== 0) fail('managed_pilot_readiness_security_audit_invalid')
+    || audit.databaseWrites !== 0
+    || !isRecord(audit.previewRehearsal)
+    || !['not_proven', 'migration_failed'].includes(audit.previewRehearsal.status)
+    || (audit.previewRehearsal.status === 'not_proven' && audit.previewRehearsal.publicTableCount !== null)
+    || (audit.previewRehearsal.status === 'migration_failed' && (!Number.isInteger(audit.previewRehearsal.publicTableCount) || audit.previewRehearsal.publicTableCount < 1))) fail('managed_pilot_readiness_security_audit_invalid')
   if (!Array.isArray(value.gates)
     || value.gates.map((entry) => entry.id).join(',') !== GATE_IDS.join(',')
     || value.gates[0]?.status !== 'ready-local'
