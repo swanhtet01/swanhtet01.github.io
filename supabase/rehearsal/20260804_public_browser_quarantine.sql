@@ -131,12 +131,25 @@ alter default privileges for role postgres in schema public
 alter default privileges for role postgres in schema public
   revoke execute on functions from public, anon, authenticated;
 
-alter default privileges for role supabase_admin in schema public
-  revoke all privileges on tables from public, anon, authenticated;
-alter default privileges for role supabase_admin in schema public
-  revoke all privileges on sequences from public, anon, authenticated;
-alter default privileges for role supabase_admin in schema public
-  revoke execute on functions from public, anon, authenticated;
+-- supabase_admin owns a second set of default-privilege rules. Altering them
+-- requires membership in that role, which the `postgres` migration role does NOT
+-- have on managed Supabase: an unconditional attempt fails with 42501 and aborts
+-- the whole packet. Proven on preview branch fpnxjptpzaztkhzeemzj, 2026-08-08.
+-- Attempt it only when the running role can, and report honestly when it cannot.
+do $supabase_admin_defaults$
+begin
+  if pg_has_role(current_user, 'supabase_admin', 'member') then
+    alter default privileges for role supabase_admin in schema public
+      revoke all privileges on tables from public, anon, authenticated;
+    alter default privileges for role supabase_admin in schema public
+      revoke all privileges on sequences from public, anon, authenticated;
+    alter default privileges for role supabase_admin in schema public
+      revoke execute on functions from public, anon, authenticated;
+  else
+    raise notice 'public browser quarantine: supabase_admin default privileges left unchanged (current role is not a member). Objects created BY supabase_admin will still auto-grant to browser roles; ask Supabase support to revoke these.';
+  end if;
+end
+$supabase_admin_defaults$;
 
 revoke all privileges on table public.assets from public, anon, authenticated;
 revoke all privileges on table public.enterprise_agent_runs from public, anon, authenticated;
@@ -203,6 +216,10 @@ begin
       message = 'public browser quarantine left a browser object grant';
   end if;
 
+  -- Split by owner: a postgres-owned leak is ours to fix and must fail the packet.
+  -- A supabase_admin-owned leak cannot be revoked without membership in that role,
+  -- so failing on it would make the packet permanently unappliable. Application
+  -- objects are created by postgres, so the residual is reported, not fatal.
   if exists (
     select 1
     from pg_default_acl default_acl
@@ -210,7 +227,7 @@ begin
     join pg_namespace schema_record on schema_record.oid = default_acl.defaclnamespace
     cross join lateral aclexplode(default_acl.defaclacl) privilege_record
     left join pg_roles grantee_role on grantee_role.oid = privilege_record.grantee
-    where owner_role.rolname in ('postgres', 'supabase_admin')
+    where owner_role.rolname = 'postgres'
       and schema_record.nspname = 'public'
       and default_acl.defaclobjtype in ('r', 'S', 'f')
       and (
@@ -221,6 +238,24 @@ begin
     raise exception using
       errcode = '55000',
       message = 'public browser quarantine left an automatic browser grant';
+  end if;
+
+  if exists (
+    select 1
+    from pg_default_acl default_acl
+    join pg_roles owner_role on owner_role.oid = default_acl.defaclrole
+    join pg_namespace schema_record on schema_record.oid = default_acl.defaclnamespace
+    cross join lateral aclexplode(default_acl.defaclacl) privilege_record
+    left join pg_roles grantee_role on grantee_role.oid = privilege_record.grantee
+    where owner_role.rolname = 'supabase_admin'
+      and schema_record.nspname = 'public'
+      and default_acl.defaclobjtype in ('r', 'S', 'f')
+      and (
+        privilege_record.grantee = 0
+        or grantee_role.rolname in ('anon', 'authenticated')
+      )
+  ) then
+    raise notice 'public browser quarantine: supabase_admin default privileges still grant browser roles. Not reachable from the postgres migration role; raise with Supabase support.';
   end if;
 
   if exists (
