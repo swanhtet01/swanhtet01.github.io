@@ -1298,6 +1298,11 @@ requireContract('Ally CEO autonomy is source-pinned, Llama-only, idle-gated, and
   && workboard.includes('| OPS-164 | CEO + Ally Autonomy Codex | done-local |')
   && now.includes('Local `SuperMega Ally CEO Cycle` is source-pinned, six-hourly, idle-gated, limited, and single-flight'))
 
+requireContract('Ecommerce checkout handoff targets the first required buyer field',
+  workboard.includes('| OPS-165 | Ecommerce UX + Codex integrator | done-local |')
+  && workboard.includes('active checkout target is the required Name input')
+  && workboard.includes('The sample cart stayed browser-local and no order was submitted.'))
+
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
   && allyCeoPlannerText.includes("'daily-company-control': Object.freeze(['operations-analyst'])")
