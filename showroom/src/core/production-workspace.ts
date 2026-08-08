@@ -589,6 +589,8 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   shift_closed: shiftClosedEventFields,
 }
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
+const productionSeedAnchorIssueId = 'ISS-301'
+const productionSeedAnchorOffsetMs = 82 * 60 * 1000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -950,6 +952,17 @@ export function createSeedProduction(now = deterministicSeedNow): ProductionStat
     ],
     events: [],
   }
+}
+
+// The seed is generated relative to a caller-supplied instant so a demo opened today reads as
+// today's work. Pristine-workspace checks recover that instant from the seeded issue rather than
+// assuming a fixed one, mirroring how upgradeCommerceSeedPolicies recovers the catalog baseline
+// time. A wrong recovery cannot pass a check: the regenerated seed simply fails to match.
+export function productionSeedAnchor(state: ProductionState) {
+  const issue = state.issues.find((candidate) => candidate.id === productionSeedAnchorIssueId)
+  if (!issue) return null
+  const createdAt = Date.parse(issue.createdAt)
+  return Number.isFinite(createdAt) ? createdAt + productionSeedAnchorOffsetMs : null
 }
 
 export function validateProductionState(value: unknown): ProductionState {
@@ -2006,7 +2019,7 @@ export function loadProductionWorkspace(storage = browserStorage()): ProductionW
       return { state: createEmptyProduction(), source: 'recovery', error: 'Legacy Production data is malformed. Migration failed closed and did not create v2 data.' }
     }
   }
-  return persistInitialState(storage, createSeedProduction(), 'seed')
+  return persistInitialState(storage, createSeedProduction(Date.now()), 'seed')
 }
 
 export function productionWorkspaceCanWrite(
@@ -3118,7 +3131,9 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
     && sampleEvents.every((event) => event.actionId.startsWith(requestedPrefix))
     && JSON.stringify(currentSampleJobs) === JSON.stringify(requestedJobs)) return source
 
-  const seed = createSeedProduction()
+  const seedAnchor = productionSeedAnchor(source)
+  if (seedAnchor === null) return null
+  const seed = createSeedProduction(seedAnchor)
   const seedWithoutJobs = validateProductionState({ ...seed, jobs: [] })
   let base = source
   if (sampleEvents.length || sampleJobIds.size) {
