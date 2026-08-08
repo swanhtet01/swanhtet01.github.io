@@ -80,3 +80,49 @@ test("the storefront features the client's own products, not the demo seed goods
     `every merchandised row must be a client product, saw ${JSON.stringify(rows.map((row) => row.sku))}`,
   )
 })
+
+test('provisioning seeds one pending request that never earns the Shop proof', async () => {
+  const state = spaWorkspace()
+  const storage = new Map([[COMMERCE_KEY, JSON.stringify(state)]])
+  const storageAdapter = {
+    getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, value) => { storage.set(key, String(value)) },
+    removeItem: (key) => { storage.delete(key) },
+  }
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const { GUIDED_SAMPLE_REQUEST_ID, isGuidedSampleBuyingState } = await import(
+    '../showroom/src/products/ecommerce/guided-sample-order.ts'
+  )
+  const { ecommerceBuyingStateStorageKey, validateEcommerceBuyingState } = await import(
+    '../showroom/src/products/ecommerce/ecommerce-buying-lifecycle.ts'
+  )
+  const activate = () => activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Yangon Wellness Spa', capturedAt: CAPTURED_AT },
+    {
+      storage: storageAdapter,
+      catalog: state.items,
+      locks: { request: async (_name, _options, callback) => callback() },
+    },
+  )
+  const first = await activate()
+  assert.ok(first.ok, `activation failed: ${first.ok ? '' : first.error}`)
+
+  const raw = storageAdapter.getItem(ecommerceBuyingStateStorageKey('ecommerce:local'))
+  assert.ok(raw, 'a guided sample request must be seeded')
+  const buying = await validateEcommerceBuyingState(JSON.parse(raw), 'ecommerce:local')
+  assert.equal(buying.requests.length, 1)
+  const [request] = buying.requests
+  assert.equal(request.id, GUIDED_SAMPLE_REQUEST_ID)
+  // The proof-earning step must be left for a human to perform in Shop.
+  assert.equal(request.state, 'pending_shop_review')
+  assert.ok(isGuidedSampleBuyingState(buying))
+  // The Ecommerce proof counter reads Shop orders sourced ECR-; a sample creates none.
+  const commerce = JSON.parse(storageAdapter.getItem(COMMERCE_KEY))
+  assert.equal(commerce.orders.filter((order) => order.sourceRecordId?.startsWith('ECR-')).length, 0)
+
+  // Re-provisioning replaces a pure guided sample rather than failing.
+  const second = await activate()
+  assert.ok(second.ok, `re-provisioning failed: ${second.ok ? '' : second.error}`)
+})
