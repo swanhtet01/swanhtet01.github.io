@@ -25,17 +25,18 @@
     { "productId": "shop", "workOrderId": "shop-counter-clear-sale-recovery", "checkpoint": "OPS-171" },
     { "productId": "plant", "workOrderId": "plant-material-entry-recovery", "checkpoint": "OPS-172" },
     { "productId": "website", "workOrderId": "website-page-readiness-recovery", "checkpoint": "OPS-173" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-cart-line-remove-recovery", "checkpoint": "OPS-174" }
+    { "productId": "ecommerce", "workOrderId": "ecommerce-cart-line-remove-recovery", "checkpoint": "OPS-174" },
+    { "productId": "shop", "workOrderId": "shop-order-line-remove-recovery", "checkpoint": "OPS-175" }
   ],
   "localImprovementQueue": [
     {
       "contract": "supermega.product-improvement-authority.v1",
-      "productId": "shop",
-      "workOrderId": "shop-order-line-remove-recovery",
+      "productId": "plant",
+      "workOrderId": "plant-job-plan-close-recovery",
       "priority": 100,
       "status": "ready-local",
-      "workOrder": "Shop: undo one order-line removal at its exact position without creating an order, handoff, payment, or stock write.",
-      "reason": "Ecommerce is recovered. Manual Shop draft lines still disappear immediately."
+      "workOrder": "Plant: recover one closed job-plan draft without scheduling, dispatching, or production writes.",
+      "reason": "Close and Escape discard owner, priority, and due-time edits."
     }
   ],
   "agentOperatingModel": {
@@ -127,7 +128,7 @@
       "path": "/shop/",
       "runtimeSurface": "commerce",
       "compatibilityPath": "/operations/commerce/",
-      "job": "Run orders, available-stock counts, purchasing and receipt, fulfilment, payment status, bounded returns, exceptions, versioned per-order tax calculation, daily close, and a balanced review-only accounting handoff with correction settlement and source-document traceability from one accountable shop record.",
+      "job": "Run orders, stock, purchasing, receiving, fulfilment, payments, returns, exceptions, versioned per-order tax calculation, daily close, and a balanced review-only accounting handoff with corrections and source traceability.",
       "surfaces": ["Sell", "Orders", "Stock"],
       "templateContract": { "file": "../site-manifest.json", "productId": "commerce" },
       "localAutomation": {

@@ -237,7 +237,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.localImprovementQueue)
   && portfolio.localImprovementQueue.length === 1
-  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'shop'
+  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'plant'
   && portfolio.localImprovementQueue.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'contract,priority,productId,reason,status,workOrder,workOrderId'
     && entry.contract === 'supermega.product-improvement-authority.v1'
@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 22
+  && portfolio.completedLocalAutomations.length === 23
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -323,10 +323,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[21]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[21]?.workOrderId === 'ecommerce-cart-line-remove-recovery'
   && portfolio.completedLocalAutomations[21]?.checkpoint === 'OPS-174'
+  && portfolio.completedLocalAutomations[22]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[22]?.workOrderId === 'shop-order-line-remove-recovery'
+  && portfolio.completedLocalAutomations[22]?.checkpoint === 'OPS-175'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-order-line-remove-recovery'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-job-plan-close-recovery'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1381,10 +1384,13 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-174 | CEO + Ecommerce UX / Agent Operations Codex | done-local |')
   && workboard.includes('Product checkpoint `02c00537` snapshots the exact removed SKU, quantity, and position')
   && workboard.includes('`shop-order-line-remove-recovery` as the sole ready local continuation')
+  && workboard.includes('| OPS-175 | CEO + Shop UX / Agent Operations Codex | done-local |')
+  && workboard.includes('Product checkpoint `73d057a2` snapshots the exact removed line, position, and remaining draft')
+  && workboard.includes('`plant-job-plan-close-recovery` as the sole ready local continuation')
   && workboard.includes('Zero-provider Claude preflight reconfirmed authentication unavailable')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-order-line-remove-recovery')
+  && portfolio.localImprovementQueue[0].workOrderId === 'plant-job-plan-close-recovery')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
