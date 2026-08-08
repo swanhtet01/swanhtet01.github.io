@@ -24,17 +24,18 @@
     { "productId": "ecommerce", "workOrderId": "ecommerce-cart-quantity-recovery", "checkpoint": "OPS-170" },
     { "productId": "shop", "workOrderId": "shop-counter-clear-sale-recovery", "checkpoint": "OPS-171" },
     { "productId": "plant", "workOrderId": "plant-material-entry-recovery", "checkpoint": "OPS-172" },
-    { "productId": "website", "workOrderId": "website-page-readiness-recovery", "checkpoint": "OPS-173" }
+    { "productId": "website", "workOrderId": "website-page-readiness-recovery", "checkpoint": "OPS-173" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-cart-line-remove-recovery", "checkpoint": "OPS-174" }
   ],
   "localImprovementQueue": [
     {
       "contract": "supermega.product-improvement-authority.v1",
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-cart-line-remove-recovery",
+      "productId": "shop",
+      "workOrderId": "shop-order-line-remove-recovery",
       "priority": 100,
       "status": "ready-local",
-      "workOrder": "Ecommerce: undo one cart-line removal after a stock recheck, restoring its quantity and checkout details without a quote, Shop request, payment, or stock write.",
-      "reason": "Website recovery is complete. Ecommerce removes lines immediately; one bounded Undo prevents local loss without operating authority."
+      "workOrder": "Shop: undo one order-line removal at its exact position without creating an order, handoff, payment, or stock write.",
+      "reason": "Ecommerce is recovered. Manual Shop draft lines still disappear immediately."
     }
   ],
   "agentOperatingModel": {
