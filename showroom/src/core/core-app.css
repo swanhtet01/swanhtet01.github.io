@@ -1578,8 +1578,12 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-product-art .art-highlight { fill: none; stroke: rgba(255,255,255,.8); stroke-linecap: round; stroke-linejoin: round; stroke-width: 4; }
 .shop-product-copy { min-width: 0; display: grid; gap: 3px; }
 .shop-product-copy strong { overflow: hidden; font-size: 14px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
-.shop-product-copy b { margin-top: 3px; color: var(--core-ink); font-family: var(--core-mono); font-size: 12px; }
-.shop-product-copy small { overflow: hidden; color: var(--core-quiet); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+/* Price and stock are the two numbers the counter actually reads, and they were the
+   smallest text on the screen — 12px and 9px, on a tile 220px tall. Burmese script needs
+   more height than Latin to stay legible, and the reader is often standing over a phone in
+   a bright shop. The price now leads the tile. */
+.shop-product-copy b { margin-top: 3px; color: var(--core-ink); font-family: var(--core-mono); font-size: 15px; }
+.shop-product-copy small { overflow: hidden; color: var(--core-quiet); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .shop-product-copy small.is-low { color: var(--core-warn); }
 .shop-product-add, .shop-product-quantity { position: absolute; top: 18px; right: 18px; min-width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(4,9,13,.72); color: #fff; font-size: 18px; font-weight: 800; backdrop-filter: blur(8px); }
 .shop-product-quantity { border-color: var(--art); background: var(--art); color: #07110e; font-family: var(--core-mono); font-size: 12px; }
@@ -2144,7 +2148,9 @@ textarea { min-height: 72px; resize: vertical; }
   .shop-product-tile { min-height: 190px; border-radius: 14px; padding: 8px; }
   .shop-product-art { height: 96px; }
   .shop-product-copy strong { font-size: 12px; }
-  .shop-product-copy b { font-size: 10px; }
+  /* The price previously shrank to 10px here — smaller on the phone at the counter than on
+     the desktop nobody sells from. Hold it at the readable size; the tile has the room. */
+  .shop-product-copy b { font-size: 14px; }
   .shop-product-add, .shop-product-quantity { top: 14px; right: 14px; }
   .shop-current-sale { right: 0; bottom: calc(64px + env(safe-area-inset-bottom)); width: 100%; max-height: calc(100svh - 64px - env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; }
   .shop-current-sale > footer { position: sticky; bottom: 0; background: var(--core-panel); }
