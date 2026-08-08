@@ -10,6 +10,11 @@ import {
   type WebsitePageReadinessIssue,
   type WebsitePage,
 } from './website-model'
+import {
+  recoverWebsiteContentSection,
+  removeWebsiteContentSection,
+  type WebsiteRemovedContentSection,
+} from './website-section-recovery'
 
 type ReadinessRecovery = Readonly<{
   pageId: string
@@ -43,8 +48,17 @@ export function ContentWorkspace({
   const issues = readinessIssues.map((issue) => issue.message)
   const [editorSection, setEditorSection] = useState<WebsitePageEditorSection>('hero')
   const [readinessRecovery, setReadinessRecovery] = useState<ReadinessRecovery | null>(null)
+  const [removedSection, setRemovedSection] = useState<WebsiteRemovedContentSection | null>(null)
   const readinessTargetsRef = useRef(new Map<string, HTMLElement>())
+  const sectionRecoveryRef = useRef<HTMLButtonElement>(null)
   const activeReadinessIssue = readinessRecovery?.pageId === page.id ? readinessRecovery.issue : null
+  const removedSectionRecovery = removedSection?.pageId === page.id
+    ? recoverWebsiteContentSection(page, removedSection)
+    : null
+  const activeRemovedSection = removedSectionRecovery?.ok ? removedSection : null
+  const sectionRecoveryKey = activeRemovedSection
+    ? `${activeRemovedSection.pageId}:${activeRemovedSection.section.id}`
+    : ''
 
   useEffect(() => {
     if (!activeReadinessIssue) return
@@ -68,6 +82,19 @@ export function ContentWorkspace({
     }
   }, [activeReadinessIssue])
 
+  useEffect(() => {
+    if (!sectionRecoveryKey) return
+    const focusUndo = () => {
+      sectionRecoveryRef.current?.focus({ preventScroll: true })
+    }
+    const frame = window.requestAnimationFrame(focusUndo)
+    const fallback = window.setTimeout(focusUndo, 180)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(fallback)
+    }
+  }, [sectionRecoveryKey])
+
   function readinessTargetProps(field: WebsitePageReadinessField, sectionId?: string) {
     const key = readinessTargetKey(field, sectionId)
     const active = activeReadinessIssue?.field === field && activeReadinessIssue.sectionId === sectionId
@@ -83,10 +110,12 @@ export function ContentWorkspace({
 
   function editPage(update: (current: WebsitePage) => WebsitePage) {
     setReadinessRecovery(null)
+    setRemovedSection(null)
     onUpdatePage((current) => ({ ...update(current), stage: 'draft' }))
   }
 
   function reviewPageReadiness() {
+    setRemovedSection(null)
     const issue = readinessIssues[0]
     if (issue) {
       setEditorSection(issue.editorSection)
@@ -109,6 +138,33 @@ export function ContentWorkspace({
     })
   }
 
+  function removeSection(sectionId: string) {
+    const removal = removeWebsiteContentSection(page, sectionId)
+    if (!removal.ok) return
+    setReadinessRecovery(null)
+    setRemovedSection(removal.removed)
+    onUpdatePage((current) => {
+      const currentRemoval = removeWebsiteContentSection(current, sectionId)
+      return currentRemoval.ok
+        ? { ...current, sections: currentRemoval.sections, stage: 'draft' }
+        : current
+    })
+  }
+
+  function undoSectionRemoval() {
+    if (!activeRemovedSection) return
+    const recovery = recoverWebsiteContentSection(page, activeRemovedSection)
+    setRemovedSection(null)
+    if (!recovery.ok) return
+    setReadinessRecovery(null)
+    onUpdatePage((current) => {
+      const currentRecovery = recoverWebsiteContentSection(current, activeRemovedSection)
+      return currentRecovery.ok
+        ? { ...current, sections: currentRecovery.sections, stage: 'draft' }
+        : current
+    })
+  }
+
   return (
     <section className="website-editor-panel" aria-labelledby="content-editor-title">
       <header className="website-panel-head">
@@ -125,7 +181,7 @@ export function ContentWorkspace({
       <div className="website-editor-scroll" data-editor-section={editorSection}>
         <label className="website-editor-section-picker">
           <span>Edit</span>
-          <select aria-label="Page section to edit" onChange={(event) => { setEditorSection(event.target.value as WebsitePageEditorSection); setReadinessRecovery(null) }} value={editorSection}>
+          <select aria-label="Page section to edit" onChange={(event) => { setEditorSection(event.target.value as WebsitePageEditorSection); setReadinessRecovery(null); setRemovedSection(null) }} value={editorSection}>
             <option value="hero">Hero</option>
             <option value="sections">Content sections</option>
             <option value="page">Page details</option>
@@ -245,6 +301,27 @@ export function ContentWorkspace({
           >
             + Add section
           </button>
+          {activeRemovedSection ? (
+            <div
+              className="website-section-remove-recovery"
+              data-website-section-remove-recovery={activeRemovedSection.section.id}
+              role="status"
+            >
+              <div>
+                <strong>{activeRemovedSection.section.title.trim() || `Section ${activeRemovedSection.index + 1}`} removed</strong>
+                <small>Undo restores it as section {activeRemovedSection.index + 1}. This only changes the unsaved preview; nothing was saved, published, sent, or added to inquiries.</small>
+              </div>
+              <button
+                aria-label={`Undo remove ${activeRemovedSection.section.title.trim() || `section ${activeRemovedSection.index + 1}`}`}
+                className="website-button is-secondary"
+                onClick={undoSectionRemoval}
+                ref={sectionRecoveryRef}
+                type="button"
+              >
+                Undo remove
+              </button>
+            </div>
+          ) : null}
           <div className="website-section-list">
             {page.sections.length ? page.sections.map((section, index) => (
               <article className="website-section-editor" key={section.id}>
@@ -270,10 +347,7 @@ export function ContentWorkspace({
                     <button
                       aria-label={'Remove section ' + String(index + 1)}
                       className="is-danger"
-                      onClick={() => editPage((current) => ({
-                        ...current,
-                        sections: current.sections.filter((candidate) => candidate.id !== section.id),
-                      }))}
+                      onClick={() => removeSection(section.id)}
                       type="button"
                     >
                       Remove

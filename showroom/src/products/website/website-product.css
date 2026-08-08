@@ -2717,6 +2717,43 @@
   background: var(--website-panel-raised);
 }
 
+.website-section-remove-recovery {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  border: 1px solid color-mix(in srgb, var(--website-green) 28%, var(--website-line));
+  border-left: 3px solid var(--website-green);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--website-green-soft) 72%, var(--website-panel));
+}
+
+.website-section-remove-recovery > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.website-section-remove-recovery strong {
+  color: var(--website-ink);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.website-section-remove-recovery small {
+  color: var(--website-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.website-section-remove-recovery .website-button {
+  min-width: max-content;
+  min-height: 44px;
+}
+
 .website-section-editor > header > strong,
 .website-record-count,
 .website-field-help,
@@ -3133,6 +3170,15 @@
     white-space: nowrap;
   }
 
+  .website-section-remove-recovery {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .website-section-remove-recovery .website-button {
+    width: 100%;
+  }
+
   .website-panel-head {
     min-height: 0;
     align-items: flex-start;
@@ -3210,11 +3256,11 @@
 
 /* Website runs inside the shared SuperMega shell. */
 .website-product {
-  height: auto;
+  height: 100%;
   min-width: 0;
-  min-height: 100%;
+  min-height: 0;
   overflow-x: hidden;
-  overflow-y: visible;
+  overflow-y: auto;
   background: transparent;
 }
 

@@ -112,6 +112,7 @@ const staticRouteSource = await readFile(resolve(root, 'showroom', 'scripts', 'p
 const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts'), 'utf8')
 const websiteLeadSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts'), 'utf8')
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
+const websiteSectionRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-section-recovery.ts'), 'utf8')
 const localMerchandisingImportSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts'), 'utf8')
 const productionJobPlanDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-job-plan-draft.ts'), 'utf8')
 const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts'), 'utf8')
@@ -3589,6 +3590,33 @@ if (!websiteModelSource.includes('export function pageReadinessIssues(page: Webs
   || websiteReadinessRecoveryReturn > websiteReadinessReadyTransition
   || !websiteCssSource.includes('.website-page-check .website-page-recovery')
   || !websiteCssSource.includes('.website-editor-scroll [aria-invalid="true"]')) fail('website_page_readiness_recovery_contract_missing')
+const websiteSectionRemoveStart = contentSource.indexOf('function removeSection(')
+const websiteSectionRemoveEnd = contentSource.indexOf('function undoSectionRemoval(', websiteSectionRemoveStart)
+const websiteSectionUndoStart = websiteSectionRemoveEnd
+const websiteSectionUndoEnd = contentSource.indexOf('\n\n  return (', websiteSectionUndoStart)
+const websiteSectionRemoveAction = contentSource.slice(websiteSectionRemoveStart, websiteSectionRemoveEnd)
+const websiteSectionUndoAction = contentSource.slice(websiteSectionUndoStart, websiteSectionUndoEnd)
+const websiteSectionRecoveryForbiddenActions = ['saveWebsiteWorkspace', 'captureWebsiteLead', 'recordWebsite', 'publish', 'deploy', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(']
+if (websiteSectionRemoveStart < 0
+  || websiteSectionRemoveEnd < 0
+  || websiteSectionUndoEnd < 0
+  || !websiteSectionRecoverySource.includes('export function removeWebsiteContentSection')
+  || !websiteSectionRecoverySource.includes('export function recoverWebsiteContentSection')
+  || !websiteSectionRecoverySource.includes("reason: 'sections_changed'")
+  || !websiteSectionRecoverySource.includes('idsEqual(page.sections.map((section) => section.id), removed.remainingSectionIds)')
+  || !websiteSectionRecoverySource.includes('sections.splice(removed.index, 0, { ...removed.section })')
+  || !websiteSectionRemoveAction.includes('setRemovedSection(removal.removed)')
+  || !websiteSectionUndoAction.includes('recoverWebsiteContentSection(current, activeRemovedSection)')
+  || !contentSource.includes('const activeRemovedSection = removedSectionRecovery?.ok ? removedSection : null')
+  || !contentSource.includes('data-website-section-remove-recovery={activeRemovedSection.section.id}')
+  || !contentSource.includes('ref={sectionRecoveryRef}')
+  || !contentSource.includes('>\n                Undo remove\n              </button>')
+  || !contentSource.includes('nothing was saved, published, sent, or added to inquiries.')
+  || !contentSource.includes('onClick={() => removeSection(section.id)}')
+  || !websiteCssSource.includes('.website-section-remove-recovery .website-button')
+  || !websiteCssSource.includes('.website-section-remove-recovery .website-button {\n    width: 100%;')
+  || !websiteCssSource.includes('/* Website runs inside the shared SuperMega shell. */\n.website-product {\n  height: 100%;\n  min-width: 0;\n  min-height: 0;\n  overflow-x: hidden;\n  overflow-y: auto;')
+  || websiteSectionRecoveryForbiddenActions.some((marker) => websiteSectionRecoverySource.includes(marker) || websiteSectionRemoveAction.includes(marker) || websiteSectionUndoAction.includes(marker))) fail('website_section_remove_recovery_contract_missing')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('Nothing has been deployed.')
   || !websiteSource.includes('Nothing was deployed.')
@@ -10411,12 +10439,54 @@ async function verifyWebsiteRuntime() {
 
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?website-verify=${Date.now()}`)
+    const sectionRecovery = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-section-recovery.ts')).href}?website-section-recovery-verify=${Date.now()}`)
     const exporter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-export.ts')).href}?website-export-verify=${Date.now()}`)
     const starter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts')).href}?website-starter-verify=${Date.now()}`)
     const leads = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts')).href}?website-leads-verify=${Date.now()}`)
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
     const seedPage = seed.pages[0]
+    const threeSectionPage = {
+      ...seedPage,
+      sections: [
+        { id: 'section-a', eyebrow: 'A', title: 'First', body: 'First body' },
+        { id: 'section-b', eyebrow: 'B', title: 'Middle', body: 'Middle body' },
+        { id: 'section-c', eyebrow: 'C', title: 'Last', body: 'Last body' },
+      ],
+    }
+    const removedMiddle = sectionRecovery.removeWebsiteContentSection(threeSectionPage, 'section-b')
+    assert(removedMiddle.ok
+      && removedMiddle.removed.index === 1
+      && removedMiddle.removed.section.title === 'Middle'
+      && removedMiddle.sections.map((section) => section.id).join(',') === 'section-a,section-c',
+    'website_section_removal_not_bound_to_exact_section_and_position')
+    const restoredMiddle = removedMiddle.ok
+      ? sectionRecovery.recoverWebsiteContentSection({ ...threeSectionPage, sections: removedMiddle.sections }, removedMiddle.removed)
+      : null
+    assert(restoredMiddle?.ok
+      && restoredMiddle.sections.map((section) => section.id).join(',') === 'section-a,section-b,section-c'
+      && restoredMiddle.sections[1].title === 'Middle'
+      && restoredMiddle.sections[1] !== threeSectionPage.sections[1],
+    'website_section_recovery_did_not_restore_exact_clone_at_exact_position')
+    const reorderedRecovery = removedMiddle.ok
+      ? sectionRecovery.recoverWebsiteContentSection({ ...threeSectionPage, sections: [...removedMiddle.sections].reverse() }, removedMiddle.removed)
+      : null
+    assert(reorderedRecovery && !reorderedRecovery.ok && reorderedRecovery.reason === 'sections_changed', 'website_section_recovery_ignored_changed_section_sequence')
+    const wrongPageRecovery = removedMiddle.ok
+      ? sectionRecovery.recoverWebsiteContentSection({ ...threeSectionPage, id: 'other-page', sections: removedMiddle.sections }, removedMiddle.removed)
+      : null
+    assert(wrongPageRecovery && !wrongPageRecovery.ok && wrongPageRecovery.reason === 'page_changed', 'website_section_recovery_crossed_page_boundary')
+    const duplicateRecovery = removedMiddle.ok
+      ? sectionRecovery.recoverWebsiteContentSection(threeSectionPage, removedMiddle.removed)
+      : null
+    assert(duplicateRecovery && !duplicateRecovery.ok && duplicateRecovery.reason === 'already_present', 'website_section_recovery_duplicated_existing_section')
+    const malformedRecovery = removedMiddle.ok
+      ? sectionRecovery.recoverWebsiteContentSection(
+          { ...threeSectionPage, sections: removedMiddle.sections },
+          { ...removedMiddle.removed, index: 9 },
+        )
+      : null
+    assert(malformedRecovery && !malformedRecovery.ok && malformedRecovery.reason === 'invalid_recovery', 'website_section_recovery_accepted_malformed_position')
     const incompletePage = {
       ...seedPage,
       internalName: ' ',
