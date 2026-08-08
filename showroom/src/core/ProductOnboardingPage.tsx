@@ -202,19 +202,23 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)
       }
       if (product === 'website') {
-        await activateLocalWebsiteWorkingSample({
+        // These activations report refusal instead of throwing, so a preserved
+        // workspace must be surfaced here or the flow would falsely report success.
+        const activation = await activateLocalWebsiteWorkingSample({
           templateId: onboardingTemplate.id as 'business-presence' | 'lead-generation' | 'catalog-showcase',
           businessName: setup.workspace,
           capturedAt: new Date().toISOString(),
         })
+        if (!activation.ok) throw new Error(activation.error)
       }
       if (product === 'ecommerce' && !managedIdentity) {
         const { activateLocalEcommerceWorkingSample } = await import('./local-client-import')
-        await activateLocalEcommerceWorkingSample({
+        const activation = await activateLocalEcommerceWorkingSample({
           templateId: onboardingTemplate.id as 'social-storefront' | 'pickup-preorder' | 'wholesale-request',
           businessName: setup.workspace,
           capturedAt: new Date().toISOString(),
         })
+        if (!activation.ok) throw new Error(activation.error)
       }
       const startedAt = new Date().toISOString()
       setSetup((current) => ({ ...current, product, owner: workspaceOwner, startedAt, savedAt: undefined }))
