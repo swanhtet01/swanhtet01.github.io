@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [switch]$Preflight,
+    [switch]$Scheduled,
     [switch]$RecordResult,
     [switch]$Json,
     [switch]$SelfTest
@@ -261,6 +262,11 @@ function Invoke-SelfTest {
     catch { if ($_.Exception.Message -ne 'ally_company_cycle_controls_invalid') { throw } }
     $deferred = ConvertTo-DeferredCycle 'ally_ceo_local_cycle_model_unavailable'
     if ($deferred.status -ne 'deferred' -or $deferred.retryPolicy -ne 'next_scheduled_cycle') { throw 'ally_company_cycle_deferred_fixture_failed' }
+    $scheduled = $ready.PSObject.Copy()
+    $scheduled.status = 'deferred'
+    $scheduled.ownerBrief = $ownerBrief
+    $scheduledResult = ConvertTo-CycleReport $scheduled 0 $true
+    if ($scheduledResult.status -ne 'deferred' -or $scheduledResult.modelCalls -ne 0) { throw 'ally_company_cycle_scheduled_fixture_failed' }
     $auditDeferred = ConvertTo-DeferredCycle 'ally_ceo_local_cycle_command_failed:audit:error'
     if ($auditDeferred.status -ne 'deferred' -or $auditDeferred.modelCalls -ne 0) { throw 'ally_company_cycle_audit_deferred_fixture_failed' }
     $wrapped = ConvertFrom-RunnerOutput @('node.exe : {"ok":false,"reason":"ally_ceo_local_cycle_model_unavailable"}', 'native error detail')
@@ -279,7 +285,7 @@ function Invoke-SelfTest {
         ceoCycleContract = $CeoCycleContract
         ownerBriefContract = $OwnerBriefContract
         leaseContract = $LeaseContract
-        checks = 10
+        checks = 11
         networkRequests = 0
         processMutation = $false
         externalWrites = $false
@@ -292,6 +298,10 @@ if ($SelfTest) {
     exit 0
 }
 
+if ($Scheduled -and ($Preflight -or $RecordResult)) {
+    throw 'ally_company_cycle_scheduled_options_invalid'
+}
+
 $cycleLease = Enter-LocalCycleLease $LeaseName
 try {
     $runner = Join-Path $PSScriptRoot 'run_ally_ceo_local_cycle.mjs'
@@ -301,7 +311,10 @@ try {
     }
     else { throw 'ally_company_cycle_node_untrusted' }
     $runnerArguments = @($runner)
-    if (-not $Preflight) { $runnerArguments += @('--execute', '--refresh-knowledge') }
+    if ($Scheduled) {
+        $runnerArguments += @('--execute', '--refresh-knowledge', '--scheduled', '--record-result')
+    }
+    elseif (-not $Preflight) { $runnerArguments += @('--execute', '--refresh-knowledge') }
     $previousErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {

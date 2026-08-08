@@ -30,7 +30,7 @@ import {
 } from '../kernel/managed-pilot-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText] = await Promise.all([
+const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoTaskText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText] = await Promise.all([
   readFile(resolve(root, 'hq', 'README.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
   readFile(resolve(root, 'hq', 'CODEX-PRODUCT-QA-BRIEF.md'), 'utf8'),
@@ -47,6 +47,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'tools', 'audit_ally_runtime.ps1'), 'utf8'),
   readFile(resolve(root, 'tools', 'trim_codex_working_sets.ps1'), 'utf8'),
   readFile(resolve(root, 'tools', 'invoke_supermega_company_cycle.ps1'), 'utf8'),
+  readFile(resolve(root, 'tools', 'manage_ally_ceo_task.ps1'), 'utf8'),
   readFile(resolve(root, 'kernel', 'ally-ceo-company-plan.mjs'), 'utf8'),
   readFile(resolve(root, 'kernel', 'scripts', 'plan-ally-ceo-company.mjs'), 'utf8'),
   readFile(resolve(root, 'tools', 'run_ally_ceo_local_cycle.mjs'), 'utf8'),
@@ -1139,7 +1140,7 @@ requireContract('managed pilot readiness is derived and fail closed',
   && supabaseSecurityAudit.conclusion?.productionMutationAuthorized === false
   && supabaseSecurityAudit.controls?.databaseWrites === 0
   && packageText.includes('"readiness:supabase-security:verify": "node tools/verify_supabase_security_advisor_audit.mjs"')
-  && packageText.includes('node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_managed_pilot_readiness.mjs --verify && node tools/verify_hq_contract.mjs'))
+  && packageText.includes('node tools/record_postgres17_rehearsal.mjs --verify && node tools/verify_supabase_security_advisor_audit.mjs && node tools/manage_managed_pilot_readiness.mjs --verify && npm run company:ally:autonomy:self-test && node tools/verify_hq_contract.mjs'))
 
 requireContract('current Supabase compatibility is a release gate',
   packageText.includes('"database:supabase:compatibility": "node tools/verify_supabase_compatibility.mjs"')
@@ -1258,7 +1259,9 @@ requireContract('Ally company cycles are host-admitted and serial',
   && allyCompanyCycleText.includes("throw 'ally_local_cycle_busy'")
   && allyCompanyCycleText.includes('finally {')
   && allyCompanyCycleText.includes('Exit-LocalCycleLease $cycleLease')
+  && allyCompanyCycleText.includes("[switch]$Scheduled")
   && allyCompanyCycleText.includes("@('--execute', '--refresh-knowledge')")
+  && allyCompanyCycleText.includes("@('--execute', '--refresh-knowledge', '--scheduled', '--record-result')")
   && allyCompanyCycleText.includes("Join-Path $PSScriptRoot 'run_ally_ceo_local_cycle.mjs'")
   && allyCompanyCycleText.includes("$Receipt.ownerBrief.contract -ne $OwnerBriefContract")
   && allyCompanyCycleText.includes('[bool]$Receipt.controls.externalWrites')
@@ -1270,7 +1273,26 @@ requireContract('Ally company cycles are host-admitted and serial',
   && packageText.includes('"company:ally:auto"')
   && packageText.includes('"company:ally:auto:preflight"')
   && packageText.includes('"company:ally:auto:self-test"')
+  && packageText.includes('"company:ally:scheduled"')
   && !/\b(?:Stop-Process|Start-Process|taskkill|kill|Remove-Item|EmptyWorkingSet|SetProcessWorkingSetSize)\b/i.test(allyCompanyCycleText))
+
+requireContract('Ally CEO autonomy is source-pinned, Llama-only, idle-gated, and single-flight',
+  allyCeoTaskText.includes("$Contract = 'supermega.ally-ceo-task.v1'")
+  && allyCeoTaskText.includes("$TaskName = 'SuperMega Ally CEO Cycle'")
+  && allyCeoTaskText.includes("$GuardLines.Add(\"& `$wrapper -Scheduled -Json\")")
+  && allyCeoTaskText.includes("$PinnedFiles.Count -eq 8")
+  && allyCeoTaskText.includes("-RepetitionInterval (New-TimeSpan -Hours 6)")
+  && allyCeoTaskText.includes("-RunOnlyIfIdle -IdleDuration (New-TimeSpan -Minutes 10)")
+  && allyCeoTaskText.includes("-MultipleInstances IgnoreNew")
+  && allyCeoTaskText.includes("-LogonType Interactive -RunLevel Limited")
+  && allyCeoTaskText.includes('externalActionsAllowed = $false')
+  && allyCeoTaskText.includes('connectorRequestsAllowed = 0')
+  && allyCeoTaskText.includes('scaleToZero = $true')
+  && packageText.includes('"company:ally:autonomy:status"')
+  && packageText.includes('"company:ally:autonomy:install"')
+  && packageText.includes('"company:ally:autonomy:repair"')
+  && packageText.includes('"company:ally:autonomy:remove"')
+  && packageText.includes('"company:ally:autonomy:self-test"'))
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
