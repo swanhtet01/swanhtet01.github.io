@@ -93,6 +93,8 @@ type EcommerceAmendmentStatus = {
   replacementOrderId: string
 }
 
+type EcommerceCartQuantityIssues = Record<string, string>
+
 type EcommerceRescheduleStatus = {
   intent: EcommerceOrderRescheduleIntent
   state: 'waiting_shop_review' | 'replacement_needed' | 'replacement_created' | 'review_required'
@@ -171,6 +173,8 @@ export function EcommerceBuyingWorkspace({
   const [freshQuoteId, setFreshQuoteId] = useState('')
   const [quoteClock, setQuoteClock] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
+  const [cartQuantityDrafts, setCartQuantityDrafts] = useState<Record<string, string>>({})
+  const [cartQuantityIssues, setCartQuantityIssues] = useState<EcommerceCartQuantityIssues>({})
   const [returnDraft, setReturnDraft] = useState<{
     orderId: string
     sku: string
@@ -216,6 +220,7 @@ export function EcommerceBuyingWorkspace({
   const [rescheduleDraft, setRescheduleDraft] = useState<{ orderId: string; requestedPromisedAt: string; reason: string } | null>(null)
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
   const requestReceiptRef = useRef<HTMLElement>(null)
+  const cartQuantityRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
@@ -234,6 +239,8 @@ export function EcommerceBuyingWorkspace({
     let current = true
     void readEcommerceBuyingState(scope).then((result) => {
       if (!current) return
+      setCartQuantityDrafts({})
+      setCartQuantityIssues({})
       const recoveredState = result.state ?? createEmptyEcommerceBuyingState(scope)
       setRecoveryRead({ scope, status: result.status, issue: result.error })
       setBuyingState(recoveredState)
@@ -460,7 +467,10 @@ export function EcommerceBuyingWorkspace({
   const cartItems = useMemo(() => cart.map((line) => ({
     ...line,
     item: preview.items.find((item) => item.sku === line.sku),
-  })), [cart, preview.items])
+    quantityLimit: Math.min(99, Math.max(0, currentCatalog.find((item) => item.sku === line.sku)?.onHand ?? 0)),
+  })), [cart, currentCatalog, preview.items])
+  const firstCartQuantityIssueSku = cart.find((line) => Boolean(cartQuantityIssues[line.sku]))?.sku ?? ''
+  const cartHasQuantityIssue = Boolean(firstCartQuantityIssueSku)
   const cartTotal = cartItems.reduce((total, line) => (
     total + (line.item?.unitPriceMmk ?? 0) * line.quantity
   ), 0)
@@ -502,6 +512,7 @@ export function EcommerceBuyingWorkspace({
     && latestRequest.fulfilment === fulfilment
     && latestRequest.quote.payment.adapter === effectivePaymentAdapter
     && (latestRequest.quote.promotion.code ?? '') === promotionCode.trim()
+    && !cartHasQuantityIssue
     && cartMatchesRequest(cart, latestRequest))
   const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
@@ -510,7 +521,9 @@ export function EcommerceBuyingWorkspace({
       ? `${latestRequest.id} recovered on this device. It remains waiting for Shop review.`
       : `${latestRequest.id} was recovered, but its quote expired. Review a new total.`
     : ''
-  const checkoutNotice = latestRequestConfirmed && latestRequestOrder
+  const checkoutNotice = firstCartQuantityIssueSku
+    ? cartQuantityIssues[firstCartQuantityIssueSku]
+    : latestRequestConfirmed && latestRequestOrder
     ? `${latestRequest?.id} is confirmed as ${latestRequestOrder.id}. ${latestRequestEntry?.paymentStatus === 'reconciled' ? 'Payment is reconciled in Shop.' : 'Payment still needs Shop reconciliation.'}`
     : notice || (latestRequestOrder
       ? `${latestRequest?.id} is already confirmed as ${latestRequestOrder.id}. Review a new total only to start another order.`
@@ -518,18 +531,59 @@ export function EcommerceBuyingWorkspace({
         ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
         : 'Add a product to begin.'))
 
-  function updateCart(sku: string, quantity: number) {
-    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return
+  function focusCartQuantity(sku: string) {
+    requestAnimationFrame(() => {
+      const input = cartQuantityRefs.current[sku]
+      if (!input) return
+      input.scrollIntoView({ block: 'center' })
+      input.focus({ preventScroll: true })
+      input.select()
+    })
+  }
+
+  function updateCart(sku: string, draft: string, itemName: string, quantityLimit: number) {
+    setCartQuantityDrafts((current) => ({ ...current, [sku]: draft }))
+    const quantity = Number(draft)
+    const issue = quantityLimit < 1
+      ? `${itemName} is no longer available. Remove this line to continue. Your cart and checkout are unchanged.`
+      : !draft.trim() || !Number.isSafeInteger(quantity) || quantity < 1
+        ? `Enter a whole number from 1 to ${quantityLimit} for ${itemName}. Your cart and checkout are unchanged.`
+        : quantity > quantityLimit
+          ? `Only ${quantityLimit} ${quantityLimit === 1 ? 'unit is' : 'units are'} available for ${itemName}. Your cart and checkout are unchanged.`
+          : ''
+    if (issue) {
+      setCartQuantityIssues((current) => ({ ...current, [sku]: issue }))
+      setNotice(issue)
+      return
+    }
+    setCartQuantityIssues((current) => {
+      if (!current[sku]) return current
+      const next = { ...current }
+      delete next[sku]
+      return next
+    })
     onCartChange(cart.map((line) => line.sku === sku ? { ...line, quantity } : line))
-    setNotice('Cart changed. Review a new total before Shop review.')
+    setNotice(`Quantity updated to ${quantity}. Your checkout details are still here; review a new total before Shop review.`)
   }
 
   function removeFromCart(sku: string) {
+    setCartQuantityDrafts((current) => {
+      const next = { ...current }
+      delete next[sku]
+      return next
+    })
+    setCartQuantityIssues((current) => {
+      const next = { ...current }
+      delete next[sku]
+      return next
+    })
     onCartChange(cart.filter((line) => line.sku !== sku))
     setNotice('Item removed. No Shop record or payment changed.')
   }
 
   function beginAnotherOrder() {
+    setCartQuantityDrafts({})
+    setCartQuantityIssues({})
     onCartChange([])
     setFreshQuoteId('')
     setNotice('Ready for a new order. Add products, then review the current total.')
@@ -565,6 +619,8 @@ export function EcommerceBuyingWorkspace({
       setNotice('That order cannot be reordered from current stock. Nothing changed.')
       return
     }
+    setCartQuantityDrafts({})
+    setCartQuantityIssues({})
     onCartChange(nextCart)
     setCustomerName(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.customerProfile?.name ?? entry.request.customerReference : entry.request.customerReference)
     setCustomerPhone(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.customerProfile?.phone ?? '' : '')
@@ -1053,6 +1109,11 @@ export function EcommerceBuyingWorkspace({
 
   async function reviewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (firstCartQuantityIssueSku) {
+      setNotice(`${cartQuantityIssues[firstCartQuantityIssueSku]} No Shop request was created.`)
+      focusCartQuantity(firstCartQuantityIssueSku)
+      return
+    }
     if (disabled || quoteBusy || recoveryBlocked || !cart.length) return
     if (!paymentPolicyReady) {
       setNotice(`Shop has no active payment method for ${fulfilment}. Set one up in Shop before reviewing this order.`)
@@ -1200,20 +1261,26 @@ export function EcommerceBuyingWorkspace({
         <div className="ecommerce-buying-body">
           {cart.length ? (
             <div aria-label="Cart items" className="ecommerce-cart" role="group">
-              {cartItems.map(({ item, quantity, sku }) => (
-                <div className="ecommerce-cart-line" key={sku}>
+              {cartItems.map(({ item, quantity, quantityLimit, sku }, index) => {
+                const itemName = item?.name ?? sku
+                const quantityIssue = cartQuantityIssues[sku] ?? ''
+                const quantityHelpId = `ecommerce-cart-quantity-${index}-help`
+                const quantityIssueId = `ecommerce-cart-quantity-${index}-issue`
+                return <div className={`ecommerce-cart-line${quantityIssue ? ' has-issue' : ''}`} data-ecommerce-cart-quantity-line={sku} key={sku}>
                   <span>
-                    <strong>{item?.name ?? sku}</strong>
+                    <strong>{itemName}</strong>
                     <small>{item?.variant || sku} · {item ? formatMmk(item.unitPriceMmk) : 'Unavailable'}</small>
                   </span>
-                  <label>
-                    <span className="sr-only">Quantity for {item?.name ?? sku}</span>
-                    <input aria-label={`Quantity for ${item?.name ?? sku}`} max={99} min={1} onChange={(event) => updateCart(sku, Number(event.target.value))} type="number" value={quantity} />
+                  <label className="ecommerce-cart-quantity">
+                    <span className="sr-only">Quantity for {itemName}</span>
+                    <input aria-describedby={`${quantityHelpId}${quantityIssue ? ` ${quantityIssueId}` : ''}`} aria-invalid={Boolean(quantityIssue)} aria-label={`Quantity for ${itemName}`} data-ecommerce-cart-quantity-field={sku} inputMode="numeric" max={Math.max(1, quantityLimit)} min={1} onChange={(event) => updateCart(sku, event.target.value, itemName, quantityLimit)} ref={(node) => { cartQuantityRefs.current[sku] = node }} step={1} type="number" value={cartQuantityDrafts[sku] ?? String(quantity)} />
+                    <small className="ecommerce-cart-quantity-help" id={quantityHelpId}>{quantityLimit > 0 ? `1 to ${quantityLimit} available` : 'Unavailable now'}</small>
                   </label>
                   <b>{item ? formatMmk(item.unitPriceMmk * quantity) : '—'}</b>
-                  <button aria-label={`Remove ${item?.name ?? sku}`} onClick={() => removeFromCart(sku)} type="button">Remove</button>
+                  <button aria-label={`Remove ${itemName}`} onClick={() => removeFromCart(sku)} type="button">Remove</button>
+                  {quantityIssue ? <p className="ecommerce-cart-quantity-issue" id={quantityIssueId} role="alert"><span>{quantityIssue}</span><button onClick={() => focusCartQuantity(sku)} type="button">Fix quantity</button></p> : null}
                 </div>
-              ))}
+              })}
               <div className="ecommerce-cart-total"><span>Products</span><strong>{formatMmk(cartTotal)}</strong></div>
             </div>
           ) : (

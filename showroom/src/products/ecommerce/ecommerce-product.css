@@ -1082,12 +1082,17 @@
 
 .ecommerce-cart-line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(90px, 104px) auto auto;
   align-items: center;
   gap: 7px;
   min-height: 62px;
   padding: 8px 9px;
   border-bottom: 1px solid rgba(31, 68, 51, .1);
+}
+
+.ecommerce-cart-line.has-issue {
+  background: rgba(180, 54, 54, .045);
+  box-shadow: inset 3px 0 #b43636;
 }
 
 .ecommerce-cart-line > span {
@@ -1121,6 +1126,60 @@
   color: #17231d;
   font: inherit;
   font-size: 11px;
+}
+
+.ecommerce-cart-quantity {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.ecommerce-cart-line input[aria-invalid="true"] {
+  border-color: #b43636;
+  box-shadow: 0 0 0 2px rgba(180, 54, 54, .12);
+}
+
+.ecommerce-cart-line .ecommerce-cart-quantity-help {
+  overflow: visible;
+  color: #53645a;
+  font-size: 8px;
+  line-height: 1.25;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.ecommerce-cart-quantity-issue {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: rgba(180, 54, 54, .08);
+  color: #7d2929;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.ecommerce-cart-quantity-issue span {
+  min-width: 0;
+}
+
+.ecommerce-cart-quantity-issue button {
+  min-width: 76px;
+  min-height: 44px;
+  flex: none;
+  border: 1px solid rgba(125, 41, 41, .24);
+  border-radius: 8px;
+  padding: 0 8px;
+  background: #fff;
+  color: #7d2929;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .ecommerce-cart-line > b {
@@ -1709,7 +1768,7 @@
   }
 
   .ecommerce-cart-line {
-    grid-template-columns: minmax(0, 1fr) 58px auto;
+    grid-template-columns: minmax(0, 1fr) minmax(90px, 104px) auto;
   }
 
   .ecommerce-cart-line > b {
@@ -1722,6 +1781,15 @@
     overflow-wrap: anywhere;
     text-overflow: clip;
     white-space: normal;
+  }
+
+  .ecommerce-cart-quantity-issue {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ecommerce-cart-quantity-issue button {
+    width: 100%;
   }
 
   .ecommerce-quote-boundaries {
