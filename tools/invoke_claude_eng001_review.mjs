@@ -15,7 +15,7 @@ import { pathToFileURL } from 'node:url'
 export const CONTRACT = 'supermega.claude-eng001-review.v1'
 export const ASSIGNMENT = 'ENG-001'
 export const INTEGRATOR_BRANCH = 'codex/fix-ecommerce-intake-count-20260808'
-export const INTEGRATOR_BASE = '4bc55a6ab01de13c436a422ecba8a54bbae1d6f6'
+export const INTEGRATOR_BASE = '26b4b2f02e8f924528b928b30d227c0e62e314ad'
 export const MAX_BUDGET_USD = '0.20'
 export const MAX_CAPTURE_BYTES = 2 * 1024 * 1024
 export const REVIEW_TIMEOUT_MS = 15 * 60 * 1000
@@ -26,7 +26,7 @@ const CANDIDATES = Object.freeze([
   Object.freeze({
     pr: 411,
     path: 'C:\\Users\\thesw\\Projects\\supermega-showroom-fixes',
-    commit: 'decb001d2e4c47c1434ea3fb1898c599228c2bf4',
+    commit: 'a09116e4edcc1e374cf17e85af27e053ff353e5a',
   }),
   Object.freeze({
     pr: 412,

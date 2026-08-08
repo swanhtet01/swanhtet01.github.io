@@ -8,10 +8,10 @@ Codex is the sole integrator on the ROG Ally. Claude may perform exactly one rea
 
 Identify the safe merge order, contradictions, release blockers, and exact next managed-account gate across PRs #411-#413.
 
-- Integrator implementation base: `4bc55a6ab01de13c436a422ecba8a54bbae1d6f6`
+- Integrator minimum implementation base: `26b4b2f02e8f924528b928b30d227c0e62e314ad`
 - Integrator branch: `codex/fix-ecommerce-intake-count-20260808`
 - Canonical authority: `hq/NOW.md`, `hq/WORKBOARD.md`, `hq/readiness/managed-pilot-readiness.json`
-- PR #411: `C:\Users\thesw\Projects\supermega-showroom-fixes`, commit `decb001d2e4c47c1434ea3fb1898c599228c2bf4`
+- PR #411 local practical candidate: `C:\Users\thesw\Projects\supermega-showroom-fixes`, commit `a09116e4edcc1e374cf17e85af27e053ff353e5a` (extends remote PR head `decb001d2e4c47c1434ea3fb1898c599228c2bf4`; replaces four duplicate static pilot-kit documents with one generated client-specific run sheet; not pushed)
 - PR #412 local hardened candidate: `C:\Users\thesw\Projects\supermega-slice1`, commit `bc0970656e25c132fcf4923a91ac45e8e2c34102` (extends remote PR head `111f069d673c14fd6f8529d87bfcaacd7aae9671` with an exact founder-approval and T0+24h branch-lifetime gate; not pushed)
 - PR #413: `C:\Users\thesw\Projects\supermega-rebaseline`, commit `3aab5edc398e4a3e2d7ec0aca4346438872c7d87`
 
@@ -28,7 +28,7 @@ Codex may check the packet with `npm run claude:eng001:preflight`. That command 
 
 ## Evidence that must remain true
 
-- Live public and app domains serve commit `4ce500c29b1cca9617eeba83528293bc1af6c83e` in `isolated_demo` mode.
+- Read-only live verification at `2026-08-08T14:58:56.281Z` confirmed public and app domains serve commit `4ce500c29b1cca9617eeba83528293bc1af6c83e` in `isolated_demo` mode; managed persistence and security remain false.
 - The existing Supabase preview is `MIGRATIONS_FAILED`: 27 copied public tables lack RLS, `app_private` is absent, and quarantine failed with `permission denied to change default privileges`.
 - The failed preview must stay disconnected from Vercel and Auth invitations.
 - PR #412's direct-admin, digest-bound rehearsal is the proposed recovery path; connector migration authority is insufficient.
