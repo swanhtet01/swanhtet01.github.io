@@ -78,3 +78,35 @@ test('the working sample never fabricates release, approval, or publish evidence
   assert.deepEqual(workspace.evidence ?? [], [])
   assert.deepEqual(workspace.events ?? [], [])
 })
+
+test('every client preset maps to a real website template with its own second page', async () => {
+  const { clientDemoPresets } = await import('../showroom/src/core/client-onboarding.ts')
+  const templateIds = new Set(websiteStarterTemplates.map((template) => template.id))
+  const secondarySlugBy = {
+    'lead-generation': '/services',
+    'catalog-showcase': '/catalog',
+    'business-presence': '/about',
+  }
+  const seen = new Set()
+  for (const preset of clientDemoPresets) {
+    const selection = preset.selections.find((entry) => entry.product === 'website')
+    if (!selection) continue
+    const templateId = selection.templateId
+    assert.ok(templateIds.has(templateId), `${preset.id} maps to unknown website template ${templateId}`)
+    seen.add(templateId)
+    const installed = installWebsiteWorkingSample(createInitialWorkspace(), {
+      templateId,
+      businessName: 'Yangon Wellness Spa',
+      capturedAt: CAPTURED_AT,
+    })
+    assert.ok(installed, `${preset.id} (${templateId}) must install`)
+    const workspace = installed.workspace ?? installed
+    const slugs = workspace.pages.map((page) => page.slug)
+    assert.ok(
+      slugs.includes(secondarySlugBy[templateId]),
+      `${templateId} must produce ${secondarySlugBy[templateId]}, saw ${JSON.stringify(slugs)}`,
+    )
+  }
+  // The presets must exercise more than one template, or client type is not reaching Website.
+  assert.ok(seen.size >= 2, `presets collapse to a single website template: ${JSON.stringify([...seen])}`)
+})

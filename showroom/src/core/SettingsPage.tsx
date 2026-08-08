@@ -36,6 +36,8 @@ import {
   pilotReady,
   productContracts,
   productDisplayName,
+  rememberProductSetup,
+  seedSetupForProduct,
   setupProductPreviewPath,
   STOREFRONT_DRAFT_RESET_PREFIX,
   templateFor,
@@ -1262,6 +1264,16 @@ export function SettingsPage() {
     if (origin === 'created' && blueprint.products.some((product) => product.product === 'production')) {
       savePlantIndustryPackId(blueprint.client.plantIndustryPackId, window.localStorage)
       plantPackNotice = ` ${plantIndustryPack(blueprint.client.plantIndustryPackId).name} Plant setup is prepared.`
+    }
+    // Retain the client's chosen template for every selected product, not only the
+    // first: without this the Website and Ecommerce onboarding pages fall back to
+    // templates[0] and every client type opens the same generic sample.
+    for (const selection of blueprint.products) {
+      rememberProductSetup(window.localStorage, {
+        ...seedSetupForProduct(selection.product, selection.templateId),
+        workspace: blueprint.client.workspace,
+        owner: blueprint.client.owner,
+      })
     }
     const first = blueprint.products[0]
     setDemoPresetId(blueprint.client.presetId)
