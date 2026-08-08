@@ -14,24 +14,25 @@
     {"productId":"ecommerce","workOrderId":"ecommerce-cancellation-request","checkpoint":"ENG-140"},
     {"productId":"ecommerce","workOrderId":"ecommerce-order-amendment-request","checkpoint":"ENG-141"},
     {"productId":"ecommerce","workOrderId":"ecommerce-delivery-reschedule-request","checkpoint":"ENG-142"},
-    { "productId": "ecommerce", "workOrderId": "ecommerce-return-outcome-receipt", "checkpoint": "ENG-143" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-support-outcome-receipt", "checkpoint": "ENG-144" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-correction-request", "checkpoint": "ENG-145" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-contact-correction-request", "checkpoint": "ENG-146" },
-    { "productId": "website", "workOrderId": "website-first-edit-focus", "checkpoint": "OPS-166" },
-    { "productId": "shop", "workOrderId": "shop-counter-search-recovery", "checkpoint": "OPS-167" },
-    { "productId": "plant", "workOrderId": "plant-output-first-entry", "checkpoint": "OPS-169" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-cart-quantity-recovery", "checkpoint": "OPS-170" },
-    { "productId": "shop", "workOrderId": "shop-counter-clear-sale-recovery", "checkpoint": "OPS-171" },
-    { "productId": "plant", "workOrderId": "plant-material-entry-recovery", "checkpoint": "OPS-172" },
-    { "productId": "website", "workOrderId": "website-page-readiness-recovery", "checkpoint": "OPS-173" },
+    {"productId":"ecommerce","workOrderId":"ecommerce-return-outcome-receipt","checkpoint":"ENG-143"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-support-outcome-receipt","checkpoint":"ENG-144"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-correction-request","checkpoint":"ENG-145"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-contact-correction-request","checkpoint":"ENG-146"},
+    {"productId":"website","workOrderId":"website-first-edit-focus","checkpoint":"OPS-166"},
+    {"productId":"shop","workOrderId":"shop-counter-search-recovery","checkpoint":"OPS-167"},
+    {"productId":"plant","workOrderId":"plant-output-first-entry","checkpoint":"OPS-169"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-cart-quantity-recovery","checkpoint":"OPS-170"},
+    {"productId":"shop","workOrderId":"shop-counter-clear-sale-recovery","checkpoint":"OPS-171"},
+    {"productId":"plant","workOrderId":"plant-material-entry-recovery","checkpoint":"OPS-172"},
+    {"productId":"website","workOrderId":"website-page-readiness-recovery","checkpoint":"OPS-173"},
     {"productId":"ecommerce","workOrderId":"ecommerce-cart-line-remove-recovery","checkpoint":"OPS-174"},
     {"productId":"shop","workOrderId":"shop-order-line-remove-recovery","checkpoint":"OPS-175"},
     {"productId":"plant","workOrderId":"plant-job-plan-close-recovery","checkpoint":"OPS-176"},
-    {"productId":"website","workOrderId":"website-section-remove-recovery","checkpoint":"OPS-177"}
+    {"productId":"website","workOrderId":"website-section-remove-recovery","checkpoint":"OPS-177"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-order-change-close-recovery","checkpoint":"OPS-178"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-order-change-close-recovery","priority":100,"status":"ready-local","workOrder":"Ecommerce: recover one closed unsent order-change draft exactly; never send to Shop or change the order.","reason":"Close drops contact, delivery, lines, and reason."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"shop","workOrderId":"shop-stock-move-close-recovery","priority":100,"status":"ready-local","workOrder":"Shop: recover one accidentally closed stock-move draft exactly; never move stock or record inventory.","reason":"Close move resets the stock source and quantity."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
