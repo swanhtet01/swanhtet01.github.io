@@ -165,8 +165,21 @@ export function buildWebsiteHtml(artifact: WebsiteArtifact): string {
     .map((page, index) => renderPage(page, targets[index] as PageTarget, targets))
     .join('\n')
 
+  // WCAG 3.1.1 (Level A) requires the page's human language to be programmatically
+  // determinable. "und" is syntactically valid BCP 47 but means "undetermined", which
+  // defeats the point: a screen reader cannot choose a voice, search engines cannot target
+  // the language, and browsers will not offer to translate. This file is the artifact the
+  // customer actually publishes, so it has to declare a real language.
+  //
+  // The workspace stores no locale, so infer it from the content being published rather
+  // than inventing a setting. Any Myanmar-script character means Burmese, otherwise
+  // English — right for a Myanmar product, and a mixed page resolves to Burmese, which is
+  // the correct call when that is the script a reader needs a voice for.
+  const myanmarScript = /[က-႟ꧠ-꧿ꩠ-ꩿ]/
+  const documentLanguage = myanmarScript.test(`${siteName}${pages}`) ? 'my' : 'en'
+
   return `<!doctype html>
-<html lang="und">
+<html lang="${documentLanguage}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">

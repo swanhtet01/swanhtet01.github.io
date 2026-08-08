@@ -934,6 +934,18 @@ export function EcommerceProduct() {
     addToCart(customerPreviewItems[0].sku)
   }
 
+  // The cart and checkout live inside a collapsed <details>. Opening it is what "Review
+  // checkout" has always said it does.
+  function openBuyingWorkspace() {
+    const workspace = document.getElementById('ecommerce-buying-workspace')
+    if (!(workspace instanceof HTMLDetailsElement)) return false
+    workspace.open = true
+    const summary = workspace.querySelector('summary')
+    if (summary instanceof HTMLElement) summary.focus({ preventScroll: true })
+    requestAnimationFrame(() => workspace.scrollIntoView({ block: 'start' }))
+    return true
+  }
+
   function focusCurrentRequestReceipt() {
     const receipt = document.querySelector<HTMLElement>('.ecommerce-quote-receipt[data-current="true"]')
     if (!receipt) {
@@ -1699,6 +1711,12 @@ export function EcommerceProduct() {
       navigate('/shop/?tab=orders')
       return
     }
+    // With items already in the cart the button reads "Review checkout", but every branch
+    // above missed and it fell through to prepareQuoteRecovery — which adds the first
+    // preview item to the cart. If that item was already in there (the normal case, since
+    // it is what put the cart in this state) nothing changed at all, so the primary action
+    // did nothing in exactly the situation it advertises. Open the checkout instead.
+    if (ecommerceTodayCartUnits && openBuyingWorkspace()) return
     prepareQuoteRecovery()
   }
 
