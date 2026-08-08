@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-08
+Updated: 2026-08-09
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -31,8 +31,8 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 ## Implemented reality
 
-- Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
-- Ally uses local-only `llama3.2:1b`: one 256-token call/model, no source excerpts for strict specialists, immediate unload, no cloud fallback.
+- Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation. Local `SuperMega Ally CEO Cycle` is source-pinned, six-hourly, idle-gated, limited, and single-flight.
+- Ally is Llama-only: local `llama3.2:1b`, 256-token maximum, immediate unload, and no cloud fallback.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
@@ -52,7 +52,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Both domains serve deployed `4ce500c29b1cca9617eeba83528293bc1af6c83e`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Vercel reports both deployments READY with no grouped runtime errors in the current review window.
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
-- Working-set trim is non-terminating and stops no process. The accepted growth cycle used one local model call and queue write, no connector/external write, and ended with zero loaded models. Local Codex subagents remain disabled. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
+- Working-set trim is non-terminating: it released 2,170.4 MB; settled RAM was 65.9%, with one frontend, one idle worker, zero configured subagents/models, and Claude/Bionic open. Scheduled rehearsal used zero model/queue writes. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 
 ## Owner-gated actions
 

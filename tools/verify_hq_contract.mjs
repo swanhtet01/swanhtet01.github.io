@@ -1281,6 +1281,8 @@ requireContract('Ally CEO autonomy is source-pinned, Llama-only, idle-gated, and
   && allyCeoTaskText.includes("$TaskName = 'SuperMega Ally CEO Cycle'")
   && allyCeoTaskText.includes("$GuardLines.Add(\"& `$wrapper -Scheduled -Json\")")
   && allyCeoTaskText.includes("$PinnedFiles.Count -eq 8")
+  && allyCeoTaskText.includes('function Get-OptionalProperty')
+  && allyCeoTaskText.includes('$observedAt = [DateTimeOffset]$item.LastWriteTimeUtc')
   && allyCeoTaskText.includes("-RepetitionInterval (New-TimeSpan -Hours 6)")
   && allyCeoTaskText.includes("-RunOnlyIfIdle -IdleDuration (New-TimeSpan -Minutes 10)")
   && allyCeoTaskText.includes("-MultipleInstances IgnoreNew")
@@ -1292,7 +1294,9 @@ requireContract('Ally CEO autonomy is source-pinned, Llama-only, idle-gated, and
   && packageText.includes('"company:ally:autonomy:install"')
   && packageText.includes('"company:ally:autonomy:repair"')
   && packageText.includes('"company:ally:autonomy:remove"')
-  && packageText.includes('"company:ally:autonomy:self-test"'))
+  && packageText.includes('"company:ally:autonomy:self-test"')
+  && workboard.includes('| OPS-164 | CEO + Ally Autonomy Codex | done-local |')
+  && now.includes('Local `SuperMega Ally CEO Cycle` is source-pinned, six-hourly, idle-gated, limited, and single-flight'))
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")

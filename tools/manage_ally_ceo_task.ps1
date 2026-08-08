@@ -120,6 +120,13 @@ function Test-CeoTaskRepairable([object]$Task) {
     return [string]::Equals($normalizedActual, $normalizedExpected, [StringComparison]::Ordinal)
 }
 
+function Get-OptionalProperty([object]$Value, [string]$Name) {
+    if ($null -eq $Value) { return $null }
+    $property = $Value.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    return $property.Value
+}
+
 function Read-CeoReceipt {
     if (-not (Test-Path -LiteralPath $ReceiptPath -PathType Leaf)) { return $null }
     $item = Get-Item -LiteralPath $ReceiptPath -ErrorAction Stop
@@ -129,8 +136,7 @@ function Read-CeoReceipt {
     try { $receipt = Get-Content -Raw -LiteralPath $ReceiptPath | ConvertFrom-Json }
     catch { return $null }
     if ($receipt.contract -ne $CycleContract) { return $null }
-    try { $observedAt = [DateTimeOffset]::Parse([string]$receipt.generatedAt) }
-    catch { return $null }
+    $observedAt = [DateTimeOffset]$item.LastWriteTimeUtc
     return [pscustomobject]@{ receipt = $receipt; observedAt = $observedAt }
 }
 
@@ -146,17 +152,20 @@ function Write-CeoTaskReceipt([string]$Status, [object]$Task, [bool]$Changed) {
     } else { $null }
     $cycle = if ($null -ne $journal) {
         $receipt = $journal.receipt
+        $ownerBrief = Get-OptionalProperty $receipt 'ownerBrief'
+        $controls = Get-OptionalProperty $receipt 'controls'
+        $completedOutcomeIds = @(Get-OptionalProperty $receipt 'completedOutcomeIds')
         [ordered]@{
-            generatedAt = [string]$receipt.generatedAt
-            period = [string]$receipt.period
-            status = [string]$receipt.status
-            outcomeId = [string]$receipt.outcomeId
-            completedOutcomeCount = @($receipt.completedOutcomeIds).Count
-            modelCalls = $receipt.modelCalls
-            queueWrites = $receipt.queueWrites
-            ownerBriefStatus = [string]$receipt.ownerBrief.status
-            externalWrites = [bool]$receipt.controls.externalWrites
-            connectors = $receipt.controls.connectors
+            observedAt = $journal.observedAt.ToString('o')
+            period = [string](Get-OptionalProperty $receipt 'period')
+            status = [string](Get-OptionalProperty $receipt 'status')
+            outcomeId = [string](Get-OptionalProperty $receipt 'outcomeId')
+            completedOutcomeCount = $completedOutcomeIds.Count
+            modelCalls = Get-OptionalProperty $receipt 'modelCalls'
+            queueWrites = Get-OptionalProperty $receipt 'queueWrites'
+            ownerBriefStatus = [string](Get-OptionalProperty $ownerBrief 'status')
+            externalWrites = [bool](Get-OptionalProperty $controls 'externalWrites')
+            connectors = Get-OptionalProperty $controls 'connectors'
         }
     } else { $null }
     $taskState = if ($null -ne $Task) { [string]$Task.State } else { 'NotInstalled' }
