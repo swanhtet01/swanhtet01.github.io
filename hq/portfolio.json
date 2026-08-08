@@ -2,18 +2,18 @@
   "schemaVersion": "supermega.hq.portfolio.v3",
   "updatedAt": "2026-08-09",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
-  "productLifecycle": ["discover", "define", "build", "release", "learn"],
+  "productLifecycle": ["discover","define","build","release","learn"],
   "completedLocalAutomations": [
-    { "productId": "ecommerce", "workOrderId": "ecommerce-today-surface", "checkpoint": "ENG-130" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-promotion-review", "checkpoint": "ENG-134" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-promotion-policy-setup", "checkpoint": "ENG-135" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-shipping-policy-review", "checkpoint": "ENG-136" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-payment-method-policy-review", "checkpoint": "ENG-137" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-tax-policy-review", "checkpoint": "ENG-138" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-order-acknowledgement", "checkpoint": "ENG-139" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-cancellation-request", "checkpoint": "ENG-140" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-order-amendment-request", "checkpoint": "ENG-141" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-delivery-reschedule-request", "checkpoint": "ENG-142" },
+    {"productId":"ecommerce","workOrderId":"ecommerce-today-surface","checkpoint":"ENG-130"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-promotion-review","checkpoint":"ENG-134"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-promotion-policy-setup","checkpoint":"ENG-135"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-shipping-policy-review","checkpoint":"ENG-136"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-payment-method-policy-review","checkpoint":"ENG-137"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-tax-policy-review","checkpoint":"ENG-138"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-order-acknowledgement","checkpoint":"ENG-139"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-cancellation-request","checkpoint":"ENG-140"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-order-amendment-request","checkpoint":"ENG-141"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-delivery-reschedule-request","checkpoint":"ENG-142"},
     { "productId": "ecommerce", "workOrderId": "ecommerce-return-outcome-receipt", "checkpoint": "ENG-143" },
     { "productId": "ecommerce", "workOrderId": "ecommerce-support-outcome-receipt", "checkpoint": "ENG-144" },
     { "productId": "ecommerce", "workOrderId": "ecommerce-correction-request", "checkpoint": "ENG-145" },
@@ -25,20 +25,13 @@
     { "productId": "shop", "workOrderId": "shop-counter-clear-sale-recovery", "checkpoint": "OPS-171" },
     { "productId": "plant", "workOrderId": "plant-material-entry-recovery", "checkpoint": "OPS-172" },
     { "productId": "website", "workOrderId": "website-page-readiness-recovery", "checkpoint": "OPS-173" },
-    { "productId": "ecommerce", "workOrderId": "ecommerce-cart-line-remove-recovery", "checkpoint": "OPS-174" },
-    { "productId": "shop", "workOrderId": "shop-order-line-remove-recovery", "checkpoint": "OPS-175" },
-    { "productId": "plant", "workOrderId": "plant-job-plan-close-recovery", "checkpoint": "OPS-176" }
+    {"productId":"ecommerce","workOrderId":"ecommerce-cart-line-remove-recovery","checkpoint":"OPS-174"},
+    {"productId":"shop","workOrderId":"shop-order-line-remove-recovery","checkpoint":"OPS-175"},
+    {"productId":"plant","workOrderId":"plant-job-plan-close-recovery","checkpoint":"OPS-176"},
+    {"productId":"website","workOrderId":"website-section-remove-recovery","checkpoint":"OPS-177"}
   ],
   "localImprovementQueue": [
-    {
-      "contract": "supermega.product-improvement-authority.v1",
-      "productId": "website",
-      "workOrderId": "website-section-remove-recovery",
-      "priority": 100,
-      "status": "ready-local",
-      "workOrder": "Website: restore one removed content section at its exact position without saving, publishing, or creating a lead.",
-      "reason": "Section Remove immediately filters the unsaved page draft."
-    }
+    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-order-change-close-recovery","priority":100,"status":"ready-local","workOrder":"Ecommerce: recover one closed unsent order-change draft exactly; never send to Shop or change the order.","reason":"Close drops contact, delivery, lines, and reason."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
