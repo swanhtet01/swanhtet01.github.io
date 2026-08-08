@@ -29,10 +29,11 @@
     {"productId":"shop","workOrderId":"shop-order-line-remove-recovery","checkpoint":"OPS-175"},
     {"productId":"plant","workOrderId":"plant-job-plan-close-recovery","checkpoint":"OPS-176"},
     {"productId":"website","workOrderId":"website-section-remove-recovery","checkpoint":"OPS-177"},
-    {"productId":"ecommerce","workOrderId":"ecommerce-order-change-close-recovery","checkpoint":"OPS-178"}
+    {"productId":"ecommerce","workOrderId":"ecommerce-order-change-close-recovery","checkpoint":"OPS-178"},
+    {"productId":"shop","workOrderId":"shop-stock-move-close-recovery","checkpoint":"OPS-179"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"shop","workOrderId":"shop-stock-move-close-recovery","priority":100,"status":"ready-local","workOrder":"Shop: recover one accidentally closed stock-move draft exactly; never move stock or record inventory.","reason":"Close move resets the stock source and quantity."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"plant","workOrderId":"plant-plan-revision-close-recovery","priority":100,"status":"ready-local","workOrder":"Plant: recover one accidentally closed controlled-plan revision exactly; never revise a plan or record production.","reason":"Revise plan rebuilds the complete BOM and routing draft whenever the setup dialog reopens."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
@@ -231,24 +232,9 @@
     }
   ],
   "researchGates": [
-    {
-      "candidate": "durable-workflows",
-      "decision": "evaluate",
-      "gate": "Compare Vercel Workflows with the existing Cloud Tasks runtime using one approval-wait use case.",
-      "source": "https://vercel.com/docs/workflows"
-    },
-    {
-      "candidate": "order-intake-agent",
-      "decision": "evaluate",
-      "gate": "Adopt only after the existing fixture corpus, server-only structured output, provenance, budget, human review, and zero-side-effect checks pass.",
-      "source": "https://platform.openai.com/docs/guides/structured-outputs"
-    },
-    {
-      "candidate": "opentelemetry",
-      "decision": "adopt-with-managed-mode",
-      "gate": "Redact customer content and correlate request, workflow, model, tool, and database operations.",
-      "source": "https://vercel.com/docs/tracing/instrumentation"
-    },
+    {"candidate":"durable-workflows","decision":"evaluate","gate":"Compare Vercel Workflows with the existing Cloud Tasks runtime using one approval-wait use case.","source":"https://vercel.com/docs/workflows"},
+    {"candidate":"order-intake-agent","decision":"evaluate","gate":"Adopt only after the existing fixture corpus, server-only structured output, provenance, budget, human review, and zero-side-effect checks pass.","source":"https://platform.openai.com/docs/guides/structured-outputs"},
+    {"candidate":"opentelemetry","decision":"adopt-with-managed-mode","gate":"Redact customer content and correlate request, workflow, model, tool, and database operations.","source":"https://vercel.com/docs/tracing/instrumentation"},
     {
       "candidate": "dense-data-grid",
       "decision": "defer",
