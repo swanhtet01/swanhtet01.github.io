@@ -28,6 +28,8 @@
 // at import and broke the whole registry — added 2026-06-26).
 // 'logistics' added for retail-fulfillment carriers (Ninja Van, J&T); 'marketing' for ads
 // platforms (Meta Ads) — 2026-07-08.
+import { providerPolicy } from '../gateway.mjs'
+
 export const CATEGORIES = ['payment', 'messaging', 'data', 'ai', 'integration', 'commerce', 'infra', 'logistics', 'marketing']
 
 const registry = new Map() // key -> Connector
@@ -67,6 +69,15 @@ export function register(connector) {
   return connector
 }
 
+// The gateway's provider policy is also the connector-level authority. Without
+// this guard, loading the Integrations health page could call a configured
+// cloud-AI adapter directly (some adapters perform a tiny generation as their
+// health probe), bypassing the local-only gateway and spending tokens.
+export function connectorAllowedByProviderPolicy(connector) {
+  if (!connector || connector.category !== 'ai' || connector.key === 'ai-gateway') return true
+  return providerPolicy() === 'cloud-enabled'
+}
+
 /** list — every registered connector (config-only metadata, no health probe). */
 export function list() {
   return [...registry.values()].map((c) => ({
@@ -85,16 +96,28 @@ export function byCategory(cat) {
 
 /** get — the raw connector by key (so callers can use its capabilities, e.g. createCheckout). */
 export function get(key) {
-  return registry.get(key) || null
+  const connector = registry.get(key) || null
+  return connectorAllowedByProviderPolicy(connector) ? connector : null
 }
 
 function safeBool(c) {
+  if (!connectorAllowedByProviderPolicy(c)) return false
   try { return Boolean(c.configured()) } catch { return false }
 }
 
 // A health probe must never hang the whole page — cap each one.
 async function probe(c, timeoutMs) {
   const base = { key: c.key, name: c.name, category: c.category, docs: c.docs || null }
+  if (!connectorAllowedByProviderPolicy(c)) {
+    return {
+      ...base,
+      configured: false,
+      ok: false,
+      detail: providerPolicy() === 'local-only'
+        ? 'disabled_by_local_only_policy'
+        : 'disabled_by_invalid_provider_policy',
+    }
+  }
   let configured
   try { configured = Boolean(c.configured()) } catch { configured = false }
   base.configured = configured
