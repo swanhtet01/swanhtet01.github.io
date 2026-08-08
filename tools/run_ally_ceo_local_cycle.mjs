@@ -1184,6 +1184,21 @@ function validateAcceptedReport(value, requiredRoles) {
   return { path: value.path, bytes: value.bytes, digest }
 }
 
+function validateRejectedReportMetadata(value) {
+  const text = typeof value?.text === 'string' ? value.text : ''
+  const digest = String(value?.digest || '')
+  if (!value
+    || typeof value.path !== 'string'
+    || !Number.isInteger(value.bytes)
+    || value.bytes < 2
+    || value.bytes > MAX_REPORT_BYTES
+    || !/^sha256:[a-f0-9]{64}$/.test(digest)
+    || Buffer.byteLength(text, 'utf8') !== value.bytes) {
+    fail('ally_ceo_local_cycle_rejected_report_invalid')
+  }
+  return { path: value.path, bytes: value.bytes, digest }
+}
+
 async function inspectExistingCycle(existing, spec, runCommand, inspectReport) {
   let report = null
   let reason = null
@@ -1587,28 +1602,49 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   if (modelCalls < spec.roles.length || modelCalls > spec.resourceEnvelope.maxModelCalls) {
     fail('ally_ceo_local_cycle_model_count_invalid')
   }
-  const report = validateAcceptedReport(await inspectReport(result.reportPath), spec.roles)
+  const inspectedReport = await inspectReport(result.reportPath)
+  let report
+  let reportRejectionReason = null
+  try {
+    report = validateAcceptedReport(inspectedReport, spec.roles)
+  } catch (error) {
+    const reason = String(error?.message || '')
+    if (!LEGACY_REPAIRABLE_REASONS.has(reason)) throw error
+    report = validateRejectedReportMetadata(inspectedReport)
+    reportRejectionReason = reason
+  }
   const finalHealth = parseJson(await runCommand({ kind: 'local', args: ['health'], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_final_health_invalid')
   validateHealth(finalHealth, provider, model)
   const finalAudit = parseJson(await runCommand({ kind: 'audit', args: [], timeoutMs: 30_000 }), 'ally_ceo_local_cycle_final_audit_invalid')
   const finalHost = validateFinalAudit(finalAudit)
+  const qualityFailureReason = reportRejectionReason || (result.qualityPassed ? null : 'queue_quality_failed')
+  const qualityPassed = result.qualityPassed && !qualityFailureReason
+  const currentRejection = qualityFailureReason ? {
+    outcomeId: spec.outcomeId,
+    queueId,
+    jobId: result.jobId,
+    status: 'quality_failed',
+    reason: qualityFailureReason,
+  } : null
 
   return {
     ...base,
-    ok: result.qualityPassed,
-    status: result.qualityPassed ? 'accepted' : 'quality_failed',
+    ok: qualityPassed,
+    status: qualityPassed ? 'accepted' : 'quality_failed',
     queueId,
     jobId: result.jobId,
-    qualityPassed: result.qualityPassed,
+    qualityPassed,
+    queueQualityPassed: result.qualityPassed,
+    reason: qualityFailureReason,
     report,
     modelCalls,
     queueWrites: 1,
     finalHost,
     ownerBrief: buildOwnerBrief({
-      status: result.qualityPassed ? 'accepted' : 'quality_failed',
+      status: qualityPassed ? 'accepted' : 'quality_failed',
       outcomeId: spec.outcomeId,
       completedOutcomeIds,
-      rejectedOutcomes,
+      rejectedOutcomes: currentRejection ? [...rejectedOutcomes, currentRejection] : rejectedOutcomes,
       skippedOutcomes,
       capacityAdmission,
     }),

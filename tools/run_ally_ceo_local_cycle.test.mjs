@@ -1282,8 +1282,7 @@ test('quality-passed reports with withheld specialist work cannot advance CEO co
     'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
     'Not verified or performed: specialist draft withheld after incomplete model output.',
   )
-  await assert.rejects(
-    runAllyCeoLocalCycle(
+  const result = await runAllyCeoLocalCycle(
       { execute: true },
       {
         plan: plan(),
@@ -1295,9 +1294,47 @@ test('quality-passed reports with withheld specialist work cannot advance CEO co
           text: withheldReport,
         }),
       },
-    ),
-    /ally_ceo_local_cycle_specialist_section_rejected/,
+    )
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'quality_failed')
+  assert.equal(result.qualityPassed, false)
+  assert.equal(result.queueQualityPassed, true)
+  assert.equal(result.reason, 'ally_ceo_local_cycle_specialist_section_rejected')
+  assert.deepEqual(result.report, {
+    path: 'C:\\state\\outputs\\withheld.md',
+    bytes: Buffer.byteLength(withheldReport),
+    digest: 'sha256:' + '1'.repeat(64),
+  })
+  assert.equal(result.queueWrites, 1)
+  assert.equal(result.modelCalls, 2)
+  assert.equal(result.ownerBrief.status, 'quality_review_required')
+  assert.equal(state.calls.filter((call) => call.args?.[1] === 'run-next').length, 1)
+})
+
+test('a rejected report still needs a valid bounded metadata envelope', async () => {
+  const state = harness({ modelEventCount: 1 })
+  const withheldReport = acceptedStructuredReport.replace(
+    'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: specialist draft withheld after incomplete model output.',
   )
+  await assert.rejects(
+    runAllyCeoLocalCycle(
+      { execute: true },
+      {
+        plan: plan(),
+        runCommand: state.runCommand,
+        inspectReport: async () => ({
+          path: 'C:\\state\\outputs\\withheld.md',
+          bytes: Buffer.byteLength(withheldReport) + 1,
+          digest: 'sha256:' + '1'.repeat(64),
+          text: withheldReport,
+        }),
+      },
+    ),
+    /ally_ceo_local_cycle_rejected_report_invalid/,
+  )
+  assert.equal(state.calls.filter((call) => call.args?.[1] === 'run-next').length, 1)
+  assert.equal(state.calls.filter((call) => call.kind === 'audit').length, 1)
 })
 
 test('quality-passed reports ending in a dangling specialist clause cannot advance', async () => {
@@ -1307,8 +1344,7 @@ test('quality-passed reports ending in a dangling specialist clause cannot advan
       'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
       `Not verified or performed: Proposed next action: review one bounded local gap. Assumption: its priority is unconfirmed. Missing proof: validate Shop Plant ${ending}.`,
     )
-    await assert.rejects(
-      runAllyCeoLocalCycle(
+    const result = await runAllyCeoLocalCycle(
         { execute: true },
         {
           plan: plan(),
@@ -1320,9 +1356,10 @@ test('quality-passed reports ending in a dangling specialist clause cannot advan
             text: danglingReport,
           }),
         },
-      ),
-      /ally_ceo_local_cycle_specialist_section_rejected/,
-    )
+      )
+    assert.equal(result.status, 'quality_failed')
+    assert.equal(result.reason, 'ally_ceo_local_cycle_specialist_section_rejected')
+    assert.equal(result.queueWrites, 1)
   }
 })
 
@@ -1333,8 +1370,7 @@ test('quality-passed reports with unbalanced specialist markdown cannot advance'
       'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
       `Not verified or performed: Proposed next action: review one bounded local gap. Assumption: its priority is unconfirmed. Missing proof: validate ${fragment} and Plant evidence.`,
     )
-    await assert.rejects(
-      runAllyCeoLocalCycle(
+    const result = await runAllyCeoLocalCycle(
         { execute: true },
         {
           plan: plan(),
@@ -1346,9 +1382,10 @@ test('quality-passed reports with unbalanced specialist markdown cannot advance'
             text: malformedReport,
           }),
         },
-      ),
-      /ally_ceo_local_cycle_specialist_section_rejected/,
-    )
+      )
+    assert.equal(result.status, 'quality_failed')
+    assert.equal(result.reason, 'ally_ceo_local_cycle_specialist_section_rejected')
+    assert.equal(result.queueWrites, 1)
   }
 })
 
@@ -1366,8 +1403,7 @@ test('quality-passed specialist text cannot smuggle filenames or source paths', 
       'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
       `Not verified or performed: Proposed next action: review ${sourceReference} for readiness. Assumption: its priority is unconfirmed. Missing proof: owner-reviewed evidence.`,
     )
-    await assert.rejects(
-      runAllyCeoLocalCycle(
+    const result = await runAllyCeoLocalCycle(
         { execute: true },
         {
           plan: plan(),
@@ -1379,9 +1415,10 @@ test('quality-passed specialist text cannot smuggle filenames or source paths', 
             text: malformedReport,
           }),
         },
-      ),
-      /ally_ceo_local_cycle_specialist_section_rejected/,
-    )
+      )
+    assert.equal(result.status, 'quality_failed')
+    assert.equal(result.reason, 'ally_ceo_local_cycle_specialist_section_rejected')
+    assert.equal(result.queueWrites, 1)
   }
 })
 
@@ -1398,8 +1435,7 @@ test('consequential proposals and dangling words before code-owned closings cann
       'Not verified or performed: Proposed next action: review one bounded local gap, Assumption: its priority is unconfirmed, Missing proof: owner-reviewed evidence.',
       unsafeSection,
     )
-    await assert.rejects(
-      runAllyCeoLocalCycle(
+    const result = await runAllyCeoLocalCycle(
         { execute: true },
         {
           plan: plan(),
@@ -1411,9 +1447,10 @@ test('consequential proposals and dangling words before code-owned closings cann
             text: unsafeReport,
           }),
         },
-      ),
-      /ally_ceo_local_cycle_specialist_section_rejected/,
-    )
+      )
+    assert.equal(result.status, 'quality_failed')
+    assert.equal(result.reason, 'ally_ceo_local_cycle_specialist_section_rejected')
+    assert.equal(result.queueWrites, 1)
   }
 })
 
@@ -1621,8 +1658,7 @@ test('a locally passed report is still rejected when it denies known missing pro
     'Missing Proof: isolated managed tenant persistence and security evidence.',
     'Missing Proof: No.',
   )
-  await assert.rejects(
-    runAllyCeoLocalCycle(
+  const result = await runAllyCeoLocalCycle(
       { execute: true },
       {
         plan: plan(),
@@ -1634,9 +1670,14 @@ test('a locally passed report is still rejected when it denies known missing pro
           text: falseReport,
         }),
       },
-    ),
-    /ally_ceo_local_cycle_report_semantics_rejected/,
-  )
+    )
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 'quality_failed')
+  assert.equal(result.qualityPassed, false)
+  assert.equal(result.queueQualityPassed, true)
+  assert.equal(result.reason, 'ally_ceo_local_cycle_report_semantics_rejected')
+  assert.equal(result.ownerBrief.status, 'quality_review_required')
+  assert.equal(result.queueWrites, 1)
 })
 
 test('an existing plan token replays without creating duplicate work', async () => {
