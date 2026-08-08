@@ -4,101 +4,34 @@
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
   "completedLocalAutomations": [
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-today-surface",
-      "checkpoint": "ENG-130"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-promotion-review",
-      "checkpoint": "ENG-134"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-promotion-policy-setup",
-      "checkpoint": "ENG-135"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-shipping-policy-review",
-      "checkpoint": "ENG-136"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-payment-method-policy-review",
-      "checkpoint": "ENG-137"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-tax-policy-review",
-      "checkpoint": "ENG-138"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-order-acknowledgement",
-      "checkpoint": "ENG-139"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-cancellation-request",
-      "checkpoint": "ENG-140"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-order-amendment-request",
-      "checkpoint": "ENG-141"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-delivery-reschedule-request",
-      "checkpoint": "ENG-142"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-return-outcome-receipt",
-      "checkpoint": "ENG-143"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-support-outcome-receipt",
-      "checkpoint": "ENG-144"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-correction-request",
-      "checkpoint": "ENG-145"
-    },
-    {
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-contact-correction-request",
-      "checkpoint": "ENG-146"
-    },
-    {
-      "productId": "website",
-      "workOrderId": "website-first-edit-focus",
-      "checkpoint": "OPS-166"
-    },
-    {
-      "productId": "shop",
-      "workOrderId": "shop-counter-search-recovery",
-      "checkpoint": "OPS-167"
-    },
-    {
-      "productId": "plant",
-      "workOrderId": "plant-output-first-entry",
-      "checkpoint": "OPS-169"
-    }
+    { "productId": "ecommerce", "workOrderId": "ecommerce-today-surface", "checkpoint": "ENG-130" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-promotion-review", "checkpoint": "ENG-134" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-promotion-policy-setup", "checkpoint": "ENG-135" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-shipping-policy-review", "checkpoint": "ENG-136" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-payment-method-policy-review", "checkpoint": "ENG-137" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-tax-policy-review", "checkpoint": "ENG-138" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-order-acknowledgement", "checkpoint": "ENG-139" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-cancellation-request", "checkpoint": "ENG-140" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-order-amendment-request", "checkpoint": "ENG-141" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-delivery-reschedule-request", "checkpoint": "ENG-142" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-return-outcome-receipt", "checkpoint": "ENG-143" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-support-outcome-receipt", "checkpoint": "ENG-144" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-correction-request", "checkpoint": "ENG-145" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-contact-correction-request", "checkpoint": "ENG-146" },
+    { "productId": "website", "workOrderId": "website-first-edit-focus", "checkpoint": "OPS-166" },
+    { "productId": "shop", "workOrderId": "shop-counter-search-recovery", "checkpoint": "OPS-167" },
+    { "productId": "plant", "workOrderId": "plant-output-first-entry", "checkpoint": "OPS-169" },
+    { "productId": "ecommerce", "workOrderId": "ecommerce-cart-quantity-recovery", "checkpoint": "OPS-170" }
   ],
   "localImprovementQueue": [
     {
       "contract": "supermega.product-improvement-authority.v1",
-      "productId": "ecommerce",
-      "workOrderId": "ecommerce-cart-quantity-recovery",
+      "productId": "shop",
+      "workOrderId": "shop-counter-clear-sale-recovery",
       "priority": 100,
       "status": "ready-local",
-      "workOrder": "Ecommerce: make each cart quantity a stock-aware edit with an exact boundary, recovery on the invalid line, and preserved cart and checkout identity without a Shop request.",
-      "reason": "Shop, Plant, and Website now start on exact fields with visible recovery. Ecommerce rejects out-of-range cart edits silently, so its browser-local cart can expose the stock boundary without a customer, managed tenant, Shop request, reservation, payment, or message."
+      "workOrder": "Shop: make Clear sale recoverable with one Undo that restores exact lines, customer, payment, and counter focus without creating an order or moving stock.",
+      "reason": "The first-entry recovery cycle is complete. Shop still clears an in-progress sale immediately; browser-local undo can remove that frequent accidental-loss path without customer, payment, order, stock, connector, or managed-tenant authority."
     }
   ],
   "agentOperatingModel": {
