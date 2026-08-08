@@ -1,5 +1,6 @@
 import {
   COMMERCE_KEY,
+  commerceWorkingSampleCatalogId,
   commerceWorkingSampleSkus,
   validateCommerceState,
   type CommerceItem,
@@ -56,11 +57,32 @@ type EcommerceWorkingSampleInput = {
   capturedAt: string
 }
 
+// Industry wording mirrors the established client-onboarding vocabulary so a
+// storefront reads like that trade rather than a generic demo shelf.
+const packMerchandisingVocabulary = {
+  retail: { featured: 'Trade essentials', more: 'More to browse', note: 'Ask for quantity and delivery area.' },
+  cafe: { featured: 'Pickup this week', more: 'Drinks', note: 'Show the pickup promise before request.' },
+  restaurant: { featured: 'Popular meals', more: 'Sides', note: 'Show preparation and pickup timing.' },
+  spa: { featured: 'Treatments', more: 'Add-ons', note: 'Request a preferred appointment time.' },
+  gym: { featured: 'Coaching', more: 'Access', note: 'Request a coach and preferred time.' },
+  school: { featured: 'Classes', more: 'Materials', note: 'Request the preferred class schedule.' },
+} as const
+
+type PackMerchandisingId = keyof typeof packMerchandisingVocabulary
+
+function packVocabulary(packId: string | null) {
+  return packId && packId in packMerchandisingVocabulary
+    ? packMerchandisingVocabulary[packId as PackMerchandisingId]
+    : null
+}
+
 function workingSamplePlan(
   catalog: CommerceItem[],
   input: Pick<EcommerceWorkingSampleInput, 'templateId' | 'businessName'>,
   preferredSkus: readonly string[] = [],
+  packId: string | null = null,
 ) {
+  const vocabulary = packVocabulary(packId)
   if (!workingSampleTemplateIds.includes(input.templateId)) throw new Error('Choose a supported Ecommerce working sample.')
   // The client's own working-sample products come before the generic Shop seed
   // items, so a storefront shows that business rather than demo household goods.
@@ -82,15 +104,19 @@ function workingSamplePlan(
   const rows = selected.map((item, index) => ({
     sku: item.sku,
     featured: index < (input.templateId === 'social-storefront' ? 2 : 1),
-    collection: input.templateId === 'social-storefront'
-      ? index < 2 ? 'Featured today' : 'More to browse'
-      : input.templateId === 'pickup-preorder' ? 'Pickup menu' : 'Trade assortment',
+    collection: vocabulary
+      ? index < (input.templateId === 'social-storefront' ? 2 : 1) ? vocabulary.featured : vocabulary.more
+      : input.templateId === 'social-storefront'
+        ? index < 2 ? 'Featured today' : 'More to browse'
+        : input.templateId === 'pickup-preorder' ? 'Pickup menu' : 'Trade assortment',
     displayName: item.name,
-    note: input.templateId === 'social-storefront'
-      ? 'Demo social listing: confirm campaign copy and availability before launch.'
-      : input.templateId === 'pickup-preorder'
-        ? 'Demo pickup listing: confirm collection time and availability before launch.'
-        : 'Demo trade listing: confirm quantities, pricing, and delivery terms before launch.',
+    note: vocabulary
+      ? vocabulary.note
+      : input.templateId === 'social-storefront'
+        ? 'Demo social listing: confirm campaign copy and availability before launch.'
+        : input.templateId === 'pickup-preorder'
+          ? 'Demo pickup listing: confirm collection time and availability before launch.'
+          : 'Demo trade listing: confirm quantities, pricing, and delivery terms before launch.',
   }))
   return { rows, summary }
 }
@@ -99,10 +125,11 @@ async function matchesWorkingSample(
   current: NonNullable<ReturnType<typeof readStorefrontDraft>['draft']>,
   catalog: CommerceItem[],
   preferredSkus: readonly string[] = [],
+  packId: string | null = null,
 ) {
   if (!('sourcePreviewDigest' in current)) return false
   for (const templateId of workingSampleTemplateIds) {
-    const plan = workingSamplePlan(catalog, { templateId, businessName: current.storeName }, preferredSkus)
+    const plan = workingSamplePlan(catalog, { templateId, businessName: current.storeName }, preferredSkus, packId)
     const preview = buildStorefrontPreview(catalog, {
       storeName: current.storeName,
       summary: plan.summary,
@@ -178,10 +205,10 @@ export async function activateLocalEcommerceWorkingSample(
     if (currentResult.status === 'invalid' || currentResult.status === 'unavailable') throw new Error(currentResult.error)
     const current = currentResult.draft
     const commerceRaw = storage.getItem(COMMERCE_KEY)
-    const workingSampleSkus = commerceRaw === null
-      ? []
-      : commerceWorkingSampleSkus(validateCommerceState(JSON.parse(commerceRaw)))
-    if (current && !await matchesWorkingSample(current, catalog.items, workingSampleSkus)) {
+    const commerceState = commerceRaw === null ? null : validateCommerceState(JSON.parse(commerceRaw))
+    const workingSampleSkus = commerceState ? commerceWorkingSampleSkus(commerceState) : []
+    const workingSamplePackId = commerceState ? commerceWorkingSampleCatalogId(commerceState) : null
+    if (current && !await matchesWorkingSample(current, catalog.items, workingSampleSkus, workingSamplePackId)) {
       throw new Error('Existing Ecommerce edits were preserved.')
     }
     const buyingRaw = storage.getItem(LOCAL_ECOMMERCE_BUYING_STATE_KEY)
@@ -199,7 +226,7 @@ export async function activateLocalEcommerceWorkingSample(
       throw new Error('Existing Ecommerce order evidence was preserved.')
     }
     if (buyingRaw !== null) storage.removeItem(LOCAL_ECOMMERCE_BUYING_STATE_KEY)
-    const plan = workingSamplePlan(catalog.items, input, workingSampleSkus)
+    const plan = workingSamplePlan(catalog.items, input, workingSampleSkus, workingSamplePackId)
     const preview = buildStorefrontPreview(catalog.items, {
       storeName: input.businessName,
       summary: plan.summary,

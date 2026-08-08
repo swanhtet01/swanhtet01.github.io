@@ -126,3 +126,36 @@ test('provisioning seeds one pending request that never earns the Shop proof', a
   const second = await activate()
   assert.ok(second.ok, `re-provisioning failed: ${second.ok ? '' : second.error}`)
 })
+
+test('a storefront uses the industry vocabulary of the client pack', async () => {
+  const state = spaWorkspace()
+  const storage = new Map([[COMMERCE_KEY, JSON.stringify(state)]])
+  const storageAdapter = {
+    getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, value) => { storage.set(key, String(value)) },
+    removeItem: (key) => { storage.delete(key) },
+  }
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } = await import(
+    '../showroom/src/products/ecommerce/storefront-draft.ts'
+  )
+  const result = await activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Yangon Wellness Spa', capturedAt: CAPTURED_AT },
+    {
+      storage: storageAdapter,
+      catalog: state.items,
+      locks: { request: async (_name, _options, callback) => callback() },
+    },
+  )
+  assert.ok(result.ok, `activation failed: ${result.ok ? '' : result.error}`)
+  const rows = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, storageAdapter).draft.merchandising
+  const collections = new Set(rows.map((row) => row.collection))
+  assert.ok(collections.has('Treatments'), `spa storefront must use spa wording, saw ${JSON.stringify([...collections])}`)
+  assert.ok(!collections.has('Featured today'), 'generic demo wording must not appear for a known pack')
+  assert.ok(
+    rows.every((row) => !row.note.startsWith('Demo ')),
+    `notes must read as trade guidance, saw ${JSON.stringify(rows.map((row) => row.note))}`,
+  )
+})
