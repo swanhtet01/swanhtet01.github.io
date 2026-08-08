@@ -992,11 +992,25 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   openOrderCount: number
   sampleCatalogActive: boolean
 }) {
-  const [cart, setCart] = useState<Record<string, number>>({})
-  const [customer, setCustomer] = useState('')
-  const [payment, setPayment] = useState('Cash')
+  const [restoredDraft] = useState(readShopCounterDraft)
+  const [cart, setCart] = useState<Record<string, number>>(() => restoredDraft?.cart ?? {})
+  const [customer, setCustomer] = useState(() => restoredDraft?.customer ?? '')
+  const [payment, setPayment] = useState(() => restoredDraft?.payment ?? 'Cash')
   const [query, setQuery] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
+
+  // clearSale() resets all three to their defaults, which this treats as "no draft" and
+  // removes — so a completed or cleared sale leaves nothing behind to resurrect.
+  useEffect(() => {
+    const empty = Object.keys(cart).length === 0 && !customer && payment === 'Cash'
+    try {
+      if (empty) window.localStorage.removeItem(SHOP_COUNTER_DRAFT_KEY)
+      else window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY, JSON.stringify({ cart, customer, payment }))
+    } catch {
+      // Storage full or blocked. The counter keeps working in memory; losing persistence
+      // must never cost the operator the sale they are ringing up right now.
+    }
+  }, [cart, customer, payment])
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const visibleItems = normalizedQuery
     ? items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
@@ -1100,6 +1114,42 @@ function localCommerceOrderDraftScope(workspaceId?: string) {
 
 function localCommerceOrderDraftStorageKey(scope: string) {
   return `${SHOP_ORDER_DRAFT_RESET_PREFIX}${encodeURIComponent(scope)}`
+}
+
+// The half-rung sale was the only counter state held purely in React. Every link in the
+// Shop header is a route change, and setTab replaces history rather than pushing, so one
+// mis-tap on "2 open orders" discarded the basket with no Back button to return to — at a
+// real counter, in front of a customer. Persisted per device, like every other workspace
+// record, so nothing leaves the browser.
+const SHOP_COUNTER_DRAFT_KEY = 'supermega.shop.counter_draft.v1'
+
+type ShopCounterDraft = { cart: Record<string, number>; customer: string; payment: string }
+
+// Validates field by field rather than trusting the parse: this value survives upgrades and
+// hand-edited storage, and a malformed draft must degrade to an empty counter, never throw
+// on the way to rendering it. Quantities are re-clamped against live stock at render, so a
+// stale SKU here is inert.
+function readShopCounterDraft(): ShopCounterDraft | null {
+  try {
+    const raw = window.localStorage.getItem(SHOP_COUNTER_DRAFT_KEY)
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    const draft = parsed as Partial<ShopCounterDraft>
+    const cart: Record<string, number> = {}
+    if (draft.cart && typeof draft.cart === 'object' && !Array.isArray(draft.cart)) {
+      for (const [sku, quantity] of Object.entries(draft.cart)) {
+        if (sku && Number.isSafeInteger(quantity) && (quantity as number) > 0) cart[sku] = quantity as number
+      }
+    }
+    return {
+      cart,
+      customer: typeof draft.customer === 'string' ? draft.customer.slice(0, 120) : '',
+      payment: typeof draft.payment === 'string' && draft.payment ? draft.payment : 'Cash',
+    }
+  } catch {
+    return null
+  }
 }
 
 function localCommerceOrderDraftCatalogState(draft: CommerceOrderDraft, catalog: CommerceItem[]) {
