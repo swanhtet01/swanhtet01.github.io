@@ -1606,6 +1606,43 @@
   background: rgba(255, 255, 255, .68);
 }
 
+.ecommerce-order-change-recovery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(11, 116, 94, .28);
+  border-left: 3px solid #0b745e;
+  border-radius: 12px;
+  padding: 10px 11px;
+  background: rgba(232, 247, 241, .92);
+}
+
+.ecommerce-order-change-recovery > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.ecommerce-order-change-recovery strong {
+  color: #174334;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ecommerce-order-change-recovery small {
+  max-width: 680px;
+  color: #53645a;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.ecommerce-order-change-recovery button {
+  min-width: 124px;
+  min-height: 44px;
+  flex: none;
+}
+
 .ecommerce-return-status > span,
 .ecommerce-return-form > span {
   display: grid;
@@ -1854,6 +1891,15 @@
   }
 
   .ecommerce-cart-remove-recovery button {
+    width: 100%;
+  }
+
+  .ecommerce-order-change-recovery {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ecommerce-order-change-recovery button {
     width: 100%;
   }
 

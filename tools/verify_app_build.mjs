@@ -162,6 +162,7 @@ const websiteReleaseUiSource = await readFile(resolve(root, 'showroom', 'src', '
 const managedWebsitePythonRuntime = await readFile(resolve(root, 'supermega_runtime', 'website_runtime.py'), 'utf8')
 const ecommerceBuyingUiSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'EcommerceBuyingWorkspace.tsx'), 'utf8')
 const ecommerceBuyingLifecycleSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts'), 'utf8')
+const ecommerceOrderChangeDraftSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-order-change-draft.ts'), 'utf8')
 const managedContextSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'managed-context.ts'), 'utf8')
 const managedContextUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedContextConsent.tsx'), 'utf8')
 const managedContextPythonSource = await readFile(resolve(root, 'supermega_runtime', 'managed_context.py'), 'utf8')
@@ -3100,6 +3101,55 @@ if (removeCartLineStart < 0
   || cartRemovalForbiddenActions.some((marker) => removeCartLineAction.includes(marker) || undoCartRemovalAction.includes(marker) || recoverCartRemovalAction.includes(marker))
   || !ecommerceCssSource.includes('.ecommerce-cart-remove-recovery')
   || !/\.ecommerce-cart-remove-recovery button\s*\{[^}]*min-height:\s*44px;/s.test(ecommerceCssSource)) fail('ecommerce_cart_line_remove_recovery_contract_missing')
+const openOrderChangeStart = ecommerceBuyingUiSource.indexOf('function openAmendmentRequest')
+const closeOrderChangeStart = ecommerceBuyingUiSource.indexOf('function closeAmendmentRequest')
+const reopenOrderChangeStart = ecommerceBuyingUiSource.indexOf('function reopenAmendmentRequest')
+const rescheduleOrderChangeStart = ecommerceBuyingUiSource.indexOf('function openRescheduleRequest')
+const changeFulfilmentStart = ecommerceBuyingUiSource.indexOf('function changeFulfilment')
+const reorderForOrderChangeStart = ecommerceBuyingUiSource.indexOf('function reorder')
+const orderStageLabelStart = ecommerceBuyingUiSource.indexOf('function orderStageLabel')
+const openOrderChangeAction = ecommerceBuyingUiSource.slice(openOrderChangeStart, closeOrderChangeStart)
+const closeOrderChangeAction = ecommerceBuyingUiSource.slice(closeOrderChangeStart, reopenOrderChangeStart)
+const reopenOrderChangeAction = ecommerceBuyingUiSource.slice(reopenOrderChangeStart, rescheduleOrderChangeStart)
+const beginAnotherOrderAction = ecommerceBuyingUiSource.slice(beginAnotherOrderStart, changeFulfilmentStart)
+const reorderForOrderChangeAction = ecommerceBuyingUiSource.slice(reorderForOrderChangeStart, orderStageLabelStart)
+const orderChangeForbiddenActions = ['saveEcommerceOrderAmendment', 'saveEcommerceOrderRequestV2', 'buildEcommerceCheckoutQuote', 'buildEcommerceOrderRequestV2', 'buildEcommerceOrderAmendmentIntent', 'onRecordManagedRequest', 'onOpenAmendment', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'reserveCommerceOrder', 'settleCommerce', 'chargePayment', 'authorizePayment']
+if (openOrderChangeStart < 0
+  || closeOrderChangeStart < 0
+  || reopenOrderChangeStart < 0
+  || rescheduleOrderChangeStart < 0
+  || changeFulfilmentStart < 0
+  || reorderForOrderChangeStart < 0
+  || orderStageLabelStart < 0
+  || !ecommerceOrderChangeDraftSource.includes("contract: 'supermega.ecommerce.closed_order_change_draft.v1'")
+  || !ecommerceOrderChangeDraftSource.includes('export function createEcommerceOrderChangeOpening')
+  || !ecommerceOrderChangeDraftSource.includes('export function closeEcommerceOrderChangeDraft')
+  || !ecommerceOrderChangeDraftSource.includes('export function recoverEcommerceOrderChangeDraft')
+  || !ecommerceOrderChangeDraftSource.includes("return { ok: false, reason: 'already_editing' }")
+  || !ecommerceOrderChangeDraftSource.includes("return { ok: false, reason: 'order_inactive' }")
+  || !ecommerceOrderChangeDraftSource.includes("return { ok: false, reason: 'change_pending' }")
+  || !ecommerceOrderChangeDraftSource.includes("return { ok: false, reason: 'order_changed' }")
+  || !ecommerceOrderChangeDraftSource.includes('currentSource.entryEvidence !== closed.source.entryEvidence')
+  || !ecommerceBuyingUiSource.includes('const [closedAmendmentDraft, setClosedAmendmentDraft] = useState<EcommerceClosedOrderChangeDraft | null>(null)')
+  || !ecommerceBuyingUiSource.includes('const amendmentOpeningRef = useRef<EcommerceOrderChangeOpening | null>(null)')
+  || !ecommerceBuyingUiSource.includes('data-ecommerce-order-change-recovery={orderChangeRecovery.draft.orderId}')
+  || !ecommerceBuyingUiSource.includes('correctionDraft || orderChangeRecovery?.ok)')
+  || !ecommerceBuyingUiSource.includes('onClick={reopenAmendmentRequest} ref={amendmentRecoveryRef}')
+  || !ecommerceBuyingUiSource.includes('ref={amendmentModeRef}')
+  || !openOrderChangeAction.includes('createEcommerceOrderChangeOpening(draft, entry)')
+  || !openOrderChangeAction.includes('activeBuyingState.cancellationIntents.some')
+  || !closeOrderChangeAction.includes('closeEcommerceOrderChangeDraft(amendmentDraft, amendmentOpeningRef.current)')
+  || closeOrderChangeAction.indexOf('closeEcommerceOrderChangeDraft(amendmentDraft, amendmentOpeningRef.current)') > closeOrderChangeAction.indexOf('setAmendmentDraft(null)')
+  || !reopenOrderChangeAction.includes('recoverEcommerceOrderChangeDraft(null, closedAmendmentDraft, activeCustomerOrders, orderChangeConflictIds)')
+  || !reopenOrderChangeAction.includes('setClosedAmendmentDraft(null)')
+  || !reopenOrderChangeAction.includes('setAmendmentDraft(recovery.draft)')
+  || !reopenOrderChangeAction.includes('amendmentModeRef.current?.focus')
+  || !beginAnotherOrderAction.includes('expireOrderChangeRecovery()')
+  || !reorderForOrderChangeAction.includes('expireOrderChangeRecovery()')
+  || orderChangeForbiddenActions.some((marker) => closeOrderChangeAction.includes(marker) || reopenOrderChangeAction.includes(marker) || ecommerceOrderChangeDraftSource.includes(marker))
+  || !ecommerceCssSource.includes('.ecommerce-order-change-recovery')
+  || !/\.ecommerce-order-change-recovery button\s*\{[^}]*min-height:\s*44px;/s.test(ecommerceCssSource)
+  || !/\.ecommerce-order-change-recovery button\s*\{[^}]*width:\s*100%;/s.test(ecommerceCssSource)) fail('ecommerce_closed_order_change_recovery_contract_missing')
 const storefrontSaveStart = ecommerceSource.indexOf('async function saveCurrentStorefront')
 const storefrontSaveEnd = ecommerceSource.indexOf('function discardStorefrontChanges', storefrontSaveStart)
 const storefrontSaveAction = ecommerceSource.slice(storefrontSaveStart, storefrontSaveEnd)
@@ -14648,6 +14698,7 @@ async function verifyStorefrontRuntime() {
     const storefront = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts')).href}?storefront-verify=${nonce}`)
     const requestModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-request.ts')).href}?storefront-request=${nonce}`)
     const buyingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts')).href}?ecommerce-buying=${nonce}`)
+    const orderChangeModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-order-change-draft.ts')).href}?ecommerce-order-change=${nonce}`)
     const confirmModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-confirm.ts')).href}?ecommerce-confirm=${nonce}`)
     const handoffModel = await import(pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-shop-handoff.ts')).href)
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?storefront-commerce=${nonce}`)
@@ -15143,6 +15194,77 @@ async function verifyStorefrontRuntime() {
       && confirmedTimeline[0].paymentStatus === 'pending'
       && confirmedTimeline[0].nextAction === 'start_preparing',
     'ecommerce_request_timeline_did_not_follow_linked_shop_order')
+    const orderChangeDraft = {
+      orderId: 'ORD-ECOMMERCE-1',
+      mode: 'details',
+      fulfilment: buyingRequest.fulfilment,
+      lines: linkedOrderLines.map((line) => ({ sku: line.sku, name: line.name, quantity: String(line.quantity) })),
+      customerName: buyingRequest.customerProfile.name,
+      customerPhone: buyingRequest.customerProfile.phone,
+      addressLine1: buyingRequest.deliveryAddress.line1,
+      addressTownship: buyingRequest.deliveryAddress.township,
+      addressCity: buyingRequest.deliveryAddress.city,
+      deliveryInstructions: buyingRequest.deliveryAddress.instructions ?? '',
+      reason: '',
+    }
+    const orderChangeOpening = orderChangeModel.createEcommerceOrderChangeOpening(orderChangeDraft, confirmedTimeline[0])
+    buyingAssert(orderChangeOpening
+      && orderChangeOpening.source.orderId === orderChangeDraft.orderId
+      && orderChangeOpening.source.requestId === buyingRequest.id
+      && orderChangeOpening.draft !== orderChangeDraft
+      && orderChangeOpening.draft.lines !== orderChangeDraft.lines,
+    'ecommerce_order_change_opening_not_exactly_source_bound')
+    buyingAssert(orderChangeModel.closeEcommerceOrderChangeDraft(orderChangeDraft, orderChangeOpening) === null,
+      'ecommerce_unchanged_order_change_became_recoverable')
+    const editedOrderChangeDraft = {
+      ...orderChangeDraft,
+      mode: 'items',
+      lines: orderChangeDraft.lines.map((line, index) => ({ ...line, quantity: index === 0 ? '07' : line.quantity })),
+      customerName: '  Ma Su Updated  ',
+      customerPhone: '09 777 888',
+      addressLine1: '88 Recovery Road',
+      addressTownship: 'Kamayut',
+      addressCity: 'Yangon',
+      deliveryInstructions: 'Call twice',
+      reason: 'Customer requested an exact correction.',
+    }
+    const closedOrderChange = orderChangeModel.closeEcommerceOrderChangeDraft(editedOrderChangeDraft, orderChangeOpening)
+    buyingAssert(closedOrderChange
+      && JSON.stringify(closedOrderChange.draft) === JSON.stringify(editedOrderChangeDraft)
+      && closedOrderChange.draft !== editedOrderChangeDraft
+      && closedOrderChange.draft.lines !== editedOrderChangeDraft.lines,
+    'ecommerce_edited_order_change_not_closed_as_exact_copy')
+    const recoveredOrderChange = orderChangeModel.recoverEcommerceOrderChangeDraft(null, closedOrderChange, confirmedTimeline, [])
+    buyingAssert(recoveredOrderChange.ok
+      && JSON.stringify(recoveredOrderChange.draft) === JSON.stringify(editedOrderChangeDraft)
+      && recoveredOrderChange.draft !== closedOrderChange.draft
+      && recoveredOrderChange.draft.lines !== closedOrderChange.draft.lines,
+    'ecommerce_closed_order_change_not_recovered_exactly')
+    buyingAssert(recoveredOrderChange.ok
+      && orderChangeModel.closeEcommerceOrderChangeDraft(recoveredOrderChange.draft, recoveredOrderChange.opening) === null,
+    'ecommerce_reopened_unchanged_order_change_created_second_recovery')
+    const editingRecovery = orderChangeModel.recoverEcommerceOrderChangeDraft(editedOrderChangeDraft, closedOrderChange, confirmedTimeline, [])
+    buyingAssert(!editingRecovery.ok && editingRecovery.reason === 'already_editing',
+      'ecommerce_order_change_recovery_replaced_active_editor')
+    const pendingRecovery = orderChangeModel.recoverEcommerceOrderChangeDraft(null, closedOrderChange, confirmedTimeline, ['ORD-ECOMMERCE-1'])
+    buyingAssert(!pendingRecovery.ok && pendingRecovery.reason === 'change_pending',
+      'ecommerce_order_change_recovered_over_pending_shop_change')
+    const changedOrderRecovery = orderChangeModel.recoverEcommerceOrderChangeDraft(null, closedOrderChange, [{
+      ...confirmedTimeline[0],
+      order: { ...confirmedTimeline[0].order, total: confirmedTimeline[0].order.total + 1 },
+    }], [])
+    buyingAssert(!changedOrderRecovery.ok && changedOrderRecovery.reason === 'order_changed',
+      'ecommerce_order_change_recovered_against_changed_order_evidence')
+    const inactiveOrderRecovery = orderChangeModel.recoverEcommerceOrderChangeDraft(null, closedOrderChange, [{
+      ...confirmedTimeline[0],
+      stage: 'preparing',
+      order: { ...confirmedTimeline[0].order, status: 'preparing' },
+    }], [])
+    buyingAssert(!inactiveOrderRecovery.ok && inactiveOrderRecovery.reason === 'order_inactive',
+      'ecommerce_order_change_recovered_after_preparation_started')
+    const malformedOrderChangeRecovery = orderChangeModel.recoverEcommerceOrderChangeDraft(null, { ...closedOrderChange, unexpected: true }, confirmedTimeline, [])
+    buyingAssert(!malformedOrderChangeRecovery.ok && malformedOrderChangeRecovery.reason === 'invalid_recovery',
+      'ecommerce_malformed_order_change_recovery_accepted')
     const preparingOrderState = linkedOrderState && commerce.advanceCommerceOrder(linkedOrderState, 'ORD-ECOMMERCE-1', 'confirmed', {
       actionId: 'ACT-ECOMMERCE-PREPARING-1',
       capturedAt: '2026-07-24T09:20:00.000Z',
