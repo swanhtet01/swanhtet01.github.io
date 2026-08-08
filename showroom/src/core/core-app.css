@@ -311,6 +311,8 @@ textarea { min-height: 72px; resize: vertical; }
 .plant-output-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--core-line); margin-bottom: 14px; padding-bottom: 10px; background: var(--core-panel); }
 .plant-output-head h2 { margin-bottom: 0; }
 .plant-output-close { min-width: 58px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--core-line); border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 11px; font-weight: 750; cursor: pointer; }
+.plant-output-boundary { display: block; margin-top: 5px; color: var(--core-quiet); font-size: 9px; font-weight: 540; line-height: 1.4; text-transform: none; }
+.plant-output-validation { min-height: 18px; margin: 0; color: var(--core-danger); font-weight: 700; }
 .guidance-panel ol { display: grid; gap: 10px; margin: 18px 0 0; padding-left: 22px; color: var(--core-muted); font-size: 12px; }
 
 .review-workspace, .control-workspace, .module-today { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 11px; }

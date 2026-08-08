@@ -6910,6 +6910,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [recallQuery, setRecallQuery] = useState('')
   const [recallSearchId, setRecallSearchId] = useState('')
   const [quantity, setQuantity] = useState(1)
+  const [outputValidationIssue, setOutputValidationIssue] = useState('')
+  const [outputValidationField, setOutputValidationField] = useState<'job' | 'shift' | 'quantity' | null>(null)
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState(latestRecordedShiftRef)
   const [outputOpen, setOutputOpen] = useState(false)
@@ -7010,6 +7012,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const scheduleTriggerRef = useRef<HTMLButtonElement | null>(null)
   const outputPanelRef = useRef<HTMLElement>(null)
   const outputJobSelectRef = useRef<HTMLSelectElement>(null)
+  const outputShiftInputRef = useRef<HTMLInputElement>(null)
+  const outputQuantityRef = useRef<HTMLInputElement>(null)
   const outputTriggerRef = useRef<HTMLButtonElement | null>(null)
   const materialDisclosureRef = useRef<HTMLDetailsElement>(null)
   const materialRefInputRef = useRef<HTMLInputElement>(null)
@@ -7036,6 +7040,20 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
   const selectedJob = activeJobs.find((job) => job.id === selectedJobId)
   const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output - (selectedJob.scrap ?? 0) : 0
+  useEffect(() => {
+    if (!outputOpen || materialGuideOpen || !selectedJobId) return
+    const focusQuantity = () => {
+      outputQuantityRef.current?.scrollIntoView({ block: 'center' })
+      outputQuantityRef.current?.focus({ preventScroll: true })
+      outputQuantityRef.current?.select()
+    }
+    const frame = requestAnimationFrame(focusQuantity)
+    const transitionFallback = window.setTimeout(focusQuantity, 200)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.clearTimeout(transitionFallback)
+    }
+  }, [materialGuideOpen, outputOpen, selectedJobId])
   const selectedMaterialJob = activeJobs.find((job) => job.id === materialDraft.jobId)
   const materialJobIsStale = Boolean(materialDraft.jobId && !selectedMaterialJob)
   const parsedMaterialQuantity = parseProductionMaterialQuantity(materialDraft.quantity)
@@ -7701,11 +7719,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   function recordOutput(event: FormEvent) {
     event.preventDefault()
     const recordedShiftRef = shiftRef.trim()
-    if (!recordedShiftRef || recordedShiftRef.length > 80) return setNotice('Enter a shift reference of 1 to 80 characters.')
-    if (!Number.isSafeInteger(quantity) || quantity < 1) return setNotice('Enter a whole-unit quantity of at least 1.')
-    if (!selectedJob) return setNotice('Choose an active job before recording output.')
-    if (selectedRemaining < 1) return setNotice(`${selectedJob.id} is already at target.`)
-    if (quantity > selectedRemaining) return setNotice(`Only ${selectedRemaining} units remain for ${selectedJob.id}. Nothing was recorded.`)
+    if (!selectedJob) return recoverOutputInput('job', 'Choose an active job. Your draft is still here; nothing was recorded.')
+    if (selectedRemaining < 1) return recoverOutputInput('job', `${selectedJob.id} is already at target. Your draft is still here; nothing was recorded.`)
+    if (!Number.isSafeInteger(quantity) || quantity < 1) return recoverOutputInput('quantity', `Enter a whole number from 1 to ${selectedRemaining}. Your draft is still here; nothing was recorded.`)
+    if (quantity > selectedRemaining) return recoverOutputInput('quantity', `Only ${selectedRemaining} units remain for ${selectedJob.id}. Your draft is still here; nothing was recorded.`)
+    if (!recordedShiftRef || recordedShiftRef.length > 80) return recoverOutputInput('shift', 'Enter a shift reference of 1 to 80 characters. Your draft is still here; nothing was recorded.')
     const recordedJobId = selectedJob.id
     const recordedQuantity = quantity
     const recordedOutputKind = outputKind
@@ -7715,6 +7733,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const resultLabel = recordedOutputKind === 'scrap' ? 'scrap units' : 'good units'
     const nextGood = selectedJob.output + (recordedOutputKind === 'good' ? recordedQuantity : 0)
     const nextScrap = recordedScrap + (recordedOutputKind === 'scrap' ? recordedQuantity : 0)
+    clearOutputValidation()
     setShiftRef(recordedShiftRef)
     setHandoffShiftRef(recordedShiftRef)
     queueAction({
@@ -7739,19 +7758,36 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     })
   }
 
+  function clearOutputValidation() {
+    setOutputValidationIssue('')
+    setOutputValidationField(null)
+  }
+
+  function recoverOutputInput(field: 'job' | 'shift' | 'quantity', message: string) {
+    setOutputValidationIssue(message)
+    setOutputValidationField(field)
+    requestAnimationFrame(() => {
+      const target = field === 'job'
+        ? outputJobSelectRef.current
+        : field === 'shift'
+          ? outputShiftInputRef.current
+          : outputQuantityRef.current
+      target?.scrollIntoView({ block: 'center' })
+      target?.focus({ preventScroll: true })
+      if (field === 'quantity') outputQuantityRef.current?.select()
+    })
+  }
+
   function openJobOutput(job: ProductionJob, trigger: HTMLButtonElement | null = null) {
     outputTriggerRef.current = trigger
     setJobId(job.id)
+    clearOutputValidation()
     if (!managedIdentity && !shiftRef.trim()) {
       const suggestedShiftRef = shiftReferencePlaceholder()
       setShiftRef(suggestedShiftRef)
       setHandoffShiftRef(suggestedShiftRef)
     }
     setOutputOpen(true)
-    requestAnimationFrame(() => {
-      outputJobSelectRef.current?.scrollIntoView({ block: 'center' })
-      outputJobSelectRef.current?.focus({ preventScroll: true })
-    })
   }
 
   function openMaterialTrace(job: ProductionJob, trigger: HTMLButtonElement | null = null) {
@@ -8799,14 +8835,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <button aria-label="Close job output" className={`plant-output-backdrop${outputOpen ? ' is-open' : ''}`} onClick={closeJobOutput} type="button" />
       <section aria-labelledby="plant-output-title" aria-modal={outputOpen} className={`core-panel output-panel${outputOpen ? ' is-open' : ''}`} id="plant-output-panel" onKeyDown={handleOutputDialogKeyDown} ref={outputPanelRef} role="dialog">
         <div className="plant-output-head"><div><span className="core-eyebrow">{materialGuideOpen ? 'Materials used' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Record materials used' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
-        {!materialGuideOpen ? <form autoComplete="off" className="core-form compact-form" id="plant-output-form" onSubmit={recordOutput}>
-          <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => setJobId(event.target.value)}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
+        {outputOpen && !materialGuideOpen ? <form autoComplete="off" className="core-form compact-form" id="plant-output-form" noValidate onSubmit={recordOutput}>
+          <label>Job<select aria-invalid={outputValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => { setJobId(event.target.value); clearOutputValidation() }}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
-          <div className="form-row"><label>Shift reference<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} required value={shiftRef} onChange={(event) => setShiftRef(event.target.value)} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" step="1" type="number" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label></div>
+          <div className="form-row"><label>Shift reference<input aria-describedby="plant-output-validation" aria-invalid={outputValidationField === 'shift'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} ref={outputShiftInputRef} required value={shiftRef} onChange={(event) => { setShiftRef(event.target.value); if (outputValidationField === 'shift') clearOutputValidation() }} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input aria-describedby="plant-output-quantity-help plant-output-validation" aria-invalid={outputValidationField === 'quantity'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" ref={outputQuantityRef} step="1" type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); if (outputValidationField === 'quantity') clearOutputValidation() }} /><small className="plant-output-boundary" id="plant-output-quantity-help">{selectedJob ? `Enter 1 to ${selectedRemaining.toLocaleString()} whole units. Review does not record output.` : 'Choose an active job first.'}</small></label></div>
+          <p aria-live="assertive" className="form-notice plant-output-validation" id="plant-output-validation">{outputValidationIssue}</p>
           {selectedJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · Held by {selectedJob.qualityHold.heldBy}. Recording a result does not release this hold; verify the hold and evidence before review.</p> : null}
           <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `This shift: ${currentShiftOutput.goodUnits.toLocaleString()} good · ${currentShiftOutput.scrapUnits.toLocaleString()} scrap across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter the shift name or date to continue.'}</p>
           <div className="form-actions">
-            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > selectedRemaining || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
+            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
             <button aria-describedby="plant-short-close-boundary" className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} onClick={(event) => closeSelectedJobShort(event.currentTarget)} type="button">Review short close</button>
           </div>
           <p className="panel-copy" id="plant-short-close-boundary">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only. Short close ends the selected job without changing its target, output, hold, inventory, costing, or accounting.</p>
