@@ -36,7 +36,7 @@ const CANDIDATES = Object.freeze([
   Object.freeze({
     pr: 413,
     path: 'C:\\Users\\thesw\\Projects\\supermega-rebaseline',
-    commit: '3aab5edc398e4a3e2d7ec0aca4346438872c7d87',
+    commit: '7e68886914e436e649915d4083572b3bf11abc39',
   }),
 ])
 
