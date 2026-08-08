@@ -22,17 +22,18 @@
     { "productId": "shop", "workOrderId": "shop-counter-search-recovery", "checkpoint": "OPS-167" },
     { "productId": "plant", "workOrderId": "plant-output-first-entry", "checkpoint": "OPS-169" },
     { "productId": "ecommerce", "workOrderId": "ecommerce-cart-quantity-recovery", "checkpoint": "OPS-170" },
-    { "productId": "shop", "workOrderId": "shop-counter-clear-sale-recovery", "checkpoint": "OPS-171" }
+    { "productId": "shop", "workOrderId": "shop-counter-clear-sale-recovery", "checkpoint": "OPS-171" },
+    { "productId": "plant", "workOrderId": "plant-material-entry-recovery", "checkpoint": "OPS-172" }
   ],
   "localImprovementQueue": [
     {
       "contract": "supermega.product-improvement-authority.v1",
-      "productId": "plant",
-      "workOrderId": "plant-material-entry-recovery",
+      "productId": "website",
+      "workOrderId": "website-page-readiness-recovery",
       "priority": 100,
       "status": "ready-local",
-      "workOrder": "Plant: keep an invalid material-use draft open and focus the exact job, material, quantity, or shift field with one local recovery message, without recording consumption.",
-      "reason": "Shop clear recovery is complete. Plant currently reports material-use validation through a shared notice without exact in-form focus; field-bound recovery can remove that local entry trap without output, material, stock, connector, or managed-tenant authority."
+      "workOrder": "Website: make Mark page ready focus the first incomplete page, hero, section, or SEO field while preserving the unsaved preview; never save, download, or publish.",
+      "reason": "Plant material recovery is complete. Website lists issues but disables its review action; exact-field recovery removes that local trap without managed or external authority."
     }
   ],
   "agentOperatingModel": {
