@@ -26,17 +26,18 @@
     { "productId": "plant", "workOrderId": "plant-material-entry-recovery", "checkpoint": "OPS-172" },
     { "productId": "website", "workOrderId": "website-page-readiness-recovery", "checkpoint": "OPS-173" },
     { "productId": "ecommerce", "workOrderId": "ecommerce-cart-line-remove-recovery", "checkpoint": "OPS-174" },
-    { "productId": "shop", "workOrderId": "shop-order-line-remove-recovery", "checkpoint": "OPS-175" }
+    { "productId": "shop", "workOrderId": "shop-order-line-remove-recovery", "checkpoint": "OPS-175" },
+    { "productId": "plant", "workOrderId": "plant-job-plan-close-recovery", "checkpoint": "OPS-176" }
   ],
   "localImprovementQueue": [
     {
       "contract": "supermega.product-improvement-authority.v1",
-      "productId": "plant",
-      "workOrderId": "plant-job-plan-close-recovery",
+      "productId": "website",
+      "workOrderId": "website-section-remove-recovery",
       "priority": 100,
       "status": "ready-local",
-      "workOrder": "Plant: recover one closed job-plan draft without scheduling, dispatching, or production writes.",
-      "reason": "Close and Escape discard owner, priority, and due-time edits."
+      "workOrder": "Website: restore one removed content section at its exact position without saving, publishing, or creating a lead.",
+      "reason": "Section Remove immediately filters the unsaved page draft."
     }
   ],
   "agentOperatingModel": {
@@ -190,7 +191,7 @@
       "kind": "maker-product",
       "status": "release-candidate-local",
       "path": "/ecommerce/",
-      "job": "Create a simple customer storefront from a read-only Shop catalogue, quote a recoverable cart, send structured order intent into Shop, and retain accountable post-order help, return, and balance-review outcomes while Shop remains the only order, stock, payment, refund, tax, and correction authority.",
+      "job": "Create a storefront from a read-only Shop catalogue, quote a recoverable cart, send order intent into Shop, and keep Shop as the sole order, stock, payment, refund, tax, and correction authority.",
       "surfaces": ["Store", "Edit store", "Cart", "Quote", "Shop review"],
       "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
       "localAutomation": {
