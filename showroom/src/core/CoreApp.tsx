@@ -738,6 +738,18 @@ function commerceOrderDisplayReference(orderId: string) {
   return match ? `#${match[1]}` : canonical
 }
 
+// Ecommerce requests and after-purchase intents are named PREFIX-<uuid>, and several
+// notices print them whole — "ECR-459AAB25-5BDD-4687-BABA-82FD4E6A1578 is ready for Shop
+// review" is not something an operator can read back over a counter or a phone. The prefix
+// says which kind of record it is, so keep it and drop the rest of the UUID; the first
+// segment is already unique enough to find the record. Anything not shaped like a UUID —
+// a human-assigned reference — passes through untouched.
+function recordDisplayReference(recordId: string) {
+  const canonical = String(recordId ?? '').trim().toUpperCase()
+  const match = /^([A-Z]{2,5})-([A-F0-9]{8})(?:-[A-F0-9-]+)?$/.exec(canonical)
+  return match ? `${match[1]}-${match[2]}` : canonical
+}
+
 function commerceOrderTargetId(orderId: string) {
   return `shop-order-${orderId.replace(/[^A-Za-z0-9_-]+/g, '-')}`
 }
@@ -2119,7 +2131,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setOrderDraftActive(true)
         setResumedOrderDraft(null)
         setOrderDraftConflict(false)
-        setNotice(`${ecommerceNavigationDraft.sourceRequestId} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
+        setNotice(`${recordDisplayReference(ecommerceNavigationDraft.sourceRequestId)} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
         requestAnimationFrame(() => {
           const dialog = orderComposerRef.current
           if (dialog && !dialog.open) dialog.showModal()
@@ -2177,7 +2189,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           sourceIntent: intent,
         })
         navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
-        setNotice(`${intent.id} is ready for Shop review. Confirm the received item and stock condition; no refund has started.`)
+        setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Confirm the received item and stock condition; no refund has started.`)
         requestAnimationFrame(() => returnEditorRef.current?.querySelector<HTMLElement>('#order-return-quantity')?.focus())
       })
       .catch(() => {
@@ -2211,7 +2223,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setOrderAmendmentReview(null)
         setOrderRescheduleReview(null)
         setCancellationDraft(intent)
-        setNotice(`${intent.id} is ready for Shop review. Keeping the order changes nothing; cancellation still requires the accountable Shop gate.`)
+        setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Keeping the order changes nothing; cancellation still requires the accountable Shop gate.`)
         requestAnimationFrame(() => document.getElementById('shop-cancellation-review')?.focus())
       })
       .catch(() => {
@@ -2365,7 +2377,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           owner: managedIdentity?.email ?? order.owner ?? '',
           dueAt: defaultIssueDueInput(),
         })
-        setNotice(`${intent.id} is ready for Shop review. Assign priority, owner, and due time before opening it; no message or refund is sent.`)
+        setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Assign priority, owner, and due time before opening it; no message or refund is sent.`)
         requestAnimationFrame(() => document.getElementById('shop-support-open-review')?.focus())
       })
       .catch(() => {
@@ -2427,7 +2439,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           listedAmountMmk: String(intent.listedAmountMmk),
           sourceIntent: intent,
         })
-        setNotice(`${intent.id} is ready for Shop review. Recheck the calculated adjustment before recording a review-only correction note.`)
+        setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Recheck the calculated adjustment before recording a review-only correction note.`)
         requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
       })
       .catch((error) => {
@@ -5003,10 +5015,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           expectedHeadDigest: commerce.inventoryFoundation.headDigest,
         }
       : undefined
+    // Receiving stock is a routine back-door job, repeated on every delivery. The
+    // purchase order is the evidence and the quantities are already stated above, so
+    // there is nothing here the operator knows that the screen does not.
+    const purchaseOrderReference = recordDisplayReference(purchaseOrder.id)
     queueAction({
       kind: 'purchase_order_receive',
       subjectId: purchaseOrder.id,
-      summary: `Receive ${receiptQuantity.toLocaleString()} accepted${rejectedQuantity ? ` and reject ${rejectedQuantity.toLocaleString()}` : ''} against ${purchaseOrder.id}`,
+      summary: `Receive ${receiptQuantity.toLocaleString()} accepted${rejectedQuantity ? ` and reject ${rejectedQuantity.toLocaleString()}` : ''} against ${purchaseOrderReference}`,
+      reasonSuggestion: rejectedQuantity
+        ? `Delivery checked against ${purchaseOrderReference}; ${rejectedQuantity.toLocaleString()} rejected.`
+        : `Delivery received and counted against ${purchaseOrderReference}.`,
+      evidenceReferenceSuggestion: `Purchase order ${purchaseOrderReference}`,
       before: `${progress.received.toLocaleString()} accepted · ${progress.rejected.toLocaleString()} rejected · ${progress.remaining.toLocaleString()} due · ${expectedOnHand.toLocaleString()} on hand`,
       after: `${(progress.received + receiptQuantity).toLocaleString()} accepted · ${(progress.rejected + rejectedQuantity).toLocaleString()} rejected${rejectedQuantity ? ` for ${purchaseOrderDraft.discrepancyCode.replace('_', ' ')} / return to vendor` : ''} · ${(expectedOnHand + receiptQuantity).toLocaleString()} on hand${locationReceipt ? ` · ${purchaseReceiptLocation?.name ?? locationReceipt.locationId} · lot ${locationReceipt.trackingCode}` : ''}`,
       apply: async (action) => {
