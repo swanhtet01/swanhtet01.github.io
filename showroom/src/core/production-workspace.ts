@@ -1,7 +1,7 @@
 import { sha256Hex } from './managed-trial-proof.ts'
-import { applyPlantOrderPlan, buildPlantOrderControlledPlan, createEmptyPlantOrderState, plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderProjection, type PlantOrderState } from './plant-order-foundation.ts'
+import { createEmptyPlantOrderState, plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderState } from './plant-order-foundation.ts'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
-import { productionOrderPortfolioEntries, upsertProductionOrderExecution, validateProductionOrderPortfolio, type ProductionOrderPortfolio } from './production-order-portfolio.ts'
+import { productionOrderPortfolioEntries, validateProductionOrderPortfolio, type ProductionOrderPortfolio } from './production-order-portfolio.ts'
 import type { ShopProductionDemandSourceSnapshot } from './shop-production-demand.ts'
 
 export const PRODUCTION_WORKSPACE_SCHEMA = 'supermega.production.workspace.v2' as const
@@ -11,14 +11,7 @@ export const PRODUCTION_LOCK = 'supermega-production-workspace-v2'
 export const PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop-demand-source.v1' as const
 export const PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1' as const
 export const PRODUCTION_RECALL_TRACE_SCHEMA = 'supermega.production.recall-trace.v1' as const
-export const PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v2' as const
-export const PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA = 'supermega.production.quality-capa.v1' as const
-export const PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA = 'supermega.production.quality-capa-effectiveness.v1' as const
-export const PRODUCTION_QUALITY_CAPA_TREND_SCHEMA = 'supermega.production.quality-capa-trend.v1' as const
-export const PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA = 'supermega.production.maintenance-finding-source.v2' as const
-export const PRODUCTION_MAINTENANCE_FINDING_SOURCE_LEGACY_SCHEMA = 'supermega.production.maintenance-finding-source.v1' as const
-export const PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA = 'supermega.production.maintenance-capacity-review.v1' as const
-export const PRODUCTION_MAINTENANCE_WINDOW_SCHEMA = 'supermega.production.maintenance-window.v1' as const
+export const PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -90,11 +83,10 @@ export type ProductionIssueResolution = {
   evidenceReference: string
   maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction
   qualityCorrectiveAction?: ProductionQualityCorrectiveAction
-  qualityEffectivenessReview?: ProductionQualityEffectivenessReview
 }
 
 export type ProductionQualityCorrectiveAction = {
-  contract: typeof PRODUCTION_QUALITY_CAPA_SCHEMA | typeof PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA
+  contract: typeof PRODUCTION_QUALITY_CAPA_SCHEMA
   failureMode: string
   causeCategory: ProductionQualityCauseCategory
   rootCause: string
@@ -103,63 +95,6 @@ export type ProductionQualityCorrectiveAction = {
   effectivenessOwner: string
   recurrenceKey: string
   priorIssueIds: string[]
-  effectivenessReviewDueAt?: string
-}
-
-export type ProductionQualityEffectivenessOutcome = 'effective' | 'ineffective'
-export type ProductionQualityEffectivenessEscalation = 'none' | 'required'
-
-export type ProductionQualityEffectivenessReview = {
-  contract: typeof PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA
-  actionId: string
-  reviewedAt: string
-  reviewedBy: string
-  outcome: ProductionQualityEffectivenessOutcome
-  evidenceSummary: string
-  evidenceReference: string
-  recurrenceIssueIds: string[]
-  escalation: ProductionQualityEffectivenessEscalation
-}
-
-export type ProductionQualityCapaTrendStatus = 'escalate' | 'review_due' | 'evidence_gap' | 'monitor'
-export type ProductionQualityCapaTrendReason = 'classified_recurrence' | 'ineffective_review' | 'legacy_review_plan_missing'
-
-export type ProductionQualityCapaTrendGroup = {
-  recurrenceKey: string
-  failureMode: string
-  causeCategory: ProductionQualityCauseCategory
-  issueIds: string[]
-  areas: string[]
-  effectivenessOwners: string[]
-  occurrenceCount: number
-  legacyCapaCount: number
-  pendingReviewCount: number
-  dueReviewCount: number
-  effectiveReviewCount: number
-  ineffectiveReviewCount: number
-  nextReviewDueAt?: string
-  latestResolvedAt: string
-  status: ProductionQualityCapaTrendStatus
-  controlReasons: ProductionQualityCapaTrendReason[]
-}
-
-export type ProductionQualityCapaTrendReport = {
-  contract: typeof PRODUCTION_QUALITY_CAPA_TREND_SCHEMA
-  observedAt: string
-  groups: ProductionQualityCapaTrendGroup[]
-  unclassifiedIssueIds: string[]
-  totals: {
-    resolvedQualityIssueCount: number
-    classifiedCapaCount: number
-    classificationGroupCount: number
-    recurrenceGroupCount: number
-    pendingReviewCount: number
-    dueReviewCount: number
-    effectiveReviewCount: number
-    ineffectiveReviewCount: number
-    evidenceGapCount: number
-    escalationGroupCount: number
-  }
 }
 
 export type ProductionMaintenanceCorrectiveAction = {
@@ -169,7 +104,8 @@ export type ProductionMaintenanceCorrectiveAction = {
   finalDisposition: ProductionMaintenanceReturnToService
 }
 
-type ProductionMaintenanceFindingSourceBase = {
+export type ProductionMaintenanceFindingSource = {
+  contract: 'supermega.production.maintenance-finding-source.v1'
   equipmentId: string
   equipmentName: string
   maintenanceOwner: string
@@ -181,26 +117,6 @@ type ProductionMaintenanceFindingSourceBase = {
   findings: string
   evidenceReference: string
 }
-
-export type ProductionMaintenanceAffectedOrder = {
-  jobId: string
-  product: string
-  planId: string
-  planPackageDigest: string
-  orderRevision: number
-  orderHeadDigest: string
-  status: Exclude<PlantOrderProjection['status'], 'unplanned' | 'released_to_stock'>
-  operations: Array<{ operationId: string; sequence: number; name: string }>
-}
-
-export type ProductionMaintenanceFindingSource = ProductionMaintenanceFindingSourceBase & (
-  | { contract: typeof PRODUCTION_MAINTENANCE_FINDING_SOURCE_LEGACY_SCHEMA }
-  | {
-    contract: typeof PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA
-    workCentreId: string
-    affectedOrders: ProductionMaintenanceAffectedOrder[]
-  }
-)
 
 export type ProductionIssue = {
   id: string
@@ -274,7 +190,7 @@ export type ProductionOpeningPlan = {
   machineIds: string[]
 }
 
-export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_effectiveness_reviewed' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'equipment_commissioned' | 'equipment_maintenance_strategy_saved' | 'downtime_started' | 'downtime_ended' | 'maintenance_window_scheduled' | 'maintenance_started' | 'maintenance_completed' | 'shift_closed'
+export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'equipment_commissioned' | 'equipment_maintenance_strategy_saved' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed' | 'shift_closed'
 export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
@@ -309,8 +225,6 @@ export type ProductionEvent = {
   downtimeStartActionId?: string
   maintenanceOwner?: string
   maintenanceStartActionId?: string
-  maintenanceWindowActionId?: string
-  maintenanceWindowJobIds?: string[]
   sourceRevision?: number
   sourceDigest?: string
   goodUnits?: number
@@ -327,15 +241,7 @@ export type ProductionEvent = {
   maintenanceReturnToService?: ProductionMaintenanceReturnToService
   maintenanceFindingSource?: ProductionMaintenanceFindingSource
   maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction
-  maintenanceWindowStartAt?: string
-  maintenanceWindowEndAt?: string
-  maintenanceWindowDurationMinutes?: number
-  maintenanceWindowCapacityAsOf?: string
-  maintenanceWindowWorkCentreId?: string
-  maintenanceWindowOrderCount?: number
-  maintenanceWindowLoadMinutesMilli?: number
   qualityCorrectiveAction?: ProductionQualityCorrectiveAction
-  qualityEffectivenessReview?: ProductionQualityEffectivenessReview
   equipmentIds?: string[]
   installedAt?: string
   workCentreId?: string
@@ -620,82 +526,13 @@ export type ProductionMaintenanceDueQueue = {
   items: ProductionMaintenanceDueItem[]
 }
 
-export type ProductionMaintenanceCapacityOrder = {
-  jobId: string
-  product: string
-  jobOwner: string | null
-  jobPriority: ProductionJobPriority | null
-  jobDueAt: string | null
-  planId: string
-  planPackageDigest: string
-  orderRevision: number
-  orderHeadDigest: string
-  status: ProductionMaintenanceAffectedOrder['status']
-  operations: Array<{
-    operationId: string
-    sequence: number
-    name: string
-    status: PlantOrderProjection['operations'][number]['status']
-    remainingQuantity: number
-    remainingMinutesMilli: number
-  }>
-  totalRemainingMinutesMilli: number
-}
-
-export type ProductionMaintenanceCapacityReview = {
-  contract: typeof PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA
-  asOf: string
-  items: Array<ProductionMaintenanceDueItem & {
-    workCentreId: string
-    loadStatus: 'overdue_with_load' | 'overdue_no_load' | 'due_soon_with_load' | 'due_soon_no_load' | 'planned_with_load' | 'planned_no_load'
-    orders: ProductionMaintenanceCapacityOrder[]
-    totalRemainingMinutesMilli: number
-  }>
-  authority: {
-    maintenanceScheduled: false
-    ordersRescheduled: false
-    machineStatusChanged: false
-    equipmentCommanded: false
-  }
-}
-
-export type ProductionMaintenanceWindow = {
-  contract: typeof PRODUCTION_MAINTENANCE_WINDOW_SCHEMA
-  actionId: string
-  equipmentId: string
-  equipmentName: string
-  maintenanceOwner: string
-  scheduledAt: string
-  scheduledBy: string
-  evidenceReference: string
-  plannedStartAt: string
-  plannedEndAt: string
-  durationMinutes: number
-  capacityAsOf: string
-  workCentreId: string
-  orderCount: number
-  totalRemainingMinutesMilli: number
-  strategyActionId: string
-  strategyRevision: number
-  procedureReference: string
-  dueAt: string
-  sourceRevision: number
-  sourceDigest: string
-  authority: {
-    maintenanceScheduled: true
-    ordersRescheduled: false
-    machineStatusChanged: false
-    equipmentCommanded: false
-  }
-}
-
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical', 'high', 'medium', 'low']
 export const productionJobPriorities: ProductionJobPriority[] = ['urgent', 'normal', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
 export const productionQualityCauseCategories: ProductionQualityCauseCategory[] = ['material', 'method', 'machine', 'measurement', 'people', 'environment']
-const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_effectiveness_reviewed', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'equipment_maintenance_strategy_saved', 'downtime_started', 'downtime_ended', 'maintenance_window_scheduled', 'maintenance_started', 'maintenance_completed', 'shift_closed']
+const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'equipment_maintenance_strategy_saved', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'shift_closed']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
 const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt', 'jobOwner']
 const jobScheduleUpdateEventFields = [...jobCreatedEventFields, 'fromJobPriority', 'fromJobDueAt', 'fromJobOwner']
@@ -707,10 +544,7 @@ const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const shiftClosedEventFields = [...baseEventFields, 'shiftRef', 'sourceRevision', 'sourceDigest', 'goodUnits', 'scrapUnits', 'outputEntryCount', 'materialEntryCount']
 const maintenanceStrategyBindingFields = ['maintenanceStrategyActionId', 'maintenanceStrategyRevision', 'maintenanceProcedureReference', 'maintenancePlannedDueAt']
 const maintenanceResultFields = ['maintenanceOutcome', 'maintenanceFindings', 'maintenanceProcedureCompleted', 'maintenanceReturnToService']
-const maintenanceWindowFields = [...baseEventFields, 'maintenanceOwner', ...maintenanceStrategyBindingFields, 'maintenanceWindowStartAt', 'maintenanceWindowEndAt', 'maintenanceWindowDurationMinutes', 'maintenanceWindowCapacityAsOf', 'maintenanceWindowWorkCentreId', 'maintenanceWindowOrderCount', 'maintenanceWindowLoadMinutesMilli', 'sourceRevision', 'sourceDigest']
-const maintenanceStartReviewFields = ['maintenanceWindowActionId', 'maintenanceWindowCapacityAsOf', 'maintenanceWindowWorkCentreId', 'maintenanceWindowOrderCount', 'maintenanceWindowLoadMinutesMilli', 'maintenanceWindowJobIds', 'sourceRevision', 'sourceDigest']
-const maintenanceHistoricalStartEventFields = [...baseEventFields, 'maintenanceOwner', ...maintenanceStrategyBindingFields]
-const maintenanceStartEventFields = [...maintenanceHistoricalStartEventFields, ...maintenanceStartReviewFields]
+const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner', ...maintenanceStrategyBindingFields]
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, ...maintenanceResultFields, 'nextDueAt']
 const maintenanceHistoricalCompleteEventFields = maintenanceCompleteEventFields.filter((field) => !maintenanceResultFields.includes(field))
 const equipmentImportEventFields = [...baseEventFields, 'equipmentIds']
@@ -722,15 +556,10 @@ const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner
 const productionShopDemandSourceFields = ['contract', 'sourceDigest', 'evidenceReference', 'snapshot']
 const productionShopDemandSnapshotFields = ['schema', 'operatingUnitLocationId', 'sku', 'productName', 'sourceOrderIds', 'activeDemandUnits', 'uncoveredDemandUnits', 'availableToPromiseUnits', 'reorderAtUnits', 'replenishmentGapUnits', 'recommendedBatchUnits']
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'maintenanceFindingSource', 'resolution']
-const productionMaintenanceFindingSourceBaseFields = ['contract', 'equipmentId', 'equipmentName', 'maintenanceOwner', 'completionActionId', 'completedAt', 'strategyActionId', 'strategyRevision', 'returnToService', 'findings', 'evidenceReference']
-const productionMaintenanceFindingSourceFields = [...productionMaintenanceFindingSourceBaseFields, 'workCentreId', 'affectedOrders']
-const productionMaintenanceAffectedOrderFields = ['jobId', 'product', 'planId', 'planPackageDigest', 'orderRevision', 'orderHeadDigest', 'status', 'operations']
-const productionMaintenanceAffectedOperationFields = ['operationId', 'sequence', 'name']
+const productionMaintenanceFindingSourceFields = ['contract', 'equipmentId', 'equipmentName', 'maintenanceOwner', 'completionActionId', 'completedAt', 'strategyActionId', 'strategyRevision', 'returnToService', 'findings', 'evidenceReference']
 const productionMaintenanceCorrectiveActionFields = ['contract', 'correctiveAction', 'verificationResult', 'finalDisposition']
-const productionQualityCorrectiveActionLegacyFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'recurrenceKey', 'priorIssueIds']
-const productionQualityCorrectiveActionFields = [...productionQualityCorrectiveActionLegacyFields, 'effectivenessReviewDueAt']
-const productionQualityEffectivenessReviewFields = ['contract', 'actionId', 'reviewedAt', 'reviewedBy', 'outcome', 'evidenceSummary', 'evidenceReference', 'recurrenceIssueIds', 'escalation']
-const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference', 'maintenanceCorrectiveAction', 'qualityCorrectiveAction', 'qualityEffectivenessReview']
+const productionQualityCorrectiveActionFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'recurrenceKey', 'priorIssueIds']
+const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference', 'maintenanceCorrectiveAction', 'qualityCorrectiveAction']
 const productionMachineFields = ['id', 'name', 'state']
 const productionEquipmentMasterFields = ['contract', 'assets']
 const productionEquipmentAssetFields = ['id', 'name', 'workCentreId', 'criticality', 'owner', 'commissioningStatus', 'sourceActionId', 'sourcePackageDigest', 'importedAt']
@@ -739,7 +568,6 @@ const productionEquipmentMaintenanceStrategyFields = ['revision', 'actionId', 's
 const productionEquipmentCriticalities: ProductionEquipmentCriticality[] = ['critical', 'high', 'medium', 'low']
 const productionMaintenanceOutcomes: ProductionMaintenanceOutcome[] = ['completed', 'completed_with_findings']
 const productionMaintenanceReturnToServiceValues: ProductionMaintenanceReturnToService[] = ['recommended', 'restricted', 'not_recommended']
-const productionMaintenanceAffectedOrderStatuses: ProductionMaintenanceAffectedOrder['status'][] = ['planned', 'shortfall', 'ready', 'released', 'in_process', 'inspection_due', 'quality_hold', 'ready_to_release']
 const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   job_created: jobCreatedEventFields,
   job_schedule_updated: jobScheduleUpdateEventFields,
@@ -748,7 +576,6 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   material_consumed: [...materialEventFields, ...materialOptionalEventFields],
   issue_opened: [...baseEventFields, 'issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment', 'maintenanceFindingSource'],
   issue_resolved: [...baseEventFields, 'maintenanceCorrectiveAction', 'qualityCorrectiveAction'],
-  quality_effectiveness_reviewed: [...baseEventFields, 'qualityEffectivenessReview'],
   quality_hold_placed: qualityHoldEventFields,
   quality_hold_released: qualityHoldEventFields,
   machine_state_changed: [...baseEventFields, 'fromState', 'toState'],
@@ -757,12 +584,13 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   equipment_maintenance_strategy_saved: equipmentMaintenanceStrategyEventFields,
   downtime_started: baseEventFields,
   downtime_ended: downtimeEndEventFields,
-  maintenance_window_scheduled: maintenanceWindowFields,
   maintenance_started: maintenanceStartEventFields,
   maintenance_completed: maintenanceCompleteEventFields,
   shift_closed: shiftClosedEventFields,
 }
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
+const productionSeedAnchorIssueId = 'ISS-301'
+const productionSeedAnchorOffsetMs = 82 * 60 * 1000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -900,12 +728,8 @@ function assertUnique(values: string[], field: string) {
 
 function validateProductionMaintenanceFindingSource(value: unknown, field: string): ProductionMaintenanceFindingSource {
   if (!isRecord(value)) throw new Error(`${field} is invalid.`)
-  const expectedFields = value.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA
-    ? productionMaintenanceFindingSourceFields
-    : value.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_LEGACY_SCHEMA
-      ? productionMaintenanceFindingSourceBaseFields
-      : null
-  if (!expectedFields || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`${field} fields are invalid.`)
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionMaintenanceFindingSourceFields].sort())) throw new Error(`${field} fields are invalid.`)
+  if (value.contract !== 'supermega.production.maintenance-finding-source.v1') throw new Error(`${field}.contract is invalid.`)
   canonicalText(value.equipmentId, `${field}.equipmentId`, 80)
   canonicalText(value.equipmentName, `${field}.equipmentName`, 120)
   canonicalText(value.maintenanceOwner, `${field}.maintenanceOwner`, 120)
@@ -916,102 +740,7 @@ function validateProductionMaintenanceFindingSource(value: unknown, field: strin
   if (value.returnToService !== 'restricted' && value.returnToService !== 'not_recommended') throw new Error(`${field}.returnToService is invalid.`)
   canonicalText(value.findings, `${field}.findings`, 360)
   canonicalText(value.evidenceReference, `${field}.evidenceReference`)
-  if (value.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA) {
-    const workCentreId = canonicalText(value.workCentreId, `${field}.workCentreId`, 80)
-    if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`${field}.workCentreId is invalid.`)
-    if (!Array.isArray(value.affectedOrders) || value.affectedOrders.length > 20) throw new Error(`${field}.affectedOrders is invalid.`)
-    let previousJobId = ''
-    for (const [orderIndex, candidate] of value.affectedOrders.entries()) {
-      const orderField = `${field}.affectedOrders[${orderIndex}]`
-      if (!isRecord(candidate) || JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...productionMaintenanceAffectedOrderFields].sort())) throw new Error(`${orderField} fields are invalid.`)
-      const jobId = canonicalText(candidate.jobId, `${orderField}.jobId`, 80)
-      const planId = canonicalText(candidate.planId, `${orderField}.planId`, 80)
-      if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(jobId) || !/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(planId)) throw new Error(`${orderField} identifiers are invalid.`)
-      if (previousJobId && jobId <= previousJobId) throw new Error(`${field}.affectedOrders must be uniquely sorted by job ID.`)
-      previousJobId = jobId
-      canonicalText(candidate.product, `${orderField}.product`)
-      if (typeof candidate.planPackageDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.planPackageDigest)) throw new Error(`${orderField}.planPackageDigest is invalid.`)
-      assertSafeInteger(candidate.orderRevision, `${orderField}.orderRevision`, 1)
-      if (typeof candidate.orderHeadDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.orderHeadDigest)) throw new Error(`${orderField}.orderHeadDigest is invalid.`)
-      if (!productionMaintenanceAffectedOrderStatuses.includes(candidate.status as ProductionMaintenanceAffectedOrder['status'])) throw new Error(`${orderField}.status is invalid.`)
-      if (!Array.isArray(candidate.operations) || !candidate.operations.length || candidate.operations.length > 100) throw new Error(`${orderField}.operations is invalid.`)
-      const operationIds: string[] = []
-      let previousSequence = 0
-      for (const [operationIndex, operation] of candidate.operations.entries()) {
-        const operationField = `${orderField}.operations[${operationIndex}]`
-        if (!isRecord(operation) || JSON.stringify(Object.keys(operation).sort()) !== JSON.stringify([...productionMaintenanceAffectedOperationFields].sort())) throw new Error(`${operationField} fields are invalid.`)
-        const operationId = canonicalText(operation.operationId, `${operationField}.operationId`, 80)
-        if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(operationId)) throw new Error(`${operationField}.operationId is invalid.`)
-        const sequence = Number(operation.sequence)
-        assertSafeInteger(sequence, `${operationField}.sequence`, 1)
-        if (sequence <= previousSequence) throw new Error(`${orderField}.operations must follow reviewed routing sequence.`)
-        previousSequence = sequence
-        canonicalText(operation.name, `${operationField}.name`)
-        operationIds.push(operationId)
-      }
-      assertUnique(operationIds, `${orderField} operation ID`)
-    }
-  }
   return value as unknown as ProductionMaintenanceFindingSource
-}
-
-function productionMaintenanceAffectedOrderForExecution(
-  jobId: string,
-  execution: PlantOrderState,
-  workCentreId: string,
-): ProductionMaintenanceAffectedOrder | null {
-  const projection = projectPlantOrder(execution)
-  const plan = projection.plan
-  if (!plan || projection.status === 'unplanned' || projection.status === 'released_to_stock') return null
-  const operations = plan.routing
-    .filter((operation) => operation.workCentreId === workCentreId)
-    .map(({ operationId, sequence, name }) => ({ operationId, sequence, name }))
-  if (!operations.length) return null
-  return {
-    jobId,
-    product: plan.job.product,
-    planId: plan.planId,
-    planPackageDigest: plan.packageDigest,
-    orderRevision: projection.revision,
-    orderHeadDigest: projection.headDigest,
-    status: projection.status,
-    operations,
-  }
-}
-
-function productionMaintenanceAffectedOrders(state: ProductionState, workCentreId: string) {
-  return productionOrderPortfolioEntries(state)
-    .flatMap(({ jobId, execution }) => {
-      const affected = productionMaintenanceAffectedOrderForExecution(jobId, execution, workCentreId)
-      return affected ? [affected] : []
-    })
-    .sort((left, right) => left.jobId < right.jobId ? -1 : left.jobId > right.jobId ? 1 : 0)
-}
-
-function validateProductionMaintenanceImpactEvidence(
-  state: ProductionState,
-  source: ProductionMaintenanceFindingSource,
-  field: string,
-) {
-  if (source.contract !== PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA) return
-  const asset = state.equipmentMaster?.assets.find((candidate) => candidate.id === source.equipmentId)
-  if (!asset || asset.workCentreId !== source.workCentreId) throw new Error(`${field} work centre does not match its equipment master evidence.`)
-  const entries = new Map(productionOrderPortfolioEntries(state).map((entry) => [entry.jobId, entry.execution]))
-  for (const [index, affected] of source.affectedOrders.entries()) {
-    const orderField = `${field}.affectedOrders[${index}]`
-    const retained = entries.get(affected.jobId)
-    if (!retained || affected.orderRevision > retained.revision) throw new Error(`${orderField} is not retained in controlled order history.`)
-    const commands = retained.commands.slice(0, affected.orderRevision)
-    if (commands.length !== affected.orderRevision || commands.at(-1)?.digest !== affected.orderHeadDigest) throw new Error(`${orderField} head digest is not retained in controlled order history.`)
-    const historical: PlantOrderState = {
-      schema: retained.schema,
-      revision: affected.orderRevision,
-      headDigest: affected.orderHeadDigest,
-      commands,
-    }
-    const expected = productionMaintenanceAffectedOrderForExecution(affected.jobId, historical, source.workCentreId)
-    if (!expected || JSON.stringify(expected) !== JSON.stringify(affected)) throw new Error(`${orderField} does not match its retained reviewed routing.`)
-  }
 }
 
 function validateProductionMaintenanceCorrectiveAction(value: unknown, field: string): ProductionMaintenanceCorrectiveAction {
@@ -1038,12 +767,8 @@ function productionQualityRecurrenceKey(failureMode: string, causeCategory: Prod
 
 function validateProductionQualityCorrectiveAction(value: unknown, field: string): ProductionQualityCorrectiveAction {
   if (!isRecord(value)) throw new Error(`${field} is invalid.`)
-  const expectedFields = value.contract === PRODUCTION_QUALITY_CAPA_SCHEMA
-    ? productionQualityCorrectiveActionFields
-    : value.contract === PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA
-      ? productionQualityCorrectiveActionLegacyFields
-      : null
-  if (!expectedFields || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`${field} fields are invalid.`)
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionQualityCorrectiveActionFields].sort())) throw new Error(`${field} fields are invalid.`)
+  if (value.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA) throw new Error(`${field}.contract is invalid.`)
   const failureMode = canonicalText(value.failureMode, `${field}.failureMode`, 120)
   if (!productionQualityCauseCategories.includes(value.causeCategory as ProductionQualityCauseCategory)) throw new Error(`${field}.causeCategory is invalid.`)
   canonicalText(value.rootCause, `${field}.rootCause`, 360)
@@ -1055,27 +780,7 @@ function validateProductionQualityCorrectiveAction(value: unknown, field: string
   if (!Array.isArray(value.priorIssueIds) || value.priorIssueIds.length > 500) throw new Error(`${field}.priorIssueIds is invalid.`)
   const priorIssueIds = value.priorIssueIds.map((issueId, index) => canonicalText(issueId, `${field}.priorIssueIds[${index}]`, 80))
   assertUnique(priorIssueIds, `${field}.priorIssueIds`)
-  if (value.contract === PRODUCTION_QUALITY_CAPA_SCHEMA && !validTimestamp(value.effectivenessReviewDueAt)) throw new Error(`${field}.effectivenessReviewDueAt is invalid.`)
   return value as unknown as ProductionQualityCorrectiveAction
-}
-
-function validateProductionQualityEffectivenessReview(value: unknown, field: string): ProductionQualityEffectivenessReview {
-  if (!isRecord(value)) throw new Error(`${field} is invalid.`)
-  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionQualityEffectivenessReviewFields].sort())) throw new Error(`${field} fields are invalid.`)
-  if (value.contract !== PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA) throw new Error(`${field}.contract is invalid.`)
-  canonicalText(value.actionId, `${field}.actionId`, 160)
-  if (!validTimestamp(value.reviewedAt)) throw new Error(`${field}.reviewedAt is invalid.`)
-  canonicalText(value.reviewedBy, `${field}.reviewedBy`)
-  if (value.outcome !== 'effective' && value.outcome !== 'ineffective') throw new Error(`${field}.outcome is invalid.`)
-  canonicalText(value.evidenceSummary, `${field}.evidenceSummary`, 360)
-  canonicalText(value.evidenceReference, `${field}.evidenceReference`)
-  if (!Array.isArray(value.recurrenceIssueIds) || value.recurrenceIssueIds.length > 500) throw new Error(`${field}.recurrenceIssueIds is invalid.`)
-  const recurrenceIssueIds = value.recurrenceIssueIds.map((issueId, index) => canonicalText(issueId, `${field}.recurrenceIssueIds[${index}]`, 80))
-  assertUnique(recurrenceIssueIds, `${field}.recurrenceIssueIds`)
-  if (value.escalation !== 'none' && value.escalation !== 'required') throw new Error(`${field}.escalation is invalid.`)
-  if (value.outcome === 'effective' && (recurrenceIssueIds.length || value.escalation !== 'none')) throw new Error(`${field} effective outcome cannot retain recurrence or escalation.`)
-  if (value.outcome === 'ineffective' && value.escalation !== 'required') throw new Error(`${field} ineffective outcome requires escalation.`)
-  return value as unknown as ProductionQualityEffectivenessReview
 }
 
 function productionQualityPriorIssueIds(issues: ProductionIssue[], issueId: string, recurrenceKey: string, resolvedBefore?: string) {
@@ -1097,7 +802,6 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
   correctiveAction: string
   verificationResult: string
   effectivenessOwner: string
-  effectivenessReviewDueAt: string
 }) {
   const issue = state.issues.find((candidate) => candidate.id === issueId)
   if (!issue || issue.kind !== 'quality' || issue.status !== 'open'
@@ -1106,8 +810,7 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
     || !validCanonicalText(input.rootCause, 360)
     || !validCanonicalText(input.correctiveAction, 360)
     || !validCanonicalText(input.verificationResult, 360)
-    || !validCanonicalText(input.effectivenessOwner, 120)
-    || !validTimestamp(input.effectivenessReviewDueAt)) return null
+    || !validCanonicalText(input.effectivenessOwner, 120)) return null
   const recurrenceToken = productionQualityRecurrenceToken(input.failureMode)
   if (!recurrenceToken) return null
   const recurrenceKey = `${input.causeCategory}:${recurrenceToken}`
@@ -1119,135 +822,6 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
     priorIssueIds: productionQualityPriorIssueIds(state.issues, issueId, recurrenceKey),
   }
   try { return validateProductionQualityCorrectiveAction(result, 'qualityCorrectiveAction') } catch { return null }
-}
-
-function productionQualityRecurrenceIssueIdsAtReview(
-  issues: ProductionIssue[],
-  events: ProductionEvent[],
-  issueId: string,
-  recurrenceKey: string,
-  resolvedAt: string,
-  reviewedAt: string,
-  reviewActionId?: string,
-) {
-  const categorySeparator = recurrenceKey.indexOf(':')
-  const causeCategory = categorySeparator > 0 ? recurrenceKey.slice(0, categorySeparator) as ProductionQualityCauseCategory : null
-  if (!causeCategory || !productionQualityCauseCategories.includes(causeCategory)) return []
-  const reviewEventIndex = reviewActionId === undefined ? -1 : events.findIndex((event) => event.actionId === reviewActionId)
-  return issues
-    .filter((candidate) => {
-      if (candidate.id === issueId
-        || candidate.kind !== 'quality'
-        || !timestampBefore(resolvedAt, candidate.createdAt)
-        || !timestampAtOrBefore(candidate.createdAt, reviewedAt)) return false
-      if (reviewEventIndex >= 0) {
-        const openingIndex = events.findIndex((event) => event.kind === 'issue_opened' && event.subjectId === candidate.id)
-        if (openingIndex >= 0 && openingIndex <= reviewEventIndex) return false
-      }
-      const candidateResolution = candidate.resolution
-      const candidateResolutionIndex = candidateResolution === undefined
-        ? -1
-        : events.findIndex((event) => event.kind === 'issue_resolved' && event.actionId === candidateResolution.actionId)
-      const classifiedBeforeReview = candidateResolution?.qualityCorrectiveAction !== undefined
-        && timestampAtOrBefore(candidateResolution.resolvedAt, reviewedAt)
-        && (reviewEventIndex < 0 || candidateResolutionIndex < 0 || candidateResolutionIndex > reviewEventIndex)
-      return classifiedBeforeReview && candidateResolution.qualityCorrectiveAction?.recurrenceKey === recurrenceKey
-    })
-    .sort((left, right) => compareTimestamps(left.createdAt, right.createdAt)
-      || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
-    .map((candidate) => candidate.id)
-}
-
-export function productionQualityEffectivenessReviewDueAt(action: ProductionQualityCorrectiveAction | undefined) {
-  return action?.contract === PRODUCTION_QUALITY_CAPA_SCHEMA ? action.effectivenessReviewDueAt ?? null : null
-}
-
-export function productionQualityEffectivenessRecurrenceIssueIds(state: ProductionState, issueId: string, reviewedAt: string) {
-  const issue = state.issues.find((candidate) => candidate.id === issueId)
-  const action = issue?.resolution?.qualityCorrectiveAction
-  if (!issue?.resolution || action?.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA || !validTimestamp(reviewedAt)) return []
-  return productionQualityRecurrenceIssueIdsAtReview(state.issues, state.events, issueId, action.recurrenceKey, issue.resolution.resolvedAt, reviewedAt)
-}
-
-export function productionQualityCapaTrend(state: ProductionState, observedAt: string): ProductionQualityCapaTrendReport {
-  const current = validateProductionState(state)
-  if (!validTimestamp(observedAt)) throw new Error('CAPA trend requires a canonical ISO-8601 observation time.')
-  const resolvedQualityIssues = current.issues.filter((issue) => issue.kind === 'quality' && issue.status === 'resolved')
-  const compareText = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0
-  const unclassifiedIssueIds = resolvedQualityIssues
-    .filter((issue) => !issue.resolution?.qualityCorrectiveAction)
-    .sort((left, right) => compareTimestamps(left.resolution?.resolvedAt ?? left.createdAt, right.resolution?.resolvedAt ?? right.createdAt) || compareText(left.id, right.id))
-    .map((issue) => issue.id)
-  const entriesByKey = new Map<string, Array<{
-    issue: ProductionIssue
-    resolution: ProductionIssueResolution
-    action: ProductionQualityCorrectiveAction
-  }>>()
-  for (const issue of resolvedQualityIssues) {
-    const resolution = issue.resolution
-    const action = resolution?.qualityCorrectiveAction
-    if (!resolution || !action) continue
-    const entries = entriesByKey.get(action.recurrenceKey) ?? []
-    entries.push({ issue, resolution, action })
-    entriesByKey.set(action.recurrenceKey, entries)
-  }
-  const statusRank: Record<ProductionQualityCapaTrendStatus, number> = { escalate: 0, review_due: 1, evidence_gap: 2, monitor: 3 }
-  const groups = [...entriesByKey.entries()].map(([recurrenceKey, entries]): ProductionQualityCapaTrendGroup => {
-    entries.sort((left, right) => compareTimestamps(left.resolution.resolvedAt, right.resolution.resolvedAt) || compareText(left.issue.id, right.issue.id))
-    const latest = entries.at(-1) as typeof entries[number]
-    const pending = entries.filter(({ action, resolution }) => action.contract === PRODUCTION_QUALITY_CAPA_SCHEMA && !resolution.qualityEffectivenessReview)
-    const due = pending.filter(({ action }) => timestampAtOrBefore(action.effectivenessReviewDueAt as string, observedAt))
-    const effectiveReviewCount = entries.filter(({ resolution }) => resolution.qualityEffectivenessReview?.outcome === 'effective').length
-    const ineffectiveReviewCount = entries.filter(({ resolution }) => resolution.qualityEffectivenessReview?.outcome === 'ineffective').length
-    const legacyCapaCount = entries.filter(({ action }) => action.contract === PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA).length
-    const controlReasons: ProductionQualityCapaTrendReason[] = []
-    if (entries.length > 1) controlReasons.push('classified_recurrence')
-    if (ineffectiveReviewCount) controlReasons.push('ineffective_review')
-    if (legacyCapaCount) controlReasons.push('legacy_review_plan_missing')
-    const status: ProductionQualityCapaTrendStatus = entries.length > 1 || ineffectiveReviewCount
-      ? 'escalate'
-      : due.length
-        ? 'review_due'
-        : legacyCapaCount
-          ? 'evidence_gap'
-          : 'monitor'
-    const pendingDueAt = pending.map(({ action }) => action.effectivenessReviewDueAt as string).sort(compareTimestamps)
-    return {
-      recurrenceKey,
-      failureMode: latest.action.failureMode,
-      causeCategory: latest.action.causeCategory,
-      issueIds: entries.map(({ issue }) => issue.id),
-      areas: [...new Set(entries.map(({ issue }) => issue.area))].sort(compareText),
-      effectivenessOwners: [...new Set(entries.map(({ action }) => action.effectivenessOwner))].sort(compareText),
-      occurrenceCount: entries.length,
-      legacyCapaCount,
-      pendingReviewCount: pending.length,
-      dueReviewCount: due.length,
-      effectiveReviewCount,
-      ineffectiveReviewCount,
-      ...(pendingDueAt[0] === undefined ? {} : { nextReviewDueAt: pendingDueAt[0] }),
-      latestResolvedAt: latest.resolution.resolvedAt,
-      status,
-      controlReasons,
-    }
-  }).sort((left, right) => statusRank[left.status] - statusRank[right.status]
-    || (left.nextReviewDueAt && right.nextReviewDueAt ? compareTimestamps(left.nextReviewDueAt, right.nextReviewDueAt) : left.nextReviewDueAt ? -1 : right.nextReviewDueAt ? 1 : 0)
-    || right.occurrenceCount - left.occurrenceCount
-    || compareTimestamps(right.latestResolvedAt, left.latestResolvedAt)
-    || compareText(left.recurrenceKey, right.recurrenceKey))
-  const totals = {
-    resolvedQualityIssueCount: resolvedQualityIssues.length,
-    classifiedCapaCount: groups.reduce((total, group) => total + group.occurrenceCount, 0),
-    classificationGroupCount: groups.length,
-    recurrenceGroupCount: groups.filter((group) => group.occurrenceCount > 1).length,
-    pendingReviewCount: groups.reduce((total, group) => total + group.pendingReviewCount, 0),
-    dueReviewCount: groups.reduce((total, group) => total + group.dueReviewCount, 0),
-    effectiveReviewCount: groups.reduce((total, group) => total + group.effectiveReviewCount, 0),
-    ineffectiveReviewCount: groups.reduce((total, group) => total + group.ineffectiveReviewCount, 0),
-    evidenceGapCount: unclassifiedIssueIds.length + groups.reduce((total, group) => total + group.legacyCapaCount, 0),
-    escalationGroupCount: groups.filter((group) => group.status === 'escalate').length,
-  }
-  return { contract: PRODUCTION_QUALITY_CAPA_TREND_SCHEMA, observedAt, groups, unclassifiedIssueIds, totals }
 }
 
 function validateProductionShopDemandSource(value: unknown, field: string): ProductionShopDemandSource {
@@ -1359,7 +933,7 @@ export function createEmptyProduction(): ProductionState {
   return { schema: PRODUCTION_WORKSPACE_SCHEMA, revision: 0, jobs: [], issues: [], machines: [], events: [] }
 }
 
-function createLegacySeedProduction(now = deterministicSeedNow): ProductionState {
+export function createSeedProduction(now = deterministicSeedNow): ProductionState {
   return {
     schema: PRODUCTION_WORKSPACE_SCHEMA,
     revision: 0,
@@ -1380,94 +954,15 @@ function createLegacySeedProduction(now = deterministicSeedNow): ProductionState
   }
 }
 
-function createMaintenanceSeedProduction(now = deterministicSeedNow): ProductionState {
-  const seed = createLegacySeedProduction(now)
-  const equipmentId = 'MC-02'
-  const workCentreId = 'WC-LINE-LINE-02'
-  const importActionId = 'ACT-DEMO-EQUIPMENT-IMPORT-MC-02'
-  const commissionActionId = 'ACT-DEMO-EQUIPMENT-COMMISSION-MC-02'
-  const strategyActionId = 'ACT-DEMO-MAINTENANCE-STRATEGY-MC-02'
-  const importedAt = new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString()
-  const installedAt = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString()
-  const commissionedAt = new Date(now - 59 * 24 * 60 * 60 * 1000).toISOString()
-  const strategySavedAt = new Date(now - 9 * 24 * 60 * 60 * 1000).toISOString()
-  const nextDueAt = new Date(now + 21 * 24 * 60 * 60 * 1000).toISOString()
-  const equipmentDigest = `sha256:${'d'.repeat(64)}`
-  const maintenanceOwner = 'Demo maintenance lead'
-  const procedureReference = 'SOP-PM-PRESS-02-R1'
-  const commissioningSafetyReference = 'SAFETY-DEMO-MC-02-R1'
-  const maintenanceSafetyReference = 'SAFETY-PM-DEMO-MC-02-R1'
-  return {
-    ...seed,
-    revision: 3,
-    equipmentMaster: {
-      contract: 'supermega.production.equipment-master.v1',
-      assets: [{
-        id: equipmentId,
-        name: 'Press 02',
-        workCentreId,
-        criticality: 'high',
-        owner: 'Line 02 lead',
-        commissioningStatus: 'commissioned',
-        sourceActionId: importActionId,
-        sourcePackageDigest: equipmentDigest,
-        importedAt,
-        commissioning: {
-          actionId: commissionActionId,
-          commissionedAt,
-          commissionedBy: 'Demo setup',
-          installedAt,
-          initialState: 'attention',
-          safetyBaselineReference: commissioningSafetyReference,
-        },
-        maintenanceStrategy: {
-          revision: 1,
-          actionId: strategyActionId,
-          savedAt: strategySavedAt,
-          savedBy: 'Demo setup',
-          maintenanceOwner,
-          intervalDays: 30,
-          nextDueAt,
-          procedureReference,
-          safetyBaselineReference: maintenanceSafetyReference,
-        },
-      }],
-    },
-    events: [
-      { id: `EVT-${strategyActionId}`, actionId: strategyActionId, createdAt: strategySavedAt, actor: 'Demo setup', reason: 'Prepared a fictional preventive-maintenance example.', evidenceReference: maintenanceSafetyReference, kind: 'equipment_maintenance_strategy_saved', subjectId: equipmentId, summary: `Saved maintenance strategy R1 for ${equipmentId}`, strategyRevision: 1, maintenanceOwner, intervalDays: 30, nextDueAt, procedureReference },
-      { id: `EVT-${commissionActionId}`, actionId: commissionActionId, createdAt: commissionedAt, actor: 'Demo setup', reason: 'Prepared fictional commissioned equipment.', evidenceReference: commissioningSafetyReference, kind: 'equipment_commissioned', subjectId: equipmentId, summary: `Commissioned Press 02 at ${workCentreId}`, installedAt, toState: 'attention', workCentreId },
-      { id: `EVT-${importActionId}`, actionId: importActionId, createdAt: importedAt, actor: 'Demo setup', reason: 'Prepared fictional equipment master data.', evidenceReference: equipmentDigest, kind: 'equipment_master_imported', subjectId: 'equipment-master', summary: 'Imported 1 equipment master records', equipmentIds: [equipmentId] },
-    ],
-  }
-}
-
-export function createSeedProduction(now = deterministicSeedNow): ProductionState {
-  const seed = createMaintenanceSeedProduction(now)
-  const controlledJob = seed.jobs.find((job) => job.id === 'JOB-202')
-  if (!controlledJob) throw new Error('The Plant demo controlled job is missing.')
-  const workCentreId = 'WC-LINE-LINE-02'
-  const emptyExecution = createEmptyPlantOrderState()
-  const plan = buildPlantOrderControlledPlan({
-    planId: 'PLN-DEMO-JOB-202-R1',
-    sourceDigest: productionJobPlanSourceDigest('plant:local-sample', controlledJob),
-    job: {
-      jobId: controlledJob.id,
-      product: controlledJob.product,
-      targetQuantity: controlledJob.target - controlledJob.output - (controlledJob.scrap ?? 0),
-      outputBatchId: 'BATCH-DEMO-JOB-202-R1',
-    },
-    materials: [{ materialId: 'MAT-DEMO-BETA-BASE', name: 'Batch Beta base', unit: 'kg', quantityPerUnitMilli: 1_000 }],
-    workCentres: [{ workCentreId, name: 'Line 02 press' }],
-    routing: [{ operationId: 'OP-DEMO-JOB-202-PRESS', sequence: 1, name: 'Press Batch Beta', workCentreId, minutesPerUnitMilli: 750 }],
-  })
-  const execution = applyPlantOrderPlan(emptyExecution, plan, {
-    actionId: 'ACT-DEMO-JOB-202-PLAN-R1',
-    capturedAt: new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString(),
-    actor: 'Demo setup',
-    reason: 'Approved the fictional JOB-202 controlled plan.',
-    evidenceReference: 'DEMO-PLAN-JOB-202-R1',
-  }, emptyExecution.headDigest).state
-  return validateProductionState(upsertProductionOrderExecution(seed, execution))
+// The seed is generated relative to a caller-supplied instant so a demo opened today reads as
+// today's work. Pristine-workspace checks recover that instant from the seeded issue rather than
+// assuming a fixed one, mirroring how upgradeCommerceSeedPolicies recovers the catalog baseline
+// time. A wrong recovery cannot pass a check: the regenerated seed simply fails to match.
+export function productionSeedAnchor(state: ProductionState) {
+  const issue = state.issues.find((candidate) => candidate.id === productionSeedAnchorIssueId)
+  if (!issue) return null
+  const createdAt = Date.parse(issue.createdAt)
+  return Number.isFinite(createdAt) ? createdAt + productionSeedAnchorOffsetMs : null
 }
 
 export function validateProductionState(value: unknown): ProductionState {
@@ -1582,17 +1077,10 @@ export function validateProductionState(value: unknown): ProductionState {
       canonicalText(resolution.evidenceReference, `issues[${index}].resolution.evidenceReference`)
       const correctiveAction = resolution.maintenanceCorrectiveAction === undefined ? undefined : validateProductionMaintenanceCorrectiveAction(resolution.maintenanceCorrectiveAction, `issues[${index}].resolution.maintenanceCorrectiveAction`)
       const qualityCorrectiveAction = resolution.qualityCorrectiveAction === undefined ? undefined : validateProductionQualityCorrectiveAction(resolution.qualityCorrectiveAction, `issues[${index}].resolution.qualityCorrectiveAction`)
-      const qualityEffectivenessReview = resolution.qualityEffectivenessReview === undefined ? undefined : validateProductionQualityEffectivenessReview(resolution.qualityEffectivenessReview, `issues[${index}].resolution.qualityEffectivenessReview`)
       if (Boolean(candidate.maintenanceFindingSource) !== Boolean(correctiveAction)) throw new Error(`issues[${index}] maintenance finding resolution requires one structured corrective action only.`)
       if (candidate.kind === 'quality' && candidate.status === 'resolved' && actionFieldCount === actionFields.length && !qualityCorrectiveAction) throw new Error(`issues[${index}] actionable quality resolution requires structured CAPA evidence.`)
       if (qualityCorrectiveAction && candidate.kind !== 'quality') throw new Error(`issues[${index}] quality corrective action requires a quality issue.`)
       if (correctiveAction && qualityCorrectiveAction) throw new Error(`issues[${index}] cannot carry maintenance and quality corrective actions together.`)
-      if (qualityCorrectiveAction?.contract === PRODUCTION_QUALITY_CAPA_SCHEMA
-        && !timestampBefore(resolution.resolvedAt as string, qualityCorrectiveAction.effectivenessReviewDueAt as string)) throw new Error(`issues[${index}] CAPA effectiveness review must be due after resolution.`)
-      if (qualityEffectivenessReview) {
-        if (qualityCorrectiveAction?.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA) throw new Error(`issues[${index}] effectiveness review requires a v2 quality CAPA.`)
-        if (timestampBefore(qualityEffectivenessReview.reviewedAt, qualityCorrectiveAction.effectivenessReviewDueAt as string)) throw new Error(`issues[${index}] effectiveness review cannot predate its due time.`)
-      }
     }
   }
   assertUnique(issueIds, 'Production issue ID')
@@ -1716,7 +1204,7 @@ export function validateProductionState(value: unknown): ProductionState {
     const issueSnapshotFields = ['issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment'] as const
     const issueSnapshotFieldCount = issueSnapshotFields.filter((field) => candidate[field] !== undefined).length
     const materialFieldCount = ['materialRef', 'materialLot', 'materialUnit'].filter((field) => candidate[field] !== undefined).length
-    const maintenanceFieldCount = ['maintenanceOwner', 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, ...maintenanceStartReviewFields, ...maintenanceResultFields, 'nextDueAt'].filter((field) => candidate[field] !== undefined).length
+    const maintenanceFieldCount = ['maintenanceOwner', 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, ...maintenanceResultFields, 'nextDueAt'].filter((field) => candidate[field] !== undefined).length
     if (candidate.kind === 'equipment_master_imported') {
       if (candidate.subjectId !== 'equipment-master') throw new Error(`events[${index}] must reference the equipment master authority.`)
       if (!Array.isArray(candidate.equipmentIds) || candidate.equipmentIds.length < 1 || candidate.equipmentIds.length > 100) throw new Error(`events[${index}].equipmentIds are invalid.`)
@@ -1823,34 +1311,6 @@ export function validateProductionState(value: unknown): ProductionState {
       const expectedFields = candidate.kind === 'downtime_ended' ? downtimeEndEventFields : baseEventFields
       if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`events[${index}] downtime event fields are invalid.`)
       if (candidate.kind === 'downtime_ended') canonicalText(candidate.downtimeStartActionId, `events[${index}].downtimeStartActionId`, 160)
-    } else if (candidate.kind === 'maintenance_window_scheduled') {
-      const machine = machines.find((entry): entry is Record<string, unknown> => isRecord(entry) && entry.id === candidate.subjectId)
-      if (!machine || !equipmentIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] maintenance window must reference commissioned equipment.`)
-      if (!validDowntimeTimestamp(candidate.createdAt)
-        || !validDowntimeTimestamp(candidate.maintenanceWindowCapacityAsOf)
-        || !validDowntimeTimestamp(candidate.maintenanceWindowStartAt)
-        || !validDowntimeTimestamp(candidate.maintenanceWindowEndAt)) throw new Error(`events[${index}] maintenance window timestamps are invalid.`)
-      if (Date.parse(candidate.maintenanceWindowCapacityAsOf as string) > Date.parse(candidate.createdAt as string)) throw new Error(`events[${index}] maintenance capacity review cannot follow confirmation.`)
-      if (timestampAtOrBefore(candidate.maintenanceWindowStartAt as string, candidate.createdAt as string)) throw new Error(`events[${index}] maintenance window must begin after confirmation.`)
-      assertSafeInteger(candidate.maintenanceWindowDurationMinutes, `events[${index}].maintenanceWindowDurationMinutes`, 15)
-      if (Number(candidate.maintenanceWindowDurationMinutes) > 10_080 || Number(candidate.maintenanceWindowDurationMinutes) % 15 !== 0) throw new Error(`events[${index}] maintenance duration must use 15-minute increments up to seven days.`)
-      if (Date.parse(candidate.maintenanceWindowEndAt as string) !== Date.parse(candidate.maintenanceWindowStartAt as string) + Number(candidate.maintenanceWindowDurationMinutes) * 60_000) throw new Error(`events[${index}] maintenance window end does not match its duration.`)
-      canonicalText(candidate.maintenanceOwner, `events[${index}].maintenanceOwner`, 120)
-      canonicalText(candidate.maintenanceStrategyActionId, `events[${index}].maintenanceStrategyActionId`, 160)
-      assertSafeInteger(candidate.maintenanceStrategyRevision, `events[${index}].maintenanceStrategyRevision`, 1)
-      canonicalText(candidate.maintenanceProcedureReference, `events[${index}].maintenanceProcedureReference`, 240)
-      if (!validDowntimeTimestamp(candidate.maintenancePlannedDueAt)) throw new Error(`events[${index}].maintenancePlannedDueAt is invalid.`)
-      const workCentreId = canonicalText(candidate.maintenanceWindowWorkCentreId, `events[${index}].maintenanceWindowWorkCentreId`, 80)
-      if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`events[${index}].maintenanceWindowWorkCentreId is invalid.`)
-      assertSafeInteger(candidate.maintenanceWindowOrderCount, `events[${index}].maintenanceWindowOrderCount`)
-      assertSafeInteger(candidate.maintenanceWindowLoadMinutesMilli, `events[${index}].maintenanceWindowLoadMinutesMilli`)
-      if (Number(candidate.maintenanceWindowOrderCount) > 20
-        || (Number(candidate.maintenanceWindowOrderCount) === 0) !== (Number(candidate.maintenanceWindowLoadMinutesMilli) === 0)) throw new Error(`events[${index}] maintenance controlled-load summary is invalid.`)
-      assertSafeInteger(candidate.sourceRevision, `events[${index}].sourceRevision`)
-      if (candidate.sourceRevision !== events.length - index - 1) throw new Error(`events[${index}] maintenance window source revision does not match its append position.`)
-      if (typeof candidate.sourceDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.sourceDigest)) throw new Error(`events[${index}].sourceDigest is invalid.`)
-      const expectedSummary = `Scheduled maintenance for ${String(machine.name)} from ${candidate.maintenanceWindowStartAt} to ${candidate.maintenanceWindowEndAt}`
-      if (candidate.summary !== expectedSummary) throw new Error(`events[${index}] maintenance window summary is not canonical.`)
     } else if (candidate.kind === 'maintenance_started' || candidate.kind === 'maintenance_completed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!validDowntimeTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt must be a canonical UTC millisecond timestamp for maintenance.`)
@@ -1861,12 +1321,8 @@ export function validateProductionState(value: unknown): ProductionState {
       const hasResult = resultFieldCount === maintenanceResultFields.length
       if (resultFieldCount !== 0 && !hasResult) throw new Error(`events[${index}] maintenance result is incomplete.`)
       if (hasResult && (candidate.kind !== 'maintenance_completed' || !strategyBound)) throw new Error(`events[${index}] maintenance result requires strategy-bound completion.`)
-      const startReviewFieldCount = maintenanceStartReviewFields.filter((field) => candidate[field] !== undefined).length
-      const hasStartReview = startReviewFieldCount === maintenanceStartReviewFields.length
-      if (startReviewFieldCount !== 0 && !hasStartReview) throw new Error(`events[${index}] maintenance start review is incomplete.`)
-      if (hasStartReview && (candidate.kind !== 'maintenance_started' || !strategyBound)) throw new Error(`events[${index}] maintenance start review requires strategy-bound work.`)
       const expectedFields = candidate.kind === 'maintenance_started'
-        ? (strategyBound ? (hasStartReview ? maintenanceStartEventFields : maintenanceHistoricalStartEventFields) : [...baseEventFields, 'maintenanceOwner'])
+        ? (strategyBound ? maintenanceStartEventFields : [...baseEventFields, 'maintenanceOwner'])
         : (strategyBound
             ? (hasResult ? maintenanceCompleteEventFields : maintenanceHistoricalCompleteEventFields)
             : [...baseEventFields, 'maintenanceStartActionId'])
@@ -1878,23 +1334,6 @@ export function validateProductionState(value: unknown): ProductionState {
         assertSafeInteger(candidate.maintenanceStrategyRevision, `events[${index}].maintenanceStrategyRevision`, 1)
         canonicalText(candidate.maintenanceProcedureReference, `events[${index}].maintenanceProcedureReference`, 240)
         if (!validDowntimeTimestamp(candidate.maintenancePlannedDueAt)) throw new Error(`events[${index}].maintenancePlannedDueAt is invalid.`)
-        if (candidate.kind === 'maintenance_started' && hasStartReview) {
-          canonicalText(candidate.maintenanceWindowActionId, `events[${index}].maintenanceWindowActionId`, 160)
-          if (!validDowntimeTimestamp(candidate.maintenanceWindowCapacityAsOf)
-            || Date.parse(candidate.maintenanceWindowCapacityAsOf as string) > Date.parse(candidate.createdAt as string)) throw new Error(`events[${index}].maintenanceWindowCapacityAsOf is invalid.`)
-          const workCentreId = canonicalText(candidate.maintenanceWindowWorkCentreId, `events[${index}].maintenanceWindowWorkCentreId`, 80)
-          if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`events[${index}].maintenanceWindowWorkCentreId is invalid.`)
-          assertSafeInteger(candidate.maintenanceWindowOrderCount, `events[${index}].maintenanceWindowOrderCount`)
-          assertSafeInteger(candidate.maintenanceWindowLoadMinutesMilli, `events[${index}].maintenanceWindowLoadMinutesMilli`)
-          if (!Array.isArray(candidate.maintenanceWindowJobIds) || candidate.maintenanceWindowJobIds.length > 20) throw new Error(`events[${index}].maintenanceWindowJobIds are invalid.`)
-          const jobIds = candidate.maintenanceWindowJobIds.map((jobId, position) => canonicalText(jobId, `events[${index}].maintenanceWindowJobIds[${position}]`, 80))
-          assertUnique(jobIds, `events[${index}] maintenance controlled-load job ID`)
-          if (jobIds.length !== Number(candidate.maintenanceWindowOrderCount)
-            || (jobIds.length === 0) !== (Number(candidate.maintenanceWindowLoadMinutesMilli) === 0)) throw new Error(`events[${index}] maintenance start controlled-load summary is invalid.`)
-          assertSafeInteger(candidate.sourceRevision, `events[${index}].sourceRevision`)
-          if (candidate.sourceRevision !== events.length - index - 1) throw new Error(`events[${index}] maintenance start source revision does not match its append position.`)
-          if (typeof candidate.sourceDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.sourceDigest)) throw new Error(`events[${index}].sourceDigest is invalid.`)
-        }
         if (candidate.kind === 'maintenance_completed') {
           if (!validDowntimeTimestamp(candidate.nextDueAt) || timestampAtOrBefore(candidate.nextDueAt as string, candidate.createdAt as string)) throw new Error(`events[${index}].nextDueAt must follow reviewed completion.`)
           if (hasResult) {
@@ -1937,13 +1376,6 @@ export function validateProductionState(value: unknown): ProductionState {
       if (candidate.maintenanceCorrectiveAction !== undefined) validateProductionMaintenanceCorrectiveAction(candidate.maintenanceCorrectiveAction, `events[${index}].maintenanceCorrectiveAction`)
       if (candidate.qualityCorrectiveAction !== undefined) validateProductionQualityCorrectiveAction(candidate.qualityCorrectiveAction, `events[${index}].qualityCorrectiveAction`)
       if (candidate.maintenanceCorrectiveAction !== undefined && candidate.qualityCorrectiveAction !== undefined) throw new Error(`events[${index}] cannot carry maintenance and quality corrective actions together.`)
-    } else if (candidate.kind === 'quality_effectiveness_reviewed') {
-      if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
-      const review = validateProductionQualityEffectivenessReview(candidate.qualityEffectivenessReview, `events[${index}].qualityEffectivenessReview`)
-      if (review.actionId !== candidate.actionId
-        || review.reviewedAt !== candidate.createdAt
-        || review.reviewedBy !== candidate.actor
-        || review.evidenceReference !== candidate.evidenceReference) throw new Error(`events[${index}] effectiveness review proof is detached from its event.`)
     }
   }
   assertUnique(eventIds, 'Production event ID')
@@ -1992,7 +1424,7 @@ export function validateProductionState(value: unknown): ProductionState {
       || event.summary !== `Commissioned ${String(asset.name)} at ${String(asset.workCentreId)}`) throw new Error('Equipment commissioning record does not match its immutable event.')
     const laterLifecycle = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate)
       && candidate.subjectId === equipmentId
-      && ['machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_window_scheduled', 'maintenance_started', 'maintenance_completed', 'equipment_maintenance_strategy_saved'].includes(String(candidate.kind)))
+      && ['machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'equipment_maintenance_strategy_saved'].includes(String(candidate.kind)))
     if (laterLifecycle.some((candidate) => timestampBefore(candidate.createdAt as string, event.createdAt as string))) throw new Error('Equipment lifecycle history cannot predate commissioning.')
     commissionedIds.add(equipmentId)
   }
@@ -2002,7 +1434,7 @@ export function validateProductionState(value: unknown): ProductionState {
     if (postOpeningIds.length !== commissionedIds.size || postOpeningIds.some((id) => !commissionedIds.has(id))) throw new Error('Every runtime machine added after opening requires equipment commissioning.')
   }
   const equipmentMaintenanceStrategyEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'equipment_maintenance_strategy_saved')
-  const equipmentMaintenanceEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && (event.kind === 'maintenance_window_scheduled' || event.kind === 'maintenance_started' || event.kind === 'maintenance_completed'))
+  const equipmentMaintenanceEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && (event.kind === 'maintenance_started' || event.kind === 'maintenance_completed'))
   let retainedEquipmentMaintenanceStrategyEvents = 0
   for (const asset of equipmentAssets) {
     const equipmentId = String(asset.id)
@@ -2024,15 +1456,11 @@ export function validateProductionState(value: unknown): ProductionState {
       const isBound = maintenanceEvent.maintenanceStrategyActionId !== undefined
       if (Boolean(applicableStrategy) !== isBound) throw new Error('Commissioned equipment maintenance must bind the strategy active at execution time.')
       if (!applicableStrategy) continue
-      const previousCompletion = assetMaintenanceEvents.find((candidate) => candidate.kind === 'maintenance_completed'
-        && candidate.maintenanceStrategyActionId === applicableStrategy.actionId
-        && timestampBefore(candidate.createdAt as string, maintenanceEvent.createdAt as string))
-      const expectedCycleDueAt = previousCompletion?.nextDueAt ?? applicableStrategy.nextDueAt
       if (maintenanceEvent.maintenanceStrategyActionId !== applicableStrategy.actionId
         || maintenanceEvent.maintenanceStrategyRevision !== applicableStrategy.strategyRevision
         || maintenanceEvent.maintenanceProcedureReference !== applicableStrategy.procedureReference
-        || maintenanceEvent.maintenancePlannedDueAt !== expectedCycleDueAt
-        || ((maintenanceEvent.kind === 'maintenance_started' || maintenanceEvent.kind === 'maintenance_window_scheduled') && maintenanceEvent.maintenanceOwner !== applicableStrategy.maintenanceOwner)) throw new Error('Equipment maintenance execution does not match its immutable strategy revision and due cycle.')
+        || maintenanceEvent.maintenancePlannedDueAt !== applicableStrategy.nextDueAt
+        || (maintenanceEvent.kind === 'maintenance_started' && maintenanceEvent.maintenanceOwner !== applicableStrategy.maintenanceOwner)) throw new Error('Equipment maintenance execution does not match its immutable strategy revision.')
       if (maintenanceEvent.kind === 'maintenance_completed') {
         const expectedNextDueAt = new Date(Date.parse(maintenanceEvent.createdAt as string) + Number(applicableStrategy.intervalDays) * 86_400_000).toISOString()
         if (maintenanceEvent.nextDueAt !== expectedNextDueAt) throw new Error('Equipment maintenance completion next due does not match its strategy interval.')
@@ -2053,28 +1481,6 @@ export function validateProductionState(value: unknown): ProductionState {
     retainedEquipmentMaintenanceStrategyEvents += matches.length
   }
   if (retainedEquipmentMaintenanceStrategyEvents !== equipmentMaintenanceStrategyEvents.length) throw new Error('Equipment maintenance strategy history contains an unknown event.')
-  const maintenanceWindowEvents = equipmentMaintenanceEvents.filter((event) => event.kind === 'maintenance_window_scheduled')
-  const maintenanceWindowCycles = maintenanceWindowEvents.map((event) => `${String(event.subjectId)}\u0000${String(event.maintenanceStrategyActionId)}\u0000${String(event.maintenancePlannedDueAt)}`)
-  assertUnique(maintenanceWindowCycles, 'Production maintenance window cycle')
-  for (const [index, event] of maintenanceWindowEvents.entries()) {
-    for (const other of maintenanceWindowEvents.slice(index + 1)) {
-      if (event.maintenanceWindowWorkCentreId !== other.maintenanceWindowWorkCentreId) continue
-      const overlaps = Date.parse(event.maintenanceWindowStartAt as string) < Date.parse(other.maintenanceWindowEndAt as string)
-        && Date.parse(other.maintenanceWindowStartAt as string) < Date.parse(event.maintenanceWindowEndAt as string)
-      if (overlaps) throw new Error('Production maintenance windows cannot overlap at one work centre.')
-    }
-  }
-  const reviewedMaintenanceStarts = equipmentMaintenanceEvents.filter((event) => event.kind === 'maintenance_started' && event.maintenanceWindowActionId !== undefined)
-  for (const start of reviewedMaintenanceStarts) {
-    const window = maintenanceWindowEvents.find((event) => event.actionId === start.maintenanceWindowActionId)
-    if (!window
-      || window.subjectId !== start.subjectId
-      || window.maintenanceStrategyActionId !== start.maintenanceStrategyActionId
-      || window.maintenanceStrategyRevision !== start.maintenanceStrategyRevision
-      || window.maintenancePlannedDueAt !== start.maintenancePlannedDueAt
-      || window.maintenanceWindowWorkCentreId !== start.maintenanceWindowWorkCentreId
-      || timestampBefore(start.createdAt as string, window.createdAt as string)) throw new Error('Maintenance start review does not match its reviewed window.')
-  }
   if (openingJobIds) {
     const openingJobIdSet = new Set(openingJobIds)
     const creationEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_created')
@@ -2176,7 +1582,6 @@ export function validateProductionState(value: unknown): ProductionState {
     if (!isRecord(candidate)) continue
     const openingEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'issue_opened' && event.subjectId === candidate.id)
     const resolutionEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'issue_resolved' && event.subjectId === candidate.id)
-    const effectivenessEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'quality_effectiveness_reviewed' && event.subjectId === candidate.id)
     if (openingEvents.length > 1) throw new Error(`issues[${index}] has duplicate opening events.`)
     const openingEvent = openingEvents[0]
     const actionFieldCount = ['severity', 'owner', 'dueAt', 'containment'].filter((field) => candidate[field] !== undefined).length
@@ -2213,7 +1618,6 @@ export function validateProductionState(value: unknown): ProductionState {
           || completionEvent.maintenanceReturnToService !== issueSource.returnToService
           || completionEvent.maintenanceFindings !== issueSource.findings
           || completionEvent.evidenceReference !== issueSource.evidenceReference) throw new Error(`issues[${index}] maintenance finding source does not match reviewed completion evidence.`)
-        validateProductionMaintenanceImpactEvidence(value as unknown as ProductionState, issueSource, `issues[${index}].maintenanceFindingSource`)
         if (events.indexOf(openingEvent) >= events.indexOf(completionEvent)) throw new Error(`issues[${index}] maintenance finding problem must follow its reviewed completion.`)
         if (issues.filter((entry): entry is Record<string, unknown> => isRecord(entry) && isRecord(entry.maintenanceFindingSource) && entry.maintenanceFindingSource.completionActionId === issueSource.completionActionId).length !== 1) throw new Error(`issues[${index}] duplicates a maintenance finding problem.`)
       }
@@ -2222,11 +1626,11 @@ export function validateProductionState(value: unknown): ProductionState {
     }
 
     if (candidate.status === 'open') {
-      if (resolutionEvents.length || effectivenessEvents.length) throw new Error(`issues[${index}] is open but has closeout history.`)
+      if (resolutionEvents.length) throw new Error(`issues[${index}] is open but has a resolution event.`)
       continue
     }
     if (!isRecord(candidate.resolution)) {
-      if (openingEvent || resolutionEvents.length || effectivenessEvents.length) throw new Error(`issues[${index}] is resolved without matching proof.`)
+      if (openingEvent || resolutionEvents.length) throw new Error(`issues[${index}] is resolved without matching proof.`)
       continue
     }
     const resolution = candidate.resolution
@@ -2246,31 +1650,6 @@ export function validateProductionState(value: unknown): ProductionState {
     if (qualityCorrectiveAction) {
       const expectedPriorIssueIds = productionQualityPriorIssueIds(issues as ProductionIssue[], candidate.id as string, qualityCorrectiveAction.recurrenceKey, resolution.resolvedAt as string)
       if (JSON.stringify(qualityCorrectiveAction.priorIssueIds) !== JSON.stringify(expectedPriorIssueIds)) throw new Error(`issues[${index}] quality recurrence links do not match prior CAPA evidence.`)
-    }
-    const effectivenessReview = resolution.qualityEffectivenessReview === undefined ? undefined : validateProductionQualityEffectivenessReview(resolution.qualityEffectivenessReview, `issues[${index}].resolution.qualityEffectivenessReview`)
-    if (!effectivenessReview) {
-      if (effectivenessEvents.length) throw new Error(`issues[${index}] has effectiveness history without a stored review.`)
-    } else {
-      const matchingEffectivenessEvents = effectivenessEvents.filter((event) => event.actionId === effectivenessReview.actionId)
-      if (effectivenessEvents.length !== 1 || matchingEffectivenessEvents.length !== 1) throw new Error(`issues[${index}] effectiveness review is not backed by exactly one event.`)
-      const effectivenessEvent = matchingEffectivenessEvents[0]
-      if (effectivenessEvent.createdAt !== effectivenessReview.reviewedAt
-        || effectivenessEvent.actor !== effectivenessReview.reviewedBy
-        || effectivenessEvent.evidenceReference !== effectivenessReview.evidenceReference
-        || JSON.stringify(effectivenessEvent.qualityEffectivenessReview) !== JSON.stringify(effectivenessReview)) throw new Error(`issues[${index}] effectiveness review does not match its immutable event.`)
-      if (!qualityCorrectiveAction || qualityCorrectiveAction.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA) throw new Error(`issues[${index}] effectiveness review requires a v2 quality CAPA.`)
-      const expectedRecurrenceIssueIds = productionQualityRecurrenceIssueIdsAtReview(
-        issues as ProductionIssue[],
-        events as ProductionEvent[],
-        candidate.id as string,
-        qualityCorrectiveAction.recurrenceKey,
-        resolution.resolvedAt as string,
-        effectivenessReview.reviewedAt,
-        effectivenessReview.actionId,
-      )
-      if (JSON.stringify(effectivenessReview.recurrenceIssueIds) !== JSON.stringify(expectedRecurrenceIssueIds)) throw new Error(`issues[${index}] effectiveness review recurrence evidence is invalid.`)
-      if (effectivenessEvent.summary !== `Reviewed ${String(candidate.id)} CAPA as ${effectivenessReview.outcome}`) throw new Error(`issues[${index}] effectiveness review summary is not canonical.`)
-      if (events.indexOf(effectivenessEvent) >= events.indexOf(resolutionEvent)) throw new Error(`issues[${index}] effectiveness review must follow CAPA resolution.`)
     }
     if (openingEvent && events.indexOf(resolutionEvent) >= events.indexOf(openingEvent)) {
       throw new Error(`issues[${index}] resolution must follow its opening event.`)
@@ -2624,12 +2003,7 @@ export function loadProductionWorkspace(storage = browserStorage()): ProductionW
   try { currentRaw = storage.getItem(PRODUCTION_KEY) } catch { return { state: createEmptyProduction(), source: 'recovery', error: 'Production storage could not be read. No local data was replaced.' } }
   if (currentRaw !== null) {
     try {
-      const current = validateProductionState(JSON.parse(currentRaw))
-      if (JSON.stringify(current) === JSON.stringify(createLegacySeedProduction())
-        || JSON.stringify(current) === JSON.stringify(createMaintenanceSeedProduction())) {
-        return persistInitialState(storage, createSeedProduction(), 'seed')
-      }
-      return { state: current, source: 'current', error: '' }
+      return { state: validateProductionState(JSON.parse(currentRaw)), source: 'current', error: '' }
     } catch {
       return { state: createEmptyProduction(), source: 'recovery', error: 'Production v2 data is malformed. Recovery failed closed without restoring or replacing older data.' }
     }
@@ -2645,7 +2019,7 @@ export function loadProductionWorkspace(storage = browserStorage()): ProductionW
       return { state: createEmptyProduction(), source: 'recovery', error: 'Legacy Production data is malformed. Migration failed closed and did not create v2 data.' }
     }
   }
-  return persistInitialState(storage, createSeedProduction(), 'seed')
+  return persistInitialState(storage, createSeedProduction(Date.now()), 'seed')
 }
 
 export function productionWorkspaceCanWrite(
@@ -2716,12 +2090,10 @@ function productionOrderExecutionAppendIsExact(current: ProductionState, candida
 
 function productionWorkingSampleTransitionIsExact(current: ProductionState, candidate: ProductionState) {
   const sampleId = productionWorkingSamplePackId(candidate)
-  if (!sampleId || candidate.jobs.length < 1) return false
+  if (!sampleId || candidate.jobs.length < 1 || candidate.events.length !== candidate.jobs.length) return false
   const prefix = `${productionWorkingSampleActionPrefix}${sampleId.toUpperCase()}-`
   const sampleEvents = candidate.events.filter((event) => event.actionId.startsWith(prefix))
-  const retainedSeedEvents = candidate.events.filter((event) => !event.actionId.startsWith(prefix))
-  if (sampleEvents.length !== candidate.jobs.length
-    || JSON.stringify(retainedSeedEvents) !== JSON.stringify(createSeedProduction().events)) return false
+  if (sampleEvents.length !== candidate.events.length) return false
   const capturedAt = sampleEvents[0]?.createdAt
   const reasonMatch = /^Seed the (.+) working sample\.$/.exec(sampleEvents[0]?.reason ?? '')
   if (!capturedAt || !reasonMatch
@@ -2859,12 +2231,10 @@ export function productionMaintenanceFindingSource(
   const completion = record?.completion
   const result = completion?.result
   const strategy = record?.strategy
-  const asset = current.equipmentMaster?.assets.find((candidate) => candidate.id === record?.machineId)
   if (!record || !completion || !result || !strategy
-    || !asset
     || (result.returnToService !== 'restricted' && result.returnToService !== 'not_recommended')) return null
   return {
-    contract: PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA,
+    contract: 'supermega.production.maintenance-finding-source.v1',
     equipmentId: record.machineId,
     equipmentName: record.machineName,
     maintenanceOwner: record.owner,
@@ -2875,8 +2245,6 @@ export function productionMaintenanceFindingSource(
     returnToService: result.returnToService,
     findings: result.findings,
     evidenceReference: completion.evidenceReference,
-    workCentreId: asset.workCentreId,
-    affectedOrders: productionMaintenanceAffectedOrders(current, asset.workCentreId),
   }
 }
 
@@ -2920,142 +2288,6 @@ export function productionMaintenanceDueQueue(
       || left.assetId.localeCompare(right.assetId)
   })
   return { contract: 'supermega.production.maintenance-due-queue.v1', asOf, items }
-}
-
-function productionMaintenanceCapacityOrder(
-  state: ProductionState,
-  jobId: string,
-  execution: PlantOrderState,
-  workCentreId: string,
-): ProductionMaintenanceCapacityOrder | null {
-  const projection = projectPlantOrder(execution)
-  const plan = projection.plan
-  if (!plan || projection.status === 'unplanned' || projection.status === 'released_to_stock') return null
-  const job = state.jobs.find((candidate) => candidate.id === jobId)
-  if (!job) throw new Error(`Maintenance capacity review cannot find Production job ${jobId}.`)
-  let totalRemainingMinutesMilli = 0
-  const operations = projection.operations.flatMap((operation): ProductionMaintenanceCapacityOrder['operations'] => {
-    if (operation.workCentreId !== workCentreId || operation.remainingQuantity <= 0) return []
-    const remainingMinutesMilli = operation.remainingQuantity * operation.minutesPerUnitMilli
-    assertSafeInteger(remainingMinutesMilli, `Maintenance capacity review ${jobId} ${operation.operationId} remaining minutes`)
-    const nextTotal = totalRemainingMinutesMilli + remainingMinutesMilli
-    assertSafeInteger(nextTotal, `Maintenance capacity review ${jobId} total remaining minutes`)
-    totalRemainingMinutesMilli = nextTotal
-    return [{
-      operationId: operation.operationId,
-      sequence: operation.sequence,
-      name: operation.name,
-      status: operation.status,
-      remainingQuantity: operation.remainingQuantity,
-      remainingMinutesMilli,
-    }]
-  })
-  if (!operations.length) return null
-  return {
-    jobId,
-    product: plan.job.product,
-    jobOwner: job.owner ?? null,
-    jobPriority: job.priority ?? null,
-    jobDueAt: job.dueAt ?? null,
-    planId: plan.planId,
-    planPackageDigest: plan.packageDigest,
-    orderRevision: projection.revision,
-    orderHeadDigest: projection.headDigest,
-    status: projection.status,
-    operations,
-    totalRemainingMinutesMilli,
-  }
-}
-
-export function productionMaintenanceCapacityReview(
-  state: ProductionState,
-  asOf: string,
-): ProductionMaintenanceCapacityReview {
-  const current = validateProductionState(state)
-  const dueQueue = productionMaintenanceDueQueue(current, asOf)
-  const orderEntries = productionOrderPortfolioEntries(current)
-  const items = dueQueue.items.map((item) => {
-    const asset = current.equipmentMaster?.assets.find((candidate) => candidate.id === item.assetId)
-    if (!asset) throw new Error(`Maintenance capacity review cannot find equipment ${item.assetId}.`)
-    const orders = orderEntries.flatMap(({ jobId, execution }) => {
-      const order = productionMaintenanceCapacityOrder(current, jobId, execution, asset.workCentreId)
-      return order ? [order] : []
-    }).sort((left, right) => left.jobId < right.jobId ? -1 : left.jobId > right.jobId ? 1 : 0)
-    let totalRemainingMinutesMilli = 0
-    for (const order of orders) {
-      const nextTotal = totalRemainingMinutesMilli + order.totalRemainingMinutesMilli
-      assertSafeInteger(nextTotal, `Maintenance capacity review ${item.assetId} total remaining minutes`)
-      totalRemainingMinutesMilli = nextTotal
-    }
-    return {
-      ...item,
-      workCentreId: asset.workCentreId,
-      loadStatus: `${item.status}_${orders.length ? 'with_load' : 'no_load'}` as ProductionMaintenanceCapacityReview['items'][number]['loadStatus'],
-      orders,
-      totalRemainingMinutesMilli,
-    }
-  })
-  return {
-    contract: PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA,
-    asOf,
-    items,
-    authority: {
-      maintenanceScheduled: false,
-      ordersRescheduled: false,
-      machineStatusChanged: false,
-      equipmentCommanded: false,
-    },
-  }
-}
-
-export function productionMaintenanceWindows(state: ProductionState): ProductionMaintenanceWindow[] {
-  const current = validateProductionState(state)
-  return current.events.flatMap((event): ProductionMaintenanceWindow[] => {
-    if (event.kind !== 'maintenance_window_scheduled') return []
-    const machine = current.machines.find((candidate) => candidate.id === event.subjectId)
-    if (!machine) return []
-    return [{
-      contract: PRODUCTION_MAINTENANCE_WINDOW_SCHEMA,
-      actionId: event.actionId,
-      equipmentId: event.subjectId,
-      equipmentName: machine.name,
-      maintenanceOwner: event.maintenanceOwner ?? '',
-      scheduledAt: event.createdAt,
-      scheduledBy: event.actor,
-      evidenceReference: event.evidenceReference,
-      plannedStartAt: event.maintenanceWindowStartAt ?? '',
-      plannedEndAt: event.maintenanceWindowEndAt ?? '',
-      durationMinutes: event.maintenanceWindowDurationMinutes ?? 0,
-      capacityAsOf: event.maintenanceWindowCapacityAsOf ?? '',
-      workCentreId: event.maintenanceWindowWorkCentreId ?? '',
-      orderCount: event.maintenanceWindowOrderCount ?? 0,
-      totalRemainingMinutesMilli: event.maintenanceWindowLoadMinutesMilli ?? 0,
-      strategyActionId: event.maintenanceStrategyActionId ?? '',
-      strategyRevision: event.maintenanceStrategyRevision ?? 0,
-      procedureReference: event.maintenanceProcedureReference ?? '',
-      dueAt: event.maintenancePlannedDueAt ?? '',
-      sourceRevision: event.sourceRevision ?? 0,
-      sourceDigest: event.sourceDigest ?? '',
-      authority: {
-        maintenanceScheduled: true,
-        ordersRescheduled: false,
-        machineStatusChanged: false,
-        equipmentCommanded: false,
-      },
-    }]
-  }).sort((left, right) => Date.parse(left.plannedStartAt) - Date.parse(right.plannedStartAt)
-    || left.equipmentId.localeCompare(right.equipmentId))
-}
-
-export function currentProductionMaintenanceWindow(state: ProductionState, equipmentId: string) {
-  if (!validCanonicalText(equipmentId, 80)) return null
-  const current = validateProductionState(state)
-  const strategy = current.equipmentMaster?.assets.find((asset) => asset.id === equipmentId)?.maintenanceStrategy
-  if (!strategy) return null
-  return productionMaintenanceWindows(current).find((window) => window.equipmentId === equipmentId
-    && window.strategyActionId === strategy.actionId
-    && window.strategyRevision === strategy.revision
-    && window.dueAt === strategy.nextDueAt) ?? null
 }
 
 export function buildProductionShiftHandoff(state: ProductionState, shiftRef: string, plantOrderScope = 'plant:local-sample'): ProductionShiftHandoff | null {
@@ -3899,11 +3131,10 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
     && sampleEvents.every((event) => event.actionId.startsWith(requestedPrefix))
     && JSON.stringify(currentSampleJobs) === JSON.stringify(requestedJobs)) return source
 
-  const seed = createSeedProduction()
-  const seedWithoutJobsValue = { ...seed }
-  delete seedWithoutJobsValue.orderExecution
-  delete seedWithoutJobsValue.orderPortfolio
-  const seedWithoutJobs = validateProductionState({ ...seedWithoutJobsValue, jobs: [] })
+  const seedAnchor = productionSeedAnchor(source)
+  if (seedAnchor === null) return null
+  const seed = createSeedProduction(seedAnchor)
+  const seedWithoutJobs = validateProductionState({ ...seed, jobs: [] })
   let base = source
   if (sampleEvents.length || sampleJobIds.size) {
     const baseRevision = source.revision - sampleEvents.length
@@ -3952,44 +3183,6 @@ export function productionWorkingSamplePackId(stateValue: ProductionState) {
   return sampleIds.size === 1 ? [...sampleIds][0] : null
 }
 
-export function productionBusinessJobs(stateValue: ProductionState) {
-  let state: ProductionState
-  try { state = validateProductionState(stateValue) } catch { return [] }
-  const businessJobIds = new Set(state.events.flatMap((event) => (
-    event.kind === 'job_created' && !event.actionId.startsWith(productionWorkingSampleActionPrefix)
-      ? [event.subjectId]
-      : []
-  )))
-  return state.jobs.filter((job) => businessJobIds.has(job.id))
-}
-
-export function productionWorkspaceIsPristineDemo(stateValue: ProductionState) {
-  let state: ProductionState
-  try { state = validateProductionState(stateValue) } catch { return false }
-  const seed = createSeedProduction()
-  if (JSON.stringify(state) === JSON.stringify(seed)) return true
-  const sampleId = productionWorkingSamplePackId(state)
-  const sampleEvents = state.events.filter((event) => event.actionId.startsWith(productionWorkingSampleActionPrefix))
-  const retainedSeedEvents = state.events.filter((event) => !event.actionId.startsWith(productionWorkingSampleActionPrefix))
-  if (!sampleId
-    || sampleEvents.length !== state.jobs.length
-    || JSON.stringify(retainedSeedEvents) !== JSON.stringify(seed.events)) return false
-  const [firstEvent] = sampleEvents
-  const sampleNameMatch = /^Seed the (.+) working sample\.$/.exec(firstEvent?.reason ?? '')
-  if (!firstEvent || !sampleNameMatch
-    || sampleEvents.some((event) => event.kind !== 'job_created'
-      || event.createdAt !== firstEvent.createdAt
-      || event.reason !== firstEvent.reason
-      || !event.actionId.startsWith(productionWorkingSampleActionPrefix))) return false
-  const expected = installProductionWorkingSampleJobs(seed, {
-    sampleId,
-    sampleName: sampleNameMatch[1],
-    jobs: state.jobs.map((job) => ({ ...job })),
-    capturedAt: firstEvent.createdAt,
-  })
-  return Boolean(expected) && JSON.stringify(expected) === JSON.stringify(state)
-}
-
 export function importProductionJobs(stateValue: ProductionState, input: {
   jobs: ProductionJob[]
   sourceDigest: string
@@ -4003,10 +3196,7 @@ export function importProductionJobs(stateValue: ProductionState, input: {
   const sourceState = validateProductionState(stateValue)
   const uniqueJobIds = new Set(input.jobs.map((job) => job.id))
   if (uniqueJobIds.size !== input.jobs.length) return null
-  const pristineDemo = productionWorkspaceIsPristineDemo(sourceState)
-  const builtInSeedJobIds = new Set(createSeedProduction().jobs.map((job) => job.id))
-  if (!pristineDemo && (productionWorkingSamplePackId(sourceState) || sourceState.jobs.some((job) => builtInSeedJobIds.has(job.id)))) return null
-  let state = pristineDemo ? createEmptyProduction() : sourceState
+  let state = sourceState
   let created = 0
   let alreadyPresent = 0
   for (const [index, job] of input.jobs.entries()) {
@@ -4320,10 +3510,6 @@ export function openProductionIssue(state: ProductionState, issue: ProductionIss
     return existing.kind === 'issue_opened' && existing.subjectId === issue.id && sameProof(existing, proof) && JSON.stringify(storedIssue) === JSON.stringify(issue) ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId) || state.issues.some((candidate) => candidate.id === issue.id) || state.revision >= Number.MAX_SAFE_INTEGER) return null
-  if (issue.maintenanceFindingSource !== undefined) {
-    const expectedSource = productionMaintenanceFindingSource(state, issue.maintenanceFindingSource.completionActionId)
-    if (!expectedSource || JSON.stringify(expectedSource) !== JSON.stringify(issue.maintenanceFindingSource)) return null
-  }
   const event = eventFor(proof, {
     kind: 'issue_opened',
     subjectId: issue.id,
@@ -4375,8 +3561,6 @@ export function resolveProductionIssue(
     || Boolean(issue.maintenanceFindingSource) !== Boolean(maintenanceCorrectiveAction)
     || (issue.kind === 'quality' && Boolean(issue.severity && issue.owner && issue.dueAt && issue.containment) && qualityCorrectiveAction === undefined)
     || (issue.kind !== 'quality' && qualityCorrectiveAction !== undefined)
-    || (qualityCorrectiveAction?.contract === PRODUCTION_QUALITY_CAPA_SCHEMA
-      && !timestampBefore(proof.capturedAt, qualityCorrectiveAction.effectivenessReviewDueAt as string))
     || (qualityCorrectiveAction !== undefined && JSON.stringify(qualityCorrectiveAction.priorIssueIds) !== JSON.stringify(productionQualityPriorIssueIds(state.issues, issueId, qualityCorrectiveAction.recurrenceKey)))
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const resolution: ProductionIssueResolution = {
@@ -4399,77 +3583,6 @@ export function resolveProductionIssue(
     ...state,
     revision: state.revision + 1,
     issues: state.issues.map((candidate) => candidate.id === issueId ? { ...candidate, status: 'resolved' as const, resolution } : candidate),
-    events: [event, ...state.events],
-  })
-}
-
-export function reviewProductionQualityEffectiveness(
-  state: ProductionState,
-  issueId: string,
-  proof: ProductionActionProof,
-  outcome: ProductionQualityEffectivenessOutcome,
-  evidenceSummary: string,
-) {
-  if (!validProof(proof)
-    || (outcome !== 'effective' && outcome !== 'ineffective')
-    || !validCanonicalText(evidenceSummary, 360)) return null
-  const canonicalEvidenceSummary = evidenceSummary.trim()
-  const issue = state.issues.find((candidate) => candidate.id === issueId)
-  const action = issue?.resolution?.qualityCorrectiveAction
-  const existingReview = issue?.resolution?.qualityEffectivenessReview
-  const existingEvent = state.events.find((event) => event.actionId === proof.actionId)
-  if (existingEvent) {
-    return existingEvent.kind === 'quality_effectiveness_reviewed'
-      && existingEvent.subjectId === issueId
-      && sameProof(existingEvent, proof)
-      && existingReview?.actionId === proof.actionId
-      && existingReview.outcome === outcome
-      && existingReview.evidenceSummary === canonicalEvidenceSummary
-      && JSON.stringify(existingEvent.qualityEffectivenessReview) === JSON.stringify(existingReview) ? state : null
-  }
-  if (!issue?.resolution
-    || issue.kind !== 'quality'
-    || issue.status !== 'resolved'
-    || action?.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA
-    || existingReview
-    || actionIdIsUsed(state, proof.actionId)
-    || timestampBefore(proof.capturedAt, action.effectivenessReviewDueAt as string)
-    || state.revision >= Number.MAX_SAFE_INTEGER) return null
-  const latestIssueEvent = state.events.find((event) => event.subjectId === issueId)
-  if (latestIssueEvent && timestampBefore(proof.capturedAt, latestIssueEvent.createdAt)) return null
-  const recurrenceIssueIds = productionQualityRecurrenceIssueIdsAtReview(
-    state.issues,
-    state.events,
-    issueId,
-    action.recurrenceKey,
-    issue.resolution.resolvedAt,
-    proof.capturedAt,
-  )
-  if (outcome === 'effective' && recurrenceIssueIds.length) return null
-  const review: ProductionQualityEffectivenessReview = {
-    contract: PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA,
-    actionId: proof.actionId,
-    reviewedAt: proof.capturedAt,
-    reviewedBy: proof.actor,
-    outcome,
-    evidenceSummary: canonicalEvidenceSummary,
-    evidenceReference: proof.evidenceReference,
-    recurrenceIssueIds,
-    escalation: outcome === 'effective' ? 'none' : 'required',
-  }
-  try { validateProductionQualityEffectivenessReview(review, 'qualityEffectivenessReview') } catch { return null }
-  const event = eventFor(proof, {
-    kind: 'quality_effectiveness_reviewed',
-    subjectId: issueId,
-    summary: `Reviewed ${issueId} CAPA as ${outcome}`,
-    qualityEffectivenessReview: review,
-  })
-  return validateProductionState({
-    ...state,
-    revision: state.revision + 1,
-    issues: state.issues.map((candidate) => candidate.id === issueId
-      ? { ...candidate, resolution: { ...candidate.resolution as ProductionIssueResolution, qualityEffectivenessReview: review } }
-      : candidate),
     events: [event, ...state.events],
   })
 }
@@ -4564,171 +3677,32 @@ export function endProductionDowntime(
   })
 }
 
-export function scheduleProductionMaintenanceWindow(
-  state: ProductionState,
-  equipmentId: string,
-  reviewedCapacity: ProductionMaintenanceCapacityReview,
-  plannedStartAt: string,
-  durationMinutes: number,
-  proof: ProductionActionProof,
-) {
-  const current = validateProductionState(state)
-  if (!validProof(proof)
-    || !validDowntimeTimestamp(proof.capturedAt)
-    || !validCanonicalText(equipmentId, 80)
-    || reviewedCapacity?.contract !== PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA
-    || !validDowntimeTimestamp(reviewedCapacity.asOf)
-    || Date.parse(reviewedCapacity.asOf) > Date.parse(proof.capturedAt)
-    || !validDowntimeTimestamp(plannedStartAt)
-    || timestampAtOrBefore(plannedStartAt, proof.capturedAt)
-    || !Number.isSafeInteger(durationMinutes)
-    || durationMinutes < 15
-    || durationMinutes > 10_080
-    || durationMinutes % 15 !== 0) return null
-  const plannedEndAt = new Date(Date.parse(plannedStartAt) + durationMinutes * 60_000).toISOString()
-  const reviewedItem = reviewedCapacity.items.find((item) => item.assetId === equipmentId)
-  if (!reviewedItem) return null
-  const existing = current.events.find((event) => event.actionId === proof.actionId)
-  if (existing) return existing.kind === 'maintenance_window_scheduled'
-    && existing.subjectId === equipmentId
-    && existing.maintenanceWindowStartAt === plannedStartAt
-    && existing.maintenanceWindowEndAt === plannedEndAt
-    && existing.maintenanceWindowDurationMinutes === durationMinutes
-    && existing.maintenanceWindowCapacityAsOf === reviewedCapacity.asOf
-    && existing.maintenanceWindowWorkCentreId === reviewedItem.workCentreId
-    && existing.maintenanceWindowOrderCount === reviewedItem.orders.length
-    && existing.maintenanceWindowLoadMinutesMilli === reviewedItem.totalRemainingMinutesMilli
-    && sameProof(existing, proof) ? current : null
-  const expectedCapacity = productionMaintenanceCapacityReview(current, reviewedCapacity.asOf)
-  if (JSON.stringify(expectedCapacity) !== JSON.stringify(reviewedCapacity)) return null
-  const asset = current.equipmentMaster?.assets.find((candidate) => candidate.id === equipmentId)
-  const strategy = asset?.maintenanceStrategy
-  const machine = current.machines.find((candidate) => candidate.id === equipmentId)
-  if (!asset || !strategy || !machine
-    || asset.commissioningStatus !== 'commissioned'
-    || reviewedItem.strategyActionId !== strategy.actionId
-    || reviewedItem.strategyRevision !== strategy.revision
-    || reviewedItem.procedureReference !== strategy.procedureReference
-    || reviewedItem.dueAt !== strategy.nextDueAt
-    || reviewedItem.owner !== strategy.maintenanceOwner
-    || reviewedItem.workCentreId !== asset.workCentreId
-    || reviewedItem.orders.length > 20
-    || (reviewedItem.orders.length === 0) !== (reviewedItem.totalRemainingMinutesMilli === 0)) return null
-  const latestEvent = current.events[0]
-  if (actionIdIsUsed(current, proof.actionId)
-    || current.revision >= Number.MAX_SAFE_INTEGER
-    || (latestEvent && timestampBefore(proof.capturedAt, latestEvent.createdAt))
-    || current.events.some((event) => event.kind === 'maintenance_window_scheduled'
-      && event.subjectId === equipmentId
-      && event.maintenanceStrategyActionId === strategy.actionId
-      && event.maintenancePlannedDueAt === strategy.nextDueAt)
-    || current.events.some((event) => event.kind === 'maintenance_window_scheduled'
-      && event.maintenanceWindowWorkCentreId === asset.workCentreId
-      && Date.parse(plannedStartAt) < Date.parse(event.maintenanceWindowEndAt ?? '')
-      && Date.parse(event.maintenanceWindowStartAt ?? '') < Date.parse(plannedEndAt))) return null
-  const sourceDigest = `sha256:${sha256Hex(productionCanonical(current))}`
-  const event = eventFor(proof, {
-    kind: 'maintenance_window_scheduled',
-    subjectId: equipmentId,
-    summary: `Scheduled maintenance for ${machine.name} from ${plannedStartAt} to ${plannedEndAt}`,
-    maintenanceOwner: strategy.maintenanceOwner,
-    maintenanceStrategyActionId: strategy.actionId,
-    maintenanceStrategyRevision: strategy.revision,
-    maintenanceProcedureReference: strategy.procedureReference,
-    maintenancePlannedDueAt: strategy.nextDueAt,
-    maintenanceWindowStartAt: plannedStartAt,
-    maintenanceWindowEndAt: plannedEndAt,
-    maintenanceWindowDurationMinutes: durationMinutes,
-    maintenanceWindowCapacityAsOf: reviewedCapacity.asOf,
-    maintenanceWindowWorkCentreId: asset.workCentreId,
-    maintenanceWindowOrderCount: reviewedItem.orders.length,
-    maintenanceWindowLoadMinutesMilli: reviewedItem.totalRemainingMinutesMilli,
-    sourceRevision: current.revision,
-    sourceDigest,
-  })
-  return validateProductionState({
-    ...current,
-    revision: current.revision + 1,
-    events: [event, ...current.events],
-  })
-}
-
 export function startProductionMaintenance(
   state: ProductionState,
   machineId: string,
   maintenanceOwner: string,
   proof: ProductionActionProof,
-  reviewedCapacity?: ProductionMaintenanceCapacityReview,
-  maintenanceWindowActionId?: string,
 ) {
-  const current = validateProductionState(state)
+  validateProductionState(state)
   if (!validProof(proof)
     || !validDowntimeTimestamp(proof.capturedAt)
     || !validCanonicalText(maintenanceOwner, 120)) return null
-  const reviewedItem = reviewedCapacity?.items.find((item) => item.assetId === machineId)
-  const existing = current.events.find((event) => event.actionId === proof.actionId)
-  if (existing) {
-    const reviewMatches = existing.maintenanceWindowActionId === undefined
-      ? reviewedCapacity === undefined && maintenanceWindowActionId === undefined
-      : reviewedCapacity?.contract === PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA
-        && reviewedItem !== undefined
-        && existing.maintenanceWindowActionId === maintenanceWindowActionId
-        && existing.maintenanceWindowCapacityAsOf === reviewedCapacity.asOf
-        && existing.maintenanceWindowWorkCentreId === reviewedItem.workCentreId
-        && existing.maintenanceWindowOrderCount === reviewedItem.orders.length
-        && existing.maintenanceWindowLoadMinutesMilli === reviewedItem.totalRemainingMinutesMilli
-        && JSON.stringify(existing.maintenanceWindowJobIds) === JSON.stringify(reviewedItem.orders.map((order) => order.jobId))
-    return existing.kind === 'maintenance_started'
-      && existing.subjectId === machineId
-      && existing.maintenanceOwner === maintenanceOwner
-      && reviewMatches
-      && sameProof(existing, proof) ? current : null
-  }
-  const machine = current.machines.find((candidate) => candidate.id === machineId)
-  const asset = current.equipmentMaster?.assets.find((candidate) => candidate.id === machineId)
-  const strategy = asset?.maintenanceStrategy
-  const openRecord = productionMaintenanceRecords(current).find((record) => record.machineId === machineId && !record.completion)
-  const latestLifecycleEvent = current.events.find((event) => event.subjectId === machineId
+  const existing = state.events.find((event) => event.actionId === proof.actionId)
+  if (existing) return existing.kind === 'maintenance_started'
+    && existing.subjectId === machineId
+    && existing.maintenanceOwner === maintenanceOwner
+    && sameProof(existing, proof) ? state : null
+  const machine = state.machines.find((candidate) => candidate.id === machineId)
+  const strategy = state.equipmentMaster?.assets.find((candidate) => candidate.id === machineId)?.maintenanceStrategy
+  const openRecord = productionMaintenanceRecords(state).find((record) => record.machineId === machineId && !record.completion)
+  const latestLifecycleEvent = state.events.find((event) => event.subjectId === machineId
     && (event.kind === 'maintenance_started' || event.kind === 'maintenance_completed'))
-  const latestEvent = current.events[0]
   if (!machine
     || openRecord
     || (strategy !== undefined && maintenanceOwner !== strategy.maintenanceOwner)
     || (latestLifecycleEvent && timestampBefore(proof.capturedAt, latestLifecycleEvent.createdAt))
-    || (latestEvent && timestampBefore(proof.capturedAt, latestEvent.createdAt))
-    || actionIdIsUsed(current, proof.actionId)
-    || current.revision >= Number.MAX_SAFE_INTEGER) return null
-  let startReview: Pick<ProductionEvent, 'maintenanceWindowActionId' | 'maintenanceWindowCapacityAsOf' | 'maintenanceWindowWorkCentreId' | 'maintenanceWindowOrderCount' | 'maintenanceWindowLoadMinutesMilli' | 'maintenanceWindowJobIds' | 'sourceRevision' | 'sourceDigest'> | undefined
-  if (strategy) {
-    if (!reviewedCapacity
-      || reviewedCapacity.contract !== PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA
-      || !validDowntimeTimestamp(reviewedCapacity.asOf)
-      || Date.parse(reviewedCapacity.asOf) > Date.parse(proof.capturedAt)
-      || !validCanonicalText(maintenanceWindowActionId, 160)
-      || !reviewedItem) return null
-    const expectedCapacity = productionMaintenanceCapacityReview(current, reviewedCapacity.asOf)
-    if (JSON.stringify(expectedCapacity) !== JSON.stringify(reviewedCapacity)) return null
-    const window = currentProductionMaintenanceWindow(current, machineId)
-    if (!window
-      || window.actionId !== maintenanceWindowActionId
-      || window.workCentreId !== asset?.workCentreId
-      || window.strategyActionId !== strategy.actionId
-      || window.strategyRevision !== strategy.revision
-      || window.dueAt !== strategy.nextDueAt
-      || reviewedItem.workCentreId !== window.workCentreId
-      || reviewedItem.orders.length > 20
-      || (reviewedItem.orders.length === 0) !== (reviewedItem.totalRemainingMinutesMilli === 0)) return null
-    startReview = {
-      maintenanceWindowActionId: window.actionId,
-      maintenanceWindowCapacityAsOf: reviewedCapacity.asOf,
-      maintenanceWindowWorkCentreId: reviewedItem.workCentreId,
-      maintenanceWindowOrderCount: reviewedItem.orders.length,
-      maintenanceWindowLoadMinutesMilli: reviewedItem.totalRemainingMinutesMilli,
-      maintenanceWindowJobIds: reviewedItem.orders.map((order) => order.jobId),
-      sourceRevision: current.revision,
-      sourceDigest: `sha256:${sha256Hex(productionCanonical(current))}`,
-    }
-  } else if (reviewedCapacity !== undefined || maintenanceWindowActionId !== undefined) return null
+    || actionIdIsUsed(state, proof.actionId)
+    || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const event = eventFor(proof, {
     kind: 'maintenance_started',
     subjectId: machineId,
@@ -4739,10 +3713,9 @@ export function startProductionMaintenance(
       maintenanceStrategyRevision: strategy.revision,
       maintenanceProcedureReference: strategy.procedureReference,
       maintenancePlannedDueAt: strategy.nextDueAt,
-      ...startReview,
     }),
   })
-  const next = structuredClone(current)
+  const next = structuredClone(state)
   return validateProductionState({
     ...next,
     revision: next.revision + 1,
