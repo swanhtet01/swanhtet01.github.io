@@ -68,10 +68,10 @@ function resolvePython() {
 }
 
 function isolatedEnvironment(uiUrl) {
-  const requestedLocalModel = String(process.env.SUPERMEGA_OLLAMA_MODEL || '').trim()
-  const localModel = /^[a-zA-Z0-9._:-]{1,80}$/.test(requestedLocalModel)
+  const requestedLocalModel = String(process.env.SUPERMEGA_OLLAMA_MODEL || '').trim().toLowerCase()
+  const localModel = new Set(['llama3.2:1b', 'llama3.2:3b']).has(requestedLocalModel)
     ? requestedLocalModel
-    : 'qwen3.5:0.8b'
+    : 'llama3.2:1b'
   return {
     ...process.env,
     ANTHROPIC_API_KEY: '',

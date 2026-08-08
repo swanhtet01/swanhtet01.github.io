@@ -85,7 +85,7 @@ test('protected state exposes only truthful aggregate daily AI-budget metadata',
 
     delete process.env.OPENROUTER_API_KEY
     process.env.SUPERMEGA_OLLAMA_ENABLED = '1'
-    process.env.SUPERMEGA_OLLAMA_MODEL = 'qwen3.5:0.8b'
+    process.env.SUPERMEGA_OLLAMA_MODEL = 'llama3.2:1b'
     const localResponse = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'owner-budget-key' } })
     assert.equal(localResponse.json.aiConfigured, true, 'explicit local Ollama configuration is reported truthfully')
     process.env.VERCEL = '1'

@@ -18,7 +18,7 @@ test('providerChain is additive — reflects which API keys are configured', () 
   assert.deepEqual(providerChain().map((p) => p.name), ['anthropic', 'openrouter'], 'openrouter joins as failover when its key is set')
   process.env.SUPERMEGA_OLLAMA_ENABLED = '1'
   assert.deepEqual(providerChain().map((p) => p.name), ['anthropic', 'openrouter'], 'local inference requires an explicit valid model')
-  process.env.SUPERMEGA_OLLAMA_MODEL = 'qwen3.5:0.8b'
+  process.env.SUPERMEGA_OLLAMA_MODEL = 'llama3.2:1b'
   assert.deepEqual(providerChain().map((p) => p.name), ['ollama-local', 'anthropic', 'openrouter'], 'explicit local inference is first to avoid paid work')
   process.env.VERCEL = '1'
   assert.deepEqual(providerChain().map((p) => p.name), ['anthropic', 'openrouter'], 'hosted runtimes never admit the loopback provider')
@@ -47,6 +47,8 @@ test('local-only policy never falls through to paid providers', async () => {
   )
   process.env.SUPERMEGA_OLLAMA_ENABLED = '1'
   process.env.SUPERMEGA_OLLAMA_MODEL = 'qwen3.5:0.8b'
+  assert.deepEqual(providerChain().map((provider) => provider.name), [], 'non-Llama local models are rejected')
+  process.env.SUPERMEGA_OLLAMA_MODEL = 'llama3.2:1b'
   assert.deepEqual(providerChain().map((provider) => provider.name), ['ollama-local'])
   process.env.SUPERMEGA_AI_PROVIDER_POLICY = 'unexpected'
   assert.equal(providerPolicy(), 'invalid')
@@ -61,7 +63,7 @@ test('local-only policy never falls through to paid providers', async () => {
 test('local Ollama is loopback-only, single-attempt, structured-capable, and scale-to-zero', async () => {
   clearKeys()
   process.env.SUPERMEGA_OLLAMA_ENABLED = '1'
-  process.env.SUPERMEGA_OLLAMA_MODEL = 'qwen3.5:0.8b'
+  process.env.SUPERMEGA_OLLAMA_MODEL = 'llama3.2:1b'
   const originalFetch = globalThis.fetch
   const requests = []
   try {
@@ -78,7 +80,7 @@ test('local Ollama is loopback-only, single-attempt, structured-capable, and sca
     const plain = await complete({ system: 'bounded system', messages: [{ role: 'user', content: 'hello' }], tier: 'bulk', maxTokens: 16, cacheKey: 'ollama-local-plain' })
     assert.equal(plain.text, 'local answer')
     assert.equal(plain.provider, 'ollama-local')
-    assert.equal(plain.model, 'qwen3.5:0.8b')
+    assert.equal(plain.model, 'llama3.2:1b')
     assert.deepEqual(plain.usage, { input_tokens: 12, output_tokens: 4 })
     const structured = await complete({
       system: 'bounded system',
@@ -109,7 +111,7 @@ test('local Ollama rejects invalid models and fails one bounded attempt on hosti
   process.env.SUPERMEGA_OLLAMA_ENABLED = '1'
   process.env.SUPERMEGA_OLLAMA_MODEL = '../invalid model'
   assert.deepEqual(providerChain().map((provider) => provider.name), [])
-  process.env.SUPERMEGA_OLLAMA_MODEL = 'qwen3.5:0.8b'
+  process.env.SUPERMEGA_OLLAMA_MODEL = 'llama3.2:1b'
   const originalFetch = globalThis.fetch
   let fetchCalls = 0
   try {

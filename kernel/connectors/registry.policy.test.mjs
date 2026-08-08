@@ -82,7 +82,7 @@ test('cloud-enabled policy preserves explicitly configured connector access', as
 test('AI gateway reports only the provider chain admitted by local-only policy without inference', async () => {
   process.env.SUPERMEGA_AI_PROVIDER_POLICY = 'local-only'
   process.env.SUPERMEGA_OLLAMA_ENABLED = '1'
-  process.env.SUPERMEGA_OLLAMA_MODEL = 'qwen3.5:0.8b'
+  process.env.SUPERMEGA_OLLAMA_MODEL = 'llama3.2:1b'
   delete process.env.VERCEL
   delete process.env.VERCEL_ENV
   delete process.env.AWS_LAMBDA_FUNCTION_NAME
@@ -100,4 +100,3 @@ test('AI gateway reports only the provider chain admitted by local-only policy w
     detail: 'local_provider_unavailable',
   })
 })
-

@@ -12,6 +12,7 @@ const API_VERSION = '2023-06-01'
 const OLLAMA_API_URL = 'http://127.0.0.1:11434/api/chat'
 const OLLAMA_RESPONSE_MAX_BYTES = 1024 * 1024
 const OLLAMA_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
+const LOCAL_LLAMA_MODELS = new Set(['llama3.2:1b', 'llama3.2:3b'])
 const PROVIDER_POLICIES = new Set(['cloud-enabled', 'local-only'])
 
 // Model tiers — change the model here, every caller follows. Claude primary, with a cross-PROVIDER
@@ -600,8 +601,8 @@ function providerError(name, status, detail) {
 }
 
 function localOllamaModel() {
-  const model = String(process.env.SUPERMEGA_OLLAMA_MODEL || '').trim()
-  return OLLAMA_MODEL_RE.test(model) ? model : ''
+  const model = String(process.env.SUPERMEGA_OLLAMA_MODEL || '').trim().toLowerCase()
+  return OLLAMA_MODEL_RE.test(model) && LOCAL_LLAMA_MODELS.has(model) ? model : ''
 }
 
 function localOllamaAvailable() {

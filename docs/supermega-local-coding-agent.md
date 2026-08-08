@@ -10,7 +10,7 @@ Open PowerShell or Command Prompt and run:
 C:\Users\thesw\Projects\local-agent-company\local-code.cmd C:\Users\thesw\Projects\supermega-platform
 ```
 
-The launcher uses `qwen3.5:4b` when installed and otherwise uses `qwen3.5:0.8b`. The 0.8B model is suitable for narrow searches, summaries, tests, and small constrained edits. A larger local model will usually produce better repository changes but consume more memory.
+The launcher admits only Llama models. It uses `llama3.2:3b` when installed and current memory permits it; otherwise it uses `llama3.2:1b`. The 1B model is suitable for narrow searches, summaries, tests, and small constrained edits. A larger local model will usually produce better repository changes but consume more memory.
 
 Before launching a model, run the read-only readiness check:
 
@@ -18,7 +18,7 @@ Before launching a model, run the read-only readiness check:
 powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\thesw\.codex\skills\supermega-local-ai\scripts\check_local_ai.ps1 -ProjectPath C:\Users\thesw\Projects\supermega-platform
 ```
 
-`codingAgentReady: true` means Ollama, OpenCode, the launcher, and a supported Qwen model are present. A desktop application being installed is not proof that its model server is running.
+After the stack check, run `local-code.cmd --check C:\Users\thesw\Projects\supermega-platform`; its ready receipt must name an admitted Llama model. A desktop application being installed is not proof that its model server is running.
 
 ## Share with Codex agents
 
@@ -68,7 +68,7 @@ Use prompts with one outcome, exact paths, acceptance checks, and explicit exclu
 
 > Objective: add validation for the Shop pilot input. Deliverable: one validator and its focused test. Scope: `tools/example.mjs` and `tools/example.test.mjs`. Out of scope: UI, deployment, database, and external calls. Run the focused test and stop after reporting the diff and proof.
 
-Do not ask the 0.8B model to redesign the whole product, autonomously deploy, or make business decisions. Use it for bounded execution; use Codex for review, complex architecture, security-sensitive work, and final verification.
+Do not ask the 1B model to redesign the whole product, autonomously deploy, or make business decisions. Use it for bounded execution; use Codex for review, complex architecture, security-sensitive work, and final verification.
 
 ## Existing money workflow
 

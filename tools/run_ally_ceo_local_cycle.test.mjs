@@ -36,6 +36,20 @@ const resourceEnvelope = {
   scaleToZero: true,
 }
 
+test('local CEO cycle rejects non-Llama Ollama models before any command', async () => {
+  let commandCalls = 0
+  await assert.rejects(
+    runAllyCeoLocalCycle({ model: 'qwen3.5:0.8b' }, {
+      runCommand: async () => {
+        commandCalls += 1
+        return { code: 0, stdout: '{}', stderr: '' }
+      },
+    }),
+    /ally_ceo_local_cycle_provider_invalid/,
+  )
+  assert.equal(commandCalls, 0)
+})
+
 test('HQ live command failures retain only recognized contract categories', () => {
   assert.equal(commandFailureReason('hq_live', {
     code: 1,
@@ -251,7 +265,7 @@ const trimReceipt = JSON.stringify({
 })
 
 const health = JSON.stringify({
-  installed_models: ['qwen3.5:0.8b'],
+  installed_models: ['llama3.2:1b'],
   active_jobs: 0,
   queued_missions: 0,
   running_missions: 0,

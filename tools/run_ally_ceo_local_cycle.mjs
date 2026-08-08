@@ -25,6 +25,7 @@ const MAX_CYCLE_RECEIPT_BYTES = 64 * 1024
 const MEMORY_SETTLEMENT_DELAY_MS = 3_000
 const MEMORY_CRITICAL_SETTLEMENT_DELAY_MS = 12_000
 const SCHEDULED_MEMORY_BLOCK_PERCENT = 85
+const LOCAL_LLAMA_MODELS = Object.freeze(new Set(['llama3.2:1b', 'llama3.2:3b']))
 const EXECUTION_SPEC_VERSION = '2026-07-29.23'
 const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
@@ -1318,10 +1319,12 @@ export async function runAllyCeoLocalCycle(input = {}, dependencies = {}) {
   const recoverMemory = input.recoverMemory !== false
   const scheduled = input.scheduled === true
   const provider = input.provider || 'ollama'
-  const model = input.model || 'qwen3.5:0.8b'
+  const model = input.model || 'llama3.2:1b'
   if (refreshKnowledge && !execute) fail('ally_ceo_local_cycle_knowledge_refresh_requires_execution')
   if (repairRejected && !execute) fail('ally_ceo_local_cycle_legacy_repair_requires_execution')
-  if (!['ollama', 'mock'].includes(provider) || !/^[a-zA-Z0-9._:-]{1,80}$/.test(model)) {
+  if (!['ollama', 'mock'].includes(provider)
+    || !/^[a-zA-Z0-9._:-]{1,80}$/.test(model)
+    || (provider === 'ollama' && !LOCAL_LLAMA_MODELS.has(model.toLowerCase()))) {
     fail('ally_ceo_local_cycle_provider_invalid')
   }
   if (scheduled && !recoverMemory && !dependencies.runCommand) {

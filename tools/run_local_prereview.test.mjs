@@ -34,7 +34,7 @@ function receiptLine(overrides = {}) {
     ok: false,
     status: 'rejected',
     reason: 'no_file_change',
-    model: 'qwen3.5:0.8b',
+    model: 'llama3.2:1b',
     agentExitCode: 0,
     changedFiles: [],
     protectedFilesCurrent: true,
@@ -55,7 +55,7 @@ function readyProbeStdout() {
     contract: 'supermega.local-ai-readiness.v1',
     ok: true,
     codingAgentReady: true,
-    supportedModels: ['qwen3.5:0.8b'],
+    supportedModels: ['llama3.2:1b'],
     externalRequestsPerformed: 0,
   }, null, 2)
 }
