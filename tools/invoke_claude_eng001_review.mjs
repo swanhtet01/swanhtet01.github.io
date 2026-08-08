@@ -31,7 +31,7 @@ const CANDIDATES = Object.freeze([
   Object.freeze({
     pr: 412,
     path: 'C:\\Users\\thesw\\Projects\\supermega-slice1',
-    commit: 'bc0970656e25c132fcf4923a91ac45e8e2c34102',
+    commit: '66ff17d677adb9bd83cb275d4497a061e667d406',
   }),
   Object.freeze({
     pr: 413,
