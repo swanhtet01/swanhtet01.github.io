@@ -23,17 +23,18 @@
     { "productId": "plant", "workOrderId": "plant-output-first-entry", "checkpoint": "OPS-169" },
     { "productId": "ecommerce", "workOrderId": "ecommerce-cart-quantity-recovery", "checkpoint": "OPS-170" },
     { "productId": "shop", "workOrderId": "shop-counter-clear-sale-recovery", "checkpoint": "OPS-171" },
-    { "productId": "plant", "workOrderId": "plant-material-entry-recovery", "checkpoint": "OPS-172" }
+    { "productId": "plant", "workOrderId": "plant-material-entry-recovery", "checkpoint": "OPS-172" },
+    { "productId": "website", "workOrderId": "website-page-readiness-recovery", "checkpoint": "OPS-173" }
   ],
   "localImprovementQueue": [
     {
       "contract": "supermega.product-improvement-authority.v1",
-      "productId": "website",
-      "workOrderId": "website-page-readiness-recovery",
+      "productId": "ecommerce",
+      "workOrderId": "ecommerce-cart-line-remove-recovery",
       "priority": 100,
       "status": "ready-local",
-      "workOrder": "Website: make Mark page ready focus the first incomplete page, hero, section, or SEO field while preserving the unsaved preview; never save, download, or publish.",
-      "reason": "Plant material recovery is complete. Website lists issues but disables its review action; exact-field recovery removes that local trap without managed or external authority."
+      "workOrder": "Ecommerce: undo one cart-line removal after a stock recheck, restoring its quantity and checkout details without a quote, Shop request, payment, or stock write.",
+      "reason": "Website recovery is complete. Ecommerce removes lines immediately; one bounded Undo prevents local loss without operating authority."
     }
   ],
   "agentOperatingModel": {
