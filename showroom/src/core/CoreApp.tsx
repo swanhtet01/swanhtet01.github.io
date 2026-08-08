@@ -992,10 +992,12 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   openOrderCount: number
   sampleCatalogActive: boolean
 }) {
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const [cart, setCart] = useState<Record<string, number>>({})
   const [customer, setCustomer] = useState('')
   const [payment, setPayment] = useState('Cash')
   const [query, setQuery] = useState('')
+  const [searchStatus, setSearchStatus] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const visibleItems = normalizedQuery
@@ -1007,6 +1009,11 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   })
   const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus())
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
 
   function changeQuantity(item: CommerceItem, next: number) {
     const nextQuantity = Math.max(0, Math.min(next, item.onHand))
@@ -1028,12 +1035,26 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
 
   function addSearchMatch(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== 'Enter' || !normalizedQuery) return
+    event.preventDefault()
     const exactSku = visibleItems.find((item) => item.sku.toLocaleLowerCase() === normalizedQuery)
     const match = exactSku ?? (visibleItems.length === 1 ? visibleItems[0] : null)
-    if (!match || match.onHand < 1) return
-    event.preventDefault()
+    if (!match) {
+      setSearchStatus(`No item matches "${query.trim()}". The current sale was not changed.`)
+      return
+    }
+    if (match.onHand < 1) {
+      setSearchStatus(`${match.name} is out of stock. The current sale was not changed.`)
+      return
+    }
     addItem(match)
     setQuery('')
+    setSearchStatus(`${match.name} added to the current sale.`)
+  }
+
+  function recoverSearch() {
+    setQuery('')
+    setSearchStatus('')
+    window.requestAnimationFrame(() => searchInputRef.current?.focus())
   }
 
   function clearSale() {
@@ -1060,8 +1081,9 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
           <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} working sample` : 'Counter open'}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
-          <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input autoComplete="off" onChange={(event) => setQuery(event.target.value)} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" type="search" value={query} /></label>
+          <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input aria-describedby="shop-counter-search-help shop-counter-search-status" autoComplete="off" data-shop-counter-primary-field="true" onChange={(event) => { setQuery(event.target.value); setSearchStatus('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" ref={searchInputRef} type="search" value={query} /><small id="shop-counter-search-help">Enter adds an exact SKU or the only match.</small></label>
         </header>
+        <p aria-live="polite" className="sr-only" id="shop-counter-search-status">{searchStatus}</p>
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item) => {
             const quantity = cart[item.sku] ?? 0
@@ -1072,9 +1094,9 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
             </button>
           })}
-        </div> : <Empty>{items.length
-          ? 'No matching item. Search by name or SKU.'
-          : <>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Add or import products</Link> before the first sale.</>}</Empty>}
+        </div> : items.length
+          ? <div className="shop-search-recovery" data-shop-counter-recovery="no-match"><ShopProductArtwork kind={0} /><strong>No item matches "{query.trim()}"</strong><span>Try an item name or exact SKU. {unitCount ? `Your ${unitCount}-item sale is still here.` : 'No item was added.'}</span><button className="core-button primary" onClick={recoverSearch} type="button">Clear search</button></div>
+          : <Empty>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Add or import products</Link> before the first sale.</Empty>}
       </section>
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
