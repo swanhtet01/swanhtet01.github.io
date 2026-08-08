@@ -113,6 +113,7 @@ const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'pr
 const websiteLeadSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts'), 'utf8')
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
 const localMerchandisingImportSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts'), 'utf8')
+const productionJobPlanDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-job-plan-draft.ts'), 'utf8')
 const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts'), 'utf8')
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
@@ -6210,6 +6211,31 @@ if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !produ
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
 const productionJobsContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'production')"), productionPageContract.indexOf("if (tab === 'control')"))
 const productionControlContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'control')"))
+const closeJobScheduleContract = productionPageContract.slice(productionPageContract.indexOf('function closeJobSchedule'), productionPageContract.indexOf('function discardClosedJobSchedule'))
+const undoClosedJobScheduleContract = productionPageContract.slice(productionPageContract.indexOf('function undoClosedJobSchedule'), productionPageContract.indexOf('function reviewJobSchedule'))
+const recoverProductionJobPlanDraftStart = productionJobPlanDraftSource.indexOf('export function recoverProductionJobPlanDraft')
+const recoverProductionJobPlanDraftContract = productionJobPlanDraftSource.slice(recoverProductionJobPlanDraftStart)
+const plantPlanRecoveryForbiddenActions = ['queueAction(', 'mutateProduction(', 'updateProductionJobPlan(', 'setPendingAction(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(']
+if (recoverProductionJobPlanDraftStart < 0
+  || !productionJobPlanDraftSource.includes('export function createProductionJobPlanOpening')
+  || !productionJobPlanDraftSource.includes('export function closeProductionJobPlanDraft')
+  || !productionJobPlanDraftSource.includes("reason: 'already_editing'")
+  || !productionJobPlanDraftSource.includes("reason: 'job_inactive'")
+  || !productionJobPlanDraftSource.includes("reason: 'job_changed'")
+  || !recoverProductionJobPlanDraftContract.includes('sourceEqual(currentSource, closed.source)')
+  || !productionPageContract.includes('const [closedScheduleDraft, setClosedScheduleDraft] = useState<ProductionClosedJobPlanDraft | null>(null)')
+  || !productionPageContract.includes('const scheduleDraftRecoveryRef = useRef<HTMLButtonElement>(null)')
+  || !closeJobScheduleContract.includes("mode: 'recover' | 'discard'")
+  || !closeJobScheduleContract.includes('closeProductionJobPlanDraft(scheduleDraft, scheduleDraftOpeningRef.current)')
+  || !undoClosedJobScheduleContract.includes('recoverProductionJobPlanDraft(scheduleDraft, closedScheduleDraft, production.jobs)')
+  || !productionJobsContract.includes('data-plant-job-plan-recovery')
+  || !productionJobsContract.includes('ref={scheduleDraftRecoveryRef}')
+  || !productionJobsContract.includes('>Undo close</button>')
+  || !productionPageContract.includes("closeJobSchedule('recover')")
+  || !productionPageContract.includes("closeJobSchedule('discard')")
+  || !coreCssSource.includes('.job-panel > .plant-plan-recovery')
+  || !coreCssSource.includes('.plant-plan-recovery .core-button { min-height: 44px; }')
+  || plantPlanRecoveryForbiddenActions.some((marker) => closeJobScheduleContract.includes(marker) || undoClosedJobScheduleContract.includes(marker) || recoverProductionJobPlanDraftContract.includes(marker))) fail('production_job_plan_close_recovery_missing')
 const productionStatusPosition = productionJobsContract.indexOf('{plantToday}')
 const productionCommandPosition = productionJobsContract.indexOf('{plantBusinessControls}')
 const productionWorkPosition = productionJobsContract.indexOf('<h2>Jobs to finish</h2>')
@@ -13662,6 +13688,49 @@ async function verifyCommerceRuntime() {
   }
 }
 
+async function verifyProductionJobPlanDraftRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    productionRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-job-plan-draft.ts')).href}?production-job-plan-draft=${Date.now()}`)
+    const job = {
+      id: 'JOB-PLAN-201',
+      line: 'Line 01',
+      product: 'Premium filter',
+      target: 100,
+      output: 24,
+      scrap: 2,
+      owner: 'Planner A',
+      priority: 'normal',
+      dueAt: '2026-08-12T08:00:00.000Z',
+    }
+    const openedDraft = { jobId: job.id, owner: job.owner, priority: job.priority, dueAt: '2026-08-12T14:30' }
+    const opening = model.createProductionJobPlanOpening(openedDraft, job)
+    assert(opening && JSON.stringify(opening.draft) === JSON.stringify(openedDraft), 'production_job_plan_opening_not_bound_exactly')
+    assert(model.closeProductionJobPlanDraft(openedDraft, opening) === null, 'production_job_plan_unchanged_close_became_recoverable')
+    const editedDraft = { ...openedDraft, owner: 'Planner B', priority: 'urgent', dueAt: '2026-08-13T16:00' }
+    const closed = model.closeProductionJobPlanDraft(editedDraft, opening)
+    const exact = model.recoverProductionJobPlanDraft(null, closed, [job])
+    assert(exact.ok
+      && JSON.stringify(exact.draft) === JSON.stringify(editedDraft)
+      && exact.draft !== editedDraft
+      && JSON.stringify(closed.draft) === JSON.stringify(editedDraft),
+    'production_job_plan_closed_draft_not_restored_exactly')
+    const changed = model.recoverProductionJobPlanDraft(null, closed, [{ ...job, owner: 'Supervisor changed it' }])
+    assert(!changed.ok && changed.reason === 'job_changed', 'production_job_plan_changed_source_restored')
+    const inactive = model.recoverProductionJobPlanDraft(null, closed, [{ ...job, output: 98 }])
+    assert(!inactive.ok && inactive.reason === 'job_inactive', 'production_job_plan_completed_job_restored')
+    const alreadyEditing = model.recoverProductionJobPlanDraft(openedDraft, closed, [job])
+    assert(!alreadyEditing.ok && alreadyEditing.reason === 'already_editing', 'production_job_plan_overwrote_open_draft')
+    const tampered = model.recoverProductionJobPlanDraft(null, { ...closed, openedDraft: { ...editedDraft } }, [job])
+    assert(!tampered.ok && tampered.reason === 'invalid_recovery', 'production_job_plan_unchanged_recovery_accepted')
+  } catch (error) {
+    fail(`production_job_plan_draft_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyCommerceOrderDraftRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -19048,6 +19117,7 @@ await verifyManagedClientImportRuntime()
 await verifyPlantEquipmentImportRuntime()
 await verifyWebsiteRuntime()
 await verifyWebsiteOrderCompletionRuntime()
+await verifyProductionJobPlanDraftRuntime()
 await verifyCommerceOrderDraftRuntime()
 await verifyStorefrontDraftRuntime()
 await verifyStorefrontRuntime()

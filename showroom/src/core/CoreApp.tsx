@@ -226,6 +226,14 @@ import {
   type ProductionShiftHandoff,
 } from './production-workspace'
 import {
+  closeProductionJobPlanDraft,
+  createProductionJobPlanOpening,
+  recoverProductionJobPlanDraft,
+  type ProductionClosedJobPlanDraft,
+  type ProductionJobPlanDraft,
+  type ProductionJobPlanOpening,
+} from './production-job-plan-draft'
+import {
   projectShopProductionDemand,
   shopProductionDemandIsCurrent,
   type ShopProductionDemandSignal,
@@ -7112,7 +7120,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const jobDisclosureRef = useRef<HTMLDetailsElement>(null)
   const [plantJobImportReview, setPlantJobImportReview] = useState<PlantJobImportReview | null>(null)
   const [plantJobImportSourceName, setPlantJobImportSourceName] = useState('')
-  const [scheduleDraft, setScheduleDraft] = useState<{ jobId: string; owner: string; priority: ProductionJobPriority; dueAt: string } | null>(null)
+  const [scheduleDraft, setScheduleDraft] = useState<ProductionJobPlanDraft | null>(null)
+  const [closedScheduleDraft, setClosedScheduleDraft] = useState<ProductionClosedJobPlanDraft | null>(null)
   const [notice, setNotice] = useState('')
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [planDraft, setPlanDraft] = useState<{ jobId: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string; machineId: string; machineName: string; reason: string; evidenceReference: string }>({
@@ -7144,6 +7153,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const maintenanceOutcomeRef = useRef<HTMLSelectElement>(null)
   const scheduleDialogRef = useRef<HTMLDialogElement>(null)
   const scheduleTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const scheduleDraftOpeningRef = useRef<ProductionJobPlanOpening | null>(null)
+  const scheduleDraftRecoveryRef = useRef<HTMLButtonElement>(null)
   const outputPanelRef = useRef<HTMLElement>(null)
   const outputJobSelectRef = useRef<HTMLSelectElement>(null)
   const outputShiftInputRef = useRef<HTMLInputElement>(null)
@@ -7713,6 +7724,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     if (!scheduleDraft && dialog.open) dialog.close()
   }, [scheduleDraft, tab])
+
+  useEffect(() => {
+    if (!closedScheduleDraft || scheduleDraft) return
+    const frame = requestAnimationFrame(() => {
+      scheduleDraftRecoveryRef.current?.scrollIntoView({ block: 'nearest' })
+      scheduleDraftRecoveryRef.current?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [closedScheduleDraft, scheduleDraft])
 
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
@@ -8337,18 +8357,64 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   function openJobSchedule(job: ProductionJob, trigger: HTMLButtonElement) {
     if (job.closure || job.output + (job.scrap ?? 0) >= job.target) return
-    scheduleTriggerRef.current = trigger
-    setScheduleDraft({
+    const draft: ProductionJobPlanDraft = {
       jobId: job.id,
       owner: job.owner ?? '',
       priority: job.priority ?? 'normal',
       dueAt: job.dueAt ? localDateTimeInputValue(new Date(job.dueAt)) : defaultJobDueInput(),
-    })
+    }
+    const opening = createProductionJobPlanOpening(draft, job)
+    if (!opening) return
+    scheduleTriggerRef.current = trigger
+    scheduleDraftOpeningRef.current = opening
+    setClosedScheduleDraft(null)
+    setScheduleDraft(draft)
   }
 
-  function closeJobSchedule() {
+  function closeJobSchedule(mode: 'recover' | 'discard') {
+    const recovery = mode === 'recover' && scheduleDraft
+      ? closeProductionJobPlanDraft(scheduleDraft, scheduleDraftOpeningRef.current)
+      : null
+    scheduleDraftOpeningRef.current = null
     setScheduleDraft(null)
+    setClosedScheduleDraft(recovery)
+    if (recovery) {
+      setNotice(`${recovery.draft.jobId} plan draft closed. Undo is available; no schedule, dispatch, or production record changed.`)
+    } else {
+      requestAnimationFrame(() => scheduleTriggerRef.current?.focus())
+    }
+  }
+
+  function discardClosedJobSchedule() {
+    setClosedScheduleDraft(null)
+    setNotice('Closed Plant plan draft discarded. No schedule, dispatch, or production record changed.')
     requestAnimationFrame(() => scheduleTriggerRef.current?.focus())
+  }
+
+  function undoClosedJobSchedule() {
+    if (!closedScheduleDraft) return
+    const recovery = recoverProductionJobPlanDraft(scheduleDraft, closedScheduleDraft, production.jobs)
+    if (!recovery.ok) {
+      setClosedScheduleDraft(null)
+      setNotice(recovery.reason === 'job_inactive'
+        ? `${closedScheduleDraft.draft.jobId} is no longer active, so its closed draft cannot be restored. No Plant record changed.`
+        : recovery.reason === 'job_changed'
+          ? `${closedScheduleDraft.draft.jobId} changed after the draft closed, so exact Undo expired. No Plant record changed.`
+          : 'Another Plant plan is open or the recovery evidence is invalid. Nothing was restored.')
+      requestAnimationFrame(() => scheduleTriggerRef.current?.focus())
+      return
+    }
+    const job = production.jobs.find((candidate) => candidate.id === recovery.draft.jobId)
+    const opening = job ? createProductionJobPlanOpening(recovery.draft, job) : null
+    if (!opening) {
+      setClosedScheduleDraft(null)
+      setNotice('The closed Plant plan draft could not be restored safely. No Plant record changed.')
+      return
+    }
+    setClosedScheduleDraft(null)
+    scheduleDraftOpeningRef.current = opening
+    setScheduleDraft(recovery.draft)
+    setNotice(`${recovery.draft.jobId} plan draft restored exactly for review. Nothing was scheduled or dispatched.`)
   }
 
   function reviewJobSchedule(event: FormEvent) {
@@ -8401,7 +8467,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         })
       },
     }, scheduleTriggerRef.current)
-    if (queued) setScheduleDraft(null)
+    if (queued) {
+      scheduleDraftOpeningRef.current = null
+      setClosedScheduleDraft(null)
+      setScheduleDraft(null)
+    }
   }
 
   function createIssue(event: FormEvent) {
@@ -8993,6 +9063,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
         <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />
+        {closedScheduleDraft ? <div className="order-draft-recovery plant-plan-recovery" data-plant-job-plan-recovery role="status">
+          <div><strong>{closedScheduleDraft.draft.jobId} plan draft is still available</strong><small>{closedScheduleDraft.draft.owner.trim() || 'Owner blank'} · {productionJobPriorityLabels[closedScheduleDraft.draft.priority]} · due {closedScheduleDraft.draft.dueAt || 'blank'}. Restore once or discard; no schedule, dispatch, or production write occurred.</small></div>
+          <div className="order-draft-recovery-actions"><button className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={undoClosedJobSchedule} ref={scheduleDraftRecoveryRef} type="button">Undo close</button><button className="text-link" onClick={discardClosedJobSchedule} type="button">Discard</button></div>
+        </div> : null}
         {nextShopDemand ? <section aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'} className="stock-receipt-preview" data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'} data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>{nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'} · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} suggested</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} active order units · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} below reorder · {nextShopDemand.sourceOrderIds.length || 'no'} source {nextShopDemand.sourceOrderIds.length === 1 ? 'order' : 'orders'}</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? nextShopDemand.sourceOrderIds.length ? 'Shop demand selected' : 'Replenishment selected' : nextShopDemand.sourceOrderIds.length ? 'Use Shop demand' : 'Plan replenishment'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
         <CompletedJobHistory jobs={completedJobs} now={issueClock} />
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
@@ -9077,15 +9151,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </div>
     </details>
     {plantBusinessControls}
-    <dialog aria-labelledby="job-schedule-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeJobSchedule() }} ref={scheduleDialogRef}>
+    <dialog aria-labelledby="job-schedule-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeJobSchedule('recover') }} ref={scheduleDialogRef}>
       {scheduleDraft ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={closeJobSchedule} type="button">Close</button></div>
+        <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={() => closeJobSchedule('recover')} type="button">Close</button></div>
         <form autoComplete="off" className="core-form" onSubmit={reviewJobSchedule}>
           <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setScheduleDraft((current) => current ? { ...current, priority: event.target.value as ProductionJobPriority } : current)} value={scheduleDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setScheduleDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type="datetime-local" value={scheduleDraft.dueAt} /></label></div>
           <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setScheduleDraft((current) => current ? { ...current, owner: event.target.value } : current)} placeholder="Named person or role" required value={scheduleDraft.owner} /></label>
           <p className="panel-copy">This records responsibility and run order only. It grants no access, assigns no machine, and dispatches no work. Target, output, quality hold, materials, and accounting stay unchanged.</p>
           <p className="panel-copy">Nothing changes until the accountable operator confirms a reason and evidence.</p>
-          <div className="form-actions"><button className="core-button" onClick={closeJobSchedule} type="button">Cancel</button><button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review plan</button></div>
+          <div className="form-actions"><button className="core-button" onClick={() => closeJobSchedule('discard')} type="button">Cancel</button><button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review plan</button></div>
         </form>
       </> : null}
     </dialog>

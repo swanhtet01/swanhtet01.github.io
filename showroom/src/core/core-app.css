@@ -695,6 +695,8 @@ textarea { min-height: 72px; resize: vertical; }
 .job-panel > .stock-receipt-preview > :not(button) { min-width: 0; grid-column: 1; }
 .job-panel > .stock-receipt-preview > span { overflow: hidden; color: var(--core-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .job-panel > .stock-receipt-preview > button { grid-column: 2; grid-row: 1 / 4; align-self: center; }
+.job-panel > .plant-plan-recovery { flex: 0 0 auto; margin: 8px 0; }
+.plant-plan-recovery .core-button { min-height: 44px; }
 .stock-receipt-editor .form-actions { align-self: end; }
 .purchase-order-editor[data-mode="receive"] { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .purchase-order-editor[data-mode="receive"] .stock-receipt-copy { grid-column: 1/3; }
