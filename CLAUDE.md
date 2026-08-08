@@ -1,6 +1,6 @@
 # Claude Code: bounded SuperMega reviewer
 
-Status: founder-reactivated; assignment packet ready, dispatch blocked until Claude CLI authentication succeeds.
+Status: founder-reactivated; assignment packet and fail-closed launcher ready, dispatch blocked until Claude CLI authentication succeeds.
 
 Codex is the sole integrator on the ROG Ally. Claude may perform exactly one read-only review, return its report to Codex, and exit. This packet does not create implementation, merge, release, credential, provider, database, messaging, or customer authority.
 
@@ -23,6 +23,8 @@ Read, Grep, and Glob are the only allowed tools. Do not use a shell, edit a file
 - This assignment is one foreground, read-only response after authentication; do not create background agents, subagents, or a recurring Claude process.
 - Codex remains the integrator. Return findings in the active Claude session; Codex independently verifies them before any repository or external action.
 - Claude is not an automatic provider fallback. Autonomous company cycles use loopback Ollama under the `local-only` policy and unload the model after each bounded run.
+
+Codex may check the packet with `npm run claude:eng001:preflight`. That command performs no provider request. `npm run claude:eng001:review` is the only execution lane: it first verifies every pinned worktree and authentication, then starts one foreground, read-only, safe-mode response with a USD 0.20 ceiling. It does not inspect or control existing Claude sessions and fails closed before dispatch when authentication or repository identity is unavailable.
 
 ## Evidence that must remain true
 
