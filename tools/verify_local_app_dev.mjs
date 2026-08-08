@@ -54,6 +54,15 @@ requireContract('runner always isolates local authority',
   && runnerSource.includes("SUPERMEGA_SUPABASE_URL: ''")
   && runnerSource.includes("OPENAI_API_KEY: ''")
   && runnerSource.includes("SUPERMEGA_CLOUD_TASKS_WORKER_URL: ''"))
+requireContract('runner enforces local-only scale-to-zero AI without inherited cloud credentials',
+  runnerSource.includes("SUPERMEGA_AI_PROVIDER_POLICY: 'local-only'")
+  && runnerSource.includes("SUPERMEGA_OLLAMA_ENABLED: '1'")
+  && runnerSource.includes("OLLAMA_KEEP_ALIVE: '0s'")
+  && runnerSource.includes("OLLAMA_MAX_LOADED_MODELS: '1'")
+  && runnerSource.includes("ANTHROPIC_API_KEY: ''")
+  && runnerSource.includes("CLAUDE_API_KEY: ''")
+  && runnerSource.includes("OPENROUTER_API_KEY: ''")
+  && runnerSource.includes("GEMINI_API_KEY: ''"))
 requireContract('runner owns child cleanup',
   runnerSource.includes("state.child.kill('SIGTERM')")
   && runnerSource.includes("state.child.kill('SIGKILL')")
@@ -178,6 +187,11 @@ requireContract('full stack keeps security headers and local safety',
   && report.safety?.databaseUrlCleared === true
   && report.safety?.hostedAuthCleared === true
   && report.safety?.externalWorkerCleared === true)
+requireContract('full stack reports local-only AI and scale-to-zero',
+  report.safety?.localAiPolicy === 'local-only'
+  && /^[a-zA-Z0-9._:-]{1,80}$/.test(report.safety?.localAiModel || '')
+  && report.safety?.cloudAiCredentialsCleared === true
+  && report.safety?.modelScaleToZero === true)
 requireContract('full stack proves zero-write ecommerce queue validation',
   report.ecommerceOrderQueueValidation?.contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'
   && report.ecommerceOrderQueueValidation?.status === 'ready_for_owner_review'
@@ -204,7 +218,7 @@ if (failures.length) {
 console.log(JSON.stringify({
   ok: true,
   contract: 'supermega_local_full_stack',
-  checks: 14,
+  checks: 16,
   operatingMode: report.runtime.operatingMode,
   writesEnabled: report.runtime.writesEnabled,
   loopbackOnly: report.safety.loopbackOnly,

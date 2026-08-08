@@ -68,10 +68,29 @@ function resolvePython() {
 }
 
 function isolatedEnvironment(uiUrl) {
+  const requestedLocalModel = String(process.env.SUPERMEGA_OLLAMA_MODEL || '').trim()
+  const localModel = /^[a-zA-Z0-9._:-]{1,80}$/.test(requestedLocalModel)
+    ? requestedLocalModel
+    : 'qwen3.5:0.8b'
   return {
     ...process.env,
+    ANTHROPIC_API_KEY: '',
+    CLAUDE_API_KEY: '',
+    COHERE_API_KEY: '',
+    DEEPSEEK_API_KEY: '',
+    FIREWORKS_API_KEY: '',
+    GEMINI_API_KEY: '',
+    GROQ_API_KEY: '',
+    MISTRAL_API_KEY: '',
     OPENAI_API_KEY: '',
+    OPENROUTER_API_KEY: '',
+    PERPLEXITY_API_KEY: '',
+    TOGETHER_API_KEY: '',
     CRON_SECRET: '',
+    OLLAMA_KEEP_ALIVE: '0s',
+    OLLAMA_MAX_LOADED_MODELS: '1',
+    OLLAMA_NUM_PARALLEL: '1',
+    SUPERMEGA_AI_PROVIDER_POLICY: 'local-only',
     SUPERMEGA_CLOUD_TASKS_ALLOWED_HOSTS: '',
     SUPERMEGA_CLOUD_TASKS_WORKER_URL: '',
     SUPERMEGA_CORS_ORIGINS: uiUrl,
@@ -81,6 +100,8 @@ function isolatedEnvironment(uiUrl) {
     SUPERMEGA_SUPABASE_URL: '',
     SUPERMEGA_TRIAL_IDENTITY_SECRET: '',
     SUPERMEGA_TRIAL_WRITES_ENABLED: 'false',
+    SUPERMEGA_OLLAMA_ENABLED: '1',
+    SUPERMEGA_OLLAMA_MODEL: localModel,
     SUPABASE_ANON_KEY: '',
     SUPABASE_PUBLISHABLE_KEY: '',
     SUPABASE_URL: '',
@@ -447,6 +468,10 @@ async function run() {
         databaseUrlCleared: true,
         hostedAuthCleared: true,
         externalWorkerCleared: true,
+        localAiPolicy: safeEnvironment.SUPERMEGA_AI_PROVIDER_POLICY,
+        localAiModel: safeEnvironment.SUPERMEGA_OLLAMA_MODEL,
+        cloudAiCredentialsCleared: true,
+        modelScaleToZero: safeEnvironment.OLLAMA_KEEP_ALIVE === '0s',
       },
       ecommerceOrderQueueValidation: {
         contract: orderQueueValidation.body.validation.contract,
@@ -477,7 +502,7 @@ async function run() {
 
     console.log(`SuperMega app: ${uiUrl}`)
     console.log(`Canonical API: ${apiUrl}`)
-    console.log('Mode: isolated demo; database, hosted auth, external workers, and managed writes are disabled.')
+    console.log(`Mode: isolated demo; local AI only (${safeEnvironment.SUPERMEGA_OLLAMA_MODEL}); database, hosted auth, external workers, and managed writes are disabled.`)
     const stopped = await Promise.race([
       apiState.exitPromise,
       uiState.exitPromise,
