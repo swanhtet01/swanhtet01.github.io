@@ -734,7 +734,10 @@ textarea { min-height: 72px; resize: vertical; }
 .job-list article > div { min-width: 0; display: grid; gap: 3px; }
 .job-list span, .job-list small { color: var(--core-quiet); font-size: 11px; }
 .job-list strong { font-size: 13px; }
-.job-list .job-schedule { color: var(--core-green); font-family: var(--core-mono); font-size: 10px; font-weight: 760; letter-spacing: .02em; }
+/* Owner, priority and due date — and the only element on the card that turns amber for
+   urgent or overdue — was the smallest text on it, below both the product name at 13px and
+   ordinary detail at 11px. A line supervisor reads the deadline before anything else. */
+.job-list .job-schedule { color: var(--core-green); font-family: var(--core-mono); font-size: 12px; font-weight: 760; letter-spacing: .02em; }
 .job-list .job-schedule[data-priority="urgent"], .job-list .job-schedule.overdue { color: var(--core-warn); }
 .job-list .job-schedule[data-priority="low"], .job-list .job-schedule[data-priority="legacy"] { color: var(--core-quiet); }
 .job-list .job-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
