@@ -1411,6 +1411,10 @@ textarea { min-height: 72px; resize: vertical; }
 .inventory-autopilot-rows span:last-child { border-right: 0; }
 .inventory-autopilot-rows small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .inventory-autopilot-rows b { overflow: hidden; color: var(--core-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.shop-stock-move-recovery { flex: 1 0 100%; display: grid; gap: 3px; border: 1px solid color-mix(in srgb,var(--core-green) 34%,var(--core-line)); border-radius: 10px; padding: 9px 11px; background: var(--core-green-soft); }
+.shop-stock-move-recovery strong { color: var(--core-ink); font-size: 12px; }
+.shop-stock-move-recovery small { overflow-wrap: anywhere; color: var(--core-muted); font-size: 9px; line-height: 1.45; }
+[data-shop-stock-move-action="reopen"]:focus-visible { outline: 3px solid color-mix(in srgb,var(--core-green) 28%,transparent); outline-offset: 3px; }
 
 .ecommerce-product { height: auto; overflow: visible; }
 .ecommerce-heading { min-height: 68px; display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; }
@@ -1935,6 +1939,7 @@ textarea { min-height: 72px; resize: vertical; }
   .settings-step-actions .core-button, .settings-step-actions .text-link { width: 100%; }
   .setup-complete, .catalog-onboarding-bridge { align-items: stretch; flex-direction: column; }
   .catalog-onboarding-bridge > div:first-child { min-width: 0; flex: none; }
+  .shop-stock-move-recovery { width: 100%; flex: none; }
   .catalog-onboarding-status { order: 0; }
   .setup-complete .core-button, .catalog-onboarding-bridge .core-button { width: 100%; }
   .ai-memory-preview-heading { flex-direction: column; }

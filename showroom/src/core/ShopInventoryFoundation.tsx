@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   applyShopInventoryImport,
@@ -24,6 +24,13 @@ import {
 } from './commerce-workspace'
 import type { ManagedIdentity } from './managed-trial'
 import type { ProductionState } from './production-workspace'
+import {
+  closeShopStockMoveDraft,
+  createShopStockMoveOpening,
+  recoverShopStockMoveDraft,
+  type ShopClosedStockMoveDraft,
+  type ShopStockMoveOpening,
+} from './shop-stock-move-draft'
 
 
 type ShopInventoryFoundationProps = {
@@ -135,6 +142,10 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferDraft, setTransferDraft] = useState({ balanceKey: '', quantity: '1' })
   const [transferReview, setTransferReview] = useState<TransferReview | null>(null)
+  const [closedTransferDraft, setClosedTransferDraft] = useState<ShopClosedStockMoveDraft | null>(null)
+  const transferOpeningRef = useRef<ShopStockMoveOpening | null>(null)
+  const transferToggleRef = useRef<HTMLButtonElement>(null)
+  const transferSelectRef = useRef<HTMLSelectElement>(null)
   const [masterDraft, setMasterDraft] = useState<{ masterType: 'client' | 'vendor'; name: string }>({ masterType: 'client', name: '' })
   const [masterReview, setMasterReview] = useState<MasterReview | null>(null)
   const [supplierPolicyDraft, setSupplierPolicyDraft] = useState({
@@ -177,6 +188,10 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     const locationTotal = projection.balances.filter((row) => row.sku === item.sku).reduce((sum, row) => sum + row.availableToPromise, 0)
     return locationTotal !== catalogBySku.get(item.sku)?.onHand
   }))
+  const inventoryReadyForTransfer = Boolean(state.revision && !inventoryDrift && balanceOptions.length)
+  const stockMoveRecovery = closedTransferDraft
+    ? recoverShopStockMoveDraft(null, closedTransferDraft, state, projection, catalog, inventoryReadyForTransfer)
+    : null
   const inventoryAutopilotRows = [
     ['Locations', state.revision ? `${projection.locations.length} active` : 'Set up'],
     ['ATP', state.revision ? projection.metrics.totalAvailableToPromise.toLocaleString() : 'Locked'],
@@ -190,6 +205,15 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       : setupBlockedByOrders
         ? 'Finish or cancel open aggregate-stock orders before creating location history.'
         : 'Set up locations once so orders, returns, production issues, counts, and transfers share the same stock truth.'
+
+  useEffect(() => {
+    if (transferOpen) transferSelectRef.current?.focus()
+  }, [transferOpen])
+
+  useEffect(() => {
+    if (!transferOpen && stockMoveRecovery?.ok) transferToggleRef.current?.focus()
+  }, [stockMoveRecovery?.ok, transferOpen])
+
   const plantProjection = useMemo(() => {
     const released = productionOrderPortfolioEntries(production)
       .map((entry) => projectPlantOrder(entry.execution))
@@ -390,6 +414,51 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     }
   }
 
+  function openFreshTransfer() {
+    const draft = {
+      balanceKey: balanceOptions[0] ? `${balanceOptions[0].stockUnitId}|${balanceOptions[0].locationId}` : '',
+      quantity: '1',
+    }
+    setClosedTransferDraft(null)
+    setTransferDraft(draft)
+    transferOpeningRef.current = createShopStockMoveOpening(draft, state, projection, catalog)
+    setTransferReview(null)
+    setTransferOpen(true)
+    setError('')
+    setNotice('Choose stock and quantity. Nothing moves until confirmation.')
+  }
+
+  function reopenTransfer() {
+    if (!stockMoveRecovery?.ok) {
+      openFreshTransfer()
+      return
+    }
+    setTransferDraft({ ...stockMoveRecovery.draft })
+    transferOpeningRef.current = stockMoveRecovery.opening
+    setClosedTransferDraft(null)
+    setTransferReview(null)
+    setTransferOpen(true)
+    setError('')
+    setNotice('Exact draft reopened. Nothing moved or recorded.')
+  }
+
+  function toggleTransfer() {
+    if (!transferOpen) {
+      if (stockMoveRecovery?.ok) reopenTransfer()
+      else openFreshTransfer()
+      return
+    }
+    const closedDraft = closeShopStockMoveDraft(transferDraft, transferOpeningRef.current)
+    setClosedTransferDraft(closedDraft)
+    transferOpeningRef.current = null
+    setTransferReview(null)
+    setTransferOpen(false)
+    setError('')
+    setNotice(closedDraft
+      ? 'Move draft kept. Reopen once; nothing moved or recorded.'
+      : 'Move closed. Nothing moved or recorded.')
+  }
+
   function reviewTransfer(event: FormEvent) {
     event.preventDefault()
     if (!selectedBalance || !destination || !transferQuantityValid) return
@@ -425,6 +494,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
         },
       )
       setTransferReview(null)
+      setClosedTransferDraft(null)
+      transferOpeningRef.current = null
       setTransferOpen(false)
       setNotice(identity
         ? 'Company Shop confirmed the paired location transfer.'
@@ -592,7 +663,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
         : 'Add accountable client, vendor, location, and opening-lot evidence inside the Shop record.'}</p>
     </div>
     {!state.revision ? <button aria-controls="location-stock-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled || setupBlockedByOrders} onClick={() => { setSetupOpen((current) => !current); setSetupReview(null) }} type="button">{setupBlockedByOrders ? `Finish ${activeAggregateOrders.length} ${activeAggregateOrders.length === 1 ? 'order' : 'orders'} first` : setupOpen ? 'Close setup' : 'Set up locations'}</button>
-      : <button aria-controls="location-stock-transfer" aria-expanded={transferOpen} className="core-button primary" disabled={disabled || inventoryDrift || !balanceOptions.length} onClick={() => { setTransferOpen((current) => !current); setTransferReview(null); setTransferDraft({ balanceKey: balanceOptions[0] ? `${balanceOptions[0].stockUnitId}|${balanceOptions[0].locationId}` : '', quantity: '1' }) }} type="button">{transferOpen ? 'Close move' : 'Move stock'}</button>}
+      : <button aria-controls="location-stock-transfer" aria-expanded={transferOpen} className="core-button primary" data-shop-stock-move-action={transferOpen ? 'close' : stockMoveRecovery?.ok ? 'reopen' : 'open'} disabled={disabled || inventoryDrift || !balanceOptions.length} onClick={toggleTransfer} ref={transferToggleRef} type="button">{transferOpen ? 'Close move' : stockMoveRecovery?.ok ? 'Reopen move' : 'Move stock'}</button>}
+    {!transferOpen && stockMoveRecovery?.ok ? <div className="shop-stock-move-recovery" data-shop-stock-move-recovery="ready" role="status"><strong>Move draft kept</strong><small>Selected stock · {stockMoveRecovery.draft.quantity || 'blank'} units. Reopen once; nothing moved.</small></div> : null}
     {setupOpen && !state.revision ? <form className="core-form compact-form" id="location-stock-setup" onSubmit={reviewSetup}>
       <div className="form-row"><label>Main location<input disabled={disabled || Boolean(setupReview)} maxLength={120} onChange={(event) => setSetupDraft((current) => ({ ...current, main: event.target.value }))} required value={setupDraft.main} /></label><label>Second location<input disabled={disabled || Boolean(setupReview)} maxLength={120} onChange={(event) => setSetupDraft((current) => ({ ...current, branch: event.target.value }))} required value={setupDraft.branch} /></label></div>
       <div className="form-row"><label>Default client<input disabled={disabled || Boolean(setupReview)} maxLength={120} onChange={(event) => setSetupDraft((current) => ({ ...current, client: event.target.value }))} required value={setupDraft.client} /></label><label>Opening vendor reference<input disabled={disabled || Boolean(setupReview)} maxLength={120} onChange={(event) => setSetupDraft((current) => ({ ...current, vendor: event.target.value }))} required value={setupDraft.vendor} /></label></div>
@@ -617,8 +689,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
         <div className="form-actions">{supplierPolicyReview ? <button className="core-button" disabled={busy} onClick={() => setSupplierPolicyReview(null)} type="button">Edit</button> : null}<button className="core-button primary" disabled={disabled || busy || !projection.vendors.length || !supplierPolicyDraft.vendorId || !supplierPolicyDraft.sku} onClick={supplierPolicyReview ? () => void confirmSupplierPolicy() : undefined} type={supplierPolicyReview ? 'button' : 'submit'}>{supplierPolicyReview ? busy ? 'Recording…' : 'Confirm policy' : 'Review policy'}</button></div>
       </form>
     </details> : null}
-    {transferOpen && state.revision ? <form className="core-form compact-form" id="location-stock-transfer" onSubmit={reviewTransfer}>
-      <label>Stock to move<select disabled={disabled || Boolean(transferReview)} onChange={(event) => setTransferDraft({ balanceKey: event.target.value, quantity: '1' })} required value={transferDraft.balanceKey}><option value="">Choose stock</option>{balanceOptions.map((row) => <option key={`${row.stockUnitId}|${row.locationId}`} value={`${row.stockUnitId}|${row.locationId}`}>{catalogBySku.get(row.sku)?.name ?? row.sku} · {projection.locations.find((location) => location.id === row.locationId)?.name} · {row.availableToPromise} ATP</option>)}</select></label>
+    {transferOpen && state.revision ? <form className="core-form compact-form" data-shop-stock-move-draft="open" id="location-stock-transfer" onSubmit={reviewTransfer}>
+      <label>Stock to move<select disabled={disabled || Boolean(transferReview)} onChange={(event) => setTransferDraft({ balanceKey: event.target.value, quantity: '1' })} ref={transferSelectRef} required value={transferDraft.balanceKey}><option value="">Choose stock</option>{balanceOptions.map((row) => <option key={`${row.stockUnitId}|${row.locationId}`} value={`${row.stockUnitId}|${row.locationId}`}>{catalogBySku.get(row.sku)?.name ?? row.sku} · {projection.locations.find((location) => location.id === row.locationId)?.name} · {row.availableToPromise} ATP</option>)}</select></label>
       <label>Quantity<input disabled={disabled || Boolean(transferReview) || !selectedBalance} inputMode="numeric" max={selectedBalance?.availableToPromise ?? 0} min="1" onChange={(event) => setTransferDraft((current) => ({ ...current, quantity: event.target.value }))} required step="1" type="number" value={transferDraft.quantity} /></label>
       {selectedBalance && destination ? <div className="stock-receipt-preview" role="status"><small>{projection.locations.find((location) => location.id === selectedBalance.locationId)?.name} → {destination.name}</small><strong>{transferQuantityValid ? `${transferQuantity} units · ${selectedBalance.availableToPromise - transferQuantity} source ATP after` : 'Enter available units'}</strong></div> : null}
       <div className="form-actions">{transferReview ? <button className="core-button" disabled={busy} onClick={() => setTransferReview(null)} type="button">Edit</button> : null}<button className="core-button primary" disabled={disabled || busy || !transferQuantityValid} onClick={transferReview ? () => void confirmTransfer() : undefined} type={transferReview ? 'button' : 'submit'}>{transferReview ? busy ? 'Moving…' : 'Confirm move' : 'Review move'}</button></div>

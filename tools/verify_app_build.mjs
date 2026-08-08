@@ -117,6 +117,7 @@ const localMerchandisingImportSource = await readFile(resolve(root, 'showroom', 
 const productionJobPlanDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-job-plan-draft.ts'), 'utf8')
 const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts'), 'utf8')
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
+const shopStockMoveDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-stock-move-draft.ts'), 'utf8')
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
 const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
@@ -4667,6 +4668,39 @@ if (!coreSource.includes('<ShopInventoryFoundation')
   || shopInventoryUiSource.includes('loadShopInventoryWorkspace')
   || shopInventoryUiSource.includes('mutateShopInventoryWorkspace')
   || shopInventoryUiSource.includes('fetch(')) fail('shop_inventory_foundation_ui_boundary_missing')
+const shopStockMoveActionsStart = shopInventoryUiSource.indexOf('function openFreshTransfer()')
+const shopStockMoveActionsEnd = shopInventoryUiSource.indexOf('function reviewTransfer(', shopStockMoveActionsStart)
+const shopStockMoveActions = shopInventoryUiSource.slice(shopStockMoveActionsStart, shopStockMoveActionsEnd)
+const shopStockMoveCloseIndex = shopStockMoveActions.indexOf('const closedDraft = closeShopStockMoveDraft(transferDraft, transferOpeningRef.current)')
+const shopStockMoveCloseUiIndex = shopStockMoveActions.indexOf('setTransferOpen(false)', shopStockMoveCloseIndex)
+if (shopStockMoveActionsStart < 0
+  || shopStockMoveActionsEnd <= shopStockMoveActionsStart
+  || shopStockMoveCloseIndex < 0
+  || shopStockMoveCloseUiIndex <= shopStockMoveCloseIndex
+  || !shopStockMoveDraftSource.includes("SHOP_STOCK_MOVE_SOURCE_SCHEMA = 'supermega.shop.stock_move_source.v1'")
+  || !shopStockMoveDraftSource.includes("SHOP_STOCK_MOVE_OPENING_CONTRACT = 'supermega.shop.stock_move_opening.v1'")
+  || !shopStockMoveDraftSource.includes("SHOP_CLOSED_STOCK_MOVE_DRAFT_CONTRACT = 'supermega.shop.closed_stock_move_draft.v1'")
+  || !shopStockMoveDraftSource.includes('export function createShopStockMoveOpening(')
+  || !shopStockMoveDraftSource.includes('export function closeShopStockMoveDraft(')
+  || !shopStockMoveDraftSource.includes('export function recoverShopStockMoveDraft(')
+  || !shopStockMoveDraftSource.includes("reason: 'already_editing' | 'invalid_recovery' | 'inventory_unavailable' | 'inventory_changed' | 'stock_unavailable'")
+  || !shopStockMoveDraftSource.includes('projectionEvidence === right.projectionEvidence')
+  || !shopStockMoveDraftSource.includes('catalogEvidence === right.catalogEvidence')
+  || !shopStockMoveDraftSource.includes('balance.availableToPromise > 0')
+  || !shopInventoryUiSource.includes('data-shop-stock-move-action={transferOpen ? \'close\' : stockMoveRecovery?.ok ? \'reopen\' : \'open\'}')
+  || !shopInventoryUiSource.includes('data-shop-stock-move-recovery="ready"')
+  || !shopInventoryUiSource.includes('Move draft kept')
+  || !shopInventoryUiSource.includes('Reopen once; nothing moved.')
+  || !shopInventoryUiSource.includes('setTransferDraft({ ...stockMoveRecovery.draft })')
+  || !shopInventoryUiSource.includes('transferOpeningRef.current = stockMoveRecovery.opening')
+  || !shopInventoryUiSource.includes('ref={transferSelectRef}')
+  || !shopInventoryUiSource.includes('ref={transferToggleRef}')
+  || !coreCssSource.includes('.shop-stock-move-recovery {')
+  || !coreCssSource.includes('[data-shop-stock-move-action="reopen"]:focus-visible')
+  || !coreCssSource.includes('.shop-stock-move-recovery { width: 100%; flex: none; }')) fail('shop_stock_move_draft_recovery_contract_missing')
+if (['oninventory', 'transfershopinventory', 'fetch(', 'xmlhttprequest', 'sendbeacon', 'localstorage', 'sessionstorage', 'setitem(', 'removeitem(']
+  .some((marker) => shopStockMoveActions.toLowerCase().includes(marker)
+    || shopStockMoveDraftSource.toLowerCase().includes(marker))) fail('shop_stock_move_draft_recovery_side_effect_added')
 if (!shopInventoryUiSource.includes('const inventoryAutopilotRows = [')
   || !shopInventoryUiSource.includes('aria-label="Stock guide"')
   || !shopInventoryUiSource.includes('Stock guide')
@@ -6793,6 +6827,7 @@ async function verifyShopInventoryRuntime() {
   }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts')).href}?shop-inventory-verify=${Date.now()}`)
+    const moveDraftModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-stock-move-draft.ts')).href}?shop-stock-move-draft-verify=${Date.now()}`)
     const catalogSkus = ['SM-1001', 'SM-1002']
     const proof = (sequence, label) => ({
       actionId: `ACT-${String(sequence).padStart(3, '0')}-${label.toUpperCase()}`,
@@ -6854,6 +6889,88 @@ async function verifyShopInventoryRuntime() {
       && openingProjection.metrics.totalOnHand === 6
       && openingProjection.metrics.totalAvailableToPromise === 6,
     'shop_inventory_opening_projection_wrong')
+    const stockMoveCatalog = [{ sku: 'SM-1001', onHand: 5 }, { sku: 'SM-1002', onHand: 1 }]
+    const stockMoveInitialDraft = { balanceKey: 'LOT-SM1001-BATCH-A|LOC-MAIN', quantity: '1' }
+    const stockMoveOpening = moveDraftModel.createShopStockMoveOpening(
+      stockMoveInitialDraft,
+      opening.state,
+      openingProjection,
+      stockMoveCatalog,
+    )
+    assert(stockMoveOpening
+      && stockMoveOpening.draft !== stockMoveInitialDraft
+      && stockMoveOpening.draft.balanceKey === stockMoveInitialDraft.balanceKey,
+    'shop_stock_move_opening_not_bound_or_cloned')
+    assert(moveDraftModel.closeShopStockMoveDraft({ ...stockMoveInitialDraft }, stockMoveOpening) === null,
+      'shop_stock_move_unchanged_close_created_recovery')
+    const stockMoveClosed = moveDraftModel.closeShopStockMoveDraft(
+      { ...stockMoveInitialDraft, quantity: '2' },
+      stockMoveOpening,
+    )
+    assert(stockMoveClosed
+      && stockMoveClosed.draft.quantity === '2'
+      && stockMoveClosed.draft !== stockMoveInitialDraft
+      && stockMoveClosed.openedDraft !== stockMoveOpening?.draft,
+    'shop_stock_move_edited_close_not_cloned_exactly')
+    const stockMoveRecovered = moveDraftModel.recoverShopStockMoveDraft(
+      null,
+      stockMoveClosed,
+      opening.state,
+      openingProjection,
+      stockMoveCatalog,
+      true,
+    )
+    assert(stockMoveRecovered.ok
+      && stockMoveRecovered.draft.quantity === '2'
+      && stockMoveRecovered.draft !== stockMoveClosed?.draft,
+    'shop_stock_move_exact_recovery_failed')
+    assert(stockMoveRecovered.ok
+      && moveDraftModel.closeShopStockMoveDraft(stockMoveRecovered.draft, stockMoveRecovered.opening) === null,
+    'shop_stock_move_recovered_unchanged_close_created_recovery')
+    assert(moveDraftModel.recoverShopStockMoveDraft(
+      stockMoveInitialDraft,
+      stockMoveClosed,
+      opening.state,
+      openingProjection,
+      stockMoveCatalog,
+      true,
+    ).reason === 'already_editing', 'shop_stock_move_active_editor_recovery_succeeded')
+    assert(moveDraftModel.recoverShopStockMoveDraft(
+      null,
+      stockMoveClosed,
+      opening.state,
+      openingProjection,
+      stockMoveCatalog,
+      false,
+    ).reason === 'inventory_unavailable', 'shop_stock_move_unavailable_inventory_recovery_succeeded')
+    assert(moveDraftModel.recoverShopStockMoveDraft(
+      null,
+      stockMoveClosed,
+      opening.state,
+      openingProjection,
+      [{ sku: 'SM-1001', onHand: 4 }, { sku: 'SM-1002', onHand: 1 }],
+      true,
+    ).reason === 'inventory_changed', 'shop_stock_move_changed_catalog_recovery_succeeded')
+    const unknownStockClosed = moveDraftModel.closeShopStockMoveDraft(
+      { balanceKey: 'LOT-UNKNOWN|LOC-MAIN', quantity: '2' },
+      stockMoveOpening,
+    )
+    assert(moveDraftModel.recoverShopStockMoveDraft(
+      null,
+      unknownStockClosed,
+      opening.state,
+      openingProjection,
+      stockMoveCatalog,
+      true,
+    ).reason === 'stock_unavailable', 'shop_stock_move_missing_balance_recovery_succeeded')
+    assert(moveDraftModel.recoverShopStockMoveDraft(
+      null,
+      { ...stockMoveClosed, unexpected: true },
+      opening.state,
+      openingProjection,
+      stockMoveCatalog,
+      true,
+    ).reason === 'invalid_recovery', 'shop_stock_move_malformed_recovery_succeeded')
     const openingReplay = model.applyShopInventoryImport(opening.state, importPackage, proof(1, 'opening'), catalogSkus, model.EMPTY_SHOP_INVENTORY_DIGEST)
     assert(openingReplay.replayed && JSON.stringify(openingReplay.state) === JSON.stringify(opening.state), 'shop_inventory_opening_retry_not_idempotent')
 
