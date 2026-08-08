@@ -60,7 +60,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is the one active Ally integrator; local subagents and models stay at zero idle load. Claude Code 2.1.218 is installed but not authenticated, so its bounded read-only review stopped before reading files and no Claude worker remains running.
+- Codex is the one active Ally integrator; local subagents and models stay at zero idle load. Claude Code 2.1.218 `auth status` confirms `loggedIn: false` and `authMethod: none`. `CLAUDE.md` now binds the founder-reactivated ENG-001 read-only review to exact clean PR worktrees and commits, but no Claude worker runs until authentication succeeds.
 - Review order: PR #411 pilot kit, PR #412 isolated rehearsal, then PR #413 manual billing. Each is one commit ahead of `main`; changed files do not overlap, GitHub exposes no commit statuses, and focused local tests pass.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
