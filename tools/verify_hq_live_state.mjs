@@ -6,6 +6,7 @@ const CONTRACT = 'supermega.hq-live-state.v1'
 const CEO_ADVISORY_FAILURES = new Set(['app_product_contract_drift', 'hq_release_commit_stale'])
 const APP_ORIGIN = 'https://app.supermega.dev'
 const PUBLIC_ORIGIN = 'https://supermega.dev'
+const PUBLIC_FALLBACK_ORIGIN = 'https://www.supermega.dev'
 const MAX_RESPONSE_BYTES = 65_536
 const LIVE_PROBE_TIMEOUT_MS = 15_000
 const LIVE_PROBE_MAX_ATTEMPTS = 2
@@ -250,6 +251,20 @@ export async function fetchLiveJson(label, url, options = {}) {
   throw new Error(`live_${label}_fetch_failed:network_error:attempts=${maxAttempts}`)
 }
 
+export async function fetchPublicReleaseJson(options = {}) {
+  const primaryUrl = `${PUBLIC_ORIGIN}/__release.json`
+  const fallbackUrl = `${PUBLIC_FALLBACK_ORIGIN}/__release.json`
+  try {
+    const probe = await fetchLiveJson('public_release', primaryUrl, options)
+    return { ...probe, origin: PUBLIC_ORIGIN, fallbackUsed: false, primaryFailure: null }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : ''
+    if (!/^live_public_release_fetch_failed:(?:timeout|network_error):attempts=[12]$/.test(reason)) throw error
+    const probe = await fetchLiveJson('public_release_fallback', fallbackUrl, options)
+    return { ...probe, origin: PUBLIC_FALLBACK_ORIGIN, fallbackUsed: true, primaryFailure: reason }
+  }
+}
+
 async function runSelfTest() {
   const commit = 'a'.repeat(40)
   const now = new Date('2026-07-27T12:00:00Z')
@@ -346,10 +361,39 @@ Live security ready: \`false\``)
   } catch (error) {
     exhaustedFailure = error instanceof Error ? error.message : ''
   }
+  const fallbackCalls = []
+  const fallback = await fetchPublicReleaseJson({
+    fetchJsonImpl: async (url) => {
+      fallbackCalls.push(url)
+      if (url.startsWith(PUBLIC_ORIGIN)) throw new TypeError('must-not-escape')
+      return publicRelease
+    },
+  })
+  let semanticFallbackCalls = 0
+  let semanticFallbackFailure = ''
+  try {
+    await fetchPublicReleaseJson({
+      fetchJsonImpl: async () => {
+        semanticFallbackCalls += 1
+        throw new Error('response_content_type_invalid')
+      },
+    })
+  } catch (error) {
+    semanticFallbackFailure = error instanceof Error ? error.message : ''
+  }
   const probeCases = [
     ['retry_one_transient_failure', transient.attempts === 2 && transient.value === appRelease],
     ['do_not_retry_invalid_content', invalidAttempts === 1 && invalidFailure === 'live_public_release_fetch_failed:response_content_type_invalid:attempts=1'],
     ['redact_exhausted_transient_failure', exhaustedFailure === 'live_health_fetch_failed:timeout:attempts=2'],
+    ['fallback_after_transient_primary_failure', fallback.fallbackUsed === true
+      && fallback.origin === PUBLIC_FALLBACK_ORIGIN
+      && fallback.value === publicRelease
+      && fallbackCalls.length === 3
+      && fallbackCalls[0] === `${PUBLIC_ORIGIN}/__release.json`
+      && fallbackCalls[1] === `${PUBLIC_ORIGIN}/__release.json`
+      && fallbackCalls[2] === `${PUBLIC_FALLBACK_ORIGIN}/__release.json`],
+    ['do_not_fallback_after_semantic_failure', semanticFallbackCalls === 1
+      && semanticFallbackFailure === 'live_public_release_fetch_failed:response_content_type_invalid:attempts=1'],
   ]
   for (const [name, passed] of probeCases) {
     if (!passed) throw new Error(`self_test_${name}_failed`)
@@ -410,7 +454,7 @@ async function main() {
   const hq = parseHqLiveState(await readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'))
   const [appReleaseProbe, publicReleaseProbe, healthProbe, cloudProbe] = await Promise.all([
     fetchLiveJson('app_release', `${APP_ORIGIN}/__release.json`),
-    fetchLiveJson('public_release', `${PUBLIC_ORIGIN}/__release.json`),
+    fetchPublicReleaseJson(),
     fetchLiveJson('health', `${APP_ORIGIN}/api/health`),
     fetchLiveJson('cloud_autonomy', `${APP_ORIGIN}/api/cloud-autonomy/status`),
   ])
@@ -436,6 +480,9 @@ async function main() {
       maxAttempts: LIVE_PROBE_MAX_ATTEMPTS,
       appReleaseAttempts: appReleaseProbe.attempts,
       publicReleaseAttempts: publicReleaseProbe.attempts,
+      publicReleaseOrigin: publicReleaseProbe.origin,
+      publicReleaseFallbackUsed: publicReleaseProbe.fallbackUsed,
+      publicReleasePrimaryFailure: publicReleaseProbe.primaryFailure,
       healthAttempts: healthProbe.attempts,
       cloudAutonomyAttempts: cloudProbe.attempts,
     },

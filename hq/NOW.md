@@ -5,7 +5,7 @@ Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
 Live release commit: `4ce500c29b1cca9617eeba83528293bc1af6c83e`
-Live state observed: `2026-08-08`
+Live state observed: `2026-08-08T11:59:10.523Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
