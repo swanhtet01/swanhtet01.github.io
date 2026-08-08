@@ -5147,9 +5147,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           expectedHeadDigest: commerce.inventoryFoundation.headDigest,
         }
       : undefined
+    // A stock count with no variance is bookkeeping and needs no explanation. A count that
+    // disagrees with the record is the opposite — that is the entry someone audits later —
+    // so state the variance and leave the operator to say what caused it.
+    const countHasVariance = countedPhysicalQuantity !== expectedPhysicalQuantity
     queueAction({
       kind: 'inventory_count',
       subjectId: item.sku,
+      ...(countHasVariance ? {} : { reasonSuggestion: `Routine stock count of ${item.name}; counted quantity matches the record.` }),
+      evidenceReferenceSuggestion: `Stock count ${item.sku}`,
       summary: stockCountBalance ? `Count ${item.name} at ${targetLabel}` : `Count available stock for ${item.name}`,
       before: stockCountBalance
         ? `${targetLabel} / ${expectedPhysicalQuantity.toLocaleString()} physical / ${stockCountBalance.reserved.toLocaleString()} reserved / ${expectedAvailable.toLocaleString()} total available`
@@ -5685,10 +5691,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const closeId = uid('CLOSE')
     const paymentExceptions = expected.paymentExceptionOrderIds.length ? expected.paymentExceptionOrderIds.join(', ') : 'none'
     const stockExceptions = expected.stockExceptionSkus.length ? expected.stockExceptionSkus.join(', ') : 'none'
+    // Closing the day happens once every day the shop opens, and the interesting facts —
+    // the date, the counted total, whether the settlement balanced — are already computed
+    // and shown above. When the count does NOT match, say so in the reason rather than
+    // hiding it behind a generic line: a short close is exactly the entry someone will
+    // read back later.
+    const closeReason = settlement.status === 'matched'
+      ? `End of day ${expected.businessDate}. Counted cash matches the expected total.`
+      : `End of day ${expected.businessDate}. Settlement needs review — counted ${formatMoney(settlement.totalCountedMmk)} against expected ${formatMoney(expected.total)}.`
     queueAction({
       kind: 'daily_close',
       subjectId: closeId,
       summary: `Close ${expected.businessDate}`,
+      reasonSuggestion: closeReason,
+      evidenceReferenceSuggestion: `Daily close ${expected.businessDate}`,
       before: `${commerce.closes.length} snapshots`,
       after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · expected ${formatMoney(expected.total)} · counted ${formatMoney(settlement.totalCountedMmk)} · settlement ${settlement.status.replace('_', ' ')} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
       apply: (action) => mutateCommerce(
