@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import {
   websiteStarterTemplates,
@@ -24,6 +24,7 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
   const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...SAMPLE_BRIEF }))
   const [attempted, setAttempted] = useState(false)
   const starterFormRef = useRef<HTMLFormElement>(null)
+  const businessNameRef = useRef<HTMLInputElement>(null)
   const issues = websiteStarterBriefIssues(brief)
   const issueFor = (field: keyof WebsiteStarterBrief) => (
     attempted ? issues.find((issue) => issue.field === field) : undefined
@@ -33,6 +34,14 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
   const contactIssue = issueFor('contactHref')
   const offerIssue = issueFor('offer')
   const proofIssue = issueFor('proof')
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      businessNameRef.current?.focus({ preventScroll: true })
+      businessNameRef.current?.select()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [])
 
   function updateBrief<Field extends keyof WebsiteStarterBrief>(field: Field, value: WebsiteStarterBrief[Field]) {
     setBrief((current) => ({ ...current, [field]: value }))
@@ -82,9 +91,11 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
               aria-describedby={businessNameIssue ? 'website-starter-error-business-name' : undefined}
               aria-invalid={Boolean(businessNameIssue)}
               autoComplete="organization"
+              data-website-starter-primary-field="true"
               maxLength={50}
               onChange={(event) => updateBrief('businessName', event.target.value)}
               placeholder="e.g. Shwe Family Store"
+              ref={businessNameRef}
               required
               value={brief.businessName}
             />

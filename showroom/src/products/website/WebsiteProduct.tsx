@@ -623,7 +623,6 @@ export function WebsiteProduct() {
     setStarterDismissed(false)
     setSurface('work')
     setSiteSettingsOpen(false)
-    requestHeadingFocus()
   }
 
   function viewWebsiteSample() {
