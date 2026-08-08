@@ -22,7 +22,7 @@ const resourceEnvelope = {
   providerPolicy: 'local_ollama_or_test_mock',
   maxModelCalls: 3,
   modelContextTokens: 4_096,
-  modelOutputTokens: 768,
+  modelOutputTokens: 256,
   modelKeepAlive: '0s',
   cycleTimeoutMs: 480_000,
   loadedModelsBefore: 0,
@@ -1131,7 +1131,7 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.match(add.args[2], /Do not end a clause with a conjunction, helper verb, or unfinished phrase/)
   const run = state.calls.find((call) => call.args?.[1] === 'run-next')
   assert.deepEqual(run.args.slice(0, 4), ['queue', 'run-next', '--queue-id', state.queueId])
-  assert.deepEqual(run.args.slice(-6), ['--num-ctx', '4096', '--num-predict', '768', '--keep-alive', '0s'])
+  assert.deepEqual(run.args.slice(-6), ['--num-ctx', '4096', '--num-predict', '256', '--keep-alive', '0s'])
   assert.equal(run.timeoutMs, 480_000)
 })
 

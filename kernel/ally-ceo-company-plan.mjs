@@ -272,7 +272,7 @@ function buildResourceEnvelope() {
     providerPolicy: 'local_ollama_or_test_mock',
     maxModelCalls: 3,
     modelContextTokens: 4_096,
-    modelOutputTokens: 768,
+    modelOutputTokens: 256,
     modelKeepAlive: '0s',
     cycleTimeoutMs: 8 * 60_000,
     loadedModelsBefore: 0,

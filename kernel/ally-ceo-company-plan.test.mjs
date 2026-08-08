@@ -133,7 +133,7 @@ test('CEO planning selects one scale-to-zero specialist with deterministic contr
     providerPolicy: 'local_ollama_or_test_mock',
     maxModelCalls: 3,
     modelContextTokens: 4_096,
-    modelOutputTokens: 768,
+    modelOutputTokens: 256,
     modelKeepAlive: '0s',
     cycleTimeoutMs: 480_000,
     loadedModelsBefore: 0,

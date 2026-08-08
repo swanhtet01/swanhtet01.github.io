@@ -32,7 +32,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Implemented reality
 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
-- Ally model work uses `local-only` loopback Ollama and refuses cloud fallback. One model and request run at a time, then unload immediately. Claude is owner-triggered.
+- Ally model work uses `local-only` loopback Ollama and refuses cloud fallback. One model/request runs at a time, specialist output is capped at 256 tokens, then the model unloads. Claude is owner-triggered.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
