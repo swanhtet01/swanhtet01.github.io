@@ -52,7 +52,8 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Both domains serve deployed `4ce500c29b1cca9617eeba83528293bc1af6c83e`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Vercel reports both deployments READY with no grouped runtime errors in the current review window.
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
-- Working-set trim is non-terminating: it released 2,170.4 MB; settled RAM was 65.9%, with one frontend, one idle worker, zero configured subagents/models, and Claude/Bionic open. Scheduled rehearsal used zero model/queue writes. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
+- Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
+- Local queue: Website and Shop complete; `plant-output-first-entry` is next. All managed pilots stay owner-gated.
 
 ## Owner-gated actions
 

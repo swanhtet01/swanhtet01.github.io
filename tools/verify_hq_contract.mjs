@@ -237,7 +237,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.localImprovementQueue)
   && portfolio.localImprovementQueue.length === 1
-  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'shop'
+  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'plant'
   && portfolio.localImprovementQueue.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'contract,priority,productId,reason,status,workOrder,workOrderId'
     && entry.contract === 'supermega.product-improvement-authority.v1'
@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 15
+  && portfolio.completedLocalAutomations.length === 16
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -302,10 +302,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[14]?.productId === 'website'
   && portfolio.completedLocalAutomations[14]?.workOrderId === 'website-first-edit-focus'
   && portfolio.completedLocalAutomations[14]?.checkpoint === 'OPS-166'
+  && portfolio.completedLocalAutomations[15]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[15]?.workOrderId === 'shop-counter-search-recovery'
+  && portfolio.completedLocalAutomations[15]?.checkpoint === 'OPS-167'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-counter-search-recovery'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-output-first-entry'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1324,6 +1327,10 @@ requireContract('Ally CEO autonomy is source-pinned, Llama-only, idle-gated, and
   && allyCeoTaskText.includes("function Test-CeoTaskMigratable")
   && allyCeoTaskText.includes("ally_ceo_task_migrate_refused_untrusted_definition")
   && workboard.includes('| OPS-164 | CEO + Ally Autonomy Codex | done-local |')
+  && workboard.includes('| OPS-168 | CEO + Local Runtime Efficiency Codex | done-local |')
+  && workboard.includes('OpenCode selects `ollama/llama3.2:1b` for both normal and small work and exposes only loopback Ollama')
+  && workboard.includes('A non-terminating trim released 3,050.7 MB')
+  && workboard.includes('Claude and Bionic were not inspected, closed, stopped, or altered')
   && now.includes('Local `SuperMega Ally CEO Cycle` is source-pinned, four-hourly, idle-gated, limited, and single-flight'))
 
 requireContract('Ecommerce checkout handoff targets the first required buyer field',
@@ -1335,10 +1342,13 @@ requireContract('local product improvement stays separate from managed-pilot aut
   workboard.includes('| OPS-166 | CEO + Website UX / Agent Operations Codex | done-local |')
   && workboard.includes('Product checkpoint `aa895353` makes `Customize demo` focus and select')
   && workboard.includes('`shop-counter-search-recovery` is the sole ready local continuation')
+  && workboard.includes('| OPS-167 | CEO + Shop UX / Agent Operations Codex | done-local |')
+  && workboard.includes('Product checkpoint `83a9b662` focuses the search/scan field')
+  && workboard.includes('`plant-output-first-entry` is now the sole ready local continuation')
   && workboard.includes('Zero-provider Claude preflight reconfirmed authentication unavailable')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-counter-search-recovery')
+  && portfolio.localImprovementQueue[0].workOrderId === 'plant-output-first-entry')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")

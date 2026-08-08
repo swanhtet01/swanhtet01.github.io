@@ -78,17 +78,22 @@
       "productId": "website",
       "workOrderId": "website-first-edit-focus",
       "checkpoint": "OPS-166"
+    },
+    {
+      "productId": "shop",
+      "workOrderId": "shop-counter-search-recovery",
+      "checkpoint": "OPS-167"
     }
   ],
   "localImprovementQueue": [
     {
       "contract": "supermega.product-improvement-authority.v1",
-      "productId": "shop",
-      "workOrderId": "shop-counter-search-recovery",
+      "productId": "plant",
+      "workOrderId": "plant-output-first-entry",
       "priority": 100,
       "status": "ready-local",
-      "workOrder": "Shop: make counter search and scan the single fast first-sale entry, show deterministic no-match recovery, and retain the current cart across mobile and desktop without creating an order.",
-      "reason": "Website and Ecommerce now land their first actions on exact fields. Shop Counter can improve its browser-local search and recovery path without a named operator, managed tenant, stock write, payment, or customer action."
+      "workOrder": "Plant: make the selected job's quantity the first output entry, explain the remaining-unit boundary, and preserve the draft through deterministic validation recovery without recording production.",
+      "reason": "Shop, Website, and Ecommerce now start on their real first fields. Plant already selects the intended job, so its browser-local output draft can focus the quantity and recover validation without a named operator, managed tenant, inventory write, quality release, or production record."
     }
   ],
   "agentOperatingModel": {
