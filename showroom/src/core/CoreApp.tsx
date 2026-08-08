@@ -6972,6 +6972,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [quantity, setQuantity] = useState(1)
   const [outputValidationIssue, setOutputValidationIssue] = useState('')
   const [outputValidationField, setOutputValidationField] = useState<'job' | 'shift' | 'quantity' | null>(null)
+  const [materialValidationIssue, setMaterialValidationIssue] = useState('')
+  const [materialValidationField, setMaterialValidationField] = useState<'job' | 'material' | 'lot' | 'quantity' | 'unit' | 'shift' | null>(null)
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState(latestRecordedShiftRef)
   const [outputOpen, setOutputOpen] = useState(false)
@@ -7076,7 +7078,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const outputQuantityRef = useRef<HTMLInputElement>(null)
   const outputTriggerRef = useRef<HTMLButtonElement | null>(null)
   const materialDisclosureRef = useRef<HTMLDetailsElement>(null)
+  const materialJobSelectRef = useRef<HTMLSelectElement>(null)
   const materialRefInputRef = useRef<HTMLInputElement>(null)
+  const materialLotInputRef = useRef<HTMLInputElement>(null)
+  const materialQuantityInputRef = useRef<HTMLInputElement>(null)
+  const materialUnitSelectRef = useRef<HTMLSelectElement>(null)
+  const materialShiftInputRef = useRef<HTMLInputElement>(null)
   const shiftCloseDisclosureRef = useRef<HTMLDetailsElement>(null)
   const openIssues = production.issues
     .filter((issue) => issue.status === 'open')
@@ -7120,6 +7127,20 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const materialQuantityError = parsedMaterialQuantity === null
     ? 'Enter a positive amount with up to three decimals that can be stored exactly (maximum 9,007,199,254,740.99).'
     : ''
+  useEffect(() => {
+    if (!outputOpen || !materialGuideOpen || !selectedMaterialJob) return
+    const focusMaterialStart = () => {
+      materialDisclosureRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      materialRefInputRef.current?.focus({ preventScroll: true })
+      materialRefInputRef.current?.select()
+    }
+    const frame = requestAnimationFrame(focusMaterialStart)
+    const transitionFallback = window.setTimeout(focusMaterialStart, 260)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.clearTimeout(transitionFallback)
+    }
+  }, [materialGuideOpen, outputOpen, selectedMaterialJob])
   const materialEntries = production.events.filter((event) => event.kind === 'material_consumed')
   const recentMaterialEntries = materialEntries.slice(0, 5)
   const canonicalShiftRef = shiftRef.trim()
@@ -7823,6 +7844,35 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setOutputValidationField(null)
   }
 
+  function clearMaterialValidation(field?: 'job' | 'material' | 'lot' | 'quantity' | 'unit' | 'shift') {
+    if (field && materialValidationField !== field) return
+    setMaterialValidationIssue('')
+    setMaterialValidationField(null)
+  }
+
+  function focusMaterialInput(field: 'job' | 'material' | 'lot' | 'quantity' | 'unit' | 'shift') {
+    const focusTarget = () => {
+      if (!materialDisclosureRef.current?.open) return
+      const target = field === 'job'
+        ? materialJobSelectRef.current
+        : field === 'material'
+          ? materialRefInputRef.current
+          : field === 'lot'
+            ? materialLotInputRef.current
+            : field === 'quantity'
+              ? materialQuantityInputRef.current
+              : field === 'unit'
+                ? materialUnitSelectRef.current
+                : materialShiftInputRef.current
+      materialDisclosureRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target?.scrollIntoView({ block: 'center' })
+      target?.focus({ preventScroll: true })
+      if (target instanceof HTMLInputElement) target.select()
+    }
+    requestAnimationFrame(() => requestAnimationFrame(focusTarget))
+    window.setTimeout(focusTarget, 220)
+  }
+
   function recoverOutputInput(field: 'job' | 'shift' | 'quantity', message: string) {
     setOutputValidationIssue(message)
     setOutputValidationField(field)
@@ -7836,6 +7886,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       target?.focus({ preventScroll: true })
       if (field === 'quantity') outputQuantityRef.current?.select()
     })
+  }
+
+  function recoverMaterialInput(field: 'job' | 'material' | 'lot' | 'quantity' | 'unit' | 'shift', message: string) {
+    setMaterialValidationIssue(`${message} Your material draft is still here; nothing was recorded.`)
+    setMaterialValidationField(field)
+    setOutputOpen(true)
+    setMaterialGuideOpen(true)
+    focusMaterialInput(field)
   }
 
   function openJobOutput(job: ProductionJob, trigger: HTMLButtonElement | null = null) {
@@ -7852,19 +7910,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   function openMaterialTrace(job: ProductionJob, trigger: HTMLButtonElement | null = null) {
     openJobOutput(job, trigger)
+    setMaterialDraft((current) => ({ ...current, jobId: job.id }))
+    clearMaterialValidation()
     setMaterialGuideOpen(true)
     focusMaterialDisclosure()
   }
 
   function focusMaterialDisclosure() {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const disclosure = materialDisclosureRef.current
-        if (!disclosure) return
-        disclosure.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        materialRefInputRef.current?.focus({ preventScroll: true })
-      })
-    })
+    focusMaterialInput('material')
   }
 
   function openShiftCloseGuide() {
@@ -7951,12 +8004,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const recordedShiftRef = shiftRef.trim()
     const recordedQuantity = parsedMaterialQuantity
     const materialUnit = materialDraft.materialUnit
-    if (!selectedMaterialJob) return setNotice('Choose an active job before recording material use.')
-    if (!materialRef || materialRef.length > 120) return setNotice('Enter a material reference of 1 to 120 characters.')
-    if (materialLot && materialLot.length > 120) return setNotice('Enter a lot or batch reference of at most 120 characters.')
-    if (!recordedShiftRef || recordedShiftRef.length > 80) return setNotice('Enter a shift reference of 1 to 80 characters.')
-    if (!productionMaterialUnits.includes(materialUnit)) return setNotice('Choose a supported material unit.')
-    if (recordedQuantity === null) return setNotice('Enter a positive material quantity with no more than three decimal places.')
+    if (!selectedMaterialJob) return recoverMaterialInput('job', materialJobIsStale ? 'The selected job is no longer active. Choose a current job.' : 'Choose an active job before review.')
+    if (!materialRef || materialRef.length > 120) return recoverMaterialInput('material', 'Enter a material reference of 1 to 120 characters.')
+    if (materialLot && materialLot.length > 120) return recoverMaterialInput('lot', 'Enter a lot or batch reference of at most 120 characters.')
+    if (recordedQuantity === null) return recoverMaterialInput('quantity', materialQuantityError)
+    if (!productionMaterialUnits.includes(materialUnit)) return recoverMaterialInput('unit', 'Choose a supported material unit.')
+    if (!recordedShiftRef || recordedShiftRef.length > 80) return recoverMaterialInput('shift', 'Enter a shift reference of 1 to 80 characters.')
+    clearMaterialValidation()
     const recordedJobId = selectedMaterialJob.id
     const recordedProduct = selectedMaterialJob.product
     const held = Boolean(selectedMaterialJob.qualityHold)
@@ -8910,21 +8964,21 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </form> : null}
         <details className="compact-disclosure production-history" onToggle={(event) => setMaterialGuideOpen(event.currentTarget.open)} open={materialGuideOpen} ref={materialDisclosureRef}>
           <summary>Materials used <span>{materialEntries.length}</span></summary>
-          <form autoComplete="off" className="core-form compact-form" onSubmit={recordMaterialUse}>
-            <label>Job<select disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} onChange={(event) => setMaterialDraft((current) => ({ ...current, jobId: event.target.value }))} value={materialDraft.jobId}>
+          <form autoComplete="off" className="core-form compact-form" noValidate onSubmit={recordMaterialUse}>
+            <label>Job<select aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} onChange={(event) => { setMaterialDraft((current) => ({ ...current, jobId: event.target.value })); clearMaterialValidation('job') }} ref={materialJobSelectRef} value={materialDraft.jobId}>
               {!materialDraft.jobId ? <option value="">Choose an active job</option> : null}
               {materialJobIsStale ? <option disabled value={materialDraft.jobId}>{materialDraft.jobId} · no longer active</option> : null}
               {activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>)}
             </select></label>
             {materialJobIsStale ? <p className="form-notice" role="alert">The selected job {materialDraft.jobId} is no longer active. Your draft is preserved; choose another job before review.</p> : null}
-            <label>Material used<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialRef: event.target.value }))} placeholder="e.g. Resin A or RM-001" ref={materialRefInputRef} required value={materialDraft.materialRef} /></label>
-            <label>Lot or batch (optional)<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialLot: event.target.value }))} placeholder="LOT-24" value={materialDraft.materialLot} /></label>
+            <label>Material used<input aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'material'} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => { setMaterialDraft((current) => ({ ...current, materialRef: event.target.value })); clearMaterialValidation('material') }} placeholder="e.g. Resin A or RM-001" ref={materialRefInputRef} required value={materialDraft.materialRef} /></label>
+            <label>Lot or batch (optional)<input aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'lot'} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => { setMaterialDraft((current) => ({ ...current, materialLot: event.target.value })); clearMaterialValidation('lot') }} placeholder="LOT-24" ref={materialLotInputRef} value={materialDraft.materialLot} /></label>
             <div className="form-row">
-              <label>Quantity<input aria-describedby={materialQuantityError ? 'plant-material-quantity-error' : undefined} aria-invalid={materialQuantityError ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} min="0.001" onChange={(event) => setMaterialDraft((current) => ({ ...current, quantity: event.target.value }))} required step="0.001" type="number" value={materialDraft.quantity} /></label>
-              <label>Unit<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} onChange={(event) => setMaterialDraft((current) => ({ ...current, materialUnit: event.target.value as ProductionMaterialUnit }))} value={materialDraft.materialUnit}>{productionMaterialUnits.map((unit) => <option key={unit} value={unit}>{productionMaterialUnitLabels[unit]}</option>)}</select></label>
+              <label>Quantity<input aria-describedby={materialValidationIssue ? 'plant-material-quantity-help plant-material-validation' : 'plant-material-quantity-help'} aria-invalid={materialValidationField === 'quantity'} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} min="0.001" onChange={(event) => { setMaterialDraft((current) => ({ ...current, quantity: event.target.value })); clearMaterialValidation('quantity') }} ref={materialQuantityInputRef} required step="0.001" type="number" value={materialDraft.quantity} /><small className="plant-output-boundary" id="plant-material-quantity-help">Positive amount, up to three decimals. Review does not record material use.</small></label>
+              <label>Unit<select aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'unit'} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} onChange={(event) => { setMaterialDraft((current) => ({ ...current, materialUnit: event.target.value as ProductionMaterialUnit })); clearMaterialValidation('unit') }} ref={materialUnitSelectRef} value={materialDraft.materialUnit}>{productionMaterialUnits.map((unit) => <option key={unit} value={unit}>{productionMaterialUnitLabels[unit]}</option>)}</select></label>
             </div>
-            {materialQuantityError ? <p className="form-notice" id="plant-material-quantity-error" role="alert">{materialQuantityError}</p> : null}
-            <label>Shift reference<input disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={80} onChange={(event) => setShiftRef(event.target.value)} placeholder={shiftReferencePlaceholder()} required value={shiftRef} /></label>
+            <label>Shift reference<input aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'shift'} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={80} onChange={(event) => { setShiftRef(event.target.value); clearMaterialValidation('shift') }} placeholder={shiftReferencePlaceholder()} ref={materialShiftInputRef} required value={shiftRef} /></label>
+            {materialValidationIssue ? <p aria-live="assertive" className="form-notice plant-material-validation" id="plant-material-validation">{materialValidationIssue}</p> : null}
             {selectedMaterialJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · This records observed material use only. It does not release the hold.</p> : null}
             {!managedIdentity ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} onClick={() => {
               const sampleShiftRef = shiftRef.trim() || shiftReferencePlaceholder()
@@ -8933,7 +8987,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               setMaterialDraft((current) => ({ ...current, materialRef: 'RM-SAMPLE-01', materialLot: 'LOT-SAMPLE-01', quantity: '1', materialUnit: 'pcs' }))
               setNotice('Sample material details filled locally. Review and confirm them before any Plant record changes.')
             }} type="button">Use sample material</button> : null}
-            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob || !materialDraft.materialRef.trim() || materialDraft.materialRef.trim().length > 120 || materialDraft.materialLot.trim().length > 120 || !shiftRef.trim() || shiftRef.trim().length > 80 || parsedMaterialQuantity === null} type="submit">Review material record</button>
+            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} type="submit">Review material record</button>
             <p className="panel-copy">Records one material and quantity against this job. Stock, purchasing, costing, accounting, and equipment stay unchanged.</p>
           </form>
           {recentMaterialEntries.length ? <div className="issue-list">{recentMaterialEntries.map((entry) => <article key={entry.actionId}>
