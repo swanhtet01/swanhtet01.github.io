@@ -31,7 +31,7 @@ const CANDIDATES = Object.freeze([
   Object.freeze({
     pr: 412,
     path: 'C:\\Users\\thesw\\Projects\\supermega-slice1',
-    commit: '111f069d673c14fd6f8529d87bfcaacd7aae9671',
+    commit: 'bc0970656e25c132fcf4923a91ac45e8e2c34102',
   }),
   Object.freeze({
     pr: 413,
@@ -377,4 +377,3 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
     process.exitCode = 1
   })
 }
-

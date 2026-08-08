@@ -12,7 +12,7 @@ Identify the safe merge order, contradictions, release blockers, and exact next 
 - Integrator branch: `codex/fix-ecommerce-intake-count-20260808`
 - Canonical authority: `hq/NOW.md`, `hq/WORKBOARD.md`, `hq/readiness/managed-pilot-readiness.json`
 - PR #411: `C:\Users\thesw\Projects\supermega-showroom-fixes`, commit `decb001d2e4c47c1434ea3fb1898c599228c2bf4`
-- PR #412: `C:\Users\thesw\Projects\supermega-slice1`, commit `111f069d673c14fd6f8529d87bfcaacd7aae9671`
+- PR #412 local hardened candidate: `C:\Users\thesw\Projects\supermega-slice1`, commit `bc0970656e25c132fcf4923a91ac45e8e2c34102` (extends remote PR head `111f069d673c14fd6f8529d87bfcaacd7aae9671` with an exact founder-approval and T0+24h branch-lifetime gate; not pushed)
 - PR #413: `C:\Users\thesw\Projects\supermega-rebaseline`, commit `3aab5edc398e4a3e2d7ec0aca4346438872c7d87`
 
 Read, Grep, and Glob are the only allowed tools. Do not use a shell, edit a file, create a branch or worktree, run a build, access secrets, call a provider, send a message, push, merge, deploy, change a domain, invite a user, or write hosted data.
