@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 
 import {
+  buildManagedPilotDecisionPreview,
   buildManagedPilotReadiness,
   readinessDigest,
   validateManagedPilotReadiness,
@@ -37,8 +38,20 @@ async function currentLedger() {
 
 async function main() {
   const args = process.argv.slice(2)
-  if (args.length > 1 || (args[0] && args[0] !== '--verify')) throw new Error('managed_pilot_readiness_arguments_invalid')
+  const previewMode = args[0] === '--decision-preview'
+  if ((previewMode && args.length > 2)
+    || (!previewMode && (args.length > 1 || (args[0] && args[0] !== '--verify')))) {
+    throw new Error('managed_pilot_readiness_arguments_invalid')
+  }
   const expected = currentLedger()
+  if (previewMode) {
+    const actual = validateManagedPilotReadiness(JSON.parse(await readFile(output, 'utf8')))
+    const current = await expected
+    if (JSON.stringify(actual) !== JSON.stringify(current)) throw new Error('managed_pilot_readiness_evidence_stale')
+    const preview = buildManagedPilotDecisionPreview(actual, args[1] || null)
+    console.log(JSON.stringify(preview))
+    return
+  }
   if (args[0] === '--verify') {
     const actual = validateManagedPilotReadiness(JSON.parse(await readFile(output, 'utf8')))
     if (JSON.stringify(actual) !== JSON.stringify(await expected)) throw new Error('managed_pilot_readiness_evidence_stale')

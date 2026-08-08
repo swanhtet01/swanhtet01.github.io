@@ -24,7 +24,10 @@ import {
   COMPANY_DAILY_BUDGET_DEFAULT_UNITS,
   COMPANY_DAILY_BUDGET_HARD_MAX_UNITS,
 } from '../kernel/gateway.mjs'
-import { validateManagedPilotReadiness } from '../kernel/managed-pilot-readiness.mjs'
+import {
+  buildManagedPilotDecisionPreview,
+  validateManagedPilotReadiness,
+} from '../kernel/managed-pilot-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, workforceText, agentWorkspaceText, research, agentSecurity, databaseRehearsalText, releaseReconciliation, allyAuditText, allyTrimText, allyCompanyCycleText, allyCeoPlannerText, allyCeoPlannerCliText, allyCeoLocalCycleText, agentJobRunnerText, packageText, storageAuditHandoff, hqLiveStateVerifier, kernelPackageText, kernelFootprintVerifier, kernelBriefText, kernelOperatorText, kernelAlertText, kernelOperationsText, kernelConsoleText, kernelAgentCompanyApiText, kernelGatewayText, kernelGatewayTestText, kernelConsoleApiText, kernelReadmeText, agentArchitectureText, agentGovernanceText] = await Promise.all([
@@ -68,6 +71,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
 const managedPilotReadiness = validateManagedPilotReadiness(JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8')))
+const managedPilotDecisionPreview = buildManagedPilotDecisionPreview(managedPilotReadiness)
 const supabaseSecurityAudit = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'supabase-security-advisor-audit.json'), 'utf8'))
 
 const manifest = JSON.parse(manifestText)
@@ -1098,6 +1102,14 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
   && managedPilotReadiness.controls?.productionWritesEnabled === false
   && managedPilotReadiness.sourceReceipts?.length === 7
+  && managedPilotDecisionPreview.contract === 'supermega.managed-pilot-decision-preview.v1'
+  && managedPilotDecisionPreview.options?.map((option) => option.productId).join(',') === 'shop,plant,website,ecommerce'
+  && managedPilotDecisionPreview.decision?.status === 'not_selected'
+  && managedPilotDecisionPreview.decision?.decisionRecorded === false
+  && managedPilotDecisionPreview.controls?.localWritesPerformed === false
+  && managedPilotDecisionPreview.controls?.externalWritesPerformed === false
+  && managedPilotDecisionPreview.controls?.activationPerformed === false
+  && JSON.parse(packageText).scripts?.['readiness:managed:decision'] === 'node tools/manage_managed_pilot_readiness.mjs --decision-preview'
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
   && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v1'
   && managedPilotReadiness.securityAudit?.asOf === supabaseSecurityAudit.asOf
@@ -1335,8 +1347,9 @@ requireContract('Ally CEO execution uses one exact local-company run and no exte
   && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_legacy_repair_requires_execution")
   && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_legacy_repair_not_allowed")
   && allyCeoLocalCycleText.includes("ally_ceo_local_cycle_legacy_repair_not_available")
-  && allyCeoLocalCycleText.includes("EXECUTION_SPEC_VERSION = '2026-07-29.25'")
-  && allyCeoLocalCycleText.includes("LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.24', '2026-07-29.23', '2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])")
+  && allyCeoLocalCycleText.includes("EXECUTION_SPEC_VERSION = '2026-07-29.26'")
+  && allyCeoLocalCycleText.includes("LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.25', '2026-07-29.24', '2026-07-29.23', '2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])")
+  && allyCeoLocalCycleText.includes("previewCommand: MANAGED_PILOT_DECISION_PREVIEW_COMMAND")
   && allyCeoLocalCycleText.includes('ALLY_CEO_RESOURCE_ENVELOPE_CONTRACT')
   && allyCeoLocalCycleText.includes('ally_ceo_local_cycle_resource_envelope_invalid')
   && allyCeoLocalCycleText.includes('productFocus.workOrder.startsWith')

@@ -26,8 +26,9 @@ const MEMORY_SETTLEMENT_DELAY_MS = 3_000
 const MEMORY_CRITICAL_SETTLEMENT_DELAY_MS = 12_000
 const SCHEDULED_MEMORY_BLOCK_PERCENT = 85
 const LOCAL_LLAMA_MODELS = Object.freeze(new Set(['llama3.2:1b', 'llama3.2:3b']))
-const EXECUTION_SPEC_VERSION = '2026-07-29.25'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.24', '2026-07-29.23', '2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.26'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.25', '2026-07-29.24', '2026-07-29.23', '2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const MANAGED_PILOT_DECISION_PREVIEW_COMMAND = 'npm run readiness:managed:decision'
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
 const CEO_LIVE_ADVISORIES = Object.freeze(new Set(['app_product_contract_drift', 'hq_release_commit_stale']))
 const LOCAL_ONLY_HQ_LIVE_FAILURE = 'scheduler_batch_limit_exceeded'
@@ -187,6 +188,7 @@ function buildOwnerBrief({
       code: 'managed_pilot_authorization_required',
       count: gatedProduct.gatedProductWork.length,
       productIds: gatedProduct.gatedProductWork.map((item) => item.productId),
+      previewCommand: MANAGED_PILOT_DECISION_PREVIEW_COMMAND,
     })
   }
   if (capacityAdmission?.companyAttentionStatus === 'attention_required') {

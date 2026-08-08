@@ -213,7 +213,7 @@ function legacyDailyHash(version = '2026-07-29.10') {
 function currentDailyHash() {
   return createHash('sha256').update([
     'supermega.ally-ceo-local-cycle.v1',
-    '2026-07-29.25',
+    '2026-07-29.26',
     'a'.repeat(64),
     'daily-company-control',
     'operations',
@@ -767,6 +767,7 @@ test('gated product work consumes no model call and lets Growth continue', async
   assert.equal(result.ownerBrief.status, 'decision_required')
   assert.equal(result.ownerBrief.nextAction, 'authorize_one_managed_pilot_or_leave_all_external_gates_closed')
   assert.deepEqual(result.ownerBrief.attention[0].productIds, ['shop', 'plant', 'website', 'ecommerce'])
+  assert.equal(result.ownerBrief.attention[0].previewCommand, 'npm run readiness:managed:decision')
   assert.equal(result.skippedOutcomes[0].gatedProductWork.length, 4)
   assert.equal(result.modelCalls, 0)
   assert.equal(state.calls.some((call) => call.args?.[1] === 'add'), false)

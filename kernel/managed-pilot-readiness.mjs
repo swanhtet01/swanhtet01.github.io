@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 export const MANAGED_PILOT_READINESS_CONTRACT = 'supermega.managed-pilot-readiness.v3'
+export const MANAGED_PILOT_DECISION_PREVIEW_CONTRACT = 'supermega.managed-pilot-decision-preview.v1'
 export const SECURITY_AUDIT_CONTRACT = 'supermega.supabase-security-advisor-audit.v1'
 
 const PRODUCT_IDS = ['shop', 'plant', 'website', 'ecommerce']
@@ -40,6 +41,14 @@ const NEXT_ACTION_DECISION_ID = 'bounded-managed-pilot-rehearsal'
 const LOCAL_GATE_EVIDENCE = '56 checks, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup and restore.'
 const REQUIRED_DATABASE_CHECK_COUNT = 56
 const REQUIRED_SOURCE_RECEIPT_COUNT = 7
+const DECISION_PREVIEW_COMMAND = 'npm run readiness:managed:decision'
+const DECISION_PREVIEW_RECOMMENDATION = 'The current readiness contract already targets Shop for the first bounded rehearsal; this is evidence context, not an owner decision.'
+const PRODUCT_OWNER_INPUTS = Object.freeze({
+  shop: ['named_business', 'named_operator', 'isolated_managed_tenant_approval', 'baseline_window', 'five_day_evidence_plan'],
+  plant: ['named_business', 'named_operator', 'named_supervisor', 'isolated_managed_tenant_approval', 'work_centre_downtime_source', 'correction_effort_measure'],
+  website: ['named_business', 'business_brief', 'owner_reviewer', 'responsive_acceptance_criteria', 'managed_artifact_retention_target'],
+  ecommerce: ['named_business', 'named_operator', 'isolated_managed_tenant_approval', 'checkout_acknowledgement_baseline', 'delivery_correction_scenario', 'shop_replacement_reviewer'],
+})
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -66,6 +75,204 @@ export function readinessDigest(value) {
   return `sha256:${createHash('sha256').update(canonical).digest('hex')}`
 }
 
+export function managedPilotDecisionPreviewDigest(value) {
+  if (!isRecord(value)) fail('managed_pilot_decision_preview_invalid')
+  const unsigned = { ...value }
+  delete unsigned.previewDigest
+  return readinessDigest(unsigned)
+}
+
+export function buildManagedPilotDecisionPreview(readiness, requestedProductId = null) {
+  const ledger = validateManagedPilotReadiness(readiness)
+  if (requestedProductId !== null
+    && (typeof requestedProductId !== 'string' || !PRODUCT_IDS.includes(requestedProductId))) {
+    fail('managed_pilot_decision_preview_product_invalid')
+  }
+  const options = ledger.products.map((product) => ({
+    productId: product.productId,
+    workOrderId: product.workOrderId,
+    localStatus: product.localStatus,
+    managedPilotStatus: product.managedPilotStatus,
+    proposedWork: product.proposedWork,
+    blockingReason: product.blockingReason,
+    requiredProof: product.requiredProof,
+    ownerInputsRequired: [...PRODUCT_OWNER_INPUTS[product.productId]],
+  }))
+  const focusedOption = requestedProductId === null
+    ? null
+    : options.find((option) => option.productId === requestedProductId)
+  const result = {
+    contract: MANAGED_PILOT_DECISION_PREVIEW_CONTRACT,
+    status: 'owner_decision_required',
+    generatedFrom: {
+      readinessContract: ledger.contract,
+      readinessAsOf: ledger.asOf,
+      readinessSourceDigest: ledger.sourceDigest,
+      readinessLedgerDigest: readinessDigest(ledger),
+    },
+    recommendation: {
+      productId: ledger.founderDecision.operator.productId,
+      authority: 'evidence_context_only',
+      reason: DECISION_PREVIEW_RECOMMENDATION,
+    },
+    decision: {
+      requestedProductId,
+      status: focusedOption ? 'proposal_previewed' : 'not_selected',
+      decisionRecorded: false,
+      authority: 'proposal_only',
+      createsAuthority: false,
+      approvalReceipt: null,
+      selectedWorkOrderId: focusedOption?.workOrderId || null,
+    },
+    options,
+    focusedOption: focusedOption || null,
+    rules: {
+      chooseAtMostOne: true,
+      zeroSelectionsAllowed: true,
+      defaultSelection: null,
+      noDecisionLeavesAllExternalGatesClosed: true,
+      proposalExpiresOnReadinessDigestChange: true,
+      doesNotAuthorize: [...FORBIDDEN_ACTIONS],
+    },
+    nextAction: {
+      kind: focusedOption ? 'owner_inputs' : 'owner_choice',
+      action: focusedOption
+        ? 'provide_required_inputs_for_owner_review'
+        : 'choose_at_most_one_product_or_leave_all_closed',
+      safeCommand: focusedOption ? null : DECISION_PREVIEW_COMMAND,
+      acceptedProductIds: [...PRODUCT_IDS],
+      requiredOwnerInputs: focusedOption ? [...focusedOption.ownerInputsRequired] : [],
+    },
+    controls: {
+      localReadsPerformed: true,
+      localWritesPerformed: false,
+      externalWritesPerformed: false,
+      connectorRequestsPerformed: 0,
+      providerRequestsPerformed: 0,
+      modelCallsPerformed: 0,
+      activationPerformed: false,
+      decisionRecorded: false,
+    },
+  }
+  result.previewDigest = managedPilotDecisionPreviewDigest(result)
+  return validateManagedPilotDecisionPreview(result)
+}
+
+export function validateManagedPilotDecisionPreview(value) {
+  const rootKeys = [
+    'contract', 'status', 'generatedFrom', 'recommendation', 'decision', 'options',
+    'focusedOption', 'rules', 'nextAction', 'controls', 'previewDigest',
+  ]
+  if (!exactObjectKeys(value, rootKeys)
+    || value.contract !== MANAGED_PILOT_DECISION_PREVIEW_CONTRACT
+    || value.status !== 'owner_decision_required'
+    || !/^sha256:[0-9a-f]{64}$/.test(value.previewDigest || '')
+    || value.previewDigest !== managedPilotDecisionPreviewDigest(value)) {
+    fail('managed_pilot_decision_preview_invalid')
+  }
+  const source = value.generatedFrom
+  if (!exactObjectKeys(source, ['readinessContract', 'readinessAsOf', 'readinessSourceDigest', 'readinessLedgerDigest'])
+    || source.readinessContract !== MANAGED_PILOT_READINESS_CONTRACT
+    || !Number.isFinite(Date.parse(source.readinessAsOf))
+    || !/^sha256:[0-9a-f]{64}$/.test(source.readinessSourceDigest || '')
+    || !/^sha256:[0-9a-f]{64}$/.test(source.readinessLedgerDigest || '')) {
+    fail('managed_pilot_decision_preview_source_invalid')
+  }
+  const recommendation = value.recommendation
+  if (!exactObjectKeys(recommendation, ['productId', 'authority', 'reason'])
+    || recommendation.productId !== 'shop'
+    || recommendation.authority !== 'evidence_context_only'
+    || recommendation.reason !== DECISION_PREVIEW_RECOMMENDATION) {
+    fail('managed_pilot_decision_preview_recommendation_invalid')
+  }
+  if (!Array.isArray(value.options)
+    || value.options.map((option) => option.productId).join(',') !== PRODUCT_IDS.join(',')) {
+    fail('managed_pilot_decision_preview_options_invalid')
+  }
+  for (const option of value.options) {
+    if (!exactObjectKeys(option, [
+      'productId', 'workOrderId', 'localStatus', 'managedPilotStatus', 'proposedWork',
+      'blockingReason', 'requiredProof', 'ownerInputsRequired',
+    ])
+      || option.localStatus !== 'release-candidate-local'
+      || option.managedPilotStatus !== 'blocked'
+      || !String(option.workOrderId || '').startsWith(`${option.productId}-`)
+      || !String(option.proposedWork || '').trim()
+      || !String(option.blockingReason || '').trim()
+      || !String(option.requiredProof || '').trim()
+      || !exactStringArray(option.ownerInputsRequired, PRODUCT_OWNER_INPUTS[option.productId])) {
+      fail('managed_pilot_decision_preview_options_invalid')
+    }
+  }
+  const decision = value.decision
+  const selected = decision?.requestedProductId === null
+    ? null
+    : value.options.find((option) => option.productId === decision?.requestedProductId)
+  if (!exactObjectKeys(decision, [
+    'requestedProductId', 'status', 'decisionRecorded', 'authority', 'createsAuthority',
+    'approvalReceipt', 'selectedWorkOrderId',
+  ])
+    || (decision.requestedProductId !== null && !selected)
+    || decision.status !== (selected ? 'proposal_previewed' : 'not_selected')
+    || decision.decisionRecorded !== false
+    || decision.authority !== 'proposal_only'
+    || decision.createsAuthority !== false
+    || decision.approvalReceipt !== null
+    || decision.selectedWorkOrderId !== (selected?.workOrderId || null)
+    || stableStringify(value.focusedOption) !== stableStringify(selected)) {
+    fail('managed_pilot_decision_preview_decision_invalid')
+  }
+  const rules = value.rules
+  if (!exactObjectKeys(rules, [
+    'chooseAtMostOne', 'zeroSelectionsAllowed', 'defaultSelection',
+    'noDecisionLeavesAllExternalGatesClosed', 'proposalExpiresOnReadinessDigestChange',
+    'doesNotAuthorize',
+  ])
+    || rules.chooseAtMostOne !== true
+    || rules.zeroSelectionsAllowed !== true
+    || rules.defaultSelection !== null
+    || rules.noDecisionLeavesAllExternalGatesClosed !== true
+    || rules.proposalExpiresOnReadinessDigestChange !== true
+    || !exactStringArray(rules.doesNotAuthorize, FORBIDDEN_ACTIONS)) {
+    fail('managed_pilot_decision_preview_rules_invalid')
+  }
+  const next = value.nextAction
+  if (!exactObjectKeys(next, ['kind', 'action', 'safeCommand', 'acceptedProductIds', 'requiredOwnerInputs'])
+    || next.kind !== (selected ? 'owner_inputs' : 'owner_choice')
+    || next.action !== (selected ? 'provide_required_inputs_for_owner_review' : 'choose_at_most_one_product_or_leave_all_closed')
+    || next.safeCommand !== (selected ? null : DECISION_PREVIEW_COMMAND)
+    || !exactStringArray(next.acceptedProductIds, PRODUCT_IDS)
+    || !exactStringArray(next.requiredOwnerInputs, selected?.ownerInputsRequired || [])) {
+    fail('managed_pilot_decision_preview_next_action_invalid')
+  }
+  const controls = value.controls
+  if (!exactObjectKeys(controls, [
+    'localReadsPerformed', 'localWritesPerformed', 'externalWritesPerformed',
+    'connectorRequestsPerformed', 'providerRequestsPerformed', 'modelCallsPerformed',
+    'activationPerformed', 'decisionRecorded',
+  ])
+    || controls.localReadsPerformed !== true
+    || controls.localWritesPerformed !== false
+    || controls.externalWritesPerformed !== false
+    || controls.connectorRequestsPerformed !== 0
+    || controls.providerRequestsPerformed !== 0
+    || controls.modelCallsPerformed !== 0
+    || controls.activationPerformed !== false
+    || controls.decisionRecorded !== false) {
+    fail('managed_pilot_decision_preview_controls_invalid')
+  }
+  const serialized = JSON.stringify(value).toLowerCase()
+  if (serialized.includes('sourcereceipts')
+    || serialized.includes('hq/')
+    || serialized.includes('kernel/')
+    || serialized.includes('postgresql://')
+    || serialized.includes('password=')
+    || serialized.includes('service_role')) {
+    fail('managed_pilot_decision_preview_sensitive_value')
+  }
+  return value
+}
+
 function field(markdown, label) {
   const match = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*(.+)$`, 'm').exec(markdown)
   if (!match?.[1]) fail(`managed_pilot_readiness_${label.toLowerCase().replaceAll(' ', '_')}_missing`)
@@ -75,6 +282,11 @@ function field(markdown, label) {
 
 function gate(id, status, evidence, nextAction) {
   return { id, status, evidence, nextAction }
+}
+
+function exactObjectKeys(value, expected) {
+  return isRecord(value)
+    && Object.keys(value).sort().join(',') === [...expected].sort().join(',')
 }
 
 function securityGateEvidence(audit) {

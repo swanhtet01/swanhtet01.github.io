@@ -1,7 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildManagedPilotReadiness, readinessDigest, validateManagedPilotReadiness } from './managed-pilot-readiness.mjs'
+import {
+  buildManagedPilotDecisionPreview,
+  buildManagedPilotReadiness,
+  managedPilotDecisionPreviewDigest,
+  readinessDigest,
+  validateManagedPilotDecisionPreview,
+  validateManagedPilotReadiness,
+} from './managed-pilot-readiness.mjs'
 
 const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
   id,
@@ -251,4 +258,77 @@ test('rejects tampered receipts and derived-ledger drift', () => {
   const sixReceipts = structuredClone(input)
   sixReceipts.sourceReceipts = sixReceipts.sourceReceipts.slice(0, 6)
   assert.throws(() => buildManagedPilotReadiness(sixReceipts), /managed_pilot_readiness_sources_invalid/)
+})
+
+test('builds a pathless four-product owner preview without selecting or authorizing anything', () => {
+  const ledger = buildManagedPilotReadiness(input)
+  const preview = buildManagedPilotDecisionPreview(ledger)
+  assert.equal(preview.contract, 'supermega.managed-pilot-decision-preview.v1')
+  assert.equal(preview.status, 'owner_decision_required')
+  assert.equal(preview.recommendation.productId, 'shop')
+  assert.equal(preview.recommendation.authority, 'evidence_context_only')
+  assert.equal(preview.decision.requestedProductId, null)
+  assert.equal(preview.decision.status, 'not_selected')
+  assert.equal(preview.decision.decisionRecorded, false)
+  assert.equal(preview.decision.createsAuthority, false)
+  assert.equal(preview.focusedOption, null)
+  assert.deepEqual(preview.options.map((option) => option.productId), ['shop', 'plant', 'website', 'ecommerce'])
+  assert.deepEqual(preview.options[0].ownerInputsRequired, [
+    'named_business', 'named_operator', 'isolated_managed_tenant_approval',
+    'baseline_window', 'five_day_evidence_plan',
+  ])
+  assert.equal(preview.rules.chooseAtMostOne, true)
+  assert.equal(preview.rules.zeroSelectionsAllowed, true)
+  assert.equal(preview.rules.noDecisionLeavesAllExternalGatesClosed, true)
+  assert.equal(preview.nextAction.safeCommand, 'npm run readiness:managed:decision')
+  assert.deepEqual(preview.nextAction.requiredOwnerInputs, [])
+  assert.deepEqual(preview.controls, {
+    localReadsPerformed: true,
+    localWritesPerformed: false,
+    externalWritesPerformed: false,
+    connectorRequestsPerformed: 0,
+    providerRequestsPerformed: 0,
+    modelCallsPerformed: 0,
+    activationPerformed: false,
+    decisionRecorded: false,
+  })
+  assert.doesNotMatch(JSON.stringify(preview), /sourceReceipts|hq\/|kernel\/|postgresql:\/\//i)
+  assert.equal(validateManagedPilotDecisionPreview(preview), preview)
+})
+
+test('focuses one product as a proposal while retaining every owner and activation gate', () => {
+  const preview = buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input), 'plant')
+  assert.equal(preview.decision.requestedProductId, 'plant')
+  assert.equal(preview.decision.status, 'proposal_previewed')
+  assert.equal(preview.decision.selectedWorkOrderId, 'plant-managed-pilot')
+  assert.equal(preview.focusedOption.productId, 'plant')
+  assert.deepEqual(preview.nextAction.requiredOwnerInputs, [
+    'named_business', 'named_operator', 'named_supervisor',
+    'isolated_managed_tenant_approval', 'work_centre_downtime_source',
+    'correction_effort_measure',
+  ])
+  assert.equal(preview.nextAction.safeCommand, null)
+  assert.equal(preview.controls.activationPerformed, false)
+  assert.equal(preview.controls.decisionRecorded, false)
+  assert.throws(
+    () => buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input), 'agents'),
+    /managed_pilot_decision_preview_product_invalid/,
+  )
+})
+
+test('decision previews reject recomputed authority, option, and source tampering', () => {
+  const authoritative = buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input), 'shop')
+  authoritative.controls.decisionRecorded = true
+  authoritative.previewDigest = managedPilotDecisionPreviewDigest(authoritative)
+  assert.throws(() => validateManagedPilotDecisionPreview(authoritative), /managed_pilot_decision_preview_controls_invalid/)
+
+  const reordered = buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input))
+  reordered.options.reverse()
+  reordered.previewDigest = managedPilotDecisionPreviewDigest(reordered)
+  assert.throws(() => validateManagedPilotDecisionPreview(reordered), /managed_pilot_decision_preview_options_invalid/)
+
+  const leaked = buildManagedPilotDecisionPreview(buildManagedPilotReadiness(input))
+  leaked.options[0].blockingReason = 'Inspect hq/private-owner-inputs.json'
+  leaked.previewDigest = managedPilotDecisionPreviewDigest(leaked)
+  assert.throws(() => validateManagedPilotDecisionPreview(leaked), /managed_pilot_decision_preview_sensitive_value/)
 })

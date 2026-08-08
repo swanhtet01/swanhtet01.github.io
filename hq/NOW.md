@@ -32,7 +32,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Implemented reality
 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
-- Ally model work uses `local-only` loopback Ollama and refuses cloud fallback. One model/request runs at a time, specialist output is capped at 256 tokens, then the model unloads. Claude is owner-triggered.
+- Ally inference is local-only Ollama `llama3.2:1b`: one call/model, 256 output tokens, immediate unload, no cloud fallback.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
@@ -58,9 +58,11 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 No external send, payment, refund, publish, domain change, connector write, merge, deployment, access change, production database write, or paid resource occurs without owner approval.
 
+`npm run readiness:managed:decision` compares four pilots without selecting, authorizing, writing, calling, or activating.
+
 ## Current coordination
 
-- Codex is the sole Ally integrator. Claude Code 2.1.218 remains unauthenticated; ENG-001 targets base `4bc55a6a` and three clean worktrees. Owner Claude sessions are never process-controlled; no Claude worker ran.
+- Codex is sole integrator. Zero-call ENG-001 binds the current clean checkout to #411 `a09116e4`, #412 `66ff17d6`, and #413 `7e688869`. Claude is unauthenticated and untouched.
 - Review order is #411 pilot kit, #412 rehearsal, then #413 billing. All are open, mergeable, one commit over `main`, mutually non-overlapping, statusless, and locally tested. #413 alone conflicts with the current generated readiness ledger; rebase it last and regenerate.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 

@@ -54,6 +54,7 @@
     "database:postgres17:record:self-test": "node --test tools/record_postgres17_rehearsal.test.mjs",
     "readiness:managed:write": "node tools/manage_managed_pilot_readiness.mjs",
     "readiness:managed:verify": "node tools/manage_managed_pilot_readiness.mjs --verify",
+    "readiness:managed:decision": "node tools/manage_managed_pilot_readiness.mjs --decision-preview",
     "readiness:managed:self-test": "node --test kernel/managed-pilot-readiness.test.mjs",
     "readiness:supabase-security:verify": "node tools/verify_supabase_security_advisor_audit.mjs",
     "readiness:supabase-security:self-test": "node tools/verify_supabase_security_advisor_audit.mjs --self-test",
