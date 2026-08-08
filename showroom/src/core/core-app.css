@@ -581,6 +581,12 @@ textarea { min-height: 72px; resize: vertical; }
 .order-total span { color: var(--core-muted); font-size: 12px; }
 .order-total strong { color: var(--core-green); font-size: 16px; }
 .order-essential-fields > .order-total { min-height: 44px; }
+.order-line-remove-recovery { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid rgba(11,116,94,.24); border-left: 3px solid var(--core-green); border-radius: 10px; padding: 9px 10px; background: rgba(232,247,241,.92); }
+.order-line-remove-recovery > span { min-width: 0; display: grid; gap: 2px; }
+.order-line-remove-recovery strong { color: var(--core-ink); font-size: 12px; line-height: 1.3; }
+.order-line-remove-recovery small { color: var(--core-muted); font-size: 10px; line-height: 1.4; }
+.order-line-remove-recovery .core-button { min-width: 108px; min-height: 44px; flex: none; }
+.order-line-remove-recovery .core-button:focus-visible { outline: 3px solid rgba(11,116,94,.22); outline-offset: 2px; }
 .order-archive { overflow: hidden; border: 1px solid var(--core-line); border-radius: 8px; background: var(--core-panel); }
 .order-archive > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px; color: var(--core-ink); cursor: pointer; list-style: none; }
 .order-archive > summary::-webkit-details-marker { display: none; }
@@ -1988,6 +1994,8 @@ textarea { min-height: 72px; resize: vertical; }
   .operations-toolbar-actions .view-tabs { min-width: 0; overflow-x: auto; }
   .form-row, .record-controls, .order-essential-fields { grid-template-columns: 1fr; }
   .order-submit-bar[data-ecommerce-payment="true"] { grid-template-columns: 1fr; }
+  .order-line-remove-recovery { align-items: stretch; flex-direction: column; }
+  .order-line-remove-recovery .core-button { width: 100%; }
   .decision-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 10px 10px 0 0; padding: 15px; }
   .accountable-action-gate { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 16px 16px 0 0; padding: 18px; }
   .action-change-flow { grid-template-columns: 1fr; }

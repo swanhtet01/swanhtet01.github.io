@@ -157,10 +157,12 @@ import {
 import { projectShopInventory } from './shop-inventory-foundation'
 import { projectProductionMaterialRequirements } from './production-material-handoff'
 import { channelOrderDraftIsReady, type ChannelOrderDraft } from './channel-order-intake'
-import type {
-  CommerceOrderDraft,
-  CommerceOrderDraftInput,
-  CommerceOrderDraftReadResult,
+import {
+  recoverCommerceOrderDraftLine,
+  type CommerceOrderDraft,
+  type CommerceOrderDraftInput,
+  type CommerceOrderDraftReadResult,
+  type CommerceRemovedOrderDraftLine,
 } from './commerce-order-draft'
 import {
   buildProductionShiftHandoff,
@@ -974,6 +976,11 @@ type ClearedShopSale = {
   total: number
 }
 
+type RemovedShopOrderLine = CommerceRemovedOrderDraftLine & Readonly<{
+  itemName: string
+  sourceDetached: boolean
+}>
+
 function readLocalShopIndustryPack() {
   if (typeof window === 'undefined') return null
   const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
@@ -1278,6 +1285,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [sku, setSku] = useState(commerce.items[0]?.sku ?? '')
   const [quantity, setQuantity] = useState(1)
   const [extraOrderLines, setExtraOrderLines] = useState<Array<{ sku: string; quantity: number }>>([])
+  const [removedOrderLine, setRemovedOrderLine] = useState<RemovedShopOrderLine | null>(null)
   const [customer, setCustomer] = useState('')
   const [channel, setChannel] = useState('Messenger')
   const [payment, setPayment] = useState('')
@@ -1303,6 +1311,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const orderPromiseRef = useRef<HTMLInputElement>(null)
   const orderOptionsRef = useRef<HTMLDetailsElement>(null)
   const orderPaymentRef = useRef<HTMLSelectElement>(null)
+  const orderLineQuantityRefs = useRef(new Map<string, HTMLInputElement>())
+  const orderLineRemovalUndoRef = useRef<HTMLButtonElement>(null)
   const catalogEditTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const catalogEditEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
@@ -1867,6 +1877,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   ), [commerce, correctionDraft])
 
   useEffect(() => {
+    if (!removedOrderLine) return
+    const frame = window.requestAnimationFrame(() => {
+      orderLineRemovalUndoRef.current?.scrollIntoView({ block: 'nearest' })
+      orderLineRemovalUndoRef.current?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [removedOrderLine])
+
+  useEffect(() => {
     if (tab !== 'inventory' && tab !== 'orders') return
     const frame = window.requestAnimationFrame(() => {
       if (tab === 'orders' && commerceLocation.hash.startsWith('#shop-order-')) {
@@ -1907,6 +1926,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setSku('')
         setQuantity(1)
         setExtraOrderLines([])
+        setRemovedOrderLine(null)
         setCustomer('')
         setChannel('Messenger')
         setPayment('')
@@ -2115,6 +2135,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setSku(draftLines[0].sku)
         setQuantity(draftLines[0].quantity)
         setExtraOrderLines(draftLines.slice(1).map((line) => ({ sku: line.sku, quantity: line.quantity })))
+        setRemovedOrderLine(null)
         setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))
         setFulfilment(ecommerceNavigationDraft.fulfilment)
         setFulfilmentReference(navigationAddress
@@ -2722,6 +2743,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setSku(commerce.items[0]?.sku ?? '')
     setQuantity(1)
     setExtraOrderLines([])
+    setRemovedOrderLine(null)
     setCustomer('')
     setChannel('Messenger')
     setPayment('')
@@ -2815,6 +2837,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setSku(firstLine.sku)
     setQuantity(firstLine.quantity)
     setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
+    setRemovedOrderLine(null)
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
     setOrderEntryMode('manual')
@@ -3119,6 +3142,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setSku(draft.sku)
     setQuantity(draft.quantity)
     setExtraOrderLines([])
+    setRemovedOrderLine(null)
     setPayment(draft.payment)
     setFulfilment('')
     setFulfilmentReference(draft.sourceRecordId)
@@ -3161,6 +3185,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setSku(firstLine.sku)
         setQuantity(firstLine.quantity)
         setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
+        setRemovedOrderLine(null)
         setPayment(draft.pricing.payment.adapter === 'cash_on_delivery'
           ? 'Cash on delivery'
           : draft.pricing.payment.adapter === 'kbzpay_manual' ? 'KBZPay' : 'Cash')
@@ -3188,6 +3213,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setSku(draft.line.sku)
       setQuantity(draft.line.quantity)
       setExtraOrderLines([])
+      setRemovedOrderLine(null)
       setPayment('')
       setFulfilment(draft.fulfilment)
       setFulfilmentReference(draft.sourceRequestId)
@@ -3207,20 +3233,61 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice('Every available catalog item is already in this order.')
       return
     }
+    setRemovedOrderLine(null)
     setExtraOrderLines((current) => [...current, { sku: nextItem.sku, quantity: 1 }])
     detachPreparedOrderSources()
     setNotice(`${nextItem.name} added. Each item can appear once in an order.`)
   }
 
   function updateExtraOrderLine(index: number, patch: Partial<{ sku: string; quantity: number }>) {
+    setRemovedOrderLine(null)
     setExtraOrderLines((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, ...patch } : line))
     detachPreparedOrderSources()
   }
 
   function removeExtraOrderLine(index: number) {
-    setExtraOrderLines((current) => current.filter((_, lineIndex) => lineIndex !== index))
-    detachPreparedOrderSources()
-    setNotice('Item removed from this order draft. Shop data has not changed.')
+    const line = extraOrderLines[index]
+    if (!line) return
+    const remainingLines = extraOrderLines
+      .filter((_, lineIndex) => lineIndex !== index)
+      .map((candidate) => ({ ...candidate }))
+    const itemName = commerce.items.find((item) => item.sku === line.sku)?.name ?? line.sku
+    const sourceDetached = detachPreparedOrderSources()
+    setExtraOrderLines(remainingLines)
+    setRemovedOrderLine({
+      line: { ...line },
+      index,
+      remainingLines,
+      itemName,
+      sourceDetached,
+    })
+    setNotice(sourceDetached
+      ? `${itemName} removed. Undo is available, but the reviewed source handoff stays detached. No order, payment, or stock changed.`
+      : `${itemName} removed. Undo is available; the other order details are still here. No order, payment, or stock changed.`)
+  }
+
+  function undoExtraOrderLineRemoval() {
+    if (!removedOrderLine) return
+    const recovery = recoverCommerceOrderDraftLine(extraOrderLines, selectedSku, removedOrderLine, commerce.items)
+    if (!recovery.ok) {
+      if (recovery.reason === 'insufficient_stock') {
+        setNotice(`Cannot restore ${removedOrderLine.line.quantity} ${recovery.available === 1 ? 'unit' : 'units'} of ${removedOrderLine.itemName}; only ${recovery.available} available now. The line stays removed and no order, payment, or stock changed.`)
+        return
+      }
+      setRemovedOrderLine(null)
+      setNotice(recovery.reason === 'already_present'
+        ? `${removedOrderLine.itemName} is already in this order. Nothing was duplicated or submitted.`
+        : recovery.reason === 'draft_changed'
+          ? 'Order items changed after that removal, so exact Undo expired. Nothing was submitted.'
+          : recovery.reason === 'line_limit'
+            ? 'This order already has 20 item lines, so Undo expired. Nothing was submitted.'
+            : 'The removed line could not be verified. Nothing was restored or submitted.')
+      return
+    }
+    setExtraOrderLines(recovery.lines)
+    setRemovedOrderLine(null)
+    setNotice(`${removedOrderLine.itemName} restored at quantity ${removedOrderLine.line.quantity}. ${removedOrderLine.sourceDetached ? 'The reviewed source handoff remains detached; recheck the handoff reference.' : 'The other order details are still here.'} No order, payment, or stock changed.`)
+    window.requestAnimationFrame(() => orderLineQuantityRefs.current.get(removedOrderLine.line.sku)?.focus({ preventScroll: true }))
   }
 
   function reviewCounterSale(review: ShopCounterReview, returnFocus: HTMLElement) {
@@ -4427,6 +4494,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setSku(firstLine.sku)
     setQuantity(firstLine.quantity)
     setExtraOrderLines(remainingLines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
+    setRemovedOrderLine(null)
     setPayment(draft.pricing.payment.adapter === 'kbzpay_manual' ? 'KBZPay' : draft.pricing.payment.adapter === 'cash_on_delivery' ? 'Cash on delivery' : 'Pay on pickup')
     setFulfilment(draft.fulfilment)
     setFulfilmentReference(draft.deliveryAddress
@@ -6011,10 +6079,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             const lineNumber = index + 2
             return <div className="form-row" key={`${index}:${line.sku}`}>
               <label>Item {lineNumber}<select disabled={commerceControlsDisabled} value={line.sku} onChange={(event) => updateExtraOrderLine(index, { sku: event.target.value })}>{!commerce.items.some((candidate) => candidate.sku === line.sku) && line.sku ? <option disabled value={line.sku}>{line.sku} · no longer in Shop</option> : null}{commerce.items.map((candidate) => <option key={candidate.sku} value={candidate.sku}>{candidate.name} · {candidate.onHand} available</option>)}</select></label>
-              <label>Quantity {lineNumber}<input disabled={commerceControlsDisabled} max={item?.onHand ?? 1} min="1" onChange={(event) => updateExtraOrderLine(index, { quantity: Number(event.target.value) })} type="number" value={line.quantity} /></label>
+              <label>Quantity {lineNumber}<input data-shop-order-line-quantity={line.sku} disabled={commerceControlsDisabled} max={item?.onHand ?? 1} min="1" onChange={(event) => updateExtraOrderLine(index, { quantity: Number(event.target.value) })} ref={(node) => { if (node) orderLineQuantityRefs.current.set(line.sku, node); else orderLineQuantityRefs.current.delete(line.sku) }} type="number" value={line.quantity} /></label>
               <button aria-label={`Remove item ${lineNumber}`} className="core-button compact" disabled={commerceControlsDisabled} onClick={() => removeExtraOrderLine(index)} type="button">Remove</button>
             </div>
           })}
+          {removedOrderLine ? <div className="order-line-remove-recovery" data-shop-order-line-remove-recovery={removedOrderLine.line.sku} role="status">
+            <span><strong>{removedOrderLine.itemName} removed</strong><small>Quantity {removedOrderLine.line.quantity} can return at item {removedOrderLine.index + 2} after a current stock check. {removedOrderLine.sourceDetached ? 'The reviewed source handoff stays detached.' : 'Other order details stay here.'}</small></span>
+            <button aria-label={`Undo remove ${removedOrderLine.itemName}`} className="core-button compact" disabled={commerceControlsDisabled} onClick={undoExtraOrderLineRemoval} ref={orderLineRemovalUndoRef} type="button">Undo remove</button>
+          </div> : null}
           <button className="core-button compact" disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
           {!preparedEcommerceDraft ? <details className="order-options" id="commerce-order-options" ref={orderOptionsRef}>
             <summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>

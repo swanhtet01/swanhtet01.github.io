@@ -2834,6 +2834,44 @@ if (settingsAdvancedIndex < 0
   || productBoundaryIndex < productWorkspaceIndex
   || productRepeatEntryIndex < 0
   || productProvisioningIndex < productRepeatEntryIndex) fail('product_setup_primary_action_hierarchy_wrong')
+const removeExtraOrderLineStart = coreSource.indexOf('function removeExtraOrderLine')
+const undoExtraOrderLineRemovalStart = coreSource.indexOf('function undoExtraOrderLineRemoval')
+const reviewCounterSaleStart = coreSource.indexOf('function reviewCounterSale', undoExtraOrderLineRemovalStart)
+const removeExtraOrderLineAction = coreSource.slice(removeExtraOrderLineStart, undoExtraOrderLineRemovalStart)
+const undoExtraOrderLineRemovalAction = coreSource.slice(undoExtraOrderLineRemovalStart, reviewCounterSaleStart)
+const recoverOrderDraftLineStart = commerceOrderDraftSource.indexOf('export function recoverCommerceOrderDraftLine')
+const recoverOrderDraftLineEnd = commerceOrderDraftSource.indexOf('export type CommerceOrderDraftInput', recoverOrderDraftLineStart)
+const recoverOrderDraftLineAction = commerceOrderDraftSource.slice(recoverOrderDraftLineStart, recoverOrderDraftLineEnd)
+const orderLineUndoForbiddenActions = ['setPreparedChannelDraft(', 'setPreparedEcommerceDraft(', 'setFulfilmentReference(', 'navigate(', 'queueAction(', 'setPendingAction(', 'mutateCommerce(', 'recordOrder(', 'reserveCommerceOrder(', 'saveCommerceOrderDraft(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'chargePayment', 'authorizePayment']
+if (removeExtraOrderLineStart < 0
+  || undoExtraOrderLineRemovalStart < 0
+  || reviewCounterSaleStart < 0
+  || recoverOrderDraftLineStart < 0
+  || recoverOrderDraftLineEnd < 0
+  || !coreSource.includes('const [removedOrderLine, setRemovedOrderLine] = useState<RemovedShopOrderLine | null>(null)')
+  || !coreSource.includes('const orderLineRemovalUndoRef = useRef<HTMLButtonElement>(null)')
+  || !coreSource.includes('data-shop-order-line-remove-recovery={removedOrderLine.line.sku}')
+  || !coreSource.includes('data-shop-order-line-quantity={line.sku}')
+  || !coreSource.includes('onClick={undoExtraOrderLineRemoval} ref={orderLineRemovalUndoRef}')
+  || !removeExtraOrderLineAction.includes('.filter((_, lineIndex) => lineIndex !== index)')
+  || !removeExtraOrderLineAction.includes('const sourceDetached = detachPreparedOrderSources()')
+  || !removeExtraOrderLineAction.includes('remainingLines,\n      itemName,\n      sourceDetached,')
+  || removeExtraOrderLineAction.indexOf('const line = extraOrderLines[index]') > removeExtraOrderLineAction.indexOf('detachPreparedOrderSources()')
+  || !undoExtraOrderLineRemovalAction.includes('recoverCommerceOrderDraftLine(extraOrderLines, selectedSku, removedOrderLine, commerce.items)')
+  || !undoExtraOrderLineRemovalAction.includes("recovery.reason === 'insufficient_stock'")
+  || undoExtraOrderLineRemovalAction.indexOf('if (!recovery.ok)') > undoExtraOrderLineRemovalAction.indexOf('setExtraOrderLines(recovery.lines)')
+  || !undoExtraOrderLineRemovalAction.includes('The reviewed source handoff remains detached; recheck the handoff reference.')
+  || !undoExtraOrderLineRemovalAction.includes('orderLineQuantityRefs.current.get(removedOrderLine.line.sku)?.focus({ preventScroll: true })')
+  || !recoverOrderDraftLineAction.includes('editableOrderDraftLinesEqual(currentLines, removed.remainingLines)')
+  || !recoverOrderDraftLineAction.includes("reason: 'draft_changed'")
+  || !recoverOrderDraftLineAction.includes('primarySku === line.sku || currentLines.some')
+  || !recoverOrderDraftLineAction.includes('if (currentLines.length >= 19)')
+  || !recoverOrderDraftLineAction.includes('if (available < line.quantity)')
+  || !recoverOrderDraftLineAction.includes('lines.splice(removed.index, 0, { ...line })')
+  || orderLineUndoForbiddenActions.some((marker) => undoExtraOrderLineRemovalAction.includes(marker) || recoverOrderDraftLineAction.includes(marker))
+  || !coreCssSource.includes('.order-line-remove-recovery')
+  || !/\.order-line-remove-recovery \.core-button \{[^}]*min-height: 44px;/s.test(coreCssSource)
+  || !coreCssSource.includes('.order-line-remove-recovery .core-button { width: 100%; }')) fail('shop_order_line_remove_recovery_contract_missing')
 if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
   || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
   || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_MAX_BYTES')
@@ -13671,6 +13709,59 @@ async function verifyCommerceOrderDraftRuntime() {
       { sku: 'SM-1001', price: 18_500, onHand: 34 },
       { sku: 'SM-1003', price: 12_000, onHand: 21 },
     ]
+
+    const removedLine = {
+      line: { sku: 'SM-1003', quantity: 2 },
+      index: 1,
+      remainingLines: [
+        { sku: 'SM-1002', quantity: 1 },
+        { sku: 'SM-1004', quantity: 1 },
+      ],
+    }
+    const editableCatalog = [
+      { sku: 'SM-1001', onHand: 34 },
+      { sku: 'SM-1002', onHand: 8 },
+      { sku: 'SM-1003', onHand: 21 },
+      { sku: 'SM-1004', onHand: 13 },
+    ]
+    const exactOrderLineRecovery = model.recoverCommerceOrderDraftLine(
+      removedLine.remainingLines,
+      'SM-1001',
+      removedLine,
+      editableCatalog,
+    )
+    assert(exactOrderLineRecovery.ok
+      && JSON.stringify(exactOrderLineRecovery.lines) === JSON.stringify([
+        { sku: 'SM-1002', quantity: 1 },
+        { sku: 'SM-1003', quantity: 2 },
+        { sku: 'SM-1004', quantity: 1 },
+      ])
+      && removedLine.remainingLines.length === 2,
+    'commerce_order_draft_removed_line_not_restored_exactly')
+    const stockBlockedOrderLine = model.recoverCommerceOrderDraftLine(
+      removedLine.remainingLines,
+      'SM-1001',
+      removedLine,
+      editableCatalog.map((item) => item.sku === 'SM-1003' ? { ...item, onHand: 1 } : item),
+    )
+    assert(!stockBlockedOrderLine.ok
+      && stockBlockedOrderLine.reason === 'insufficient_stock'
+      && stockBlockedOrderLine.available === 1,
+    'commerce_order_draft_removed_line_ignored_current_stock')
+    const duplicateOrderLine = model.recoverCommerceOrderDraftLine(
+      removedLine.remainingLines,
+      'SM-1003',
+      removedLine,
+      editableCatalog,
+    )
+    assert(!duplicateOrderLine.ok && duplicateOrderLine.reason === 'already_present', 'commerce_order_draft_removed_line_duplicate_restored')
+    const changedOrderLine = model.recoverCommerceOrderDraftLine(
+      [{ sku: 'SM-1002', quantity: 2 }, { sku: 'SM-1004', quantity: 1 }],
+      'SM-1001',
+      removedLine,
+      editableCatalog,
+    )
+    assert(!changedOrderLine.ok && changedOrderLine.reason === 'draft_changed', 'commerce_order_draft_removed_line_restored_after_other_line_edit')
 
     assert(model.readCommerceOrderDraft(localScope, storage).status === 'empty', 'commerce_order_draft_empty_read_invalid')
     const first = await model.saveCommerceOrderDraft(input, 0, localScope, {

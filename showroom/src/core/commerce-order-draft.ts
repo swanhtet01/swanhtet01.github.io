@@ -20,6 +20,82 @@ export type CommerceOrderDraftLine = {
   availableAtSave: number
 }
 
+export type CommerceOrderDraftEditableLine = Pick<CommerceOrderDraftLine, 'sku' | 'quantity'>
+
+export type CommerceRemovedOrderDraftLine = Readonly<{
+  line: CommerceOrderDraftEditableLine
+  index: number
+  remainingLines: CommerceOrderDraftEditableLine[]
+}>
+
+export type CommerceOrderDraftLineRecovery =
+  | Readonly<{ ok: true; available: number; lines: CommerceOrderDraftEditableLine[] }>
+  | Readonly<{
+      ok: false
+      available: number
+      reason: 'already_present' | 'draft_changed' | 'insufficient_stock' | 'invalid_removal' | 'line_limit'
+    }>
+
+function editableOrderDraftLineValid(line: CommerceOrderDraftEditableLine | undefined) {
+  return Boolean(line
+    && typeof line.sku === 'string'
+    && line.sku.length > 0
+    && line.sku.length <= 80
+    && line.sku.trim() === line.sku
+    && Number.isSafeInteger(line.quantity)
+    && line.quantity >= 1
+    && line.quantity <= 9_999)
+}
+
+function editableOrderDraftLinesEqual(left: CommerceOrderDraftEditableLine[], right: CommerceOrderDraftEditableLine[]) {
+  return left.length === right.length
+    && left.every((line, index) => line.sku === right[index]?.sku && line.quantity === right[index]?.quantity)
+}
+
+export function recoverCommerceOrderDraftLine(
+  currentLines: CommerceOrderDraftEditableLine[],
+  primarySku: string,
+  removed: CommerceRemovedOrderDraftLine,
+  currentCatalog: Array<Pick<CommerceOrderDraftCatalogItem, 'sku' | 'onHand'>>,
+): CommerceOrderDraftLineRecovery {
+  const line = removed?.line
+  const catalogItem = line && Array.isArray(currentCatalog)
+    ? currentCatalog.find((candidate) => candidate.sku === line.sku)
+    : undefined
+  const available = typeof catalogItem?.onHand === 'number' && Number.isSafeInteger(catalogItem.onHand)
+    ? Math.max(0, catalogItem.onHand)
+    : 0
+  if (!Array.isArray(currentLines)
+    || !Array.isArray(removed?.remainingLines)
+    || !Array.isArray(currentCatalog)
+    || typeof primarySku !== 'string'
+    || !primarySku.trim()
+    || primarySku.trim() !== primarySku
+    || !editableOrderDraftLineValid(line)
+    || currentLines.some((candidate) => !editableOrderDraftLineValid(candidate))
+    || removed.remainingLines.some((candidate) => !editableOrderDraftLineValid(candidate))
+    || !Number.isSafeInteger(removed.index)
+    || removed.index < 0
+    || removed.index > removed.remainingLines.length) {
+    return { ok: false, available, reason: 'invalid_removal' }
+  }
+  if (!editableOrderDraftLinesEqual(currentLines, removed.remainingLines)) {
+    return { ok: false, available, reason: 'draft_changed' }
+  }
+  if (primarySku === line.sku || currentLines.some((candidate) => candidate.sku === line.sku)) {
+    return { ok: false, available, reason: 'already_present' }
+  }
+  if (currentLines.length >= 19) {
+    return { ok: false, available, reason: 'line_limit' }
+  }
+  if (available < line.quantity) {
+    return { ok: false, available, reason: 'insufficient_stock' }
+  }
+  const lines = currentLines.map((candidate) => ({ ...candidate }))
+  lines.splice(removed.index, 0, { ...line })
+  return { ok: true, available, lines }
+}
+
 export type CommerceOrderDraftInput = {
   customer: string
   channel: CommerceOrderDraftChannel
