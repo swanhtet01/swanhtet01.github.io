@@ -122,7 +122,9 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       // `leads_source_not_configured` (never a silent empty list). Read + record only.
       if (method === 'GET' && seg[1] === 'review' && !seg[2]) {
         const limit = query.limit != null && String(query.limit).trim() !== '' ? Number(query.limit) : 50
-        const result = await listLeadsForReview({ limit })
+        // Smoke-test submissions share this table with customers; they stay hidden unless asked for.
+        const includeSynthetic = String(query.includeSynthetic ?? '').trim() === '1'
+        const result = await listLeadsForReview({ limit, includeSynthetic })
         if (!result.ok) return { status: result.reason === 'leads_source_not_configured' ? 503 : 400, json: result }
         return ok(result)
       }

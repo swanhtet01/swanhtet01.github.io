@@ -10,15 +10,18 @@ import {
   LEADS_SOURCE_REQUIRED_ENV,
   leadReviewRecordKey,
   leadsSourceConfigured,
+  isSyntheticLead,
   listLeadsForReview,
   markLeadReviewed,
 } from './console/leads-review.mjs'
 
 const HASH_RE = /^[a-f0-9]{64}$/
 
+// Fixture addresses must NOT use RFC 2606 reserved names: those are exactly what
+// isSyntheticLead filters out, and these cases are about review mechanics, not classification.
 const LEADS = [
-  { id: 'lead-1', lead_id: 'lead-1', source: 'website', name: 'Aye', company: 'Alpha Co', contact: 'aye@example.com', package: 'build', message: 'Automate intake', score: 80, stage: 'new', created_at: '2026-08-01T00:00:00.000Z' },
-  { id: 'lead-2', lead_id: 'lead-2', source: 'website', name: 'Ba', company: 'Beta Co', contact: 'ba@example.com', package: 'dashboard', message: 'Dashboard', score: 60, stage: 'qualified', created_at: '2026-08-02T00:00:00.000Z' },
+  { id: 'lead-1', lead_id: 'lead-1', source: 'website', name: 'Aye', company: 'Alpha Co', contact: 'aye@alphaco.com.mm', package: 'build', message: 'Automate intake', score: 80, stage: 'new', created_at: '2026-08-01T00:00:00.000Z' },
+  { id: 'lead-2', lead_id: 'lead-2', source: 'website', name: 'Ba', company: 'Beta Co', contact: 'ba@betaco.com.mm', package: 'dashboard', message: 'Dashboard', score: 60, stage: 'qualified', created_at: '2026-08-02T00:00:00.000Z' },
 ]
 
 function fakeStore({ leads = LEADS, converted = [], mode = 'supabase', putResult = true } = {}) {
@@ -92,6 +95,42 @@ test('configured source lists recent leads with converted + reviewed state', asy
   assert.equal(lead1.review.reviewedAt, '2026-08-07T10:00:00.000Z')
   assert.match(lead1.review.reviewHash, HASH_RE)
   assert.equal(second.leads.find((l) => l.id === 'lead-2').reviewed, false)
+})
+
+test('only RFC 2606 reserved names count as synthetic; anything else is a real prospect', () => {
+  for (const contact of ['aye@example.com', 'x@EXAMPLE.ORG', 'a@shop.test', 'b@host.localhost', 'c@thing.invalid', 'd@corp.example']) {
+    assert.equal(isSyntheticLead({ contact }), true, `${contact} should be synthetic`)
+  }
+  // Free-mail, local TLDs, odd-but-real addresses and missing data must never be hidden.
+  for (const contact of ['ko@gmail.com', 'sales@yangontyre.com.mm', 'a@examples.com', 'b@myexample.com', 'owner@shop.mm', '', 'not-an-email']) {
+    assert.equal(isSyntheticLead({ contact }), false, `${contact} must be treated as real`)
+  }
+})
+
+test('smoke-test leads are hidden by default, counted, and never crowd out a real prospect', async () => {
+  // 60 newer smoke rows ahead of one genuine May lead: a naive newest-N window would lose it.
+  const smoke = Array.from({ length: 60 }, (_, i) => ({
+    id: `smoke-${i}`, lead_id: `smoke-${i}`, source: 'website', name: 'QA', company: 'QA',
+    contact: `qa${i}@example.com`, package: '', message: '', score: 50, stage: 'new',
+    created_at: `2026-06-${String((i % 28) + 1).padStart(2, '0')}T00:00:00.000Z`,
+  }))
+  const real = { id: 'real-1', lead_id: 'real-1', source: 'website', name: 'Ko Aung', company: 'Yangon Tyre', contact: 'ko@gmail.com', package: '', message: '', score: 50, stage: 'new', created_at: '2026-05-07T00:00:00.000Z' }
+  const store = fakeStore({ leads: [...smoke, real] })
+
+  const list = await listLeadsForReview({ limit: 10 }, store)
+  assert.equal(list.ok, true)
+  assert.equal(list.leads.length, 1, 'the genuine lead survives a wall of newer smoke traffic')
+  assert.equal(list.leads[0].id, 'real-1')
+  assert.equal(list.leads[0].synthetic, false)
+  assert.equal(list.syntheticHidden, 60)
+  assert.equal(list.scanned, 61)
+
+  const withSynthetic = await listLeadsForReview({ limit: 10, includeSynthetic: true }, store)
+  assert.equal(withSynthetic.leads.length, 10)
+  assert.equal(withSynthetic.syntheticHidden, 0)
+  assert.equal(withSynthetic.leads.some((l) => l.synthetic === true), true)
+
+  assert.equal((await listLeadsForReview({ includeSynthetic: 'yes' }, store)).reason, 'invalid_leads_review_query')
 })
 
 test('review records are tenant-scoped: a foreign-tenant record never marks a lead reviewed', async () => {
