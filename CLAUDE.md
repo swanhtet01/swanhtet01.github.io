@@ -1,6 +1,6 @@
 # Claude Code: bounded SuperMega reviewer
 
-Status: founder-reactivated; blocked only until Claude CLI authentication succeeds.
+Status: founder-reactivated; assignment packet ready, dispatch blocked until Claude CLI authentication succeeds.
 
 Codex is the sole integrator on the ROG Ally. Claude may perform exactly one read-only review, return its report to Codex, and exit. This packet does not create implementation, merge, release, credential, provider, database, messaging, or customer authority.
 
@@ -8,7 +8,7 @@ Codex is the sole integrator on the ROG Ally. Claude may perform exactly one rea
 
 Identify the safe merge order, contradictions, release blockers, and exact next managed-account gate across PRs #411-#413.
 
-- Integrator implementation base: `c368ddfc20ccecd2f4a874cb4511039a6f433160`
+- Integrator implementation base: `4bc55a6ab01de13c436a422ecba8a54bbae1d6f6`
 - Integrator branch: `codex/fix-ecommerce-intake-count-20260808`
 - Canonical authority: `hq/NOW.md`, `hq/WORKBOARD.md`, `hq/readiness/managed-pilot-readiness.json`
 - PR #411: `C:\Users\thesw\Projects\supermega-showroom-fixes`, commit `decb001d2e4c47c1434ea3fb1898c599228c2bf4`
@@ -16,6 +16,13 @@ Identify the safe merge order, contradictions, release blockers, and exact next 
 - PR #413: `C:\Users\thesw\Projects\supermega-rebaseline`, commit `3aab5edc398e4a3e2d7ec0aca4346438872c7d87`
 
 Read, Grep, and Glob are the only allowed tools. Do not use a shell, edit a file, create a branch or worktree, run a build, access secrets, call a provider, send a message, push, merge, deploy, change a domain, invite a user, or write hosted data.
+
+## Coordination and runtime boundary
+
+- The founder's existing Claude sessions are owner-controlled and must never be started, continued, closed, or terminated by a RAM-cleanup or company-cycle process.
+- This assignment is one foreground, read-only response after authentication; do not create background agents, subagents, or a recurring Claude process.
+- Codex remains the integrator. Return findings in the active Claude session; Codex independently verifies them before any repository or external action.
+- Claude is not an automatic provider fallback. Autonomous company cycles use loopback Ollama under the `local-only` policy and unload the model after each bounded run.
 
 ## Evidence that must remain true
 

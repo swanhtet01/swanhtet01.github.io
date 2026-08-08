@@ -32,6 +32,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Implemented reality
 
 - Hosted scheduling remains deliberately dormant; flag-only, preview, stale, incomplete, or tampered activation attempts stop before worker invocation.
+- Ally model work uses `local-only` loopback Ollama and refuses cloud fallback. One model and request run at a time, then unload immediately. Claude is owner-triggered.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
@@ -42,7 +43,6 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Plant quality problems now require structured CAPA evidence before an actionable record can close. Recurrence is Unicode-safe; release, stock blocks, customer contact, certificates, and effectiveness follow-up stay separate.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
-- Live first-use proof now covers a persisted Shop order, attributed Plant output, a three-page Website draft, and an Ecommerce request handed into Shop. The products are usable browser-local samples; they are not shared company accounts.
 
 ## Verified baseline
 
@@ -52,7 +52,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Both domains serve deployed `4ce500c29b1cca9617eeba83528293bc1af6c83e`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Vercel reports both deployments READY with no grouped runtime errors in the current review window.
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
-- Working-set trim is non-terminating and stops no process. The Ally remains under `memory_pressure_critical` with zero run admission, zero loaded models, and local subagents disabled. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
+- Working-set trim is non-terminating and stops no process. The accepted growth cycle used one local model call and queue write, no connector/external write, and ended with zero loaded models. Local Codex subagents remain disabled. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 
 ## Owner-gated actions
 
@@ -60,7 +60,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is the sole Ally integrator; local subagents and models idle at zero. Claude Code 2.1.218 reports `loggedIn: false`, `authMethod: none`; ENG-001 is bound to exact clean worktrees, but no Claude worker runs.
+- Codex is the sole Ally integrator. Claude Code 2.1.218 remains unauthenticated; ENG-001 targets base `4bc55a6a` and three clean worktrees. Owner Claude sessions are never process-controlled; no Claude worker ran.
 - Review order is #411 pilot kit, #412 rehearsal, then #413 billing. All are open, mergeable, one commit over `main`, mutually non-overlapping, statusless, and locally tested. #413 alone conflicts with the current generated readiness ledger; rebase it last and regenerate.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 

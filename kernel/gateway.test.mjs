@@ -2,12 +2,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-const KEYS = ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'OPENROUTER_API_KEY', 'SUPERMEGA_OLLAMA_ENABLED', 'SUPERMEGA_OLLAMA_MODEL', 'VERCEL']
+const KEYS = ['ANTHROPIC_API_KEY', 'CLAUDE_API_KEY', 'OPENROUTER_API_KEY', 'SUPERMEGA_AI_PROVIDER_POLICY', 'SUPERMEGA_OLLAMA_ENABLED', 'SUPERMEGA_OLLAMA_MODEL', 'VERCEL']
 const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]))
 const clearKeys = () => { for (const k of KEYS) delete process.env[k] }
 const restore = () => { for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k] } }
 
-const { providerChain, complete } = await import('./gateway.mjs')
+const { providerChain, providerPolicy, complete } = await import('./gateway.mjs')
 
 test('providerChain is additive — reflects which API keys are configured', () => {
   clearKeys()
@@ -30,6 +30,30 @@ test('complete() fails clearly when no provider key is configured', async () => 
   await assert.rejects(
     () => complete({ system: 'x', messages: [{ role: 'user', content: 'hi' }] }),
     /gateway_missing_api_key/,
+  )
+  restore()
+})
+
+test('local-only policy never falls through to paid providers', async () => {
+  clearKeys()
+  process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
+  process.env.OPENROUTER_API_KEY = 'sk-or-test'
+  process.env.SUPERMEGA_AI_PROVIDER_POLICY = 'local-only'
+  assert.equal(providerPolicy(), 'local-only')
+  assert.deepEqual(providerChain().map((provider) => provider.name), [])
+  await assert.rejects(
+    () => complete({ system: 'x', messages: [{ role: 'user', content: 'hi' }] }),
+    /gateway_local_provider_unavailable/,
+  )
+  process.env.SUPERMEGA_OLLAMA_ENABLED = '1'
+  process.env.SUPERMEGA_OLLAMA_MODEL = 'qwen3.5:0.8b'
+  assert.deepEqual(providerChain().map((provider) => provider.name), ['ollama-local'])
+  process.env.SUPERMEGA_AI_PROVIDER_POLICY = 'unexpected'
+  assert.equal(providerPolicy(), 'invalid')
+  assert.deepEqual(providerChain().map((provider) => provider.name), [])
+  await assert.rejects(
+    () => complete({ system: 'x', messages: [{ role: 'user', content: 'hi' }] }),
+    /gateway_provider_policy_invalid/,
   )
   restore()
 })

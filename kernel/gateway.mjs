@@ -1,5 +1,5 @@
 // SUPERMEGA AI gateway — one interface in front of every model call.
-// Zero-dependency (native fetch). Supports guarded local Ollama plus paid failover providers.
+// Zero-dependency (native fetch). Supports guarded local Ollama plus explicitly admitted paid providers.
 //
 // Why this exists: swapping a model, adding caching, or capping a client's spend should touch
 // ONE file, not every caller. Every build agent, the Deal Desk, and the per-client operator
@@ -12,6 +12,7 @@ const API_VERSION = '2023-06-01'
 const OLLAMA_API_URL = 'http://127.0.0.1:11434/api/chat'
 const OLLAMA_RESPONSE_MAX_BYTES = 1024 * 1024
 const OLLAMA_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/
+const PROVIDER_POLICIES = new Set(['cloud-enabled', 'local-only'])
 
 // Model tiers — change the model here, every caller follows. Claude primary, with a cross-PROVIDER
 // fallback model (routed via OpenRouter) used only when Anthropic itself is unreachable, so a Claude
@@ -607,6 +608,12 @@ function localOllamaAvailable() {
   return process.env.SUPERMEGA_OLLAMA_ENABLED === '1' && !hostedRuntime() && Boolean(localOllamaModel())
 }
 
+export function providerPolicy() {
+  const configured = String(process.env.SUPERMEGA_AI_PROVIDER_POLICY || '').trim().toLowerCase()
+  if (!configured) return 'cloud-enabled'
+  return PROVIDER_POLICIES.has(configured) ? configured : 'invalid'
+}
+
 function boundedUsageCount(value) {
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= 10_000_000 ? parsed : 0
@@ -774,10 +781,14 @@ const OPENROUTER = {
   },
 }
 
-// Ordered provider chain: explicitly enabled local Ollama first, then Anthropic and OpenRouter.
+// Ordered provider chain: explicitly enabled local Ollama first, then admitted paid providers.
+// `local-only` never falls through to a cloud key, even when one exists in the environment.
 // Only available providers are attempted; local inference is denied in hosted runtimes.
 export function providerChain() {
-  return [OLLAMA, ANTHROPIC, OPENROUTER].filter((provider) => provider.available())
+  const policy = providerPolicy()
+  if (policy === 'invalid') return []
+  const providers = policy === 'local-only' ? [OLLAMA] : [OLLAMA, ANTHROPIC, OPENROUTER]
+  return providers.filter((provider) => provider.available())
 }
 
 /**
@@ -833,7 +844,12 @@ export async function complete(o) {
   // resolved tenant policy, provider/model route, and retention policy form the cache identity.
   const cacheHint = explicitCacheHint(o.cacheKey)
   const providers = providerChain()
-  if (!providers.length) throw new Error('gateway_missing_api_key')
+  const activeProviderPolicy = providerPolicy()
+  if (activeProviderPolicy === 'invalid') throw new Error('gateway_provider_policy_invalid')
+  if (!providers.length) {
+    if (activeProviderPolicy === 'local-only') throw new Error('gateway_local_provider_unavailable')
+    throw new Error('gateway_missing_api_key')
+  }
   const nowMs = Date.now()
   const fresh = (v) => v && (!v._exp || nowMs < v._exp)
   const unwrap = (v) => { const { _exp, ...out } = v; return { ...out, cached: true } }
