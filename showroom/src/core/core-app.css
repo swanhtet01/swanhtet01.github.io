@@ -1735,6 +1735,12 @@ textarea { min-height: 72px; resize: vertical; }
   .production-operation-module > .control-workspace { min-height: 0; flex: none; }
   .production-operation-module > .production-view > .output-panel { position: fixed; top: auto; right: 6px; bottom: calc(67px + env(safe-area-inset-bottom)); width: min(480px,calc(100% - 12px)); height: auto; max-height: calc(100svh - 78px - env(safe-area-inset-bottom)); border-radius: 18px 18px 8px 8px; padding: 16px; transform: translateY(24px) scale(.985); }
   .operation-module > .split-workspace, .operation-module > .module-today, .operation-module > .control-workspace, .operation-module > .inventory-panel { flex: none; }
+  /* The mobile override above restates the panel's closed transform, and it has the same
+     specificity as `.production-view .output-panel.is-open` while sitting later in the
+     file — so on phones the open panel kept its closed offset and never settled: 1.5%
+     undersized and nudged 24px down, over the whole shift. Restate the open transform
+     here so the open state wins on mobile too. */
+  .production-operation-module > .production-view > .output-panel.is-open { transform: none; }
   .plant-output-backdrop { inset: 0 0 calc(64px + env(safe-area-inset-bottom)); }
   .production-view .output-panel :is(button,input,select,summary) { min-height: 46px; }
   .accountable-action-gate, .action-history { min-height: 0; }
