@@ -6405,6 +6405,20 @@ export function commerceWorkingSampleCatalogId(stateValue: CommerceState) {
   return sampleIds.size === 1 ? [...sampleIds][0] : null
 }
 
+export function commerceWorkingSampleSkus(stateValue: CommerceState) {
+  let state: CommerceState
+  try { state = validateCommerceState(stateValue) } catch { return [] }
+  const skus = new Set([
+    ...commerceCatalogBaselines(state)
+      .filter((baseline) => baseline.proof.actionId.startsWith(commerceWorkingSampleActionPrefix))
+      .map((baseline) => baseline.sku),
+    ...state.movements
+      .filter((movement) => movement.actionId.startsWith(commerceWorkingSampleActionPrefix))
+      .map((movement) => movement.sku),
+  ])
+  return [...skus].sort((left, right) => left.localeCompare(right, 'en'))
+}
+
 export function importCommerceCatalog(stateValue: CommerceState, input: {
   items: CommerceItem[]
   sourceDigest: string

@@ -1,5 +1,6 @@
 import {
   COMMERCE_KEY,
+  commerceWorkingSampleSkus,
   validateCommerceState,
   type CommerceItem,
   type CommerceStorefrontMerchandising,
@@ -46,9 +47,18 @@ type EcommerceWorkingSampleInput = {
   capturedAt: string
 }
 
-function workingSamplePlan(catalog: CommerceItem[], input: Pick<EcommerceWorkingSampleInput, 'templateId' | 'businessName'>) {
+function workingSamplePlan(
+  catalog: CommerceItem[],
+  input: Pick<EcommerceWorkingSampleInput, 'templateId' | 'businessName'>,
+  preferredSkus: readonly string[] = [],
+) {
   if (!workingSampleTemplateIds.includes(input.templateId)) throw new Error('Choose a supported Ecommerce working sample.')
+  // The client's own working-sample products come before the generic Shop seed
+  // items, so a storefront shows that business rather than demo household goods.
+  const preferred = new Set(preferredSkus)
   const ranked = catalog.filter((item) => item.onHand > 0).sort((left, right) => (
+    Number(preferred.has(right.sku)) - Number(preferred.has(left.sku))
+  ) || (
     input.templateId === 'pickup-preorder'
       ? left.price - right.price || right.onHand - left.onHand
       : right.onHand - left.onHand || right.price - left.price
@@ -160,7 +170,10 @@ export async function activateLocalEcommerceWorkingSample(
       || commerceRaw !== null && (validateCommerceState(JSON.parse(commerceRaw)).storefrontRequests ?? []).length) {
       throw new Error('Existing Ecommerce order evidence was preserved.')
     }
-    const plan = workingSamplePlan(catalog.items, input)
+    const workingSampleSkus = commerceRaw === null
+      ? []
+      : commerceWorkingSampleSkus(validateCommerceState(JSON.parse(commerceRaw)))
+    const plan = workingSamplePlan(catalog.items, input, workingSampleSkus)
     const preview = buildStorefrontPreview(catalog.items, {
       storeName: input.businessName,
       summary: plan.summary,
