@@ -824,6 +824,19 @@
   font-size: 8px;
 }
 
+.website-page-check .website-page-recovery {
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: color-mix(in srgb, var(--website-warn) 10%, transparent);
+  color: var(--website-ink);
+  font-weight: 650;
+}
+
+.website-editor-scroll [aria-invalid="true"] {
+  border-color: var(--website-warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--website-warn) 18%, transparent);
+}
+
 .website-panel-actions {
   min-height: 57px;
   display: flex;

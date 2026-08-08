@@ -1,14 +1,26 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   createBlankSection,
   formatTimestamp,
   MAX_WEBSITE_SECTIONS,
-  pageIssues,
+  pageReadinessIssues,
+  type WebsitePageEditorSection,
+  type WebsitePageReadinessField,
+  type WebsitePageReadinessIssue,
   type WebsitePage,
 } from './website-model'
 
-type EditorSection = 'page' | 'hero' | 'sections' | 'seo'
+type ReadinessRecovery = Readonly<{
+  pageId: string
+  issue: WebsitePageReadinessIssue
+}>
+
+const READINESS_RECOVERY_ID = 'website-page-readiness-recovery'
+
+function readinessTargetKey(field: WebsitePageReadinessField, sectionId?: string) {
+  return sectionId ? `${field}:${sectionId}` : field
+}
 
 type ContentWorkspaceProps = {
   page: WebsitePage
@@ -27,11 +39,62 @@ export function ContentWorkspace({
   onRequestDelete,
   onUpdatePage,
 }: ContentWorkspaceProps) {
-  const issues = pageIssues(page)
-  const [editorSection, setEditorSection] = useState<EditorSection>('hero')
+  const readinessIssues = pageReadinessIssues(page)
+  const issues = readinessIssues.map((issue) => issue.message)
+  const [editorSection, setEditorSection] = useState<WebsitePageEditorSection>('hero')
+  const [readinessRecovery, setReadinessRecovery] = useState<ReadinessRecovery | null>(null)
+  const readinessTargetsRef = useRef(new Map<string, HTMLElement>())
+  const activeReadinessIssue = readinessRecovery?.pageId === page.id ? readinessRecovery.issue : null
+
+  useEffect(() => {
+    if (!activeReadinessIssue) return
+    const targetKey = readinessTargetKey(activeReadinessIssue.field, activeReadinessIssue.sectionId)
+    const focusTarget = () => {
+      const target = readinessTargetsRef.current.get(targetKey)
+      if (!target?.isConnected) return
+      target.scrollIntoView({ block: 'center', inline: 'nearest' })
+      target.focus({ preventScroll: true })
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) target.select()
+    }
+    let nestedFrame = 0
+    const frame = window.requestAnimationFrame(() => {
+      nestedFrame = window.requestAnimationFrame(focusTarget)
+    })
+    const fallback = window.setTimeout(focusTarget, 220)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      if (nestedFrame) window.cancelAnimationFrame(nestedFrame)
+      window.clearTimeout(fallback)
+    }
+  }, [activeReadinessIssue])
+
+  function readinessTargetProps(field: WebsitePageReadinessField, sectionId?: string) {
+    const key = readinessTargetKey(field, sectionId)
+    const active = activeReadinessIssue?.field === field && activeReadinessIssue.sectionId === sectionId
+    return {
+      'aria-describedby': active ? READINESS_RECOVERY_ID : undefined,
+      'aria-invalid': active || undefined,
+      ref: (node: HTMLElement | null) => {
+        if (node) readinessTargetsRef.current.set(key, node)
+        else readinessTargetsRef.current.delete(key)
+      },
+    }
+  }
 
   function editPage(update: (current: WebsitePage) => WebsitePage) {
+    setReadinessRecovery(null)
     onUpdatePage((current) => ({ ...update(current), stage: 'draft' }))
+  }
+
+  function reviewPageReadiness() {
+    const issue = readinessIssues[0]
+    if (issue) {
+      setEditorSection(issue.editorSection)
+      setReadinessRecovery({ pageId: page.id, issue })
+      return
+    }
+    setReadinessRecovery(null)
+    onUpdatePage((current) => ({ ...current, stage: 'ready' }))
   }
 
   function moveSection(sectionId: string, direction: -1 | 1) {
@@ -62,7 +125,7 @@ export function ContentWorkspace({
       <div className="website-editor-scroll" data-editor-section={editorSection}>
         <label className="website-editor-section-picker">
           <span>Edit</span>
-          <select aria-label="Page section to edit" onChange={(event) => setEditorSection(event.target.value as EditorSection)} value={editorSection}>
+          <select aria-label="Page section to edit" onChange={(event) => { setEditorSection(event.target.value as WebsitePageEditorSection); setReadinessRecovery(null) }} value={editorSection}>
             <option value="hero">Hero</option>
             <option value="sections">Content sections</option>
             <option value="page">Page details</option>
@@ -78,6 +141,7 @@ export function ContentWorkspace({
               <input
                 maxLength={60}
                 onChange={(event) => editPage((current) => ({ ...current, internalName: event.target.value }))}
+                {...readinessTargetProps('internal-name')}
                 value={page.internalName}
               />
             </label>
@@ -87,6 +151,7 @@ export function ContentWorkspace({
                 autoCapitalize="none"
                 maxLength={100}
                 onChange={(event) => editPage((current) => ({ ...current, slug: event.target.value }))}
+                {...readinessTargetProps('path')}
                 spellCheck={false}
                 value={page.slug}
               />
@@ -116,6 +181,7 @@ export function ContentWorkspace({
                   ...current,
                   hero: { ...current.hero, headline: event.target.value },
                 }))}
+                {...readinessTargetProps('hero-headline')}
                 rows={2}
                 value={page.hero.headline}
               />
@@ -128,6 +194,7 @@ export function ContentWorkspace({
                   ...current,
                   hero: { ...current.hero, summary: event.target.value },
                 }))}
+                {...readinessTargetProps('hero-summary')}
                 rows={3}
                 value={page.hero.summary}
               />
@@ -141,6 +208,7 @@ export function ContentWorkspace({
                     ...current,
                     hero: { ...current.hero, ctaLabel: event.target.value },
                   }))}
+                  {...readinessTargetProps('hero-cta-label')}
                   value={page.hero.ctaLabel}
                 />
               </label>
@@ -153,6 +221,7 @@ export function ContentWorkspace({
                     ...current,
                     hero: { ...current.hero, ctaHref: event.target.value },
                   }))}
+                  {...readinessTargetProps('hero-cta-destination')}
                   spellCheck={false}
                   value={page.hero.ctaHref}
                 />
@@ -170,6 +239,7 @@ export function ContentWorkspace({
               ...current,
               sections: [...current.sections, createBlankSection()],
             }))}
+            {...readinessTargetProps('section-add')}
             title={page.sections.length >= MAX_WEBSITE_SECTIONS ? 'The four-section page limit is reached' : 'Add a section'}
             type="button"
           >
@@ -234,6 +304,7 @@ export function ContentWorkspace({
                           ? { ...candidate, title: event.target.value }
                           : candidate),
                       }))}
+                      {...readinessTargetProps('section-title', section.id)}
                       value={section.title}
                     />
                   </label>
@@ -247,6 +318,7 @@ export function ContentWorkspace({
                           ? { ...candidate, body: event.target.value }
                           : candidate),
                       }))}
+                      {...readinessTargetProps('section-body', section.id)}
                       rows={3}
                       value={section.body}
                     />
@@ -276,6 +348,7 @@ export function ContentWorkspace({
                   ...current,
                   seo: { ...current.seo, title: event.target.value },
                 }))}
+                {...readinessTargetProps('seo-title')}
                 value={page.seo.title}
               />
             </label>
@@ -287,6 +360,7 @@ export function ContentWorkspace({
                   ...current,
                   seo: { ...current.seo, description: event.target.value },
                 }))}
+                {...readinessTargetProps('seo-description')}
                 rows={3}
                 value={page.seo.description}
               />
@@ -304,6 +378,11 @@ export function ContentWorkspace({
           ) : (
             <p>Content, paths, sections, CTA, and metadata are complete for this page.</p>
           )}
+          {activeReadinessIssue ? (
+            <p aria-live="assertive" className="website-page-recovery" id={READINESS_RECOVERY_ID}>
+              {activeReadinessIssue.message} Your unsaved preview is still here; nothing was saved or published.
+            </p>
+          ) : null}
         </section>
       </div>
 
@@ -333,8 +412,8 @@ export function ContentWorkspace({
         ) : (
           <button
             className="website-button is-primary"
-            disabled={issues.length > 0}
-            onClick={() => onUpdatePage((current) => ({ ...current, stage: 'ready' }))}
+            onClick={reviewPageReadiness}
+            title={issues.length ? `Fix first check: ${issues[0]}` : 'Mark this page ready in the unsaved preview'}
             type="button"
           >
             Mark page ready

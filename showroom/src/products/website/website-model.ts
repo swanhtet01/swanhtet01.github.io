@@ -550,22 +550,65 @@ export function createBlankSection(): PageSection {
   return { id: createId('section'), eyebrow: '', title: '', body: '' }
 }
 
-export function pageIssues(page: WebsitePage) {
-  const issues: string[] = []
+export type WebsitePageEditorSection = 'page' | 'hero' | 'sections' | 'seo'
+
+export type WebsitePageReadinessField =
+  | 'internal-name'
+  | 'path'
+  | 'hero-headline'
+  | 'hero-summary'
+  | 'hero-cta-label'
+  | 'hero-cta-destination'
+  | 'section-add'
+  | 'section-title'
+  | 'section-body'
+  | 'seo-title'
+  | 'seo-description'
+
+export type WebsitePageReadinessIssue = Readonly<{
+  editorSection: WebsitePageEditorSection
+  field: WebsitePageReadinessField
+  message: string
+  sectionId?: string
+}>
+
+export function pageReadinessIssues(page: WebsitePage): WebsitePageReadinessIssue[] {
+  const issues: WebsitePageReadinessIssue[] = []
   const hasCtaLabel = Boolean(page.hero.ctaLabel.trim())
   const hasCtaHref = Boolean(page.hero.ctaHref.trim())
 
-  if (!page.internalName.trim()) issues.push('Add an internal page name.')
-  if (!isValidSlug(page.slug)) issues.push('Use a path such as /about or /.')
-  if (!page.hero.headline.trim()) issues.push('Add a hero headline.')
-  if (!page.hero.summary.trim()) issues.push('Add a hero summary.')
-  if (hasCtaLabel !== hasCtaHref) issues.push('Complete both CTA fields or leave both empty.')
-  if (hasCtaHref && !isValidDestination(page.hero.ctaHref)) issues.push('Use a local path, anchor, or https URL for the CTA.')
-  if (!page.sections.length) issues.push('Add at least one content section.')
-  if (page.sections.some((section) => !section.title.trim() || !section.body.trim())) issues.push('Complete every section title and body.')
-  if (!page.seo.title.trim()) issues.push('Add an SEO title.')
-  if (!page.seo.description.trim()) issues.push('Add an SEO description.')
+  if (!page.internalName.trim()) issues.push({ editorSection: 'page', field: 'internal-name', message: 'Add an internal page name.' })
+  if (!isValidSlug(page.slug)) issues.push({ editorSection: 'page', field: 'path', message: 'Use a path such as /about or /.' })
+  if (!page.hero.headline.trim()) issues.push({ editorSection: 'hero', field: 'hero-headline', message: 'Add a hero headline.' })
+  if (!page.hero.summary.trim()) issues.push({ editorSection: 'hero', field: 'hero-summary', message: 'Add a hero summary.' })
+  if (hasCtaLabel !== hasCtaHref) issues.push({
+    editorSection: 'hero',
+    field: hasCtaLabel ? 'hero-cta-destination' : 'hero-cta-label',
+    message: 'Complete both CTA fields or leave both empty.',
+  })
+  if (hasCtaHref && !isValidDestination(page.hero.ctaHref)) issues.push({
+    editorSection: 'hero',
+    field: 'hero-cta-destination',
+    message: 'Use a local path, anchor, or https URL for the CTA.',
+  })
+  if (!page.sections.length) {
+    issues.push({ editorSection: 'sections', field: 'section-add', message: 'Add at least one content section.' })
+  } else {
+    const incompleteSection = page.sections.find((section) => !section.title.trim() || !section.body.trim())
+    if (incompleteSection) issues.push({
+      editorSection: 'sections',
+      field: incompleteSection.title.trim() ? 'section-body' : 'section-title',
+      message: 'Complete every section title and body.',
+      sectionId: incompleteSection.id,
+    })
+  }
+  if (!page.seo.title.trim()) issues.push({ editorSection: 'seo', field: 'seo-title', message: 'Add an SEO title.' })
+  if (!page.seo.description.trim()) issues.push({ editorSection: 'seo', field: 'seo-description', message: 'Add an SEO description.' })
   return issues
+}
+
+export function pageIssues(page: WebsitePage) {
+  return pageReadinessIssues(page).map((issue) => issue.message)
 }
 
 export function workspaceFingerprint(workspace: WebsiteWorkspace) {

@@ -3488,6 +3488,35 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !coreSource.includes('prepareManagedEcommerceShopDraftV2')
   || !coreSource.includes('setExtraOrderLines(remainingLines.map')
   || !coreSource.includes('separate Shop action gate')) fail('managed_ecommerce_inbox_contract_missing')
+const websiteReadinessActionStart = contentSource.indexOf('function reviewPageReadiness()')
+const websiteReadinessActionEnd = contentSource.indexOf('function moveSection(', websiteReadinessActionStart)
+const websiteReadinessAction = contentSource.slice(websiteReadinessActionStart, websiteReadinessActionEnd)
+const websiteReadinessRecoverySet = websiteReadinessAction.indexOf('setReadinessRecovery({ pageId: page.id, issue })')
+const websiteReadinessRecoveryReturn = websiteReadinessAction.indexOf('return')
+const websiteReadinessReadyTransition = websiteReadinessAction.indexOf("stage: 'ready'")
+if (!websiteModelSource.includes('export function pageReadinessIssues(page: WebsitePage): WebsitePageReadinessIssue[]')
+  || !websiteModelSource.includes("field: hasCtaLabel ? 'hero-cta-destination' : 'hero-cta-label'")
+  || !websiteModelSource.includes("field: incompleteSection.title.trim() ? 'section-body' : 'section-title'")
+  || !websiteModelSource.includes('return pageReadinessIssues(page).map((issue) => issue.message)')
+  || !contentSource.includes('const readinessIssues = pageReadinessIssues(page)')
+  || !contentSource.includes('const readinessTargetsRef = useRef(new Map<string, HTMLElement>())')
+  || !contentSource.includes('setEditorSection(issue.editorSection)')
+  || !contentSource.includes("target.scrollIntoView({ block: 'center', inline: 'nearest' })")
+  || !contentSource.includes("target.focus({ preventScroll: true })")
+  || !contentSource.includes("{...readinessTargetProps('section-title', section.id)}")
+  || !contentSource.includes("{...readinessTargetProps('section-body', section.id)}")
+  || !contentSource.includes('Your unsaved preview is still here; nothing was saved or published.')
+  || !contentSource.includes('onClick={reviewPageReadiness}')
+  || contentSource.includes('disabled={issues.length > 0}')
+  || websiteReadinessActionStart < 0
+  || websiteReadinessActionEnd < 0
+  || websiteReadinessRecoverySet < 0
+  || websiteReadinessRecoveryReturn < 0
+  || websiteReadinessReadyTransition < 0
+  || websiteReadinessRecoverySet > websiteReadinessRecoveryReturn
+  || websiteReadinessRecoveryReturn > websiteReadinessReadyTransition
+  || !websiteCssSource.includes('.website-page-check .website-page-recovery')
+  || !websiteCssSource.includes('.website-editor-scroll [aria-invalid="true"]')) fail('website_page_readiness_recovery_contract_missing')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('Nothing has been deployed.')
   || !websiteSource.includes('Nothing was deployed.')
@@ -3832,7 +3861,8 @@ if (!websiteCssSource.includes('.website-workspace-grid[data-surface="work"] > .
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-work-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-preview-surface')
   || !websiteCssSource.includes('display: none')) fail('website_mobile_panels_not_bounded')
-if (!contentSource.includes("type EditorSection = 'page' | 'hero' | 'sections' | 'seo'")
+if (!websiteModelSource.includes("export type WebsitePageEditorSection = 'page' | 'hero' | 'sections' | 'seo'")
+  || !contentSource.includes("useState<WebsitePageEditorSection>('hero')")
   || !contentSource.includes('aria-label="Page section to edit"')
   || !contentSource.includes('data-editor-section={editorSection}')
   || !websiteCssSource.includes('.website-editor-scroll[data-editor-section] > [data-content-section]')) fail('website_content_focus_contract_missing')
@@ -10289,6 +10319,34 @@ async function verifyWebsiteRuntime() {
     const leads = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts')).href}?website-leads-verify=${Date.now()}`)
     const seed = model.createInitialWorkspace()
     const fingerprint = model.workspaceFingerprint(seed)
+    const seedPage = seed.pages[0]
+    const incompletePage = {
+      ...seedPage,
+      internalName: ' ',
+      slug: 'home',
+      hero: { ...seedPage.hero, headline: '', summary: '', ctaLabel: 'Contact', ctaHref: '' },
+      sections: [],
+      seo: { ...seedPage.seo, title: '', description: '' },
+    }
+    const incompletePageReadiness = model.pageReadinessIssues(incompletePage)
+    assert(incompletePageReadiness.map((issue) => issue.field).join(',') === 'internal-name,path,hero-headline,hero-summary,hero-cta-destination,section-add,seo-title,seo-description'
+      && incompletePageReadiness.map((issue) => issue.editorSection).join(',') === 'page,page,hero,hero,hero,sections,seo,seo'
+      && model.pageIssues(incompletePage).join('|') === incompletePageReadiness.map((issue) => issue.message).join('|'), 'website_page_readiness_issue_identity_or_legacy_messages_changed')
+    const incompleteSection = { ...seedPage.sections[0], title: '', body: '' }
+    const sectionTitleReadiness = model.pageReadinessIssues({ ...seedPage, sections: [incompleteSection] })
+    const sectionBodyReadiness = model.pageReadinessIssues({ ...seedPage, sections: [{ ...incompleteSection, title: 'What we offer' }] })
+    assert(sectionTitleReadiness.length === 1
+      && sectionTitleReadiness[0].field === 'section-title'
+      && sectionTitleReadiness[0].sectionId === incompleteSection.id
+      && sectionBodyReadiness.length === 1
+      && sectionBodyReadiness[0].field === 'section-body'
+      && sectionBodyReadiness[0].sectionId === incompleteSection.id, 'website_page_readiness_did_not_target_the_first_incomplete_section_field')
+    const missingCtaLabelReadiness = model.pageReadinessIssues({ ...seedPage, hero: { ...seedPage.hero, ctaLabel: '' } })
+    const unsafeCtaReadiness = model.pageReadinessIssues({ ...seedPage, hero: { ...seedPage.hero, ctaHref: 'javascript:alert(1)' } })
+    assert(missingCtaLabelReadiness.length === 1
+      && missingCtaLabelReadiness[0].field === 'hero-cta-label'
+      && unsafeCtaReadiness.length === 1
+      && unsafeCtaReadiness[0].field === 'hero-cta-destination', 'website_page_readiness_did_not_target_the_exact_cta_field')
     assert(seed.siteName === 'Mingalar Fresh Mart'
       && seed.pages.map((page) => page.slug).join(',') === '/,/catalog,/contact'
       && seed.pages[0].hero.headline === 'Fresh everyday groceries without the extra trip.'
