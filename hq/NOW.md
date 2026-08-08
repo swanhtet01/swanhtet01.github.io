@@ -1,11 +1,11 @@
 # HQ now
 
-Updated: 2026-08-03
+Updated: 2026-08-08
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `25cac2f50dfcc210d29dd1fd794ac194083f90d1`
-Live state observed: `2026-08-03T14:46:45.695Z`
+Live release commit: `4ce500c29b1cca9617eeba83528293bc1af6c83e`
+Live state observed: `2026-08-08`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
 Live scheduler configured: `false`
@@ -38,41 +38,38 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancellation releases, completion consumes, and sellable returns restore the exact fulfilled location/lot.
 - Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted from rejected units; no posting occurs.
-- Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
-- Shop owns delivery zones, fees, promises, taxes, and payment eligibility. Ecommerce and Shop retain exact decisions; Shop rechecks authority before reservation.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
-- Plant controls up to 20 job-bound plans. Priority-and-due MRP consumes Shop stock and open POs once and exposes per-order exceptions.
-- Plant maintenance binds due work, results, findings, corrective action, and human disposition; it performs no automatic dispatch or equipment control.
 - Plant quality problems now require structured CAPA evidence before an actionable record can close. Recurrence is Unicode-safe; release, stock blocks, customer contact, certificates, and effectiveness follow-up stay separate.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
-- Shop, Plant, Website, and Ecommerce render the real workspace before one collapsed `More tools` drawer; workflow and setup access remain available without internal counts or a redundant product-entry button (`058c2914`).
-- Plant's state-aware mobile action carries one shift through output, same-shift material, blocker review, accountable close, and next output; reload restores the shift and closed metrics (`2909fd66`).
-- Public states the offer: four browser-local products stay free; managed adds approved cross-product context, company history and roles, reviewed actions, recovery, and support only after identity, tenant, recovery, and write controls pass (`25cac2f5`).
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
+- Live first-use proof now covers a persisted Shop order, attributed Plant output, a three-page Website draft, and an Ecommerce request handed into Shop. The products are usable browser-local samples; they are not shared company accounts.
 
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- Checks: 106 Ecommerce, 342 Commerce, 327 Production, 10 Shop next-action, 109 Website, 95 security, 241 onboarding, 11 backup, 85 managed import, and 56 PostgreSQL 17 checks across eleven migrations.
 - The deterministic 12-profile rehearsal passes 24 rows. Live Shop reaches the counter; Plant mobile passes output through next output; Website mobile passes edit through standalone file; Ecommerce mobile passes sample start, cart, quote, review, Shop order, return, and reload. All four product missions are overflow-free on desktop. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
-- Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1` after guarded release `30823422205`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Responsive public-offer QA also passes.
+- Both domains serve deployed `4ce500c29b1cca9617eeba83528293bc1af6c83e`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Vercel reports both deployments READY with no grouped runtime errors in the current review window.
+- Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating and stops no process. The Ally remains under `memory_pressure_critical` with zero run admission, zero loaded models, and local subagents disabled. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-`hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
 ## Owner-gated actions
 
 No external send, payment, refund, publish, domain change, connector write, merge, deployment, access change, production database write, or paid resource occurs without owner approval.
 
+## Current coordination
+
+- Codex is the one active Ally integrator; local subagents and models stay at zero idle load. Claude Code 2.1.218 is installed but not authenticated, so its bounded read-only review stopped before reading files and no Claude worker remains running.
+- Review order: PR #411 pilot kit, PR #412 isolated rehearsal, then PR #413 manual billing. Each is one commit ahead of `main`; changed files do not overlap, GitHub exposes no commit statuses, and focused local tests pass.
+- Real lead accounts remain blocked. Production has the enterprise schema through v7, but the live app reports `isolated_demo`, writes disabled, and managed activation unproven. Do not issue credentials until the isolated preview rehearsal proves tenant isolation, session revocation, storage privacy, backup/restore, and exact release binding.
+
 ## Blockers
 
-- Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - Read-only hosted audit: `supermegabase` is PostgreSQL 17.6, private schema v7, 14 private policies, and zero workspace data; its 27 Security Advisor notices are INFO-only default-deny legacy public tables. v8-v10 and the digest-bound public browser quarantine remain code-only, and writes stay off pending isolated backup/restore, target binding, tenant/Auth/Storage proof, and owner authorization.
-- The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `25cac2f5`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `4ce500c2`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
+- The retired standalone POS host, legacy demo launcher, and internal Console still return 200 from separate projects. Canonical customer routing is public site to app; retire or redirect the two legacy customer hosts and rebaseline Console only through an owner-approved domain release.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
-- Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
 ## Decisions in force
 
@@ -87,5 +84,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
-2. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.
+1. Review and integrate PR #411, then PR #412; on an owner-approved isolated Supabase preview branch, prove Storage, RLS, tenant isolation, session revocation, and exact restore before writes.
+2. Use the approved pilot kit with one founder-named Shop design partner and measured baseline. Integrate PR #413 only after the account and pilot gates pass. Keep AI provider execution and scheduling dormant until their gates pass.

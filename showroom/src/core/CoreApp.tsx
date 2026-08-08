@@ -1487,6 +1487,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const pendingStorefrontRequests = storefrontRequests.filter((request) => (
     !commerce.orders.some((order) => order.sourceRecordId === request.id)
   ))
+  const preparedEcommerceRequestIsWaiting = Boolean(
+    preparedEcommerceDraft
+    && !pendingStorefrontRequests.some((request) => request.id === preparedEcommerceDraft.sourceRequestId)
+    && !commerce.orders.some((order) => order.sourceRecordId === preparedEcommerceDraft.sourceRequestId),
+  )
+  const pendingEcommerceReviewCount = pendingStorefrontRequests.length + Number(preparedEcommerceRequestIsWaiting)
   const requestedStorefrontRequestIsWaiting = Boolean(
     requestedRequestId
     && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
@@ -2518,7 +2524,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     inventoryReady: Boolean(commerce.inventoryFoundation && managedInventoryProjection),
     lowStockCount: lowStock.length,
     pendingAction: Boolean(pendingAction),
-    pendingOnlineRequestCount: pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0),
+    pendingOnlineRequestCount: pendingEcommerceReviewCount + (legacyWebsiteWorkWaiting ? 1 : 0),
   })
   const shopAgentJob = shopNextAction.job
   const shopAgentReason = shopNextAction.reason
@@ -2542,7 +2548,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const shopSetupGuideRows = [
     ['Products', commerce.items.length ? `${commerce.items.length} current SKU` : 'Import catalog'],
     ['Stock', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + ATP' : 'Simple count first'],
-    ['Orders', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
+    ['Orders', pendingEcommerceReviewCount || legacyWebsiteWorkWaiting ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
     ['Payments', paymentReview.length ? `${paymentReview.length} exception` : 'Review only'],
     ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
     ['Boundary', 'Review before writes'],
@@ -5596,7 +5602,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked)
   const shopOrderControlNext = orderDraftRecoveryBlocked
     ? 'Repair saved order draft'
-    : pendingStorefrontRequests.length
+    : pendingEcommerceReviewCount
       ? 'Review Ecommerce inbox'
       : actionOrders.length
         ? 'Finish fulfilment queue'
@@ -5606,7 +5612,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             ? 'Save daily close'
             : 'Ready for new orders'
   const shopOrderControlRows = [
-    ['Online inbox', pendingStorefrontRequests.length ? `${pendingStorefrontRequests.length} waiting` : 'Clear'],
+    ['Online inbox', pendingEcommerceReviewCount ? `${pendingEcommerceReviewCount} waiting` : 'Clear'],
     ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
     ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
     ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
@@ -5614,7 +5620,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   ] as const
   const shopOrderControlBoundary = 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.'
   const shopOrderLifecycleRows = [
-    ['Capture', pendingStorefrontRequests.length || legacyWebsiteWorkWaiting ? `${pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)} online` : openOrders.length ? `${openOrders.length} open` : 'Ready'],
+    ['Capture', pendingEcommerceReviewCount || legacyWebsiteWorkWaiting ? `${pendingEcommerceReviewCount + (legacyWebsiteWorkWaiting ? 1 : 0)} online` : openOrders.length ? `${openOrders.length} open` : 'Ready'],
     ['Reserve', managedInventoryProjection ? 'ATP active' : 'Catalog stock'],
     ['Fulfil', actionOrders.length ? `${actionOrders.length} action` : openOrders.length ? 'In progress' : 'Ready'],
     ['Collect', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
@@ -5680,7 +5686,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const afterSalesCount = commerce.orders.reduce((total, order) => (
     total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
   ), 0)
-  const incomingRequestCount = pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
+  const incomingRequestCount = pendingEcommerceReviewCount + (legacyWebsiteWorkWaiting ? 1 : 0)
   const shopTodayMetrics = [
     { label: 'Open orders', value: String(openOrders.length), tone: actionOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Catalog items', value: String(commerce.items.length) },
@@ -5821,7 +5827,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           closeReady={closableOrders.length}
           confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
           disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
-          incomingOnline={pendingStorefrontRequests.length}
+          incomingOnline={pendingEcommerceReviewCount}
           incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === 'pending_confirmation').length : Number(legacyWebsiteWorkWaiting)}
           onOpenOrder={openOrderComposer}
           overdue={actionOrders.filter((order) => commerceOrderPromiseUrgency(order, purchaseOrderClock) === 'late').length}
@@ -5866,7 +5872,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><Suspense fallback={<p className="form-notice" role="status">Loading message intake…</p>}><ChannelOrderIntake disabled={commerceControlsDisabled} identity={managedIdentity ?? undefined} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></Suspense></div> : null}
       {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
         <section className="website-intake">
-          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingStorefrontRequests.length} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
+          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingEcommerceReviewCount} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
           {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => {
             const lines = commerceStorefrontRequestLines(request)
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
