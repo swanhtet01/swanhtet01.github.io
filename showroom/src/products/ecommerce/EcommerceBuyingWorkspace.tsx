@@ -1226,7 +1226,7 @@ export function EcommerceBuyingWorkspace({
           <form onSubmit={(event) => void reviewOrder(event)}>
             <label>
               <span>Name</span>
-              <input autoComplete="name" maxLength={80} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Ma Su" required value={customerName} />
+              <input autoComplete="name" data-checkout-primary-field="true" maxLength={80} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Ma Su" required value={customerName} />
             </label>
             <label>
               <span>Phone</span>

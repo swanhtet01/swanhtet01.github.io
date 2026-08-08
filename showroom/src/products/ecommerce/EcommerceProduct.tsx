@@ -918,7 +918,9 @@ export function EcommerceProduct() {
       const workspace = document.getElementById('ecommerce-buying-workspace')
       if (workspace instanceof HTMLDetailsElement) workspace.open = true
       workspace?.scrollIntoView({ block: 'start' })
-      workspace?.focus({ preventScroll: true })
+      const primaryField = workspace?.querySelector<HTMLInputElement>('[data-checkout-primary-field="true"]')
+      const focusTarget = primaryField ?? workspace
+      focusTarget?.focus({ preventScroll: true })
     })
   }
 
@@ -1650,7 +1652,7 @@ export function EcommerceProduct() {
             : ecommerceActiveOrderCount
               ? 'Open Shop'
             : ecommerceTodayCartUnits
-              ? 'Review checkout'
+              ? 'Enter checkout details'
               : managedIdentity
                 ? 'Prepare next order'
                 : 'Start sample order'
