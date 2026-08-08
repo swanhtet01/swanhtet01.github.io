@@ -165,6 +165,7 @@ export function EcommerceBuyingWorkspace({
   const [paymentAdapter, setPaymentAdapter] = useState<EcommercePaymentAdapter>('pay_on_pickup')
   const [promotionCode, setPromotionCode] = useState('')
   const [open, setOpen] = useState(false)
+  const [orderHistoryExpanded, setOrderHistoryExpanded] = useState(false)
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
@@ -247,6 +248,7 @@ export function EcommerceBuyingWorkspace({
       setPaymentAdapter('pay_on_pickup')
       setPromotionCode('')
       setOpen(false)
+      setOrderHistoryExpanded(false)
       setFreshQuoteId('')
       setReturnDraft(null)
       setSupportDraft(null)
@@ -341,6 +343,8 @@ export function EcommerceBuyingWorkspace({
       ? entry.request.customerProfile.phone === customerPhone.trim()
       : entry.request.customerReference === trackedCustomerReference)
   )).filter((entry) => !replacementRequestIds.has(entry.request.id) || Boolean(entry.order))
+  const customerOrderHistoryLimit = Math.min(5, customerOrderTimeline.length)
+  const visibleCustomerOrderTimeline = customerOrderTimeline.slice(0, orderHistoryExpanded ? customerOrderHistoryLimit : 1)
   const completedCustomerOrders = customerOrderTimeline.filter((entry) => entry.stage === 'completed' && entry.order?.completion)
   const activeCustomerOrders = customerOrderTimeline.filter((entry) => (
     entry.order && ['confirmed', 'preparing', 'ready'].includes(entry.order.status)
@@ -1322,8 +1326,8 @@ export function EcommerceBuyingWorkspace({
               <b>{customerOrderTimeline.length ? `${customerOrderTimeline.length} found` : 'Enter contact above'}</b>
             </div>
             {customerOrderTimeline.length ? (
-              <div className="ecommerce-order-history">
-                {customerOrderTimeline.slice(0, 5).map((entry) => (
+              <div className="ecommerce-order-history" id="ecommerce-order-history">
+                {visibleCustomerOrderTimeline.map((entry) => (
                   <article key={entry.request.id}>
                     <span>
                       <small>{entry.request.id}</small>
@@ -1339,6 +1343,9 @@ export function EcommerceBuyingWorkspace({
                     <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">Reorder</button>
                   </article>
                 ))}
+                {customerOrderHistoryLimit > 1 ? <button aria-controls="ecommerce-order-history" aria-expanded={orderHistoryExpanded} className="text-link ecommerce-order-history-toggle" onClick={() => setOrderHistoryExpanded((current) => !current)} type="button">
+                  {orderHistoryExpanded ? 'Show latest only' : `Show ${customerOrderHistoryLimit - 1} older ${customerOrderHistoryLimit === 2 ? 'order' : 'orders'}`}
+                </button> : null}
               </div>
             ) : <p>Use the same name and phone as checkout to see request, fulfilment, and payment status here.</p>}
           </section>
