@@ -213,7 +213,7 @@ function legacyDailyHash(version = '2026-07-29.10') {
 function currentDailyHash() {
   return createHash('sha256').update([
     'supermega.ally-ceo-local-cycle.v1',
-    '2026-07-29.24',
+    '2026-07-29.25',
     'a'.repeat(64),
     'daily-company-control',
     'operations',
@@ -1075,7 +1075,7 @@ test('a closed period never repairs a rejected current-version outcome', async (
   const state = harness({
     queueList,
     jobObjectives: {
-      [firstJobId]: '[ALLY_CEO_OUTCOME:2026-07-29:daily-company-control] [ALLY_CEO_CYCLE:0123456789ab] [ALLY_CEO_PLAN:fedcba987654] Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required. Write each specialist section as plain text on one line with no Markdown markers and no filenames. Return only this line with no introduction, heading, list, explanation, or closing. Preserve this literal skeleton and replace only the bracketed phrases: Not verified or performed: Proposed next action: review [one bounded local gap]. Assumption: [one unverified premise]. Missing proof: [one named proof item]. The Proposed next action may replace review only with inspect, compare, or draft. End every clause as a complete sentence. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.',
+      [firstJobId]: '[ALLY_CEO_OUTCOME:2026-07-29:daily-company-control] [ALLY_CEO_CYCLE:0123456789ab] [ALLY_CEO_PLAN:fedcba987654] Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required. Write each specialist section as plain text on one line with no Markdown markers and no filenames. Return only this line with no introduction, heading, list, explanation, or closing. Preserve this literal skeleton and replace only the bracketed phrases: Not verified or performed: Proposed next action: review [one bounded local gap]. Assumption: [one unverified premise]. Missing proof: [one named proof item]. The Proposed next action may replace review only with inspect, compare, or draft and must name the bounded local gap. Missing proof must name a concrete unresolved proof and must never be none, no, complete, or not applicable. Do not include Owner review required inside a specialist section. End every clause as a complete sentence. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.',
     },
     reportPaths: { [firstJobId]: firstReportPath },
   })
@@ -1142,6 +1142,9 @@ test('execution claims the exact reviewed mission once and accepts only a qualit
   assert.match(add.args[2], /Return only this line with no introduction, heading, list, explanation, or closing/)
   assert.match(add.args[2], /Not verified or performed: Proposed next action: review \[one bounded local gap\]\. Assumption:/)
   assert.match(add.args[2], /may replace review only with inspect, compare, or draft/)
+  assert.match(add.args[2], /must name the bounded local gap/)
+  assert.match(add.args[2], /Missing proof must name a concrete unresolved proof/)
+  assert.match(add.args[2], /Do not include Owner review required inside a specialist section/)
   assert.doesNotMatch(add.args[2], /\b(?:deploy|publish|send|pay|purchase|migrate|enable)\b/i)
   assert.match(add.args[2], /Do not end a clause with a conjunction, helper verb, or unfinished phrase/)
   const run = state.calls.find((call) => call.args?.[1] === 'run-next')
@@ -1462,9 +1465,12 @@ test('ordinary slash-separated specialist terminology is not mistaken for a sour
   assert.equal(result.qualityPassed, true)
 })
 
-test('consequential proposals and dangling words before code-owned closings cannot advance', async () => {
+test('unsafe, empty, or incomplete specialist clauses cannot advance', async () => {
   const unsafeSections = [
     'Not verified or performed: Proposed next action: Execute the hosted migration. Assumption: readiness is unconfirmed. Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: Proposed next action: inspect. Assumption: readiness is unconfirmed. Missing proof: owner-reviewed evidence.',
+    'Not verified or performed: Proposed next action: review one bounded local gap. Assumption: readiness is unconfirmed. Missing proof: None.',
+    'Not verified or performed: Proposed next action: review one bounded local gap. Assumption: readiness is unconfirmed. Missing proof: owner-reviewed evidence. Owner review required.',
     ...['currently', 'state', 'not', 'reusable', 'consequential'].map((word) =>
       `Not verified or performed: Proposed next action: review one bounded local gap ending ${word}; Keep the scope local. Assumption: readiness is unconfirmed. Missing proof: owner-reviewed evidence.`
     ),

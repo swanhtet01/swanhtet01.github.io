@@ -26,8 +26,8 @@ const MEMORY_SETTLEMENT_DELAY_MS = 3_000
 const MEMORY_CRITICAL_SETTLEMENT_DELAY_MS = 12_000
 const SCHEDULED_MEMORY_BLOCK_PERCENT = 85
 const LOCAL_LLAMA_MODELS = Object.freeze(new Set(['llama3.2:1b', 'llama3.2:3b']))
-const EXECUTION_SPEC_VERSION = '2026-07-29.24'
-const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.23', '2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
+const EXECUTION_SPEC_VERSION = '2026-07-29.25'
+const LEGACY_EXECUTION_SPEC_VERSIONS = Object.freeze(['2026-07-29.24', '2026-07-29.23', '2026-07-29.22', '2026-07-29.21', '2026-07-29.20', '2026-07-29.19', '2026-07-29.18', '2026-07-29.17', '2026-07-29.16', '2026-07-29.15', '2026-07-29.14', '2026-07-29.13', '2026-07-29.12', '2026-07-29.11', '2026-07-29.10'])
 const MEMORY_RECOVERY_BLOCKERS = Object.freeze(new Set(['memory_pressure_critical', 'codex_working_set_high']))
 const CEO_LIVE_ADVISORIES = Object.freeze(new Set(['app_product_contract_drift', 'hq_release_commit_stale']))
 const LOCAL_ONLY_HQ_LIVE_FAILURE = 'scheduler_batch_limit_exceeded'
@@ -131,7 +131,7 @@ const LEGACY_REPAIRABLE_REASONS = Object.freeze(new Set([
   'ally_ceo_local_cycle_specialist_section_rejected',
 ]))
 const SPECIALIST_SECTION_CONTRACT = 'Each specialist section must be at most 90 words and contain exactly these advisory labels: Proposed next action, Assumption, and Missing proof. Specialists must not claim execution or verified facts; the evidence-grounded executive synthesis remains code-owned. The executive synthesis must be at most 120 words and end with: Owner review required.'
-const SPECIALIST_OUTPUT_GRAMMAR = 'Write each specialist section as plain text on one line with no Markdown markers and no filenames. Return only this line with no introduction, heading, list, explanation, or closing. Preserve this literal skeleton and replace only the bracketed phrases: Not verified or performed: Proposed next action: review [one bounded local gap]. Assumption: [one unverified premise]. Missing proof: [one named proof item]. The Proposed next action may replace review only with inspect, compare, or draft. End every clause as a complete sentence. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.'
+const SPECIALIST_OUTPUT_GRAMMAR = 'Write each specialist section as plain text on one line with no Markdown markers and no filenames. Return only this line with no introduction, heading, list, explanation, or closing. Preserve this literal skeleton and replace only the bracketed phrases: Not verified or performed: Proposed next action: review [one bounded local gap]. Assumption: [one unverified premise]. Missing proof: [one named proof item]. The Proposed next action may replace review only with inspect, compare, or draft and must name the bounded local gap. Missing proof must name a concrete unresolved proof and must never be none, no, complete, or not applicable. Do not include Owner review required inside a specialist section. End every clause as a complete sentence. Do not end a clause with a conjunction, helper verb, or unfinished phrase, and do not append canned scope warnings after a semicolon.'
 
 function fail(reason) {
   throw new Error(reason)
@@ -1130,8 +1130,11 @@ function validateSpecialistSections(text, requiredRoles) {
       || words.length > 90
       || !/Proposed next action\s*:/i.test(section)
       || !/Proposed next action\s*:\s*(?:review|inspect|compare|draft)\b/i.test(section)
+      || /Proposed next action\s*:\s*(?:review|inspect|compare|draft)\s*(?:[.!?]|Assumption\s*:)/i.test(section)
       || !/Assumption\s*:/i.test(section)
       || !/Missing proof\s*:/i.test(section)
+      || /Missing proof\s*:\s*(?:none|nothing|complete|n\/?a|not applicable|no(?:\s+missing)?\s+proof)\b/i.test(section)
+      || /\bOwner review required\b/i.test(section)
       || /specialist draft withheld|incomplete model output|no substantive specialist draft/i.test(section)
       || /Proposed next action\s*:\s*(?:execute|deploy|publish|send|pay|purchase|migrate|enable)\b/i.test(section)
       || /\b(?:and|or|to|for|with|using|before|after|the|a|an|of|in|on|at|from|does|is|are|has|have|can|will|must|should|could|would|may|might|verify|confirm|assuming|currently|whether)\.?$/i.test(section)
