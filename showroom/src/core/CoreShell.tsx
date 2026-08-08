@@ -1,9 +1,12 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
+import { RouteErrorBoundary } from './RouteErrorBoundary'
 import { recordBehaviorSignal } from './behavior-trail'
 import type { ClientSolutionId } from './client-onboarding'
+
+const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -309,7 +312,7 @@ function Brand() {
 }
 
 export function RuntimeBadge({ status }: { status: RuntimeStatus }) {
-  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Local mode'}</span>
+  return <span className={`runtime-badge ${status}`}><i />{status === 'checking' ? 'Checking' : status === 'enterprise' ? 'Company data' : 'Demo mode'}</span>
 }
 
 export function PageHeading({ eyebrow, title, copy, actions }: { eyebrow?: string; title: string; copy: string; actions?: ReactNode }) {
@@ -426,8 +429,11 @@ export function CoreLayout() {
       <div className="core-stage">
         <header className="core-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-title"><strong>{routeName}</strong><span>SuperMega</span></div><div className="topbar-meta">{!accountEntryRoute ? <Link aria-label="Company login" className="account-shell-link mobile-account-link" to={companyLoginPath}>Login</Link> : null}<button aria-label={themeLabel} className="theme-toggle mobile-theme-toggle" onClick={toggleTheme} type="button"><span aria-hidden="true">{theme === 'dark' ? '☼' : '◐'}</span></button><RuntimeBadge status={runtime.status} /></div></header>
         {mobileNavigation.length > 0 ? <nav className="mobile-nav" aria-label="Current product navigation">{mobileNavigation.map((item) => <NavLink className={({ isActive }) => navigationClass(item.to, isActive)} end={item.end} key={item.to} to={item.to}>{item.label}</NavLink>)}</nav> : null}
-        <main id="workspace-main" className={`core-main${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
-          <div className="core-route-content"><Outlet context={runtime} /></div>
+        <main id="workspace-main" className={`core-main${routeProduct ? ' has-system-navigator' : ''}${routeProduct === 'ecommerce' ? ' natural-scroll' : ''}`} ref={workspaceMainRef} tabIndex={-1}>
+          <div className="core-route-content">
+            <RouteErrorBoundary resetKey={location.pathname}><Outlet context={runtime} /></RouteErrorBoundary>
+          </div>
+          {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense> : null}
         </main>
       </div>
     </div>
@@ -444,16 +450,14 @@ const customerProducts = [
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
   const location = useLocation()
   const params = new URLSearchParams(location.search)
-  const productIntent = params.get('demo') ?? params.get('product')
-  const route = productDemoPath(productIntent)
-  const explicitProductIntent = params.has('demo') || params.has('product')
+  const route = productDemoPath(params.get('demo'))
   const choosingProduct = params.get('choose') === '1'
   const lastProduct = !route && !choosingProduct && typeof window !== 'undefined'
     ? readLastProduct(window.localStorage)
     : null
   return route
     ? <Navigate replace to={route} />
-    : choosingProduct || explicitProductIntent
+    : choosingProduct
       ? <ProductHomePage />
       : <Navigate replace to={productWorkspacePath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
 }

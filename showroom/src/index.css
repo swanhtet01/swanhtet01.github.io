@@ -35,3 +35,37 @@ img, svg { display: block; max-width: 100%; }
 }
 .product-route-loading span { color: var(--sm-green); font: 700 18px/1 Geist Mono, ui-monospace, monospace; }
 .product-route-loading p { margin: 0; }
+
+/* Lives in the global sheet rather than core-app.css, and every colour carries a literal
+   fallback: the failure this renders for is frequently "a chunk or stylesheet never
+   arrived", so it has to stay readable when the design tokens are not there either. */
+.route-error {
+  max-width: 46ch;
+  margin: 12vh auto;
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--core-line, rgba(31, 68, 51, .12));
+  border-radius: 14px;
+  padding: 24px;
+  background: var(--core-panel, #ffffff);
+  color: var(--core-ink, #17231d);
+  text-align: left;
+}
+.route-error strong { font-size: 17px; }
+.route-error p { margin: 0; color: var(--core-muted, #56665d); line-height: 1.5; }
+.route-error .route-error-data { font-size: 13px; }
+.route-error-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.route-error-actions button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 20px;
+  background: var(--core-green, #0b745e);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+}
+.route-error-actions a { color: var(--core-green, #0b745e); }
+.route-error details { color: var(--core-muted, #56665d); font-size: 12px; }
+.route-error summary { cursor: pointer; }
+.route-error code { display: block; overflow-x: auto; margin-top: 6px; font-family: ui-monospace, Consolas, monospace; }
