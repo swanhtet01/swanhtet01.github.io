@@ -348,9 +348,16 @@ export function shopBusinessTemplateSetupPath(id: ShopBusinessTemplateId) {
   return `/settings/?product=shop&template=${encodeURIComponent(shopBusinessTemplate(id).id)}`
 }
 
+// Item names are the one free-text field here, and they were interpolated raw. No shipped
+// name contains a comma today, so nothing was broken -- but "Front brake pad set, ceramic"
+// is an ordinary thing to call a product, and it would have split into two columns and
+// failed the whole template's import at provisioning time, with no clue as to why.
+// Quoted per RFC 4180, which is what parseCsv in core/client-onboarding.ts already reads.
+const csvField = (value: string) => `"${value.replaceAll('"', '""')}"`
+
 export function shopBusinessTemplateCatalogCsv(id: ShopBusinessTemplateId) {
   const template = shopBusinessTemplate(id)
-  const lines = template.catalog.map((item) => `${item.sku},${item.name},${item.openingStock},${item.reorderAt},${item.priceMmk}`)
+  const lines = template.catalog.map((item) => `${item.sku},${csvField(item.name)},${item.openingStock},${item.reorderAt},${item.priceMmk}`)
   return `sku,item_name,opening_stock,reorder_at,price_mmk\r\n${lines.join('\r\n')}\r\n`
 }
 

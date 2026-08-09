@@ -18,7 +18,8 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 const bundle = await build({
   stdin: {
     contents: `
-      export { shopBusinessTemplates, shopBusinessTemplate } from './business-templates.ts'
+      export { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv } from './business-templates.ts'
+      export { createClientImportPreview } from '../../core/client-onboarding.ts'
     `,
     resolveDir: 'showroom/src/products/shop',
     sourcefile: 'showroom/src/products/shop/templates-test-entry.ts',
@@ -31,7 +32,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { shopBusinessTemplates, shopBusinessTemplate } = await import(
+const { shopBusinessTemplates, shopBusinessTemplate, shopBusinessTemplateCatalogCsv, createClientImportPreview } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
 )
 
@@ -117,6 +118,66 @@ for (const template of shopBusinessTemplates) {
   for (const [sku, wanted] of demand) {
     const item = template.catalog.find((candidate) => candidate.sku === sku)
     check(item.openingStock >= wanted, `${where} opens with enough ${sku} to cover its own samples (${item.openingStock} < ${wanted})`)
+  }
+}
+
+// --- every template must survive the REAL provisioning path ------------------
+// core/product-onboarding-runtime.ts does not install a template's catalog directly.
+// It renders the template to CSV and pushes it through createClientImportPreview --
+// the same validator a shopkeeper's own spreadsheet goes through -- and throws if any
+// row comes back less than 'ready'. Well-formed data is not sufficient: a name holding
+// a comma or an unrecognised unit passes every check above and still fails here, which
+// is exactly the failure a customer would hit in their first minute.
+for (const template of shopBusinessTemplates) {
+  const csv = shopBusinessTemplateCatalogCsv(template.id)
+  const preview = await createClientImportPreview(
+    csv,
+    'commerce',
+    undefined,
+    `sample-${template.id}.csv`,
+    template.workflowTemplateId,
+  )
+  const notReady = preview.rows.filter((row) => row.status !== 'ready')
+  check(
+    preview.readyForStaging,
+    `template "${template.id}" CSV is ready for staging (issues: ${JSON.stringify(preview.fileIssues ?? []).slice(0, 160)})`,
+  )
+  check(
+    notReady.length === 0,
+    `template "${template.id}" has every row importable, ${notReady.length} were not (${notReady.slice(0, 3).map((row) => JSON.stringify(row.issues ?? row.status)).join('; ').slice(0, 200)})`,
+  )
+  check(
+    preview.rows.length === template.catalog.length,
+    `template "${template.id}" round-trips every catalog item through CSV (${preview.rows.length} of ${template.catalog.length})`,
+  )
+  // The prices that come back out are what the counter will actually charge.
+  for (const row of preview.rows) {
+    const source = template.catalog.find((item) => item.sku === row.values.sku)
+    check(Boolean(source), `template "${template.id}" CSV row ${row.values.sku} corresponds to a catalog item`)
+    check(
+      Number(row.values.price) === source.priceMmk,
+      `template "${template.id}" item ${row.values.sku} keeps its price through the CSV round trip`,
+    )
+    check(
+      Number(row.values.onHand) === source.openingStock,
+      `template "${template.id}" item ${row.values.sku} keeps its opening stock through the CSV round trip`,
+    )
+  }
+}
+
+// --- the generated CSV must quote its one free-text column -------------------
+// item_name was interpolated raw. No shipped name contains a comma, so this was
+// latent rather than broken -- but a name like "Front brake pad set, ceramic" would
+// have split into two columns and failed the entire template's provisioning. Asserting
+// the quoting directly, so the protection does not depend on nobody ever adding a comma.
+for (const template of shopBusinessTemplates) {
+  const [header, ...rows] = shopBusinessTemplateCatalogCsv(template.id).trim().split('\r\n')
+  check(header === 'sku,item_name,opening_stock,reorder_at,price_mmk', `template "${template.id}" CSV header is the expected contract`)
+  for (const row of rows) {
+    check(
+      /^[^,]+,"(?:[^"]|"")*",\d+,\d+,\d+$/.test(row),
+      `template "${template.id}" CSV row quotes its item name: ${row.slice(0, 70)}`,
+    )
   }
 }
 
