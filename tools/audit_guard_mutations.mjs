@@ -16,6 +16,7 @@ const EXPORT = `${ROOT}/showroom/src/products/website/website-export.ts`
 const CORECSS = `${ROOT}/showroom/src/core/core-app.css`
 const WEBMODEL = `${ROOT}/showroom/src/products/website/website-model.ts`
 const PRODWS = `${ROOT}/showroom/src/core/production-workspace.ts`
+const STORAGE = `${ROOT}/showroom/src/core/local-workspace-storage.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
 const MUTATIONS = [
@@ -66,6 +67,10 @@ const MUTATIONS = [
     '.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }',
     '.catalog-import-table { max-height: 340px; overflow: auto; background: #fff; }',
     'a fixed light surface reverts to hardcoded white'],
+  ['test_workspace_storage_registry.mjs', STORAGE,
+    "  'supermega.shop.counter_draft.v1',
+", '',
+    'the in-progress counter sale stops being backed up or cleared'],
   ['test_commerce_state_validator.mjs', COMMERCE,
     '        || candidate.total !== calculation.totalMmk) throw new Error(`orders[${index}].calculation totals are invalid.`)',
     '        || false) throw new Error(`orders[${index}].calculation totals are invalid.`)',
