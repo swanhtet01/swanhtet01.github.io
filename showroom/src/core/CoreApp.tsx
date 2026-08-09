@@ -1950,7 +1950,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return rightShortage - leftShortage || left.index - right.index
     })
   const openOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
-  const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
+  const paymentReview = commerce.orders.filter((order) => order.refundStatus === 'due' || (['ready', 'completed'].includes(order.status) && order.paymentStatus === 'pending'))
   const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
   const supplierPayablesAging = commerceSupplierPayablesAging(commerce, purchaseOrderClock)
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
@@ -2436,8 +2436,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       }
       if (tab === 'orders' && commerceLocation.hash.startsWith('#shop-order-')) {
         const target = document.getElementById(commerceLocation.hash.slice(1))
-        target?.scrollIntoView({ block: 'center' })
-        target?.focus({ preventScroll: true })
+        const action = target?.querySelector<HTMLElement>('.order-row-actions .core-button.primary:not(:disabled)') ?? target
+        action?.scrollIntoView({ block: 'center' })
+        action?.focus({ preventScroll: true })
         return
       }
       if (tab !== 'inventory') return
@@ -6502,7 +6503,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     { label: 'Orders & fulfilment', detail: 'Channel intake, allocation, promise, delivery and returns', status: actionOrders.length ? `${actionOrders.length} need action` : `${openOrders.length} open`, to: '/shop/?tab=orders', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Inventory & purchasing', detail: 'Locations, lots, ATP, counts, suppliers and receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Customers & after-sales', detail: 'Credit, receivables, appointments, support and warranty trail', status: afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history' },
-    { label: 'Finance controls', detail: 'Payment review, daily close, settlement and accounting export', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length || closePreview ? 'attention' as const : 'ready' as const },
+    { label: 'Finance controls', detail: 'Payments and close', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: paymentReview.length ? `/shop/?tab=orders#${commerceOrderTargetId(paymentReview[0].id)}` : '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length || closePreview ? 'attention' as const : 'ready' as const },
     { label: 'Online channels', detail: 'Website and Ecommerce requests enter one Shop authority', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
   ]
   const stockAttentionRows = stockRows.filter(({ item }) => item.onHand <= item.reorderAt)
