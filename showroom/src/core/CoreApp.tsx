@@ -249,6 +249,14 @@ import {
   type ShopIndustryPack,
 } from './shop-service-scheduling'
 import { decideShopNextAction } from './shop-next-action'
+import {
+  closeShopPurchaseOrderDraft,
+  createShopPurchaseOrderOpening,
+  recoverShopPurchaseOrderDraft,
+  type ShopClosedPurchaseOrderDraft,
+  type ShopPurchaseOrderDraft as PurchaseOrderDraft,
+  type ShopPurchaseOrderOpening,
+} from './shop-purchase-order-draft'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -256,10 +264,6 @@ const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module)
 const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
 const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: module.ShopToday })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
-
-type PurchaseOrderDraft =
-  | { mode: 'create'; requisitionId?: string; sku: string; supplier: string; expectedAt: string; quantity: string; unitCostMmk: string }
-  | { mode: 'receive'; purchaseOrderId: string; quantity: string; rejectedQuantity: string; discrepancyCode: CommercePurchaseOrderDiscrepancyCode; locationId: string; trackingCode: string }
 
 type PurchaseBudgetDraft = {
   budgetCode: string
@@ -1325,6 +1329,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const catalogEditEditorRef = useRef<HTMLFormElement>(null)
   const purchaseOrderTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const purchaseOrderEditorRef = useRef<HTMLFormElement>(null)
+  const purchaseOrderRecoveryRef = useRef<HTMLButtonElement>(null)
+  const purchaseOrderOpeningRef = useRef<ShopPurchaseOrderOpening | null>(null)
   const purchaseOrderHistoryRef = useRef<HTMLDetailsElement>(null)
   const catalogCreateFormRef = useRef<HTMLFormElement>(null)
   const stockCountTriggerRef = useRef<HTMLButtonElement>(null)
@@ -1358,6 +1364,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [purchaseBudgetDraft, setPurchaseBudgetDraft] = useState<PurchaseBudgetDraft | null>(null)
   const [supplierSourcingDraft, setSupplierSourcingDraft] = useState<SupplierSourcingDraft | null>(null)
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<PurchaseOrderDraft | null>(null)
+  const [closedPurchaseOrderDraft, setClosedPurchaseOrderDraft] = useState<ShopClosedPurchaseOrderDraft | null>(null)
   const [supplierInvoiceDraft, setSupplierInvoiceDraft] = useState<SupplierInvoiceDraft | null>(null)
   const [supplierReturnDraft, setSupplierReturnDraft] = useState<SupplierReturnDraft | null>(null)
   const [supplierCreditDraft, setSupplierCreditDraft] = useState<SupplierCreditDraft | null>(null)
@@ -1661,6 +1668,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const purchaseOrderDraftItem = purchaseOrderDraft?.mode === 'create'
     ? commerce.items.find((item) => item.sku === purchaseOrderDraft.sku)
     : purchaseOrderDraftOrder?.item
+  const purchaseOrderRecovery = closedPurchaseOrderDraft
+    ? recoverShopPurchaseOrderDraft(null, closedPurchaseOrderDraft, commerce)
+    : null
+  const closedPurchaseOrderDraftValue = closedPurchaseOrderDraft?.draft ?? null
+  const closedPurchaseOrderItem = closedPurchaseOrderDraftValue?.mode === 'create'
+    ? commerce.items.find((item) => item.sku === closedPurchaseOrderDraftValue.sku)
+    : closedPurchaseOrderDraftValue?.mode === 'receive'
+      ? purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === closedPurchaseOrderDraftValue.purchaseOrderId)?.item
+      : undefined
+  const closedPurchaseOrderSummary = closedPurchaseOrderDraftValue?.mode === 'create'
+    ? `${closedPurchaseOrderDraftValue.supplier.trim() || 'Supplier blank'} · ${closedPurchaseOrderDraftValue.quantity.trim() || 'quantity blank'} units · ${closedPurchaseOrderDraftValue.unitCostMmk.trim() || 'cost blank'} MMK each · arrival ${closedPurchaseOrderDraftValue.expectedAt || 'blank'}`
+    : closedPurchaseOrderDraftValue?.mode === 'receive'
+      ? `${closedPurchaseOrderDraftValue.quantity.trim() || 'accepted blank'} accepted · ${closedPurchaseOrderDraftValue.rejectedQuantity.trim() || 'rejected blank'} rejected · ${closedPurchaseOrderDraftValue.locationId || 'location blank'} · lot ${closedPurchaseOrderDraftValue.trackingCode || 'blank'}`
+      : ''
   const purchaseOrderQuantityText = purchaseOrderDraft?.quantity.trim() ?? ''
   const purchaseOrderQuantity = /^\d+$/.test(purchaseOrderQuantityText)
     ? Number(purchaseOrderQuantityText)
@@ -3016,7 +3037,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     if (purchaseOrderDraft) {
       requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish or cancel the stock order before editing catalog values. Your stock-order draft was preserved.')
+      setNotice('Finish, close, or discard the stock order before editing catalog values. Your stock-order draft was preserved.')
+      return
+    }
+    if (closedPurchaseOrderDraft) {
+      requestAnimationFrame(() => purchaseOrderRecoveryRef.current?.focus())
+      setNotice('Undo close or discard the saved stock-order draft before editing catalog values.')
       return
     }
     const alreadyEditingCurrent = catalogEditDraft?.sku === item.sku
@@ -4686,6 +4712,31 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     })
   }
 
+  function beginPurchaseOrderEditor(draft: PurchaseOrderDraft, message: string) {
+    const opening = createShopPurchaseOrderOpening(draft, commerce)
+    if (!opening) {
+      setNotice('Shop could not bind the stock-order draft to the current item, supplier authority, or receipt balance. Nothing was opened or changed.')
+      return false
+    }
+    purchaseOrderOpeningRef.current = opening
+    setClosedPurchaseOrderDraft(null)
+    setPurchaseOrderDraft({ ...draft })
+    setNotice(message)
+    return true
+  }
+
+  function purchaseOrderDraftItemSku(draft: PurchaseOrderDraft | null) {
+    if (!draft) return ''
+    return draft.mode === 'create'
+      ? draft.sku
+      : purchaseOrderRows.find(({ purchaseOrder }) => purchaseOrder.id === draft.purchaseOrderId)?.purchaseOrder.sku ?? ''
+  }
+
+  function focusClosedPurchaseOrderDraft(message = 'Undo close or discard the saved stock-order draft before starting another purchasing task.') {
+    requestAnimationFrame(() => purchaseOrderRecoveryRef.current?.focus())
+    setNotice(message)
+  }
+
   function openPurchaseOrder(itemSku: string) {
     const item = commerce.items.find((candidate) => candidate.sku === itemSku)
     if (!item) return
@@ -4697,7 +4748,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (stockCountDraft) {
       const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
-      setNotice('Finish or cancel the stock count before opening a stock order. Your count draft was preserved.')
+      setNotice('Finish or discard the stock count before opening a stock order. Your count draft was preserved.')
+      return
+    }
+    if (closedPurchaseOrderDraft) {
+      focusClosedPurchaseOrderDraft()
       return
     }
     const active = activePurchaseOrderBySku.get(itemSku)
@@ -4711,17 +4766,30 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(`Continue the ${active ? 'receipt' : 'stock order'} below. Your draft was preserved.`)
       return
     }
+    if (purchaseOrderDraft) {
+      requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice('Finish, close, or discard the current stock-order draft before opening another one.')
+      return
+    }
     const receiptDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date()).replaceAll('-', '')
-    setPurchaseOrderDraft(active
+    const draft: PurchaseOrderDraft = active
       ? { mode: 'receive', purchaseOrderId: active.purchaseOrder.id, quantity: '', rejectedQuantity: '0', discrepancyCode: 'damaged', locationId: defaultReceiptLocationId, trackingCode: `IN-${receiptDate}-${commandUuid().slice(0, 8).toUpperCase()}` }
-      : { mode: 'create', sku: itemSku, supplier: '', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: '', unitCostMmk: '' })
-    setNotice(active
+      : { mode: 'create', sku: itemSku, supplier: '', expectedAt: defaultPurchaseOrderExpectedInput(), quantity: '', unitCostMmk: '' }
+    beginPurchaseOrderEditor(draft, active
       ? `Record only units counted against ${active.purchaseOrder.id}. Nothing changes until confirmation.`
       : `Create an internal order for ${item.name}. This does not contact a supplier or create a payment.`)
   }
 
   function openPurchaseBudgetEditor() {
-    setPurchaseOrderDraft(null)
+    if (purchaseOrderDraft) {
+      requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice('Finish, close, or discard the stock-order draft before changing buying limits.')
+      return
+    }
+    if (closedPurchaseOrderDraft) {
+      focusClosedPurchaseOrderDraft('Undo close or discard the saved stock-order draft before changing buying limits.')
+      return
+    }
     setPurchaseBudgetDraft({
       budgetCode: `SHOP-STOCK-${new Date(purchaseOrderClock).getUTCFullYear()}`,
       label: 'Stock replenishment',
@@ -4852,6 +4920,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function startSupplierRequest() {
+    if (purchaseOrderDraft) {
+      requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+      setNotice('Finish, close, or discard the current stock-order draft before starting another supplier request.')
+      return
+    }
+    if (closedPurchaseOrderDraft) {
+      focusClosedPurchaseOrderDraft()
+      return
+    }
     const approved = openPurchaseRequisitions[0]
     if (!approved && !activePurchaseBudget) {
       openPurchaseBudgetEditor()
@@ -4890,7 +4967,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       const deliveryAt = earliestSafeArrival && Number.isFinite(earliestSafeArrival.getTime())
         ? localDateTimeInputValue(earliestSafeArrival)
         : defaultPurchaseOrderExpectedInput()
-      setPurchaseOrderDraft(null)
       setSupplierSourcingDraft({
         sku: item.sku,
         itemName: item.name,
@@ -4908,7 +4984,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return
     }
     const sourcedExpectedAt = selectedQuote?.deliveryAt
-    setPurchaseOrderDraft({
+    const draft: PurchaseOrderDraft = {
       mode: 'create',
       ...(approved ? { requisitionId: approved.id } : {}),
       sku: item.sku,
@@ -4916,19 +4992,51 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       expectedAt: approved ? localDateTimeInputValue(new Date(approved.expectedAt)) : sourcedExpectedAt ? localDateTimeInputValue(new Date(sourcedExpectedAt)) : defaultPurchaseOrderExpectedInput(),
       quantity: String(approved?.quantityRequested ?? recommendation!.recommendedOrderUnits),
       unitCostMmk: String(approved?.unitCostMmk ?? selectedQuote?.unitCostMmk ?? ''),
-    })
-    setNotice(approved
+    }
+    const opened = beginPurchaseOrderEditor(draft, approved
       ? `${approved.id} is approved and ready to become one internal purchase order. A different operator must confirm the unchanged terms; nothing was sent or purchased.`
       : `${sourcingDecision!.id} awarded ${selectedQuote!.quoteReference} to ${selectedQuote!.supplier}. Review the bound terms; approval records a requisition only.`)
+    if (opened) requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
+  }
+
+  function closePurchaseOrderEditor() {
+    if (!purchaseOrderDraft) return
+    const itemSku = purchaseOrderDraftItemSku(purchaseOrderDraft)
+    const closedDraft = closeShopPurchaseOrderDraft(purchaseOrderDraft, purchaseOrderOpeningRef.current)
+    setClosedPurchaseOrderDraft(closedDraft)
+    purchaseOrderOpeningRef.current = null
+    setPurchaseOrderDraft(null)
+    setNotice(closedDraft
+      ? `${purchaseOrderDraft.mode === 'create' ? 'Supplier-order' : 'Receipt'} draft kept. Undo close once or discard it; no Shop or procurement evidence was created.`
+      : 'Stock-order editor closed. No changed fields or Shop records were kept.')
+    requestAnimationFrame(() => {
+      if (closedDraft) purchaseOrderRecoveryRef.current?.focus()
+      else if (itemSku) purchaseOrderTriggerRefs.current.get(itemSku)?.focus()
+    })
+  }
+
+  function restoreClosedPurchaseOrderEditor() {
+    if (!closedPurchaseOrderDraft) return
+    const recovery = recoverShopPurchaseOrderDraft(null, closedPurchaseOrderDraft, commerce)
+    if (!recovery.ok) {
+      setNotice('The Shop item, supplier authority, purchase order, receipt balance, or location evidence changed after close. The draft was not restored and no record changed.')
+      requestAnimationFrame(() => purchaseOrderRecoveryRef.current?.focus())
+      return
+    }
+    setPurchaseOrderDraft({ ...recovery.draft })
+    purchaseOrderOpeningRef.current = recovery.opening
+    setClosedPurchaseOrderDraft(null)
+    setNotice(`Exact ${recovery.draft.mode === 'create' ? 'supplier-order' : 'receipt'} draft restored once. Review current values before continuing; no record changed.`)
     requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
   }
 
-  function cancelPurchaseOrderEditor() {
-    const itemSku = purchaseOrderDraft?.mode === 'create'
-      ? purchaseOrderDraft.sku
-      : purchaseOrderDraftOrder?.purchaseOrder.sku
+  function discardPurchaseOrderEditor() {
+    const draft = purchaseOrderDraft ?? closedPurchaseOrderDraft?.draft ?? null
+    const itemSku = purchaseOrderDraftItemSku(draft)
     setPurchaseOrderDraft(null)
-    setNotice('Stock order editing closed. Shop data was not modified.')
+    setClosedPurchaseOrderDraft(null)
+    purchaseOrderOpeningRef.current = null
+    setNotice(`${draft?.mode === 'receive' ? 'Receipt' : 'Supplier-order'} draft discarded. No Shop, stock, supplier, payable, or payment record was created.`)
     requestAnimationFrame(() => {
       if (itemSku) purchaseOrderTriggerRefs.current.get(itemSku)?.focus()
     })
@@ -4999,6 +5107,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               sourceSourcingDecisionId: sourcingDecision.id,
             }, proof))
             setPurchaseOrderDraft((current) => current?.mode === 'create' && current.sku === item.sku ? null : current)
+            setClosedPurchaseOrderDraft(null)
+            purchaseOrderOpeningRef.current = null
           },
         }, purchaseOrderTriggerRefs.current.get(item.sku))
         return
@@ -5022,6 +5132,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             proof,
           ))
           setPurchaseOrderDraft((current) => current?.mode === 'create' && current.sku === item.sku ? null : current)
+          setClosedPurchaseOrderDraft(null)
+          purchaseOrderOpeningRef.current = null
         },
       }, purchaseOrderTriggerRefs.current.get(item.sku))
       return
@@ -5071,6 +5183,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           return receiveCommercePurchaseOrder(current, purchaseOrder.id, receiptQuantity, proof, locationReceipt, discrepancy)
         })
         setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrder.id ? null : current)
+        setClosedPurchaseOrderDraft(null)
+        purchaseOrderOpeningRef.current = null
       },
     }, purchaseOrderTriggerRefs.current.get(item.sku))
   }
@@ -5084,7 +5198,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     if (purchaseOrderDraft) {
       requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish or cancel the stock order before starting a count. Your stock-order draft was preserved.')
+      setNotice('Finish, close, or discard the stock order before starting a count. Your stock-order draft was preserved.')
+      return
+    }
+    if (closedPurchaseOrderDraft) {
+      focusClosedPurchaseOrderDraft('Undo close or discard the saved stock-order draft before starting a count.')
       return
     }
     if (catalogEditDraft) {
@@ -5241,7 +5359,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             || commercePurchaseOrderProgress(current, currentPurchaseOrder).remaining !== expectedRemaining) return null
           return cancelCommercePurchaseOrder(current, purchaseOrderId, proof)
         })
-        setPurchaseOrderDraft((current) => current?.mode === 'receive' && current.purchaseOrderId === purchaseOrderId ? null : current)
+        setPurchaseOrderDraft((current) => {
+          if (current?.mode !== 'receive' || current.purchaseOrderId !== purchaseOrderId) return current
+          purchaseOrderOpeningRef.current = null
+          return null
+        })
       },
     }, purchaseOrderTriggerRefs.current.get(row.purchaseOrder.sku))
   }
@@ -6412,7 +6534,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <div className="stock-receipt-preview"><small>Authority</small><strong>{formatMoney(Number(purchaseBudgetDraft.ceilingMmk) || 0)} total · {formatMoney(Number(purchaseBudgetDraft.perRequisitionLimitMmk) || 0)} per request</strong></div>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setPurchaseBudgetDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review buying limits</button></div>
       </form> : null}
-      {purchaseOrderDraft && purchaseOrderDraftItem ? <form aria-labelledby="purchase-order-title" className="stock-receipt-editor purchase-order-editor" data-mode={purchaseOrderDraft.mode} onSubmit={reviewPurchaseOrder} ref={purchaseOrderEditorRef}>
+      {closedPurchaseOrderDraft ? <div className={`order-draft-recovery purchase-order-draft-recovery ${purchaseOrderRecovery?.ok ? '' : 'is-blocked'}`} data-shop-purchase-order-recovery={purchaseOrderRecovery?.ok ? 'ready' : 'expired'} role={purchaseOrderRecovery?.ok ? 'status' : 'alert'}>
+        <div><strong>{closedPurchaseOrderItem?.name ?? (closedPurchaseOrderDraft.draft.mode === 'create' ? closedPurchaseOrderDraft.draft.sku : closedPurchaseOrderDraft.draft.purchaseOrderId)} {closedPurchaseOrderDraft.draft.mode === 'create' ? 'supplier-order' : 'receipt'} draft is still available</strong><small>{purchaseOrderRecovery?.ok ? `${closedPurchaseOrderSummary}. Restore once or discard; no requisition, purchase order, receipt, stock, payable, supplier message, or payment was created.` : 'The source item, supplier authority, purchase order, receipt balance, or location evidence changed. Review the expiry, then discard and reopen from current Shop data.'}</small></div>
+        <div className="order-draft-recovery-actions"><button className="core-button primary compact" disabled={Boolean(pendingAction)} onClick={restoreClosedPurchaseOrderEditor} ref={purchaseOrderRecoveryRef} type="button">{purchaseOrderRecovery?.ok ? 'Undo close' : 'Review expiry'}</button><button className="text-link danger-text" disabled={Boolean(pendingAction)} onClick={discardPurchaseOrderEditor} type="button">Discard</button></div>
+      </div> : null}
+      {purchaseOrderDraft && purchaseOrderDraftItem ? <form aria-labelledby="purchase-order-title" className="stock-receipt-editor purchase-order-editor" data-mode={purchaseOrderDraft.mode} id="purchase-order-editor" onSubmit={reviewPurchaseOrder} ref={purchaseOrderEditorRef}>
         <div className="stock-receipt-copy">
           <span className="core-eyebrow">{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Second operator approval' : 'Approve requisition' : 'Receive order'}</span>
           <h3 id="purchase-order-title">{purchaseOrderDraftItem.name}</h3>
@@ -6432,7 +6558,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           : purchaseOrderDraft.mode === 'create'
             ? `${purchaseOrderQuantityResult.toLocaleString()} units${purchaseOrderDraftTotal === null ? ' · enter unit cost' : ` · ${formatMoney(purchaseOrderDraftTotal)} total`}`
             : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()} accepted into stock${purchaseOrderRejectedResult ? ` · ${purchaseOrderRejectedResult.toLocaleString()} rejected / return to vendor` : ''}${purchaseReceiptLocation ? ` · ${purchaseReceiptLocation.name}` : ''}`}</strong></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelPurchaseOrderEditor} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || !purchaseReceiptDiscrepancyReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null || purchaseOrderUnitCostResult === null || purchaseOrderDraftTotal === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition' : 'Review receipt'}</button></div>
+        <div className="form-actions"><button className="text-link danger-text" disabled={Boolean(pendingAction)} onClick={discardPurchaseOrderEditor} type="button">Discard</button><button className="core-button" disabled={Boolean(pendingAction)} onClick={closePurchaseOrderEditor} type="button">Close</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || !purchaseReceiptDiscrepancyReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null || purchaseOrderUnitCostResult === null || purchaseOrderDraftTotal === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition' : 'Review receipt'}</button></div>
       </form> : null}
       {supplierReturnDraft && supplierReturnDraftRow && supplierReturnDraftReceipt ? <form aria-label="Supplier return review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierReturn}>
         <div className="stock-receipt-copy"><span className="core-eyebrow">Rejected supplier units</span><h3>{supplierReturnDraftRow.purchaseOrder.supplier}</h3><small>{supplierReturnDraftReceipt.rejectedQuantity} rejected · {supplierReturnDraftReceipt.discrepancyCode?.replaceAll('_', ' ')} · internal claim only</small></div>

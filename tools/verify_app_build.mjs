@@ -33,6 +33,7 @@ let managedContextRuntimeChecks = 0
 let operatingBaselineRuntimeChecks = 0
 let plantEquipmentImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
+let shopPurchaseOrderDraftRuntimeChecks = 0
 let shopServiceScheduleRuntimeChecks = 0
 let shopBusinessTemplateRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
@@ -118,6 +119,7 @@ const productionJobPlanDraftSource = await readFile(resolve(root, 'showroom', 's
 const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts'), 'utf8')
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
 const shopStockMoveDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-stock-move-draft.ts'), 'utf8')
+const shopPurchaseOrderDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-purchase-order-draft.ts'), 'utf8')
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
 const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
@@ -5995,7 +5997,7 @@ if (!commercePageContract.includes('const shopOrderControlNext = orderDraftRecov
   || !coreCssSource.includes('.shop-order-control-rows')) fail('commerce_order_control_missing')
 const commerceInventoryContract = commercePageContract.slice(commercePageContract.indexOf("if (tab === 'inventory')"))
 const commerceStockTableHeadContract = commerceInventoryContract.slice(commerceInventoryContract.indexOf('data-row table-head'), commerceInventoryContract.indexOf('{stockAttentionRows.length', commerceInventoryContract.indexOf('data-row table-head')))
-const openPurchaseOrderContract = commercePageContract.slice(commercePageContract.indexOf('function openPurchaseOrder'), commercePageContract.indexOf('function cancelPurchaseOrderEditor'))
+const openPurchaseOrderContract = commercePageContract.slice(commercePageContract.indexOf('function openPurchaseOrder'), commercePageContract.indexOf('function openPurchaseBudgetEditor'))
 const openStockCountContract = commercePageContract.slice(commercePageContract.indexOf('function openStockCount'), commercePageContract.indexOf('function cancelStockCount'))
 if (!commercePageContract.includes('const stockRows = commerce.items')
   || !commercePageContract.includes('leftNeedsAttention !== rightNeedsAttention')
@@ -6046,6 +6048,41 @@ if (!openPurchaseOrderContract.includes('Your count draft was preserved.')
   || openPurchaseOrderContract.includes('setStockCountDraft(null)')
   || !openStockCountContract.includes('Your stock-order draft was preserved.')
   || openStockCountContract.includes('setPurchaseOrderDraft(null)')) fail('commerce_stock_editor_switch_discards_draft')
+const shopPurchaseOrderDraftActionsStart = commercePageContract.indexOf('function beginPurchaseOrderEditor(')
+const shopPurchaseOrderDraftActionsEnd = commercePageContract.indexOf('function reviewPurchaseOrder(', shopPurchaseOrderDraftActionsStart)
+const shopPurchaseOrderDraftActions = commercePageContract.slice(shopPurchaseOrderDraftActionsStart, shopPurchaseOrderDraftActionsEnd)
+const shopPurchaseOrderCloseIndex = shopPurchaseOrderDraftActions.indexOf('const closedDraft = closeShopPurchaseOrderDraft(purchaseOrderDraft, purchaseOrderOpeningRef.current)')
+const shopPurchaseOrderCloseUiIndex = shopPurchaseOrderDraftActions.indexOf('setPurchaseOrderDraft(null)', shopPurchaseOrderCloseIndex)
+const shopPurchaseOrderRecoveryActions = shopPurchaseOrderDraftActions.slice(
+  shopPurchaseOrderDraftActions.indexOf('function closePurchaseOrderEditor('),
+)
+if (shopPurchaseOrderDraftActionsStart < 0
+  || shopPurchaseOrderDraftActionsEnd <= shopPurchaseOrderDraftActionsStart
+  || shopPurchaseOrderCloseIndex < 0
+  || shopPurchaseOrderCloseUiIndex <= shopPurchaseOrderCloseIndex
+  || !shopPurchaseOrderDraftSource.includes("SHOP_PURCHASE_ORDER_SOURCE_SCHEMA = 'supermega.shop.purchase_order_source.v1'")
+  || !shopPurchaseOrderDraftSource.includes("SHOP_PURCHASE_ORDER_OPENING_CONTRACT = 'supermega.shop.purchase_order_opening.v1'")
+  || !shopPurchaseOrderDraftSource.includes("SHOP_CLOSED_PURCHASE_ORDER_DRAFT_CONTRACT = 'supermega.shop.closed_purchase_order_draft.v1'")
+  || !shopPurchaseOrderDraftSource.includes('export function createShopPurchaseOrderOpening(')
+  || !shopPurchaseOrderDraftSource.includes('export function closeShopPurchaseOrderDraft(')
+  || !shopPurchaseOrderDraftSource.includes('export function recoverShopPurchaseOrderDraft(')
+  || !shopPurchaseOrderDraftSource.includes("reason: 'already_editing' | 'invalid_recovery' | 'target_unavailable' | 'source_changed'")
+  || !shopPurchaseOrderDraftSource.includes('state.inventoryFoundation?.headDigest ?? null')
+  || !shopPurchaseOrderDraftSource.includes("state.movements.filter((movement) => movement.kind === 'receipt' && movement.purchaseOrderId === purchaseOrderId)")
+  || !shopPurchaseOrderDraftSource.includes('currentSource.targetEvidence !== boundSource.targetEvidence')
+  || !commercePageContract.includes('data-shop-purchase-order-recovery={purchaseOrderRecovery?.ok ? \'ready\' : \'expired\'}')
+  || !commercePageContract.includes("purchaseOrderRecovery?.ok ? 'Undo close' : 'Review expiry'")
+  || !commercePageContract.includes('Exact ${recovery.draft.mode === \'create\' ? \'supplier-order\' : \'receipt\'} draft restored once.')
+  || !commercePageContract.includes('Restore once or discard; no requisition, purchase order, receipt, stock, payable, supplier message, or payment was created.')
+  || !commercePageContract.includes('setPurchaseOrderDraft({ ...recovery.draft })')
+  || !commercePageContract.includes('purchaseOrderOpeningRef.current = recovery.opening')
+  || !commercePageContract.includes('onClick={discardPurchaseOrderEditor} type="button">Discard</button><button className="core-button"')
+  || !commercePageContract.includes('onClick={closePurchaseOrderEditor} type="button">Close</button>')
+  || !openPurchaseOrderContract.includes('if (closedPurchaseOrderDraft)')
+  || !openStockCountContract.includes('if (closedPurchaseOrderDraft)')) fail('shop_purchase_order_draft_recovery_contract_missing')
+if (['queueaction', 'mutatecommerce', 'fetch(', 'xmlhttprequest', 'sendbeacon', 'localstorage', 'sessionstorage', 'setitem(', 'removeitem(']
+  .some((marker) => shopPurchaseOrderRecoveryActions.toLowerCase().includes(marker)
+    || shopPurchaseOrderDraftSource.toLowerCase().includes(marker))) fail('shop_purchase_order_draft_recovery_side_effect_added')
 if (!openStockCountContract.includes('const suggestedItem = lowStock[0] ?? commerce.items[0]')
   || !openStockCountContract.includes('managedInventoryProjection?.balances.find((balance) => balance.sku === suggestedItem?.sku)')
   || !openStockCountContract.includes('const suggestedDraft: StockCountDraft = {')
@@ -6914,6 +6951,95 @@ async function verifyChannelOrderRuntime() {
     assert(commerce.reserveCommerceOrder(accepted, conflictingOrder, conflictingProof) === null, 'channel_order_conflicting_source_reuse_succeeded')
   } catch (error) {
     fail(`channel_order_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
+async function verifyShopPurchaseOrderDraftRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopPurchaseOrderDraftRuntimeChecks += 1
+  }
+  try {
+    const nonce = Date.now()
+    const [draftModel, commerce] = await Promise.all([
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-purchase-order-draft.ts')).href}?shop-purchase-order-draft-verify=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-purchase-order-commerce-verify=${nonce}`),
+    ])
+    const state = commerce.createSeedCommerce(Date.parse('2026-08-09T08:00:00+06:30'))
+    const stateBefore = JSON.stringify(state)
+    const purchaseOrderId = state.purchaseOrders[0].id
+    const receiptInitial = {
+      mode: 'receive', purchaseOrderId, quantity: '', rejectedQuantity: '0', discrepancyCode: 'damaged',
+      locationId: '', trackingCode: 'IN-20260809-RECEIPT',
+    }
+    const receiptOpening = draftModel.createShopPurchaseOrderOpening(receiptInitial, state)
+    assert(receiptOpening
+      && receiptOpening.draft !== receiptInitial
+      && receiptOpening.draft.purchaseOrderId === purchaseOrderId,
+    'shop_purchase_order_receipt_opening_not_bound_or_cloned')
+    assert(draftModel.closeShopPurchaseOrderDraft({ ...receiptInitial }, receiptOpening) === null,
+      'shop_purchase_order_unchanged_receipt_close_created_recovery')
+    const receiptEdited = {
+      ...receiptInitial,
+      quantity: '12',
+      rejectedQuantity: '2',
+      discrepancyCode: 'wrong_item',
+      locationId: 'LOC-MAIN',
+      trackingCode: 'LOT-EXACT-20260809',
+    }
+    const receiptClosed = draftModel.closeShopPurchaseOrderDraft(receiptEdited, receiptOpening)
+    assert(receiptClosed
+      && receiptClosed.draft !== receiptEdited
+      && receiptClosed.draft.quantity === '12'
+      && receiptClosed.draft.rejectedQuantity === '2'
+      && receiptClosed.draft.discrepancyCode === 'wrong_item'
+      && receiptClosed.draft.locationId === 'LOC-MAIN'
+      && receiptClosed.draft.trackingCode === 'LOT-EXACT-20260809',
+    'shop_purchase_order_edited_receipt_not_closed_exactly')
+    const receiptRecovered = draftModel.recoverShopPurchaseOrderDraft(null, receiptClosed, state)
+    assert(receiptRecovered.ok
+      && receiptRecovered.draft !== receiptClosed.draft
+      && JSON.stringify(receiptRecovered.draft) === JSON.stringify(receiptEdited),
+    'shop_purchase_order_exact_receipt_recovery_failed')
+    assert(receiptRecovered.ok
+      && draftModel.closeShopPurchaseOrderDraft(receiptRecovered.draft, receiptRecovered.opening) === null,
+    'shop_purchase_order_recovered_unchanged_receipt_created_second_recovery')
+    assert(draftModel.recoverShopPurchaseOrderDraft(receiptInitial, receiptClosed, state).reason === 'already_editing',
+      'shop_purchase_order_active_editor_recovery_succeeded')
+    assert(draftModel.recoverShopPurchaseOrderDraft(null, receiptClosed, {
+      ...state,
+      items: state.items.map((item) => item.sku === 'SM-1002' ? { ...item, onHand: item.onHand + 1 } : item),
+    }).reason === 'source_changed', 'shop_purchase_order_changed_receipt_source_recovered')
+    assert(draftModel.recoverShopPurchaseOrderDraft(null, receiptClosed, { ...state, purchaseOrders: [] }).reason === 'target_unavailable',
+      'shop_purchase_order_missing_receipt_target_recovered')
+    assert(draftModel.recoverShopPurchaseOrderDraft(null, { ...receiptClosed, unexpected: true }, state).reason === 'invalid_recovery',
+      'shop_purchase_order_malformed_receipt_recovered')
+
+    const createInitial = {
+      mode: 'create', sku: 'SM-1001', supplier: '', expectedAt: '2026-08-12T09:00', quantity: '', unitCostMmk: '',
+    }
+    const createOpening = draftModel.createShopPurchaseOrderOpening(createInitial, state)
+    const createEdited = {
+      ...createInitial, supplier: 'Yangon Essentials Supply', expectedAt: '2026-08-15T13:30', quantity: '25', unitCostMmk: '12500',
+    }
+    const createClosed = draftModel.closeShopPurchaseOrderDraft(createEdited, createOpening)
+    const createRecovered = draftModel.recoverShopPurchaseOrderDraft(null, createClosed, state)
+    assert(createOpening && createClosed && createRecovered.ok
+      && createRecovered.draft.supplier === 'Yangon Essentials Supply'
+      && createRecovered.draft.expectedAt === '2026-08-15T13:30'
+      && createRecovered.draft.quantity === '25'
+      && createRecovered.draft.unitCostMmk === '12500',
+    'shop_purchase_order_exact_supplier_order_recovery_failed')
+    assert(draftModel.recoverShopPurchaseOrderDraft(null, createClosed, {
+      ...state,
+      purchaseBudgetEnvelopes: state.purchaseBudgetEnvelopes.map((budget) => ({ ...budget, ceilingMmk: budget.ceilingMmk + 1 })),
+    }).reason === 'source_changed', 'shop_purchase_order_changed_authority_recovered')
+    assert(draftModel.createShopPurchaseOrderOpening({ ...receiptInitial, discrepancyCode: 'untrusted' }, state) === null,
+      'shop_purchase_order_untrusted_discrepancy_opened')
+    assert(JSON.stringify(state) === stateBefore,
+      'shop_purchase_order_draft_recovery_mutated_procurement_state')
+  } catch (error) {
+    fail(`shop_purchase_order_draft_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
 }
 
@@ -19723,6 +19849,7 @@ await verifyOperationalReportRuntime()
 await verifyShopOperatingFlowRuntime()
 await verifyShopNextActionRuntime()
 await verifyChannelOrderRuntime()
+await verifyShopPurchaseOrderDraftRuntime()
 await verifyShopInventoryRuntime()
 await verifyShopServiceScheduleRuntime()
 await verifyShopBusinessTemplateRuntime()
@@ -19751,8 +19878,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for supplier return claims, credit evidence, and credit-adjusted invoice matching.
-if (bytes > 2_800_000) fail(`artifact_budget:${bytes}`)
+// Bounded 10 KB allowance for source-bound supplier-order and receipt recovery; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_810_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -20255,4 +20382,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
