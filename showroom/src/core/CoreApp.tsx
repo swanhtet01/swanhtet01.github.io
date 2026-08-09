@@ -892,9 +892,13 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     setError('')
     try {
       await onConfirm({ actor: responsibleActor, reason: confirmedReason, evidenceReference: confirmedEvidence })
-      // Only after the change actually applied — a name that failed to commit should not
-      // become the default for the next person.
-      if (!authenticatedActor) rememberLastOperator(responsibleActor)
+      // Remember only a name the operator actually supplied, and only after the change
+      // applied. Six actions offer a ROLE placeholder as actorSuggestion — 'Sample cashier',
+      // 'Plant operator', 'Shift supervisor'. Confirming one of those untouched must not
+      // turn the placeholder into the default identity for every later action, which would
+      // sign the whole device's audit trail with a name nobody ever claimed.
+      const offeredSuggestion = (action.actorSuggestion ?? '').trim()
+      if (!authenticatedActor && responsibleActor !== offeredSuggestion) rememberLastOperator(responsibleActor)
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'The change was not applied.')
       setBusy(false)

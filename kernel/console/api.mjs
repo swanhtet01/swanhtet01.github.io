@@ -118,8 +118,15 @@ function recordAuthFailure(method, path) {
 /** @param {{method:string, path:string, query?:object, body?:object, headers?:object}} req */
 export async function handle({ method, path, query = {}, body = {}, headers = {} }) {
   // Fail CLOSED: a missing/blank ops key must DENY all requests — never authenticate everyone.
-  if (!OPS_KEY) return bad(503, 'ops_key_not_configured')
-  if (OPS_KEY.length < OPS_KEY_MINIMUM_LENGTH) return bad(503, 'ops_key_too_weak')
+  // A key below the floor is treated exactly like a missing one: same status, same reason.
+  // The earlier 'ops_key_too_weak' told an unauthenticated caller that the owner key is
+  // short — precisely the fact that makes guessing worth attempting — and it invented a
+  // failure mode the other eight entry points sharing this key do not have. The specific
+  // cause goes to the server log, where the owner can see it and an attacker cannot.
+  if (!OPS_KEY || OPS_KEY.length < OPS_KEY_MINIMUM_LENGTH) {
+    if (OPS_KEY) console.error(`SUPERMEGA_OPS_KEY is ${OPS_KEY.length} characters; the console requires at least ${OPS_KEY_MINIMUM_LENGTH} and is refusing all requests until it is longer.`)
+    return bad(503, 'ops_key_not_configured')
+  }
   if (!constantTimeEqual(String(headers['x-ops-key'] || ''), OPS_KEY)) {
     recordAuthFailure(method, path)
     return bad(401, 'unauthorized')
