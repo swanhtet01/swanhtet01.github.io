@@ -29,7 +29,7 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 
 ## 4. Objection handling: the boundary
 
-"Can this touch my machines or live production?" — approved copy answers directly: `Machine control and live production writes stay behind review.` The on-screen notice repeats it: `Every production, quality, material, maintenance, and equipment-status change still requires accountable review.`
+"Can this touch my machines or live production?" — approved copy answers directly: `Machine control and live production writes stay behind review.` The on-screen notice repeats it: `Plant changes require accountable review.`
 
 "Where does the demo data live?" — the panel's source line says `Local sample records on this device`, and setup says `Stays on this device. Nothing is sent or published.`
 

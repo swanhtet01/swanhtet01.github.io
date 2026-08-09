@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 57
+  && portfolio.completedLocalAutomations.length === 58
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -428,10 +428,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[56]?.productId === 'plant'
   && portfolio.completedLocalAutomations[56]?.workOrderId === 'plant-today-output-focus'
   && portfolio.completedLocalAutomations[56]?.checkpoint === 'OPS-209'
+  && portfolio.completedLocalAutomations[57]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[57]?.workOrderId === 'plant-today-problem-focus'
+  && portfolio.completedLocalAutomations[57]?.checkpoint === 'OPS-210'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-today-problem-focus'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-today-material-cold-load'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1048,7 +1051,7 @@ requireContract('Plant uses the stable production runtime',
   && product('plant')?.compatibilityPath === '/operations/production/'
   && product('plant')?.surfaces?.join(',') === 'Jobs,Problems'
   && product('plant')?.templateContract?.productId === 'production'
-  && product('plant')?.nextGate?.includes('Validate one order-bound OEE window')
+  && product('plant')?.nextGate?.includes('isolated order-bound OEE window')
   && workboard.includes('| ENG-102 | Plant + Manufacturing Performance Codex | done-local |')
   && workboard.includes('adds `supermega.plant.order_effectiveness.v1`')
   && workboard.includes('96.77% Performance, 80% Quality')
@@ -1592,6 +1595,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-209 | CEO + Plant Output Focus / Agent Operations Codex | done-local |')
   && workboard.includes('waits for the first active job instead of consuming intent during a cold load')
   && workboard.includes('The receipt advances `plant-today-problem-focus`')
+  && workboard.includes('| OPS-210 | CEO + Plant Blocker Focus / Agent Operations Codex | done-local |')
+  && workboard.includes('refuses to consume the intent until a real enabled blocker control exists')
+  && workboard.includes('The receipt advances `plant-today-material-cold-load`')
   && workboard.includes('| CLAUDE-007 | Claude Code | ready |')
   && workboard.includes('Shop Finance checkpoint `2744b28f`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -1617,7 +1623,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-today-exact-next-action' && entry.checkpoint === 'OPS-207')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-today-finance-action-label' && entry.checkpoint === 'OPS-208')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-today-output-focus' && entry.checkpoint === 'OPS-209')
-  && portfolio.localImprovementQueue[0].workOrderId === 'plant-today-problem-focus')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-today-problem-focus' && entry.checkpoint === 'OPS-210')
+  && portfolio.localImprovementQueue[0].workOrderId === 'plant-today-material-cold-load')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")

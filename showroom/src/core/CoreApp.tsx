@@ -8442,7 +8442,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantTodayNotice = productionStorageError
     ? `Writes paused: ${productionStorageError}`
     : plantOutputRecoveryNotice || plantOutputDigestState.error || notice || (productionCanWrite
-      ? 'Every production, quality, material, maintenance, and equipment-status change still requires accountable review.'
+      ? 'Plant changes require accountable review.'
       : 'Writes are paused until durable storage and write locking are confirmed.')
 
   useEffect(() => {
@@ -8589,6 +8589,29 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       navigate('/plant/?tab=production', { replace: true })
       return
     }
+    if (focus === 'blocker' && tab === 'control') {
+      const selector = urgentIssueCount
+        ? '.production-issue-launcher > .issue-list button:not(:disabled)'
+        : heldJobs.length
+          ? '.production-issue-launcher details .issue-list button:not(:disabled)'
+          : openDowntimeIntervals.length
+            ? '[aria-label^="Review downtime records"]'
+            : openMaintenanceRecords.length
+              ? '[aria-label^="Review maintenance work"]'
+              : shiftCloseProblemCount
+                ? '.production-issue-launcher > .issue-list button:not(:disabled)'
+                : ''
+      if (!selector) return
+      requestAnimationFrame(() => {
+        const workspace = document.querySelector('.control-workspace')
+        const blocker = workspace?.querySelector<HTMLButtonElement>(selector)
+        if (!blocker) return
+        blocker.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        blocker.focus({ preventScroll: true })
+        navigate('/plant/?tab=control', { replace: true })
+      })
+      return
+    }
     if (focus === 'shift-close' && tab === 'control') {
       const suggestedShiftRef = canonicalShiftRef || shiftReferencePlaceholder()
       requestAnimationFrame(() => {
@@ -8604,7 +8627,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       })
       navigate('/plant/?tab=control', { replace: true })
     }
-  }, [canonicalShiftRef, guidedPlantJobId, managedIdentity, navigate, productionLocation.search, shiftRef, tab])
+  }, [canonicalShiftRef, guidedPlantJobId, heldJobs.length, managedIdentity, navigate, openDowntimeIntervals.length, openMaintenanceRecords.length, productionLocation.search, shiftCloseProblemCount, shiftRef, tab, urgentIssueCount])
 
   async function initializeManagedProduction(event: FormEvent) {
     event.preventDefault()
@@ -9912,11 +9935,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       return
     }
     if (plantTodayStep === 'problems') {
-      if (tab !== 'control') {
-        navigate('/plant/?tab=control')
-        return
-      }
-      document.querySelector('.control-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      navigate('/plant/?tab=control&focus=blocker')
       return
     }
     if (plantTodayStep === 'material' && activeJobs[0]) {
@@ -10146,7 +10165,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             {holdableJobs.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={placeQualityHold}>
               <label>Job or batch<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setHoldJobId(event.target.value)} value={selectedHoldJobId}>{holdableJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line}</option>)}</select></label>
               <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedHoldJob} type="submit">Review hold</button>
-              <p className="panel-copy">The next review records who placed the hold, why, and the source evidence. It does not change output or control equipment.</p>
+              <p className="panel-copy">Review records owner and evidence; no output or equipment change.</p>
             </form> : <p className="panel-copy">Every recorded job is currently held. Release one with evidence before placing another hold.</p>}
           </details>
           <details className="compact-disclosure production-history" data-plant-genealogy="versioned">
@@ -10177,14 +10196,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             <form autoComplete="off" className="core-form compact-form" onSubmit={buildShiftHandoff}>
               <label>Shift reference<input maxLength={80} onChange={(event) => setHandoffShiftRef(event.target.value)} placeholder={shiftReferencePlaceholder()} required value={handoffShiftRef} /></label>
               <button className="core-button" disabled={!handoffShiftRef.trim() && !shiftRef.trim()} type="submit">Prepare shift close file</button>
-              <p className="panel-copy">Review current output, material, quality, WCM, maintenance, and carry-forward work. Preparing changes nothing; closing requires a named owner, reason, and evidence.</p>
+              <p className="panel-copy">Preparing changes nothing; close requires owner, reason, and evidence.</p>
             </form>
             {shiftCloseRows.length ? <div aria-label="Shift close checklist" className="plant-shift-close-grid">{shiftCloseRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div> : null}
             {currentShiftClose ? <div className="form-notice" role="status"><strong>Shift closed by {currentShiftClose.actor}</strong><br />{currentShiftClose.shiftRef} | revision {currentShiftClose.sourceRevision} | {currentShiftClose.goodUnits} good | {currentShiftClose.materialEntryCount} material entries | {currentShiftCloseEvidence?.handoff.controlledOrders.length ?? 0} controlled orders | quality clear | WCM clear<br />Evidence: {currentShiftClose.evidenceReference}</div> : null}
             {shiftHandoff && !shiftHandoffIsCurrent && !currentShiftClose ? <p className="form-notice" role="alert">Plant records or the shift reference changed after this close file was prepared. Prepare it again before use.</p> : null}
             {currentShiftCloseEvidence ? <ShiftHandoffView handoff={currentShiftCloseEvidence.handoff} onCopy={copyClosedShiftHandoff} /> : shiftHandoff && shiftHandoffIsCurrent ? <ShiftHandoffView handoff={shiftHandoff} onCopy={copyShiftHandoff} /> : null}
             {!currentShiftClose && shiftHandoff && shiftHandoffIsCurrent ? <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !shiftCloseReady} onClick={(event) => reviewShiftClose(event.currentTarget)} type="button">Review shift close</button> : null}
-            {!currentShiftClose && shiftHandoff && shiftHandoffIsCurrent && !shiftCloseReady ? <p className="panel-copy">The owner close remains locked until this exact shift has good output and material trace, every controlled order is released or safely owned forward, and the current Plant record has no quality or WCM blocker.</p> : null}
+            {!currentShiftClose && shiftHandoff && shiftHandoffIsCurrent && !shiftCloseReady ? <p className="panel-copy">Close needs output, materials, safe orders, quality, and maintenance.</p> : null}
           </details>
         </section>
         <section className="core-panel" style={{ overflowY: 'auto' }}>
@@ -10208,7 +10227,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedDowntimeMachine} type="submit">Review start</button>
       </form> : <p className="panel-copy">Every recorded machine already has open downtime.</p>}
       {recentDowntimeIntervals.length ? <><p className="panel-copy"><strong>Recent closed intervals</strong></p><div className="action-history-list">{recentDowntimeIntervals.map((interval) => <article key={interval.startActionId}><div><strong>{interval.machineName} · {formatDowntimeDuration(interval.durationMs ?? 0)}</strong><small style={wrappedIssueDetail}>{formatTime(interval.startedAt)} to {formatTime(interval.end?.endedAt ?? interval.startedAt)}</small><small style={wrappedIssueDetail}>Start: {interval.startedBy} · {interval.startReason} · {interval.startEvidenceReference}</small><small style={wrappedIssueDetail}>End: {interval.end?.endedBy} · {interval.end?.reason} · {interval.end?.evidenceReference}</small></div></article>)}</div></> : null}
-      <p className="panel-copy">This human record is separate from machine status. It sends no equipment command and changes no job or output.</p>
+      <p className="panel-copy">Downtime record only; no machine, job, or output change.</p>
     </dialog>
     <dialog aria-labelledby="maintenance-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMaintenanceDialog() }} ref={maintenanceDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
@@ -10236,7 +10255,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         const findingSource = record.completion ? maintenanceFindingSources.get(record.completion.actionId) : undefined
         return <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.result ? <small style={wrappedIssueDetail}>{record.completion.result.outcome.replaceAll('_', ' ')} · Return: {record.completion.result.returnToService.replaceAll('_', ' ')} · {record.completion.result.findings}</small> : null}{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div>{findingSource ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => startMaintenanceFindingProblem(record)} type="button">Review problem</button> : null}</article>
       })}</div></> : null}
-      <p className="panel-copy">Strategy-bound completion retains outcome, findings, procedure confirmation, recommendation, and next due. It performs no equipment command, telemetry, parts purchase, status change, downtime, or job change.</p>
+      <p className="panel-copy">Maintenance evidence only; no machine, inventory, or job change.</p>
     </dialog>
     <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
       {observedMachine && machineObservation ? <>
