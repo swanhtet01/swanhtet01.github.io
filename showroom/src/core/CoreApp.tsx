@@ -745,9 +745,13 @@ function commerceOrderDisplayReference(orderId: string) {
 // segment is already unique enough to find the record. Anything not shaped like a UUID —
 // a human-assigned reference — passes through untouched.
 function recordDisplayReference(recordId: string) {
-  const canonical = String(recordId ?? '').trim().toUpperCase()
-  const match = /^([A-Z]{2,5})-([A-F0-9]{8})(?:-[A-F0-9-]+)?$/.exec(canonical)
-  return match ? `${match[1]}-${match[2]}` : canonical
+  const trimmed = String(recordId ?? '').trim()
+  // Upper-cased for MATCHING only. Returning the upper-cased value on the non-match path
+  // would shout every human-assigned reference — "Messenger delivery review #1042" came
+  // back as "MESSENGER DELIVERY REVIEW #1042" — which is the opposite of passing through
+  // untouched. Every caller happens to pass a generated UUID today, so this was latent.
+  const match = /^([A-Z]{2,5})-([A-F0-9]{8})(?:-[A-F0-9-]+)?$/.exec(trimmed.toUpperCase())
+  return match ? `${match[1]}-${match[2]}` : trimmed
 }
 
 function commerceOrderTargetId(orderId: string) {
