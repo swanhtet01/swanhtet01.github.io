@@ -2020,6 +2020,19 @@ const managedProductionInitializeStart = coreSource.indexOf('async function init
 const plantJobAnchorFocusContract = plantJobAnchorFocusStart >= 0 && managedProductionInitializeStart > plantJobAnchorFocusStart
   ? coreSource.slice(plantJobAnchorFocusStart, managedProductionInitializeStart)
   : ''
+const plantJobImportLoadStart = coreSource.indexOf('function loadPlantJobImportReview(review: PlantJobImportReview)')
+const plantJobImportSampleStart = coreSource.indexOf('function loadSamplePlantJobImportBatch()', plantJobImportLoadStart)
+const plantJobImportUploadStart = coreSource.indexOf('async function uploadPlantJobCsv(event: ChangeEvent<HTMLInputElement>)', plantJobImportSampleStart)
+const plantJobScheduleStart = coreSource.indexOf('function openJobSchedule(', plantJobImportUploadStart)
+const plantJobImportLoadContract = plantJobImportLoadStart >= 0 && plantJobImportSampleStart > plantJobImportLoadStart
+  ? coreSource.slice(plantJobImportLoadStart, plantJobImportSampleStart)
+  : ''
+const plantJobImportSampleContract = plantJobImportSampleStart >= 0 && plantJobImportUploadStart > plantJobImportSampleStart
+  ? coreSource.slice(plantJobImportSampleStart, plantJobImportUploadStart)
+  : ''
+const plantJobImportUploadContract = plantJobImportUploadStart >= 0 && plantJobScheduleStart > plantJobImportUploadStart
+  ? coreSource.slice(plantJobImportUploadStart, plantJobScheduleStart)
+  : ''
 const plantMaterialFocusStart = coreSource.indexOf("if (focus === 'material-use' && tab === 'production')")
 const plantBlockerFocusStart = coreSource.indexOf("if (focus === 'blocker' && tab === 'control')")
 const plantMaterialFocusContract = plantMaterialFocusStart >= 0 && plantBlockerFocusStart > plantMaterialFocusStart
@@ -2089,6 +2102,13 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !plantJobAnchorFocusContract.includes("const control = target.querySelector<HTMLButtonElement>('button:not(:disabled)')")
   || !plantJobAnchorFocusContract.includes("target.scrollIntoView({ block: 'center' })")
   || !plantJobAnchorFocusContract.includes(';(control ?? target).focus({ preventScroll: true })')
+  || !plantJobImportLoadContract.includes('setPlantJobImportReview(review)')
+  || !plantJobImportLoadContract.includes('if (!review.firstReady) return')
+  || !plantJobImportLoadContract.includes('setJobDraft(review.firstReady)')
+  || !plantJobImportLoadContract.includes('if (jobDisclosureRef.current) jobDisclosureRef.current.open = true')
+  || !plantJobImportLoadContract.includes('requestAnimationFrame(focusPlantJobIdInput)')
+  || !plantJobImportSampleContract.includes('loadPlantJobImportReview(review)')
+  || !plantJobImportUploadContract.includes('loadPlantJobImportReview(review)')
   || !coreSource.includes('ref={plantJobIdInputRef}')
   || !coreSource.includes("focus === 'output' && tab === 'production'")
   || !coreSource.includes("navigate('/plant/?tab=production&focus=output')")
@@ -2288,14 +2308,14 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || coreSource.includes('Job CSV autopilot')
   || !coreSource.includes('Load sample job batch')
   || !coreSource.includes('Load sample Plant job batch')
-  || !coreSource.includes('Sample Plant job batch loaded and the first reviewed job was copied into the form. No production job, equipment command, material movement, accounting post, or managed write ran.')
+  || !coreSource.includes('Sample checked. First ready job copied below; no Plant write ran.')
   || !coreSource.includes('const plantJobRepairRows = plantJobImportReview')
   || !coreSource.includes('aria-label="Plant job repair checklist"')
   || !coreSource.includes('Upload Plant job CSV')
   || !coreSource.includes('Ready for review')
   || !coreSource.includes('Repair before Plant review')
   || !coreSource.includes('no Plant write')
-  || !coreSource.includes('Uploaded Plant job CSV and prepared the first reviewed job locally. No production job, equipment command, material movement, accounting post, or managed write ran.')
+  || !coreSource.includes('CSV checked. First ready job copied below; no Plant write ran.')
   || !coreSource.includes('Plant job CSV is too large. Upload at most 180 KB or split the file into 50-row batches. No production job, equipment command, material movement, accounting post, or managed write ran.')
   || !coreCssSource.includes('.plant-today')
   || !coreCssSource.includes('.plant-today-priority')

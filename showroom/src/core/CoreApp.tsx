@@ -9323,18 +9323,25 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     return rows.map((row) => row.map(plantJobImportCsvCell).join(',')).join('\r\n')
   }
 
+  function loadPlantJobImportReview(review: PlantJobImportReview) {
+    setPlantJobImportReview(review)
+    if (!review.firstReady) return
+    setJobDraft(review.firstReady)
+    if (jobDisclosureRef.current) jobDisclosureRef.current.open = true
+    requestAnimationFrame(focusPlantJobIdInput)
+  }
+
   function loadSamplePlantJobImportBatch() {
     if (pendingAction) {
       setNotice('Finish or cancel the pending Plant review before loading a sample job batch.')
       return
     }
     const review = buildPlantJobImportReview(buildSamplePlantJobImportCsv())
-    setPlantJobImportReview(review)
+    loadPlantJobImportReview(review)
     setPlantJobImportSourceName('sample-plant-job-batch.csv')
-    if (review.firstReady) setJobDraft(review.firstReady)
     setNotice(review.firstReady
-      ? 'Sample Plant job batch loaded and the first reviewed job was copied into the form. No production job, equipment command, material movement, accounting post, or managed write ran.'
-      : 'Sample Plant job batch was reviewed locally but no row is ready. No production job, equipment command, material movement, accounting post, or managed write ran.')
+      ? 'Sample checked. First ready job copied below; no Plant write ran.'
+      : 'Sample checked; no row is ready and no Plant write ran.')
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
       product: 'production',
@@ -9361,11 +9368,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     try {
       const text = await file.text()
       const review = buildPlantJobImportReview(text)
-      setPlantJobImportReview(review)
-      if (review.firstReady) setJobDraft(review.firstReady)
+      loadPlantJobImportReview(review)
       setNotice(review.firstReady
-        ? 'Uploaded Plant job CSV and prepared the first reviewed job locally. No production job, equipment command, material movement, accounting post, or managed write ran.'
-        : 'Uploaded Plant job CSV was reviewed locally but no row is ready. No production job, equipment command, material movement, accounting post, or managed write ran.')
+        ? 'CSV checked. First ready job copied below; no Plant write ran.'
+        : 'CSV checked; no row is ready and no Plant write ran.')
       recordBehaviorSignal(window.localStorage, {
         event: 'agent_job_chosen',
         product: 'production',
