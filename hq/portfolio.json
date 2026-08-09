@@ -35,10 +35,11 @@
     {"productId":"website","workOrderId":"website-page-remove-recovery","checkpoint":"OPS-181"},
     {"productId":"ecommerce","workOrderId":"ecommerce-reschedule-close-recovery","checkpoint":"OPS-182"},
     {"productId":"shop","workOrderId":"shop-purchase-order-close-recovery","checkpoint":"OPS-183"},
-    {"productId":"plant","workOrderId":"plant-availability-order-switch-recovery","checkpoint":"OPS-184"}
+    {"productId":"plant","workOrderId":"plant-availability-order-switch-recovery","checkpoint":"OPS-184"},
+    {"productId":"website","workOrderId":"website-edit-session-tab-recovery","checkpoint":"OPS-185"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"website","workOrderId":"website-edit-session-tab-recovery","priority":100,"status":"ready-local","workOrder":"Website: recover one unsaved edit session after a tab closes without saving or publishing.","reason":"Website edits use sessionStorage, so tab closure drops multi-page work; Resume and Discard must stay source-bound and conflict-safe."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-storefront-edit-tab-recovery","priority":100,"status":"ready-local","workOrder":"Ecommerce: recover unsaved storefront edits after tab closure without saving or sending.","reason":"Store name, summary, products, and merchandising stay in memory until Save; Resume/Discard must bind to saved revision and catalog digest."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
