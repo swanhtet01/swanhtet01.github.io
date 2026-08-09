@@ -1568,7 +1568,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-205 | CEO + Shop Finance Simplification / Agent Operations Codex | done-local |')
   && workboard.includes('Finance now opens `Daily close`')
   && workboard.includes('The receipt advances `shop-finance-attention-routing`')
-  && workboard.includes('| CLAUDE-006 | Claude Code | ready |')
+  && workboard.includes('| CLAUDE-007 | Claude Code | ready |')
+  && workboard.includes('Shop Finance checkpoint `2744b28f`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'website-inquiry-entry-tab-recovery' && entry.checkpoint === 'OPS-189')

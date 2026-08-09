@@ -8,16 +8,16 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packet = await readFile(resolve(root, 'CLAUDE.md'), 'utf8')
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 
-const checkpoint = 'b8808439975ee80f7c456c52a6564b600952864a'
+const checkpoint = '2744b28f84ea5b7299f24e33156b468844125e78'
 const requiredFiles = [
-  'showroom/src/products/ecommerce/ecommerce-buying-lifecycle.ts',
-  'showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx',
-  'showroom/src/products/ecommerce/EcommerceProduct.tsx',
+  'showroom/src/core/CoreApp.tsx',
+  'showroom/src/core/ShopToday.tsx',
   'tools/verify_app_build.mjs',
+  'hq/WORKBOARD.md',
 ]
 const requiredStatements = [
   '# Claude Code: owner-controlled SuperMega review packet',
-  '## Assignment CLAUDE-006',
+  '## Assignment CLAUDE-007',
   checkpoint,
   'Autonomous company cycles use loopback Ollama with `llama3.2:1b`',
   'Use Read, Grep, and Glob only.',
@@ -27,6 +27,8 @@ const requiredStatements = [
 ]
 const forbiddenStaleMarkers = [
   'CLAUDE-005',
+  'CLAUDE-006',
+  'b8808439975ee80f7c456c52a6564b600952864a',
   'ENG-001',
   'ENG-002',
   'bdcb6a58d9615f4d73f0d2b4b7afd16c65468a82',
@@ -66,7 +68,7 @@ if (Object.keys(scripts).some((name) => name.startsWith('claude:eng001'))) {
 console.log(JSON.stringify({
   ok: true,
   contract: 'supermega.claude-owner-handoff.v1',
-  assignment: 'CLAUDE-006',
+  assignment: 'CLAUDE-007',
   checkpoint,
   files: requiredFiles.length,
   providerRequests: 0,

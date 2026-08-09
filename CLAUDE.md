@@ -1,31 +1,31 @@
 # Claude Code: owner-controlled SuperMega review packet
 
-Status: CLAUDE-006 is ready for manual use in the founder's existing Claude Code session. No automated Claude dispatch lane exists in this repository. This packet starts no provider request.
+Status: CLAUDE-007 is ready for manual use in the founder's existing Claude Code session. No automated Claude dispatch lane exists in this repository. This packet starts no provider request.
 
 Codex is the sole integrator on the ROG Ally. Autonomous company cycles use loopback Ollama with `llama3.2:1b`, immediate unload, one run at a time, and no cloud fallback. Claude is an optional independent reviewer only; it never replaces the Llama-only autonomous path.
 
-## Assignment CLAUDE-006
+## Assignment CLAUDE-007
 
-Review the exact local product checkpoint `b8808439975ee80f7c456c52a6564b600952864a` for defects in Ecommerce stale or changed quote guidance and its next-action handoff.
+Review the exact local product checkpoint `2744b28f84ea5b7299f24e33156b468844125e78` for defects in Shop Finance simplification, attention routing, and close deep-link focus.
 
 Read only these files:
 
-1. `showroom/src/products/ecommerce/ecommerce-buying-lifecycle.ts`
-2. `showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx`
-3. `showroom/src/products/ecommerce/EcommerceProduct.tsx`
-4. `tools/verify_app_build.mjs`
+1. `showroom/src/core/CoreApp.tsx`
+2. `showroom/src/core/ShopToday.tsx`
+3. `tools/verify_app_build.mjs`
+4. `hq/WORKBOARD.md`
 
 Use Read, Grep, and Glob only. Do not use a shell, edit or create files, start an agent or subagent, inspect or control another Claude session, access secrets, browse the web, call a connector, send a message, or change repository, account, database, deployment, domain, payment, customer, or hosted state. Return one response in the founder's current session and stop.
 
 ## Review questions
 
-1. Does the pure projection distinguish `idle`, `waiting_shop_review`, `quote_expired`, `checkout_changed`, and `confirmed`, with confirmed order precedence and malformed or boundary-expired time failing closed?
-2. Is checkout currentness bound to the exact scope, preview digest, saved-storefront revision/action pair, customer and delivery fields, fulfilment, payment, promotion, stock-valid cart, and quantities?
-3. Can an expired or changed request ever leak into the fresh `Request sent` receipt path, Shop metric, next-step copy, or autopilot branch?
-4. Does each stale state expose exactly one truthful action: current-total review, changed-checkout review, or add products for an empty cart, while fresh and confirmed states add no duplicate action?
-5. Does the action open the existing checkout and focus the first invalid field or enabled request control immediately, with animation-frame reinforcement but no dependency on that frame?
-6. Do projection and focus helpers avoid storage, network, navigation, quote creation, Shop writes, orders, stock moves, payment, delivery booking, provider calls, and customer messages?
-7. Are adversarial tests meaningful for exact expiry boundary, malformed time, changed checkout, empty-cart recovery, confirmed precedence, source drift, branch ordering, and runtime copy/action mapping?
+1. Does Shop Today show `Open finance` only when payment review or a close preview needs attention, while preserving `New sale` otherwise?
+2. Does the current Finance link always target `#shop-close-controls`, including when its visible reason is payment review, and what exact routing defect or priority ambiguity follows?
+3. Does `Daily close` expose only the close task while preserving all six promotion, delivery, payment, credit, tax, and account-mapping controls inside one accessible setup disclosure?
+4. Does removing the duplicate low-stock boundary list preserve stock exception evidence in the close snapshot and keep Stock as the operational surface for reorder work?
+5. Does hash navigation open the close disclosure and focus the enabled primary close action only after write readiness, with a safe summary fallback and no focus loop?
+6. Do the Today link, disclosures, and focus recovery avoid order, stock, policy, payment, close, storage, network, provider, connector, and customer-message side effects?
+7. Are adversarial and rendered checks sufficient for payment-only, close-only, both, neither, already-closed, disabled-control, reload, keyboard, and mobile states?
 
 ## Required report
 

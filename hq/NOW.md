@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-205 reduces Shop Finance from eight direct disclosures to three: Daily close stays primary and six configuration controls remain behind one setup disclosure. CLAUDE-006 remains manual and read-only.
+- Codex is sole integrator. OPS-205 reduces Shop Finance from eight direct disclosures to three: Daily close stays primary and six configuration controls remain behind one setup disclosure. CLAUDE-007 is a manual read-only review of exact checkpoint `2744b28f`.
 - Autonomous cycles and the local coding entrypoint remain Llama-only and scale to zero: Ollama is the only enabled OpenCode provider, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -88,4 +88,4 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 ## Next evidence
 
 1. Complete `shop-finance-attention-routing`: route `Open finance` to the first payment-review task when one exists, otherwise to Daily close, without changing payment or close authority.
-2. Use CLAUDE-006 only as an optional owner-controlled review of checkpoint `b8808439`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
+2. Use CLAUDE-007 only as an optional owner-controlled review of checkpoint `2744b28f`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
