@@ -3421,6 +3421,22 @@
   color: #fff;
 }
 
+/* A second copy of the white-on-primary pairing, and the reason fixing
+   `.theme-dark .website-button.is-primary` alone was not enough: this selector carries the
+   same specificity but is declared later, so it won and "Edit page" and "Save" stayed at
+   1.44:1 in dark mode while "Review edits" -- which only matches the base rule -- was
+   already fixed. Found by driving the builder into its editing state; the landing screen
+   never renders this action bar. */
+.theme-dark .website-primary-actions > .website-button.is-primary {
+  color: var(--website-bg);
+}
+
+.theme-dark .website-primary-actions > .website-button.is-primary:hover:not(:disabled) {
+  border-color: #3ad9a8;
+  background: #3ad9a8;
+  color: var(--website-bg);
+}
+
 .website-site-settings > summary::-webkit-details-marker {
   display: none;
 }
@@ -3999,4 +4015,16 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Same white-on-mint pairing as the primary buttons: --website-green is a dark green in
+   light where white reads cleanly, and a bright mint in dark where white measures 1.44:1.
+   These two carry it on a hover state and a recovery action, both of which only appear in
+   states the landing screen never renders. */
+.theme-dark .website-notice-action:hover {
+  color: var(--website-bg);
+}
+
+.theme-dark .website-recovery-actions > button {
+  color: var(--website-bg);
 }
