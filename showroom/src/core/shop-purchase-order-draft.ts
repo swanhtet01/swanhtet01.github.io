@@ -73,7 +73,7 @@ function progress(state: CommerceState, purchaseOrderId: string, ordered: number
 function source(draft: ShopPurchaseOrderDraft, state: CommerceState): ShopPurchaseOrderSource | null {
   const orders = state.purchaseOrders ?? []
   const requisitions = state.purchaseRequisitions ?? []
-  let targetEvidence = ''
+  let targetEvidence: string
   if (draft.mode === 'create') {
     const items = state.items.filter((item) => item.sku === draft.sku)
     const requisition = draft.requisitionId ? requisitions.find((row) => row.id === draft.requisitionId) : undefined

@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 42
+  && portfolio.completedLocalAutomations.length === 43
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -383,10 +383,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[41]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[41]?.workOrderId === 'ecommerce-replacement-rendered-acceptance'
   && portfolio.completedLocalAutomations[41]?.checkpoint === 'OPS-194'
+  && portfolio.completedLocalAutomations[42]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[42]?.workOrderId === 'ecommerce-replacement-action-rendered-acceptance'
+  && portfolio.completedLocalAutomations[42]?.checkpoint === 'OPS-195'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-replacement-action-rendered-acceptance'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-replacement-submit-clarity'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1502,6 +1505,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-194 | CEO + Ecommerce/Shop Rendered Acceptance / Agent Operations Codex | done-local |')
   && workboard.includes('Product checkpoints `fb5b32c5` and `eb5004c7` bind the exact predecessor')
   && workboard.includes('`ecommerce-replacement-action-rendered-acceptance` for one post-fix focus and activation check')
+  && workboard.includes('| OPS-195 | CEO + Ecommerce/Shop Action Acceptance / Agent Operations Codex | done-local |')
+  && workboard.includes('focused the link whose data identity matched the successor')
+  && workboard.includes('The receipt advances `ecommerce-replacement-submit-clarity`')
   && workboard.includes('| CLAUDE-006 | Claude Code | ready |')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
@@ -1511,7 +1517,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-stale-quote-supersession' && entry.checkpoint === 'OPS-192')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-supersession-review-context' && entry.checkpoint === 'OPS-193')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-replacement-rendered-acceptance' && entry.checkpoint === 'OPS-194')
-  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-replacement-action-rendered-acceptance')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-replacement-action-rendered-acceptance' && entry.checkpoint === 'OPS-195')
+  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-replacement-submit-clarity')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
