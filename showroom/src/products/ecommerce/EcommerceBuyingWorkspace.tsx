@@ -694,6 +694,7 @@ export function EcommerceBuyingWorkspace({
     customerRequestState,
     cart.reduce((total, line) => total + line.quantity, 0),
   )
+  const replacingCurrentRequest = Boolean(latestRequest && !latestRequestOrder && quoteNextAction)
   useEffect(() => onRequestStateChange(customerRequestState), [customerRequestState, onRequestStateChange])
   const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
   const checkoutEntryDraftInput = {
@@ -2044,8 +2045,11 @@ export function EcommerceBuyingWorkspace({
               <span>Promotion code <small>optional · Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => setPromotionCode(event.target.value)} placeholder="Optional" value={promotionCode} />
             </label>
-            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" data-ecommerce-quote-review-action="true" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
-              {quoteBusy ? 'Sending…' : 'Send order request'}
+            {!quoteCurrent && !latestRequestConfirmed && replacingCurrentRequest
+              ? <p className="form-notice" data-ecommerce-replaces={latestRequest?.id} role="status">Replaces request {latestRequest?.id}. Earlier request stays in Your orders; Shop creates no order until review.</p>
+              : null}
+            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" data-ecommerce-submit-mode={replacingCurrentRequest ? 'replacement' : 'new'} data-ecommerce-quote-review-action="true" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
+              {quoteBusy ? replacingCurrentRequest ? 'Replacing...' : 'Sending...' : replacingCurrentRequest ? 'Replace current request' : 'Send order request'}
             </button> : null}
           </form>
 
