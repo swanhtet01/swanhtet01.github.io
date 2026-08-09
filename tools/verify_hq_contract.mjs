@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 56
+  && portfolio.completedLocalAutomations.length === 57
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -425,10 +425,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[55]?.productId === 'shop'
   && portfolio.completedLocalAutomations[55]?.workOrderId === 'shop-today-finance-action-label'
   && portfolio.completedLocalAutomations[55]?.checkpoint === 'OPS-208'
+  && portfolio.completedLocalAutomations[56]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[56]?.workOrderId === 'plant-today-output-focus'
+  && portfolio.completedLocalAutomations[56]?.checkpoint === 'OPS-209'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-today-output-focus'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-today-problem-focus'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1586,6 +1589,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-208 | CEO + Shop Exact Finance Action / Agent Operations Codex | done-local |')
   && workboard.includes('The existing Finance projection now exposes `Reconcile payment`, `Record settled refund`, or `Review and save close`')
   && workboard.includes('The receipt advances `plant-today-output-focus`')
+  && workboard.includes('| OPS-209 | CEO + Plant Output Focus / Agent Operations Codex | done-local |')
+  && workboard.includes('waits for the first active job instead of consuming intent during a cold load')
+  && workboard.includes('The receipt advances `plant-today-problem-focus`')
   && workboard.includes('| CLAUDE-007 | Claude Code | ready |')
   && workboard.includes('Shop Finance checkpoint `2744b28f`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -1610,7 +1616,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-finance-attention-routing' && entry.checkpoint === 'OPS-206')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-today-exact-next-action' && entry.checkpoint === 'OPS-207')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-today-finance-action-label' && entry.checkpoint === 'OPS-208')
-  && portfolio.localImprovementQueue[0].workOrderId === 'plant-today-output-focus')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-today-output-focus' && entry.checkpoint === 'OPS-209')
+  && portfolio.localImprovementQueue[0].workOrderId === 'plant-today-problem-focus')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")

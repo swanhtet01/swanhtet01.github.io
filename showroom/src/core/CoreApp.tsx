@@ -8397,22 +8397,22 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 ? 'Continue production'
                 : 'Record first shift output'
   const plantTodayReason = plantTodayStep === 'restore'
-    ? 'Company data must confirm durable storage before records can change.'
+    ? 'Reconnect company data before changing records.'
     : plantTodayStep === 'approval'
-      ? 'Review the pending change, responsible owner, reason, and evidence.'
+      ? 'Review the change, owner, reason, and evidence.'
       : plantTodayStep === 'problems'
         ? `${shiftCloseProblemCount} quality or maintenance blocker${shiftCloseProblemCount === 1 ? '' : 's'} must be cleared before owner close.`
         : plantTodayStep === 'material'
-          ? `Good output is recorded for ${canonicalShiftRef}. Record the materials used in this shift before owner close.`
+          ? `${canonicalShiftRef} has output. Record its materials before close.`
           : plantTodayStep === 'shift-close'
-            ? `${canonicalShiftRef} has output, materials used, and clear quality and maintenance gates. Prepare the accountable close.`
+            ? `${canonicalShiftRef} has output, materials, and clear controls. Prepare the close.`
             : plantTodayStep === 'plan'
-              ? 'No active production job is waiting. Add the next owned job and due time.'
+              ? 'Add the next owned job and due time.'
               : currentShiftClose
-                ? `${currentShiftClose.shiftRef} is closed by ${currentShiftClose.actor}. Record the next output when production continues.`
+                ? `${currentShiftClose.shiftRef} is closed. Record the next output.`
                 : activeJobs[0]
-                  ? `${activeJobs[0].id} is the next active job by priority and due time.`
-                  : 'Choose an active job and record the first good output for this shift.'
+                  ? `${activeJobs[0].id} is next by priority and due time.`
+                  : 'Choose a job and record first output.'
   const plantTodayAction = plantTodayStep === 'restore'
     ? 'Restore write access'
     : plantTodayStep === 'approval'
@@ -8552,6 +8552,24 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   useEffect(() => {
     const focus = new URLSearchParams(productionLocation.search).get('focus')
+    if (focus === 'output' && tab === 'production') {
+      if (!guidedPlantJobId) return
+      requestAnimationFrame(() => {
+        outputTriggerRef.current = null
+        setJobId(guidedPlantJobId)
+        setPlantOutputRecoveryArmed(true)
+        setOutputValidationIssue('')
+        setOutputValidationField(null)
+        if (!managedIdentity && !shiftRef.trim()) {
+          const suggestedShiftRef = shiftReferencePlaceholder()
+          setShiftRef(suggestedShiftRef)
+          setHandoffShiftRef(suggestedShiftRef)
+        }
+        setOutputOpen(true)
+      })
+      navigate('/plant/?tab=production', { replace: true })
+      return
+    }
     if (focus === 'material-use' && tab === 'production') {
       if (guidedPlantJobId) {
         requestAnimationFrame(() => {
@@ -8586,7 +8604,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       })
       navigate('/plant/?tab=control', { replace: true })
     }
-  }, [canonicalShiftRef, guidedPlantJobId, navigate, productionLocation.search, tab])
+  }, [canonicalShiftRef, guidedPlantJobId, managedIdentity, navigate, productionLocation.search, shiftRef, tab])
 
   async function initializeManagedProduction(event: FormEvent) {
     event.preventDefault()
@@ -9919,7 +9937,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     if (plantTodayStep === 'output' && activeJobs[0]) {
       if (tab !== 'production') {
-        navigate('/plant/?tab=production')
+        navigate('/plant/?tab=production&focus=output')
         return
       }
       openJobOutput(activeJobs[0], trigger)
