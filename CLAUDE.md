@@ -1,33 +1,31 @@
 # Claude Code: owner-controlled SuperMega review packet
 
-Status: CLAUDE-005 is ready for manual use in the founder's existing Claude Code session. No automated Claude dispatch lane exists in this repository. This packet starts no provider request.
+Status: CLAUDE-006 is ready for manual use in the founder's existing Claude Code session. No automated Claude dispatch lane exists in this repository. This packet starts no provider request.
 
 Codex is the sole integrator on the ROG Ally. Autonomous company cycles use loopback Ollama with `llama3.2:1b`, immediate unload, one run at a time, and no cloud fallback. Claude is an optional independent reviewer only; it never replaces the Llama-only autonomous path.
 
-## Assignment CLAUDE-005
+## Assignment CLAUDE-006
 
-Review the exact local product checkpoint `f756da119f58c785bdd97abeddcee00731423cf3` for defects in Ecommerce pre-quote checkout recovery after reload or tab closure.
+Review the exact local product checkpoint `b8808439975ee80f7c456c52a6564b600952864a` for defects in Ecommerce stale or changed quote guidance and its next-action handoff.
 
 Read only these files:
 
-1. `showroom/src/core/local-workspace-storage.ts`
-2. `showroom/src/products/ecommerce/ecommerce-checkout-entry-recovery.ts`
-3. `showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx`
-4. `showroom/src/products/ecommerce/EcommerceProduct.tsx`
-5. `showroom/src/products/ecommerce/ecommerce-product.css`
-6. `tools/verify_app_build.mjs`
+1. `showroom/src/products/ecommerce/ecommerce-buying-lifecycle.ts`
+2. `showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx`
+3. `showroom/src/products/ecommerce/EcommerceProduct.tsx`
+4. `tools/verify_app_build.mjs`
 
 Use Read, Grep, and Glob only. Do not use a shell, edit or create files, start an agent or subagent, inspect or control another Claude session, access secrets, browse the web, call a connector, send a message, or change repository, account, database, deployment, domain, payment, customer, or hosted state. Return one response in the founder's current session and stop.
 
 ## Review questions
 
-1. Does an empty checkout or a checkout matching the current saved request avoid redundant recovery while an unfinished draft retains ordered cart lines, exact raw quantity text, removed-line Undo state, raw customer/delivery fields, fulfilment, payment, promotion, and open-panel destination?
-2. Is every recovery bound to the exact account scope, storefront preview digest, saved-storefront revision/action pair, buying revision/head digest, and SHA-256 digest of validated Commerce state, current catalogue, preview, and buying history?
-3. Does Resume reject changed scope, storefront, catalogue, stock, Commerce policy, buying state, malformed payloads, duplicate lines, valid quantity mismatches, tampering, closed-panel evidence, or newer-tab ownership?
-4. Can draft clearing, Discard, Start another order, and a successful reviewed request remove only the exact recovery they own without clearing a newer tab's checkout?
-5. Do Resume and Discard avoid creating a quote, Shop request, order, stock move, payment, delivery booking, provider call, customer message, or network mutation?
-6. While recovery is pending, are product buttons locked behind one clear Resume/Discard surface, does Start here point to it, and are mobile/desktop layout, focus, raw invalid quantity restoration, and touch sizes understandable to a first-time customer?
-7. Are any tests tautological, missing state-digest, successful-write cleanup, source-drift, invalid-raw-quantity, or cross-tab write/clear races, or asserting source strings without meaningful runtime coverage?
+1. Does the pure projection distinguish `idle`, `waiting_shop_review`, `quote_expired`, `checkout_changed`, and `confirmed`, with confirmed order precedence and malformed or boundary-expired time failing closed?
+2. Is checkout currentness bound to the exact scope, preview digest, saved-storefront revision/action pair, customer and delivery fields, fulfilment, payment, promotion, stock-valid cart, and quantities?
+3. Can an expired or changed request ever leak into the fresh `Request sent` receipt path, Shop metric, next-step copy, or autopilot branch?
+4. Does each stale state expose exactly one truthful action: current-total review, changed-checkout review, or add products for an empty cart, while fresh and confirmed states add no duplicate action?
+5. Does the action open the existing checkout and focus the first invalid field or enabled request control immediately, with animation-frame reinforcement but no dependency on that frame?
+6. Do projection and focus helpers avoid storage, network, navigation, quote creation, Shop writes, orders, stock moves, payment, delivery booking, provider calls, and customer messages?
+7. Are adversarial tests meaningful for exact expiry boundary, malformed time, changed checkout, empty-cart recovery, confirmed precedence, source drift, branch ordering, and runtime copy/action mapping?
 
 ## Required report
 

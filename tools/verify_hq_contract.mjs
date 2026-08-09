@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 38
+  && portfolio.completedLocalAutomations.length === 39
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -371,10 +371,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[37]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[37]?.workOrderId === 'ecommerce-checkout-entry-tab-recovery'
   && portfolio.completedLocalAutomations[37]?.checkpoint === 'OPS-190'
+  && portfolio.completedLocalAutomations[38]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[38]?.workOrderId === 'ecommerce-stale-quote-next-action'
+  && portfolio.completedLocalAutomations[38]?.checkpoint === 'OPS-191'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-stale-quote-next-action'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-stale-quote-supersession'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1478,12 +1481,16 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-190 | CEO + Ecommerce UX / Agent Operations Codex | done-local |')
   && workboard.includes('Product checkpoint `f756da11` adds `supermega.ecommerce.closed-checkout-entry.v1`')
   && workboard.includes('`ecommerce-stale-quote-next-action` as the sole ready local continuation')
-  && workboard.includes('| CLAUDE-005 | Claude Code | ready |')
+  && workboard.includes('| OPS-191 | CEO + Ecommerce UX / Agent Operations Codex | done-local |')
+  && workboard.includes('Product checkpoint `b8808439` adds explicit idle, waiting, expired, changed, and confirmed customer-request states')
+  && workboard.includes('`ecommerce-stale-quote-supersession` because resubmission currently creates a new identity')
+  && workboard.includes('| CLAUDE-006 | Claude Code | ready |')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'website-inquiry-entry-tab-recovery' && entry.checkpoint === 'OPS-189')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-checkout-entry-tab-recovery' && entry.checkpoint === 'OPS-190')
-  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-stale-quote-next-action')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-stale-quote-next-action' && entry.checkpoint === 'OPS-191')
+  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-stale-quote-supersession')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")

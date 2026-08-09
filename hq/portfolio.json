@@ -41,10 +41,11 @@
     {"productId":"shop","workOrderId":"shop-counter-sale-tab-recovery","checkpoint":"OPS-187"},
     {"productId":"plant","workOrderId":"plant-output-entry-tab-recovery","checkpoint":"OPS-188"},
     {"productId":"website","workOrderId":"website-inquiry-entry-tab-recovery","checkpoint":"OPS-189"},
-    {"productId":"ecommerce","workOrderId":"ecommerce-checkout-entry-tab-recovery","checkpoint":"OPS-190"}
+    {"productId":"ecommerce","workOrderId":"ecommerce-checkout-entry-tab-recovery","checkpoint":"OPS-190"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-stale-quote-next-action","checkpoint":"OPS-191"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-stale-quote-next-action","priority":100,"status":"ready-local","workOrder":"Ecommerce: correct stale quote guidance.","reason":"Today can mislabel an expired or cart-changed quote as Request sent."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-stale-quote-supersession","priority":100,"status":"ready-local","workOrder":"Ecommerce: bind replacement quotes.","reason":"A replacement request does not identify the stale request it supersedes."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
