@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
   "asOf": "2026-08-08T12:23:36.370Z",
-  "sourceDigest": "sha256:e20e104e18963287f566dd63b2ba7032ba91ff893d0bc01cf1df63544e76bfc3",
+  "sourceDigest": "sha256:6738b19bb57156a080501405a03ae9ee1b1a39d6eb0a5cd00a1a592f75ac55a6",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -140,7 +140,7 @@
       "automationStatus": "owner-gated",
       "workOrderId": "shop-managed-order-close-pilot",
       "proposedWork": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
-      "blockingReason": "The next Shop proof requires a founder-selected operator and approved isolated tenant, so local automation must not spend a model call pretending it can complete it.",
+      "blockingReason": "Needs a founder-selected operator and approved isolated tenant.",
       "requiredProof": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
     },
     {
@@ -150,7 +150,7 @@
       "automationStatus": "owner-gated",
       "workOrderId": "plant-managed-oee-pilot",
       "proposedWork": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
-      "blockingReason": "The Plant evidence gate needs named human timing evidence and an approved managed tenant; automation cannot manufacture either input.",
+      "blockingReason": "Needs named timing evidence and an approved managed tenant.",
       "requiredProof": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
     },
     {
@@ -160,7 +160,7 @@
       "automationStatus": "owner-gated",
       "workOrderId": "website-managed-brief-acceptance",
       "proposedWork": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
-      "blockingReason": "A real named business brief and accepted owner review are missing, so a generated sample cannot truthfully close the Website gate.",
+      "blockingReason": "Needs a named business brief and accepted owner review.",
       "requiredProof": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
     {
@@ -170,7 +170,7 @@
       "automationStatus": "owner-gated",
       "workOrderId": "ecommerce-managed-order-exception-pilot",
       "proposedWork": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
-      "blockingReason": "ENG-146 completed the local correction boundary. The next proof needs a founder-selected operator and approved isolated managed tenant; automation cannot manufacture those inputs or claim hosted persistence.",
+      "blockingReason": "Needs a founder-selected operator and approved isolated tenant.",
       "requiredProof": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
   ],
@@ -197,7 +197,7 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:4c8fab24355eb9239394889ecb0885b6133c2dee93592d7df4b6e14ab7380f94"
+      "digest": "sha256:bb56247a0fd947bd9059821fb5d0cea35262b0db35ec71028a16c4e3d0f3e6f8"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
@@ -213,7 +213,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:64e56a89390fe1574466fb2f195f86c1e86f1283410f2b7b72778776327da18e"
+      "digest": "sha256:441e0f8956f5b5f27d2ce54f41c88b2fb5fb725001474e9bfc59e9d18452d5b7"
     },
     {
       "path": "package.json",

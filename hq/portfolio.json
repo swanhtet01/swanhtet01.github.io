@@ -31,10 +31,11 @@
     {"productId":"website","workOrderId":"website-section-remove-recovery","checkpoint":"OPS-177"},
     {"productId":"ecommerce","workOrderId":"ecommerce-order-change-close-recovery","checkpoint":"OPS-178"},
     {"productId":"shop","workOrderId":"shop-stock-move-close-recovery","checkpoint":"OPS-179"},
-    {"productId":"plant","workOrderId":"plant-plan-revision-close-recovery","checkpoint":"OPS-180"}
+    {"productId":"plant","workOrderId":"plant-plan-revision-close-recovery","checkpoint":"OPS-180"},
+    {"productId":"website","workOrderId":"website-page-remove-recovery","checkpoint":"OPS-181"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"website","workOrderId":"website-page-remove-recovery","priority":100,"status":"ready-local","workOrder":"Website: undo one confirmed page removal exactly; never save or publish.","reason":"Recovery otherwise discards unrelated edits."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-reschedule-close-recovery","priority":100,"status":"ready-local","workOrder":"Ecommerce: reopen one closed unsent reschedule exactly; never send to Shop.","reason":"Close discards the requested time and reason."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
@@ -135,7 +136,7 @@
         "priority": 80,
         "status": "owner-gated",
         "workOrder": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
-        "reason": "The next Shop proof requires a founder-selected operator and approved isolated tenant, so local automation must not spend a model call pretending it can complete it."
+        "reason": "Needs a founder-selected operator and approved isolated tenant."
       },
       "nextGate": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
     },
@@ -157,7 +158,7 @@
         "priority": 70,
         "status": "owner-gated",
         "workOrder": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
-        "reason": "The Plant evidence gate needs named human timing evidence and an approved managed tenant; automation cannot manufacture either input."
+        "reason": "Needs named timing evidence and an approved managed tenant."
       },
       "nextGate": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
     },
@@ -177,7 +178,7 @@
         "priority": 60,
         "status": "owner-gated",
         "workOrder": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
-        "reason": "A real named business brief and accepted owner review are missing, so a generated sample cannot truthfully close the Website gate."
+        "reason": "Needs a named business brief and accepted owner review."
       },
       "nextGate": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
@@ -197,7 +198,7 @@
         "priority": 95,
         "status": "owner-gated",
         "workOrder": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
-        "reason": "ENG-146 completed the local correction boundary. The next proof needs a founder-selected operator and approved isolated managed tenant; automation cannot manufacture those inputs or claim hosted persistence."
+        "reason": "Needs a founder-selected operator and approved isolated tenant."
       },
       "nextGate": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
