@@ -33,10 +33,11 @@
     {"productId":"shop","workOrderId":"shop-stock-move-close-recovery","checkpoint":"OPS-179"},
     {"productId":"plant","workOrderId":"plant-plan-revision-close-recovery","checkpoint":"OPS-180"},
     {"productId":"website","workOrderId":"website-page-remove-recovery","checkpoint":"OPS-181"},
-    {"productId":"ecommerce","workOrderId":"ecommerce-reschedule-close-recovery","checkpoint":"OPS-182"}
+    {"productId":"ecommerce","workOrderId":"ecommerce-reschedule-close-recovery","checkpoint":"OPS-182"},
+    {"productId":"shop","workOrderId":"shop-purchase-order-close-recovery","checkpoint":"OPS-183"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"shop","workOrderId":"shop-purchase-order-close-recovery","priority":100,"status":"ready-local","workOrder":"Shop: preserve one unfinished supplier-order or receipt editor across Close exactly once, while explicit discard remains separate and no procurement evidence is created.","reason":"The current Cancel action drops supplier, arrival, quantity, cost, location, lot, rejected quantity, and discrepancy fields; enterprise receiving work needs a reversible close and an explicit discard."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"plant","workOrderId":"plant-availability-order-switch-recovery","priority":100,"status":"ready-local","workOrder":"Plant: recover one unfinished material-and-capacity check after an order switch without recording production.","reason":"Switching orders replaces entered lots, quantities, and centre minutes; recovery must stay source-bound to prevent cross-order evidence."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
