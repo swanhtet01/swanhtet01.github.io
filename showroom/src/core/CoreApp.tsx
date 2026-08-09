@@ -127,6 +127,7 @@ import {
   commerceSupplierReturnClaimBalance,
   commerceSupplierReturnClaimStatus,
   commerceSupplierPerformance,
+  commerceStorefrontOrderTimeline,
   commerceStorefrontRequestLines,
   commerceStorefrontRequests,
   commerceWebsiteIntakes,
@@ -1898,9 +1899,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ? websiteIntakes.some((intake) => intake.status === 'pending_confirmation')
     : Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
   const storefrontRequests = commerceStorefrontRequests(commerce)
-  const pendingStorefrontRequests = storefrontRequests.filter((request) => (
-    !commerce.orders.some((order) => order.sourceRecordId === request.id)
-  ))
+  const pendingStorefrontRequests = commerceStorefrontOrderTimeline(commerce, storefrontRequests)
+    .filter((entry) => entry.nextAction === 'review_in_shop')
+    .map((entry) => entry.request)
   const preparedEcommerceRequestIsWaiting = Boolean(
     preparedEcommerceDraft
     && !pendingStorefrontRequests.some((request) => request.id === preparedEcommerceDraft.sourceRequestId)

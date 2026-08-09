@@ -616,6 +616,73 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(EcommerceLifecycleValidationError, "exact quote"):
             validate_ecommerce_order_request(tampered)
 
+    def test_request_supersession_retains_one_older_request_and_fails_closed(self) -> None:
+        original = request()
+        replacement_quote = quote(
+            pim=projection(),
+            fulfilment="pickup",
+            cart=[{"sku": "SKU-BLUE-M", "quantity": 1}],
+            idempotency_key="ECI-32345678-1234-4ABC-8ABC-1234567890AF",
+            quoted_at="2026-07-26T10:01:00+06:30",
+            expires_at="2026-07-26T10:16:00+06:30",
+        )
+        replacement = build_ecommerce_order_request(
+            replacement_quote,
+            source_storefront_revision=4,
+            source_storefront_action_id="ACT-STOREFRONT-R4",
+            supersedes_request_id=str(original["id"]),
+        )
+        empty = create_empty_ecommerce_lifecycle_state(SCOPE)
+        with_original = record_ecommerce_order_request(
+            empty,
+            original,
+            expected_head_digest=str(empty["headDigest"]),
+        )
+        superseded = record_ecommerce_order_request(
+            with_original,
+            replacement,
+            expected_head_digest=str(with_original["headDigest"]),
+        )
+        self.assertEqual(
+            [candidate["id"] for candidate in superseded["requests"]],
+            [replacement["id"], original["id"]],
+        )
+        self.assertEqual(replacement["supersedesRequestId"], original["id"])
+        self.assertEqual(validate_ecommerce_lifecycle_state(superseded), superseded)
+
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "older recovered"):
+            record_ecommerce_order_request(
+                empty,
+                replacement,
+                expected_head_digest=str(empty["headDigest"]),
+            )
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "supersession identity"):
+            build_ecommerce_order_request(
+                replacement_quote,
+                supersedes_request_id=str(replacement["id"]),
+            )
+
+        second_quote = quote(
+            pim=projection(),
+            fulfilment="pickup",
+            cart=[{"sku": "SKU-BLUE-M", "quantity": 2}],
+            idempotency_key="ECI-42345678-1234-4ABC-8ABC-1234567890AF",
+            quoted_at="2026-07-26T10:02:00+06:30",
+            expires_at="2026-07-26T10:17:00+06:30",
+        )
+        second_replacement = build_ecommerce_order_request(
+            second_quote,
+            source_storefront_revision=4,
+            source_storefront_action_id="ACT-STOREFRONT-R4",
+            supersedes_request_id=str(original["id"]),
+        )
+        with self.assertRaisesRegex(EcommerceLifecycleValidationError, "older recovered"):
+            record_ecommerce_order_request(
+                superseded,
+                second_replacement,
+                expected_head_digest=str(superseded["headDigest"]),
+            )
+
     def test_shop_handoff_revalidates_all_lines_and_expires_closed(self) -> None:
         candidate = request()
         draft = prepare_ecommerce_shop_handoff(

@@ -3586,7 +3586,22 @@ function managedStorefrontRequestIntent(
       { code: 'managed_storefront_request_intent_invalid' },
     )
   }
-  return { request }
+  const supersedesRequestId = typeof request.supersedesRequestId === 'string'
+    ? request.supersedesRequestId
+    : null
+  const supersededMatches = supersedesRequestId
+    ? requests.filter((candidate) => isRecord(candidate) && candidate.id === supersedesRequestId)
+    : []
+  if (supersedesRequestId && (supersededMatches.length !== 1 || !supersedesRequestId.startsWith('ECR-'))) {
+    throw new ManagedTrialError(
+      'The Ecommerce replacement request is missing its exact prior request history.',
+      { code: 'managed_storefront_request_supersession_invalid' },
+    )
+  }
+  return {
+    request,
+    ...(supersededMatches[0] ? { supersededRequest: supersededMatches[0] } : {}),
+  }
 }
 
 export async function saveManagedCommerceCommand(request: {

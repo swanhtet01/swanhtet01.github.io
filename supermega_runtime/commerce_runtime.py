@@ -4323,13 +4323,35 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     storefront_request_ids: list[str] = []
     storefront_idempotency_keys: list[str] = []
     storefront_action_ids: list[str] = []
+    storefront_request_v2_by_id: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(storefront_requests):
         request = _storefront_request(candidate, f"storefrontRequests[{index}]")
         storefront_request_ids.append(request["id"])
         storefront_idempotency_keys.append(request["idempotencyKey"])
         storefront_action_ids.append(f"ACT-{request['id'][4:]}")
+        if request["schema"] == "supermega.ecommerce.order_request.v2":
+            storefront_request_v2_by_id[request["id"]] = request
     _unique(storefront_request_ids, "Storefront request ID")
     _unique(storefront_idempotency_keys, "Storefront request idempotency key")
+    superseded_storefront_request_ids: set[str] = set()
+    order_source_record_ids = set(source_record_ids)
+    for request in storefront_request_v2_by_id.values():
+        supersedes_request_id = request.get("supersedesRequestId")
+        if supersedes_request_id is None:
+            continue
+        prior = storefront_request_v2_by_id.get(supersedes_request_id)
+        if (
+            prior is None
+            or prior["scope"] != request["scope"]
+            or datetime.fromisoformat(prior["createdAt"].replace("Z", "+00:00"))
+            >= datetime.fromisoformat(request["createdAt"].replace("Z", "+00:00"))
+            or prior["id"] in order_source_record_ids
+            or prior["id"] in superseded_storefront_request_ids
+        ):
+            raise TrialValidationError(
+                f"Storefront request {request['id']} does not supersede one older pending Ecommerce request."
+            )
+        superseded_storefront_request_ids.add(prior["id"])
     catalog_baseline_action_set = set(catalog_baseline_action_ids)
     for action_id in catalog_baseline_action_set:
         baselines = [
@@ -9970,11 +9992,25 @@ def _validate_storefront_request_received(current: Mapping[str, Any], next_state
     _require_website_intakes_unchanged(current, next_state)
     current_requests = _storefront_requests(current)
     next_requests = _storefront_requests(next_state)
-    if len(next_requests) != len(current_requests) + 1 or next_requests[1:] != current_requests:
+    if not next_requests:
         raise TrialValidationError(
-            "commerce.storefront_request.received must prepend exactly one Ecommerce request."
+            "commerce.storefront_request.received must prepend one Ecommerce request."
         )
     request = next_requests[0]
+    supersedes_request_id = request.get("supersedesRequestId")
+    prior_is_retained = supersedes_request_id is not None and any(
+        candidate.get("id") == supersedes_request_id for candidate in current_requests
+    )
+    added_count = 2 if supersedes_request_id is not None and not prior_is_retained else 1
+    if (
+        len(next_requests) != len(current_requests) + added_count
+        or next_requests[added_count:] != current_requests
+        or added_count == 2
+        and next_requests[1].get("id") != supersedes_request_id
+    ):
+        raise TrialValidationError(
+            "commerce.storefront_request.received must prepend one request and only its missing prior history."
+        )
     lines = (
         request["lines"]
         if request["schema"] == "supermega.ecommerce.order_request.v2"
@@ -10043,12 +10079,73 @@ def create_commerce_storefront_request_from_intent(
         intent,
         "storefront request intent",
         required=frozenset({"request"}),
+        optional=frozenset({"supersededRequest"}),
     )
     request = _storefront_request(
         intent["request"],
         "storefront request intent.request",
     )
     evidence = _action_proof(evidence_value, "evidence")
+    current_requests = _storefront_requests(current)
+    supplied_prior = (
+        _storefront_request(
+            intent["supersededRequest"],
+            "storefront request intent.supersededRequest",
+        )
+        if "supersededRequest" in intent
+        else None
+    )
+    supersedes_request_id = request.get("supersedesRequestId")
+    missing_prior = None
+    if supersedes_request_id is None:
+        if supplied_prior is not None:
+            raise TrialValidationError(
+                "a non-replacement Ecommerce request cannot carry prior request history."
+            )
+    else:
+        retained_matches = [
+            candidate for candidate in current_requests
+            if candidate.get("id") == supersedes_request_id
+        ]
+        if len(retained_matches) > 1:
+            raise TrialValidationError(
+                "the Ecommerce replacement references ambiguous prior request history."
+            )
+        retained_prior = retained_matches[0] if retained_matches else None
+        if supplied_prior is not None and supplied_prior["id"] != supersedes_request_id:
+            raise TrialValidationError(
+                "the Ecommerce replacement carries unrelated prior request history."
+            )
+        if retained_prior is not None and supplied_prior is not None and retained_prior != supplied_prior:
+            raise TrialValidationError(
+                "the Ecommerce replacement conflicts with retained prior request history."
+            )
+        prior = retained_prior or supplied_prior
+        if (
+            prior is None
+            or prior["schema"] != "supermega.ecommerce.order_request.v2"
+            or prior["scope"] != request["scope"]
+            or datetime.fromisoformat(prior["createdAt"].replace("Z", "+00:00"))
+            >= datetime.fromisoformat(request["createdAt"].replace("Z", "+00:00"))
+            or any(order.get("sourceRecordId") == prior["id"] for order in current["orders"])
+            or any(
+                candidate.get("supersedesRequestId") == prior["id"]
+                for candidate in current_requests
+            )
+        ):
+            raise TrialValidationError(
+                "the Ecommerce replacement does not identify one older pending request."
+            )
+        if retained_prior is None:
+            if any(
+                candidate.get("id") == prior["id"]
+                or candidate.get("idempotencyKey") == prior["idempotencyKey"]
+                for candidate in current_requests
+            ):
+                raise TrialValidationError(
+                    "the Ecommerce prior request conflicts with retained request history."
+                )
+            missing_prior = prior
     requested_at = datetime.fromisoformat(request["createdAt"].replace("Z", "+00:00"))
     received_at = datetime.fromisoformat(evidence["capturedAt"].replace("Z", "+00:00"))
     if received_at < requested_at:
@@ -10066,7 +10163,11 @@ def create_commerce_storefront_request_from_intent(
     return validate_commerce_state(
         {
             **current,
-            "storefrontRequests": [request, *_storefront_requests(current)],
+            "storefrontRequests": [
+                request,
+                *([missing_prior] if missing_prior is not None else []),
+                *current_requests,
+            ],
         }
     )
 

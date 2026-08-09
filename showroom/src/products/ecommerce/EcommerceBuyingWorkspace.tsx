@@ -105,7 +105,10 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenReschedule: (intent: EcommerceOrderRescheduleIntent) => void
   onOpenReturns: (intent: EcommerceReturnIntent) => void
   onOpenSupport: (intent: EcommerceSupportIntent) => void
-  onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
+  onRecordManagedRequest?: (
+    request: EcommerceBuyingState['requests'][number],
+    supersededRequest?: EcommerceBuyingState['requests'][number] | null,
+  ) => Promise<void>
   onRecoveryPendingChange: (pending: boolean) => void
   onRequestStateChange: (state: EcommerceCustomerRequestState) => void
   preview: StorefrontPreview
@@ -1167,6 +1170,7 @@ export function EcommerceBuyingWorkspace({
 
   function orderStageLabel(entry: CommerceStorefrontOrderTimelineEntry) {
     if (entry.stage === 'waiting_shop_review') return quoteExpiredWithoutOrder(entry) ? 'Quote expired' : 'Waiting for Shop review'
+    if (entry.stage === 'superseded') return 'Replaced'
     if (entry.stage === 'confirmed') return 'Confirmed'
     if (entry.stage === 'preparing') return 'Preparing'
     if (entry.stage === 'ready') return entry.request.fulfilment === 'pickup' ? 'Ready for pickup' : 'Ready for delivery'
@@ -1792,7 +1796,10 @@ export function EcommerceBuyingWorkspace({
         && Date.parse(retained.quote.expiresAt) > quotedAt.getTime()
         && cartMatchesRequest(cart, retained))
       if (retainedMatches && retained && onRecordManagedRequest) {
-        await onRecordManagedRequest(retained)
+        const retainedPrior = retained.supersedesRequestId
+          ? activeBuyingState.requests.find((candidate) => candidate.id === retained.supersedesRequestId) ?? null
+          : null
+        await onRecordManagedRequest(retained, retainedPrior)
         clearMatchingCheckoutEntryRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
@@ -1826,12 +1833,16 @@ export function EcommerceBuyingWorkspace({
         quotedAt: quotedAt.toISOString(),
         expiresAt: new Date(quotedAt.getTime() + 15 * 60 * 1000).toISOString(),
       })
-      const request = await buildEcommerceOrderRequestV2(quote, sourceStorefront)
+      const supersededRequest = latestRequest && !latestRequestOrder
+        && (Date.parse(latestRequest.quote.expiresAt) <= quotedAt.getTime() || !latestRequestCheckoutMatches)
+        ? latestRequest
+        : null
+      const request = await buildEcommerceOrderRequestV2(quote, sourceStorefront, supersededRequest?.id ?? null)
       const saved = await saveEcommerceOrderRequestV2(scope, request, activeBuyingState.headDigest)
       setBuyingState(saved)
       setRecoveryRead({ scope, status: 'ready', issue: '' })
       setFreshQuoteId('')
-      if (onRecordManagedRequest) await onRecordManagedRequest(request)
+      if (onRecordManagedRequest) await onRecordManagedRequest(request, supersededRequest)
       clearMatchingCheckoutEntryRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
       recordBehaviorSignal(window.localStorage, {
         event: 'first_value_completed',
@@ -2096,7 +2107,7 @@ export function EcommerceBuyingWorkspace({
                     <div>
                       <small>{entry.request.fulfilment === 'pickup' ? 'Pickup' : 'Delivery'}</small>
                       <small>{entry.paymentStatus === 'reconciled' ? 'Payment confirmed' : entry.paymentStatus === 'pending' ? 'Payment pending' : 'Payment not charged'}</small>
-                       {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : quoteExpiredWithoutOrder(entry) ? <small>Review again for the current total</small> : <small>Shop confirms the promise</small>}
+                       {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : entry.supersededByRequestId ? <small>Replaced by {entry.supersededByRequestId}</small> : quoteExpiredWithoutOrder(entry) ? <small>Review again for the current total</small> : <small>Shop confirms the promise</small>}
                        {entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}
                     </div>
                     <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">Reorder</button>

@@ -3480,7 +3480,9 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('onRecordManagedRequest?:')
   || !ecommerceBuyingUiSource.includes('onOpenManagedRequest?:')
   || !ecommerceBuyingUiSource.includes('retainedMatches')
-  || !ecommerceBuyingUiSource.includes('await onRecordManagedRequest(request)')
+  || !ecommerceBuyingUiSource.includes('await onRecordManagedRequest(request, supersededRequest)')
+  || !ecommerceBuyingUiSource.includes('await onRecordManagedRequest(retained, retainedPrior)')
+  || !ecommerceBuyingUiSource.includes('Date.parse(latestRequest.quote.expiresAt) <= quotedAt.getTime()')
   || !ecommerceBuyingUiSource.includes('onOpenManagedRequest(latestRequest.id)')
   || !ecommerceBuyingUiSource.includes("window.addEventListener('storage', refresh)")
   || !ecommerceBuyingUiSource.includes('setFreshQuoteId(request.id)')
@@ -3757,16 +3759,22 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !commerceSource.includes('lines.some((line) => !configuration.selectedSkus.includes(line.sku))')
   || !commerceSource.includes('validatedRequest.sourceStorefrontRevision !== configuration.revision')
   || !commerceSource.includes('commerceStorefrontRequestEquals')
+  || !commerceSource.includes('supersedesRequestId?: string')
+  || !commerceSource.includes("stage: order?.status ?? (successorId ? 'superseded' : 'waiting_shop_review')")
+  || !coreSource.includes("entry.nextAction === 'review_in_shop'")
   || !commerceSource.includes('legacyFields')
   || !commerceSource.includes('matches[0].onHand < 1')
   || !commerceSource.includes('ECOMMERCE:${validatedRequest.id}:${validatedRequest.sourcePreviewDigest}')
   || !managedTrialSource.includes('commerce.storefront_request.received')
   || !managedTrialSource.includes('function managedStorefrontRequestIntent')
+  || !managedTrialSource.includes('supersededRequest: supersededMatches[0]')
   || !managedTrialSource.includes('{ intent: storefrontRequestIntent, evidence: request.evidence }')
   || !managedCommerceRuntime.includes('commerce.storefront_request.received')
   || !managedCommerceRuntime.includes('create_commerce_storefront_request_from_intent')
   || !managedCommerceRuntime.includes('the Ecommerce request receipt cannot predate its customer quote.')
   || !managedCommerceRuntime.includes('the Ecommerce request quote expired before Shop received it.')
+  || !managedCommerceRuntime.includes('only its missing prior history')
+  || !managedCommerceRuntime.includes('supersededRequest')
   || !managedTrialStoreRuntime.includes('event_type == "commerce.storefront_request.received"')
   || !managedTrialStoreRuntime.includes('and isinstance(authoritative.get("intent"), Mapping)')
   || !managedCommerceRuntime.includes('validate_ecommerce_order_request')
@@ -3779,6 +3787,7 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !managedBuyingRequestAction.includes("eventType: 'commerce.storefront_request.received'")
   || !managedBuyingRequestAction.includes('result.version !== view.inbox.version + 1')
   || !managedBuyingRequestAction.includes('exactRequestIsRetained')
+  || !managedBuyingRequestAction.includes('exactSupersessionHistoryIsRetained')
   || !managedBuyingRequestAction.includes('await loadManagedBootstrap(identity)')
   || !ecommerceBuyingLifecycleSource.includes('prepareManagedEcommerceShopDraftV2')
   || !ecommerceBuyingLifecycleSource.includes('validateEcommerceOrderRequestV2(input.request)')
@@ -16679,6 +16688,135 @@ async function verifyStorefrontRuntime() {
       && waitingTimeline[0].returnedQuantity === 0
       && waitingTimeline[0].nextAction === 'review_in_shop',
     'ecommerce_request_timeline_did_not_show_shop_review_boundary')
+    const staleQuoteReplacementQuote = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: [
+        { sku: 'SM-CARE-01', quantity: 1 },
+        { sku: 'SM-1001', quantity: 1 },
+      ],
+      customerReference: 'Ma Su Â· 09 123 456',
+      fulfilment: 'delivery',
+      paymentAdapter: 'kbzpay_manual',
+      promotionCode: null,
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: buyingRequest.customerProfile },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: 'Call twice', previous: buyingRequest.deliveryAddress },
+      idempotencyKey: 'ECI-42345678-1234-4ABC-8ABC-1234567890AE',
+      quotedAt: '2026-07-24T09:05:00.000Z',
+      expiresAt: '2026-07-24T09:20:00.000Z',
+    })
+    const staleQuoteReplacementRequest = await buyingModel.buildEcommerceOrderRequestV2(staleQuoteReplacementQuote, {
+      revision: 1,
+      actionId: managedPreviewProof.actionId,
+    }, buyingRequest.id)
+    const staleQuoteReplacementProof = {
+      actionId: `ACT-${staleQuoteReplacementRequest.id.slice(4)}`,
+      capturedAt: staleQuoteReplacementRequest.createdAt,
+      actor: 'OP-OWNER',
+      reason: 'Replace one stale Ecommerce request while retaining its exact history.',
+      evidenceReference: `ECOMMERCE:${staleQuoteReplacementRequest.id}:${staleQuoteReplacementRequest.sourcePreviewDigest}`,
+    }
+    const atomicSupersessionState = await commerce.recordCommerceStorefrontRequest(
+      managedPreviewState,
+      staleQuoteReplacementRequest,
+      staleQuoteReplacementProof,
+      buyingRequest,
+    )
+    const retainedSupersessionState = await commerce.recordCommerceStorefrontRequest(
+      managedBuyingState,
+      staleQuoteReplacementRequest,
+      staleQuoteReplacementProof,
+      buyingRequest,
+    )
+    const supersessionTimeline = atomicSupersessionState
+      ? commerce.commerceStorefrontOrderTimeline(atomicSupersessionState)
+      : []
+    buyingAssert(atomicSupersessionState
+      && retainedSupersessionState
+      && JSON.stringify(atomicSupersessionState.storefrontRequests) === JSON.stringify(retainedSupersessionState.storefrontRequests)
+      && atomicSupersessionState.storefrontRequests?.length === 2
+      && atomicSupersessionState.storefrontRequests[0].id === staleQuoteReplacementRequest.id
+      && atomicSupersessionState.storefrontRequests[1].id === buyingRequest.id,
+    'ecommerce_supersession_did_not_atomically_retain_exact_prior_history')
+    buyingAssert(supersessionTimeline.length === 2
+      && supersessionTimeline.filter((entry) => entry.nextAction === 'review_in_shop').length === 1
+      && supersessionTimeline[0].request.id === staleQuoteReplacementRequest.id
+      && supersessionTimeline[0].stage === 'waiting_shop_review'
+      && supersessionTimeline[1].request.id === buyingRequest.id
+      && supersessionTimeline[1].stage === 'superseded'
+      && supersessionTimeline[1].supersededByRequestId === staleQuoteReplacementRequest.id
+      && supersessionTimeline[1].nextAction === 'none',
+    'ecommerce_superseded_request_remained_actionable_in_shop')
+    buyingAssert(await commerce.recordCommerceStorefrontRequest(
+      atomicSupersessionState,
+      staleQuoteReplacementRequest,
+      staleQuoteReplacementProof,
+      buyingRequest,
+    ) === atomicSupersessionState,
+    'ecommerce_supersession_retry_not_idempotent')
+    buyingAssert(await commerce.recordCommerceStorefrontRequest(
+      managedPreviewState,
+      staleQuoteReplacementRequest,
+      staleQuoteReplacementProof,
+    ) === null,
+    'ecommerce_orphan_supersession_was_accepted')
+    buyingAssert(await commerce.recordCommerceStorefrontRequest(
+      managedPreviewState,
+      staleQuoteReplacementRequest,
+      staleQuoteReplacementProof,
+      staleQuoteReplacementRequest,
+    ) === null,
+    'ecommerce_unrelated_supersession_history_was_accepted')
+    let orphanSupersessionStateRejected = false
+    try {
+      commerce.validateCommerceState({
+        ...managedPreviewState,
+        storefrontRequests: [staleQuoteReplacementRequest],
+      })
+    } catch { orphanSupersessionStateRejected = true }
+    buyingAssert(orphanSupersessionStateRejected, 'ecommerce_orphan_supersession_state_was_readable')
+    const secondStaleQuoteReplacementQuote = await buyingModel.buildEcommerceCheckoutQuote({
+      pim,
+      cart: [{ sku: 'SM-1001', quantity: 1 }],
+      customerReference: 'Ma Su Â· 09 123 456',
+      fulfilment: 'delivery',
+      paymentAdapter: 'kbzpay_manual',
+      promotionCode: null,
+      customerProfile: { name: 'Ma Su', phone: '09 123 456', previous: staleQuoteReplacementRequest.customerProfile },
+      deliveryAddress: { line1: '12 Insein Road, Ward 3', township: 'Hlaing', city: 'Yangon', instructions: null, previous: staleQuoteReplacementRequest.deliveryAddress },
+      idempotencyKey: 'ECI-52345678-1234-4ABC-8ABC-1234567890AE',
+      quotedAt: '2026-07-24T09:06:00.000Z',
+      expiresAt: '2026-07-24T09:21:00.000Z',
+    })
+    const secondStaleQuoteReplacementRequest = await buyingModel.buildEcommerceOrderRequestV2(secondStaleQuoteReplacementQuote, {
+      revision: 1,
+      actionId: managedPreviewProof.actionId,
+    }, buyingRequest.id)
+    const secondStaleQuoteReplacementProof = {
+      ...staleQuoteReplacementProof,
+      actionId: `ACT-${secondStaleQuoteReplacementRequest.id.slice(4)}`,
+      capturedAt: secondStaleQuoteReplacementRequest.createdAt,
+      evidenceReference: `ECOMMERCE:${secondStaleQuoteReplacementRequest.id}:${secondStaleQuoteReplacementRequest.sourcePreviewDigest}`,
+    }
+    buyingAssert(await commerce.recordCommerceStorefrontRequest(
+      atomicSupersessionState,
+      secondStaleQuoteReplacementRequest,
+      secondStaleQuoteReplacementProof,
+      buyingRequest,
+    ) === null,
+    'ecommerce_prior_request_received_two_successors')
+    const localOriginalState = await buyingModel.recordEcommerceOrderRequestV2(
+      buyingModel.createEmptyEcommerceBuyingState(buyingScope),
+      buyingRequest,
+      buyingModel.EMPTY_ECOMMERCE_BUYING_DIGEST,
+    )
+    const localSupersessionState = await buyingModel.recordEcommerceOrderRequestV2(
+      localOriginalState,
+      staleQuoteReplacementRequest,
+      localOriginalState.headDigest,
+    )
+    buyingAssert(localSupersessionState.requests.length === 2
+      && localSupersessionState.requests[0].supersedesRequestId === buyingRequest.id,
+    'ecommerce_local_supersession_history_was_not_recoverable')
     const linkedOrderProof = {
       actionId: 'ACT-ECOMMERCE-ORDER-1',
       capturedAt: '2026-07-24T09:10:00.000Z',
@@ -16721,6 +16859,13 @@ async function verifyStorefrontRuntime() {
       && confirmedTimeline[0].paymentStatus === 'pending'
       && confirmedTimeline[0].nextAction === 'start_preparing',
     'ecommerce_request_timeline_did_not_follow_linked_shop_order')
+    buyingAssert(await commerce.recordCommerceStorefrontRequest(
+      linkedOrderState,
+      staleQuoteReplacementRequest,
+      staleQuoteReplacementProof,
+      buyingRequest,
+    ) === null,
+    'ecommerce_confirmed_request_was_superseded')
     const orderChangeDraft = {
       orderId: 'ORD-ECOMMERCE-1',
       mode: 'details',

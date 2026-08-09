@@ -1335,7 +1335,10 @@ export function EcommerceProduct() {
     navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestInboxNextRequest.id)}`)
   }
 
-  async function recordManagedBuyingRequest(request: EcommerceOrderRequestV2) {
+  async function recordManagedBuyingRequest(
+    request: EcommerceOrderRequestV2,
+    supersededRequest: EcommerceOrderRequestV2 | null = null,
+  ) {
     const identity = managedIdentity
     if (!identity || !globalThis.crypto?.randomUUID) throw new Error('Managed Ecommerce request identity is unavailable. Nothing was sent to Shop.')
     const currentIdentity = await currentManagedIdentity()
@@ -1351,6 +1354,12 @@ export function EcommerceProduct() {
       const matches = commerceStorefrontRequests(state).filter((candidate) => candidate.id === request.id || candidate.idempotencyKey === request.idempotencyKey)
       return matches.length === 1 && commerceStorefrontRequestEquals(matches[0], request)
     }
+    const exactSupersessionHistoryIsRetained = (state: CommerceState) => {
+      if (!request.supersedesRequestId) return supersededRequest === null
+      const matches = commerceStorefrontRequests(state).filter((candidate) => candidate.id === request.supersedesRequestId)
+      return matches.length === 1
+        && (!supersededRequest || commerceStorefrontRequestEquals(matches[0], supersededRequest))
+    }
     const proof = {
       actionId: `ACT-${request.id.slice(4)}`,
       capturedAt: request.createdAt,
@@ -1358,9 +1367,9 @@ export function EcommerceProduct() {
       reason: 'Record the reviewed multi-line Ecommerce request for Shop review.',
       evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}`,
     }
-    const next = await recordCommerceStorefrontRequest(view.inbox.state, request, proof)
+    const next = await recordCommerceStorefrontRequest(view.inbox.state, request, proof, supersededRequest)
     if (!next) throw new Error('The Ecommerce request no longer matches the current managed Shop catalog or storefront.')
-    if (next === view.inbox.state && exactRequestIsRetained(next)) return
+    if (next === view.inbox.state && exactRequestIsRetained(next) && exactSupersessionHistoryIsRetained(next)) return
     const commandId = globalThis.crypto.randomUUID()
     try {
       const result = await saveManagedCommerceCommand({
@@ -1377,7 +1386,9 @@ export function EcommerceProduct() {
         || result.version !== view.inbox.version + 1
         || typeof result.idempotent_replay !== 'boolean') throw new Error('The company account returned an unrelated Ecommerce receipt.')
       const accepted = validateCommerceState(result.state)
-      if (!exactRequestIsRetained(accepted)) throw new Error('The company account returned a different Ecommerce request.')
+      if (!exactRequestIsRetained(accepted) || !exactSupersessionHistoryIsRetained(accepted)) {
+        throw new Error('The company account returned a different Ecommerce request history.')
+      }
       const confirmedIdentity = await currentManagedIdentity()
       if (!confirmedIdentity
         || confirmedIdentity.workspaceId !== identity.workspaceId
@@ -1392,7 +1403,8 @@ export function EcommerceProduct() {
         if (refreshed && confirmedIdentity
           && confirmedIdentity.workspaceId === identity.workspaceId
           && confirmedIdentity.userId === identity.userId
-          && exactRequestIsRetained(refreshed.inbox.state)) {
+          && exactRequestIsRetained(refreshed.inbox.state)
+          && exactSupersessionHistoryIsRetained(refreshed.inbox.state)) {
           setManagedInbox(refreshed.inbox)
           setCatalog({ source: 'managed-shop', items: refreshed.inbox.state.items, error: '' })
           return

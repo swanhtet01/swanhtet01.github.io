@@ -470,6 +470,7 @@ export type EcommerceOrderRequestV2 = {
   sourcePreviewDigest: string
   sourceStorefrontRevision: number | null
   sourceStorefrontActionId: string | null
+  supersedesRequestId?: string
   customerReference: string
   customerProfile?: EcommerceCustomerProfileSnapshot
   deliveryAddress?: EcommerceDeliveryAddressSnapshot | null
@@ -1451,6 +1452,7 @@ export async function validateEcommerceCheckoutQuote(value: unknown): Promise<Ec
 export async function buildEcommerceOrderRequestV2(
   quoteValue: EcommerceCheckoutQuote,
   sourceStorefront: { revision: number; actionId: string } | null = null,
+  supersedesRequestId: string | null = null,
 ): Promise<EcommerceOrderRequestV2> {
   const quote = await validateEcommerceCheckoutQuote(quoteValue)
   const request: EcommerceOrderRequestV2 = {
@@ -1464,6 +1466,7 @@ export async function buildEcommerceOrderRequestV2(
     sourcePreviewDigest: quote.sourcePreviewDigest,
     sourceStorefrontRevision: sourceStorefront ? safeInteger(sourceStorefront.revision, 'sourceStorefront.revision', 1) : null,
     sourceStorefrontActionId: sourceStorefront ? canonicalToken(sourceStorefront.actionId, 'sourceStorefront.actionId') : null,
+    ...(supersedesRequestId ? { supersedesRequestId: canonicalText(supersedesRequestId, 'supersedesRequestId', 40) } : {}),
     customerReference: quote.customerReference,
     ...(quote.customerProfile ? {
       customerProfile: canonicalCopy(quote.customerProfile),
@@ -1486,7 +1489,12 @@ export async function validateEcommerceOrderRequestV2(value: unknown): Promise<E
   ]
   const structuredFields = ['customerProfile', 'deliveryAddress']
   const structured = isRecord(value) && structuredFields.some((field) => field in value)
-  const source = exactObject(value, 'Ecommerce request', structured ? [...baseFields, ...structuredFields] : baseFields)
+  const supersedes = isRecord(value) && 'supersedesRequestId' in value
+  const source = exactObject(value, 'Ecommerce request', [
+    ...baseFields,
+    ...(supersedes ? ['supersedesRequestId'] : []),
+    ...(structured ? structuredFields : []),
+  ])
   if (source.schema !== ECOMMERCE_REQUEST_SCHEMA_V2
     || source.mode !== 'browser-local-request'
     || source.state !== 'pending_shop_review') throw new Error('Ecommerce request boundary is invalid.')
@@ -1495,6 +1503,12 @@ export async function validateEcommerceOrderRequestV2(value: unknown): Promise<E
   if (!requestIdPattern.test(id)
     || !checkoutKeyPattern.test(idempotencyKey)
     || id.slice(4) !== idempotencyKey.slice(4)) throw new Error('Ecommerce request identity is invalid.')
+  const supersedesRequestId = supersedes
+    ? canonicalText(source.supersedesRequestId, 'Ecommerce request.supersedesRequestId', 40)
+    : null
+  if (supersedesRequestId && (!requestIdPattern.test(supersedesRequestId) || supersedesRequestId === id)) {
+    throw new Error('Ecommerce request supersession identity is invalid.')
+  }
   const quote = await validateEcommerceCheckoutQuote(source.quote)
   if (!Array.isArray(source.lines) || source.lines.length < 1 || source.lines.length > maxLines) throw new Error('Ecommerce request lines are invalid.')
   const lines = source.lines.map((line, index) => quoteLine(line, `Ecommerce request.lines[${index}]`))
@@ -1524,6 +1538,7 @@ export async function validateEcommerceOrderRequestV2(value: unknown): Promise<E
     sourcePreviewDigest: canonicalDigest(source.sourcePreviewDigest, 'Ecommerce request.sourcePreviewDigest'),
     sourceStorefrontRevision: revision,
     sourceStorefrontActionId: actionId,
+    ...(supersedesRequestId ? { supersedesRequestId } : {}),
     customerReference: canonicalText(source.customerReference, 'Ecommerce request.customerReference', 80),
     ...(customerProfile ? { customerProfile, deliveryAddress: deliveryAddress ?? null } : {}),
     fulfilment: source.fulfilment as EcommerceFulfilment,
@@ -1645,6 +1660,19 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
     || new Set(records.map((record) => record.idempotencyKey)).size !== records.length
     || events.length !== records.length) throw new Error('Buying state records are not unique and scope-bound.')
   const requestIds = new Set(requests.map((request) => request.id))
+  const requestById = new Map(requests.map((request) => [request.id, request]))
+  const supersededRequestIds = new Set<string>()
+  for (const request of requests) {
+    if (!request.supersedesRequestId) continue
+    const prior = requestById.get(request.supersedesRequestId)
+    if (!prior
+      || prior.scope !== request.scope
+      || Date.parse(prior.createdAt) >= Date.parse(request.createdAt)
+      || supersededRequestIds.has(prior.id)) {
+      throw new Error('Ecommerce request supersession is not bound to one older recovered request.')
+    }
+    supersededRequestIds.add(prior.id)
+  }
   if (returnIntents.some((intent) => !requestIds.has(intent.sourceRequestId))) {
     throw new Error('Return intent is not attributable to one recovered Ecommerce request.')
   }
@@ -1683,7 +1711,6 @@ export async function validateEcommerceBuyingState(value: unknown, expectedScope
   if (new Set(amendmentIntents.map((intent) => intent.orderId)).size !== amendmentIntents.length) {
     throw new Error('Only one amendment request may exist for an Ecommerce order.')
   }
-  const requestById = new Map(requests.map((request) => [request.id, request]))
   for (const intent of amendmentIntents) {
     const sourceRequest = requestById.get(intent.sourceRequestId)
     const replacementRequest = requestById.get(intent.replacementRequestId)

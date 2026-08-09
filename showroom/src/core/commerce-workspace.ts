@@ -935,6 +935,7 @@ export type CommerceStorefrontRequestV2 = {
   sourcePreviewDigest: string
   sourceStorefrontRevision: number | null
   sourceStorefrontActionId: string | null
+  supersedesRequestId?: string
   customerReference: string
   customerProfile?: CommerceStorefrontCustomerProfile
   deliveryAddress?: CommerceStorefrontDeliveryAddress | null
@@ -969,7 +970,7 @@ export type CommerceStorefrontRequestV2 = {
 
 export type CommerceStorefrontRequest = CommerceStorefrontRequestV1 | CommerceStorefrontRequestV2
 
-export type CommerceStorefrontOrderStage = 'waiting_shop_review' | CommerceOrderStatus
+export type CommerceStorefrontOrderStage = 'waiting_shop_review' | 'superseded' | CommerceOrderStatus
 
 export type CommerceStorefrontOrderNextAction =
   | 'review_in_shop'
@@ -987,6 +988,7 @@ export type CommerceStorefrontOrderTimelineEntry = {
   paymentStatus: 'not_authorized' | CommercePaymentStatus
   refundStatus: 'none' | CommerceRefundStatus
   returnedQuantity: number
+  supersededByRequestId: string | null
   nextAction: CommerceStorefrontOrderNextAction
 }
 
@@ -1737,7 +1739,12 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
   ]
   const structuredFields = ['customerProfile', 'deliveryAddress']
   const structured = structuredFields.some((key) => key in value)
-  const requestFields = structured ? [...baseRequestFields, ...structuredFields] : baseRequestFields
+  const supersedes = 'supersedesRequestId' in value
+  const requestFields = [
+    ...baseRequestFields,
+    ...(supersedes ? ['supersedesRequestId'] : []),
+    ...(structured ? structuredFields : []),
+  ]
   if (!hasExactKeys(value, requestFields)
     || value.schema !== 'supermega.ecommerce.order_request.v2'
     || value.mode !== 'browser-local-request'
@@ -1752,6 +1759,12 @@ function storefrontRequestV2(value: Record<string, unknown>, field: string): Com
     || !validTimestamp(value.createdAt)
     || typeof value.sourcePreviewDigest !== 'string'
     || !sha256DigestPattern.test(value.sourcePreviewDigest)) throw new Error(`${field} identity or source is invalid.`)
+  if (supersedes) {
+    const supersedesRequestId = canonicalText(value.supersedesRequestId, `${field}.supersedesRequestId`, 40)
+    if (!storefrontRequestIdPattern.test(supersedesRequestId) || supersedesRequestId === requestId) {
+      throw new Error(`${field}.supersedesRequestId is invalid.`)
+    }
+  }
   if ((value.sourceStorefrontRevision === null) !== (value.sourceStorefrontActionId === null)) throw new Error(`${field} storefront provenance is incomplete.`)
   if (value.sourceStorefrontRevision !== null) {
     assertSafeInteger(value.sourceStorefrontRevision, `${field}.sourceStorefrontRevision`, 1)
@@ -4285,6 +4298,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const storefrontRequestIds: string[] = []
   const storefrontIdempotencyKeys: string[] = []
   const storefrontActionIds: string[] = []
+  const storefrontRequestV2ById = new Map<string, CommerceStorefrontRequestV2>()
   for (const [index, candidate] of storefrontRequests.entries()) {
     if (!isRecord(candidate)) throw new Error(`storefrontRequests[${index}] is invalid.`)
     if (candidate.schema === 'supermega.ecommerce.order_request.v2') {
@@ -4292,6 +4306,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       storefrontRequestIds.push(request.id)
       storefrontIdempotencyKeys.push(request.idempotencyKey)
       storefrontActionIds.push(`ACT-${request.id.slice(4)}`)
+      storefrontRequestV2ById.set(request.id, request)
       continue
     }
     const legacyFields = ['schema', 'mode', 'state', 'id', 'idempotencyKey', 'createdAt', 'sourcePreviewDigest', 'customerReference', 'fulfilment', 'currency', 'line', 'totalMmk']
@@ -4349,6 +4364,20 @@ export function validateCommerceState(value: unknown): CommerceState {
   }
   assertUnique(storefrontRequestIds, 'Storefront request ID')
   assertUnique(storefrontIdempotencyKeys, 'Storefront request idempotency key')
+  const supersededStorefrontRequestIds = new Set<string>()
+  const orderSourceRecordIds = new Set(sourceRecordIds)
+  for (const request of storefrontRequestV2ById.values()) {
+    if (!request.supersedesRequestId) continue
+    const prior = storefrontRequestV2ById.get(request.supersedesRequestId)
+    if (!prior
+      || prior.scope !== request.scope
+      || (timestampMicros(prior.createdAt) as bigint) >= (timestampMicros(request.createdAt) as bigint)
+      || orderSourceRecordIds.has(prior.id)
+      || supersededStorefrontRequestIds.has(prior.id)) {
+      throw new Error(`Storefront request ${request.id} does not supersede one older pending Ecommerce request.`)
+    }
+    supersededStorefrontRequestIds.add(prior.id)
+  }
   const catalogBaselineActionSet = new Set(catalogBaselineActionIds)
   for (const actionId of catalogBaselineActionSet) {
     const baselines = [...catalogBaselineBySku.values()].filter((baseline) => baseline.proof.actionId === actionId)
@@ -5574,11 +5603,19 @@ export function commerceStorefrontOrderTimeline(
     ...current,
     storefrontRequests: structuredClone(requests),
   }))
+  const supersededByRequestId = new Map(validatedRequests.flatMap((request) => (
+    request.schema === 'supermega.ecommerce.order_request.v2' && request.supersedesRequestId
+      ? [[request.supersedesRequestId, request.id] as const]
+      : []
+  )))
   return validatedRequests.map((request): CommerceStorefrontOrderTimelineEntry => {
     const matchingOrders = current.orders.filter((order) => order.sourceRecordId === request.id)
     if (matchingOrders.length > 1) throw new Error(`Ecommerce request ${request.id} has multiple Shop orders.`)
     const order = matchingOrders[0] ? structuredClone(matchingOrders[0]) : null
-    const nextAction: CommerceStorefrontOrderNextAction = !order
+    const successorId = supersededByRequestId.get(request.id) ?? null
+    const nextAction: CommerceStorefrontOrderNextAction = !order && successorId
+      ? 'none'
+      : !order
       ? 'review_in_shop'
       : order.refundStatus === 'due'
         ? 'settle_refund'
@@ -5594,10 +5631,11 @@ export function commerceStorefrontOrderTimeline(
     return {
       request: structuredClone(request),
       order,
-      stage: order?.status ?? 'waiting_shop_review',
+      stage: order?.status ?? (successorId ? 'superseded' : 'waiting_shop_review'),
       paymentStatus: order?.paymentStatus ?? 'not_authorized',
       refundStatus: order?.refundStatus ?? 'none',
       returnedQuantity: order?.returns?.reduce((total, record) => total + record.quantity, 0) ?? 0,
+      supersededByRequestId: successorId,
       nextAction,
     }
   }).sort((left, right) => Date.parse(right.request.createdAt) - Date.parse(left.request.createdAt))
@@ -6045,14 +6083,25 @@ export async function recordCommerceStorefrontRequest(
   state: CommerceState,
   request: CommerceStorefrontRequest,
   proof: CommerceActionProof,
+  supersededRequestValue: CommerceStorefrontRequest | null = null,
 ) {
   const current = validateCommerceState(state)
   let validatedRequest: CommerceStorefrontRequest
+  let validatedSupersededRequest: CommerceStorefrontRequest | null = null
   try {
-    validatedRequest = validateCommerceState({
-      ...current,
-      storefrontRequests: [request],
-    }).storefrontRequests?.[0] as CommerceStorefrontRequest
+    validatedRequest = request.schema === 'supermega.ecommerce.order_request.v2'
+      ? storefrontRequestV2(request as unknown as Record<string, unknown>, 'storefront request')
+      : validateCommerceState({
+          ...current,
+          storefrontRequests: [request],
+        }).storefrontRequests?.[0] as CommerceStorefrontRequest
+    if (supersededRequestValue) {
+      if (supersededRequestValue.schema !== 'supermega.ecommerce.order_request.v2') return null
+      validatedSupersededRequest = storefrontRequestV2(
+        supersededRequestValue as unknown as Record<string, unknown>,
+        'superseded storefront request',
+      )
+    }
   } catch {
     return null
   }
@@ -6065,12 +6114,47 @@ export async function recordCommerceStorefrontRequest(
   const existingByIdempotency = requests.find((candidate) => candidate.idempotencyKey === validatedRequest.idempotencyKey)
   if (existingById || existingByIdempotency) {
     const existing = existingById ?? existingByIdempotency as CommerceStorefrontRequest
-    return existingById === existingByIdempotency
-      && commerceStorefrontRequestEquals(existing, validatedRequest) ? current : null
+    if (existingById !== existingByIdempotency || !commerceStorefrontRequestEquals(existing, validatedRequest)) return null
+    if (!validatedSupersededRequest) return current
+    const supersedesRequestId = existing.schema === 'supermega.ecommerce.order_request.v2'
+      ? existing.supersedesRequestId
+      : null
+    const retainedPrior = supersedesRequestId
+      ? requests.find((candidate) => candidate.id === supersedesRequestId)
+      : null
+    return retainedPrior
+      && retainedPrior.id === validatedSupersededRequest.id
+      && commerceStorefrontRequestEquals(retainedPrior, validatedSupersededRequest) ? current : null
   }
   if (actionIdIsUsed(current, proof.actionId)
     || current.orders.some((order) => order.sourceRecordId === validatedRequest.id)) return null
-  if (requests.length >= maxStorefrontRequests) return null
+  const supersedingRequest = validatedRequest.schema === 'supermega.ecommerce.order_request.v2'
+    ? validatedRequest
+    : null
+  const supersedesRequestId = supersedingRequest?.supersedesRequestId ?? null
+  if (!supersedesRequestId && validatedSupersededRequest) return null
+  let missingSupersededRequest: CommerceStorefrontRequestV2 | null = null
+  if (supersedesRequestId) {
+    const retainedPrior = requests.find((candidate) => candidate.id === supersedesRequestId) ?? null
+    if (validatedSupersededRequest && validatedSupersededRequest.id !== supersedesRequestId) return null
+    if (retainedPrior && validatedSupersededRequest
+      && !commerceStorefrontRequestEquals(retainedPrior, validatedSupersededRequest)) return null
+    const prior = retainedPrior ?? validatedSupersededRequest
+    if (!prior
+      || prior.schema !== 'supermega.ecommerce.order_request.v2'
+      || !supersedingRequest
+      || prior.scope !== supersedingRequest.scope
+      || (timestampMicros(prior.createdAt) as bigint) >= (timestampMicros(supersedingRequest.createdAt) as bigint)
+      || current.orders.some((order) => order.sourceRecordId === prior.id)
+      || requests.some((candidate) => candidate.schema === 'supermega.ecommerce.order_request.v2'
+        && candidate.supersedesRequestId === prior.id)) return null
+    if (!retainedPrior) {
+      if (requests.some((candidate) => candidate.id === prior.id || candidate.idempotencyKey === prior.idempotencyKey)) return null
+      missingSupersededRequest = prior
+    }
+  }
+  const addedRequestCount = 1 + Number(Boolean(missingSupersededRequest))
+  if (requests.length + addedRequestCount > maxStorefrontRequests) return null
   const configuration = commerceStorefrontConfiguration(current)
   const lines = commerceStorefrontRequestLines(validatedRequest)
   if (!configuration || lines.some((line) => !configuration.selectedSkus.includes(line.sku))) return null
@@ -6094,7 +6178,7 @@ export async function recordCommerceStorefrontRequest(
   })) return null
   return validateCommerceState({
     ...current,
-    storefrontRequests: [validatedRequest, ...requests],
+    storefrontRequests: [validatedRequest, ...(missingSupersededRequest ? [missingSupersededRequest] : []), ...requests],
   })
 }
 

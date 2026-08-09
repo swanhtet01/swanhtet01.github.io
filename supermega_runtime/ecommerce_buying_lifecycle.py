@@ -765,6 +765,7 @@ def build_ecommerce_order_request(
     *,
     source_storefront_revision: int | None = None,
     source_storefront_action_id: str | None = None,
+    supersedes_request_id: str | None = None,
 ) -> dict[str, Any]:
     """Freeze a valid quote as intent awaiting accountable Shop review."""
 
@@ -792,6 +793,11 @@ def build_ecommerce_order_request(
         "sourcePreviewDigest": quote["sourcePreviewDigest"],
         "sourceStorefrontRevision": revision,
         "sourceStorefrontActionId": action_id,
+        **({"supersedesRequestId": _text(
+            supersedes_request_id,
+            "supersedesRequestId",
+            maximum=40,
+        )} if supersedes_request_id is not None else {}),
         "customerReference": quote["customerReference"],
         **({
             "customerProfile": _canonical_copy(quote["customerProfile"]),
@@ -814,10 +820,15 @@ def validate_ecommerce_order_request(value: object) -> dict[str, Any]:
     )
     structured_fields = ("customerProfile", "deliveryAddress")
     structured = isinstance(value, Mapping) and any(field in value for field in structured_fields)
+    supersedes = isinstance(value, Mapping) and "supersedesRequestId" in value
     source = _object(
         value,
         "Ecommerce request",
-        (*base_fields, *structured_fields) if structured else base_fields,
+        (
+            *base_fields,
+            *(("supersedesRequestId",) if supersedes else ()),
+            *(structured_fields if structured else ()),
+        ),
     )
     if (
         source["schema"] != ECOMMERCE_REQUEST_SCHEMA
@@ -833,6 +844,23 @@ def validate_ecommerce_order_request(value: object) -> dict[str, Any]:
         or request_id[4:] != key[4:]
     ):
         raise _fail("Ecommerce request identity is invalid.")
+    supersedes_request_id = (
+        _text(
+            source["supersedesRequestId"],
+            "Ecommerce request.supersedesRequestId",
+            maximum=40,
+        )
+        if supersedes
+        else None
+    )
+    if (
+        supersedes_request_id is not None
+        and (
+            _REQUEST_ID.fullmatch(supersedes_request_id) is None
+            or supersedes_request_id == request_id
+        )
+    ):
+        raise _fail("Ecommerce request supersession identity is invalid.")
     quote = validate_ecommerce_checkout_quote(source["quote"])
     lines = [
         _quote_line(candidate, f"Ecommerce request.lines[{index}]")
@@ -868,6 +896,7 @@ def validate_ecommerce_order_request(value: object) -> dict[str, Any]:
         ),
         "sourceStorefrontRevision": revision,
         "sourceStorefrontActionId": action_id,
+        **({"supersedesRequestId": supersedes_request_id} if supersedes_request_id else {}),
         "customerReference": _text(
             source["customerReference"], "Ecommerce request.customerReference", maximum=80
         ),
@@ -3359,6 +3388,23 @@ def validate_ecommerce_lifecycle_state(value: object) -> dict[str, Any]:
     if any(record["scope"] != scope for record in records):
         raise _fail("Lifecycle record scope does not match the state.")
     request_ids = {request["id"] for request in requests}
+    request_by_id = {request["id"]: request for request in requests}
+    superseded_request_ids: set[str] = set()
+    for request in requests:
+        supersedes_request_id = request.get("supersedesRequestId")
+        if supersedes_request_id is None:
+            continue
+        prior = request_by_id.get(supersedes_request_id)
+        if (
+            prior is None
+            or prior["scope"] != request["scope"]
+            or _instant(prior["createdAt"]) >= _instant(request["createdAt"])
+            or prior["id"] in superseded_request_ids
+        ):
+            raise _fail(
+                "Ecommerce request supersession is not bound to one older recovered request."
+            )
+        superseded_request_ids.add(prior["id"])
     if any(intent["sourceRequestId"] not in request_ids for intent in return_intents):
         raise _fail("Return intent is not attributable to one recovered Ecommerce request.")
     if any(intent["sourceRequestId"] not in request_ids for intent in support_intents):

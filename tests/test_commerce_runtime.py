@@ -29,6 +29,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_supplier_payables_handoff_csv,
     commerce_supplier_payables_aging,
     commerce_website_intake_snapshot_digest,
+    create_commerce_storefront_request_from_intent,
     validate_commerce_state,
 )
 from supermega_runtime.client_import_runtime import (
@@ -616,7 +617,14 @@ def storefront_request(
     }
 
 
-def storefront_request_v2(state: dict[str, object]) -> dict[str, object]:
+def storefront_request_v2(
+    state: dict[str, object],
+    *,
+    request_uuid: str = STOREFRONT_REQUEST_UUID,
+    quoted_at: str = NOW,
+    expires_at: str = "2026-07-23T09:15:00.000Z",
+    supersedes_request_id: str | None = None,
+) -> dict[str, object]:
     configuration = state["storefrontConfiguration"]
     selected_skus = set(configuration["selectedSkus"])  # type: ignore[index]
     items = [
@@ -642,9 +650,9 @@ def storefront_request_v2(state: dict[str, object]) -> dict[str, object]:
         fulfilment="delivery",
         payment_adapter="kbzpay_manual",
         promotion_code="WELCOME",
-        idempotency_key=f"ECI-{STOREFRONT_REQUEST_UUID}",
-        quoted_at=NOW,
-        expires_at="2026-07-23T09:15:00.000Z",
+        idempotency_key=f"ECI-{request_uuid}",
+        quoted_at=quoted_at,
+        expires_at=expires_at,
         customer_profile_input={
             "name": "Customer A",
             "phone": "09 123 456 789",
@@ -662,6 +670,7 @@ def storefront_request_v2(state: dict[str, object]) -> dict[str, object]:
         quote_value,
         source_storefront_revision=configuration["revision"],  # type: ignore[index]
         source_storefront_action_id=configuration["saved"]["actionId"],  # type: ignore[index]
+        supersedes_request_id=supersedes_request_id,
     )
 
 
@@ -2399,6 +2408,91 @@ class CommerceRuntimeTests(unittest.TestCase):
                 repriced_line,
                 storefront_evidence(request),
             )
+
+    def test_storefront_replacement_atomically_retains_history_without_duplicate_work(self) -> None:
+        current = catalog_state()
+        current["items"].append(  # type: ignore[union-attr]
+            {
+                "sku": "SKU-2",
+                "name": "Second item",
+                "variant": "Large",
+                "onHand": 5,
+                "reorderAt": 1,
+                "price": 250,
+            }
+        )
+        current["storefrontConfiguration"] = storefront_configuration(
+            current,
+            selected_skus=["SKU-1", "SKU-2"],
+        )
+        prior = storefront_request_v2(current)
+        replacement = storefront_request_v2(
+            current,
+            request_uuid="10000000-0000-4000-8000-000000000010",
+            quoted_at="2026-07-23T09:05:00.000Z",
+            expires_at="2026-07-23T09:20:00.000Z",
+            supersedes_request_id=str(prior["id"]),
+        )
+        evidence = storefront_evidence(replacement)
+        atomic = create_commerce_storefront_request_from_intent(
+            current,
+            {"request": replacement, "supersededRequest": prior},
+            evidence,
+        )
+        self.assertEqual(
+            [candidate["id"] for candidate in atomic["storefrontRequests"]],  # type: ignore[index]
+            [replacement["id"], prior["id"]],
+        )
+        self.assertEqual(
+            apply_event(
+                current,
+                "commerce.storefront_request.received",
+                atomic,
+                evidence,
+            ),
+            atomic,
+        )
+
+        retained_current = deepcopy(current)
+        retained_current["storefrontRequests"] = [prior]
+        retained = create_commerce_storefront_request_from_intent(
+            retained_current,
+            {"request": replacement, "supersededRequest": prior},
+            evidence,
+        )
+        self.assertEqual(retained["storefrontRequests"], atomic["storefrontRequests"])
+
+        with self.assertRaisesRegex(TrialValidationError, "older pending"):
+            create_commerce_storefront_request_from_intent(
+                current,
+                {"request": replacement},
+                evidence,
+            )
+        with self.assertRaisesRegex(TrialValidationError, "unrelated prior"):
+            create_commerce_storefront_request_from_intent(
+                current,
+                {"request": replacement, "supersededRequest": replacement},
+                evidence,
+            )
+
+        second_replacement = storefront_request_v2(
+            current,
+            request_uuid="20000000-0000-4000-8000-000000000010",
+            quoted_at="2026-07-23T09:06:00.000Z",
+            expires_at="2026-07-23T09:21:00.000Z",
+            supersedes_request_id=str(prior["id"]),
+        )
+        with self.assertRaisesRegex(TrialValidationError, "older pending"):
+            create_commerce_storefront_request_from_intent(
+                atomic,
+                {"request": second_replacement, "supersededRequest": prior},
+                storefront_evidence(second_replacement),
+            )
+
+        orphan = deepcopy(current)
+        orphan["storefrontRequests"] = [replacement]
+        with self.assertRaisesRegex(TrialValidationError, "older pending"):
+            validate_commerce_state(orphan)
 
     def test_storefront_catalog_digest_matches_cross_runtime_golden(self) -> None:
         vector: dict[str, object] = {
