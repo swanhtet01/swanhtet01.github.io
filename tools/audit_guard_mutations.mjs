@@ -19,6 +19,7 @@ const PRODWS = `${ROOT}/showroom/src/core/production-workspace.ts`
 const STORAGE = `${ROOT}/showroom/src/core/local-workspace-storage.ts`
 const INVENTORY = `${ROOT}/showroom/src/core/shop-inventory-foundation.ts`
 const STOREFRONT = `${ROOT}/showroom/src/products/ecommerce/storefront-draft.ts`
+const SCHEDULING = `${ROOT}/showroom/src/core/shop-service-scheduling.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
 const MUTATIONS = [
@@ -69,6 +70,9 @@ const MUTATIONS = [
     '.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }',
     '.catalog-import-table { max-height: 340px; overflow: auto; background: #fff; }',
     'a fixed light surface reverts to hardcoded white'],
+  ['test_shop_service_scheduling.mjs', SCHEDULING,
+    "    && booking.status !== 'cancelled'", '    && true',
+    'a cancelled appointment keeps blocking its slot'],
   ['test_storefront_reconciliation.mjs', STOREFRONT,
     '    missingSkus: saved.filter((sku) => !catalogSet.has(sku)),', '    missingSkus: [],',
     'items removed from the catalog vanish from the storefront without being reported'],
