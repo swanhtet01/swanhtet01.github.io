@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
@@ -69,6 +69,20 @@ import {
   websiteClosedEditSessionStorageKey,
   type WebsiteClosedEditSession,
 } from './website-edit-session-recovery'
+import {
+  createWebsiteInquiryEntryRecovery,
+  restoreWebsiteInquiryEntryRecovery,
+  reviewWebsiteInquiryEntryRecovery,
+  websiteInquiryEntryDigest,
+  websiteInquiryEntryDigestSource,
+  websiteInquiryEntryDraftHasContent,
+  websiteInquiryEntryRecoveriesMatch,
+  websiteInquiryEntryRecoveryMatchesDraft,
+  websiteInquiryEntryRecoveryStorageKey,
+  type WebsiteInquiryEntryDraft,
+  type WebsiteInquiryEntryRecovery,
+  type WebsiteInquiryEntryRecoverySource,
+} from './website-inquiry-entry-recovery'
 import './website-product.css'
 
 type WebsiteView = 'content' | 'publish'
@@ -81,6 +95,11 @@ type WebsiteEditSessionState = {
 type WebsiteClosedEditSessionState = {
   scope: string
   recovery: WebsiteClosedEditSession
+}
+
+type WebsiteInquiryEntryRecoveryState = {
+  scope: string
+  recovery: WebsiteInquiryEntryRecovery
 }
 
 const DEFAULT_NOTICE = 'Website example loaded. Nothing has been deployed.'
@@ -162,6 +181,18 @@ function editSessionStorageKey(scope: string) {
   return `${WEBSITE_EDIT_SESSION_KEY}.${encodeURIComponent(scope)}`
 }
 
+function websiteInquiryEntryDraft(
+  value: { name: string; contact: string; request: string; consentRecorded: boolean },
+  sourcePage: WebsitePage,
+): WebsiteInquiryEntryDraft {
+  return {
+    ...value,
+    sourcePageId: sourcePage.id,
+    sourcePage: sourcePage.slug,
+    panelOpen: true,
+  }
+}
+
 export function WebsiteProduct() {
   const location = useLocation()
   const {
@@ -195,6 +226,15 @@ export function WebsiteProduct() {
   const headingRef = useRef<HTMLHeadingElement>(null)
   const recoveryPrimaryActionRef = useRef<HTMLButtonElement>(null)
   const editSessionRef = useRef<WebsiteEditSessionState | null>(null)
+  const inquiryRecoveryActionRef = useRef<HTMLButtonElement>(null)
+  const inquiryRecoveryHydrationRef = useRef('')
+  const inquiryLastWrittenRecoveryRef = useRef<WebsiteInquiryEntryRecovery | null>(null)
+  const inquiryControlsRef = useRef<HTMLDetailsElement>(null)
+  const inquirySummaryRef = useRef<HTMLElement>(null)
+  const inquiryNameRef = useRef<HTMLInputElement>(null)
+  const inquiryContactRef = useRef<HTMLInputElement>(null)
+  const inquiryRequestRef = useRef<HTMLTextAreaElement>(null)
+  const inquiryConsentRef = useRef<HTMLInputElement>(null)
   const [device, setDevice] = useState<PreviewDevice>(() => (
     typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop'
   ))
@@ -212,6 +252,10 @@ export function WebsiteProduct() {
   const [leadDraft, setLeadDraft] = useState({ name: '', contact: '', request: '', consentRecorded: false })
   const [leadOwner, setLeadOwner] = useState('')
   const [leadDecisionNote, setLeadDecisionNote] = useState('')
+  const [inquiryRecoveryArmed, setInquiryRecoveryArmed] = useState(false)
+  const [inquiryRecoveryState, setInquiryRecoveryState] = useState<WebsiteInquiryEntryRecoveryState | null>(null)
+  const [inquiryRecoveryNotice, setInquiryRecoveryNotice] = useState('')
+  const [inquiryDigestState, setInquiryDigestState] = useState({ source: '', value: '', error: '' })
   const editSessionScope = storageMode === 'managed'
     ? managedActorId ? `managed:${managedActorId}` : ''
     : storageMode
@@ -227,6 +271,36 @@ export function WebsiteProduct() {
   const selectedPage = editorWorkspace.pages.find((page) => page.id === selectedPageId)
     ?? editorWorkspace.pages.find((page) => page.id === editorWorkspace.selectedPageId)
     ?? editorWorkspace.pages[0]
+  const inquirySourcePage = workspace.pages.find((page) => page.id === selectedPage.id) ?? workspace.pages[0]
+  let inquiryDigestSource = ''
+  try {
+    inquiryDigestSource = websiteInquiryEntryDigestSource(workspace, leadLedger)
+  } catch {
+    inquiryDigestSource = ''
+  }
+  const inquiryStateDigest = inquiryDigestState.source === inquiryDigestSource ? inquiryDigestState.value : ''
+  const inquiryRecoverySource = useMemo<WebsiteInquiryEntryRecoverySource | null>(() => (
+    inquiryStateDigest
+      ? {
+          workspaceRevision: workspace.revision,
+          workspaceContentRevision: workspace.contentRevision,
+          leadLedgerRevision: leadLedger.revision,
+          stateDigest: inquiryStateDigest,
+        }
+      : null
+  ), [inquiryStateDigest, leadLedger.revision, workspace.contentRevision, workspace.revision])
+  const activeInquiryRecovery = inquiryRecoveryState?.scope === editSessionScope
+    ? inquiryRecoveryState.recovery
+    : null
+  const inquiryRecoveryReview = activeInquiryRecovery && inquiryRecoverySource
+    ? reviewWebsiteInquiryEntryRecovery(activeInquiryRecovery, editSessionScope, inquiryStateDigest, workspace, leadLedger)
+    : null
+  const hasInquiryRecovery = Boolean(activeInquiryRecovery)
+  const hasActiveInquiryDraft = Boolean(
+    inquiryRecoveryArmed
+    && inquiryRecoverySource
+    && websiteInquiryEntryDraftHasContent(leadDraft),
+  )
   const activeRemovedDraftPage = removedDraftPage
   const pageRemovalRecoveryKey = activeRemovedDraftPage
     ? `${activeRemovedDraftPage.page.id}:${activeRemovedDraftPage.postRemovalFingerprint}`
@@ -294,7 +368,7 @@ export function WebsiteProduct() {
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
     ? 'The saved site changed. Discard this preserved preview before editing.'
-    : storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
+    : storageIssue || inquiryRecoveryNotice || inquiryDigestState.error || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
   const noticePriority = editConflict || storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
   const repairArmed = canRepairLocalStorage
     && repairCandidateRevision > 0
@@ -343,6 +417,117 @@ export function WebsiteProduct() {
         : null)
     }, 0)
     return () => window.clearTimeout(restoreTimer)
+  }, [editSessionScope])
+
+  useEffect(() => {
+    let current = true
+    void websiteInquiryEntryDigest(workspace, leadLedger)
+      .then((value) => {
+        if (current) setInquiryDigestState({ source: inquiryDigestSource, value, error: '' })
+      })
+      .catch(() => {
+        if (current) setInquiryDigestState({ source: inquiryDigestSource, value: '', error: 'Inquiry recovery is unavailable on this device.' })
+      })
+    return () => { current = false }
+  }, [inquiryDigestSource, leadLedger, workspace])
+
+  useEffect(() => {
+    if (!editSessionScope || !inquiryRecoverySource) return
+    const identity = `${editSessionScope}|${inquiryRecoverySource.workspaceRevision}|${inquiryRecoverySource.leadLedgerRevision}|${inquiryRecoverySource.stateDigest}`
+    if (inquiryRecoveryHydrationRef.current === identity) return
+    inquiryRecoveryHydrationRef.current = identity
+    const timer = window.setTimeout(() => {
+      try {
+        const key = websiteInquiryEntryRecoveryStorageKey(editSessionScope)
+        const raw = window.localStorage.getItem(key)
+        const restored = raw ? restoreWebsiteInquiryEntryRecovery(raw) : null
+        if (raw && !restored) window.localStorage.removeItem(key)
+        inquiryLastWrittenRecoveryRef.current = null
+        setInquiryRecoveryState(restored ? { scope: editSessionScope, recovery: restored } : null)
+        if (restored) requestAnimationFrame(() => inquiryRecoveryActionRef.current?.focus({ preventScroll: true }))
+      } catch {
+        setInquiryRecoveryState(null)
+        setInquiryRecoveryNotice('Inquiry recovery is unavailable. Add or clear this inquiry before leaving Website.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [editSessionScope, inquiryRecoverySource])
+
+  useEffect(() => {
+    if (!editSessionScope
+      || !inquiryRecoverySource
+      || !hasActiveInquiryDraft
+      || hasInquiryRecovery) return
+    const timer = window.setTimeout(() => {
+      try {
+        const key = websiteInquiryEntryRecoveryStorageKey(editSessionScope)
+        const raw = window.localStorage.getItem(key)
+        const retained = raw ? restoreWebsiteInquiryEntryRecovery(raw) : null
+        const lastWritten = inquiryLastWrittenRecoveryRef.current
+        if (retained && (retained.source.workspaceRevision !== inquiryRecoverySource.workspaceRevision
+          || retained.source.workspaceContentRevision !== inquiryRecoverySource.workspaceContentRevision
+          || retained.source.leadLedgerRevision !== inquiryRecoverySource.leadLedgerRevision
+          || retained.source.stateDigest !== inquiryRecoverySource.stateDigest
+          || !lastWritten
+          || !websiteInquiryEntryRecoveriesMatch(retained, lastWritten))) {
+          setInquiryRecoveryState({ scope: editSessionScope, recovery: retained })
+          setInquiryRecoveryNotice('Another tab has an unfinished inquiry. Resume or discard it before replacing it.')
+          requestAnimationFrame(() => inquiryRecoveryActionRef.current?.focus({ preventScroll: true }))
+          return
+        }
+        const next = createWebsiteInquiryEntryRecovery(
+          editSessionScope,
+          inquiryRecoverySource,
+          websiteInquiryEntryDraft(leadDraft, inquirySourcePage),
+        )
+        window.localStorage.setItem(key, JSON.stringify(next))
+        inquiryLastWrittenRecoveryRef.current = next
+        setInquiryRecoveryNotice('')
+      } catch {
+        setInquiryRecoveryNotice('This inquiry stays in this tab. Add or clear it before leaving Website.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [editSessionScope, hasActiveInquiryDraft, hasInquiryRecovery, inquiryRecoverySource, inquirySourcePage, leadDraft])
+
+  useEffect(() => {
+    if (!editSessionScope || hasActiveInquiryDraft || hasInquiryRecovery) return
+    const lastWritten = inquiryLastWrittenRecoveryRef.current
+    if (!lastWritten) return
+    const timer = window.setTimeout(() => {
+      try {
+        const key = websiteInquiryEntryRecoveryStorageKey(editSessionScope)
+        const raw = window.localStorage.getItem(key)
+        const current = raw ? restoreWebsiteInquiryEntryRecovery(raw) : null
+        if (current && websiteInquiryEntryRecoveriesMatch(current, lastWritten)) window.localStorage.removeItem(key)
+        inquiryLastWrittenRecoveryRef.current = null
+      } catch {
+        setInquiryRecoveryNotice('The cleared inquiry recovery could not be removed from this device.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [editSessionScope, hasActiveInquiryDraft, hasInquiryRecovery])
+
+  useEffect(() => {
+    if (!editSessionScope) return
+    const recoveryKey = websiteInquiryEntryRecoveryStorageKey(editSessionScope)
+    function refreshInquiryRecovery(event: StorageEvent) {
+      if (event.key !== recoveryKey && event.key !== null) return
+      try {
+        const raw = window.localStorage.getItem(recoveryKey)
+        const restored = raw ? restoreWebsiteInquiryEntryRecovery(raw) : null
+        inquiryLastWrittenRecoveryRef.current = null
+        setInquiryRecoveryState(restored ? { scope: editSessionScope, recovery: restored } : null)
+        if (restored) {
+          setInquiryRecoveryNotice('The unfinished inquiry changed in another tab. Review it before continuing.')
+          requestAnimationFrame(() => inquiryRecoveryActionRef.current?.focus({ preventScroll: true }))
+        }
+      } catch {
+        setInquiryRecoveryState(null)
+      }
+    }
+    window.addEventListener('storage', refreshInquiryRecovery)
+    return () => window.removeEventListener('storage', refreshInquiryRecovery)
   }, [editSessionScope])
 
   useEffect(() => {
@@ -1105,6 +1290,105 @@ export function WebsiteProduct() {
     openWorkspaceView('publish')
   }
 
+  function inquiryRecoveryIsCurrent(target: WebsiteInquiryEntryRecoveryState) {
+    try {
+      const raw = window.localStorage.getItem(websiteInquiryEntryRecoveryStorageKey(target.scope))
+      const current = raw ? restoreWebsiteInquiryEntryRecovery(raw) : null
+      if (current && websiteInquiryEntryRecoveriesMatch(current, target.recovery)) return true
+      inquiryLastWrittenRecoveryRef.current = null
+      setInquiryRecoveryState(current ? { scope: target.scope, recovery: current } : null)
+      setInquiryRecoveryNotice(current
+        ? 'Another tab changed this inquiry. Review the newer recovery before continuing.'
+        : 'This inquiry was already resolved in another tab.')
+    } catch {
+      setInquiryRecoveryNotice('Inquiry recovery could not be checked. No lead or message was created.')
+    }
+    return false
+  }
+
+  function clearInquiryRecovery(target = inquiryRecoveryState) {
+    if (!target) return true
+    if (!inquiryRecoveryIsCurrent(target)) return false
+    try {
+      window.localStorage.removeItem(websiteInquiryEntryRecoveryStorageKey(target.scope))
+    } catch {
+      setInquiryRecoveryNotice('Inquiry recovery could not be removed. No lead or message was created.')
+      return false
+    }
+    inquiryLastWrittenRecoveryRef.current = null
+    if (inquiryRecoveryState === target) setInquiryRecoveryState(null)
+    return true
+  }
+
+  function clearMatchingInquiryRecovery(
+    draft = websiteInquiryEntryDraft(leadDraft, inquirySourcePage),
+    source = inquiryRecoverySource,
+  ) {
+    if (!editSessionScope || !source) return
+    try {
+      const key = websiteInquiryEntryRecoveryStorageKey(editSessionScope)
+      const raw = window.localStorage.getItem(key)
+      const current = raw ? restoreWebsiteInquiryEntryRecovery(raw) : null
+      if (current && websiteInquiryEntryRecoveryMatchesDraft(current, editSessionScope, source, draft)) {
+        window.localStorage.removeItem(key)
+        inquiryLastWrittenRecoveryRef.current = null
+      }
+    } catch {
+      // A retained or newer recovery remains source-bound and cannot create a Website inquiry.
+    }
+  }
+
+  function resumeInquiryRecovery() {
+    const target = inquiryRecoveryState
+    if (!target
+      || target.scope !== editSessionScope
+      || !activeInquiryRecovery
+      || !inquiryRecoveryReview?.ok) {
+      setInquiryRecoveryNotice('This inquiry cannot resume because the Website or inquiry record changed. Discard it to continue.')
+      return
+    }
+    if (!inquiryRecoveryIsCurrent(target)) return
+    const recovered = inquiryRecoveryReview.draft
+    setSelectedPageId(recovered.sourcePageId)
+    setLeadDraft({
+      name: recovered.name,
+      contact: recovered.contact,
+      request: recovered.request,
+      consentRecorded: recovered.consentRecorded,
+    })
+    setInquiryRecoveryArmed(true)
+    inquiryLastWrittenRecoveryRef.current = target.recovery
+    setInquiryRecoveryState(null)
+    setInquiryRecoveryNotice('Unfinished inquiry resumed. No lead was created and no message was sent.')
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (inquiryControlsRef.current) inquiryControlsRef.current.open = true
+      const focusTarget = !recovered.name.trim()
+        ? inquiryNameRef.current
+        : !recovered.contact.trim()
+          ? inquiryContactRef.current
+          : !recovered.request.trim()
+            ? inquiryRequestRef.current
+            : !recovered.consentRecorded
+              ? inquiryConsentRef.current
+              : inquiryNameRef.current
+      focusTarget?.scrollIntoView({ block: 'center' })
+      focusTarget?.focus({ preventScroll: true })
+      if (focusTarget instanceof HTMLInputElement && focusTarget.type !== 'checkbox') focusTarget.select()
+    }))
+  }
+
+  function discardInquiryRecovery() {
+    if (!activeInquiryRecovery) return
+    if (!clearInquiryRecovery()) return
+    setInquiryRecoveryArmed(false)
+    setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
+    setInquiryRecoveryNotice('Unfinished inquiry discarded. No lead was created and no message was sent.')
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (inquiryControlsRef.current) inquiryControlsRef.current.open = false
+      inquirySummaryRef.current?.focus({ preventScroll: true })
+    }))
+  }
+
   function saveLeadLedger(nextLedger: typeof leadLedger, success: string) {
     try {
       const confirmed = writeWebsiteLeadLedger(window.localStorage, nextLedger)
@@ -1119,27 +1403,41 @@ export function WebsiteProduct() {
 
   async function captureDemoInquiry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const reviewedRecoveryDraft = websiteInquiryEntryDraft(leadDraft, inquirySourcePage)
+    const reviewedRecoverySource = inquiryRecoverySource
     try {
       const next = captureWebsiteLead(leadLedger, {
         siteName: workspace.siteName,
-        sourcePage: selectedPage.slug,
+        sourcePage: reviewedRecoveryDraft.sourcePage,
         ...leadDraft,
       }, { id: createId('lead'), now: new Date().toISOString() })
       if (storageMode === 'managed') {
-        const result = await mutateWorkspace((current) => ({
-          ...current,
-          leadLedger: captureWebsiteLead(current.leadLedger ?? emptyWebsiteLeadLedger(), {
-            siteName: current.siteName,
-            sourcePage: selectedPage.slug,
-            ...leadDraft,
-          }, { id: next.leads[0].id, now: next.leads[0].createdAt }),
-        }), { durable: true })
+        const result = await mutateWorkspace((current) => {
+          const sourcePage = current.pages.find((page) => page.id === reviewedRecoveryDraft.sourcePageId)
+          if (!sourcePage || sourcePage.slug !== reviewedRecoveryDraft.sourcePage) {
+            throw new Error('The Website source page changed. Review it before adding this inquiry.')
+          }
+          return {
+            ...current,
+            leadLedger: captureWebsiteLead(current.leadLedger ?? emptyWebsiteLeadLedger(), {
+              siteName: current.siteName,
+              sourcePage: reviewedRecoveryDraft.sourcePage,
+              ...leadDraft,
+            }, { id: next.leads[0].id, now: next.leads[0].createdAt }),
+          }
+        }, { durable: true })
         if (!result.ok) throw new Error(result.error)
+        clearMatchingInquiryRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
+        setInquiryRecoveryArmed(false)
+        setInquiryRecoveryNotice('')
         setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
         setNotice('Inquiry saved for manager review. No message or external write ran.')
         return
       }
       if (saveLeadLedger(next, 'Inquiry saved locally. No message or external write ran.')) {
+        clearMatchingInquiryRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
+        setInquiryRecoveryArmed(false)
+        setInquiryRecoveryNotice('')
         setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
       }
     } catch (error) {
@@ -1178,6 +1476,44 @@ export function WebsiteProduct() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The Website inquiry decision is invalid.')
     }
+  }
+
+  if (activeInquiryRecovery) {
+    const recoveredDraft = inquiryRecoveryReview?.ok ? inquiryRecoveryReview.draft : activeInquiryRecovery.draft
+    return (
+      <div className="website-product">
+        <div className="website-shell">
+          <div className="website-main website-inquiry-recovery-surface" id="website-workspace">
+            <section
+              aria-labelledby="website-inquiry-recovery-title"
+              aria-live="polite"
+              className="website-inquiry-recovery-card"
+              data-state={inquiryRecoveryReview?.ok ? 'ready' : 'conflict'}
+            >
+              <div className="website-inquiry-recovery-copy">
+                <span className="website-eyebrow">Unfinished inquiry found</span>
+                <h1 id="website-inquiry-recovery-title">{inquiryRecoveryReview?.ok ? 'Continue this inquiry?' : 'This inquiry needs a fresh start'}</h1>
+                <p>{inquiryRecoveryReview?.ok
+                  ? 'Resume the exact customer details, consent choice, source page, and open inquiry form. Nothing creates a lead automatically.'
+                  : 'The Website or inquiry record changed after this entry began. Discard the older recovery to protect the current record.'}</p>
+              </div>
+              <div aria-label="Recovered inquiry summary" className="website-inquiry-recovery-summary" role="group">
+                <span><small>Name</small><strong>{recoveredDraft.name || 'Blank'}</strong></span>
+                <span><small>Contact</small><strong>{recoveredDraft.contact || 'Blank'}</strong></span>
+                <span><small>Source page</small><strong>{recoveredDraft.sourcePage}</strong></span>
+                <span><small>Consent</small><strong>{recoveredDraft.consentRecorded ? 'Recorded' : 'Not yet'}</strong></span>
+                <span className="website-inquiry-recovery-request"><small>Request</small><strong>{recoveredDraft.request || 'Blank'}</strong></span>
+              </div>
+              <div className="website-inquiry-recovery-actions">
+                <button className="website-button is-quiet" onClick={discardInquiryRecovery} ref={inquiryRecoveryReview?.ok ? undefined : inquiryRecoveryActionRef} type="button">Discard</button>
+                {inquiryRecoveryReview?.ok ? <button className="website-button is-primary" onClick={resumeInquiryRecovery} ref={inquiryRecoveryActionRef} type="button">Resume inquiry</button> : null}
+              </div>
+              <small className="website-inquiry-recovery-boundary">No lead, message, email, notification, publish, deployment, payment, or company write happens here. Source: Website revision {activeInquiryRecovery.source.workspaceRevision}, inquiry revision {activeInquiryRecovery.source.leadLedgerRevision}.</small>
+            </section>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -1446,8 +1782,8 @@ export function WebsiteProduct() {
             </section>
           ) : null}
 
-          {!starterSetupActive ? <details className="website-start-tools website-business-controls">
-            <summary><span><strong>Inquiries</strong><small>Capture, assign, decide, export</small></span><b>{leadCounts.new} new</b></summary>
+          {!starterSetupActive ? <details className="website-start-tools website-business-controls" ref={inquiryControlsRef}>
+            <summary ref={inquirySummaryRef}><span><strong>Inquiries</strong><small>Capture, assign, decide, export</small></span><b>{leadCounts.new} new</b></summary>
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
@@ -1456,10 +1792,11 @@ export function WebsiteProduct() {
                 </header>
 
                 <form className="website-lead-capture-form" onSubmit={captureDemoInquiry}>
-                  <label>Name<input autoComplete="name" maxLength={80} onChange={(event) => setLeadDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Customer name" required value={leadDraft.name} /></label>
-                  <label>Phone or email<input autoComplete="email" maxLength={120} onChange={(event) => setLeadDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="09… or name@example.com" required value={leadDraft.contact} /></label>
-                  <label className="website-lead-request">What do they need?<textarea maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
-                  <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
+                  <label>Name<input autoComplete="name" maxLength={80} onChange={(event) => { setLeadDraft((current) => ({ ...current, name: event.target.value })); setInquiryRecoveryArmed(true) }} placeholder="Customer name" ref={inquiryNameRef} required value={leadDraft.name} /></label>
+                  <label>Phone or email<input autoComplete="email" maxLength={120} onChange={(event) => { setLeadDraft((current) => ({ ...current, contact: event.target.value })); setInquiryRecoveryArmed(true) }} placeholder="09… or name@example.com" ref={inquiryContactRef} required value={leadDraft.contact} /></label>
+                  <label className="website-lead-request">What do they need?<textarea maxLength={500} onChange={(event) => { setLeadDraft((current) => ({ ...current, request: event.target.value })); setInquiryRecoveryArmed(true) }} placeholder="Product, service, quantity, timing, or question" ref={inquiryRequestRef} required rows={3} value={leadDraft.request} /></label>
+                  <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} onChange={(event) => { setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked })); setInquiryRecoveryArmed(true) }} ref={inquiryConsentRef} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
+                  <small className="website-inquiry-source">Source page: {inquirySourcePage.slug}</small>
                   <button className="website-button is-primary is-compact" disabled={!readyBuyerCtaPages.length} type="submit">Add inquiry</button>
                   {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action first.</small> : null}
                 </form>

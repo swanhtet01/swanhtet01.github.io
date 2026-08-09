@@ -37,6 +37,7 @@ let shopInventoryRuntimeChecks = 0
 let shopPurchaseOrderDraftRuntimeChecks = 0
 let shopCounterSaleRecoveryRuntimeChecks = 0
 let plantOutputEntryRecoveryRuntimeChecks = 0
+let websiteInquiryEntryRecoveryRuntimeChecks = 0
 let shopServiceScheduleRuntimeChecks = 0
 let shopBusinessTemplateRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
@@ -118,6 +119,7 @@ const websiteLeadSource = await readFile(resolve(root, 'showroom', 'src', 'produ
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
 const websiteSectionRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-section-recovery.ts'), 'utf8')
 const websiteEditSessionRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-edit-session-recovery.ts'), 'utf8')
+const websiteInquiryEntryRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-inquiry-entry-recovery.ts'), 'utf8')
 const storefrontEditRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-edit-recovery.ts'), 'utf8')
 const localMerchandisingImportSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts'), 'utf8')
 const productionJobPlanDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-job-plan-draft.ts'), 'utf8')
@@ -3870,7 +3872,7 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteSource.includes('function viewWebsiteSample()')
   || !websiteSource.includes("openContentSurface('preview')")
   || !websiteSource.includes('onViewSample={viewWebsiteSample}')
-  || !websiteSource.includes('{!starterSetupActive ? <details className="website-start-tools website-business-controls">')
+  || !websiteSource.includes('{!starterSetupActive ? <details className="website-start-tools website-business-controls" ref={inquiryControlsRef}>')
   || !websiteCssSource.includes('.website-starter-actions {\n  position: sticky;')
   || websiteStarterSetupSource.includes('website-starter-errors')
   || websiteStarterSetupSource.includes('Review the brief')
@@ -4168,6 +4170,48 @@ if (websiteClosedEditResumeStart < 0
   || !websiteCssSource.includes('.website-edit-recovery-actions .website-button {\n  min-height: 44px;')
   || !websiteCssSource.includes('.theme-dark .website-product .website-button.is-primary {\n  color: #04110e;')
   || !websiteCssSource.includes('.theme-dark .website-today-source small {\n  color: var(--website-muted);')) fail('website_closed_edit_session_recovery_contract_missing')
+const websiteInquiryResumeStart = websiteSource.indexOf('function resumeInquiryRecovery()')
+const websiteInquiryDiscardStart = websiteSource.indexOf('function discardInquiryRecovery()', websiteInquiryResumeStart)
+const websiteInquirySaveStart = websiteSource.indexOf('function saveLeadLedger(', websiteInquiryDiscardStart)
+const websiteInquiryResumeAction = websiteSource.slice(websiteInquiryResumeStart, websiteInquiryDiscardStart)
+const websiteInquiryDiscardAction = websiteSource.slice(websiteInquiryDiscardStart, websiteInquirySaveStart)
+const websiteInquiryConsequentialActions = ['captureWebsiteLead(', 'writeWebsiteLeadLedger(', 'mutateWorkspace(', 'saveLeadLedger(', 'reviewWebsiteLead(', 'recordWebsite', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon']
+const websiteInquiryHelperForbiddenActions = ['localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'captureWebsiteLead(', 'writeWebsiteLeadLedger(', 'mutateWorkspace(']
+if (websiteInquiryResumeStart < 0
+  || websiteInquiryDiscardStart < 0
+  || websiteInquirySaveStart < 0
+  || !websiteInquiryEntryRecoverySource.includes("WEBSITE_INQUIRY_ENTRY_RECOVERY_CONTRACT = 'supermega.website.closed-inquiry-entry.v1'")
+  || !websiteInquiryEntryRecoverySource.includes("globalThis.crypto.subtle.digest('SHA-256', bytes)")
+  || !websiteInquiryEntryRecoverySource.includes('canonicalState(workspace, leadLedger)')
+  || !websiteInquiryEntryRecoverySource.includes('restoreWorkspace(workspace)')
+  || !websiteInquiryEntryRecoverySource.includes('restoreWebsiteLeadLedger(leadLedger)')
+  || !websiteInquiryEntryRecoverySource.includes('export function reviewWebsiteInquiryEntryRecovery(')
+  || websiteInquiryHelperForbiddenActions.some((marker) => websiteInquiryEntryRecoverySource.includes(marker))
+  || !localWorkspaceStorageSource.includes("'supermega.website.closed-inquiry-entry.v1.'")
+  || !websiteSource.includes('window.localStorage.setItem(key, JSON.stringify(next))')
+  || !websiteSource.includes("window.addEventListener('storage', refreshInquiryRecovery)")
+  || !websiteSource.includes('websiteInquiryEntryRecoveriesMatch(')
+  || !websiteSource.includes('websiteInquiryEntryRecoveryMatchesDraft(')
+  || !websiteSource.includes('Another tab has an unfinished inquiry. Resume or discard it before replacing it.')
+  || !websiteSource.includes('className="website-inquiry-recovery-card"')
+  || !websiteSource.includes("data-state={inquiryRecoveryReview?.ok ? 'ready' : 'conflict'}")
+  || !websiteSource.includes("inquiryRecoveryReview?.ok ? 'Continue this inquiry?' : 'This inquiry needs a fresh start'")
+  || !websiteSource.includes('Resume inquiry')
+  || !websiteSource.includes('No lead, message, email, notification, publish, deployment, payment, or company write happens here.')
+  || !websiteInquiryResumeAction.includes('inquiryRecoveryIsCurrent(target)')
+  || !websiteInquiryResumeAction.includes('setSelectedPageId(recovered.sourcePageId)')
+  || !websiteInquiryResumeAction.includes('name: recovered.name')
+  || !websiteInquiryResumeAction.includes('contact: recovered.contact')
+  || !websiteInquiryResumeAction.includes('request: recovered.request')
+  || !websiteInquiryResumeAction.includes('consentRecorded: recovered.consentRecorded')
+  || !websiteInquiryResumeAction.includes('inquiryControlsRef.current.open = true')
+  || !websiteInquiryDiscardAction.includes('clearInquiryRecovery()')
+  || !websiteInquiryDiscardAction.includes("setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })")
+  || (websiteSource.match(/clearMatchingInquiryRecovery\(reviewedRecoveryDraft, reviewedRecoverySource\)/g) || []).length !== 2
+  || (websiteSource.match(/setInquiryRecoveryArmed\(true\)/g) || []).length < 5
+  || websiteInquiryConsequentialActions.some((marker) => websiteInquiryResumeAction.includes(marker) || websiteInquiryDiscardAction.includes(marker))
+  || !websiteCssSource.includes('.website-inquiry-recovery-card[data-state="conflict"]')
+  || !/\.website-inquiry-recovery-actions \.website-button\s*\{[^}]*min-width:\s*128px;[^}]*min-height:\s*44px;/s.test(websiteCssSource)) fail('website_inquiry_tab_recovery_contract_missing_or_consequential')
 if (!websiteCssSource.includes('.website-workspace-grid[data-surface="work"] > .website-preview-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-work-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-preview-surface')
@@ -15687,6 +15731,126 @@ async function verifyShopCounterSaleRecoveryRuntime() {
   }
 }
 
+async function verifyWebsiteInquiryEntryRecoveryRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    websiteInquiryEntryRecoveryRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-inquiry-entry-recovery.ts')).href}?website-inquiry-recovery=${Date.now()}`)
+    const website = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?website-inquiry-workspace=${Date.now()}`)
+    const leads = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts')).href}?website-inquiry-ledger=${Date.now()}`)
+    const workspace = website.createInitialWorkspace()
+    const ledger = leads.emptyWebsiteLeadLedger()
+    const stateDigest = await model.websiteInquiryEntryDigest(workspace, ledger)
+    const repeatedDigest = await model.websiteInquiryEntryDigest(structuredClone(workspace), structuredClone(ledger))
+    const changedWorkspace = { ...structuredClone(workspace), siteName: 'Changed Website' }
+    const changedWorkspaceDigest = await model.websiteInquiryEntryDigest(changedWorkspace, ledger)
+    const changedLedger = leads.captureWebsiteLead(ledger, {
+      siteName: workspace.siteName,
+      sourcePage: workspace.pages[0].slug,
+      name: 'Existing customer',
+      contact: 'existing@example.com',
+      request: 'Existing request',
+      consentRecorded: true,
+    }, { id: 'lead-existing', now: '2026-08-09T05:50:00.000Z' })
+    const changedLedgerDigest = await model.websiteInquiryEntryDigest(workspace, changedLedger)
+    assert(stateDigest === repeatedDigest
+      && stateDigest !== changedWorkspaceDigest
+      && stateDigest !== changedLedgerDigest
+      && /^sha256:[0-9a-f]{64}$/.test(stateDigest),
+    'website_inquiry_recovery_state_digest_not_exact')
+    const source = {
+      workspaceRevision: workspace.revision,
+      workspaceContentRevision: workspace.contentRevision,
+      leadLedgerRevision: ledger.revision,
+      stateDigest,
+    }
+    const draft = {
+      name: ' Mya Thida ',
+      contact: '09 123 456 789 ',
+      request: 'Need 20 units.\nCall after 5. ',
+      consentRecorded: false,
+      sourcePageId: workspace.pages[0].id,
+      sourcePage: workspace.pages[0].slug,
+      panelOpen: true,
+    }
+    const recovery = model.createWebsiteInquiryEntryRecovery(
+      'managed:owner@example.com',
+      source,
+      draft,
+      '2026-08-09T05:51:00.000Z',
+    )
+    const restored = model.restoreWebsiteInquiryEntryRecovery(JSON.stringify(recovery))
+    assert(restored
+      && restored.schema === model.WEBSITE_INQUIRY_ENTRY_RECOVERY_CONTRACT
+      && restored.scope === 'managed:owner@example.com'
+      && restored.draft.name === draft.name
+      && restored.draft.contact === draft.contact
+      && restored.draft.request === draft.request
+      && restored.draft.consentRecorded === false
+      && restored.draft.sourcePageId === draft.sourcePageId
+      && restored.draft.sourcePage === draft.sourcePage
+      && restored.draft.panelOpen === true,
+    'website_inquiry_recovery_did_not_restore_exact_entry')
+    const current = model.reviewWebsiteInquiryEntryRecovery(recovery, 'managed:owner@example.com', stateDigest, workspace, ledger)
+    assert(current.ok
+      && current.draft.name === draft.name
+      && current.draft.contact === draft.contact
+      && current.draft.request === draft.request,
+    'website_inquiry_recovery_current_source_not_resumable')
+    assert(model.websiteInquiryEntryRecoveryMatchesDraft(recovery, 'managed:owner@example.com', source, draft)
+      && model.websiteInquiryEntryRecoveriesMatch(recovery, structuredClone(recovery))
+      && !model.websiteInquiryEntryRecoveryMatchesDraft(recovery, 'managed:owner@example.com', source, { ...draft, contact: 'other@example.com' }),
+    'website_inquiry_recovery_exact_identity_not_enforced')
+    const newer = model.createWebsiteInquiryEntryRecovery(
+      'managed:owner@example.com',
+      source,
+      { ...draft, request: 'Newer tab request' },
+      '2026-08-09T05:51:01.000Z',
+    )
+    assert(!model.websiteInquiryEntryRecoveriesMatch(recovery, newer), 'website_inquiry_recovery_newer_tab_identity_not_enforced')
+    const wrongScope = model.reviewWebsiteInquiryEntryRecovery(recovery, 'managed:other@example.com', stateDigest, workspace, ledger)
+    assert(!wrongScope.ok && wrongScope.reason === 'scope_changed', 'website_inquiry_recovery_wrong_scope_accepted')
+    const staleWebsite = model.reviewWebsiteInquiryEntryRecovery(recovery, 'managed:owner@example.com', changedWorkspaceDigest, changedWorkspace, ledger)
+    assert(!staleWebsite.ok && staleWebsite.reason === 'website_changed', 'website_inquiry_recovery_workspace_change_ignored')
+    const staleLedger = model.reviewWebsiteInquiryEntryRecovery(recovery, 'managed:owner@example.com', changedLedgerDigest, workspace, changedLedger)
+    assert(!staleLedger.ok && staleLedger.reason === 'website_changed', 'website_inquiry_recovery_ledger_change_ignored')
+    const missingPage = structuredClone(recovery)
+    missingPage.draft.sourcePageId = 'page-missing'
+    const missingPageReview = model.reviewWebsiteInquiryEntryRecovery(missingPage, 'managed:owner@example.com', stateDigest, workspace, ledger)
+    assert(!missingPageReview.ok && missingPageReview.reason === 'invalid_recovery', 'website_inquiry_recovery_missing_page_accepted')
+    const badDigest = structuredClone(recovery)
+    badDigest.source.stateDigest = 'sha256:not-valid'
+    const extraField = { ...structuredClone(recovery), autoCreateLead: true }
+    assert(model.restoreWebsiteInquiryEntryRecovery(badDigest) === null
+      && model.restoreWebsiteInquiryEntryRecovery(extraField) === null
+      && model.restoreWebsiteInquiryEntryRecovery('{broken') === null,
+    'website_inquiry_recovery_tamper_accepted')
+    let emptyDraftRejected = false
+    try {
+      model.createWebsiteInquiryEntryRecovery('browser-local', source, { ...draft, name: '', contact: '', request: '', consentRecorded: false })
+    } catch {
+      emptyDraftRejected = true
+    }
+    assert(emptyDraftRejected, 'website_inquiry_recovery_empty_entry_created')
+    let closedPanelRejected = false
+    try {
+      model.createWebsiteInquiryEntryRecovery('browser-local', source, { ...draft, panelOpen: false })
+    } catch {
+      closedPanelRejected = true
+    }
+    assert(closedPanelRejected, 'website_inquiry_recovery_closed_panel_created')
+    const badRevision = structuredClone(recovery)
+    badRevision.source.leadLedgerRevision = -1
+    assert(model.restoreWebsiteInquiryEntryRecovery(badRevision) === null, 'website_inquiry_recovery_invalid_revision_accepted')
+    assert(/^supermega\.website\.closed-inquiry-entry\.v1\./.test(model.websiteInquiryEntryRecoveryStorageKey('managed:owner@example.com')),
+      'website_inquiry_recovery_storage_scope_missing')
+  } catch (error) {
+    fail(`website_inquiry_entry_recovery_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyPlantOutputEntryRecoveryRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -20473,6 +20637,7 @@ await verifyCommerceOrderDraftRuntime()
 await verifyStorefrontDraftRuntime()
 await verifyStorefrontEditRecoveryRuntime()
 await verifyShopCounterSaleRecoveryRuntime()
+await verifyWebsiteInquiryEntryRecoveryRuntime()
 await verifyPlantOutputEntryRecoveryRuntime()
 await verifyStorefrontRuntime()
 await verifyManagedWebsiteRuntime()
@@ -20484,8 +20649,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 60 KB allowance for Shop, Plant, Website, and Ecommerce recovery, including Shop counter and Plant output tab recovery; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_860_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 80 KB allowance for Shop, Plant, Website, and Ecommerce recovery, including Website inquiry tab recovery; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_880_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -20988,4 +21153,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopCounterSaleRecoveryRuntimeChecks, plantOutputEntryRecoveryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontEditRecoveryRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopCounterSaleRecoveryRuntimeChecks, plantOutputEntryRecoveryRuntimeChecks, websiteInquiryEntryRecoveryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontEditRecoveryRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

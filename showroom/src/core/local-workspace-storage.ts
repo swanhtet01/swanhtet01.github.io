@@ -35,6 +35,7 @@ const workspaceKeyPrefixes = [
   'supermega.ecommerce.storefront_draft.v1.',
   'supermega.shop.order_draft.v1.',
   'supermega.website.workspace.recovery.v1.',
+  'supermega.website.closed-inquiry-entry.v1.',
   'supermega.website.release-foundation.v1:',
   'supermega.ecommerce.buying_lifecycle.v1.',
 ]
