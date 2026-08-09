@@ -903,6 +903,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
 
   if (!action) return null
   const isCounterConfirmation = action.presentation === 'counter'
+  const isOrderCreation = action.kind === 'order_create'
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -923,7 +924,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   }
 
   return <dialog aria-labelledby="action-confirm-title" className="accountable-action-gate" onCancel={(event) => { event.preventDefault(); if (!busy && !action.confirmation) onCancel() }} ref={dialogRef}>
-    <div className="action-change"><span className="core-eyebrow">{isCounterConfirmation ? 'Review counter order' : 'Confirm change'}</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
+    <div className="action-change"><span className="core-eyebrow">{isCounterConfirmation ? 'Review counter order' : isOrderCreation ? 'Confirm order' : 'Confirm change'}</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       {authenticatedActor
         ? <label>Your account<input readOnly value={authenticatedActor.label} /></label>
@@ -932,7 +933,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
-      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : isCounterConfirmation ? 'Create order' : 'Confirm change'}</button></div>
+      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : isOrderCreation ? 'Create order' : 'Confirm change'}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
   </dialog>
