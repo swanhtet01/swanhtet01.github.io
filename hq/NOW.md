@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 19 local recoveries pass. Next: `ecommerce-storefront-edit-tab-recovery`; pilots stay owner-gated.
+- 20 local recoveries pass. Next: `shop-counter-sale-tab-recovery`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,8 +63,8 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. Zero-call ENG-001 binds the current clean checkout to #411 `a09116e4`, #412 `66ff17d6`, and #413 `7e688869`. Claude is unauthenticated and untouched.
-- Review order is #411 pilot kit, #412 rehearsal, then #413 billing. All are open, mergeable, one commit over `main`, mutually non-overlapping, statusless, and locally tested. #413 alone conflicts with the current generated readiness ledger; rebase it last and regenerate.
+- Codex is sole integrator. Product checkpoint `b6dfc3d3` completes Ecommerce storefront-edit tab recovery and advances one finite Shop continuation. The current ENG-002 packet is manual, read-only, and bound to that exact checkpoint.
+- Autonomous cycles remain Llama-only and scale to zero. The Claude CLI is unauthenticated, no provider request or automatic dispatch lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
 ## Blockers
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Review and integrate PR #411, then PR #412. Repair or replace the failed preview branch only through PR #412's direct-admin, digest-bound sequence; do not use connector migration authority for the quarantine. Prove Storage, RLS, tenant isolation, session revocation, and exact restore before any invite, Vercel wiring, or write.
-2. Use the approved pilot kit with one founder-named Shop design partner and measured baseline. Integrate PR #413 only after the account and pilot gates pass. Keep AI provider execution and scheduling dormant until their gates pass.
+1. Complete the finite local `shop-counter-sale-tab-recovery` slice with exact catalogue/stock binding, one Resume/Discard decision, mobile acceptance, and no order or stock side effect.
+2. Use ENG-002 only as an optional owner-controlled review of checkpoint `b6dfc3d3`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

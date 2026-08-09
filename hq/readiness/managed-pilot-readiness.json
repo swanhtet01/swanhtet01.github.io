@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
   "asOf": "2026-08-08T12:23:36.370Z",
-  "sourceDigest": "sha256:aa50c9e8b030b0de7c20d8fd9b04472b06552a380b0c5de817659a739433691a",
+  "sourceDigest": "sha256:1e491b80e81b606753e76fa7f70fd1212407ca8b8b9ec4ba47d6206f60e81044",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -141,7 +141,7 @@
       "workOrderId": "shop-managed-order-close-pilot",
       "proposedWork": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
       "blockingReason": "Needs a founder-selected operator and approved isolated tenant.",
-      "requiredProof": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
+      "requiredProof": "Run one authenticated order-to-close and return-exception pilot on an isolated tenant with a named operator and five-day baseline."
     },
     {
       "productId": "plant",
@@ -151,7 +151,7 @@
       "workOrderId": "plant-managed-oee-pilot",
       "proposedWork": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
       "blockingReason": "Needs named timing evidence and an approved managed tenant.",
-      "requiredProof": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
+      "requiredProof": "Validate one order-bound OEE window on an isolated managed tenant with named operators, exact downtime, and measured correction effort."
     },
     {
       "productId": "website",
@@ -161,7 +161,7 @@
       "workOrderId": "website-managed-brief-acceptance",
       "proposedWork": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
       "blockingReason": "Needs a named business brief and accepted owner review.",
-      "requiredProof": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
+      "requiredProof": "Accept one named-business brief in responsive preview and retain its artifact before any domain or publish authority."
     },
     {
       "productId": "ecommerce",
@@ -171,7 +171,7 @@
       "workOrderId": "ecommerce-managed-order-exception-pilot",
       "proposedWork": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
       "blockingReason": "Needs a founder-selected operator and approved isolated tenant.",
-      "requiredProof": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
+      "requiredProof": "Prove cart-to-Shop on a protected preview and isolated managed tenant; add tax, shipping, and payment adapters only with accountable approval and duplicate-safe recovery."
     }
   ],
   "controls": {
@@ -197,7 +197,7 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:5456b51602e4cf79fccf35f6ba797a076c6ab8fb4219a7f7a2087fb940d7c00c"
+      "digest": "sha256:160b7dde5eda5097a38718a2e6efd7adf825ea98ccbbf7a59e0e8473616d34d5"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
@@ -213,11 +213,11 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:0f6b8d848ba36fec9bd95454d40cd383ee5c87ce4ee130cc7830a9b3c44ba181"
+      "digest": "sha256:8fc9727453f312ace1928a22a4508dc7b18bf7c9fe681054ad1ff6c9ba322329"
     },
     {
       "path": "package.json",
-      "digest": "sha256:02653b2471a6fc83559c680b945cc16553d66f229c2923f966bd5d7ee2090059"
+      "digest": "sha256:32258bf1e3ae259e7e5163b68152c4f2169f11d36a265a214e74317309f5b88d"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",

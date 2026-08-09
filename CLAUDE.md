@@ -1,48 +1,47 @@
-# Claude Code: bounded SuperMega reviewer
+# Claude Code: owner-controlled SuperMega review packet
 
-Status: founder-reactivated; assignment packet and fail-closed launcher ready, dispatch blocked until Claude CLI authentication succeeds.
+Status: ENG-002 is ready for manual use in the founder's existing Claude Code session. No automated Claude dispatch lane exists in this repository. The local CLI authentication check was unavailable on 2026-08-09, so no provider request was started.
 
-Codex is the sole integrator on the ROG Ally. Claude may perform exactly one read-only review, return its report to Codex, and exit. This packet does not create implementation, merge, release, credential, provider, database, messaging, or customer authority.
+Codex is the sole integrator on the ROG Ally. Autonomous company cycles use loopback Ollama with `llama3.2:1b`, immediate unload, one run at a time, and no cloud fallback. Claude is an optional independent reviewer only; it never replaces the Llama-only autonomous path.
 
-## Assignment ENG-001
+## Assignment ENG-002
 
-Identify the safe merge order, contradictions, release blockers, and exact next managed-account gate across PRs #411-#413.
+Review the exact local product checkpoint `b6dfc3d31473819b7bdda3afa5c5da0df44d7b88` for defects in Ecommerce storefront edit recovery after reload or tab closure.
 
-- Integrator minimum implementation base: `26b4b2f02e8f924528b928b30d227c0e62e314ad`
-- Integrator branch: `codex/fix-ecommerce-intake-count-20260808`
-- Canonical authority: `hq/NOW.md`, `hq/WORKBOARD.md`, `hq/readiness/managed-pilot-readiness.json`
-- PR #411 local practical candidate: `C:\Users\thesw\Projects\supermega-showroom-fixes`, commit `a09116e4edcc1e374cf17e85af27e053ff353e5a` (extends remote PR head `decb001d2e4c47c1434ea3fb1898c599228c2bf4`; replaces four duplicate static pilot-kit documents with one generated client-specific run sheet; not pushed)
-- PR #412 local hardened candidate: `C:\Users\thesw\Projects\supermega-slice1`, commit `66ff17d677adb9bd83cb275d4497a061e667d406` (extends remote PR head `111f069d673c14fd6f8529d87bfcaacd7aae9671` with an exact founder-approval and T0+24h branch-lifetime gate, and places the 16-case rehearsal safety test inside the normal app gate; not pushed)
-- PR #413 local executable candidate: `C:\Users\thesw\Projects\supermega-rebaseline`, commit `7e68886914e436e649915d4083572b3bf11abc39` (extends remote PR head `3aab5edc398e4a3e2d7ec0aca4346438872c7d87`; replaces a draft-only billing promise with a digest-bound manual issue/paid/void lifecycle and 49 fail-closed checks; not pushed)
-- Current integrator blob audit: every modified #411/#412 file still equals the shared-base blob and every added path is free; #413's new paths are free, but its `package.json` and generated managed-readiness ledger differ from the integrator and require deliberate reconciliation plus ledger regeneration.
+Read only these files:
 
-Read, Grep, and Glob are the only allowed tools. Do not use a shell, edit a file, create a branch or worktree, run a build, access secrets, call a provider, send a message, push, merge, deploy, change a domain, invite a user, or write hosted data.
+1. `showroom/src/products/ecommerce/storefront-edit-recovery.ts`
+2. `showroom/src/products/ecommerce/EcommerceProduct.tsx`
+3. `showroom/src/products/ecommerce/ecommerce-product.css`
+4. `tools/verify_app_build.mjs`
 
-## Coordination and runtime boundary
+Use Read, Grep, and Glob only. Do not use a shell, edit or create files, start an agent or subagent, inspect or control another Claude session, access secrets, browse the web, call a connector, send a message, or change repository, account, database, deployment, domain, payment, customer, or hosted state. Return one response in the founder's current session and stop.
 
-- The founder's existing Claude sessions are owner-controlled and must never be started, continued, closed, or terminated by a RAM-cleanup or company-cycle process.
-- This assignment is one foreground, read-only response after authentication; do not create background agents, subagents, or a recurring Claude process.
-- Codex remains the integrator. Return findings in the active Claude session; Codex independently verifies them before any repository or external action.
-- Claude is not an automatic provider fallback. Autonomous company cycles use loopback Ollama under the `local-only` policy and unload the model after each bounded run.
+## Review questions
 
-Codex may check the packet with `npm run claude:eng001:preflight`. That command performs no provider request. `npm run claude:eng001:review` is the only execution lane: it first verifies every pinned worktree and authentication, then starts one foreground, read-only, safe-mode response with a USD 0.20 ceiling. It does not inspect or control existing Claude sessions and fails closed before dispatch when authentication or repository identity is unavailable.
-
-## Evidence that must remain true
-
-- Read-only live verification at `2026-08-08T14:58:56.281Z` confirmed public and app domains serve commit `4ce500c29b1cca9617eeba83528293bc1af6c83e` in `isolated_demo` mode; managed persistence and security remain false.
-- The existing Supabase preview is `MIGRATIONS_FAILED`: 27 copied public tables lack RLS, `app_private` is absent, and quarantine failed with `permission denied to change default privileges`.
-- The failed preview must stay disconnected from Vercel and Auth invitations.
-- PR #412's direct-admin, digest-bound rehearsal is the proposed recovery path; connector migration authority is insufficient.
-- A real account remains blocked until tenant isolation, session revocation, private Storage, backup/restore, role boundaries, and exact release binding all pass.
+1. Does an unchanged first-run storefront avoid creating recovery evidence?
+2. Does a real edit retain the exact name, summary, SKU order, merchandising, view, and device without saving or sending?
+3. Does Resume reject a changed scope, saved revision, saved fingerprint, catalog digest, unknown SKU, malformed payload, or newer-tab recovery?
+4. Can Discard or Save remove only the exact recovery they own without clearing a newer tab's draft?
+5. While recovery is pending, are editing, storefront switching, add-to-cart, and consequential buying actions blocked behind one clear Resume/Discard decision?
+6. Does the single Start-here surface remain usable in light/dark themes and at mobile touch sizes without adding another page or duplicate callout?
+7. Are any tests tautological, missing a race, or asserting source strings without meaningful runtime coverage?
 
 ## Required report
 
-Return one concise response with:
+Return one concise report containing:
 
-1. verified commit and worktree identities;
-2. changed-file overlap or hidden coupling across the three PRs;
-3. recommended merge order with a reason for each step;
-4. any security, rollback, billing, or evidence defect that must block integration;
-5. the smallest next action that can safely enable one named Shop preview operator.
+1. verified checkpoint and files read;
+2. prioritized defects with exact file and line references;
+3. missing adversarial or concurrency cases;
+4. UX/accessibility defects that would confuse a first-time operator;
+5. a final verdict: `accept`, `accept-with-follow-up`, or `block`.
 
-Separate verified facts from recommendations. Do not convert local tests, documentation, or an isolated preview into production-readiness claims. If authentication is unavailable, a worktree is dirty, a commit differs, or evidence cannot be read, stop and report that exact blocker. Codex will independently verify any report before accepting it.
+Separate verified findings from recommendations. Do not claim that local tests, browser-local storage, or an isolated demo prove hosted persistence, tenant isolation, managed security, deployment, customer demand, or production readiness. If the checkpoint or a required file cannot be verified, stop and report that exact blocker.
+
+## Coordination boundary
+
+- Do not start, continue, close, terminate, or inspect any existing Claude or Bionic process on behalf of Codex.
+- Do not create a recurring Claude process or automatic provider fallback.
+- Codex independently reproduces every accepted finding before changing source.
+- No push, merge, deployment, connector write, account invite, external send, or paid resource is authorized by this packet.

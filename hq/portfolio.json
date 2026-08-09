@@ -36,10 +36,11 @@
     {"productId":"ecommerce","workOrderId":"ecommerce-reschedule-close-recovery","checkpoint":"OPS-182"},
     {"productId":"shop","workOrderId":"shop-purchase-order-close-recovery","checkpoint":"OPS-183"},
     {"productId":"plant","workOrderId":"plant-availability-order-switch-recovery","checkpoint":"OPS-184"},
-    {"productId":"website","workOrderId":"website-edit-session-tab-recovery","checkpoint":"OPS-185"}
+    {"productId":"website","workOrderId":"website-edit-session-tab-recovery","checkpoint":"OPS-185"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-storefront-edit-tab-recovery","checkpoint":"OPS-186"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-storefront-edit-tab-recovery","priority":100,"status":"ready-local","workOrder":"Ecommerce: recover unsaved storefront edits after tab closure without saving or sending.","reason":"Store name, summary, products, and merchandising stay in memory until Save; Resume/Discard must bind to saved revision and catalog digest."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"shop","workOrderId":"shop-counter-sale-tab-recovery","priority":100,"status":"ready-local","workOrder":"Shop: recover one unfinished counter sale after reload or tab closure without creating an order or moving stock.","reason":"Counter quantities, customer, payment, and drawer state are memory-only; Resume/Discard must bind exact Shop catalogue and stock."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
@@ -142,7 +143,7 @@
         "workOrder": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
         "reason": "Needs a founder-selected operator and approved isolated tenant."
       },
-      "nextGate": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
+      "nextGate": "Run one authenticated order-to-close and return-exception pilot on an isolated tenant with a named operator and five-day baseline."
     },
     {
       "id": "plant",
@@ -164,7 +165,7 @@
         "workOrder": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
         "reason": "Needs named timing evidence and an approved managed tenant."
       },
-      "nextGate": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
+      "nextGate": "Validate one order-bound OEE window on an isolated managed tenant with named operators, exact downtime, and measured correction effort."
     },
     {
       "id": "website",
@@ -184,7 +185,7 @@
         "workOrder": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
         "reason": "Needs a named business brief and accepted owner review."
       },
-      "nextGate": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
+      "nextGate": "Accept one named-business brief in responsive preview and retain its artifact before any domain or publish authority."
     },
     {
       "id": "ecommerce",
@@ -204,7 +205,7 @@
         "workOrder": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
         "reason": "Needs a founder-selected operator and approved isolated tenant."
       },
-      "nextGate": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
+      "nextGate": "Prove cart-to-Shop on a protected preview and isolated managed tenant; add tax, shipping, and payment adapters only with accountable approval and duplicate-safe recovery."
     }
   ],
   "sharedCapabilities": [
@@ -226,14 +227,14 @@
       "id": "company-system",
       "name": "SuperMega HQ",
       "path": "/",
-      "job": "Coordinate Product, Engineering, Growth, Finance, evidence, exceptions, and owner decisions for SuperMega itself.",
+      "job": "Coordinate SuperMega product, engineering, growth, finance, evidence, and owner decisions.",
       "surfaces": ["Home", "Work", "Products", "Settings (utility)", "Agent teams (internal)"]
     },
     {
       "id": "rnd-system",
       "name": "R&D and resource intelligence",
       "path": "hq/",
-      "job": "Discover, verify, test, compare, and convert useful resources into reusable implementation guidance.",
+      "job": "Turn verified resources into reusable implementation guidance.",
       "public": false
     }
   ],

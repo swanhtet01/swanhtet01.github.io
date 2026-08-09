@@ -237,7 +237,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.localImprovementQueue)
   && portfolio.localImprovementQueue.length === 1
-  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'ecommerce'
+  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'shop'
   && portfolio.localImprovementQueue.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'contract,priority,productId,reason,status,workOrder,workOrderId'
     && entry.contract === 'supermega.product-improvement-authority.v1'
@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 33
+  && portfolio.completedLocalAutomations.length === 34
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -356,10 +356,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[32]?.productId === 'website'
   && portfolio.completedLocalAutomations[32]?.workOrderId === 'website-edit-session-tab-recovery'
   && portfolio.completedLocalAutomations[32]?.checkpoint === 'OPS-185'
+  && portfolio.completedLocalAutomations[33]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[33]?.workOrderId === 'ecommerce-storefront-edit-tab-recovery'
+  && portfolio.completedLocalAutomations[33]?.checkpoint === 'OPS-186'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-storefront-edit-tab-recovery'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-counter-sale-tab-recovery'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1448,9 +1451,14 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('Product checkpoint `333b5043` adds `supermega.website.closed-edit-session.v1`')
   && workboard.includes('`ecommerce-storefront-edit-tab-recovery` as the sole ready local continuation')
   && workboard.includes('Zero-provider Claude preflight reconfirmed authentication unavailable')
+  && workboard.includes('| OPS-186 | CEO + Ecommerce UX / Agent Operations Codex | done-local |')
+  && workboard.includes('Product checkpoint `b6dfc3d3` adds `supermega.ecommerce.closed-storefront-edit.v1`')
+  && workboard.includes('`shop-counter-sale-tab-recovery` as the sole ready local continuation')
+  && workboard.includes('| ENG-002 | Claude Code | blocked-prerequisite |')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
-  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-storefront-edit-tab-recovery')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-storefront-edit-tab-recovery' && entry.checkpoint === 'OPS-186')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-counter-sale-tab-recovery')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
