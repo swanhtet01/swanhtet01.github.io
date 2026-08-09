@@ -4,6 +4,9 @@ import {
   type ClientSolutionId,
 } from './client-onboarding.ts'
 import {
+  commerceBusinessCatalogItems,
+  commerceWorkspaceIsPristineDemo,
+  createEmptyCommerce,
   importCommerceCatalog,
   mutateCommerceWorkspace,
   type CommerceCatalogImportResult,
@@ -36,6 +39,7 @@ export type LocalClientDemoProductInstall = {
 
 type LocalClientDemoActivationOptions = {
   replaceExistingEcommerceDraft?: boolean
+  replacePristineCommerceDemo?: boolean
 }
 
 const localProductLabels: Record<ClientSolutionId, string> = {
@@ -66,6 +70,14 @@ export async function activateLocalStagingPackage(
   let mutationError = ''
   if (stagingPackage.product === 'commerce') {
     const result = await mutateCommerceWorkspace((current) => {
+      const businessItems = commerceBusinessCatalogItems(current)
+      if (options.replacePristineCommerceDemo && current.items.length > 0 && businessItems.length === 0 && !commerceWorkspaceIsPristineDemo(current)) {
+        mutationError = 'This Shop demo already has activity. Existing records were preserved; reset the demo before replacing it with client products.'
+        return null
+      }
+      const importBase = options.replacePristineCommerceDemo && commerceWorkspaceIsPristineDemo(current)
+        ? createEmptyCommerce()
+        : current
       const items: CommerceItem[] = stagingPackage.rows.map((row) => ({
         sku: row.values.sku,
         name: row.values.name,
@@ -73,7 +85,7 @@ export async function activateLocalStagingPackage(
         reorderAt: Number(row.values.reorderAt),
         price: Number(row.values.price),
       }))
-      activation = importCommerceCatalog(current, {
+      activation = importCommerceCatalog(importBase, {
         items,
         sourceDigest: stagingPackage.source.previewDigest,
         capturedAt,
@@ -82,7 +94,7 @@ export async function activateLocalStagingPackage(
       return activation?.state ?? null
     })
     mutationOk = result.ok
-    mutationError = result.ok ? '' : result.error
+    mutationError = result.ok ? '' : mutationError || result.error
   } else if (stagingPackage.product === 'production') {
     const result = await mutateProductionWorkspace((current) => {
       const jobs: ProductionJob[] = stagingPackage.rows.map((row) => ({

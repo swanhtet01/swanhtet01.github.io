@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { lazy, Suspense, type FormEvent, useEffect, useState } from 'react'
 import { useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
@@ -10,6 +10,8 @@ import {
   startPilotOutcome,
 } from './pilot-outcome'
 import { currentProductionShiftClose } from './production-workspace'
+import { commerceBusinessCatalogItems, loadCommerceWorkspace } from './commerce-workspace'
+import type { ClientDemoProductProgress } from './client-onboarding'
 import {
   productContracts,
   managedTrialRequestUrl,
@@ -45,9 +47,12 @@ import {
 import {
   useAccountableActions,
   useManagedIdentity,
+  useCommerceWorkspace,
   useProductionWorkspace,
   useSetupWorkspace,
 } from './workspace-runtime'
+
+const ClientDataOnboarding = lazy(() => import('./ClientDataOnboarding').then((module) => ({ default: module.ClientDataOnboarding })))
 
 type ProductOnboardingPageProps = {
   product: SetupProductId
@@ -74,8 +79,8 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
   },
   ecommerce: {
     outcome: 'Open a working online store',
-    detail: 'A storefront and checkout sample are ready. Review the store, then send an order into Shop.',
-    actionLabel: 'Create Ecommerce and open the store',
+    detail: 'Shop stays the source of products, stock, and prices. Ecommerce presents them online and sends each order request back for review.',
+    actionLabel: 'Build Ecommerce from Shop',
     firstTaskPath: '/ecommerce/',
   },
 }
@@ -88,8 +93,10 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [actions] = useAccountableActions()
   const [production] = useProductionWorkspace()
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
+  const [commerceWorkspace] = useCommerceWorkspace(managedIdentity)
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
+  const [catalogImportRows, setCatalogImportRows] = useState(0)
   const [shopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
   const [plantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
@@ -109,6 +116,9 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const workspaceOwner = setup.owner.trim() || 'Business owner'
   const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
+  const currentBusinessCatalog = product === 'ecommerce' ? commerceBusinessCatalogItems(commerceWorkspace) : []
+  const ecommerceCatalogRows = Math.max(currentBusinessCatalog.length, catalogImportRows)
+  const ecommerceCatalogReady = ecommerceCatalogRows > 0
 
   useEffect(() => {
     if (setup.product === product) return undefined
@@ -121,7 +131,9 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       setSetup(saved ?? seedSetupForProduct(product, template.id))
       setNotice(saved
         ? `Continue your saved ${onboardingProduct.name} workspace.`
-        : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
+        : product === 'ecommerce'
+          ? 'Enter the business name, then connect its Shop products.'
+          : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
     }, 0)
     return () => window.clearTimeout(selectionTimer)
   }, [onboardingProduct.name, product, selectedShopIndustryPack.workflowTemplateId, setSetup, setup])
@@ -175,10 +187,20 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     })
   }
 
-  async function startGuidedWorkspace(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  function recordEcommerceCatalogProgress(progress: ClientDemoProductProgress) {
+    if (progress.product !== 'commerce' || progress.status !== 'applied') return
+    setCatalogImportRows(progress.readyRows)
+    setSetup((current) => current.product === 'ecommerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current)
+    setNotice(`${progress.readyRows} Shop products are ready. Build the storefront when you are ready.`)
+  }
+
+  async function prepareGuidedWorkspace(useEcommerceDemo = false) {
     if (!workflowReady) {
       setNotice('Enter a business name.')
+      return
+    }
+    if (product === 'ecommerce' && !useEcommerceDemo && !ecommerceCatalogReady) {
+      setNotice('Import real Shop products first, or choose the demo option below.')
       return
     }
     if (workspaceStarted) {
@@ -210,11 +232,14 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       }
       if (product === 'ecommerce' && !managedIdentity) {
         const { activateLocalEcommerceWorkingSample } = await import('./local-client-import')
-        await activateLocalEcommerceWorkingSample({
+        const realCatalog = useEcommerceDemo ? undefined : commerceBusinessCatalogItems(loadCommerceWorkspace().state)
+        if (!useEcommerceDemo && !realCatalog?.length) throw new Error('No reviewed Shop products are available for Ecommerce yet.')
+        const result = await activateLocalEcommerceWorkingSample({
           templateId: onboardingTemplate.id as 'social-storefront' | 'pickup-preorder' | 'wholesale-request',
           businessName: setup.workspace,
           capturedAt: new Date().toISOString(),
-        })
+        }, realCatalog ? { catalog: realCatalog } : undefined)
+        if (!result.ok) throw new Error(result.error)
       }
       const startedAt = new Date().toISOString()
       setSetup((current) => ({ ...current, product, owner: workspaceOwner, startedAt, savedAt: undefined }))
@@ -246,6 +271,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     }
   }
 
+  async function startGuidedWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await prepareGuidedWorkspace()
+  }
+
   function recordGuidedSetupRequest() {
     recordBehaviorSignal(window.localStorage, {
       event: 'product_requested',
@@ -264,7 +294,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       />
       <div aria-label={`${onboardingProduct.name} onboarding`} className="product-onboarding-grid">
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
-          <div className="product-onboarding-intro"><span className="core-eyebrow">One step</span><h2>Name your workspace</h2><p>We will add realistic sample records now; replace them with your data whenever you are ready.</p></div>
+          <div className="product-onboarding-intro"><span className="core-eyebrow">{product === 'ecommerce' ? 'Quick setup' : 'One step'}</span><h2>Name your workspace</h2><p>{product === 'ecommerce' ? 'Use the products already reviewed in Shop, or import them below. Demo products stay optional.' : 'We will add realistic sample records now; replace them with your data whenever you are ready.'}</p></div>
           <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           {product === 'commerce' ? (
@@ -279,12 +309,14 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
               </label>
             </details>
           ) : null}
-          <div className="product-onboarding-primary">
-            <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
-            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
-          </div>
-          <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
-          <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
+          {product === 'ecommerce' && !ecommerceCatalogReady ? <Suspense fallback={<p className="form-notice" role="status">Loading the Shop import...</p>}><ClientDataOnboarding allowSample={false} managedIdentity={managedIdentity} onProgress={recordEcommerceCatalogProgress} owner={workspaceOwner} product="commerce" productName="Shop" productSlug="shop" replacePristineCommerceDemo shopIndustryPackId={selectedShopIndustryPack.id} workflowTemplateId={selectedShopIndustryPack.workflowTemplateId} workspace={setup.workspace} /></Suspense> : null}
+          {product !== 'ecommerce' || ecommerceCatalogReady ? <div className="product-onboarding-primary">
+            <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : product === 'ecommerce' ? `Build from ${ecommerceCatalogRows} Shop product${ecommerceCatalogRows === 1 ? '' : 's'}` : onboardingJourney.actionLabel}</button>
+            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : product === 'ecommerce' ? 'Uses Shop as the catalogue authority and opens the customer storefront.' : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
+          </div> : null}
+          {product === 'ecommerce' && !ecommerceCatalogReady ? <details className="compact-disclosure"><summary><span>Just exploring?</span><small>Demo products are optional</small></summary><div className="form-actions"><button className="core-button" disabled={!workflowReady || workspaceBusy} onClick={() => void prepareGuidedWorkspace(true)} type="button">Use demo products</button></div></details> : null}
+          <p className="product-onboarding-help">{product === 'ecommerce' ? 'Ecommerce reads products, stock, and prices from Shop; confirmed requests return there as orders.' : <>This setup affects {onboardingProduct.name} only. Your other products stay separate.</>}</p>
+          {product !== 'ecommerce' ? <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p> : null}
           <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>
         </form>
       </div>

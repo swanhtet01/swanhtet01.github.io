@@ -68,10 +68,10 @@ function workingSamplePlan(catalog: CommerceItem[], input: Pick<EcommerceWorking
       : input.templateId === 'pickup-preorder' ? 'Pickup menu' : 'Trade assortment',
     displayName: item.name,
     note: input.templateId === 'social-storefront'
-      ? 'Demo social listing: confirm campaign copy and availability before launch.'
+      ? 'Confirm campaign copy and availability before sharing.'
       : input.templateId === 'pickup-preorder'
-        ? 'Demo pickup listing: confirm collection time and availability before launch.'
-        : 'Demo trade listing: confirm quantities, pricing, and delivery terms before launch.',
+        ? 'Confirm collection time and availability before sharing.'
+        : 'Confirm quantities, pricing, and delivery terms before sharing.',
   }))
   return { rows, summary }
 }

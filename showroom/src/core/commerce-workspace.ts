@@ -6491,6 +6491,23 @@ export function commerceWorkingSampleCatalogId(stateValue: CommerceState) {
   return sampleIds.size === 1 ? [...sampleIds][0] : null
 }
 
+export function commerceWorkspaceIsPristineDemo(stateValue: CommerceState) {
+  try {
+    return JSON.stringify(validateCommerceState(stateValue)) === JSON.stringify(createSeedCommerce())
+  } catch {
+    return false
+  }
+}
+
+export function commerceBusinessCatalogItems(stateValue: CommerceState) {
+  let state: CommerceState
+  try { state = validateCommerceState(stateValue) } catch { return [] }
+  const demoSkus = new Set(commerceCatalogBaselines(state)
+    .filter((baseline) => baseline.proof.actionId.startsWith('ACT-DEMO-'))
+    .map((baseline) => baseline.sku))
+  return state.items.filter((item) => !demoSkus.has(item.sku))
+}
+
 export function importCommerceCatalog(stateValue: CommerceState, input: {
   items: CommerceItem[]
   sourceDigest: string

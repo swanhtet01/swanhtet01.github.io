@@ -34,8 +34,6 @@ details:not([open]) > :not(summary) { display: none; }
 .core-stage { width: 100%; max-width: 100%; min-width: 0; min-height: 0; grid-column: 2; display: grid; grid-template-rows: 56px minmax(0,1fr); overflow-x: clip; }
 .core-main { width: min(calc(100% - 40px), 1420px); max-width: calc(100% - 40px); height: 100%; min-width: 0; min-height: 0; margin: 0 auto; padding: 20px 0; overflow: hidden; }
 .core-route-content { width: 100%; max-width: 100%; height: 100%; min-width: 0; min-height: 0; }
-.core-main.has-system-navigator { display: flex; flex-direction: column; }
-.core-main.has-system-navigator .core-route-content { height: auto; flex: 1; }
 .core-main.has-trial-context { display: flex; flex-direction: column; gap: 10px; }
 .core-main.has-trial-context .core-route-content { height: auto; flex: 1; }
 .core-main.natural-scroll { overflow-y: auto; }
@@ -78,33 +76,6 @@ details:not([open]) > :not(summary) { display: none; }
 .topbar-meta a { color: var(--core-muted); text-decoration: none; }
 .topbar-meta a:hover { color: var(--core-green); }
 
-.product-system-navigator { position: relative; z-index: 12; flex: 0 0 auto; margin-top: 12px; overflow: clip; border: 1px solid var(--core-line); border-radius: 9px; background: color-mix(in srgb,var(--core-panel) 94%,transparent); }
-.product-system-navigator > summary { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 14px; cursor: pointer; list-style: none; }
-.product-system-navigator > summary::-webkit-details-marker { display: none; }
-.product-system-navigator > summary > span { min-width: 0; display: flex; align-items: center; gap: 10px; }
-.product-system-navigator > summary b { color: var(--core-ink); font-size: 12px; }
-.product-system-navigator > summary small { overflow: hidden; color: var(--core-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.product-system-navigator > summary > strong { flex: 0 0 auto; color: var(--core-green); font-size: 10px; text-transform: uppercase; }
-.product-system-navigator[open] > summary { border-bottom: 1px solid var(--core-line); background: var(--core-green-soft); }
-.product-system-body { max-height: min(70vh,760px); display: grid; gap: 13px; overflow: auto; padding: 16px 20px 20px; background: var(--core-panel); scrollbar-gutter: stable; }
-.product-system-body > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-.product-system-body > header > div:first-child { max-width: 760px; }
-.product-system-body h2 { margin: 4px 0; font-size: 20px; letter-spacing: 0; }
-.product-system-body header p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.45; }
-.product-system-actions { display: flex; gap: 7px; }
-.product-system-workflows { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
-.product-system-workflow { min-width: 0; min-height: 104px; display: grid; align-content: start; gap: 4px; border: 1px solid var(--core-line); border-radius: 8px; padding: 11px; background: var(--core-panel-raised); text-decoration: none; }
-.product-system-workflow:hover { border-color: var(--core-green); background: var(--core-green-soft); }
-.product-system-workflow > span { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.product-system-workflow > b { color: var(--core-ink); font-size: 12px; line-height: 1.25; }
-.product-system-workflow > p { margin: 0; color: var(--core-muted); font-size: 9px; line-height: 1.4; }
-.product-system-workflow > strong { align-self: end; color: var(--core-green); font-size: 10px; }
-.product-system-data { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 16px; border: 1px solid var(--core-line); border-radius: 8px; padding: 12px; background: var(--core-panel-raised); }
-.product-system-data h3 { margin: 4px 0; font-size: 14px; }
-.product-system-data p { margin: 0; color: var(--core-muted); font-size: 10px; line-height: 1.5; }
-.product-system-data small { display: block; margin-top: 5px; color: var(--core-quiet); font-size: 9px; }
-.product-system-import { min-width: 0; border-top: 1px solid var(--core-line); padding-top: 2px; }
-.product-system-import .catalog-import-disclosure { margin-top: 0; border-top: 0; padding-top: 0; }
 .mobile-nav { display: none; }
 .runtime-badge { min-height: 28px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--core-line); border-radius: 5px; padding: 0 9px; color: var(--core-muted); font-family: var(--core-mono); font-size: 9px; font-weight: 740; text-transform: uppercase; }
 .runtime-badge i { width: 5px; height: 5px; border-radius: 50%; background: var(--core-quiet); }
@@ -1710,16 +1681,6 @@ textarea { min-height: 72px; resize: vertical; }
   .mobile-nav a { min-width: 0; display: grid; place-items: center; border-top: 2px solid transparent; padding-inline: 2px; overflow: hidden; color: var(--core-quiet); font-size: 9px; font-weight: 740; text-align: center; text-overflow: ellipsis; text-decoration: none; white-space: nowrap; }
   .mobile-nav a.active { border-top-color: var(--core-green); color: var(--core-green); }
   .core-main { width: min(calc(100% - 24px),760px); max-width: calc(100% - 24px); height: auto; min-height: 0; padding: 18px 0 calc(88px + env(safe-area-inset-bottom)); overflow: visible; }
-  .product-system-navigator > summary { min-height: 46px; padding-inline: 12px; }
-  .product-system-navigator > summary > span { display: grid; gap: 2px; }
-  .product-system-body { max-height: min(72svh,720px); padding: 13px 12px 16px; }
-  .product-system-body > header { align-items: stretch; flex-direction: column; }
-  .product-system-actions { display: flex; }
-  .product-system-actions .core-button { width: 100%; }
-  .product-system-workflows { grid-template-columns: 1fr; }
-  .product-system-workflow { min-height: auto; }
-  .product-system-data { grid-template-columns: 1fr; }
-  .product-system-data .core-button { width: 100%; }
   .core-route-content, .core-main.has-trial-context .core-route-content { height: auto; flex: none; }
   .core-main :is(a, button, input, select, textarea, summary, [tabindex="0"]) { scroll-margin-block: 64px calc(80px + env(safe-area-inset-bottom)); }
   .workspace-screen, .operations-screen, .commerce-screen { width: 100%; max-width: 100%; min-width: 0; overflow-x: clip; }

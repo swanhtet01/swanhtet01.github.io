@@ -16,7 +16,6 @@ export function verifyCurrentReleaseAssets({
   manifest,
   assetCorpus,
   operationsChunk,
-  productSystemNavigatorChunk,
   productOnboardingChunk,
   settingsChunk,
   ecommerceProductCorpus,
@@ -29,10 +28,9 @@ export function verifyCurrentReleaseAssets({
 }) {
   const groups = [
     ['launcher', assetCorpus, ['SUPERMEGA', 'Switch product', 'Each product opens as its own working sample. Setup is optional when you are ready to use your business data.', 'supermega.last-product.v1', 'Sell and manage stock', 'Run production', 'Publish your business', 'Take online orders', 'Counter sales, inventory, orders, and daily close.', 'Jobs, materials, output, quality, and traceability.', 'Pages, services, inquiries, and launch preview.', 'Storefront, checkout, delivery, and Shop handoff.', 'Your product workspaces stay separate. Opening a sample does not change another product.', 'Open', manifest.brand.colors.accent, manifest.brand.colors.ink]],
-    ['guided_outcomes', productOnboardingChunk, ['Complete a sample sale', 'Create Shop and start selling', 'Run a sample production job', 'Create Plant and open the job', 'Preview a business website', 'Create Website and preview it', 'Open a working online store', 'Create Ecommerce and open the store']],
+    ['guided_outcomes', productOnboardingChunk, ['Complete a sample sale', 'Create Shop and start selling', 'Run a sample production job', 'Create Plant and open the job', 'Preview a business website', 'Create Website and preview it', 'Open a working online store', 'Build Ecommerce from Shop']],
     ['onboarding', productOnboardingChunk, ['Make ', ' yours', 'One step', 'Name your workspace', 'We will add realistic sample records now; replace them with your data whenever you are ready.', 'First useful result:', 'Creates local sample records, then opens the first task.', 'Enter a business name to continue.', 'This setup affects', 'Opening it will not run setup again.', 'Nothing is sent or published.', 'Need help bringing real data?', 'Ask SuperMega to set up ', 'product_requested']],
     ['shop_plant', operationsChunk, ['Create order', 'Finish payment and handoff in Orders.', 'Stock reserved. Finish fulfilment and reconcile payment before completion.', 'Jobs', 'Problems', 'Record output', 'Close shift', 'Browser-local sample only.', 'No payment is captured']],
-    ['secondary_tools', productSystemNavigatorChunk, ['Next steps', 'More workflows or your data', 'Keep working in ', 'Choose another working flow, use your data, or make this sample yours.', 'Make ', ' mine', 'Your data', 'Upload a CSV or try a sample.', 'Use my Shop data', 'Use my Plant data', 'Use my website content', 'Use my store data', 'Only ', 'next_steps_opened', 'data_setup_opened']],
     ['settings', settingsChunk, ['supermega_trial_evidence', 'Premium company learning', 'Advanced controls', 'Save, export, restore, or reset.', 'Export full evidence', 'Selected product only', 'activation journey', 'Shows where this browser stopped between next steps, own data, and a product request.']],
     ['activation_learning', assetCorpus, ['supermega.product_activation_funnel.v1']],
     ['website', websiteChunk, ['Start your website', 'New website', 'View example', 'Make preview', 'Download site', 'Website starter brief generated', 'Not online yet', 'Edit page', 'Mingalar Fresh Mart', 'Fresh everyday groceries without the extra trip.', 'Stock the week in one simple order.', 'Tell us what you need today.']],
@@ -57,10 +55,6 @@ export function verifyCurrentReleaseAssets({
   for (const forbidden of ['Start with one product.', 'Company workspace readiness', 'Choose one product when its demo makes sense', 'Prepare one product at a time.', 'Samples open immediately with no account or setup.']) {
     checks += 1
     if (assetCorpus.includes(forbidden)) throw new Error(`retired_launcher_release_asset:${forbidden}`)
-  }
-  for (const forbidden of ['Workflows and setup', 'Choose another task.', 'Set up ', 'Setup and imports']) {
-    checks += 1
-    if (productSystemNavigatorChunk.includes(forbidden)) throw new Error(`retired_secondary_tools_release_asset:${forbidden}`)
   }
   for (const forbidden of ['Use Plant in 3 steps.', 'Choose a job, record output, then fix blockers.', 'Plant guided jobs']) {
     checks += 1
@@ -110,9 +104,11 @@ if (artifactSelfTest) {
   if (assetNames.some((name) => /^ProductHomeReadiness-[A-Za-z0-9_-]+\.js$/.test(name))) {
     throw new Error('retired_product_home_readiness_chunk_present')
   }
+  if (assetNames.some((name) => /^ProductSystemNavigator-[A-Za-z0-9_-]+\.js$/.test(name))) {
+    throw new Error('retired_product_system_navigator_chunk_present')
+  }
   const [
     operationsChunk,
-    productSystemNavigatorChunk,
     productOnboardingChunk,
     settingsChunk,
     ecommerceChunk,
@@ -126,7 +122,6 @@ if (artifactSelfTest) {
     activationRunbookChunk,
   ] = await Promise.all([
     readArtifactChunk(assetsDir, assetNames, /^(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js$/),
-    readArtifactChunk(assetsDir, assetNames, /^ProductSystemNavigator-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^ProductOnboardingPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^SettingsPage-[A-Za-z0-9_-]+\.js$/),
     readArtifactChunk(assetsDir, assetNames, /^EcommerceProduct-[A-Za-z0-9_-]+\.js$/),
@@ -148,7 +143,6 @@ if (artifactSelfTest) {
     manifest: artifactManifest,
     assetCorpus,
     operationsChunk,
-    productSystemNavigatorChunk,
     productOnboardingChunk,
     settingsChunk,
     ecommerceProductCorpus: `${ecommerceChunk}\n${ecommercePacketChunk}`,
@@ -373,8 +367,7 @@ const operationsChunkPath = /assets\/(?:CoreApp|core-app)-[A-Za-z0-9_-]+\.js/.ex
 if (!operationsChunkPath) throw new Error('operations_chunk_missing')
 const operationsChunk = (await get(`/${operationsChunkPath}`)).body
 const productSystemNavigatorChunkPath = /assets\/ProductSystemNavigator-[A-Za-z0-9_-]+\.js/.exec(`${assetCorpus}\n${operationsChunk}`)?.[0]
-if (!productSystemNavigatorChunkPath) throw new Error('product_system_navigator_chunk_missing')
-const productSystemNavigatorChunk = (await get(`/${productSystemNavigatorChunkPath}`)).body
+if (productSystemNavigatorChunkPath) throw new Error('retired_product_system_navigator_chunk_present')
 const productOnboardingChunkPath = /assets\/ProductOnboardingPage-[A-Za-z0-9_-]+\.js/.exec(assetCorpus)?.[0]
 if (!productOnboardingChunkPath) throw new Error('product_onboarding_chunk_missing')
 const productOnboardingChunk = (await get(`/${productOnboardingChunkPath}`)).body
@@ -425,7 +418,6 @@ const releaseAssetVerification = verifyCurrentReleaseAssets({
   manifest,
   assetCorpus,
   operationsChunk,
-  productSystemNavigatorChunk,
   productOnboardingChunk,
   settingsChunk,
   ecommerceProductCorpus,

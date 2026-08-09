@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router'
 import { recordBehaviorSignal } from '../../core/behavior-trail'
 import {
   COMMERCE_KEY,
+  commerceBusinessCatalogItems,
   commerceCatalogDigest,
   commerceCatalogDigestSource,
   commerceStorefrontConfiguration,
@@ -1418,6 +1419,7 @@ export function EcommerceProduct() {
     navigate('/shop/?tab=orders&source=ecommerce', { state: { ecommerceShopDraft: draft } })
   }
 
+  const sampleStore = !managedIdentity && commerceBusinessCatalogItems(localCommerceState).length === 0
   const sourceLabel = catalog.source === 'shop-local'
     ? 'Current local Shop catalog'
     : catalog.source === 'managed-shop'
@@ -1779,7 +1781,7 @@ export function EcommerceProduct() {
     ['Storefront', previewResult.preview ? savedDraftIsCurrent ? 'Saved' : 'Draft ready' : 'Blocked'],
     ['Checkout', buyingReady ? 'Quote ready' : 'Locked'],
     ['Queue', pendingManagedRequests.length ? `${pendingManagedRequests.length} Shop review` : 'Clear'],
-    ['Safety', managedIdentity ? 'Account review' : 'Sample only'],
+    ['Safety', managedIdentity ? 'Account review' : sampleStore ? 'Sample only' : 'Browser review'],
   ] as const
   const managedStoreActivationStage = importNeeded
     ? 'Import catalog for go-live'
@@ -1875,7 +1877,7 @@ export function EcommerceProduct() {
           ? 'Review cart quote'
           : managedIdentity
             ? 'Open store for ordering'
-            : 'Start sample order'
+            : sampleStore ? 'Start sample order' : 'Start customer order'
   const aiAgentReason = checkoutEntryRecoveryPending
     ? 'A source-bound customer checkout must be resumed or discarded before the cart can change.'
     : pendingManagedRequests.length
@@ -1894,7 +1896,7 @@ export function EcommerceProduct() {
           ? `${buyingCart.length} cart line${buyingCart.length === 1 ? '' : 's'} ready for quote review.`
           : managedIdentity
             ? 'The store is saved and ready for a customer request.'
-            : 'The sample store is ready for one customer-order walkthrough.'
+            : sampleStore ? 'The sample store is ready for one customer-order walkthrough.' : 'The customer store is ready for its next reviewed order.'
   const aiOwnerGate = checkoutEntryRecoveryPending
     ? 'Resume or discard only; recovery cannot create a quote, order, payment, stock change, or message.'
     : pendingManagedRequests.length
@@ -1971,7 +1973,7 @@ export function EcommerceProduct() {
                 ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'} ready for checkout`
                 : managedIdentity
                   ? 'Your store is ready for the next order'
-                  : 'Try one customer order'
+                  : sampleStore ? 'Try one customer order' : 'Take the next customer order'
   const ecommerceTodaySummary = hasStorefrontEditRecovery
     ? storefrontEditRecoveryReview?.ok
       ? 'Resume the exact name, description, products, and display details before taking another action.'
@@ -1992,7 +1994,7 @@ export function EcommerceProduct() {
           ? 'Shop owns fulfilment for this order. The storefront stays ready for the next customer.'
           : managedIdentity
             ? 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
-            : 'Add one sample item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.'
+            : sampleStore ? 'Add one sample item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.' : 'Add one customer item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.'
   const ecommerceTodayAction = hasStorefrontEditRecovery
     ? 'Review store edits'
     : checkoutEntryRecoveryPending
@@ -2017,9 +2019,9 @@ export function EcommerceProduct() {
               ? 'Enter checkout details'
               : managedIdentity
                 ? 'Prepare next order'
-                : 'Start sample order'
+                : sampleStore ? 'Start sample order' : 'Start customer order'
   const ecommerceTodayMetrics = [
-    ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Sample ready'],
+    ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : sampleStore ? 'Sample ready' : 'Ready'],
     ['2. Cart', checkoutEntryRecoveryPending ? 'Resume available' : ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['3. Shop', pendingManagedRequests.length
       ? `${pendingManagedRequests.length} to review`
@@ -2100,7 +2102,7 @@ export function EcommerceProduct() {
     <div className="workspace-screen ecommerce-product">
       <header className="ecommerce-heading">
         <div>
-          <span className="core-eyebrow">{managedIdentity ? 'Company store' : 'Sample store'}</span>
+          <span className="core-eyebrow">{managedIdentity ? 'Company store' : sampleStore ? 'Sample store' : 'Business store'}</span>
           <h1>Ecommerce</h1>
           <p>Sell online with products, cart, orders, delivery, and returns.</p>
         </div>
@@ -2162,7 +2164,7 @@ export function EcommerceProduct() {
       <section aria-label="Order workspace" className="ecommerce-ai-desk">
         <div>
           <span className="core-eyebrow">Order workspace</span>
-          <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : storefrontSetupRequired ? 'Save store before orders' : managedIdentity ? 'Ready to take reviewed orders' : 'Try the sample order flow'}</h2>
+          <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : storefrontSetupRequired ? 'Save store before orders' : managedIdentity ? 'Ready to take reviewed orders' : sampleStore ? 'Try the sample order flow' : 'Take a customer order'}</h2>
           <p>{pendingManagedRequests.length
             ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
             : importNeeded
@@ -2171,7 +2173,7 @@ export function EcommerceProduct() {
                 ? 'Save the customer view so the quote, cart, and Shop review all use the same products and prices.'
                 : managedIdentity
                   ? 'Customers can build a cart; Shop still confirms the accountable order before anything consequential happens.'
-                  : 'Use the sample cart to review the customer path. Nothing reaches Shop until confirmation.'}</p>
+                  : sampleStore ? 'Use the sample cart to review the customer path. Nothing reaches Shop until confirmation.' : 'Use the customer cart to review the order. Nothing reaches Shop until confirmation.'}</p>
         </div>
         <div className="ecommerce-ai-desk-queue">
           {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
@@ -2528,7 +2530,7 @@ export function EcommerceProduct() {
 
         <section className="core-panel ecommerce-preview-panel" aria-labelledby="ecommerce-preview-title" id="ecommerce-preview-panel">
           <div className="panel-head ecommerce-preview-head">
-            <div><span className="core-eyebrow">Store demo</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>Shop the sample</h2></div>
+            <div><span className="core-eyebrow">Store preview</span><h2 id="ecommerce-preview-title" ref={storefrontPreviewHeadingRef} tabIndex={-1}>{sampleStore ? 'Shop the sample' : 'Customer storefront'}</h2></div>
             <label className="ecommerce-preview-size">
               <span>Preview</span>
               <select aria-label="Preview size" onChange={(event) => setDevice(event.target.value as PreviewDevice)} value={device}>
@@ -2541,7 +2543,7 @@ export function EcommerceProduct() {
           {!buyingReady && !catalogHydrating ? (
             <div className="ecommerce-preview-gate">
               <span>
-                <strong>{managedIdentity ? 'Review the store before taking orders' : 'Preparing the sample store'}</strong>
+                <strong>{managedIdentity ? 'Review the store before taking orders' : sampleStore ? 'Preparing the sample store' : 'Preparing the customer store'}</strong>
                 <small>{managedIdentity ? 'Save the store before customer requests are available.' : 'The exact Shop catalog and prices are being checked.'}</small>
               </span>
               <button
