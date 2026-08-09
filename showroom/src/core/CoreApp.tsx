@@ -46,6 +46,7 @@ import {
   useSetupWorkspace,
   useStoredState,
   type AccountableAction,
+  type ActionKind,
   type ActionDetails,
   type ActionDomain,
   type PendingAccountableAction,
@@ -867,6 +868,13 @@ function commerceOrderReturnLines(order: CommerceOrder) {
   })) ?? (order.itemSku ? [{ sku: order.itemSku, name: order.item, quantity: order.quantity }] : [])
 }
 
+const accountableActionSubmitLabels: Partial<Record<ActionKind, string>> = {
+  order_create: 'Create order',
+  production_output: 'Record output',
+  production_scrap: 'Record scrap',
+  production_material: 'Record material use',
+}
+
 function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm, returnFocus }: {
   action: PendingAccountableAction | null
   authenticatedActor?: { id: string; label: string }
@@ -933,7 +941,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
-      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : isOrderCreation ? 'Create order' : action.kind === 'production_output' ? 'Record output' : action.kind === 'production_scrap' ? 'Record scrap' : 'Confirm change'}</button></div>
+      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : accountableActionSubmitLabels[action.kind] ?? 'Confirm change'}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
   </dialog>
@@ -8938,10 +8946,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       kind: 'production_material',
       subjectId: recordedJobId,
       summary: `Record ${recordedQuantity} ${materialUnit} ${materialRef}${lotSummary} for ${recordedJobId}`,
-      before: `${recordedProduct} · no material-use event for this action${held ? ' · QUALITY HOLD remains active' : ''}`,
-      after: `${recordedQuantity} ${materialUnit} ${materialRef}${lotSummary} · ${recordedShiftRef} · internal traceability only${held ? ' · QUALITY HOLD remains active' : ''}`,
+      before: `${recordedProduct} · no material-use event${held ? ' · QUALITY HOLD active' : ''}`,
+      after: `${recordedQuantity} ${materialUnit} ${materialRef}${lotSummary} · ${recordedShiftRef} · traceability only${held ? ' · QUALITY HOLD active' : ''}`,
       actorSuggestion: managedIdentity ? undefined : 'Plant operator',
-      reasonSuggestion: `Material use reviewed for ${recordedJobId} during ${recordedShiftRef}.`,
+      reasonSuggestion: `Material use reviewed · ${recordedJobId} · ${recordedShiftRef}.`,
       evidenceReferenceSuggestion: `Plant shift ${recordedShiftRef} · ${recordedJobId} · ${materialRef}${materialLot ? ` · ${materialLot}` : ''}`,
       apply: async (record) => {
         await mutateProduction('production.material.consumed', record.commandId, productionActionProof(record), (current) => recordProductionMaterialConsumption(
