@@ -86,6 +86,9 @@ const MUTATIONS = [
   // NOTE: '|| job.qualityHold' and '|| job.closure' each appear four times in this file, and
   // String.replace takes the FIRST -- which is a different function. Anchored on a line that
   // is unique instead: the hold recording who placed it, which the guard asserts.
+  ['test_production_state_validator.mjs', PRODWS,
+    "  assertOnlyFields(value, productionStateFields, 'Production workspace')", '  void 0',
+    'the Plant backstop stops rejecting unexpected top-level fields'],
   ['test_production_quality_hold.mjs', PRODWS,
     '    heldBy: proof.actor,', "    heldBy: 'someone else',",
     'a quality hold records the wrong operator'],
