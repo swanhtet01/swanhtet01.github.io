@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 44
+  && portfolio.completedLocalAutomations.length === 45
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -389,10 +389,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[43]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[43]?.workOrderId === 'ecommerce-replacement-submit-clarity'
   && portfolio.completedLocalAutomations[43]?.checkpoint === 'OPS-196'
+  && portfolio.completedLocalAutomations[44]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[44]?.workOrderId === 'shop-online-request-review-clarity'
+  && portfolio.completedLocalAutomations[44]?.checkpoint === 'OPS-197'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-online-request-review-clarity'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-ecommerce-confirm-order-action-clarity'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1514,6 +1517,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-196 | CEO + Ecommerce Replacement Clarity / Agent Operations Codex | done-local |')
   && workboard.includes('The checkout now derives one `replacingCurrentRequest` flag')
   && workboard.includes('The receipt advances `shop-online-request-review-clarity`')
+  && workboard.includes('| OPS-197 | CEO + Shop Online Request Review / Agent Operations Codex | done-local |')
+  && workboard.includes('The same prepared request now opens `Review online request`')
+  && workboard.includes('The receipt advances `shop-ecommerce-confirm-order-action-clarity`')
   && workboard.includes('| CLAUDE-006 | Claude Code | ready |')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
@@ -1525,7 +1531,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-replacement-rendered-acceptance' && entry.checkpoint === 'OPS-194')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-replacement-action-rendered-acceptance' && entry.checkpoint === 'OPS-195')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-replacement-submit-clarity' && entry.checkpoint === 'OPS-196')
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-online-request-review-clarity')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-online-request-review-clarity' && entry.checkpoint === 'OPS-197')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-ecommerce-confirm-order-action-clarity')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
