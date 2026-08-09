@@ -237,7 +237,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.localImprovementQueue)
   && portfolio.localImprovementQueue.length === 1
-  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'website'
+  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'ecommerce'
   && portfolio.localImprovementQueue.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'contract,priority,productId,reason,status,workOrder,workOrderId'
     && entry.contract === 'supermega.product-improvement-authority.v1'
@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 36
+  && portfolio.completedLocalAutomations.length === 37
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -365,10 +365,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[35]?.productId === 'plant'
   && portfolio.completedLocalAutomations[35]?.workOrderId === 'plant-output-entry-tab-recovery'
   && portfolio.completedLocalAutomations[35]?.checkpoint === 'OPS-188'
+  && portfolio.completedLocalAutomations[36]?.productId === 'website'
+  && portfolio.completedLocalAutomations[36]?.workOrderId === 'website-inquiry-entry-tab-recovery'
+  && portfolio.completedLocalAutomations[36]?.checkpoint === 'OPS-189'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'website-inquiry-entry-tab-recovery'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-checkout-entry-tab-recovery'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1466,11 +1469,14 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-188 | CEO + Plant UX / Agent Operations Codex | done-local |')
   && workboard.includes('Product checkpoint `bdcb6a58` adds `supermega.plant.closed-output-entry.v1`')
   && workboard.includes('`website-inquiry-entry-tab-recovery` as the sole ready local continuation')
-  && workboard.includes('| CLAUDE-004 | Claude Code | ready |')
+  && workboard.includes('| OPS-189 | CEO + Website UX / Agent Operations Codex | done-local |')
+  && workboard.includes('Product checkpoint `b7797f23` adds `supermega.website.closed-inquiry-entry.v1`')
+  && workboard.includes('`ecommerce-checkout-entry-tab-recovery` as the sole ready local continuation')
+  && workboard.includes('| CLAUDE-005 | Claude Code | ready |')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
-  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-output-entry-tab-recovery' && entry.checkpoint === 'OPS-188')
-  && portfolio.localImprovementQueue[0].workOrderId === 'website-inquiry-entry-tab-recovery')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'website-inquiry-entry-tab-recovery' && entry.checkpoint === 'OPS-189')
+  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-checkout-entry-tab-recovery')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
