@@ -139,10 +139,13 @@
 .ecommerce-today-priority h2 {
   max-width: 560px;
   margin: 0;
-  /* #17231d is the LIGHT theme's ink written as a literal, so in dark mode this heading —
-     the product's primary call to action — rendered near-black on the dark shell at 1.24:1.
-     The token carries the right value in both themes. */
-  color: var(--core-ink);
+  /* Deliberately a literal, not var(--core-ink). The card behind this heading is painted
+     with a hardcoded light gradient (.ecommerce-today, background: linear-gradient(135deg,
+     #fff, #f3f8f4)) and this stylesheet has no .theme-dark overrides at all, so the card
+     stays white in dark mode. A token that flips with the theme therefore puts near-white
+     text on a white card: measured 1.07:1, against 16.22:1 for this literal. Until the card
+     itself becomes theme-aware, the text on it must be theme-blind too. */
+  color: #17231d;
   font-size: clamp(22px, 2.4vw, 34px);
   line-height: 1.04;
   letter-spacing: -.035em;
@@ -180,10 +183,11 @@
 
 .ecommerce-today-metrics small,
 .ecommerce-today-source small {
-  /* Was a hardcoded #6b786f measuring 4.2:1 on the page ground — under the 4.5:1 AA floor,
-     and unable to follow the dark theme because it bypassed the tokens entirely.
-     --core-quiet is the intended colour for this role and measures 4.83:1 here. */
-  color: var(--core-quiet);
+  /* Also deliberately a literal, for the same reason as the heading above: this sits on the
+     same hardcoded light gradient. Measured on that card, #6b786f is 4.62:1 and passes;
+     var(--core-quiet) resolves to #7a8a9c in dark and drops to 3.53:1. An earlier reading of
+     4.2:1 here was taken against the page ground rather than the card. */
+  color: #6b786f;
   font-size: 9px;
   font-weight: 760;
   letter-spacing: .04em;

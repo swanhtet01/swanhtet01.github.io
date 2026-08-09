@@ -20,7 +20,10 @@
      makes the whole declaration invalid at computed value time, so these silently
      removed a card border, a shadow and a focus ring — and, worst, the colour that
      tells "1 low stock" apart from ordinary counts on the Shop home screen.
-     --core-surface-soft existed only inside .theme-dark, so it was missing in light. */
+     --core-surface-soft existed only inside .theme-dark, so it was missing in light.
+     NOTE: these are substituted against :root, so every one of them is repeated in the
+     .theme-dark block below. Adding an alias here without adding it there ships a token
+     that is silently stuck on the light value in dark mode. */
   --core-accent: var(--core-green);
   --core-focus: var(--core-green);
   --core-warning: var(--core-warn);
@@ -1522,9 +1525,17 @@ textarea { min-height: 72px; resize: vertical; }
   --core-success-soft: rgba(86,240,193,.11);
   --core-warn: #ffcc7a;
   --core-danger: #ff8291;
-  /* The aliases in :root are var() references, so they follow the tokens above on
-     their own. Only the literal shadow needs a dark value — the light one is tuned
-     for a near-white ground and reads as nothing against #05080d. */
+  /* The aliases must be restated here. A var() inside a custom property is substituted
+     against the element the property is DECLARED on — :root — not the element that uses it,
+     so `--core-accent: var(--core-green)` on :root freezes at the light green and never sees
+     this block. .theme-dark is a descendant div, not :root, so it cannot retroactively
+     change what :root already computed. Verified: before this, --core-accent read #0b745e
+     and --core-text read #17231d inside dark mode. */
+  --core-accent: var(--core-green);
+  --core-focus: var(--core-green);
+  --core-warning: var(--core-warn);
+  --core-text: var(--core-ink);
+  --core-soft: var(--core-panel-raised);
   --core-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .38);
   background: radial-gradient(circle at 72% -10%, rgba(42,120,133,.2), transparent 32%), #05080d;
   color: var(--core-ink);
