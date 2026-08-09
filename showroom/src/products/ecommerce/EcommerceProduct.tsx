@@ -69,6 +69,19 @@ import {
   type StorefrontDraft,
   type StorefrontDraftReadResult,
 } from './storefront-draft'
+import {
+  createStorefrontEditRecovery,
+  restoreStorefrontEditRecovery,
+  reviewStorefrontEditRecovery,
+  storefrontEditDraftsMatch,
+  storefrontEditRecoveriesMatch,
+  storefrontEditRecoveryMatchesDraft,
+  storefrontEditRecoveryStorageKey,
+  storefrontSavedStateFingerprint,
+  type StorefrontEditDraft,
+  type StorefrontEditRecovery,
+  type StorefrontEditRecoverySource,
+} from './storefront-edit-recovery'
 import './ecommerce-product.css'
 
 type PreviewDevice = 'phone' | 'desktop'
@@ -97,6 +110,10 @@ type ManagedStorefrontView = {
     merchandising: CommerceStorefrontMerchandising[] | null
   }
   availableSku: string
+}
+type StorefrontEditRecoveryState = {
+  scope: string
+  recovery: StorefrontEditRecovery
 }
 const DEFAULT_STORE_NAME = 'Mingalar Market'
 const DEFAULT_STORE_SUMMARY = 'Everyday essentials for pickup or delivery, with clear local pricing.'
@@ -268,6 +285,7 @@ export function EcommerceProduct() {
   const [draftIssue, setDraftIssue] = useState('')
   const [draftNotice, setDraftNotice] = useState('')
   const [draftBusy, setDraftBusy] = useState(false)
+  const [storefrontEditRecoveryState, setStorefrontEditRecoveryState] = useState<StorefrontEditRecoveryState | null>(null)
   const [missingSelectionReviewed, setMissingSelectionReviewed] = useState(false)
   const [storeName, setStoreName] = useState(initialState.storeName)
   const [summary, setSummary] = useState(initialState.summary)
@@ -277,6 +295,11 @@ export function EcommerceProduct() {
   const [workspaceView, setWorkspaceView] = useState<'setup' | 'preview'>('preview')
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
+    source: '',
+    value: '',
+    error: '',
+  })
+  const [localCatalogDigestState, setLocalCatalogDigestState] = useState({
     source: '',
     value: '',
     error: '',
@@ -295,6 +318,10 @@ export function EcommerceProduct() {
   const [channelReplyDraft, setChannelReplyDraft] = useState('')
   const storefrontSaveRef = useRef<HTMLButtonElement>(null)
   const storefrontPreviewHeadingRef = useRef<HTMLHeadingElement>(null)
+  const storefrontNameRef = useRef<HTMLInputElement>(null)
+  const storefrontRecoveryActionRef = useRef<HTMLButtonElement>(null)
+  const storefrontRecoveryHydrationRef = useRef('')
+  const storefrontLastWrittenRecoveryRef = useRef<StorefrontEditRecovery | null>(null)
 
   useEffect(() => {
     let current = true
@@ -425,6 +452,10 @@ export function EcommerceProduct() {
   const previewJson = previewResult.preview ? JSON.stringify(previewResult.preview) : ''
   const digest = digestState.previewJson === previewJson ? digestState.value : ''
   const digestError = digestState.previewJson === previewJson ? digestState.error : ''
+  const localCatalogSource = commerceCatalogDigestSource(localCommerceState)
+  const localCatalogDigest = localCatalogDigestState.source === localCatalogSource
+    ? localCatalogDigestState.value
+    : ''
   const managedCatalogSource = managedInbox
     ? commerceCatalogDigestSource(managedInbox.state)
     : ''
@@ -441,7 +472,7 @@ export function EcommerceProduct() {
     && savedDraft.storeName === storeName
     && savedDraft.summary === summary
     && savedDraft.selectedSkus.length === selectedSkus.length
-    && savedDraft.selectedSkus.every((sku) => selectedSkus.includes(sku))
+    && savedDraft.selectedSkus.every((sku, index) => selectedSkus[index] === sku)
     && JSON.stringify(savedDraft.merchandising ?? null) === JSON.stringify(merchandising))
   const savedCatalogIsCurrent = managedIdentity
     ? Boolean(savedDraft?.shopCatalogDigest
@@ -453,7 +484,51 @@ export function EcommerceProduct() {
   const savedDraftIsCurrent = savedFieldsAreCurrent && savedCatalogIsCurrent
   const storefrontSetupRequired = Boolean(managedIdentity) && !savedDraftIsCurrent
   const hasUnsavedStorefront = !savedDraftIsCurrent
-  const hasUnsavedFieldChanges = !savedFieldsAreCurrent
+  const savedStorefrontFields = useMemo<StorefrontEditDraft>(() => {
+    const fields = draftFieldsForCatalog(savedDraft, catalog.items)
+    return {
+      storeName: fields.storeName,
+      summary: fields.summary,
+      selectedSkus: [...fields.selectedSkus],
+      merchandising: cloneMerchandising(fields.merchandising ?? undefined),
+    }
+  }, [catalog.items, savedDraft])
+  const currentStorefrontEditDraft = useMemo<StorefrontEditDraft>(() => ({
+    storeName,
+    summary,
+    selectedSkus: [...selectedSkus],
+    merchandising: cloneMerchandising(merchandising ?? undefined),
+  }), [merchandising, selectedSkus, storeName, summary])
+  const hasUnsavedFieldChanges = !storefrontEditDraftsMatch(currentStorefrontEditDraft, savedStorefrontFields)
+  const storefrontRecoveryScope = catalogHydrating
+    ? ''
+    : managedIdentity
+      ? `managed:${managedIdentity.workspaceId}:${managedIdentity.userId}`
+      : `local:${LOCAL_STOREFRONT_DRAFT_SCOPE}`
+  const storefrontRecoveryCatalogDigest = managedIdentity ? managedCatalogDigest : localCatalogDigest
+  const storefrontRecoverySource = useMemo<StorefrontEditRecoverySource | null>(() => {
+    if (!storefrontRecoveryCatalogDigest) return null
+    return {
+      savedRevision: savedDraft?.revision ?? 0,
+      savedAt: savedDraft?.savedAt ?? null,
+      savedFingerprint: storefrontSavedStateFingerprint(savedDraft),
+      catalogDigest: storefrontRecoveryCatalogDigest,
+    }
+  }, [savedDraft, storefrontRecoveryCatalogDigest])
+  const activeStorefrontEditRecovery = storefrontEditRecoveryState?.scope === storefrontRecoveryScope
+    ? storefrontEditRecoveryState.recovery
+    : null
+  const storefrontEditRecoveryReview = activeStorefrontEditRecovery && storefrontRecoverySource
+    ? reviewStorefrontEditRecovery(
+      activeStorefrontEditRecovery,
+      storefrontRecoveryScope,
+      savedDraft,
+      storefrontRecoveryCatalogDigest,
+      catalog.items.map((item) => item.sku),
+      savedStorefrontFields,
+    )
+    : null
+  const hasStorefrontEditRecovery = Boolean(activeStorefrontEditRecovery)
   const managedCatalogRebindRequired = Boolean(managedIdentity
     && savedDraft
     && savedFieldsAreCurrent
@@ -501,6 +576,25 @@ export function EcommerceProduct() {
 
   useEffect(() => {
     let current = true
+    if (managedIdentity) return () => { current = false }
+    void commerceCatalogDigest(localCommerceState)
+      .then((value) => {
+        if (current) setLocalCatalogDigestState({ source: localCatalogSource, value, error: '' })
+      })
+      .catch((error) => {
+        if (current) {
+          setLocalCatalogDigestState({
+            source: localCatalogSource,
+            value: '',
+            error: error instanceof Error ? error.message : 'Local Shop catalog digest failed.',
+          })
+        }
+      })
+    return () => { current = false }
+  }, [localCatalogSource, localCommerceState, managedIdentity])
+
+  useEffect(() => {
+    let current = true
     if (!managedInbox) {
       return () => { current = false }
     }
@@ -520,7 +614,189 @@ export function EcommerceProduct() {
     return () => { current = false }
   }, [managedCatalogSource, managedInbox])
 
+  useEffect(() => {
+    if (!storefrontRecoveryScope || !storefrontRecoverySource || catalogHydrating) return
+    const recoveryIdentity = [
+      storefrontRecoveryScope,
+      storefrontRecoverySource.savedFingerprint,
+      storefrontRecoverySource.catalogDigest,
+    ].join('|')
+    if (storefrontRecoveryHydrationRef.current === recoveryIdentity) return
+    storefrontRecoveryHydrationRef.current = recoveryIdentity
+    const timer = window.setTimeout(() => {
+      try {
+        const key = storefrontEditRecoveryStorageKey(storefrontRecoveryScope)
+        const raw = window.localStorage.getItem(key)
+        const restored = raw ? restoreStorefrontEditRecovery(raw) : null
+        if (raw && !restored) window.localStorage.removeItem(key)
+        storefrontLastWrittenRecoveryRef.current = null
+        setStorefrontEditRecoveryState(restored
+          ? { scope: storefrontRecoveryScope, recovery: restored }
+          : null)
+      } catch {
+        setStorefrontEditRecoveryState(null)
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [catalogHydrating, storefrontRecoveryScope, storefrontRecoverySource])
+
+  useEffect(() => {
+    if (!storefrontRecoveryScope
+      || !storefrontRecoverySource
+      || catalogHydrating
+      || draftBusy
+      || !hasUnsavedFieldChanges
+      || hasStorefrontEditRecovery) return
+    const timer = window.setTimeout(() => {
+      try {
+        const key = storefrontEditRecoveryStorageKey(storefrontRecoveryScope)
+        const raw = window.localStorage.getItem(key)
+        const retained = raw ? restoreStorefrontEditRecovery(raw) : null
+        const lastWritten = storefrontLastWrittenRecoveryRef.current
+        if (retained && (!lastWritten || !storefrontEditRecoveriesMatch(retained, lastWritten))) {
+          setStorefrontEditRecoveryState({ scope: storefrontRecoveryScope, recovery: retained })
+          setDraftNotice('Another tab has unsaved store edits. Resume or discard that recovery before replacing it.')
+          requestAnimationFrame(() => storefrontRecoveryActionRef.current?.focus({ preventScroll: true }))
+          return
+        }
+        const next = createStorefrontEditRecovery(
+          storefrontRecoveryScope,
+          storefrontRecoverySource,
+          currentStorefrontEditDraft,
+          workspaceView,
+          device,
+        )
+        window.localStorage.setItem(key, JSON.stringify(next))
+        storefrontLastWrittenRecoveryRef.current = next
+      } catch {
+        setDraftNotice('This tab holds the unsaved store. Save or Discard before closing it.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [
+    catalogHydrating,
+    currentStorefrontEditDraft,
+    device,
+    draftBusy,
+    hasStorefrontEditRecovery,
+    hasUnsavedFieldChanges,
+    storefrontRecoveryScope,
+    storefrontRecoverySource,
+    workspaceView,
+  ])
+
+  useEffect(() => {
+    if (!storefrontRecoveryScope) return
+    const recoveryKey = storefrontEditRecoveryStorageKey(storefrontRecoveryScope)
+    function refreshStorefrontRecovery(event: StorageEvent) {
+      if (event.key !== recoveryKey && event.key !== null) return
+      try {
+        const raw = window.localStorage.getItem(recoveryKey)
+        const restored = raw ? restoreStorefrontEditRecovery(raw) : null
+        storefrontLastWrittenRecoveryRef.current = null
+        setStorefrontEditRecoveryState(restored
+          ? { scope: storefrontRecoveryScope, recovery: restored }
+          : null)
+        if (restored) setDraftNotice('Unsaved store edits changed in another tab. Review them before continuing.')
+      } catch {
+        setStorefrontEditRecoveryState(null)
+      }
+    }
+    window.addEventListener('storage', refreshStorefrontRecovery)
+    return () => window.removeEventListener('storage', refreshStorefrontRecovery)
+  }, [storefrontRecoveryScope])
+
+  function storefrontEditRecoveryIsCurrent(target: StorefrontEditRecoveryState) {
+    try {
+      const raw = window.localStorage.getItem(storefrontEditRecoveryStorageKey(target.scope))
+      const current = raw ? restoreStorefrontEditRecovery(raw) : null
+      if (current && storefrontEditRecoveriesMatch(current, target.recovery)) return true
+      storefrontLastWrittenRecoveryRef.current = null
+      setStorefrontEditRecoveryState(current ? { scope: target.scope, recovery: current } : null)
+      setDraftNotice(current
+        ? 'Another tab changed these store edits. Review the newer recovery before continuing.'
+        : 'These store edits were already resolved in another tab.')
+    } catch {
+      setDraftNotice('Store recovery could not be checked on this device. The saved storefront did not change.')
+    }
+    return false
+  }
+
+  function clearStorefrontEditRecovery(target = storefrontEditRecoveryState) {
+    if (!target) return true
+    if (!storefrontEditRecoveryIsCurrent(target)) return false
+    try {
+      window.localStorage.removeItem(storefrontEditRecoveryStorageKey(target.scope))
+    } catch {
+      setDraftNotice('Store recovery could not be removed from this device. The saved storefront did not change.')
+      return false
+    }
+    storefrontLastWrittenRecoveryRef.current = null
+    if (storefrontEditRecoveryState === target) setStorefrontEditRecoveryState(null)
+    return true
+  }
+
+  function clearMatchingStorefrontEditRecovery(draft = currentStorefrontEditDraft) {
+    if (!storefrontRecoveryScope || !storefrontRecoverySource) return
+    try {
+      const key = storefrontEditRecoveryStorageKey(storefrontRecoveryScope)
+      const raw = window.localStorage.getItem(key)
+      const current = raw ? restoreStorefrontEditRecovery(raw) : null
+      if (current && storefrontEditRecoveryMatchesDraft(
+        current,
+        storefrontRecoveryScope,
+        storefrontRecoverySource,
+        draft,
+      )) {
+        window.localStorage.removeItem(key)
+        storefrontLastWrittenRecoveryRef.current = null
+      }
+    } catch {
+      // A retained or newer recovery remains source-bound and cannot save the storefront.
+    }
+  }
+
+  function resumeStorefrontEditRecovery() {
+    const target = storefrontEditRecoveryState
+    if (!target
+      || target.scope !== storefrontRecoveryScope
+      || !activeStorefrontEditRecovery
+      || !storefrontEditRecoveryReview?.ok
+      || draftBusy) {
+      setDraftNotice('These edits cannot be resumed because the saved storefront or Shop catalog changed. Discard the recovery to continue.')
+      return
+    }
+    if (!storefrontEditRecoveryIsCurrent(target)) return
+    const recovered = storefrontEditRecoveryReview.draft
+    setStoreName(recovered.storeName)
+    setSummary(recovered.summary)
+    setSelectedSkus([...recovered.selectedSkus])
+    setMerchandising(recovered.merchandising?.map((entry) => ({ ...entry })) ?? null)
+    setWorkspaceView(storefrontEditRecoveryReview.view)
+    setDevice(storefrontEditRecoveryReview.device)
+    setBuyingCart([])
+    storefrontLastWrittenRecoveryRef.current = target.recovery
+    setStorefrontEditRecoveryState(null)
+    setDraftNotice('Unsaved store edits resumed. Nothing was saved, sent to Shop, published, or deployed.')
+    requestAnimationFrame(() => storefrontNameRef.current?.focus({ preventScroll: true }))
+  }
+
+  function discardStorefrontEditRecovery() {
+    if (!activeStorefrontEditRecovery || draftBusy) return
+    if (!clearStorefrontEditRecovery()) return
+    setStoreName(savedStorefrontFields.storeName)
+    setSummary(savedStorefrontFields.summary)
+    setSelectedSkus([...savedStorefrontFields.selectedSkus])
+    setMerchandising(savedStorefrontFields.merchandising?.map((entry) => ({ ...entry })) ?? null)
+    setMissingSelectionReviewed(false)
+    setBuyingCart([])
+    setWorkspaceView('preview')
+    setDraftNotice('Unsaved store edits discarded. The saved storefront and Shop catalog did not change.')
+    requestAnimationFrame(() => storefrontPreviewHeadingRef.current?.focus({ preventScroll: true }))
+  }
+
   function toggleSku(sku: string) {
+    if (hasStorefrontEditRecovery) return
     setDraftNotice(merchandising
       ? 'Product selection changed. Imported display details were cleared; save to confirm.'
       : '')
@@ -831,6 +1107,7 @@ export function EcommerceProduct() {
       || catalogHydrating
       || selectionReviewRequired
       || draftBusy
+      || hasStorefrontEditRecovery
       || draftStorageBlocked
       || managedCatalogDigestPending
       || Boolean(managedCatalogDigestError)) return
@@ -839,6 +1116,7 @@ export function EcommerceProduct() {
     try {
       if (managedIdentity) {
         await saveManagedStorefront(managedIdentity)
+        clearMatchingStorefrontEditRecovery()
         setBuyingCart([])
         showSavedStorefrontPreview()
         return
@@ -848,6 +1126,7 @@ export function EcommerceProduct() {
         savedDraft?.revision ?? 0,
         LOCAL_STOREFRONT_DRAFT_SCOPE,
       )
+      clearMatchingStorefrontEditRecovery()
       setSavedDraft(savedLocalDraft(saved))
       setDraftReadStatus('ready')
       setDraftIssue('')
@@ -895,6 +1174,8 @@ export function EcommerceProduct() {
   }
 
   function discardStorefrontChanges() {
+    if (hasStorefrontEditRecovery) return
+    clearMatchingStorefrontEditRecovery()
     const fields = draftFieldsForCatalog(savedDraft, catalog.items)
     setStoreName(fields.storeName)
     setSummary(fields.summary)
@@ -910,7 +1191,7 @@ export function EcommerceProduct() {
   }
 
   function addToCart(sku: string) {
-    if (catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)) return
+    if (catalogHydrating || hasStorefrontEditRecovery || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)) return
     setBuyingCart((current) => current.some((line) => line.sku === sku)
       ? current
       : [...current, { sku, quantity: 1 }])
@@ -1119,7 +1400,7 @@ export function EcommerceProduct() {
       return collectionDifference || left.sku.localeCompare(right.sku)
     })
     : []
-  const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))
+  const buyingReady = Boolean(previewResult.preview && digest && !hasStorefrontEditRecovery && (savedDraftIsCurrent || !managedIdentity))
   const activeCommerceState = managedIdentity ? managedInbox?.state ?? null : localCommerceState
   const managedOrderTimeline = managedInbox
     ? commerceStorefrontOrderTimeline(managedInbox.state)
@@ -1600,12 +1881,16 @@ export function EcommerceProduct() {
               ? 'Ready for customer orders'
               : 'Check setup'
   const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
-  const ecommerceTodayState = importNeeded || storefrontSetupRequired
+  const ecommerceTodayState = hasStorefrontEditRecovery
+    ? 'attention'
+    : importNeeded || storefrontSetupRequired
     ? 'setup'
     : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || pendingManagedRequests.length || customerRequestState === 'waiting_shop_review'
       ? 'attention'
       : 'ready'
-  const ecommerceTodayHeadline = importNeeded
+  const ecommerceTodayHeadline = hasStorefrontEditRecovery
+    ? storefrontEditRecoveryReview?.ok ? 'Continue your unsaved store' : 'Review older store edits'
+    : importNeeded
     ? 'Connect your products to start selling'
     : storefrontSetupRequired
       ? 'Finish the store customers will see'
@@ -1624,7 +1909,11 @@ export function EcommerceProduct() {
                 : managedIdentity
                   ? 'Your store is ready for the next order'
                   : 'Try one customer order'
-  const ecommerceTodaySummary = importNeeded
+  const ecommerceTodaySummary = hasStorefrontEditRecovery
+    ? storefrontEditRecoveryReview?.ok
+      ? 'Resume the exact name, description, products, and display details before taking another action.'
+      : 'The saved store or Shop catalog changed. Discard the older recovery to protect the current version.'
+    : importNeeded
     ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
     : storefrontSetupRequired
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
@@ -1637,7 +1926,9 @@ export function EcommerceProduct() {
           : managedIdentity
             ? 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
             : 'Add one sample item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.'
-  const ecommerceTodayAction = importNeeded
+  const ecommerceTodayAction = hasStorefrontEditRecovery
+    ? 'Review store edits'
+    : importNeeded
     ? 'Connect products'
     : storefrontSetupRequired
       ? 'Finish store'
@@ -1669,7 +1960,7 @@ export function EcommerceProduct() {
           ? `${ecommerceCompletedOrderCount} completed`
           : 'No order yet'],
   ] as const
-  const ecommerceTodayGuided = importNeeded || storefrontSetupRequired
+  const ecommerceTodayGuided = hasStorefrontEditRecovery || importNeeded || storefrontSetupRequired
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -1677,6 +1968,11 @@ export function EcommerceProduct() {
       route: location.pathname + location.search,
       detail: `Order autopilot: ${orderAutopilotStage}`,
     })
+    if (hasStorefrontEditRecovery) {
+      document.getElementById('ecommerce-edit-recovery')?.scrollIntoView({ block: 'center' })
+      storefrontRecoveryActionRef.current?.focus({ preventScroll: true })
+      return
+    }
     if (importNeeded) {
       navigate('/settings/?product=ecommerce')
       return
@@ -1723,12 +2019,44 @@ export function EcommerceProduct() {
         </div>
       </header>
 
-      <section aria-labelledby="ecommerce-today-title" className="ecommerce-today" data-density={ecommerceTodayGuided ? 'guided' : 'compact'} data-state={ecommerceTodayState}>
+      <section
+        aria-labelledby="ecommerce-today-title"
+        aria-live={hasStorefrontEditRecovery ? 'polite' : undefined}
+        className="ecommerce-today"
+        data-density={ecommerceTodayGuided ? 'guided' : 'compact'}
+        data-state={ecommerceTodayState}
+        id={hasStorefrontEditRecovery ? 'ecommerce-edit-recovery' : undefined}
+      >
         <div className="ecommerce-today-priority">
           <span className="core-eyebrow">Start here</span>
           <h2 id="ecommerce-today-title">{ecommerceTodayHeadline}</h2>
           <p>{ecommerceTodaySummary}</p>
-          <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
+          {activeStorefrontEditRecovery ? (
+            <div className="ecommerce-today-recovery-actions">
+              <button
+                className="core-button secondary"
+                disabled={draftBusy}
+                onClick={discardStorefrontEditRecovery}
+                ref={storefrontEditRecoveryReview?.ok ? undefined : storefrontRecoveryActionRef}
+                type="button"
+              >
+                Discard
+              </button>
+              {storefrontEditRecoveryReview?.ok ? (
+                <button
+                  className="core-button primary"
+                  disabled={draftBusy}
+                  onClick={resumeStorefrontEditRecovery}
+                  ref={storefrontRecoveryActionRef}
+                  type="button"
+                >
+                  Resume edits
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <button className="core-button primary" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">{ecommerceTodayAction}</button>
+          )}
         </div>
         {ecommerceTodayGuided ? (
           <div aria-label="Ecommerce today status" className="ecommerce-today-metrics" role="group">
@@ -1976,7 +2304,7 @@ export function EcommerceProduct() {
 
       <label className="ecommerce-workspace-switch">
         <span>View</span>
-        <select aria-controls={workspaceView === 'preview' ? 'ecommerce-preview-panel' : 'ecommerce-setup-panel'} aria-label="Storefront view" onChange={(event) => showWorkspace(event.target.value as 'setup' | 'preview')} value={workspaceView}>
+        <select aria-controls={workspaceView === 'preview' ? 'ecommerce-preview-panel' : 'ecommerce-setup-panel'} aria-label="Storefront view" disabled={hasStorefrontEditRecovery} onChange={(event) => showWorkspace(event.target.value as 'setup' | 'preview')} value={workspaceView}>
           <option value="preview">Store</option>
           <option value="setup">Edit store</option>
         </select>
@@ -1992,11 +2320,11 @@ export function EcommerceProduct() {
           <div className="ecommerce-copy-fields">
             <label>
               <span>Store name</span>
-              <input disabled={catalogHydrating || draftBusy} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} value={storeName} />
+              <input disabled={catalogHydrating || draftBusy || hasStorefrontEditRecovery} maxLength={60} onChange={(event) => { setStoreName(event.target.value); setDraftNotice(''); setBuyingCart([]) }} ref={storefrontNameRef} value={storeName} />
             </label>
             <label>
               <span>Short description</span>
-              <textarea disabled={catalogHydrating || draftBusy} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} rows={3} value={summary} />
+              <textarea disabled={catalogHydrating || draftBusy || hasStorefrontEditRecovery} maxLength={180} onChange={(event) => { setSummary(event.target.value); setDraftNotice(''); setBuyingCart([]) }} rows={3} value={summary} />
             </label>
           </div>
 
@@ -2028,7 +2356,7 @@ export function EcommerceProduct() {
                 <button
                   aria-pressed={selected}
                   className="ecommerce-catalog-item"
-                  disabled={catalogHydrating || draftBusy || (!selected && selectedSkus.length >= 8)}
+                  disabled={catalogHydrating || draftBusy || hasStorefrontEditRecovery || (!selected && selectedSkus.length >= 8)}
                   key={item.sku}
                   onClick={() => toggleSku(item.sku)}
                   type="button"
@@ -2085,7 +2413,7 @@ export function EcommerceProduct() {
                 : null}
             </div>
             {!savedDraftIsCurrent ? <div className="ecommerce-save-actions">
-              {hasUnsavedFieldChanges ? <button className="core-button secondary" disabled={catalogHydrating || draftBusy} onClick={discardStorefrontChanges} type="button">Discard</button> : null}
+              {hasUnsavedFieldChanges ? <button className="core-button secondary" disabled={catalogHydrating || draftBusy || hasStorefrontEditRecovery} onClick={discardStorefrontChanges} type="button">Discard</button> : null}
               <button
                 className="core-button primary"
                 disabled={!hasUnsavedStorefront
@@ -2095,6 +2423,7 @@ export function EcommerceProduct() {
                   || catalogHydrating
                   || selectionReviewRequired
                   || draftBusy
+                  || hasStorefrontEditRecovery
                   || draftStorageBlocked
                   || managedCatalogDigestPending
                   || Boolean(managedCatalogDigestError)}
@@ -2131,6 +2460,7 @@ export function EcommerceProduct() {
               <button
                 aria-controls="ecommerce-setup-panel"
                 className="core-button primary"
+                disabled={hasStorefrontEditRecovery}
                 onClick={finishStorefrontSetup}
                 type="button"
               >

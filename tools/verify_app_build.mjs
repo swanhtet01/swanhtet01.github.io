@@ -19,6 +19,7 @@ let channelOrderRuntimeChecks = 0
 let websiteRuntimeChecks = 0
 let storefrontRuntimeChecks = 0
 let storefrontDraftRuntimeChecks = 0
+let storefrontEditRecoveryRuntimeChecks = 0
 let storefrontRequestRuntimeChecks = 0
 let commerceOrderDraftRuntimeChecks = 0
 let managedWebsiteRuntimeChecks = 0
@@ -115,6 +116,7 @@ const websiteLeadSource = await readFile(resolve(root, 'showroom', 'src', 'produ
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
 const websiteSectionRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-section-recovery.ts'), 'utf8')
 const websiteEditSessionRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-edit-session-recovery.ts'), 'utf8')
+const storefrontEditRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-edit-recovery.ts'), 'utf8')
 const localMerchandisingImportSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts'), 'utf8')
 const productionJobPlanDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-job-plan-draft.ts'), 'utf8')
 const plantAvailabilityDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-availability-draft.ts'), 'utf8')
@@ -2756,6 +2758,20 @@ if (!storefrontDraftSource.includes("supermega.ecommerce.storefront_draft.v2")
   || !storefrontDraftSource.includes("status: 'invalid'")
   || !storefrontDraftSource.includes('reconcileStorefrontSelection')
   || ['customerReference', 'requestLedger', 'payment', 'fulfilment', 'phone', 'address'].some((marker) => storefrontDraftSource.includes(marker))) fail('ecommerce_storefront_draft_contract_missing_or_contains_request_data')
+const storefrontEditRecoveryPureForbiddenActions = ['globalThis.localStorage', 'window.localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'saveStorefrontDraft(', 'saveManagedCommerceCommand(', 'recordCommerceStorefrontRequest(']
+if (!storefrontEditRecoverySource.includes("export const STOREFRONT_EDIT_RECOVERY_CONTRACT = 'supermega.ecommerce.closed-storefront-edit.v1'")
+  || !storefrontEditRecoverySource.includes('export function createStorefrontEditRecovery(')
+  || !storefrontEditRecoverySource.includes('export function restoreStorefrontEditRecovery(')
+  || !storefrontEditRecoverySource.includes('export function reviewStorefrontEditRecovery(')
+  || !storefrontEditRecoverySource.includes('export function storefrontEditRecoveryMatchesDraft(')
+  || !storefrontEditRecoverySource.includes('export function storefrontEditRecoveriesMatch(')
+  || !storefrontEditRecoverySource.includes('export function storefrontSavedStateFingerprint(')
+  || !storefrontEditRecoverySource.includes("reason: 'saved_storefront_changed'")
+  || !storefrontEditRecoverySource.includes("reason: 'catalog_changed'")
+  || !storefrontEditRecoverySource.includes("reason: 'no_changes'")
+  || !storefrontEditRecoverySource.includes('/^sha256:[0-9a-f]{64}$/')
+  || ['customerReference', 'requestLedger', 'customerPhone', 'address', 'sourceMessage'].some((marker) => storefrontEditRecoverySource.includes(marker))
+  || storefrontEditRecoveryPureForbiddenActions.some((marker) => storefrontEditRecoverySource.includes(marker))) fail('ecommerce_storefront_edit_recovery_contract_missing_or_side_effectful')
 if (!localMerchandisingImportSource.includes('export async function activateLocalEcommerceWorkingSample')
   || !localMerchandisingImportSource.includes('await matchesWorkingSample(current, catalog.items)')
   || !localMerchandisingImportSource.includes("LOCAL_ECOMMERCE_BUYING_STATE_KEY = 'supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'")
@@ -2961,7 +2977,7 @@ if (!ecommerceSource.includes('Stock, payment, delivery, and the final order sta
   || !ecommerceSource.includes('current edits were kept for review')
   || !ecommerceSource.includes('loadManagedBootstrap(identity)')
   || !managedStorefrontSource.includes('result.command_id !== expected.commandId')
-  || !ecommerceSource.includes('disabled={catalogHydrating || draftBusy}')
+  || !ecommerceSource.includes('disabled={catalogHydrating || draftBusy || hasStorefrontEditRecovery}')
   || !ecommerceSource.includes('selectionReviewRequired')
   || !ecommerceSource.includes('Open recovery settings')
   || !ecommerceSource.includes('Saved products no longer in this Shop')
@@ -3192,6 +3208,32 @@ if (closeRescheduleStart < 0
   || rescheduleRecoveryForbiddenActions.some((marker) => closeRescheduleAction.includes(marker) || reopenRescheduleAction.includes(marker) || ecommerceOrderChangeDraftSource.includes(marker))
   || !/\.ecommerce-order-change-recovery button\s*\{[^}]*min-height:\s*44px;/s.test(ecommerceCssSource)
   || !/\.ecommerce-order-change-recovery button\s*\{[^}]*width:\s*100%;/s.test(ecommerceCssSource)) fail('ecommerce_closed_order_reschedule_recovery_contract_missing')
+const storefrontEditResumeStart = ecommerceSource.indexOf('function resumeStorefrontEditRecovery()')
+const storefrontEditDiscardStart = ecommerceSource.indexOf('function discardStorefrontEditRecovery()', storefrontEditResumeStart)
+const storefrontEditToggleStart = ecommerceSource.indexOf('function toggleSku(', storefrontEditDiscardStart)
+const storefrontEditResumeAction = ecommerceSource.slice(storefrontEditResumeStart, storefrontEditDiscardStart)
+const storefrontEditDiscardAction = ecommerceSource.slice(storefrontEditDiscardStart, storefrontEditToggleStart)
+const storefrontEditRecoveryForbiddenActions = ['saveCurrentStorefront(', 'saveManagedStorefront(', 'saveStorefrontDraft(', 'saveManagedCommerceCommand(', 'recordCommerceStorefrontRequest(', 'navigate(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'publishStorefront(', 'deployStorefront(']
+if (storefrontEditResumeStart < 0
+  || storefrontEditDiscardStart < 0
+  || storefrontEditToggleStart < 0
+  || !ecommerceSource.includes('window.localStorage.setItem(key, JSON.stringify(next))')
+  || !ecommerceSource.includes('window.localStorage.removeItem(storefrontEditRecoveryStorageKey(target.scope))')
+  || !ecommerceSource.includes('storefrontEditRecoveryMatchesDraft(')
+  || !ecommerceSource.includes('storefrontEditRecoveriesMatch(')
+  || !ecommerceSource.includes('reviewStorefrontEditRecovery(')
+  || !ecommerceSource.includes('Another tab has unsaved store edits. Resume or discard that recovery before replacing it.')
+  || !ecommerceSource.includes('id={hasStorefrontEditRecovery ? \'ecommerce-edit-recovery\' : undefined}')
+  || !ecommerceSource.includes('Resume edits')
+  || !ecommerceSource.includes('Unsaved store edits discarded. The saved storefront and Shop catalog did not change.')
+  || !storefrontEditResumeAction.includes('storefrontEditRecoveryIsCurrent(target)')
+  || !storefrontEditResumeAction.includes('setStoreName(recovered.storeName)')
+  || !storefrontEditResumeAction.includes('setSelectedSkus([...recovered.selectedSkus])')
+  || !storefrontEditResumeAction.includes('setWorkspaceView(storefrontEditRecoveryReview.view)')
+  || !storefrontEditDiscardAction.includes('clearStorefrontEditRecovery()')
+  || storefrontEditRecoveryForbiddenActions.some((marker) => storefrontEditResumeAction.includes(marker) || storefrontEditDiscardAction.includes(marker))
+  || !ecommerceSource.includes('className="ecommerce-today-recovery-actions"')
+  || !/\.ecommerce-today-recovery-actions \.core-button\s*\{[^}]*min-height:\s*44px;/s.test(ecommerceCssSource)) fail('ecommerce_storefront_edit_recovery_ui_missing_or_consequential')
 const storefrontSaveStart = ecommerceSource.indexOf('async function saveCurrentStorefront')
 const storefrontSaveEnd = ecommerceSource.indexOf('function discardStorefrontChanges', storefrontSaveStart)
 const storefrontSaveAction = ecommerceSource.slice(storefrontSaveStart, storefrontSaveEnd)
@@ -3203,6 +3245,7 @@ const managedStorefrontSave = storefrontSaveAction.indexOf('await saveManagedSto
 const localStorefrontSave = storefrontSaveAction.indexOf('const saved = await saveStorefrontDraft(')
 const firstSavePreviewAdvance = storefrontSaveAction.indexOf('showSavedStorefrontPreview()')
 const lastSavePreviewAdvance = storefrontSaveAction.lastIndexOf('showSavedStorefrontPreview()')
+const storefrontRecoveryClearAfterSaveCount = (storefrontSaveAction.match(/clearMatchingStorefrontEditRecovery\(\)/g) ?? []).length
 if (addToCartStart < 0
   || addToCartEnd < 0
   || storefrontSaveStart < 0
@@ -3232,7 +3275,7 @@ if (addToCartStart < 0
   || !ecommerceSource.includes("managedIdentity ? 'Review the store before taking orders' : 'Preparing the sample store'")
   || !ecommerceSource.includes("className={available && buyingReady ? 'has-request-action' : undefined}")
   || !ecommerceSource.includes('{available && buyingReady ? (')
-  || !ecommerceSource.includes('const buyingReady = Boolean(previewResult.preview && digest && (savedDraftIsCurrent || !managedIdentity))')
+  || !ecommerceSource.includes('const buyingReady = Boolean(previewResult.preview && digest && !hasStorefrontEditRecovery && (savedDraftIsCurrent || !managedIdentity))')
   || !ecommerceSource.includes('data-requested={buyingCart.some')
   || !ecommerceSource.includes("? 'In cart' : 'Add to cart'")
   || !ecommerceSource.includes('cart={buyingCart}')
@@ -3246,11 +3289,12 @@ if (addToCartStart < 0
   || localStorefrontSave < 0
   || firstSavePreviewAdvance < managedStorefrontSave
   || lastSavePreviewAdvance < localStorefrontSave
+  || storefrontRecoveryClearAfterSaveCount !== 2
   || !finishStorefrontSetupAction.includes("showWorkspace('setup')")
   || !finishStorefrontSetupAction.includes("storefrontSaveRef.current?.scrollIntoView({ block: 'center' })")
   || !finishStorefrontSetupAction.includes("storefrontSaveRef.current?.focus({ preventScroll: true })")
   || ['saveCurrentStorefront', 'saveManagedCommerceCommand', 'saveStorefrontDraft', 'createRequestReceipt', 'setStoreName', 'setSelectedSkus', 'fetch('].some((marker) => finishStorefrontSetupAction.includes(marker))
-  || !addToCartAction.includes('catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)')
+  || !addToCartAction.includes('catalogHydrating || hasStorefrontEditRecovery || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)')
   || !addToCartAction.includes('setBuyingCart((current) => current.some')
   || !addToCartAction.includes('workspace instanceof HTMLDetailsElement')
   || !addToCartAction.includes("scrollIntoView({ block: 'start' })")
@@ -15346,6 +15390,125 @@ async function verifyStorefrontDraftRuntime() {
   }
 }
 
+async function verifyStorefrontEditRecoveryRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    storefrontEditRecoveryRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-edit-recovery.ts')).href}?storefront-edit-recovery=${Date.now()}`)
+    const catalogDigest = `sha256:${'c'.repeat(64)}`
+    const saved = {
+      revision: 7,
+      savedAt: '2026-08-09T05:00:00.000Z',
+      storeName: 'Mingalar Shop',
+      summary: 'Clear prices and a small customer-ready catalog.',
+      selectedSkus: ['SM-1001', 'SM-1003'],
+      merchandising: [
+        { sku: 'SM-1001', featured: true, collection: 'Daily', displayName: 'Daily basket', note: '' },
+        { sku: 'SM-1003', featured: false, collection: 'Home', displayName: 'Home refill', note: 'Check availability.' },
+      ],
+      localPreviewDigest: `sha256:${'a'.repeat(64)}`,
+    }
+    const baseline = {
+      storeName: saved.storeName,
+      summary: saved.summary,
+      selectedSkus: [...saved.selectedSkus],
+      merchandising: saved.merchandising.map((entry) => ({ ...entry })),
+    }
+    const edited = {
+      ...baseline,
+      storeName: 'Mingalar Recovery Shop',
+      summary: 'Exact unsaved storefront copy retained after tab closure.',
+      selectedSkus: [...baseline.selectedSkus].reverse(),
+      merchandising: null,
+    }
+    const source = {
+      savedRevision: saved.revision,
+      savedAt: saved.savedAt,
+      savedFingerprint: model.storefrontSavedStateFingerprint(saved),
+      catalogDigest,
+    }
+    const recovery = model.createStorefrontEditRecovery(
+      'local:local',
+      source,
+      edited,
+      'setup',
+      'phone',
+      '2026-08-09T05:01:00.000Z',
+    )
+    const restored = model.restoreStorefrontEditRecovery(JSON.stringify(recovery))
+    assert(restored
+      && restored.schema === model.STOREFRONT_EDIT_RECOVERY_CONTRACT
+      && restored.scope === 'local:local'
+      && restored.draft.storeName === edited.storeName
+      && restored.draft.selectedSkus.join(',') === 'SM-1003,SM-1001'
+      && restored.view === 'setup'
+      && restored.device === 'phone',
+    'storefront_edit_recovery_did_not_restore_exact_draft')
+    const review = model.reviewStorefrontEditRecovery(
+      recovery,
+      'local:local',
+      saved,
+      catalogDigest,
+      ['SM-1001', 'SM-1003'],
+      baseline,
+    )
+    assert(review.ok
+      && review.draft.summary === edited.summary
+      && review.view === 'setup'
+      && review.device === 'phone',
+    'storefront_edit_recovery_current_source_not_resumable')
+    assert(model.storefrontEditRecoveryMatchesDraft(recovery, 'local:local', source, edited)
+      && model.storefrontEditRecoveriesMatch(recovery, structuredClone(recovery))
+      && !model.storefrontEditRecoveryMatchesDraft(recovery, 'local:local', source, baseline),
+    'storefront_edit_recovery_exact_identity_not_enforced')
+    const movedRecovery = model.createStorefrontEditRecovery(
+      'local:local',
+      source,
+      edited,
+      'preview',
+      'desktop',
+      '2026-08-09T05:01:01.000Z',
+    )
+    assert(!model.storefrontEditRecoveriesMatch(recovery, movedRecovery), 'storefront_edit_recovery_newer_tab_identity_not_enforced')
+    const wrongScope = model.reviewStorefrontEditRecovery(recovery, 'managed:other', saved, catalogDigest, ['SM-1001', 'SM-1003'], baseline)
+    assert(!wrongScope.ok && wrongScope.reason === 'scope_changed', 'storefront_edit_recovery_wrong_scope_accepted')
+    const changedSaved = { ...saved, revision: 8, savedAt: '2026-08-09T05:02:00.000Z' }
+    const staleSaved = model.reviewStorefrontEditRecovery(recovery, 'local:local', changedSaved, catalogDigest, ['SM-1001', 'SM-1003'], baseline)
+    assert(!staleSaved.ok && staleSaved.reason === 'saved_storefront_changed', 'storefront_edit_recovery_overwrote_newer_saved_store')
+    const changedCatalog = model.reviewStorefrontEditRecovery(recovery, 'local:local', saved, `sha256:${'d'.repeat(64)}`, ['SM-1001', 'SM-1003'], baseline)
+    assert(!changedCatalog.ok && changedCatalog.reason === 'catalog_changed', 'storefront_edit_recovery_ignored_catalog_change')
+    const unchangedRecovery = model.createStorefrontEditRecovery('local:local', source, baseline, 'preview', 'desktop', '2026-08-09T05:03:00.000Z')
+    const unchanged = model.reviewStorefrontEditRecovery(unchangedRecovery, 'local:local', saved, catalogDigest, ['SM-1001', 'SM-1003'], baseline)
+    assert(!unchanged.ok && unchanged.reason === 'no_changes', 'storefront_edit_recovery_unchanged_draft_offered')
+    const unknownSkuRecovery = model.createStorefrontEditRecovery(
+      'local:local',
+      source,
+      { ...edited, selectedSkus: ['UNKNOWN-SKU'], merchandising: null },
+      'setup',
+      'phone',
+      '2026-08-09T05:04:00.000Z',
+    )
+    const unknownSku = model.reviewStorefrontEditRecovery(unknownSkuRecovery, 'local:local', saved, catalogDigest, ['SM-1001', 'SM-1003'], baseline)
+    assert(!unknownSku.ok && unknownSku.reason === 'invalid_recovery', 'storefront_edit_recovery_unknown_catalog_sku_accepted')
+    const badDigest = structuredClone(recovery)
+    badDigest.source.catalogDigest = 'sha256:not-valid'
+    const extraField = { ...structuredClone(recovery), autoSave: true }
+    const oversizedDraft = structuredClone(recovery)
+    oversizedDraft.draft.storeName = 'x'.repeat(61)
+    assert(model.restoreStorefrontEditRecovery(badDigest) === null
+      && model.restoreStorefrontEditRecovery(extraField) === null
+      && model.restoreStorefrontEditRecovery(oversizedDraft) === null
+      && model.restoreStorefrontEditRecovery('{broken') === null,
+    'storefront_edit_recovery_tamper_accepted')
+    assert(/^supermega\.ecommerce\.closed-storefront-edit\.v1\./.test(model.storefrontEditRecoveryStorageKey('local:local')),
+      'storefront_edit_recovery_storage_scope_missing')
+  } catch (error) {
+    fail(`storefront_edit_recovery_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyStorefrontRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -20030,6 +20193,7 @@ await verifyWebsiteOrderCompletionRuntime()
 await verifyProductionJobPlanDraftRuntime()
 await verifyCommerceOrderDraftRuntime()
 await verifyStorefrontDraftRuntime()
+await verifyStorefrontEditRecoveryRuntime()
 await verifyStorefrontRuntime()
 await verifyManagedWebsiteRuntime()
 await verifyManagedStorefrontRuntime()
@@ -20040,8 +20204,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 24 KB allowance for Shop procurement, Plant availability, and Website tab recovery; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_824_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 40 KB allowance for Shop, Plant, Website, and Ecommerce recovery; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_840_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -20544,4 +20708,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontEditRecoveryRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

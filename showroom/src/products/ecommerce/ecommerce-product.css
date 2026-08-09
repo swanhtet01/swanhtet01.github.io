@@ -37,6 +37,16 @@
   background: rgba(11, 116, 94, .05);
 }
 
+.ecommerce-today-recovery-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ecommerce-today-recovery-actions .core-button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
 .ecommerce-workspace-switch {
   order: 1;
   width: min(100%, 360px);
@@ -1729,6 +1739,20 @@
   .ecommerce-save-bar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ecommerce-today-recovery-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ecommerce-today-recovery-actions .core-button {
+    width: 100%;
+  }
+
+  .ecommerce-today-recovery-actions .core-button:only-child {
+    grid-column: 1 / -1;
   }
 
   .ecommerce-today {
