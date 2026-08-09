@@ -207,10 +207,10 @@ export function WebsiteProduct() {
   } = useWebsiteWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedView = searchParams.get('view')
-  const [surface, setSurface] = useState<'work' | 'preview'>('preview')
+  const [surface, setSurface] = useState<'work' | 'preview'>(() => isUntouchedWebsiteStarter(workspace) ? 'work' : 'preview')
   const [selectedPageId, setSelectedPageId] = useState(workspace.selectedPageId)
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
-  const [starterDismissed, setStarterDismissed] = useState(true)
+  const [starterDismissed, setStarterDismissed] = useState(false)
   const [editSessionState, setEditSessionState] = useState<WebsiteEditSessionState | null>(null)
   const [closedEditSessionState, setClosedEditSessionState] = useState<WebsiteClosedEditSessionState | null>(null)
   const [savingDraft, setSavingDraft] = useState(false)
@@ -325,15 +325,15 @@ export function WebsiteProduct() {
   const canReview = !hasUnsavedChanges && !hasClosedEditSession && !starterAvailable && contentChecksPass
   const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
-  const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
+  const activeViewCopy = view === 'content' && starterAvailable && !starterSetupActive && surface === 'preview'
     ? {
         title: 'Website',
         copy: 'Preview, edit, and download the website file.',
       }
     : starterSetupActive
     ? {
-        title: 'Make this website yours',
-        copy: 'Edit the example, then preview it.',
+        title: 'Start your website',
+        copy: 'Answer five questions, then check the preview.',
       }
     : view === 'content' && surface === 'preview'
     ? {
@@ -352,7 +352,7 @@ export function WebsiteProduct() {
       : viewCopy[view]
   const savedStateNotice = `${storageMode === 'managed' ? 'Company account' : storageMode === 'browser-local' ? 'This device' : 'This session'} only. Nothing has been deployed.`
   const saveStateLabel = starterAvailable
-    ? 'Sample only'
+    ? 'New website'
     : editConflict
     ? 'Saved version changed'
     : hasUnsavedChanges
@@ -363,7 +363,7 @@ export function WebsiteProduct() {
           ? 'Saved on this device'
           : 'Session only'
   const websiteSurfaceActionLabel = surface === 'preview'
-    ? starterAvailable ? 'Edit sample' : 'Edit page'
+    ? starterAvailable ? 'Start website' : 'Edit page'
     : 'Preview'
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
@@ -1164,7 +1164,7 @@ export function WebsiteProduct() {
     : starterSetupActive
       ? 'Answer 5 questions'
     : starterAvailable
-        ? 'Customize this demo'
+        ? 'Start your website'
         : hasUnsavedChanges
           ? 'Save or discard edits'
           : localPreviewReady
@@ -1187,7 +1187,7 @@ export function WebsiteProduct() {
         ? 'A previous tab closed before these edits were saved.'
         : 'The saved Website changed, so the older edits cannot be resumed.'
     : starterAvailable || starterSetupActive
-      ? 'Answer five questions to replace the example.'
+      ? 'Answer five questions to create a preview.'
       : hasUnsavedChanges
         ? 'Save or discard this preview.'
         : failingContentChecks.length
@@ -1205,7 +1205,7 @@ export function WebsiteProduct() {
     : hasClosedEditSession
       ? 'Review recovery'
     : starterSetupActive || starterAvailable
-      ? 'Customize demo'
+      ? 'Start website'
       : websiteAgentJob
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'

@@ -15,14 +15,14 @@ The pitch, verbatim from approved copy (eyebrow `Website maker`):
 1. Open `https://app.supermega.dev/settings/?product=website` — the same destination as the `Start free sample` button on the public `/website/` landing page.
 2. Under `Name your workspace`, enter the client's name in `Business name`.
 3. Press `Create Website and preview it`. A responsive homepage sample is provisioned and the app opens `/website/`. The stated first result is `Preview a business website`.
-4. Confirm the sidebar badge reads `Demo mode`. On a fresh sample, the primary action in the `Start here` panel is `Customize demo`.
+4. Confirm the sidebar badge reads `Demo mode`. A blank Website opens directly on `Start your website`; an explicitly provisioned working sample opens its preview.
 
 ## 3. Demo script
 
-1. Start on `/website/` in preview. The heading is `Website`; the `Start here` panel shows the pages, readiness, and inquiry counts at a glance.
-2. Press `Customize demo` to open the starter form: `Change the sample into your website`. Fill the client's real business details in front of them — this is the brief-to-site moment. `View sample` shows the untouched example; `Make preview` applies their answers.
+1. Start on a fresh `/website/`. The heading is `Start your website`, the client brief is empty, and Business name is focused. No sample claim is presented as client content.
+2. Fill the client's real business details in front of them — this is the brief-to-site moment. `View example` is optional; `Make preview` applies their answers without saving.
 3. Review the preview at desktop, tablet, and mobile widths. On a saved draft page the copy explains itself: `Go back, then Preview to check desktop, tablet, or mobile.`
-4. Press `Edit sample` (later `Edit page`) to change one headline live, then `Save` — or `Discard` to show that a preview never overwrites anything silently.
+4. Press `Edit page` to change one headline live, then `Save` — or `Discard` to show that a preview never overwrites anything silently.
 5. Open the `Inquiries` disclosure: `Capture customer inquiries`. Add a test inquiry with `Add inquiry`, then `Qualify` it with a responsible person, and show `Export inquiries`. Note the on-screen line: nothing is sent to customers, CRM, or Shop from this screen.
 6. Finish on the download: the ready panel says `Download your website` — `One file works on any phone or computer.` Press `Download website` (in a session-only workspace the button is `Download preview`) and open the file in a new tab.
 7. Point at the boundary card while the file opens: `Not online yet` — this is the honest close, not a fake launch.

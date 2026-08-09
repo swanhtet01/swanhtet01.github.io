@@ -11,17 +11,17 @@ type WebsiteStarterSetupProps = {
   onViewSample: () => void
 }
 
-const SAMPLE_BRIEF: WebsiteStarterBrief = {
-  templateId: 'catalog-showcase',
-  businessName: 'Mingalar Fresh Mart',
-  audience: 'families and office buyers in Yangon',
-  offer: 'Daily groceries, pantry packs, and local delivery with clear pickup windows.',
-  proof: 'Public proof: same-day neighborhood delivery, visible prices, and a reviewed phone or chat contact route.',
-  contactHref: 'https://m.me/mingalarfreshmart',
+const EMPTY_BRIEF: WebsiteStarterBrief = {
+  templateId: 'business-presence',
+  businessName: '',
+  audience: '',
+  offer: '',
+  proof: '',
+  contactHref: '',
 }
 
 export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSetupProps) {
-  const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...SAMPLE_BRIEF }))
+  const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...EMPTY_BRIEF }))
   const [attempted, setAttempted] = useState(false)
   const starterFormRef = useRef<HTMLFormElement>(null)
   const businessNameRef = useRef<HTMLInputElement>(null)
@@ -66,15 +66,15 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
       <header className="website-panel-head">
         <div>
           <span className="website-eyebrow">Quick setup</span>
-          <h2 id="website-starter-title">Change the sample into your website</h2>
-          <p>Answer the basics only. SuperMega makes a three-page preview you can check before saving.</p>
+          <h2 id="website-starter-title">Start your website</h2>
+          <p>Five answers make a three-page preview. Nothing is saved yet.</p>
         </div>
-        <span className="website-status is-draft">Example ready</span>
+        <span className="website-status is-draft">New website</span>
       </header>
 
       <form className="website-editor-scroll website-starter-form" noValidate onSubmit={submit} ref={starterFormRef}>
         <footer className="website-starter-actions">
-          <button className="website-button is-secondary" onClick={onViewSample} type="button">View sample</button>
+          <button className="website-button is-secondary" onClick={onViewSample} type="button">View example</button>
           <button className="website-button is-primary" type="submit">Make preview</button>
         </footer>
 
