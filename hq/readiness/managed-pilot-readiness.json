@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
   "asOf": "2026-08-08T12:23:36.370Z",
-  "sourceDigest": "sha256:85dd13cacff2f80194ef00fa79a0c960ae3a315cfa0ae5aa8ff64caaeb5a266f",
+  "sourceDigest": "sha256:2c85c4a85b8f107606246e6bc2de8d27c0e846eb6dc597e3823362742fdbea68",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -197,7 +197,7 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:4dd1ade6aa31e399adcdab3b4697e5f3eb61c4bef76ef93a553447fcf1c94bb3"
+      "digest": "sha256:48160e76970b46e90fedff87431ba73d8410ecdd91f271f5859a8fdf8e789bef"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
@@ -213,7 +213,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:d53f400bc79c71bc712ba6bf99b968823afd4d4ee9e1901c230aaa3da85fd2bb"
+      "digest": "sha256:b60deaaf6b10520f79a00b816e9f5abdeef730138df09852105f8253ac9c58fe"
     },
     {
       "path": "package.json",

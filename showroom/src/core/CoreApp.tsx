@@ -688,6 +688,10 @@ type PlantJobImportReview = {
   issues: PlantJobImportIssue[]
 }
 
+function emptyPlantJobDraft(): PlantJobDraft {
+  return { id: '', line: '', product: '', target: '', owner: '', priority: 'normal', dueAt: defaultJobDueInput() }
+}
+
 const PLANT_JOB_IMPORT_MAX_BYTES = 180 * 1024
 const PLANT_JOB_IMPORT_MAX_ROWS = 50
 const PLANT_JOB_IMPORT_PRIORITIES: Record<string, ProductionJobPriority> = {
@@ -7787,15 +7791,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     procedureCompleted: boolean
     returnToService: ProductionMaintenanceReturnToService
   } | null>(null)
-  const [jobDraft, setJobDraft] = useState<PlantJobDraft>({
-    id: '',
-    line: '',
-    product: '',
-    target: '',
-    owner: '',
-    priority: 'normal',
-    dueAt: defaultJobDueInput(),
-  })
+  const [jobDraft, setJobDraft] = useState<PlantJobDraft>(emptyPlantJobDraft)
   const [shopDemandSignals, setShopDemandSignals] = useState<ShopProductionDemandSignal[]>([])
   const [shopDemandIssue, setShopDemandIssue] = useState('')
   const [selectedShopDemandDigest, setSelectedShopDemandDigest] = useState('')
@@ -9209,6 +9205,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       dueAt: canonicalDueAt,
       ...(demandSignal ? { shopDemandSource: productionShopDemandSource(demandSignal) } : {}),
     }
+    const importedJobs = plantJobImportReview?.readyJobs ?? []
+    const nextImportedJob = importedJobs.some((draft) => draft.id === id)
+      ? importedJobs.find((draft) => draft.id !== id && !production.jobs.some((candidate) => candidate.id === draft.id))
+      : undefined
     queueAction({
       kind: 'production_job',
       subjectId: id,
@@ -9230,7 +9230,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           return registerProductionJob(current, job, boundProof)
         })
         setJobId(id)
-        setJobDraft({ id: '', line: '', product: '', target: '', owner: '', priority: 'normal', dueAt: defaultJobDueInput() })
+        if (nextImportedJob) loadPlantJobImportDraft(nextImportedJob)
+        else setJobDraft(emptyPlantJobDraft())
         setSelectedShopDemandDigest('')
       },
     })
@@ -10122,7 +10123,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
           <section aria-label="Plant job CSV import" className="plant-job-import">
-            <div><span className="core-eyebrow">Job CSV import</span><strong>Prepare job list</strong><small>Download, edit, then upload. Checked locally; no jobs created.</small><button className="text-link" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Or try a sample</button></div>
+            <div><span className="core-eyebrow">Job CSV import</span><strong>Prepare job list</strong><small>Download, edit, upload. Local review; no jobs created.</small><button className="text-link" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Or try a sample</button></div>
             <div className="plant-job-import-actions">
               <a className="core-button primary" download="supermega-plant-job-template.csv" href={`data:text/csv;charset=utf-8,%EF%BB%BF${encodeURIComponent(buildPlantJobImportTemplateCsv())}`}>Download template</a>
               <label className="plant-job-import-upload">Upload completed CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
