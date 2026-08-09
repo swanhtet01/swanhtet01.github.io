@@ -2005,6 +2005,16 @@ const plantOutputFocusStart = coreSource.indexOf("if (focus === 'output' && tab 
 const plantPlanFocusContract = plantPlanFocusStart >= 0 && plantOutputFocusStart > plantPlanFocusStart
   ? coreSource.slice(plantPlanFocusStart, plantOutputFocusStart)
   : ''
+const plantJobIdFocusStart = coreSource.indexOf('function focusPlantJobIdInput()')
+const plantMaterialDisclosureFocusStart = coreSource.indexOf('function focusMaterialDisclosure()', plantJobIdFocusStart)
+const plantJobIdFocusContract = plantJobIdFocusStart >= 0 && plantMaterialDisclosureFocusStart > plantJobIdFocusStart
+  ? coreSource.slice(plantJobIdFocusStart, plantMaterialDisclosureFocusStart)
+  : ''
+const plantShopDemandFocusStart = coreSource.indexOf('function selectShopDemand(signal: ShopProductionDemandSignal)')
+const plantJobImportReviewStart = coreSource.indexOf('function buildPlantJobImportReview', plantShopDemandFocusStart)
+const plantShopDemandFocusContract = plantShopDemandFocusStart >= 0 && plantJobImportReviewStart > plantShopDemandFocusStart
+  ? coreSource.slice(plantShopDemandFocusStart, plantJobImportReviewStart)
+  : ''
 const plantMaterialFocusStart = coreSource.indexOf("if (focus === 'material-use' && tab === 'production')")
 const plantBlockerFocusStart = coreSource.indexOf("if (focus === 'blocker' && tab === 'control')")
 const plantMaterialFocusContract = plantMaterialFocusStart >= 0 && plantBlockerFocusStart > plantMaterialFocusStart
@@ -2054,12 +2064,14 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes("navigate('/plant/?tab=production&focus=plan')")
   || !plantPlanFocusContract.includes('if (!disclosure) return')
   || !plantPlanFocusContract.includes('disclosure.open = true')
-  || !plantPlanFocusContract.includes('window.setTimeout(() => {')
-  || !plantPlanFocusContract.includes('const jobIdInput = plantJobIdInputRef.current')
-  || !plantPlanFocusContract.includes('if (!jobIdInput) return')
-  || !plantPlanFocusContract.includes("jobIdInput.scrollIntoView({ block: 'center' })")
-  || !plantPlanFocusContract.includes('jobIdInput.focus({ preventScroll: true })')
-  || !plantPlanFocusContract.includes('}, 220)')
+  || !plantPlanFocusContract.includes('window.setTimeout(focusPlantJobIdInput, 220)')
+  || !plantJobIdFocusContract.includes('const input = plantJobIdInputRef.current')
+  || !plantJobIdFocusContract.includes('if (!input) return')
+  || !plantJobIdFocusContract.includes("input.scrollIntoView({ block: 'center' })")
+  || !plantJobIdFocusContract.includes('input.focus({ preventScroll: true })')
+  || !plantShopDemandFocusContract.includes('if (jobDisclosureRef.current) jobDisclosureRef.current.open = true')
+  || !plantShopDemandFocusContract.includes('requestAnimationFrame(focusPlantJobIdInput)')
+  || plantShopDemandFocusContract.includes("querySelector<HTMLInputElement>('input')")
   || !coreSource.includes('ref={plantJobIdInputRef}')
   || !coreSource.includes("focus === 'output' && tab === 'production'")
   || !coreSource.includes("navigate('/plant/?tab=production&focus=output')")

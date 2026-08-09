@@ -8559,12 +8559,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       if (!disclosure) return
       disclosure.open = true
       navigate('/plant/?tab=production', { replace: true })
-      window.setTimeout(() => {
-        const jobIdInput = plantJobIdInputRef.current
-        if (!jobIdInput) return
-        jobIdInput.scrollIntoView({ block: 'center' })
-        jobIdInput.focus({ preventScroll: true })
-      }, 220)
+      window.setTimeout(focusPlantJobIdInput, 220)
       return
     }
     if (focus === 'output' && tab === 'production') {
@@ -9005,6 +9000,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     focusMaterialDisclosure()
   }
 
+  function focusPlantJobIdInput() {
+    const input = plantJobIdInputRef.current
+    if (!input) return
+    input.scrollIntoView({ block: 'center' })
+    input.focus({ preventScroll: true })
+  }
+
   function focusMaterialDisclosure() {
     focusMaterialInput('material')
   }
@@ -9223,7 +9225,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       dueAt: defaultJobDueInput(),
     })
     if (jobDisclosureRef.current) jobDisclosureRef.current.open = true
-    requestAnimationFrame(() => jobDisclosureRef.current?.querySelector<HTMLInputElement>('input')?.focus())
+    requestAnimationFrame(focusPlantJobIdInput)
     setNotice('Shop demand attached. Review owner, line, due time, and evidence.')
   }
 
@@ -9989,7 +9991,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     if (jobDisclosureRef.current) {
       jobDisclosureRef.current.open = true
       jobDisclosureRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      requestAnimationFrame(() => plantJobIdInputRef.current?.focus({ preventScroll: true }))
+      requestAnimationFrame(focusPlantJobIdInput)
     }
   }
   const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState} data-step={plantTodayStep}>
