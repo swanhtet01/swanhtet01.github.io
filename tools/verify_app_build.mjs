@@ -35,6 +35,7 @@ let operatingBaselineRuntimeChecks = 0
 let plantEquipmentImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let shopPurchaseOrderDraftRuntimeChecks = 0
+let shopCounterSaleRecoveryRuntimeChecks = 0
 let shopServiceScheduleRuntimeChecks = 0
 let shopBusinessTemplateRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
@@ -124,6 +125,7 @@ const shopInventorySource = await readFile(resolve(root, 'showroom', 'src', 'cor
 const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ShopInventoryFoundation.tsx'), 'utf8')
 const shopStockMoveDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-stock-move-draft.ts'), 'utf8')
 const shopPurchaseOrderDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-purchase-order-draft.ts'), 'utf8')
+const shopCounterSaleRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-counter-sale-recovery.ts'), 'utf8')
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
 const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
@@ -5893,6 +5895,47 @@ if (!shopCounterContract.includes('Tap an item to add it')
   || !coreCssSource.includes('.shop-pack-context')
   || !coreCssSource.includes('.shop-mobile-cart')
   || !coreCssSource.includes('.shop-current-sale.is-open')) fail('shop_counter_direct_demo_missing')
+const counterRecoveryResumeStart = shopCounterContract.indexOf('function resumeCounterRecovery()')
+const counterRecoveryDiscardStart = shopCounterContract.indexOf('function discardCounterRecovery()', counterRecoveryResumeStart)
+const counterRecoveryChangeStart = shopCounterContract.indexOf('function changeQuantity(', counterRecoveryDiscardStart)
+const counterRecoveryFinishStart = shopCounterContract.indexOf('function finishCommittedSale()')
+const counterRecoveryReviewStart = shopCounterContract.indexOf('function reviewSale(', counterRecoveryFinishStart)
+const counterRecoveryResumeAction = shopCounterContract.slice(counterRecoveryResumeStart, counterRecoveryDiscardStart)
+const counterRecoveryDiscardAction = shopCounterContract.slice(counterRecoveryDiscardStart, counterRecoveryChangeStart)
+const counterRecoveryFinishAction = shopCounterContract.slice(counterRecoveryFinishStart, counterRecoveryReviewStart)
+const counterRecoveryForbiddenActions = ['onReview(', 'mutateCommerce(', 'queueAction(', 'navigate(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'reserveCommerceOrder(', 'confirmAccountableAction(', 'reconcileCommercePayment(']
+if (counterRecoveryResumeStart < 0
+  || counterRecoveryDiscardStart < 0
+  || counterRecoveryChangeStart < 0
+  || counterRecoveryFinishStart < 0
+  || counterRecoveryReviewStart < 0
+  || !shopCounterSaleRecoverySource.includes("SHOP_COUNTER_SALE_RECOVERY_CONTRACT = 'supermega.shop.closed-counter-sale.v1'")
+  || !shopCounterSaleRecoverySource.includes("globalThis.crypto.subtle.digest('SHA-256', bytes)")
+  || !shopCounterSaleRecoverySource.includes('export function reviewShopCounterSaleRecovery(')
+  || !shopCounterContract.includes('window.localStorage.setItem(key, JSON.stringify(next))')
+  || !shopCounterContract.includes('retained.source.catalogDigest !== counterRecoverySource.catalogDigest')
+  || !shopCounterContract.includes('shopCounterSaleRecoveriesMatch(')
+  || !shopCounterContract.includes('shopCounterSaleRecoveryMatchesDraft(')
+  || !shopCounterContract.includes('Another tab has an unfinished sale. Resume or discard it before replacing it.')
+  || !shopCounterContract.includes('className="shop-counter-tab-recovery"')
+  || !shopCounterContract.includes("data-state={counterRecoveryReview?.ok ? 'ready' : 'conflict'}")
+  || !shopCounterContract.includes("counterRecoveryReview?.ok ? 'Continue this sale?' : 'This sale needs a fresh start'")
+  || !shopCounterContract.includes('Resume sale')
+  || !shopCounterContract.includes('No order, stock reservation, payment, receipt, customer message, or company write happens here.')
+  || !counterRecoveryResumeAction.includes('counterRecoveryIsCurrent(target)')
+  || !counterRecoveryResumeAction.includes('setCart(Object.fromEntries(recovered.lines.map')
+  || !counterRecoveryResumeAction.includes('setCustomer(recovered.customer)')
+  || !counterRecoveryResumeAction.includes('setPayment(recovered.payment)')
+  || !counterRecoveryResumeAction.includes('setCartOpen(recovered.cartOpen)')
+  || !counterRecoveryDiscardAction.includes('clearCounterRecovery()')
+  || !counterRecoveryDiscardAction.includes("setPayment('Cash')")
+  || !counterRecoveryFinishAction.includes('clearMatchingCounterRecovery()')
+  || counterRecoveryForbiddenActions.some((marker) => counterRecoveryResumeAction.includes(marker) || counterRecoveryDiscardAction.includes(marker))
+  || !shopCounterRouteContract.includes('key={counterSaleScope}')
+  || !shopCounterRouteContract.includes('scope={counterSaleScope}')
+  || !coreSource.includes("`managed:${managedIdentity.workspaceId}:${managedIdentity.userId}`")
+  || !coreCssSource.includes('.shop-counter-tab-recovery[data-state="conflict"]')
+  || !/\.shop-counter-tab-recovery-actions \.core-button\s*\{[^}]*min-width:\s*116px;[^}]*min-height:\s*44px;/s.test(coreCssSource)) fail('shop_counter_tab_recovery_contract_missing_or_consequential')
 if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 if (!commercePageContract.includes('purchaseOrderDraft')
@@ -15509,6 +15552,103 @@ async function verifyStorefrontEditRecoveryRuntime() {
   }
 }
 
+async function verifyShopCounterSaleRecoveryRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    shopCounterSaleRecoveryRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-counter-sale-recovery.ts')).href}?shop-counter-recovery=${Date.now()}`)
+    const catalog = [
+      { sku: 'SM-1001', name: 'Daily essentials basket', variant: 'Standard', onHand: 24, reorderAt: 8, price: 18_500 },
+      { sku: 'SM-1002', name: 'Cold drink pack', onHand: 18, reorderAt: 6, price: 6_500 },
+    ]
+    const catalogDigest = await model.shopCounterCatalogDigest(catalog)
+    const repeatedDigest = await model.shopCounterCatalogDigest(structuredClone(catalog))
+    const reorderedDigest = await model.shopCounterCatalogDigest([...catalog].reverse())
+    const repricedDigest = await model.shopCounterCatalogDigest([{ ...catalog[0], price: 19_000 }, catalog[1]])
+    assert(catalogDigest === repeatedDigest
+      && catalogDigest !== reorderedDigest
+      && catalogDigest !== repricedDigest
+      && /^sha256:[0-9a-f]{64}$/.test(catalogDigest),
+    'shop_counter_recovery_catalog_digest_not_exact')
+    const source = { catalogDigest }
+    const draft = {
+      lines: [{ sku: 'SM-1001', quantity: 2 }, { sku: 'SM-1002', quantity: 1 }],
+      customer: 'Mya Thida ',
+      payment: 'KBZPay',
+      cartOpen: true,
+    }
+    const recovery = model.createShopCounterSaleRecovery(
+      'managed:workspace-1:user-1',
+      source,
+      draft,
+      '2026-08-09T05:20:00.000Z',
+    )
+    const restored = model.restoreShopCounterSaleRecovery(JSON.stringify(recovery))
+    assert(restored
+      && restored.schema === model.SHOP_COUNTER_SALE_RECOVERY_CONTRACT
+      && restored.scope === 'managed:workspace-1:user-1'
+      && restored.draft.lines.map((line) => `${line.sku}:${line.quantity}`).join(',') === 'SM-1001:2,SM-1002:1'
+      && restored.draft.customer === 'Mya Thida '
+      && restored.draft.payment === 'KBZPay'
+      && restored.draft.cartOpen === true,
+    'shop_counter_recovery_did_not_restore_exact_sale')
+    const current = model.reviewShopCounterSaleRecovery(recovery, 'managed:workspace-1:user-1', catalogDigest, catalog)
+    assert(current.ok
+      && current.draft.lines.length === 2
+      && current.draft.customer === draft.customer
+      && current.draft.payment === draft.payment,
+    'shop_counter_recovery_current_source_not_resumable')
+    assert(model.shopCounterSaleRecoveryMatchesDraft(recovery, 'managed:workspace-1:user-1', source, draft)
+      && model.shopCounterSaleRecoveriesMatch(recovery, structuredClone(recovery))
+      && !model.shopCounterSaleRecoveryMatchesDraft(recovery, 'managed:workspace-1:user-1', source, { ...draft, customer: 'Other' }),
+    'shop_counter_recovery_exact_identity_not_enforced')
+    const newer = model.createShopCounterSaleRecovery(
+      'managed:workspace-1:user-1',
+      source,
+      { ...draft, cartOpen: false },
+      '2026-08-09T05:20:01.000Z',
+    )
+    assert(!model.shopCounterSaleRecoveriesMatch(recovery, newer), 'shop_counter_recovery_newer_tab_identity_not_enforced')
+    const wrongScope = model.reviewShopCounterSaleRecovery(recovery, 'managed:workspace-2:user-1', catalogDigest, catalog)
+    assert(!wrongScope.ok && wrongScope.reason === 'scope_changed', 'shop_counter_recovery_wrong_scope_accepted')
+    const changedCatalog = [{ ...catalog[0], onHand: 23 }, catalog[1]]
+    const changedDigest = await model.shopCounterCatalogDigest(changedCatalog)
+    const staleCatalog = model.reviewShopCounterSaleRecovery(recovery, 'managed:workspace-1:user-1', changedDigest, changedCatalog)
+    assert(!staleCatalog.ok && staleCatalog.reason === 'catalog_changed', 'shop_counter_recovery_catalog_or_stock_change_ignored')
+    const unknownSku = structuredClone(recovery)
+    unknownSku.draft.lines[0].sku = 'UNKNOWN-SKU'
+    const unknownReview = model.reviewShopCounterSaleRecovery(unknownSku, 'managed:workspace-1:user-1', catalogDigest, catalog)
+    assert(!unknownReview.ok && unknownReview.reason === 'invalid_recovery', 'shop_counter_recovery_unknown_sku_accepted')
+    const excessQuantity = structuredClone(recovery)
+    excessQuantity.draft.lines[0].quantity = 25
+    const excessReview = model.reviewShopCounterSaleRecovery(excessQuantity, 'managed:workspace-1:user-1', catalogDigest, catalog)
+    assert(!excessReview.ok && excessReview.reason === 'invalid_recovery', 'shop_counter_recovery_excess_stock_accepted')
+    const badPayment = structuredClone(recovery)
+    badPayment.draft.payment = 'Card'
+    const badDigest = structuredClone(recovery)
+    badDigest.source.catalogDigest = 'sha256:not-valid'
+    const extraField = { ...structuredClone(recovery), createOrder: true }
+    assert(model.restoreShopCounterSaleRecovery(badPayment) === null
+      && model.restoreShopCounterSaleRecovery(badDigest) === null
+      && model.restoreShopCounterSaleRecovery(extraField) === null
+      && model.restoreShopCounterSaleRecovery('{broken') === null,
+    'shop_counter_recovery_tamper_accepted')
+    let emptySaleRejected = false
+    try {
+      model.createShopCounterSaleRecovery('local:local', source, { ...draft, lines: [] })
+    } catch {
+      emptySaleRejected = true
+    }
+    assert(emptySaleRejected, 'shop_counter_recovery_empty_sale_created')
+    assert(/^supermega\.shop\.closed-counter-sale\.v1\./.test(model.shopCounterSaleRecoveryStorageKey('managed:workspace-1:user-1')),
+      'shop_counter_recovery_storage_scope_missing')
+  } catch (error) {
+    fail(`shop_counter_sale_recovery_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyStorefrontRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -20194,6 +20334,7 @@ await verifyProductionJobPlanDraftRuntime()
 await verifyCommerceOrderDraftRuntime()
 await verifyStorefrontDraftRuntime()
 await verifyStorefrontEditRecoveryRuntime()
+await verifyShopCounterSaleRecoveryRuntime()
 await verifyStorefrontRuntime()
 await verifyManagedWebsiteRuntime()
 await verifyManagedStorefrontRuntime()
@@ -20204,8 +20345,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 40 KB allowance for Shop, Plant, Website, and Ecommerce recovery; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_840_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 50 KB allowance for Shop, Plant, Website, and Ecommerce recovery, including counter tab recovery; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_850_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -20708,4 +20849,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontEditRecoveryRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopCounterSaleRecoveryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontEditRecoveryRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

@@ -8,6 +8,20 @@ import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceO
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
+import {
+  createShopCounterSaleRecovery,
+  restoreShopCounterSaleRecovery,
+  reviewShopCounterSaleRecovery,
+  shopCounterCatalogDigest,
+  shopCounterCatalogDigestSource,
+  shopCounterSaleRecoveriesMatch,
+  shopCounterSaleRecoveryMatchesDraft,
+  shopCounterSaleRecoveryStorageKey,
+  type ShopCounterPayment,
+  type ShopCounterSaleDraft,
+  type ShopCounterSaleRecovery,
+  type ShopCounterSaleRecoverySource,
+} from './shop-counter-sale-recovery'
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
@@ -981,11 +995,16 @@ type ShopCounterReview = {
 type ClearedShopSale = {
   cart: Record<string, number>
   customer: string
-  payment: string
+  payment: ShopCounterPayment
   cartOpen: boolean
   lineCount: number
   unitCount: number
   total: number
+}
+
+type ShopCounterSaleRecoveryState = {
+  scope: string
+  recovery: ShopCounterSaleRecovery
 }
 
 type RemovedShopOrderLine = CommerceRemovedOrderDraftLine & Readonly<{
@@ -1012,7 +1031,7 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
 }
 
-function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount, sampleCatalogActive }: {
+function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount, sampleCatalogActive, scope }: {
   disabled: boolean
   industryPack: ShopIndustryPack | null
   items: CommerceItem[]
@@ -1020,17 +1039,24 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
   sampleCatalogActive: boolean
+  scope: string
 }) {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const clearSaleButtonRef = useRef<HTMLButtonElement>(null)
   const undoClearSaleButtonRef = useRef<HTMLButtonElement>(null)
+  const counterRecoveryActionRef = useRef<HTMLButtonElement>(null)
+  const counterRecoveryHydrationRef = useRef('')
+  const counterLastWrittenRecoveryRef = useRef<ShopCounterSaleRecovery | null>(null)
   const [cart, setCart] = useState<Record<string, number>>({})
   const [customer, setCustomer] = useState('')
-  const [payment, setPayment] = useState('Cash')
+  const [payment, setPayment] = useState<ShopCounterPayment>('Cash')
   const [query, setQuery] = useState('')
   const [searchStatus, setSearchStatus] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
   const [clearedSale, setClearedSale] = useState<ClearedShopSale | null>(null)
+  const [counterRecoveryState, setCounterRecoveryState] = useState<ShopCounterSaleRecoveryState | null>(null)
+  const [counterRecoveryNotice, setCounterRecoveryNotice] = useState('')
+  const [counterCatalogDigestState, setCounterCatalogDigestState] = useState({ source: '', value: '', error: '' })
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const visibleItems = normalizedQuery
     ? items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
@@ -1041,14 +1067,226 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   })
   const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
+  const counterCatalogSource = useMemo(() => {
+    try {
+      return shopCounterCatalogDigestSource(items)
+    } catch {
+      return ''
+    }
+  }, [items])
+  const counterCatalogDigest = counterCatalogDigestState.source === counterCatalogSource
+    ? counterCatalogDigestState.value
+    : ''
+  const counterRecoverySource = useMemo<ShopCounterSaleRecoverySource | null>(() => (
+    counterCatalogDigest ? { catalogDigest: counterCatalogDigest } : null
+  ), [counterCatalogDigest])
+  const currentCounterSaleDraft = useMemo<ShopCounterSaleDraft>(() => ({
+    lines: items.flatMap((item) => {
+      const quantity = Math.min(cart[item.sku] ?? 0, item.onHand)
+      return quantity > 0 ? [{ sku: item.sku, quantity }] : []
+    }),
+    customer,
+    payment,
+    cartOpen,
+  }), [cart, cartOpen, customer, items, payment])
+  const hasUnfinishedCounterSale = currentCounterSaleDraft.lines.length > 0
+  const activeCounterRecovery = counterRecoveryState?.scope === scope ? counterRecoveryState.recovery : null
+  const counterRecoveryReview = activeCounterRecovery && counterRecoverySource
+    ? reviewShopCounterSaleRecovery(activeCounterRecovery, scope, counterCatalogDigest, items)
+    : null
+  const hasCounterRecovery = Boolean(activeCounterRecovery)
   const clearedSaleRestorable = Boolean(clearedSale && Object.entries(clearedSale.cart).every(([sku, quantity]) => (
     items.some((item) => item.sku === sku && item.onHand >= quantity)
   )))
 
   useEffect(() => {
+    let current = true
+    void shopCounterCatalogDigest(items)
+      .then((value) => {
+        if (current) setCounterCatalogDigestState({ source: counterCatalogSource, value, error: '' })
+      })
+      .catch(() => {
+        if (current) setCounterCatalogDigestState({ source: counterCatalogSource, value: '', error: 'Counter recovery is unavailable on this device.' })
+      })
+    return () => { current = false }
+  }, [counterCatalogSource, items])
+
+  useEffect(() => {
+    if (!scope || !counterRecoverySource) return
+    const identity = `${scope}|${counterRecoverySource.catalogDigest}`
+    if (counterRecoveryHydrationRef.current === identity) return
+    counterRecoveryHydrationRef.current = identity
+    const timer = window.setTimeout(() => {
+      try {
+        const key = shopCounterSaleRecoveryStorageKey(scope)
+        const raw = window.localStorage.getItem(key)
+        const restored = raw ? restoreShopCounterSaleRecovery(raw) : null
+        if (raw && !restored) window.localStorage.removeItem(key)
+        counterLastWrittenRecoveryRef.current = null
+        setCounterRecoveryState(restored ? { scope, recovery: restored } : null)
+        if (restored) requestAnimationFrame(() => counterRecoveryActionRef.current?.focus({ preventScroll: true }))
+      } catch {
+        setCounterRecoveryState(null)
+        setCounterRecoveryNotice('Counter recovery is unavailable. Review or clear this sale before closing the tab.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [counterRecoverySource, scope])
+
+  useEffect(() => {
+    if (!scope || !counterRecoverySource || !hasUnfinishedCounterSale || hasCounterRecovery) return
+    const timer = window.setTimeout(() => {
+      try {
+        const key = shopCounterSaleRecoveryStorageKey(scope)
+        const raw = window.localStorage.getItem(key)
+        const retained = raw ? restoreShopCounterSaleRecovery(raw) : null
+        const lastWritten = counterLastWrittenRecoveryRef.current
+        if (retained && (retained.source.catalogDigest !== counterRecoverySource.catalogDigest
+          || !lastWritten
+          || !shopCounterSaleRecoveriesMatch(retained, lastWritten))) {
+          setCounterRecoveryState({ scope, recovery: retained })
+          setCounterRecoveryNotice('Another tab has an unfinished sale. Resume or discard it before replacing it.')
+          requestAnimationFrame(() => counterRecoveryActionRef.current?.focus({ preventScroll: true }))
+          return
+        }
+        const next = createShopCounterSaleRecovery(scope, counterRecoverySource, currentCounterSaleDraft)
+        window.localStorage.setItem(key, JSON.stringify(next))
+        counterLastWrittenRecoveryRef.current = next
+        setCounterRecoveryNotice('')
+      } catch {
+        setCounterRecoveryNotice('This sale stays in this tab. Review or clear it before closing the tab.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [counterRecoverySource, currentCounterSaleDraft, hasCounterRecovery, hasUnfinishedCounterSale, scope])
+
+  useEffect(() => {
+    if (!scope || !counterRecoverySource || hasUnfinishedCounterSale || hasCounterRecovery) return
+    const lastWritten = counterLastWrittenRecoveryRef.current
+    if (!lastWritten) return
+    const timer = window.setTimeout(() => {
+      try {
+        const key = shopCounterSaleRecoveryStorageKey(scope)
+        const raw = window.localStorage.getItem(key)
+        const current = raw ? restoreShopCounterSaleRecovery(raw) : null
+        if (current && shopCounterSaleRecoveriesMatch(current, lastWritten)) window.localStorage.removeItem(key)
+        counterLastWrittenRecoveryRef.current = null
+      } catch {
+        setCounterRecoveryNotice('The cleared sale recovery could not be removed from this device.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [counterRecoverySource, hasCounterRecovery, hasUnfinishedCounterSale, scope])
+
+  useEffect(() => {
+    if (!scope) return
+    const recoveryKey = shopCounterSaleRecoveryStorageKey(scope)
+    function refreshCounterRecovery(event: StorageEvent) {
+      if (event.key !== recoveryKey && event.key !== null) return
+      try {
+        const raw = window.localStorage.getItem(recoveryKey)
+        const restored = raw ? restoreShopCounterSaleRecovery(raw) : null
+        counterLastWrittenRecoveryRef.current = null
+        setCounterRecoveryState(restored ? { scope, recovery: restored } : null)
+        if (restored) setCounterRecoveryNotice('The unfinished sale changed in another tab. Review it before continuing.')
+      } catch {
+        setCounterRecoveryState(null)
+      }
+    }
+    window.addEventListener('storage', refreshCounterRecovery)
+    return () => window.removeEventListener('storage', refreshCounterRecovery)
+  }, [scope])
+
+  useEffect(() => {
     const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus())
     return () => window.cancelAnimationFrame(frame)
   }, [])
+
+  function counterRecoveryIsCurrent(target: ShopCounterSaleRecoveryState) {
+    try {
+      const raw = window.localStorage.getItem(shopCounterSaleRecoveryStorageKey(target.scope))
+      const current = raw ? restoreShopCounterSaleRecovery(raw) : null
+      if (current && shopCounterSaleRecoveriesMatch(current, target.recovery)) return true
+      counterLastWrittenRecoveryRef.current = null
+      setCounterRecoveryState(current ? { scope: target.scope, recovery: current } : null)
+      setCounterRecoveryNotice(current
+        ? 'Another tab changed this sale. Review the newer recovery before continuing.'
+        : 'This unfinished sale was already resolved in another tab.')
+    } catch {
+      setCounterRecoveryNotice('Counter recovery could not be checked. No order or stock changed.')
+    }
+    return false
+  }
+
+  function clearCounterRecovery(target = counterRecoveryState) {
+    if (!target) return true
+    if (!counterRecoveryIsCurrent(target)) return false
+    try {
+      window.localStorage.removeItem(shopCounterSaleRecoveryStorageKey(target.scope))
+    } catch {
+      setCounterRecoveryNotice('Counter recovery could not be removed. No order or stock changed.')
+      return false
+    }
+    counterLastWrittenRecoveryRef.current = null
+    if (counterRecoveryState === target) setCounterRecoveryState(null)
+    return true
+  }
+
+  function clearMatchingCounterRecovery(draft = currentCounterSaleDraft) {
+    if (!scope || !counterRecoverySource) return
+    try {
+      const key = shopCounterSaleRecoveryStorageKey(scope)
+      const raw = window.localStorage.getItem(key)
+      const current = raw ? restoreShopCounterSaleRecovery(raw) : null
+      if (current && shopCounterSaleRecoveryMatchesDraft(current, scope, counterRecoverySource, draft)) {
+        window.localStorage.removeItem(key)
+        counterLastWrittenRecoveryRef.current = null
+      }
+    } catch {
+      // A retained or newer sale recovery remains source-bound and cannot create an order.
+    }
+  }
+
+  function resumeCounterRecovery() {
+    const target = counterRecoveryState
+    if (!target
+      || target.scope !== scope
+      || !activeCounterRecovery
+      || !counterRecoveryReview?.ok) {
+      setCounterRecoveryNotice('This sale cannot resume because its Shop catalogue or stock changed. Discard it to continue.')
+      return
+    }
+    if (!counterRecoveryIsCurrent(target)) return
+    const recovered = counterRecoveryReview.draft
+    setCart(Object.fromEntries(recovered.lines.map((line) => [line.sku, line.quantity])))
+    setCustomer(recovered.customer)
+    setPayment(recovered.payment)
+    setCartOpen(recovered.cartOpen)
+    setClearedSale(null)
+    setQuery('')
+    setSearchStatus('')
+    counterLastWrittenRecoveryRef.current = target.recovery
+    setCounterRecoveryState(null)
+    setCounterRecoveryNotice('Unfinished sale resumed. No order was created and no stock or payment changed.')
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const focusTarget = recovered.cartOpen ? clearSaleButtonRef.current : searchInputRef.current
+      focusTarget?.focus({ preventScroll: true })
+    }))
+  }
+
+  function discardCounterRecovery() {
+    if (!activeCounterRecovery) return
+    if (!clearCounterRecovery()) return
+    setCart({})
+    setCustomer('')
+    setPayment('Cash')
+    setCartOpen(false)
+    setClearedSale(null)
+    setQuery('')
+    setSearchStatus('')
+    setCounterRecoveryNotice('Unfinished sale discarded. No order was created and no stock or payment changed.')
+    window.requestAnimationFrame(() => searchInputRef.current?.focus({ preventScroll: true }))
+  }
 
   function changeQuantity(item: CommerceItem, next: number) {
     const nextQuantity = Math.max(0, Math.min(next, item.onHand))
@@ -1064,7 +1302,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   }
 
   function addItem(item: CommerceItem) {
-    if (item.onHand < 1) return
+    if (item.onHand < 1 || hasCounterRecovery || !counterRecoverySource) return
     setClearedSale(null)
     setSearchStatus('')
     setCart((current) => ({ ...current, [item.sku]: Math.min((current[item.sku] ?? 0) + 1, item.onHand) }))
@@ -1096,6 +1334,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
 
   function clearSaleWithUndo() {
     if (!unitCount) return
+    clearMatchingCounterRecovery()
     setClearedSale({
       cart: Object.fromEntries(lines.map((line) => [line.item.sku, line.quantity])),
       customer,
@@ -1132,6 +1371,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   }
 
   function finishCommittedSale() {
+    clearMatchingCounterRecovery()
     setClearedSale(null)
     setCart({})
     setCustomer('')
@@ -1140,7 +1380,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   }
 
   function reviewSale(event: MouseEvent<HTMLButtonElement>) {
-    if (!lines.length || disabled) return
+    if (!lines.length || disabled || hasCounterRecovery) return
     onReview({
       lines: lines.map((line) => ({ sku: line.item.sku, quantity: line.quantity })),
       customer: customer.trim(),
@@ -1151,14 +1391,51 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
     }, event.currentTarget)
   }
 
+  if (activeCounterRecovery) {
+    const recoveredDraft = counterRecoveryReview?.ok ? counterRecoveryReview.draft : activeCounterRecovery.draft
+    const recoveredUnits = recoveredDraft.lines.reduce((sum, line) => sum + line.quantity, 0)
+    const recoveredTotal = recoveredDraft.lines.reduce((sum, line) => {
+      const item = items.find((candidate) => candidate.sku === line.sku)
+      return sum + (item?.price ?? 0) * line.quantity
+    }, 0)
+    return <section aria-label="Sales counter" className="shop-counter-surface shop-counter-recovery-surface">
+      <section
+        aria-labelledby="shop-counter-tab-recovery-title"
+        aria-live="polite"
+        className="shop-counter-tab-recovery"
+        data-state={counterRecoveryReview?.ok ? 'ready' : 'conflict'}
+      >
+        <div className="shop-counter-tab-recovery-copy">
+          <span className="core-eyebrow">Unfinished sale found</span>
+          <h2 id="shop-counter-tab-recovery-title">{counterRecoveryReview?.ok ? 'Continue this sale?' : 'This sale needs a fresh start'}</h2>
+          <p>{counterRecoveryReview?.ok
+            ? 'Resume the exact items, customer, payment choice, and mobile drawer. Nothing creates an order automatically.'
+            : 'The Shop catalogue or stock changed after this sale began. Discard the older recovery to protect the current record.'}</p>
+        </div>
+        <div aria-label="Recovered sale summary" className="shop-counter-tab-recovery-summary" role="group">
+          <span><small>Items</small><strong>{recoveredUnits} across {recoveredDraft.lines.length} {recoveredDraft.lines.length === 1 ? 'line' : 'lines'}</strong></span>
+          <span><small>Customer</small><strong>{recoveredDraft.customer.trim() || 'Guest'}</strong></span>
+          <span><small>Payment</small><strong>{recoveredDraft.payment}</strong></span>
+          <span><small>Total</small><strong>{counterRecoveryReview?.ok ? formatMoney(recoveredTotal) : 'Recheck required'}</strong></span>
+        </div>
+        <div className="shop-counter-tab-recovery-actions">
+          <button className="core-button secondary" onClick={discardCounterRecovery} ref={counterRecoveryReview?.ok ? undefined : counterRecoveryActionRef} type="button">Discard</button>
+          {counterRecoveryReview?.ok ? <button className="core-button primary" onClick={resumeCounterRecovery} ref={counterRecoveryActionRef} type="button">Resume sale</button> : null}
+        </div>
+        <small className="shop-counter-tab-recovery-boundary">No order, stock reservation, payment, receipt, customer message, or company write happens here.</small>
+      </section>
+    </section>
+  }
+
   return <section aria-label="Sales counter" className="shop-counter-surface">
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
           <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} working sample` : 'Counter open'}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
-          <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input aria-describedby="shop-counter-search-help shop-counter-search-status" autoComplete="off" data-shop-counter-primary-field="true" onChange={(event) => { setQuery(event.target.value); setSearchStatus('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" ref={searchInputRef} type="search" value={query} /><small id="shop-counter-search-help">Enter adds an exact SKU or the only match.</small></label>
+          <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input aria-describedby="shop-counter-search-help shop-counter-search-status" autoComplete="off" data-shop-counter-primary-field="true" disabled={!counterRecoverySource} onChange={(event) => { setQuery(event.target.value); setSearchStatus('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" ref={searchInputRef} type="search" value={query} /><small id="shop-counter-search-help">{counterCatalogDigestState.error || (counterRecoverySource ? 'Enter adds an exact SKU or the only match.' : 'Preparing safe sale recovery…')}</small></label>
         </header>
         <p aria-live="polite" className="sr-only" id="shop-counter-search-status">{searchStatus}</p>
+        {counterRecoveryNotice ? <p className="form-notice shop-counter-recovery-notice" role="status">{counterRecoveryNotice}</p> : null}
         {clearedSale ? <div className="shop-clear-recovery" data-shop-counter-recovery="cleared-sale" role="status">
           <span><strong>{clearedSaleRestorable ? 'Sale cleared' : 'Sale changed'}</strong><small>{clearedSaleRestorable ? `${clearedSale.unitCount} ${clearedSale.unitCount === 1 ? 'item' : 'items'} across ${clearedSale.lineCount} ${clearedSale.lineCount === 1 ? 'line' : 'lines'} · ${clearedSale.customer.trim() || 'Guest'} · ${clearedSale.payment}. No order or stock changed.` : 'Current stock changed, so this sale cannot be restored exactly. Start a new sale.'}</small></span>
           <button aria-label="Undo clear sale" className="core-button primary" disabled={!clearedSaleRestorable} onClick={undoClearSale} ref={undoClearSaleButtonRef} type="button">Undo</button>
@@ -1167,7 +1444,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
           {visibleItems.map((item) => {
             const quantity = cart[item.sku] ?? 0
             const artKind = Math.max(0, items.indexOf(item)) % 5
-            return <button aria-label={`Add ${item.name} to this sale`} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
+            return <button aria-label={`Add ${item.name} to this sale`} className="shop-product-tile" data-art={String(artKind)} data-empty={item.onHand < 1 ? 'true' : 'false'} disabled={!counterRecoverySource || item.onHand < 1} key={item.sku} onClick={() => addItem(item)} type="button">
               <ShopProductArtwork kind={artKind} />
               <span className="shop-product-copy"><strong>{item.name}</strong>{item.variant ? <small>{item.variant}</small> : null}<b>{formatMoney(item.price)}</b><small className={item.onHand <= item.reorderAt ? 'is-low' : ''}>{item.onHand ? `${item.onHand} in stock` : 'Out of stock'}</small></span>
               {quantity ? <span className="shop-product-quantity" aria-label={`${quantity} in sale`}>{quantity}</span> : <span aria-hidden="true" className="shop-product-add">+</span>}
@@ -1186,7 +1463,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
         </div>
         {unitCount ? <><div className="shop-sale-details">
           <label>Customer <small>optional</small><input maxLength={80} onChange={(event) => setCustomer(event.target.value)} placeholder="Guest" value={customer} /></label>
-          <fieldset><legend>Payment</legend><div className="shop-payment-options">{['Cash', 'KBZPay', 'WavePay'].map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
+          <fieldset><legend>Payment</legend><div className="shop-payment-options">{(['Cash', 'KBZPay', 'WavePay'] as const).map((method) => <button aria-pressed={payment === method} key={method} onClick={() => setPayment(method)} type="button">{method}</button>)}</div></fieldset>
         </div>
         <footer><div><span>Total</span><strong>{formatMoney(total)}</strong></div><button className="shop-review-sale" disabled={disabled} onClick={reviewSale} type="button">{disabled ? 'Sales paused' : 'Review order'}<span aria-hidden="true">→</span></button><small>Confirm to create the order. Finish payment and handoff in Orders.</small></footer></> : null}
       </aside>
@@ -1287,6 +1564,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
+  const counterSaleScope = managedIdentity
+    ? `managed:${managedIdentity.workspaceId}:${managedIdentity.userId}`
+    : 'local:local'
   const ecommerceBuyingScope = managedIdentity ? `ecommerce:${managedIdentity.workspaceId}` : 'ecommerce:local'
   const commerceRef = useRef(commerce)
   useEffect(() => {
@@ -6016,7 +6296,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} sampleCatalogActive={shopSampleCatalogActive} />
+    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} key={counterSaleScope} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} sampleCatalogActive={shopSampleCatalogActive} scope={counterSaleScope} />
     {actionGate}
   </div>
 
