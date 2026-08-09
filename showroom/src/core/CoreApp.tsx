@@ -53,6 +53,19 @@ import {
 import { formatTime } from './team-work'
 import { plantIndustryPack, readPlantIndustryPackId } from './plant-industry-packs'
 import {
+  createPlantOutputEntryRecovery,
+  plantOutputEntryDigest,
+  plantOutputEntryDigestSource,
+  plantOutputEntryRecoveriesMatch,
+  plantOutputEntryRecoveryMatchesDraft,
+  plantOutputEntryRecoveryStorageKey,
+  restorePlantOutputEntryRecovery,
+  reviewPlantOutputEntryRecovery,
+  type PlantOutputEntryDraft,
+  type PlantOutputEntryRecovery,
+  type PlantOutputEntryRecoverySource,
+} from './plant-output-entry-recovery'
+import {
   advanceCommerceOrder,
   approveCommercePurchaseBudgetEnvelope,
   approveCommercePurchaseRequisition,
@@ -1007,6 +1020,20 @@ type ShopCounterSaleRecoveryState = {
   recovery: ShopCounterSaleRecovery
 }
 
+type PlantOutputEntryRecoveryState = {
+  scope: string
+  recovery: PlantOutputEntryRecovery
+}
+
+function plantOutputEntryDraft(
+  jobId: string,
+  quantity: number,
+  outputKind: ProductionOutputKind,
+  shiftRef: string,
+): PlantOutputEntryDraft {
+  return { jobId, quantity, outputKind, shiftRef, panelOpen: true }
+}
+
 type RemovedShopOrderLine = CommerceRemovedOrderDraftLine & Readonly<{
   itemName: string
   sourceDetached: boolean
@@ -1398,31 +1425,31 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
       const item = items.find((candidate) => candidate.sku === line.sku)
       return sum + (item?.price ?? 0) * line.quantity
     }, 0)
-    return <section aria-label="Sales counter" className="shop-counter-surface shop-counter-recovery-surface">
+    return <section aria-label="Sales counter" className="shop-counter-surface tab-recovery-surface">
       <section
         aria-labelledby="shop-counter-tab-recovery-title"
         aria-live="polite"
-        className="shop-counter-tab-recovery"
+        className="tab-recovery-card shop-counter-tab-recovery"
         data-state={counterRecoveryReview?.ok ? 'ready' : 'conflict'}
       >
-        <div className="shop-counter-tab-recovery-copy">
+        <div className="tab-recovery-copy">
           <span className="core-eyebrow">Unfinished sale found</span>
           <h2 id="shop-counter-tab-recovery-title">{counterRecoveryReview?.ok ? 'Continue this sale?' : 'This sale needs a fresh start'}</h2>
           <p>{counterRecoveryReview?.ok
             ? 'Resume the exact items, customer, payment choice, and mobile drawer. Nothing creates an order automatically.'
             : 'The Shop catalogue or stock changed after this sale began. Discard the older recovery to protect the current record.'}</p>
         </div>
-        <div aria-label="Recovered sale summary" className="shop-counter-tab-recovery-summary" role="group">
+        <div aria-label="Recovered sale summary" className="tab-recovery-summary" role="group">
           <span><small>Items</small><strong>{recoveredUnits} across {recoveredDraft.lines.length} {recoveredDraft.lines.length === 1 ? 'line' : 'lines'}</strong></span>
           <span><small>Customer</small><strong>{recoveredDraft.customer.trim() || 'Guest'}</strong></span>
           <span><small>Payment</small><strong>{recoveredDraft.payment}</strong></span>
           <span><small>Total</small><strong>{counterRecoveryReview?.ok ? formatMoney(recoveredTotal) : 'Recheck required'}</strong></span>
         </div>
-        <div className="shop-counter-tab-recovery-actions">
+        <div className="tab-recovery-actions">
           <button className="core-button secondary" onClick={discardCounterRecovery} ref={counterRecoveryReview?.ok ? undefined : counterRecoveryActionRef} type="button">Discard</button>
           {counterRecoveryReview?.ok ? <button className="core-button primary" onClick={resumeCounterRecovery} ref={counterRecoveryActionRef} type="button">Resume sale</button> : null}
         </div>
-        <small className="shop-counter-tab-recovery-boundary">No order, stock reservation, payment, receipt, customer message, or company write happens here.</small>
+        <small className="tab-recovery-boundary">No order, stock reservation, payment, receipt, customer message, or company write happens here.</small>
       </section>
     </section>
   }
@@ -7445,6 +7472,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ? managedWorkspaceId || managedIdentity.workspaceId
     : 'local-sample'
   const plantOrderScope = `plant:${plantOrderScopeWorkspaceId}`
+  const plantOutputRecoveryScope = managedIdentity
+    ? `managed:${plantOrderScopeWorkspaceId}:${managedIdentity.userId}`
+    : 'local:local'
   const latestRecordedShiftRef = production.events.find((event) => Boolean(event.shiftRef?.trim()))?.shiftRef?.trim() ?? ''
   const [, setActions] = useStoredState<AccountableAction[]>(ACTION_KEY, [], normalizeActions)
   const [pendingAction, setPendingAction] = useState<PendingAccountableAction | null>(null)
@@ -7463,6 +7493,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [outputKind, setOutputKind] = useState<ProductionOutputKind>('good')
   const [shiftRef, setShiftRef] = useState(latestRecordedShiftRef)
   const [outputOpen, setOutputOpen] = useState(false)
+  const [plantOutputRecoveryArmed, setPlantOutputRecoveryArmed] = useState(false)
+  const [plantOutputRecoveryState, setPlantOutputRecoveryState] = useState<PlantOutputEntryRecoveryState | null>(null)
+  const [plantOutputRecoveryNotice, setPlantOutputRecoveryNotice] = useState('')
+  const [plantOutputDigestState, setPlantOutputDigestState] = useState({ source: '', value: '', error: '' })
   const [materialGuideOpen, setMaterialGuideOpen] = useState(false)
   const [shiftCloseGuideOpen, setShiftCloseGuideOpen] = useState(false)
   const [plantBatchOpen, setPlantBatchOpen] = useState(false)
@@ -7562,6 +7596,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const scheduleDraftOpeningRef = useRef<ProductionJobPlanOpening | null>(null)
   const scheduleDraftRecoveryRef = useRef<HTMLButtonElement>(null)
   const outputPanelRef = useRef<HTMLElement>(null)
+  const plantOutputRecoveryActionRef = useRef<HTMLButtonElement>(null)
+  const plantTodayActionRef = useRef<HTMLButtonElement>(null)
+  const plantOutputRecoveryHydrationRef = useRef('')
+  const plantOutputLastWrittenRecoveryRef = useRef<PlantOutputEntryRecovery | null>(null)
   const outputJobSelectRef = useRef<HTMLSelectElement>(null)
   const outputShiftInputRef = useRef<HTMLInputElement>(null)
   const outputQuantityRef = useRef<HTMLInputElement>(null)
@@ -7596,6 +7634,142 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
   const selectedJob = activeJobs.find((job) => job.id === selectedJobId)
   const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output - (selectedJob.scrap ?? 0) : 0
+  const plantOutputDigestSource = useMemo(() => {
+    try {
+      return plantOutputEntryDigestSource(production)
+    } catch {
+      return ''
+    }
+  }, [production])
+  const plantOutputDigest = plantOutputDigestState.source === plantOutputDigestSource
+    ? plantOutputDigestState.value
+    : ''
+  const plantOutputRecoverySource = useMemo<PlantOutputEntryRecoverySource | null>(() => (
+    plantOutputDigest
+      ? { productionRevision: production.revision, productionDigest: plantOutputDigest }
+      : null
+  ), [plantOutputDigest, production.revision])
+  const activePlantOutputRecovery = plantOutputRecoveryState?.scope === plantOutputRecoveryScope
+    ? plantOutputRecoveryState.recovery
+    : null
+  const plantOutputRecoveryReview = activePlantOutputRecovery && plantOutputRecoverySource
+    ? reviewPlantOutputEntryRecovery(activePlantOutputRecovery, plantOutputRecoveryScope, plantOutputDigest, production)
+    : null
+  const hasPlantOutputRecovery = Boolean(activePlantOutputRecovery)
+  const hasActivePlantOutputDraft = Boolean(
+    plantOutputRecoveryArmed
+    && outputOpen
+    && !materialGuideOpen
+    && selectedJobId
+    && plantOutputRecoverySource,
+  )
+
+  useEffect(() => {
+    let current = true
+    void plantOutputEntryDigest(production)
+      .then((value) => {
+        if (current) setPlantOutputDigestState({ source: plantOutputDigestSource, value, error: '' })
+      })
+      .catch(() => {
+        if (current) setPlantOutputDigestState({ source: plantOutputDigestSource, value: '', error: 'Output recovery is unavailable on this device.' })
+      })
+    return () => { current = false }
+  }, [plantOutputDigestSource, production])
+
+  useEffect(() => {
+    if (!plantOutputRecoveryScope || !plantOutputRecoverySource) return
+    const identity = `${plantOutputRecoveryScope}|${plantOutputRecoverySource.productionRevision}|${plantOutputRecoverySource.productionDigest}`
+    if (plantOutputRecoveryHydrationRef.current === identity) return
+    plantOutputRecoveryHydrationRef.current = identity
+    const timer = window.setTimeout(() => {
+      try {
+        const key = plantOutputEntryRecoveryStorageKey(plantOutputRecoveryScope)
+        const raw = window.localStorage.getItem(key)
+        const restored = raw ? restorePlantOutputEntryRecovery(raw) : null
+        if (raw && !restored) window.localStorage.removeItem(key)
+        plantOutputLastWrittenRecoveryRef.current = null
+        setPlantOutputRecoveryState(restored ? { scope: plantOutputRecoveryScope, recovery: restored } : null)
+        if (restored) requestAnimationFrame(() => plantOutputRecoveryActionRef.current?.focus({ preventScroll: true }))
+      } catch {
+        setPlantOutputRecoveryState(null)
+        setPlantOutputRecoveryNotice('Output recovery is unavailable. Review or close this entry before leaving Plant.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [plantOutputRecoveryScope, plantOutputRecoverySource])
+
+  useEffect(() => {
+    if (!plantOutputRecoveryScope
+      || !plantOutputRecoverySource
+      || !hasActivePlantOutputDraft
+      || hasPlantOutputRecovery) return
+    const timer = window.setTimeout(() => {
+      try {
+        const key = plantOutputEntryRecoveryStorageKey(plantOutputRecoveryScope)
+        const raw = window.localStorage.getItem(key)
+        const retained = raw ? restorePlantOutputEntryRecovery(raw) : null
+        const lastWritten = plantOutputLastWrittenRecoveryRef.current
+        if (retained && (retained.source.productionRevision !== plantOutputRecoverySource.productionRevision
+          || retained.source.productionDigest !== plantOutputRecoverySource.productionDigest
+          || !lastWritten
+          || !plantOutputEntryRecoveriesMatch(retained, lastWritten))) {
+          setPlantOutputRecoveryState({ scope: plantOutputRecoveryScope, recovery: retained })
+          setPlantOutputRecoveryNotice('Another tab has an unfinished output entry. Resume or discard it before replacing it.')
+          requestAnimationFrame(() => plantOutputRecoveryActionRef.current?.focus({ preventScroll: true }))
+          return
+        }
+        const next = createPlantOutputEntryRecovery(
+          plantOutputRecoveryScope,
+          plantOutputRecoverySource,
+          plantOutputEntryDraft(selectedJobId, quantity, outputKind, shiftRef),
+        )
+        window.localStorage.setItem(key, JSON.stringify(next))
+        plantOutputLastWrittenRecoveryRef.current = next
+        setPlantOutputRecoveryNotice('')
+      } catch {
+        setPlantOutputRecoveryNotice('This output entry stays in this tab. Review or close it before leaving Plant.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [hasActivePlantOutputDraft, hasPlantOutputRecovery, outputKind, plantOutputRecoveryScope, plantOutputRecoverySource, quantity, selectedJobId, shiftRef])
+
+  useEffect(() => {
+    if (!plantOutputRecoveryScope || hasActivePlantOutputDraft || hasPlantOutputRecovery) return
+    const lastWritten = plantOutputLastWrittenRecoveryRef.current
+    if (!lastWritten) return
+    const timer = window.setTimeout(() => {
+      try {
+        const key = plantOutputEntryRecoveryStorageKey(plantOutputRecoveryScope)
+        const raw = window.localStorage.getItem(key)
+        const current = raw ? restorePlantOutputEntryRecovery(raw) : null
+        if (current && plantOutputEntryRecoveriesMatch(current, lastWritten)) window.localStorage.removeItem(key)
+        plantOutputLastWrittenRecoveryRef.current = null
+      } catch {
+        setPlantOutputRecoveryNotice('The closed output recovery could not be removed from this device.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [hasActivePlantOutputDraft, hasPlantOutputRecovery, plantOutputRecoveryScope])
+
+  useEffect(() => {
+    if (!plantOutputRecoveryScope) return
+    const recoveryKey = plantOutputEntryRecoveryStorageKey(plantOutputRecoveryScope)
+    function refreshPlantOutputRecovery(event: StorageEvent) {
+      if (event.key !== recoveryKey && event.key !== null) return
+      try {
+        const raw = window.localStorage.getItem(recoveryKey)
+        const restored = raw ? restorePlantOutputEntryRecovery(raw) : null
+        plantOutputLastWrittenRecoveryRef.current = null
+        setPlantOutputRecoveryState(restored ? { scope: plantOutputRecoveryScope, recovery: restored } : null)
+        if (restored) setPlantOutputRecoveryNotice('The unfinished output entry changed in another tab. Review it before continuing.')
+      } catch {
+        setPlantOutputRecoveryState(null)
+      }
+    }
+    window.addEventListener('storage', refreshPlantOutputRecovery)
+    return () => window.removeEventListener('storage', refreshPlantOutputRecovery)
+  }, [plantOutputRecoveryScope])
+
   useEffect(() => {
     if (!outputOpen || materialGuideOpen || !selectedJobId) return
     const focusQuantity = () => {
@@ -8040,7 +8214,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     : 'Local sample records on this device'
   const plantTodayNotice = productionStorageError
     ? `Writes paused: ${productionStorageError}`
-    : notice || (productionCanWrite
+    : plantOutputRecoveryNotice || plantOutputDigestState.error || notice || (productionCanWrite
       ? 'Every production, quality, material, maintenance, and equipment-status change still requires accountable review.'
       : 'Writes are paused until durable storage and write locking are confirmed.')
 
@@ -8253,6 +8427,41 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </section>
   }
 
+  if (activePlantOutputRecovery) {
+    const recoveredDraft = plantOutputRecoveryReview?.ok ? plantOutputRecoveryReview.draft : activePlantOutputRecovery.draft
+    const recoveredJob = production.jobs.find((job) => job.id === recoveredDraft.jobId)
+    const recoveredRemaining = recoveredJob
+      ? recoveredJob.target - recoveredJob.output - (recoveredJob.scrap ?? 0)
+      : null
+    return <section aria-label="Plant output recovery" className="operation-module production-operation-module tab-recovery-surface">
+      <section
+        aria-labelledby="plant-output-tab-recovery-title"
+        aria-live="polite"
+        className="tab-recovery-card plant-output-tab-recovery"
+        data-state={plantOutputRecoveryReview?.ok ? 'ready' : 'conflict'}
+      >
+        <div className="tab-recovery-copy">
+          <span className="core-eyebrow">Unfinished output found</span>
+          <h2 id="plant-output-tab-recovery-title">{plantOutputRecoveryReview?.ok ? 'Continue this output entry?' : 'This entry needs a fresh start'}</h2>
+          <p>{plantOutputRecoveryReview?.ok
+            ? 'Resume the exact job, quantity, result, shift, and output panel. Nothing records production automatically.'
+            : 'The active job or Plant record changed after this entry began. Discard the older recovery to protect the current record.'}</p>
+        </div>
+        <div aria-label="Recovered output summary" className="tab-recovery-summary" role="group">
+          <span><small>Job</small><strong>{recoveredDraft.jobId}</strong></span>
+          <span><small>Result</small><strong>{recoveredDraft.outputKind === 'scrap' ? 'Scrap' : 'Good output'}</strong></span>
+          <span><small>Quantity</small><strong>{Number.isFinite(recoveredDraft.quantity) ? recoveredDraft.quantity.toLocaleString() : 'Recheck required'}{recoveredRemaining === null ? '' : ` / ${recoveredRemaining.toLocaleString()} left`}</strong></span>
+          <span><small>Shift</small><strong>{recoveredDraft.shiftRef || 'Blank'}</strong></span>
+        </div>
+        <div className="tab-recovery-actions">
+          <button className="core-button secondary" onClick={discardPlantOutputRecovery} ref={plantOutputRecoveryReview?.ok ? undefined : plantOutputRecoveryActionRef} type="button">Discard</button>
+          {plantOutputRecoveryReview?.ok ? <button className="core-button primary" onClick={resumePlantOutputRecovery} ref={plantOutputRecoveryActionRef} type="button">Resume entry</button> : null}
+        </div>
+        <small className="tab-recovery-boundary">No output, material use, equipment command, inventory movement, costing, accounting, message, or company write happens here. Source: Plant revision {activePlantOutputRecovery.source.productionRevision}.</small>
+      </section>
+    </section>
+  }
+
   function queueAction(
     action: Omit<PendingAccountableAction, 'id' | 'commandId' | 'domain'>,
     trigger?: HTMLElement | null,
@@ -8295,6 +8504,99 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setPendingAction(null)
   }
 
+  function plantOutputRecoveryIsCurrent(target: PlantOutputEntryRecoveryState) {
+    try {
+      const raw = window.localStorage.getItem(plantOutputEntryRecoveryStorageKey(target.scope))
+      const current = raw ? restorePlantOutputEntryRecovery(raw) : null
+      if (current && plantOutputEntryRecoveriesMatch(current, target.recovery)) return true
+      plantOutputLastWrittenRecoveryRef.current = null
+      setPlantOutputRecoveryState(current ? { scope: target.scope, recovery: current } : null)
+      setPlantOutputRecoveryNotice(current
+        ? 'Another tab changed this output entry. Review the newer recovery before continuing.'
+        : 'This output entry was already resolved in another tab.')
+    } catch {
+      setPlantOutputRecoveryNotice('Output recovery could not be checked. No production record changed.')
+    }
+    return false
+  }
+
+  function clearPlantOutputRecovery(target = plantOutputRecoveryState) {
+    if (!target) return true
+    if (!plantOutputRecoveryIsCurrent(target)) return false
+    try {
+      window.localStorage.removeItem(plantOutputEntryRecoveryStorageKey(target.scope))
+    } catch {
+      setPlantOutputRecoveryNotice('Output recovery could not be removed. No production record changed.')
+      return false
+    }
+    plantOutputLastWrittenRecoveryRef.current = null
+    if (plantOutputRecoveryState === target) setPlantOutputRecoveryState(null)
+    return true
+  }
+
+  function clearMatchingPlantOutputRecovery(
+    draft = plantOutputEntryDraft(selectedJobId, quantity, outputKind, shiftRef),
+    source = plantOutputRecoverySource,
+  ) {
+    if (!plantOutputRecoveryScope || !source) return
+    try {
+      const key = plantOutputEntryRecoveryStorageKey(plantOutputRecoveryScope)
+      const raw = window.localStorage.getItem(key)
+      const current = raw ? restorePlantOutputEntryRecovery(raw) : null
+      if (current && plantOutputEntryRecoveryMatchesDraft(current, plantOutputRecoveryScope, source, draft)) {
+        window.localStorage.removeItem(key)
+        plantOutputLastWrittenRecoveryRef.current = null
+      }
+    } catch {
+      // A retained or newer recovery remains source-bound and cannot record Plant output.
+    }
+  }
+
+  function resumePlantOutputRecovery() {
+    const target = plantOutputRecoveryState
+    if (!target
+      || target.scope !== plantOutputRecoveryScope
+      || !activePlantOutputRecovery
+      || !plantOutputRecoveryReview?.ok) {
+      setPlantOutputRecoveryNotice('This output entry cannot resume because the active job or Plant record changed. Discard it to continue.')
+      return
+    }
+    if (!plantOutputRecoveryIsCurrent(target)) return
+    const recovered = plantOutputRecoveryReview.draft
+    setJobId(recovered.jobId)
+    setQuantity(recovered.quantity)
+    setOutputKind(recovered.outputKind)
+    setShiftRef(recovered.shiftRef)
+    setOutputOpen(true)
+    setMaterialGuideOpen(false)
+    setPlantOutputRecoveryArmed(true)
+    clearOutputValidation()
+    plantOutputLastWrittenRecoveryRef.current = target.recovery
+    setPlantOutputRecoveryState(null)
+    setPlantOutputRecoveryNotice('Unfinished output entry resumed. No output, material use, or equipment state changed.')
+    if (tab !== 'production') navigate('/plant/?tab=production')
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      outputQuantityRef.current?.scrollIntoView({ block: 'center' })
+      outputQuantityRef.current?.focus({ preventScroll: true })
+      outputQuantityRef.current?.select()
+    }))
+  }
+
+  function discardPlantOutputRecovery() {
+    if (!activePlantOutputRecovery) return
+    if (!clearPlantOutputRecovery()) return
+    setPlantOutputRecoveryArmed(false)
+    setJobId('')
+    setQuantity(1)
+    setOutputKind('good')
+    setShiftRef(latestRecordedShiftRef)
+    setOutputOpen(false)
+    setMaterialGuideOpen(false)
+    clearOutputValidation()
+    setPlantOutputRecoveryNotice('Unfinished output entry discarded. No production record changed.')
+    requestAnimationFrame(() => requestAnimationFrame(() => plantTodayActionRef.current?.focus({ preventScroll: true })))
+  }
+
   function recordOutput(event: FormEvent) {
     event.preventDefault()
     const recordedShiftRef = shiftRef.trim()
@@ -8309,6 +8611,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const recordedScrap = selectedJob.scrap ?? 0
     const recordedShiftOutput = productionShiftOutput(production, recordedShiftRef)
     const recordedShiftMaterialCount = materialEntries.filter((event) => event.shiftRef === recordedShiftRef).length
+    const reviewedRecoveryDraft = plantOutputEntryDraft(selectedJobId, quantity, outputKind, shiftRef)
+    const reviewedRecoverySource = plantOutputRecoverySource
     const resultLabel = recordedOutputKind === 'scrap' ? 'scrap units' : 'good units'
     const nextGood = selectedJob.output + (recordedOutputKind === 'good' ? recordedQuantity : 0)
     const nextScrap = recordedScrap + (recordedOutputKind === 'scrap' ? recordedQuantity : 0)
@@ -8329,6 +8633,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         await mutateProduction('production.output.recorded', record.commandId, productionActionProof(record), (current) => recordedOutputKind === 'scrap'
           ? recordProductionScrap(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record))
           : recordProductionOutput(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record)))
+        clearMatchingPlantOutputRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
+        setPlantOutputRecoveryArmed(false)
         if (recordedOutputKind === 'good' && recordedShiftMaterialCount === 0) {
           setMaterialGuideOpen(true)
           focusMaterialDisclosure()
@@ -8372,6 +8678,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   }
 
   function recoverOutputInput(field: 'job' | 'shift' | 'quantity', message: string) {
+    setPlantOutputRecoveryArmed(true)
     setOutputValidationIssue(message)
     setOutputValidationField(field)
     requestAnimationFrame(() => {
@@ -8397,6 +8704,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   function openJobOutput(job: ProductionJob, trigger: HTMLButtonElement | null = null) {
     outputTriggerRef.current = trigger
     setJobId(job.id)
+    setPlantOutputRecoveryArmed(true)
     clearOutputValidation()
     if (!managedIdentity && !shiftRef.trim()) {
       const suggestedShiftRef = shiftReferencePlaceholder()
@@ -8434,6 +8742,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   }
 
   function closeJobOutput() {
+    clearMatchingPlantOutputRecovery()
+    setPlantOutputRecoveryArmed(false)
     setOutputOpen(false)
     setMaterialGuideOpen(false)
     requestAnimationFrame(() => outputTriggerRef.current?.focus())
@@ -8472,6 +8782,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     const expectedGood = selectedJob.output
     const expectedScrap = selectedJob.scrap ?? 0
     const expectedRemaining = selectedJob.target - expectedGood - expectedScrap
+    const reviewedRecoveryDraft = plantOutputEntryDraft(selectedJobId, quantity, outputKind, shiftRef)
+    const reviewedRecoverySource = plantOutputRecoverySource
     if (expectedRemaining < 1) return setNotice(`${recordedJobId} has no remaining units to close short.`)
     setShiftRef(recordedShiftRef)
     queueAction({
@@ -8491,6 +8803,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             || currentJob.target - currentJob.output - (currentJob.scrap ?? 0) !== expectedRemaining) return null
           return closeProductionJob(current, recordedJobId, recordedShiftRef, productionActionProof(record))
         })
+        clearMatchingPlantOutputRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
+        setPlantOutputRecoveryArmed(false)
       },
     }, trigger)
   }
@@ -9396,7 +9710,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
   }
   const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState} data-step={plantTodayStep}>
-    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><div className="plant-pack-context"><strong>{loadedPlantSamplePack?.name ?? activePlantIndustryPack.name} working sample</strong><span>{plantSampleWorkflow}. {plantSampleContext}</span></div><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} type="button">{plantTodayAction}</button></div>
+    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><div className="plant-pack-context"><strong>{loadedPlantSamplePack?.name ?? activePlantIndustryPack.name} working sample</strong><span>{plantSampleWorkflow}. {plantSampleContext}</span></div><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} ref={plantTodayActionRef} type="button">{plantTodayAction}</button></div>
     <div aria-label="Plant today status" className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>
@@ -9502,9 +9816,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <section aria-labelledby="plant-output-title" aria-modal={outputOpen} className={`core-panel output-panel${outputOpen ? ' is-open' : ''}`} id="plant-output-panel" onKeyDown={handleOutputDialogKeyDown} ref={outputPanelRef} role="dialog">
         <div className="plant-output-head"><div><span className="core-eyebrow">{materialGuideOpen ? 'Materials used' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Record materials used' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
         {outputOpen && !materialGuideOpen ? <form autoComplete="off" className="core-form compact-form" id="plant-output-form" noValidate onSubmit={recordOutput}>
-          <label>Job<select aria-invalid={outputValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => { setJobId(event.target.value); clearOutputValidation() }}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
-          <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => setOutputKind(event.target.value as ProductionOutputKind)}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
-          <div className="form-row"><label>Shift reference<input aria-describedby="plant-output-validation" aria-invalid={outputValidationField === 'shift'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} ref={outputShiftInputRef} required value={shiftRef} onChange={(event) => { setShiftRef(event.target.value); if (outputValidationField === 'shift') clearOutputValidation() }} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input aria-describedby="plant-output-quantity-help plant-output-validation" aria-invalid={outputValidationField === 'quantity'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" ref={outputQuantityRef} step="1" type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); if (outputValidationField === 'quantity') clearOutputValidation() }} /><small className="plant-output-boundary" id="plant-output-quantity-help">{selectedJob ? `Enter 1 to ${selectedRemaining.toLocaleString()} whole units. Review does not record output.` : 'Choose an active job first.'}</small></label></div>
+          <label>Job<select aria-invalid={outputValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => { setJobId(event.target.value); setPlantOutputRecoveryArmed(true); clearOutputValidation() }}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
+          <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => { setOutputKind(event.target.value as ProductionOutputKind); setPlantOutputRecoveryArmed(true) }}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
+          <div className="form-row"><label>Shift reference<input aria-describedby="plant-output-validation" aria-invalid={outputValidationField === 'shift'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} ref={outputShiftInputRef} required value={shiftRef} onChange={(event) => { setShiftRef(event.target.value); setPlantOutputRecoveryArmed(true); if (outputValidationField === 'shift') clearOutputValidation() }} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input aria-describedby="plant-output-quantity-help plant-output-validation" aria-invalid={outputValidationField === 'quantity'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" ref={outputQuantityRef} step="1" type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPlantOutputRecoveryArmed(true); if (outputValidationField === 'quantity') clearOutputValidation() }} /><small className="plant-output-boundary" id="plant-output-quantity-help">{selectedJob ? `Enter 1 to ${selectedRemaining.toLocaleString()} whole units. Review does not record output.` : 'Choose an active job first.'}</small></label></div>
           <p aria-live="assertive" className="form-notice plant-output-validation" id="plant-output-validation">{outputValidationIssue}</p>
           {selectedJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · Held by {selectedJob.qualityHold.heldBy}. Recording a result does not release this hold; verify the hold and evidence before review.</p> : null}
           <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `This shift: ${currentShiftOutput.goodUnits.toLocaleString()} good · ${currentShiftOutput.scrapUnits.toLocaleString()} scrap across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter the shift name or date to continue.'}</p>

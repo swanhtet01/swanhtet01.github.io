@@ -36,6 +36,7 @@ let plantEquipmentImportRuntimeChecks = 0
 let shopInventoryRuntimeChecks = 0
 let shopPurchaseOrderDraftRuntimeChecks = 0
 let shopCounterSaleRecoveryRuntimeChecks = 0
+let plantOutputEntryRecoveryRuntimeChecks = 0
 let shopServiceScheduleRuntimeChecks = 0
 let shopBusinessTemplateRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
@@ -126,6 +127,7 @@ const shopInventoryUiSource = await readFile(resolve(root, 'showroom', 'src', 'c
 const shopStockMoveDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-stock-move-draft.ts'), 'utf8')
 const shopPurchaseOrderDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-purchase-order-draft.ts'), 'utf8')
 const shopCounterSaleRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'shop-counter-sale-recovery.ts'), 'utf8')
+const plantOutputEntryRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-output-entry-recovery.ts'), 'utf8')
 const shopInventoryPythonSource = await readFile(resolve(root, 'supermega_runtime', 'shop_inventory_runtime.py'), 'utf8')
 const managedActivationRunbookSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ManagedActivationRunbook.tsx'), 'utf8')
 const localClientImportSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'local-client-import.ts'), 'utf8')
@@ -5917,7 +5919,7 @@ if (counterRecoveryResumeStart < 0
   || !shopCounterContract.includes('shopCounterSaleRecoveriesMatch(')
   || !shopCounterContract.includes('shopCounterSaleRecoveryMatchesDraft(')
   || !shopCounterContract.includes('Another tab has an unfinished sale. Resume or discard it before replacing it.')
-  || !shopCounterContract.includes('className="shop-counter-tab-recovery"')
+  || !shopCounterContract.includes('className="tab-recovery-card shop-counter-tab-recovery"')
   || !shopCounterContract.includes("data-state={counterRecoveryReview?.ok ? 'ready' : 'conflict'}")
   || !shopCounterContract.includes("counterRecoveryReview?.ok ? 'Continue this sale?' : 'This sale needs a fresh start'")
   || !shopCounterContract.includes('Resume sale')
@@ -5934,8 +5936,8 @@ if (counterRecoveryResumeStart < 0
   || !shopCounterRouteContract.includes('key={counterSaleScope}')
   || !shopCounterRouteContract.includes('scope={counterSaleScope}')
   || !coreSource.includes("`managed:${managedIdentity.workspaceId}:${managedIdentity.userId}`")
-  || !coreCssSource.includes('.shop-counter-tab-recovery[data-state="conflict"]')
-  || !/\.shop-counter-tab-recovery-actions \.core-button\s*\{[^}]*min-width:\s*116px;[^}]*min-height:\s*44px;/s.test(coreCssSource)) fail('shop_counter_tab_recovery_contract_missing_or_consequential')
+  || !coreCssSource.includes('.tab-recovery-card[data-state="conflict"]')
+  || !/\.tab-recovery-actions \.core-button\s*\{[^}]*min-width:\s*116px;[^}]*min-height:\s*44px;/s.test(coreCssSource)) fail('shop_counter_tab_recovery_contract_missing_or_consequential')
 if (!shopCounterRouteContract.includes('<ShopCounter') || shopCounterRouteContract.includes('{shopGuidance}')) fail('shop_counter_first_action_not_focused')
 const commercePageContract = coreSource.slice(coreSource.indexOf('function CommercePage'), coreSource.indexOf('function OrderList'))
 if (!commercePageContract.includes('purchaseOrderDraft')
@@ -6558,6 +6560,42 @@ if (productionTabsContract.includes("{ id: 'today', label: 'Today' }") || !produ
 const productionPageContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
 const productionJobsContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'production')"), productionPageContract.indexOf("if (tab === 'control')"))
 const productionControlContract = productionPageContract.slice(productionPageContract.indexOf("if (tab === 'control')"))
+const plantOutputRecoveryResumeStart = productionPageContract.indexOf('function resumePlantOutputRecovery()')
+const plantOutputRecoveryDiscardStart = productionPageContract.indexOf('function discardPlantOutputRecovery()', plantOutputRecoveryResumeStart)
+const plantOutputRecoveryRecordStart = productionPageContract.indexOf('function recordOutput(', plantOutputRecoveryDiscardStart)
+const plantOutputRecoveryResumeAction = productionPageContract.slice(plantOutputRecoveryResumeStart, plantOutputRecoveryDiscardStart)
+const plantOutputRecoveryDiscardAction = productionPageContract.slice(plantOutputRecoveryDiscardStart, plantOutputRecoveryRecordStart)
+const plantOutputRecoveryForbiddenActions = ['queueAction(', 'mutateProduction(', 'recordProductionOutput(', 'recordProductionScrap(', 'closeProductionJob(', 'confirmAccountableAction(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon']
+if (plantOutputRecoveryResumeStart < 0
+  || plantOutputRecoveryDiscardStart < 0
+  || plantOutputRecoveryRecordStart < 0
+  || !plantOutputEntryRecoverySource.includes("PLANT_OUTPUT_ENTRY_RECOVERY_CONTRACT = 'supermega.plant.closed-output-entry.v1'")
+  || !plantOutputEntryRecoverySource.includes("globalThis.crypto.subtle.digest('SHA-256', bytes)")
+  || !plantOutputEntryRecoverySource.includes('productionStateCanonical(state)')
+  || !plantOutputEntryRecoverySource.includes('export function reviewPlantOutputEntryRecovery(')
+  || !productionPageContract.includes('window.localStorage.setItem(key, JSON.stringify(next))')
+  || !productionPageContract.includes('retained.source.productionDigest !== plantOutputRecoverySource.productionDigest')
+  || !productionPageContract.includes('plantOutputEntryRecoveriesMatch(')
+  || !productionPageContract.includes('plantOutputEntryRecoveryMatchesDraft(')
+  || !productionPageContract.includes('Another tab has an unfinished output entry. Resume or discard it before replacing it.')
+  || !productionPageContract.includes('className="tab-recovery-card plant-output-tab-recovery"')
+  || !productionPageContract.includes("data-state={plantOutputRecoveryReview?.ok ? 'ready' : 'conflict'}")
+  || !productionPageContract.includes("plantOutputRecoveryReview?.ok ? 'Continue this output entry?' : 'This entry needs a fresh start'")
+  || !productionPageContract.includes('Resume entry')
+  || !productionPageContract.includes('No output, material use, equipment command, inventory movement, costing, accounting, message, or company write happens here.')
+  || !plantOutputRecoveryResumeAction.includes('plantOutputRecoveryIsCurrent(target)')
+  || !plantOutputRecoveryResumeAction.includes('setJobId(recovered.jobId)')
+  || !plantOutputRecoveryResumeAction.includes('setQuantity(recovered.quantity)')
+  || !plantOutputRecoveryResumeAction.includes('setOutputKind(recovered.outputKind)')
+  || !plantOutputRecoveryResumeAction.includes('setShiftRef(recovered.shiftRef)')
+  || !plantOutputRecoveryResumeAction.includes('setOutputOpen(true)')
+  || !plantOutputRecoveryDiscardAction.includes('clearPlantOutputRecovery()')
+  || !plantOutputRecoveryDiscardAction.includes("setOutputKind('good')")
+  || !productionPageContract.includes('clearMatchingPlantOutputRecovery(reviewedRecoveryDraft, reviewedRecoverySource)')
+  || !productionPageContract.includes('setPlantOutputRecoveryArmed(false)')
+  || plantOutputRecoveryForbiddenActions.some((marker) => plantOutputRecoveryResumeAction.includes(marker) || plantOutputRecoveryDiscardAction.includes(marker))
+  || !coreCssSource.includes('.tab-recovery-card[data-state="conflict"]')
+  || !/\.tab-recovery-actions \.core-button\s*\{[^}]*min-width:\s*116px;[^}]*min-height:\s*44px;/s.test(coreCssSource)) fail('plant_output_tab_recovery_contract_missing_or_consequential')
 const closeJobScheduleContract = productionPageContract.slice(productionPageContract.indexOf('function closeJobSchedule'), productionPageContract.indexOf('function discardClosedJobSchedule'))
 const undoClosedJobScheduleContract = productionPageContract.slice(productionPageContract.indexOf('function undoClosedJobSchedule'), productionPageContract.indexOf('function reviewJobSchedule'))
 const recoverProductionJobPlanDraftStart = productionJobPlanDraftSource.indexOf('export function recoverProductionJobPlanDraft')
@@ -15649,6 +15687,106 @@ async function verifyShopCounterSaleRecoveryRuntime() {
   }
 }
 
+async function verifyPlantOutputEntryRecoveryRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    plantOutputEntryRecoveryRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-output-entry-recovery.ts')).href}?plant-output-recovery=${Date.now()}`)
+    const state = {
+      schema: 'supermega.production.workspace.v2',
+      revision: 0,
+      jobs: [
+        { id: 'JOB-201', line: 'Line 01', product: 'Premium batch', target: 1_200, output: 860, owner: 'Line 01 lead', priority: 'urgent', dueAt: '2026-08-10T10:00:00.000Z' },
+        { id: 'JOB-202', line: 'Line 02', product: 'Daily batch', target: 500, output: 120 },
+      ],
+      issues: [],
+      machines: [{ id: 'MC-01', name: 'Line 01 mixer', state: 'running' }],
+      events: [],
+    }
+    const productionDigest = await model.plantOutputEntryDigest(state)
+    const repeatedDigest = await model.plantOutputEntryDigest(structuredClone(state))
+    const changedState = { ...structuredClone(state), jobs: [{ ...state.jobs[0], output: 861 }, state.jobs[1]] }
+    const changedDigest = await model.plantOutputEntryDigest(changedState)
+    assert(productionDigest === repeatedDigest
+      && productionDigest !== changedDigest
+      && /^sha256:[0-9a-f]{64}$/.test(productionDigest),
+    'plant_output_recovery_production_digest_not_exact')
+    const source = { productionRevision: state.revision, productionDigest }
+    const draft = { jobId: 'JOB-201', quantity: 1.5, outputKind: 'scrap', shiftRef: '2026-08-09 Night ', panelOpen: true }
+    const recovery = model.createPlantOutputEntryRecovery(
+      'managed:workspace-1:user-1',
+      source,
+      draft,
+      '2026-08-09T05:40:00.000Z',
+    )
+    const restored = model.restorePlantOutputEntryRecovery(JSON.stringify(recovery))
+    assert(restored
+      && restored.schema === model.PLANT_OUTPUT_ENTRY_RECOVERY_CONTRACT
+      && restored.scope === 'managed:workspace-1:user-1'
+      && restored.draft.jobId === 'JOB-201'
+      && restored.draft.quantity === 1.5
+      && restored.draft.outputKind === 'scrap'
+      && restored.draft.shiftRef === '2026-08-09 Night '
+      && restored.draft.panelOpen === true,
+    'plant_output_recovery_did_not_restore_exact_entry')
+    const current = model.reviewPlantOutputEntryRecovery(recovery, 'managed:workspace-1:user-1', productionDigest, state)
+    assert(current.ok
+      && current.draft.jobId === draft.jobId
+      && current.draft.quantity === draft.quantity
+      && current.draft.outputKind === draft.outputKind,
+    'plant_output_recovery_current_source_not_resumable')
+    assert(model.plantOutputEntryRecoveryMatchesDraft(recovery, 'managed:workspace-1:user-1', source, draft)
+      && model.plantOutputEntryRecoveriesMatch(recovery, structuredClone(recovery))
+      && !model.plantOutputEntryRecoveryMatchesDraft(recovery, 'managed:workspace-1:user-1', source, { ...draft, shiftRef: 'Other shift' }),
+    'plant_output_recovery_exact_identity_not_enforced')
+    const newer = model.createPlantOutputEntryRecovery(
+      'managed:workspace-1:user-1',
+      source,
+      { ...draft, quantity: 2 },
+      '2026-08-09T05:40:01.000Z',
+    )
+    assert(!model.plantOutputEntryRecoveriesMatch(recovery, newer), 'plant_output_recovery_newer_tab_identity_not_enforced')
+    const wrongScope = model.reviewPlantOutputEntryRecovery(recovery, 'managed:workspace-2:user-1', productionDigest, state)
+    assert(!wrongScope.ok && wrongScope.reason === 'scope_changed', 'plant_output_recovery_wrong_scope_accepted')
+    const staleProduction = model.reviewPlantOutputEntryRecovery(recovery, 'managed:workspace-1:user-1', changedDigest, changedState)
+    assert(!staleProduction.ok && staleProduction.reason === 'production_changed', 'plant_output_recovery_production_change_ignored')
+    const unknownJob = structuredClone(recovery)
+    unknownJob.draft.jobId = 'JOB-MISSING'
+    const unknownReview = model.reviewPlantOutputEntryRecovery(unknownJob, 'managed:workspace-1:user-1', productionDigest, state)
+    assert(!unknownReview.ok && unknownReview.reason === 'invalid_recovery', 'plant_output_recovery_unknown_job_accepted')
+    const completedState = { ...structuredClone(state), jobs: [{ ...state.jobs[0], output: 1_200 }, state.jobs[1]] }
+    const completedDigest = await model.plantOutputEntryDigest(completedState)
+    const completedReview = model.reviewPlantOutputEntryRecovery(recovery, 'managed:workspace-1:user-1', completedDigest, completedState)
+    assert(!completedReview.ok, 'plant_output_recovery_completed_job_accepted')
+    const badKind = structuredClone(recovery)
+    badKind.draft.outputKind = 'rework'
+    const badDigest = structuredClone(recovery)
+    badDigest.source.productionDigest = 'sha256:not-valid'
+    const extraField = { ...structuredClone(recovery), autoRecord: true }
+    assert(model.restorePlantOutputEntryRecovery(badKind) === null
+      && model.restorePlantOutputEntryRecovery(badDigest) === null
+      && model.restorePlantOutputEntryRecovery(extraField) === null
+      && model.restorePlantOutputEntryRecovery('{broken') === null,
+    'plant_output_recovery_tamper_accepted')
+    let closedPanelRejected = false
+    try {
+      model.createPlantOutputEntryRecovery('local:local', source, { ...draft, panelOpen: false })
+    } catch {
+      closedPanelRejected = true
+    }
+    assert(closedPanelRejected, 'plant_output_recovery_closed_panel_created')
+    const badRevision = structuredClone(recovery)
+    badRevision.source.productionRevision = -1
+    assert(model.restorePlantOutputEntryRecovery(badRevision) === null, 'plant_output_recovery_invalid_revision_accepted')
+    assert(/^supermega\.plant\.closed-output-entry\.v1\./.test(model.plantOutputEntryRecoveryStorageKey('managed:workspace-1:user-1')),
+      'plant_output_recovery_storage_scope_missing')
+  } catch (error) {
+    fail(`plant_output_entry_recovery_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyStorefrontRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -20335,6 +20473,7 @@ await verifyCommerceOrderDraftRuntime()
 await verifyStorefrontDraftRuntime()
 await verifyStorefrontEditRecoveryRuntime()
 await verifyShopCounterSaleRecoveryRuntime()
+await verifyPlantOutputEntryRecoveryRuntime()
 await verifyStorefrontRuntime()
 await verifyManagedWebsiteRuntime()
 await verifyManagedStorefrontRuntime()
@@ -20345,8 +20484,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 50 KB allowance for Shop, Plant, Website, and Ecommerce recovery, including counter tab recovery; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_850_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 60 KB allowance for Shop, Plant, Website, and Ecommerce recovery, including Shop counter and Plant output tab recovery; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_860_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -20849,4 +20988,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopCounterSaleRecoveryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontEditRecoveryRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopCounterSaleRecoveryRuntimeChecks, plantOutputEntryRecoveryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontEditRecoveryRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
