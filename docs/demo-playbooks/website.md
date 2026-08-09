@@ -21,17 +21,17 @@ The pitch, verbatim from approved copy (eyebrow `Website maker`):
 
 1. Start on `/website/` in preview. The heading is `Website`; the `Start here` panel shows the pages, readiness, and inquiry counts at a glance.
 2. Press `Customize demo` to open the starter form: `Change the sample into your website`. Fill the client's real business details in front of them — this is the brief-to-site moment. `View sample` shows the untouched example; `Make preview` applies their answers.
-3. Review the preview at desktop, tablet, and mobile widths. On a saved draft page the copy explains itself: `Check the selected page at desktop, tablet, or mobile size.`
+3. Review the preview at desktop, tablet, and mobile widths. On a saved draft page the copy explains itself: `Go back, then Preview to check desktop, tablet, or mobile.`
 4. Press `Edit sample` (later `Edit page`) to change one headline live, then `Save` — or `Discard` to show that a preview never overwrites anything silently.
 5. Open the `Inquiries` disclosure: `Capture customer inquiries`. Add a test inquiry with `Add inquiry`, then `Qualify` it with a responsible person, and show `Export inquiries`. Note the on-screen line: nothing is sent to customers, CRM, or Shop from this screen.
-6. Finish on the download: the ready panel says `Download your website` — `Open one file on any phone or computer, or hand it to a hosting provider.` Press `Download website` (in a session-only workspace the button is `Download preview`) and open the file in a new tab.
+6. Finish on the download: the ready panel says `Download your website` — `One file works on any phone or computer.` Press `Download website` (in a session-only workspace the button is `Download preview`) and open the file in a new tab.
 7. Point at the boundary card while the file opens: `Not online yet` — this is the honest close, not a fake launch.
 
 ## 4. Objection handling: the boundary
 
 "Is my site live now?" — the app answers: `Not online yet` / `Downloading does not deploy a site, connect a domain, or send customer data.` Going live is a separate reviewed step: `Request managed hosting when needed.`
 
-"Where is my content saved?" — `Changes are saved on this device. Nothing has been deployed.` Setup adds `Stays on this device. Nothing is sent or published.`
+"Where is my content saved?" — the app says `Saved on this device` and `Nothing has been deployed.` Setup adds `Stays on this device. Nothing is sent or published.`
 
 "Can it spam my customers?" — the inquiry inbox captures and assigns; it never sends. Approved boundaries for Website are explicit: `No CMS`, `No domain write`, `No analytics connection`, `No deployment`, `No customer send`, `No payment action`.
 
