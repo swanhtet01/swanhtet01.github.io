@@ -96,6 +96,7 @@ function Save-CycleReceipt {
     $bytes = [Text.Encoding]::UTF8.GetBytes($serialized + "`n")
     if ($bytes.Length -lt 2 -or $bytes.Length -gt $MaxReceiptBytes) { throw 'ally_company_cycle_receipt_size_invalid' }
     $temporary = Join-Path $StateRoot ('.ally-ceo-cycle-last.' + [guid]::NewGuid().ToString('N') + '.tmp')
+    $backup = Join-Path $StateRoot ('.ally-ceo-cycle-last.' + [guid]::NewGuid().ToString('N') + '.bak')
     try {
         $stream = [IO.FileStream]::new($temporary, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None, 4096, [IO.FileOptions]::WriteThrough)
         try {
@@ -104,12 +105,13 @@ function Save-CycleReceipt {
         }
         finally { $stream.Dispose() }
         if (Test-Path -LiteralPath $ReceiptPath) {
-            [IO.File]::Replace($temporary, $ReceiptPath, $null, $true)
+            [IO.File]::Replace($temporary, $ReceiptPath, $backup, $true)
         }
         else { [IO.File]::Move($temporary, $ReceiptPath) }
     }
     finally {
         if (Test-Path -LiteralPath $temporary) { [IO.File]::Delete($temporary) }
+        if (Test-Path -LiteralPath $backup) { [IO.File]::Delete($backup) }
     }
     [pscustomobject]@{ path = $ReceiptPath; bytes = $bytes.Length }
 }

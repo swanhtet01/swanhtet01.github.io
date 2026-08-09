@@ -32,10 +32,11 @@
     {"productId":"ecommerce","workOrderId":"ecommerce-order-change-close-recovery","checkpoint":"OPS-178"},
     {"productId":"shop","workOrderId":"shop-stock-move-close-recovery","checkpoint":"OPS-179"},
     {"productId":"plant","workOrderId":"plant-plan-revision-close-recovery","checkpoint":"OPS-180"},
-    {"productId":"website","workOrderId":"website-page-remove-recovery","checkpoint":"OPS-181"}
+    {"productId":"website","workOrderId":"website-page-remove-recovery","checkpoint":"OPS-181"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-reschedule-close-recovery","checkpoint":"OPS-182"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-reschedule-close-recovery","priority":100,"status":"ready-local","workOrder":"Ecommerce: reopen one closed unsent reschedule exactly; never send to Shop.","reason":"Close discards the requested time and reason."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"shop","workOrderId":"shop-purchase-order-close-recovery","priority":100,"status":"ready-local","workOrder":"Shop: preserve one unfinished supplier-order or receipt editor across Close exactly once, while explicit discard remains separate and no procurement evidence is created.","reason":"The current Cancel action drops supplier, arrival, quantity, cost, location, lot, rejected quantity, and discrepancy fields; enterprise receiving work needs a reversible close and an explicit discard."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",

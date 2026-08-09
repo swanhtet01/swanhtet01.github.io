@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 15 local recoveries pass. Next: `ecommerce-reschedule-close-recovery`; pilots stay owner-gated.
+- 16 local recoveries pass. Next: `shop-purchase-order-close-recovery`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
