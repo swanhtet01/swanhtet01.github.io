@@ -7,10 +7,18 @@
 -- Supabase preview branch comes up with zero tables and the whole managed-pilot
 -- rehearsal is unreachable.
 --
--- This file makes the chain self-contained: it is stamped one second before
--- `enable_rls_public_tables_20260711` so a fresh database builds the catalog
--- first and every later migration finds what it expects. Reconstructed by
--- introspecting production on 2026-08-08; no data, only structure.
+-- This file makes the chain self-contained. It is stamped one second before
+-- production's own first recorded migration so a fresh database builds the catalog
+-- before anything else runs. Reconstructed by introspecting production on
+-- 2026-08-08; no data, only structure.
+--
+-- It also ENABLES ROW LEVEL SECURITY on all 27 tables at the end, because the
+-- migration that does that in production — `enable_rls_public_tables_20260711` —
+-- exists only in production's migration table and was never committed here. Without
+-- that step a database rebuilt from this repository comes up with the whole legacy
+-- catalog readable, which is the exact condition the browser-quarantine packet
+-- exists to prevent. Enabling RLS with no policies matches production and denies
+-- every row to anon/authenticated by default.
 --
 -- Scope note: most of these tables belong to the dormant enterprise stack. This
 -- baseline deliberately captures reality as it stands rather than pre-judging
@@ -131,5 +139,24 @@ begin
   alter table public.wcm_incidents add constraint wcm_incidents_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES public.assets(id) ON DELETE SET NULL;
 end
 $constraints$;
+
+-- Match production: RLS on, no policies, so every row is denied to anon and
+-- authenticated by default. Driven off the catalog rather than a second hardcoded
+-- list, so it cannot drift from the tables created above. ALTER ... ENABLE is
+-- idempotent, which keeps this file safe to re-run.
+do $enable_rls$
+declare
+  target record;
+begin
+  for target in
+    select c.relname
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind in ('r', 'p') and not c.relrowsecurity
+  loop
+    execute format('alter table public.%I enable row level security', target.relname);
+  end loop;
+end
+$enable_rls$;
 
 commit;

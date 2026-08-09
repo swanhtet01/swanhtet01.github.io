@@ -7,6 +7,12 @@ const exactWorkspaceKeys = new Set([
   'supermega.accountable.actions.v1',
   'supermega.behavior-trail.v1',
   'supermega.shop.order_draft_reset.v1',
+  // The in-progress counter sale and the remembered operator name. Registered so
+  // "Confirm local reset", restore points and backup restore all reach them. The reset UI
+  // promises to clear drafts; without these it reseeds the catalog while the previous
+  // basket and the previous person's name survive on top of the supposedly clean workspace.
+  'supermega.shop.counter_draft.v1',
+  'supermega.last_operator.v1',
   'supermega.ecommerce.storefront_draft_reset.v1',
   'supermega.team.workspace.v4',
   'supermega.website.workspace.v2',

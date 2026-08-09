@@ -15,7 +15,12 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 // button that quietly does nothing. Either way local workspace data is untouched: it lives
 // in this browser's storage, not in the component tree, so the reassurance is honest.
 
-const CHUNK_FAILURE = /ChunkLoadError|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i
+// The first four cover webpack plus Chrome, Firefox and Safari dynamic-import rejections.
+// "Unable to preload CSS" is Vite's own: a lazy route with its own stylesheet chunk is
+// loaded through __vitePreload, which awaits the <link> and rejects with that wording. Since
+// the heaviest routes here (Ecommerce, Website, Settings) each ship a separate CSS chunk,
+// that is the likeliest stale-deploy failure of the set — and it was the one missing.
+const CHUNK_FAILURE = /ChunkLoadError|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
 function isChunkFailure(error: unknown) {
   if (!error) return false

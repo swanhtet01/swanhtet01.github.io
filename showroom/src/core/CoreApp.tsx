@@ -1020,18 +1020,6 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   const [query, setQuery] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
 
-  // clearSale() resets all three to their defaults, which this treats as "no draft" and
-  // removes — so a completed or cleared sale leaves nothing behind to resurrect.
-  useEffect(() => {
-    const empty = Object.keys(cart).length === 0 && !customer && payment === 'Cash'
-    try {
-      if (empty) window.localStorage.removeItem(SHOP_COUNTER_DRAFT_KEY)
-      else window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY, JSON.stringify({ cart, customer, payment }))
-    } catch {
-      // Storage full or blocked. The counter keeps working in memory; losing persistence
-      // must never cost the operator the sale they are ringing up right now.
-    }
-  }, [cart, customer, payment])
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const visibleItems = normalizedQuery
     ? items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
@@ -1042,6 +1030,23 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   })
   const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
+
+  // Persist what the counter can actually act on, not the raw cart. `lines` is the same
+  // derived value the UI uses: catalog SKUs only, clamped to live stock. Judging emptiness
+  // from raw cart keys instead left a draft the operator could neither see nor remove —
+  // the Clear button is gated on unitCount, so a cart holding only sold-out or deleted SKUs
+  // rendered as an empty counter while quietly resurrecting a stale customer and payment
+  // method on every load. A sale exists only if it has at least one sellable line.
+  const liveCartJson = JSON.stringify(Object.fromEntries(lines.map((line) => [line.item.sku, line.quantity])))
+  useEffect(() => {
+    try {
+      if (liveCartJson === '{}') window.localStorage.removeItem(SHOP_COUNTER_DRAFT_KEY)
+      else window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY, JSON.stringify({ cart: JSON.parse(liveCartJson), customer, payment }))
+    } catch {
+      // Storage full or blocked. The counter keeps working in memory; losing persistence
+      // must never cost the operator the sale they are ringing up right now.
+    }
+  }, [liveCartJson, customer, payment])
 
   function changeQuantity(item: CommerceItem, next: number) {
     const nextQuantity = Math.max(0, Math.min(next, item.onHand))
