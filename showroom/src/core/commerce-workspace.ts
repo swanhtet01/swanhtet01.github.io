@@ -4372,9 +4372,11 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!prior
       || prior.scope !== request.scope
       || (timestampMicros(prior.createdAt) as bigint) >= (timestampMicros(request.createdAt) as bigint)
-      || orderSourceRecordIds.has(prior.id)
       || supersededStorefrontRequestIds.has(prior.id)) {
       throw new Error(`Storefront request ${request.id} does not supersede one older pending Ecommerce request.`)
+    }
+    if (orderSourceRecordIds.has(prior.id)) {
+      throw new Error('a superseded Ecommerce request cannot create a Shop order.')
     }
     supersededStorefrontRequestIds.add(prior.id)
   }
@@ -7032,6 +7034,11 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
       ))
       && JSON.stringify(storedBusinessOrder) === JSON.stringify(requestedBusinessOrder) ? state : null
   }
+  const trackedSourceTimeline = order.sourceRecordId?.startsWith('ECR-')
+    && commerceStorefrontRequests(state).some((request) => request.id === order.sourceRecordId)
+    ? commerceStorefrontOrderTimeline(state).find((entry) => entry.request.id === order.sourceRecordId) ?? null
+    : null
+  if (trackedSourceTimeline && trackedSourceTimeline.nextAction !== 'review_in_shop') return null
   const capturedLines = order.lines === undefined ? undefined : validatedOrderLineSnapshots(order)
   if (order.lines !== undefined && !capturedLines) return null
   const legacyItem = order.lines === undefined && order.itemSku

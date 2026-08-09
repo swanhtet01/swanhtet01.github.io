@@ -2453,6 +2453,29 @@ class CommerceRuntimeTests(unittest.TestCase):
             atomic,
         )
 
+        superseded_order_state = deepcopy(atomic)
+        superseded_order_state["items"][0]["onHand"] = 8  # type: ignore[index]
+        superseded_order = order_record("ORD-SUPERSEDED")
+        superseded_order["sourceRecordId"] = prior["id"]
+        superseded_order_state["orders"] = [superseded_order]
+        superseded_order_state["movements"] = [
+            movement(
+                "reserve",
+                "ACT-ORD-SUPERSEDED",
+                -2,
+                order_id="ORD-SUPERSEDED",
+            )
+        ]
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "superseded Ecommerce request",
+        ):
+            apply_event(
+                atomic,
+                "commerce.order.created",
+                superseded_order_state,
+            )
+
         retained_current = deepcopy(current)
         retained_current["storefrontRequests"] = [prior]
         retained = create_commerce_storefront_request_from_intent(

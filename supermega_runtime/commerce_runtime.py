@@ -4345,11 +4345,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             or prior["scope"] != request["scope"]
             or datetime.fromisoformat(prior["createdAt"].replace("Z", "+00:00"))
             >= datetime.fromisoformat(request["createdAt"].replace("Z", "+00:00"))
-            or prior["id"] in order_source_record_ids
             or prior["id"] in superseded_storefront_request_ids
         ):
             raise TrialValidationError(
                 f"Storefront request {request['id']} does not supersede one older pending Ecommerce request."
+            )
+        if prior["id"] in order_source_record_ids:
+            raise TrialValidationError(
+                "a superseded Ecommerce request cannot create a Shop order."
             )
         superseded_storefront_request_ids.add(prior["id"])
     catalog_baseline_action_set = set(catalog_baseline_action_ids)
@@ -8008,6 +8011,21 @@ def _validate_new_order_and_reservation(
         raise TrialValidationError(f"{event_type} must prepend exactly one order.")
     _require_unchanged(current, next_state, "closes")
     order = next_state["orders"][0]
+    source_record_id = order.get("sourceRecordId")
+    storefront_requests = _storefront_requests(current)
+    source_is_tracked = any(
+        isinstance(request, Mapping) and request.get("id") == source_record_id
+        for request in storefront_requests
+    )
+    source_was_superseded = source_is_tracked and any(
+        isinstance(request, Mapping)
+        and request.get("supersedesRequestId") == source_record_id
+        for request in storefront_requests
+    )
+    if source_was_superseded:
+        raise TrialValidationError(
+            "a superseded Ecommerce request cannot create a Shop order."
+        )
     calculation = order.get("calculation")
     effective_tax_configuration = _effective_tax_configuration(
         current,

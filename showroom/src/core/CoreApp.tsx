@@ -1899,15 +1899,52 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ? websiteIntakes.some((intake) => intake.status === 'pending_confirmation')
     : Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
   const storefrontRequests = commerceStorefrontRequests(commerce)
-  const pendingStorefrontRequests = commerceStorefrontOrderTimeline(commerce, storefrontRequests)
+  const storefrontOrderTimeline = commerceStorefrontOrderTimeline(commerce, storefrontRequests)
+  const pendingStorefrontRequests = storefrontOrderTimeline
     .filter((entry) => entry.nextAction === 'review_in_shop')
     .map((entry) => entry.request)
+  const preparedEcommerceSourceTimeline = preparedEcommerceDraft
+    ? storefrontOrderTimeline.find((entry) => entry.request.id === preparedEcommerceDraft.sourceRequestId) ?? null
+    : null
+  const preparedEcommerceSupersededByRequestId = preparedEcommerceSourceTimeline?.stage === 'superseded'
+    ? preparedEcommerceSourceTimeline.supersededByRequestId
+    : null
+  const preparedEcommerceReplacesRequestId = preparedEcommerceSourceTimeline?.request.schema === 'supermega.ecommerce.order_request.v2'
+    ? preparedEcommerceSourceTimeline.request.supersedesRequestId ?? null
+    : null
   const preparedEcommerceRequestIsWaiting = Boolean(
     preparedEcommerceDraft
-    && !pendingStorefrontRequests.some((request) => request.id === preparedEcommerceDraft.sourceRequestId)
+    && !preparedEcommerceSourceTimeline
     && !commerce.orders.some((order) => order.sourceRecordId === preparedEcommerceDraft.sourceRequestId),
   )
   const pendingEcommerceReviewCount = pendingStorefrontRequests.length + Number(preparedEcommerceRequestIsWaiting)
+  useEffect(() => {
+    if (!preparedEcommerceDraft || !preparedEcommerceSupersededByRequestId || pendingAction) return
+    const supersededRequestId = preparedEcommerceDraft.sourceRequestId
+    const preparedDraftId = preparedEcommerceDraft.id
+    const frameId = requestAnimationFrame(() => {
+      consumedEcommerceDraftId.current = preparedDraftId
+      setSku(commerce.items[0]?.sku ?? '')
+      setQuantity(1)
+      setExtraOrderLines([])
+      setRemovedOrderLine(null)
+      setCustomer('')
+      setChannel('Messenger')
+      setPayment('')
+      setFulfilment('')
+      setFulfilmentReference('')
+      setPromisedAt('')
+      setPaymentTermsDays(0)
+      setPreparedEcommerceDraft(null)
+      setOrderDraftActive(false)
+      setResumedOrderDraft(null)
+      setOrderDraftConflict(false)
+      setOrderEntryMode('online')
+      setNotice(`${supersededRequestId} was replaced by ${preparedEcommerceSupersededByRequestId}. The stale Shop draft was closed; review the replacement instead.`)
+      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-ecommerce-request-id="${preparedEcommerceSupersededByRequestId}"]`)?.focus({ preventScroll: true }))
+    })
+    return () => cancelAnimationFrame(frameId)
+  }, [commerce.items, pendingAction, preparedEcommerceDraft, preparedEcommerceSupersededByRequestId])
   const requestedStorefrontRequestIsWaiting = Boolean(
     requestedRequestId
     && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
@@ -6464,9 +6501,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => {
             const lines = commerceStorefrontRequestLines(request)
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
+            const replacedRequest = request.schema === 'supermega.ecommerce.order_request.v2' && request.supersedesRequestId
+              ? storefrontRequests.find((candidate) => candidate.id === request.supersedesRequestId) ?? null
+              : null
             return <div className="website-intake-ready" key={request.id}>
-              <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small></div>
-              <button className="core-button compact" disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
+              <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small>{replacedRequest ? <small title={`Exact predecessor ${replacedRequest.id}`}>Replacement · replaces {replacedRequest.id} · {replacedRequest.totalMmk.toLocaleString()} MMK · prior quote is history only</small> : null}</div>
+              <button className="core-button compact" data-ecommerce-request-id={request.id} disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
             </div>
           }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Ecommerce</Link>
@@ -6476,7 +6516,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
-          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small></div>
+          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small>{preparedEcommerceReplacesRequestId ? <small title={`Exact predecessor ${preparedEcommerceReplacesRequestId}`}>Replacement request · replaces {preparedEcommerceReplacesRequestId} · prior quote stays history-only</small> : null}</div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>

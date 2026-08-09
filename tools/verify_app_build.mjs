@@ -3761,6 +3761,11 @@ if (!commerceSource.includes('recordCommerceStorefrontRequest')
   || !commerceSource.includes('commerceStorefrontRequestEquals')
   || !commerceSource.includes('supersedesRequestId?: string')
   || !commerceSource.includes("stage: order?.status ?? (successorId ? 'superseded' : 'waiting_shop_review')")
+  || !commerceSource.includes("trackedSourceTimeline.nextAction !== 'review_in_shop'")
+  || !coreSource.includes('const storefrontOrderTimeline = commerceStorefrontOrderTimeline')
+  || !coreSource.includes('const preparedEcommerceSupersededByRequestId =')
+  || !coreSource.includes('data-ecommerce-request-id={request.id}')
+  || !coreSource.includes('Replacement request · replaces {preparedEcommerceReplacesRequestId} · prior quote stays history-only')
   || !coreSource.includes("entry.nextAction === 'review_in_shop'")
   || !commerceSource.includes('legacyFields')
   || !commerceSource.includes('matches[0].onHand < 1')
@@ -16746,6 +16751,76 @@ async function verifyStorefrontRuntime() {
       && supersessionTimeline[1].supersededByRequestId === staleQuoteReplacementRequest.id
       && supersessionTimeline[1].nextAction === 'none',
     'ecommerce_superseded_request_remained_actionable_in_shop')
+    const supersededOrderProof = {
+      actionId: 'ACT-ECOMMERCE-SUPERSEDED-ORDER',
+      capturedAt: '2026-07-24T09:10:00.000Z',
+      actor: 'OP-OWNER',
+      reason: 'Reject the prior quote after its replacement reached Shop.',
+      evidenceReference: `ECOMMERCE:${buyingRequest.id}:SUPERSEDED`,
+    }
+    const supersededOrderLines = commerce.commerceStorefrontRequestLines(buyingRequest).map((line) => ({
+      sku: line.sku,
+      name: line.name,
+      ...(line.variant ? { variant: line.variant } : {}),
+      quantity: line.quantity,
+      unitPriceMmk: line.unitPriceMmk,
+    }))
+    const supersededOrder = {
+      id: 'ORD-ECOMMERCE-SUPERSEDED',
+      createdAt: supersededOrderProof.capturedAt,
+      customer: buyingRequest.customerReference,
+      owner: supersededOrderProof.actor,
+      channel: 'Ecommerce',
+      item: commerce.commerceOrderItemSummary(supersededOrderLines),
+      quantity: supersededOrderLines.reduce((total, line) => total + line.quantity, 0),
+      payment: 'KBZPay',
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      fulfilment: buyingRequest.fulfilment,
+      fulfilmentReference: buyingRequest.id,
+      promisedAt: '2026-07-24T10:00:00.000Z',
+      paymentDueAt: supersededOrderProof.capturedAt,
+      sourceRecordId: buyingRequest.id,
+      evidenceReference: supersededOrderProof.evidenceReference,
+      lines: supersededOrderLines,
+      total: buyingRequest.totalMmk,
+      status: 'confirmed',
+    }
+    buyingAssert(commerce.reserveCommerceOrder(
+      atomicSupersessionState,
+      supersededOrder,
+      supersededOrderProof,
+    ) === null, 'ecommerce_superseded_request_created_a_shop_order')
+    const successorOrderProof = {
+      ...supersededOrderProof,
+      actionId: 'ACT-ECOMMERCE-SUCCESSOR-ORDER',
+      reason: 'Confirm the current replacement request in Shop.',
+      evidenceReference: `ECOMMERCE:${staleQuoteReplacementRequest.id}:CURRENT`,
+    }
+    const successorOrderLines = commerce.commerceStorefrontRequestLines(staleQuoteReplacementRequest).map((line) => ({
+      sku: line.sku,
+      name: line.name,
+      ...(line.variant ? { variant: line.variant } : {}),
+      quantity: line.quantity,
+      unitPriceMmk: line.unitPriceMmk,
+    }))
+    const successorOrderState = commerce.reserveCommerceOrder(atomicSupersessionState, {
+      ...supersededOrder,
+      id: 'ORD-ECOMMERCE-SUCCESSOR',
+      customer: staleQuoteReplacementRequest.customerReference,
+      owner: successorOrderProof.actor,
+      item: commerce.commerceOrderItemSummary(successorOrderLines),
+      quantity: successorOrderLines.reduce((total, line) => total + line.quantity, 0),
+      fulfilment: staleQuoteReplacementRequest.fulfilment,
+      fulfilmentReference: staleQuoteReplacementRequest.id,
+      paymentDueAt: successorOrderProof.capturedAt,
+      sourceRecordId: staleQuoteReplacementRequest.id,
+      evidenceReference: successorOrderProof.evidenceReference,
+      lines: successorOrderLines,
+      total: staleQuoteReplacementRequest.totalMmk,
+    }, successorOrderProof)
+    buyingAssert(successorOrderState?.orders[0].sourceRecordId === staleQuoteReplacementRequest.id,
+      'ecommerce_current_replacement_request_could_not_create_a_shop_order')
     buyingAssert(await commerce.recordCommerceStorefrontRequest(
       atomicSupersessionState,
       staleQuoteReplacementRequest,
