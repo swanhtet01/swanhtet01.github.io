@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import test from 'node:test'
 
 import { buildAllyCeoCompanyPlan } from './ally-ceo-company-plan.mjs'
@@ -28,6 +29,30 @@ const workboard = `# Workboard
 1. Keep the four products stable.
 2. Prove managed isolation before writes.
 `
+
+function stableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+}
+
+function completedAutomationArchive(entries, throughCheckpoint = entries.at(-1)?.checkpoint) {
+  const archive = {
+    contract: 'supermega.completed-local-automation-archive.v1',
+    throughCheckpoint,
+    entries,
+  }
+  return {
+    text: JSON.stringify(archive),
+    reference: {
+      contract: 'supermega.completed-local-automation-archive-ref.v1',
+      path: 'archive/completed-local-automations-through-ops-194.json',
+      count: entries.length,
+      throughCheckpoint,
+      digest: `sha256:${createHash('sha256').update(stableStringify(archive)).digest('hex')}`,
+    },
+  }
+}
 
 function portfolio(overrides = {}, automationOverrides = {}) {
   const localImprovements = {
@@ -249,6 +274,60 @@ test('completed automation history is receipt-bound instead of copied into every
   assert.match(evidence.portfolio.completedLocalAutomationSummary.digest, /^sha256:[a-f0-9]{64}$/)
   assert.equal(JSON.stringify(evidence).includes('ecommerce-completed-000'), false)
   assert.ok(Buffer.byteLength(JSON.stringify(evidence), 'utf8') <= 8_192)
+})
+
+test('archived completion receipts remain counted, source-bound, and duplicate-protected', async () => {
+  const archivedEntry = { productId: 'ecommerce', workOrderId: 'ecommerce-support-case', checkpoint: 'ENG-130' }
+  const archived = completedAutomationArchive([archivedEntry], 'ENG-130')
+  const archivedPortfolio = JSON.parse(portfolio())
+  archivedPortfolio.completedLocalAutomationArchive = archived.reference
+
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({
+      now: '2026-07-29T12:00:00.000Z',
+      hqNow: now,
+      workboard,
+      portfolioText: JSON.stringify(archivedPortfolio),
+      completedAutomationArchiveText: archived.text,
+      completedOutcomeIds: ['daily-company-control', 'engineering-release-control'],
+    }),
+    /ally_ceo_company_plan_product_work_already_completed/,
+  )
+
+  archivedPortfolio.localImprovementQueue = []
+  const result = await buildAllyCeoCompanyPlan({
+    now: '2026-07-29T12:00:00.000Z',
+    hqNow: now,
+    workboard,
+    portfolioText: JSON.stringify(archivedPortfolio),
+    completedAutomationArchiveText: archived.text,
+    completedOutcomeIds: ['daily-company-control'],
+  })
+  assert.equal(result.manifest.evidence['proof-builder'].portfolio.completedLocalAutomationSummary.count, 1)
+  assert.ok(result.manifest.evidence['proof-builder'].sourceReceipts.some((receipt) => receipt.path === 'hq/archive/completed-local-automations-through-ops-194.json'
+    && receipt.digest === archived.reference.digest))
+
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({
+      now: '2026-07-29T12:00:00.000Z',
+      hqNow: now,
+      workboard,
+      portfolioText: JSON.stringify(archivedPortfolio),
+      completedOutcomeIds: ['daily-company-control'],
+    }),
+    /ally_ceo_company_plan_completed_automation_archive_missing/,
+  )
+  await assert.rejects(
+    buildAllyCeoCompanyPlan({
+      now: '2026-07-29T12:00:00.000Z',
+      hqNow: now,
+      workboard,
+      portfolioText: JSON.stringify(archivedPortfolio),
+      completedAutomationArchiveText: archived.text.replace('ENG-130', 'ENG-131'),
+      completedOutcomeIds: ['daily-company-control'],
+    }),
+    /ally_ceo_company_plan_completed_automation_archive_invalid/,
+  )
 })
 
 test('completed outcomes rotate through all five fixed teams and then stop', async () => {

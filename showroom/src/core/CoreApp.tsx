@@ -8571,21 +8571,20 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       return
     }
     if (focus === 'material-use' && tab === 'production') {
-      if (guidedPlantJobId) {
+      if (!guidedPlantJobId) return
+      requestAnimationFrame(() => {
+        outputTriggerRef.current = null
+        setJobId(guidedPlantJobId)
+        setMaterialDraft((current) => ({ ...current, jobId: guidedPlantJobId }))
+        setOutputOpen(true)
+        setMaterialGuideOpen(true)
         requestAnimationFrame(() => {
-          outputTriggerRef.current = null
-          setJobId(guidedPlantJobId)
-          setMaterialDraft((current) => ({ ...current, jobId: guidedPlantJobId }))
-          setOutputOpen(true)
-          setMaterialGuideOpen(true)
-          requestAnimationFrame(() => {
-            const disclosure = materialDisclosureRef.current
-            if (!disclosure) return
-            disclosure.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            materialRefInputRef.current?.focus({ preventScroll: true })
-          })
+          const disclosure = materialDisclosureRef.current
+          if (!disclosure) return
+          disclosure.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          materialRefInputRef.current?.focus({ preventScroll: true })
         })
-      }
+      })
       navigate('/plant/?tab=production', { replace: true })
       return
     }

@@ -38,8 +38,13 @@ const PRODUCT_ACCEPTANCE_DIMENSIONS = Object.freeze([
 const PRODUCT_AUTOMATION_STATUSES = Object.freeze(new Set(['ready-local', 'owner-gated', 'external-blocked']))
 const PRODUCT_WORK_AUTHORITY_CONTRACT = 'supermega.product-work-authority.v2'
 const PRODUCT_IMPROVEMENT_AUTHORITY_CONTRACT = 'supermega.product-improvement-authority.v1'
+const COMPLETED_AUTOMATION_ARCHIVE_CONTRACT = 'supermega.completed-local-automation-archive.v1'
+const COMPLETED_AUTOMATION_ARCHIVE_REF_CONTRACT = 'supermega.completed-local-automation-archive-ref.v1'
+const COMPLETED_AUTOMATION_ARCHIVE_PATH = 'archive/completed-local-automations-through-ops-194.json'
 const PRODUCT_AUTOMATION_KEYS = Object.freeze(['contract', 'priority', 'productId', 'reason', 'status', 'workOrder', 'workOrderId'])
 const COMPLETED_AUTOMATION_KEYS = Object.freeze(['checkpoint', 'productId', 'workOrderId'])
+const COMPLETED_AUTOMATION_ARCHIVE_KEYS = Object.freeze(['contract', 'entries', 'throughCheckpoint'])
+const COMPLETED_AUTOMATION_ARCHIVE_REF_KEYS = Object.freeze(['contract', 'count', 'digest', 'path', 'throughCheckpoint'])
 const WORK_ORDER_ID_RE = /^[a-z0-9][a-z0-9-]{2,79}$/
 const PRODUCT_NAMES = Object.freeze({ shop: 'Shop', plant: 'Plant', website: 'Website', ecommerce: 'Ecommerce' })
 
@@ -77,15 +82,9 @@ function markdownSection(source, heading) {
   return { heading, body }
 }
 
-function portfolioView(value) {
-  if (!isRecord(value)
-    || value.schemaVersion !== 'supermega.hq.portfolio.v3'
-    || typeof value.northStar !== 'string'
-    || !Array.isArray(value.products)
-    || !isRecord(value.agentOperatingModel)) fail('ally_ceo_company_plan_portfolio_invalid')
-
-  if (!Array.isArray(value.completedLocalAutomations)) fail('ally_ceo_company_plan_completed_automation_invalid')
-  const completedLocalAutomations = value.completedLocalAutomations.map((entry) => {
+function completedAutomationEntries(value) {
+  if (!Array.isArray(value)) fail('ally_ceo_company_plan_completed_automation_invalid')
+  return value.map((entry) => {
     const productId = String(entry?.productId || '')
     const workOrderId = String(entry?.workOrderId || '')
     const checkpoint = String(entry?.checkpoint || '')
@@ -98,6 +97,69 @@ function portfolioView(value) {
     }
     return { productId, workOrderId, checkpoint }
   })
+}
+
+function completedAutomationArchive(value, archiveText) {
+  const reference = value.completedLocalAutomationArchive
+  if (reference === undefined) {
+    if (archiveText !== undefined) fail('ally_ceo_company_plan_completed_automation_archive_unexpected')
+    return { entries: [], reference: null }
+  }
+  if (!isRecord(reference)
+    || Object.keys(reference).sort().join(',') !== COMPLETED_AUTOMATION_ARCHIVE_REF_KEYS.join(',')
+    || reference.contract !== COMPLETED_AUTOMATION_ARCHIVE_REF_CONTRACT
+    || reference.path !== COMPLETED_AUTOMATION_ARCHIVE_PATH
+    || !Number.isInteger(reference.count)
+    || reference.count < 1
+    || !/^(?:CEO|ENG|OPS|QA|UX)-\d{3}$/.test(reference.throughCheckpoint)
+    || !/^sha256:[a-f0-9]{64}$/.test(reference.digest)) {
+    fail('ally_ceo_company_plan_completed_automation_archive_invalid')
+  }
+  if (archiveText === undefined) fail('ally_ceo_company_plan_completed_automation_archive_missing')
+
+  let archive
+  try { archive = JSON.parse(boundedSource(archiveText, 'completed_automation_archive')) }
+  catch (error) {
+    if (error?.message?.startsWith('ally_ceo_company_plan_')) throw error
+    fail('ally_ceo_company_plan_completed_automation_archive_invalid')
+  }
+  if (!isRecord(archive)
+    || Object.keys(archive).sort().join(',') !== COMPLETED_AUTOMATION_ARCHIVE_KEYS.join(',')
+    || archive.contract !== COMPLETED_AUTOMATION_ARCHIVE_CONTRACT
+    || archive.throughCheckpoint !== reference.throughCheckpoint) {
+    fail('ally_ceo_company_plan_completed_automation_archive_invalid')
+  }
+  const entries = completedAutomationEntries(archive.entries)
+  const archiveDigest = `sha256:${digest(stableStringify(archive))}`
+  if (entries.length !== reference.count
+    || entries.at(-1)?.checkpoint !== reference.throughCheckpoint
+    || archiveDigest !== reference.digest) {
+    fail('ally_ceo_company_plan_completed_automation_archive_invalid')
+  }
+  return {
+    entries,
+    reference: {
+      contract: COMPLETED_AUTOMATION_ARCHIVE_REF_CONTRACT,
+      path: COMPLETED_AUTOMATION_ARCHIVE_PATH,
+      count: reference.count,
+      throughCheckpoint: reference.throughCheckpoint,
+      digest: reference.digest,
+    },
+  }
+}
+
+function portfolioView(value, archiveText) {
+  if (!isRecord(value)
+    || value.schemaVersion !== 'supermega.hq.portfolio.v3'
+    || typeof value.northStar !== 'string'
+    || !Array.isArray(value.products)
+    || !isRecord(value.agentOperatingModel)) fail('ally_ceo_company_plan_portfolio_invalid')
+
+  const archivedAutomations = completedAutomationArchive(value, archiveText)
+  const completedLocalAutomations = [
+    ...archivedAutomations.entries,
+    ...completedAutomationEntries(value.completedLocalAutomations),
+  ]
   const completedAutomationKeys = new Set(completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`))
   if (completedAutomationKeys.size !== completedLocalAutomations.length) fail('ally_ceo_company_plan_completed_automation_duplicate')
 
@@ -205,6 +267,7 @@ function portfolioView(value) {
     northStar: value.northStar.trim(),
     products,
     completedLocalAutomations,
+    completedLocalAutomationArchive: archivedAutomations.reference,
     localImprovementQueue,
     limits: {
       registeredRoles: 12,
@@ -333,7 +396,7 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
   const workboard = boundedSource(input.workboard, 'workboard', MAX_WORKBOARD_BYTES)
   const portfolioText = boundedSource(input.portfolioText, 'portfolio')
   let portfolio
-  try { portfolio = portfolioView(JSON.parse(portfolioText)) }
+  try { portfolio = portfolioView(JSON.parse(portfolioText), input.completedAutomationArchiveText) }
   catch (error) {
     if (error?.message?.startsWith('ally_ceo_company_plan_')) throw error
     fail('ally_ceo_company_plan_portfolio_invalid')
@@ -389,6 +452,10 @@ export async function buildAllyCeoCompanyPlan(input = {}) {
     { path: 'hq/NOW.md', digest: `sha256:${digest(hqNow)}` },
     { path: 'hq/WORKBOARD.md#execution-order', digest: `sha256:${digest(stableStringify(executionOrder))}` },
     { path: 'hq/portfolio.json', digest: `sha256:${digest(portfolioText)}` },
+    ...(portfolio.completedLocalAutomationArchive ? [{
+      path: `hq/${portfolio.completedLocalAutomationArchive.path}`,
+      digest: portfolio.completedLocalAutomationArchive.digest,
+    }] : []),
     ...(managedReadiness ? [{ path: 'hq/readiness/managed-pilot-readiness.json', digest: `sha256:${digest(stableStringify(managedReadiness))}` }] : []),
   ]
   if (selection.selected.id === 'product-portfolio-control' && !productFocus) {
