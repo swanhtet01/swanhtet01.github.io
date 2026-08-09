@@ -7793,6 +7793,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantJobIdInputRef = useRef<HTMLInputElement>(null)
   const [plantJobImportReview, setPlantJobImportReview] = useState<PlantJobImportReview | null>(null)
   const [plantJobImportSourceName, setPlantJobImportSourceName] = useState('')
+  const plantJobImportReadRef = useRef(0)
   const [scheduleDraft, setScheduleDraft] = useState<ProductionJobPlanDraft | null>(null)
   const [closedScheduleDraft, setClosedScheduleDraft] = useState<ProductionClosedJobPlanDraft | null>(null)
   const [notice, setNotice] = useState('')
@@ -9334,7 +9335,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setJobDraft(draft)
     if (jobDisclosureRef.current) jobDisclosureRef.current.open = true
     requestAnimationFrame(focusPlantJobIdInput)
-    setNotice(`${draft.id} ready below. No job created.`)
+    setNotice(`${draft.id} ready below.`)
   }
 
   function loadPlantJobImportReview(review: PlantJobImportReview) {
@@ -9352,8 +9353,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     loadPlantJobImportReview(review)
     setPlantJobImportSourceName('sample-plant-job-batch.csv')
     setNotice(review.readyRows
-      ? 'Sample checked; review below. No job created.'
-      : 'Sample checked; repair rows. No job created.')
+      ? 'Sample ready.'
+      : 'Sample needs fixes.')
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
       product: 'production',
@@ -9363,6 +9364,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   }
 
   async function uploadPlantJobCsv(event: ChangeEvent<HTMLInputElement>) {
+    const read = ++plantJobImportReadRef.current
     const file = event.currentTarget.files?.[0] ?? null
     event.currentTarget.value = ''
     if (!file) return
@@ -9379,11 +9381,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
     try {
       const text = await file.text()
+      if (read !== plantJobImportReadRef.current) return
       const review = buildPlantJobImportReview(text)
       loadPlantJobImportReview(review)
       setNotice(review.readyRows
-        ? 'CSV checked; review below. No job created.'
-        : 'CSV checked; repair rows. No job created.')
+        ? 'CSV ready.'
+        : 'CSV needs fixes.')
       recordBehaviorSignal(window.localStorage, {
         event: 'agent_job_chosen',
         product: 'production',
@@ -9391,6 +9394,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         detail: 'Upload Plant job CSV for local production review',
       })
     } catch (error) {
+      if (read !== plantJobImportReadRef.current) return
       setPlantJobImportReview(null)
       setNotice(error instanceof Error ? error.message : 'CSV could not be checked locally.')
     }
