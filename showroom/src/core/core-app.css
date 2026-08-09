@@ -377,8 +377,6 @@ textarea { min-height: 72px; resize: vertical; }
 .brief-divider { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; border-top: 1px solid var(--core-line); color: var(--core-muted); font-size: 8px; }
 .brief-output.compact { gap: 3px; }
 .brief-output.compact p { font-size: 8px; }
-.decision-dialog { position: fixed; inset: 0; width: min(820px,calc(100% - 36px)); max-height: calc(100svh - 36px); margin: auto; overflow: auto; border: 1px solid rgba(11,116,94,.24); border-radius: var(--core-radius); padding: 18px; color: var(--core-ink); background: var(--core-panel); box-shadow: 0 26px 80px rgba(25,54,42,.2); }
-.decision-dialog::backdrop { background: rgba(2,4,3,.82); backdrop-filter: blur(8px); }
 .decision-packet-meta, .decision-outcomes { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid var(--core-line); border-radius: 5px; }
 .decision-packet-meta span, .decision-outcomes span { min-width: 0; display: grid; gap: 4px; border-right: 1px solid var(--core-line); padding: 9px 10px; }
 .decision-packet-meta span:last-child, .decision-outcomes span:last-child { border-right: 0; }
@@ -2021,7 +2019,6 @@ textarea { min-height: 72px; resize: vertical; }
   .operations-toolbar-actions .view-tabs { min-width: 0; overflow-x: auto; }
   .form-row, .record-controls, .order-essential-fields { grid-template-columns: 1fr; }
   .order-submit-bar[data-ecommerce-payment="true"] { grid-template-columns: 1fr; }
-  .decision-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 10px 10px 0 0; padding: 15px; }
   .accountable-action-gate { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 16px 16px 0 0; padding: 18px; }
   .action-change-flow { grid-template-columns: 1fr; }
   .production-issue-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 16px 16px 0 0; padding: 18px; }
