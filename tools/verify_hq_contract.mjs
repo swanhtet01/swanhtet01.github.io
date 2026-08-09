@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 50
+  && portfolio.completedLocalAutomations.length === 51
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -407,10 +407,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[49]?.productId === 'shop'
   && portfolio.completedLocalAutomations[49]?.workOrderId === 'shop-accountable-action-language-completion'
   && portfolio.completedLocalAutomations[49]?.checkpoint === 'OPS-202'
+  && portfolio.completedLocalAutomations[50]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[50]?.workOrderId === 'shop-close-deep-link-recovery'
+  && portfolio.completedLocalAutomations[50]?.checkpoint === 'OPS-203'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-close-deep-link-recovery'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-finance-entry-focus'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1550,6 +1553,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-202 | CEO + Shop Action Language Completion / Agent Operations Codex | done-local |')
   && workboard.includes('`ShopActionKind` and `PlantActionKind` now partition the complete 48-kind accountable-action union')
   && workboard.includes('The receipt advances `shop-close-deep-link-recovery`')
+  && workboard.includes('| OPS-203 | CEO + Shop Close Deep-Link Recovery / Agent Operations Codex | done-local |')
+  && workboard.includes('The shared hash recovery now opens the disclosure')
+  && workboard.includes('The receipt advances `shop-finance-entry-focus`')
   && workboard.includes('| CLAUDE-006 | Claude Code | ready |')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
@@ -1567,7 +1573,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-material-confirm-action-clarity' && entry.checkpoint === 'OPS-200')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-accountable-action-language-completion' && entry.checkpoint === 'OPS-201')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-accountable-action-language-completion' && entry.checkpoint === 'OPS-202')
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-close-deep-link-recovery')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-close-deep-link-recovery' && entry.checkpoint === 'OPS-203')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-finance-entry-focus')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")

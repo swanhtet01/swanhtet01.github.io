@@ -1936,6 +1936,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const closeSettlement = closePreview && closeSettlementInput.every((line) => line !== null)
     ? commerceCloseSettlementReview(commerce, closePreview, closeSettlementInput as CommerceCloseSettlementInputLine[])
     : null
+  const closeDeepLinkReady = Boolean(commerceCanWrite && !pendingAction && closePreview && closeSettlement)
   const lowStock = commerce.items.filter((item) => item.onHand <= item.reorderAt)
   const stockRows = commerce.items
     .map((item, index) => ({ item, index }))
@@ -2424,6 +2425,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (tab !== 'inventory' && tab !== 'orders') return
     const frame = window.requestAnimationFrame(() => {
+      if (tab === 'orders' && commerceLocation.hash === '#shop-close-controls') {
+        const controls = document.getElementById('shop-close-controls')
+        if (controls instanceof HTMLDetailsElement) controls.open = true
+        const target = controls?.querySelector<HTMLElement>('[data-close-primary]:not(:disabled)')
+          ?? controls?.querySelector<HTMLElement>(':scope > summary')
+        target?.scrollIntoView({ block: 'center' })
+        target?.focus({ preventScroll: true })
+        return
+      }
       if (tab === 'orders' && commerceLocation.hash.startsWith('#shop-order-')) {
         const target = document.getElementById(commerceLocation.hash.slice(1))
         target?.scrollIntoView({ block: 'center' })
@@ -2445,7 +2455,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       }
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [commerce.orders.length, commerceLocation.hash, tab])
+  }, [closeDeepLinkReady, commerce.orders.length, commerceLocation.hash, tab])
 
   useEffect(() => {
     let current = true
@@ -6807,7 +6817,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     supportResolutionDraft={supportResolutionDraft}
     supportWorkloadDownload={supportWorkloadDownload}
   />
-  <details className="core-panel today-more order-daily-controls" id="shop-close-controls">
+  <details className="core-panel today-more order-daily-controls" id="shop-close-controls" open={commerceLocation.hash === '#shop-close-controls' || undefined}>
     <summary><span>Pricing, credit, and close</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
@@ -6955,7 +6965,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
         </section>
       </details>
-      <button className="core-button" disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
+      <button className="core-button" data-close-primary disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
       <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
       {latestClose?.operator ? <details className="compact-disclosure">
         <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>

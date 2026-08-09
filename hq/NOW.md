@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 24 recoveries, exact supersession, request-first Shop review, and exact final actions for all 32 Shop plus 16 Plant action kinds pass. Next: `shop-close-deep-link-recovery`; pilots stay owner-gated.
+- 25 recoveries, exact supersession, request-first Shop review, and exact final actions for all 32 Shop plus 16 Plant action kinds pass. Shop close deep links now open and focus the real action. Next: `shop-finance-entry-focus`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-202 removes the final generic action path with exhaustive 32-kind Shop labels and outcome-sensitive wording while preserving evidence, recovery, and sole Shop write authority. CLAUDE-006 remains manual and read-only.
+- Codex is sole integrator. OPS-203 makes every Shop close deep link open its disclosure and focus the enabled close action, with a safe summary fallback, while preserving the exact Shop record. CLAUDE-006 remains manual and read-only.
 - Autonomous cycles and the local coding entrypoint remain Llama-only and scale to zero: Ollama is the only enabled OpenCode provider, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-close-deep-link-recovery`: make Today and operating-flow links open and focus the real daily-close control on desktop and mobile without changing Shop data.
+1. Complete `shop-finance-entry-focus`: make Finance controls visible from Today whenever payment or daily-close attention exists, without expanding the default Shop surface or changing data.
 2. Use CLAUDE-006 only as an optional owner-controlled review of checkpoint `b8808439`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
