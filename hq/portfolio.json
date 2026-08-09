@@ -44,10 +44,11 @@
     {"productId":"ecommerce","workOrderId":"ecommerce-checkout-entry-tab-recovery","checkpoint":"OPS-190"},
     {"productId":"ecommerce","workOrderId":"ecommerce-stale-quote-next-action","checkpoint":"OPS-191"},
     {"productId":"ecommerce","workOrderId":"ecommerce-stale-quote-supersession","checkpoint":"OPS-192"},
-    {"productId":"ecommerce","workOrderId":"ecommerce-supersession-review-context","checkpoint":"OPS-193"}
+    {"productId":"ecommerce","workOrderId":"ecommerce-supersession-review-context","checkpoint":"OPS-193"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-replacement-rendered-acceptance","checkpoint":"OPS-194"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-replacement-rendered-acceptance","priority":100,"status":"ready-local","workOrder":"Ecommerce: prove the replacement Shop path in-browser.","reason":"Submit, lineage, and stale-draft closure lack rendered proof."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-replacement-action-rendered-acceptance","priority":100,"status":"ready-local","workOrder":"Ecommerce: prove replacement focus.","reason":"UI unproven."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",

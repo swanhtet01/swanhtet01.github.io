@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 24 recoveries, stale-quote guidance, exact supersession, and Shop replacement context pass. Next: `ecommerce-replacement-rendered-acceptance`; pilots stay owner-gated.
+- 24 recoveries, stale-quote guidance, exact supersession, replacement lineage, and cross-tab stale-draft closure pass. Next: `ecommerce-replacement-action-rendered-acceptance`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. Product checkpoint `4eb2ebc9` shows the exact predecessor on the actionable successor, closes an already-open stale Shop draft, focuses the replacement, and rejects superseded order creation in both runtimes. The current CLAUDE-006 packet remains manual, read-only, and bound to its earlier `b8808439` review checkpoint.
+- Codex is sole integrator. Product checkpoints `fb5b32c5` and `eb5004c7` carry exact replacement lineage into the local Shop draft, close a stale cross-tab draft, and expose one focusable `Open replacement` action. The current CLAUDE-006 packet remains manual, read-only, and bound to its earlier `b8808439` review checkpoint.
 - Autonomous cycles and the local coding entrypoint remain Llama-only and scale to zero: Ollama is the only enabled OpenCode provider, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `ecommerce-replacement-rendered-acceptance`: submit one replacement in the browser, see predecessor lineage on the sole Shop inbox item, and prove an already-open stale draft closes and focuses the successor without creating an order or stock write.
+1. Complete `ecommerce-replacement-action-rendered-acceptance`: rerun the final cross-tab replacement once, confirm `Open replacement` is visible and focused after the stale Shop draft closes, then activate it and see the exact successor without creating an order or stock write.
 2. Use CLAUDE-006 only as an optional owner-controlled review of checkpoint `b8808439`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
