@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 25 recoveries and all 32 Shop/16 Plant final actions pass. Plant import keeps every ready job selectable and focused on desktop/mobile. Next: `plant-job-import-blocked-row-detail`; pilots stay owner-gated.
+- 25 recoveries and all 32 Shop/16 Plant final actions pass. Plant import names every blocked CSV row and failed rule on desktop/mobile. Next: `plant-job-import-same-file-retry`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-217 retains every ready Plant CSV draft, switches between exact jobs, and focuses the populated Job ID; browser QA created no job. CLAUDE-007 stays manual at `2744b28f`.
+- Codex is sole integrator. OPS-218 retains exact blocked-row reasons beside ready Plant jobs in both themes without creating records. CLAUDE-007 stays manual at `2744b28f`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `plant-job-import-blocked-row-detail`: identify the exact CSV row and failed fields so a client file can be repaired without guesswork.
+1. Complete `plant-job-import-same-file-retry`: clear the local chooser after every outcome so a corrected file can be reviewed again under the same name.
 2. Use CLAUDE-007 only as an optional owner-controlled review of checkpoint `2744b28f`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

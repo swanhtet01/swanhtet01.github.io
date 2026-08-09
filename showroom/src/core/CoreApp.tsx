@@ -679,13 +679,13 @@ function defaultJobDueInput() {
 }
 
 type PlantJobDraft = { id: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string }
+type PlantJobImportIssue = { row: number; id: string; reasons: string[] }
 
 type PlantJobImportReview = {
-  status: 'ready' | 'blocked'
-  totalRows: number
   readyRows: number
   blockedRows: number
   readyJobs: PlantJobDraft[]
+  issues: PlantJobImportIssue[]
 }
 
 const PLANT_JOB_IMPORT_MAX_BYTES = 180 * 1024
@@ -9272,9 +9272,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
     const existingIds = new Set(production.jobs.map((job) => job.id.toUpperCase()))
     const seenIds = new Set<string>()
-    let blockedRows = 0
     const readyJobs: PlantJobDraft[] = []
-    for (const cells of parsed.slice(1)) {
+    const issues: PlantJobImportIssue[] = []
+    for (const [rowIndex, cells] of parsed.slice(1).entries()) {
       const id = (cells[jobIdIndex] ?? '').trim().toUpperCase()
       const line = (cells[lineIndex] ?? '').trim()
       const product = (cells[productIndex] ?? '').trim()
@@ -9288,26 +9288,33 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           ? 'low'
           : 'normal'
       const targetNumber = Number(target)
-      const dueDate = dueAt ? new Date(dueAt) : null
-      const blocked = !id || !line || !product || !owner || owner.length > 120
-        || !Number.isSafeInteger(targetNumber) || targetNumber < 1
-        || !dueDate || Number.isNaN(dueDate.getTime()) || dueDate.getTime() <= Date.now()
-        || existingIds.has(id) || seenIds.has(id)
-      if (blocked) {
-        blockedRows += 1
+      const dueTime = Date.parse(dueAt)
+      const reasons = [
+        !id && 'job_id: required',
+        !line && 'line: required',
+        !product && 'product: required',
+        !owner && 'owner: required',
+        owner.length > 120 && 'owner: over 120 chars',
+        (!Number.isSafeInteger(targetNumber) || targetNumber < 1) && 'target: whole number > 0',
+        !Number.isFinite(dueTime) && 'due_at: invalid',
+        Number.isFinite(dueTime) && dueTime <= Date.now() && 'due_at: future required',
+        existingIds.has(id) && 'job_id: exists',
+        seenIds.has(id) && 'job_id: repeated',
+      ].filter(Boolean) as string[]
+      if (reasons.length) {
+        issues.push({ row: rowIndex + 2, id, reasons })
       } else {
         seenIds.add(id)
         readyJobs.push({ id, line, product, target: String(targetNumber), owner, priority, dueAt })
       }
     }
     const readyRows = readyJobs.length
-    const totalRows = readyRows + blockedRows
+    const blockedRows = issues.length
     return {
-      status: readyRows > 0 && blockedRows === 0 ? 'ready' : 'blocked',
-      totalRows,
       readyRows,
       blockedRows,
       readyJobs,
+      issues,
     }
   }
 
@@ -9316,6 +9323,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ['job_id', 'line', 'product', 'target', 'owner', 'priority', 'due_at'],
       ['JOB-AI-101', 'Line A', 'First production run', 120, 'Plant supervisor', 'urgent', localDateTimeInputValue(new Date(Date.now() + 10 * 60 * 60 * 1000))],
       ['JOB-SAMPLE-102', 'Quality Lab', 'Quality release sample', 1, 'Quality owner', 'normal', localDateTimeInputValue(new Date(Date.now() + 12 * 60 * 60 * 1000))],
+      ['', '', 'Repair sample', 0, '', 'normal', 'not-a-date'],
+      ['JOB-AI-101', 'Line C', 'Duplicate sample', 10, 'Plant planner', 'normal', localDateTimeInputValue(new Date(Date.now() + 14 * 60 * 60 * 1000))],
     ]
     return rows.map((row) => row.map(plantJobImportCsvCell).join(',')).join('\r\n')
   }
@@ -9325,7 +9334,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setJobDraft(draft)
     if (jobDisclosureRef.current) jobDisclosureRef.current.open = true
     requestAnimationFrame(focusPlantJobIdInput)
-    setNotice(`Ready job ${draft.id} copied below; no Plant write ran.`)
+    setNotice(`${draft.id} ready below. No job created.`)
   }
 
   function loadPlantJobImportReview(review: PlantJobImportReview) {
@@ -9343,8 +9352,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     loadPlantJobImportReview(review)
     setPlantJobImportSourceName('sample-plant-job-batch.csv')
     setNotice(review.readyRows
-      ? 'Sample checked. First ready job copied below; no Plant write ran.'
-      : 'Sample checked; no row is ready and no Plant write ran.')
+      ? 'Sample checked; review below. No job created.'
+      : 'Sample checked; repair rows. No job created.')
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
       product: 'production',
@@ -9373,8 +9382,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       const review = buildPlantJobImportReview(text)
       loadPlantJobImportReview(review)
       setNotice(review.readyRows
-        ? 'CSV checked. First ready job copied below; no Plant write ran.'
-        : 'CSV checked; no row is ready and no Plant write ran.')
+        ? 'CSV checked; review below. No job created.'
+        : 'CSV checked; repair rows. No job created.')
       recordBehaviorSignal(window.localStorage, {
         event: 'agent_job_chosen',
         product: 'production',
@@ -10031,48 +10040,48 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const mesDispatch = <section aria-label="Plant dispatch helper" className="plant-control mes-dispatch-control">
-    <div><span className="core-eyebrow">Daily dispatch</span><strong>{plantAgentJob}</strong><small>SuperMega shows the next station, blocker, evidence need, and shift route from live Plant state. The manager reviews equipment and production changes before anything is saved.</small></div>
+    <div><span className="core-eyebrow">Daily dispatch</span><strong>{plantAgentJob}</strong><small>Next station, blocker, evidence, and shift route. Manager review gates Plant changes.</small></div>
     <div className="plant-control-rows">{mesDispatchRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
-    <div><span className="core-eyebrow">Production lifecycle</span><strong>Plan to shift close</strong><small>Follow planning, output, quality, maintenance, material trace, and shift close in one place. No equipment or production write runs without manager review.</small></div>
+    <div><span className="core-eyebrow">Production lifecycle</span><strong>Plan to shift close</strong><small>Planning, output, quality, maintenance, trace, and shift close in one path. Manager review gates Plant writes.</small></div>
     <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantMrp = <section aria-label="Plant material readiness" className="plant-control">
-    <div><span className="core-eyebrow">Material readiness</span><strong>{plantMrpNext}</strong><small>Review job demand, BOM, availability, Shop supply, material blockers, and trace evidence. No purchase, issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Material readiness</span><strong>{plantMrpNext}</strong><small>Check demand, BOM, supply, blockers, and trace. Cannot buy, issue, cost, move inventory, or write production.</small></div>
     <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantCostReadiness = <section aria-label="Plant cost readiness" className="plant-control">
-    <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check good output, waste, material trace, quality release, maintenance closure, and shift close before any costing package is reviewed. No costing, accounting, inventory, payroll, invoice, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check output, waste, trace, quality, maintenance, and shift close. Cannot cost, post, value stock, run payroll, invoice, or write production.</small></div>
     <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantCostPacket = <section aria-label="Plant cost review file" className="plant-control">
-    <div><span className="core-eyebrow">Cost review file</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>Package finished batch output, waste, material trace, quality release state, maintenance closure, and shift evidence for cost review. No standard cost update, inventory valuation, journal, payroll, invoice, certificate, or production write runs from this packet.</small></div>
+    <div><span className="core-eyebrow">Cost review file</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>Packages Plant evidence. Cannot update costs, inventory, journals, payroll, invoices, certificates, or production.</small></div>
     <div className="plant-control-rows">{plantCostPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantQualityRelease = <section aria-label="Plant quality release" className="plant-control">
-    <div><span className="core-eyebrow">Quality release</span><strong>{plantQualityReleaseNext}</strong><small>Check quality holds, maintenance closure, material trace, shift close, and manager release evidence before output can be treated as ready. No quality release, certificate, equipment command, material issue, costing, inventory, or production write runs from this panel.</small></div>
+    <div><span className="core-eyebrow">Quality release</span><strong>{plantQualityReleaseNext}</strong><small>Check holds, maintenance, trace, shift close, and manager evidence. Cannot release, certify, command equipment, issue material, cost, move stock, or write production.</small></div>
     <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantInspectionControl = <section aria-label="Plant inspection and CAPA" className="plant-control">
-    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>Keep sampling, NCR containment, corrective action, evidence, and release review in one quality queue. No certificate, CAPA closure, customer claim, inventory block, costing, or production write runs from this panel.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
+    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>Sampling, containment, corrective action, evidence, and release in one queue. Cannot close CAPA, certify, contact customers, block stock, cost, or write production.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
     <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantComplianceDossier = <section aria-label="Plant compliance dossier" className="plant-control plant-compliance-dossier">
-    <div><span className="core-eyebrow">Compliance file</span><strong>{plantComplianceDossierNext}</strong><small>Summarize quality release, maintenance closure, material traceability, output evidence, shift close, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this file.</small></div>
+    <div><span className="core-eyebrow">Compliance file</span><strong>{plantComplianceDossierNext}</strong><small>Packages release, maintenance, trace, output, shift, and cost evidence for audit. Cannot certify, release quality, value stock, command equipment, contact customers, or write production.</small></div>
     <div className="plant-control-rows">{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantJobImportReady = plantJobImportReview?.readyJobs.filter((draft) => !production.jobs.some((job) => job.id === draft.id)) ?? []
   const plantJobImportSummary = plantJobImportReview
-    ? plantJobImportReady.length
-      ? `${plantJobImportReady.length} of ${plantJobImportReview.readyRows} ready jobs remain.`
-      : plantJobImportReview.blockedRows ? `Repair ${plantJobImportReview.blockedRows} blocked rows.` : 'All reviewed jobs are in Plant.'
+    ? plantJobImportReady.length || plantJobImportReview.blockedRows
+      ? `${plantJobImportReady.length} ready remain${plantJobImportReview.blockedRows ? ` · ${plantJobImportReview.blockedRows} need fixes` : ''}.`
+      : 'All reviewed jobs are in Plant.'
     : ''
   const plantJobRepairRows = plantJobImportReview
     ? [
         ['Ready rows', `${plantJobImportReady.length}`],
         ['Blocked rows', `${plantJobImportReview.blockedRows}`],
-        ['Next fix', plantJobImportReady.length ? 'Review imported job' : plantJobImportReview.blockedRows ? 'Repair blocked rows' : 'Done'],
+        ['Next fix', plantJobImportReady.length ? plantJobImportReview.blockedRows ? 'Review jobs + fixes' : 'Review imported job' : plantJobImportReview.blockedRows ? 'Repair blocked rows' : 'Done'],
       ] as const
     : [
         ['Step 1', 'Load sample or upload CSV'],
@@ -10115,7 +10124,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               <button className="core-button" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Load sample job batch</button>
               <label className="plant-job-import-upload">Upload Plant job CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
               <div aria-label="Plant job repair checklist" className="plant-job-import-repair">{plantJobRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-              {plantJobImportReview ? <><div className={`plant-job-import-review ${plantJobImportReview.status}`} role="status"><strong>{plantJobImportReady.length ? 'Ready for review' : plantJobImportReview.blockedRows ? 'Repair before Plant review' : 'Import reviewed'}</strong><span>{plantJobImportSummary}</span><small>{plantJobImportReady.length} ready / {plantJobImportReview.blockedRows} blocked / review only</small></div>{plantJobImportReview.readyRows > 1 && plantJobImportReady.length ? <label className="core-form"><small>Ready job</small><select aria-label="Ready imported job" disabled={Boolean(pendingAction)} onChange={(event) => { const draft = plantJobImportReady.find((candidate) => candidate.id === event.target.value); if (draft) loadPlantJobImportDraft(draft) }} value={plantJobImportReady.some((draft) => draft.id === jobDraft.id) ? jobDraft.id : ''}><option value="">Choose ready job</option>{plantJobImportReady.map((draft) => <option key={draft.id} value={draft.id}>{draft.id} · {draft.product}</option>)}</select></label> : null}</> : null}
+              {plantJobImportReview ? <><div className={`plant-job-import-review ${plantJobImportReview.blockedRows ? 'blocked' : 'ready'}`} role="status"><strong>{plantJobImportReview.blockedRows ? plantJobImportReady.length ? 'Review jobs + fixes' : 'Repair blocked rows' : plantJobImportReady.length ? 'Ready for review' : 'Import reviewed'}</strong><span>{plantJobImportSummary}</span><small>{plantJobImportReady.length} ready / {plantJobImportReview.blockedRows} blocked / review only</small></div>{plantJobImportReview.readyRows > 1 && plantJobImportReady.length ? <label className="core-form"><small>Ready job</small><select aria-label="Ready imported job" disabled={Boolean(pendingAction)} onChange={(event) => { const draft = plantJobImportReady.find((candidate) => candidate.id === event.target.value); if (draft) loadPlantJobImportDraft(draft) }} value={plantJobImportReady.some((draft) => draft.id === jobDraft.id) ? jobDraft.id : ''}><option value="">Choose ready job</option>{plantJobImportReady.map((draft) => <option key={draft.id} value={draft.id}>{draft.id} · {draft.product}</option>)}</select></label> : null}{plantJobImportReview.issues.length ? <details className="compact-disclosure"><summary>Fix {plantJobImportReview.issues.length} blocked rows</summary><div aria-label="Blocked imported jobs" className="plant-job-import-repair" role="list">{plantJobImportReview.issues.map((issue) => <span key={issue.row} role="listitem"><small>Row {issue.row} · {issue.id || 'No ID'}</small><strong>{issue.reasons.join(' · ')}</strong></span>)}</div></details> : null}</> : null}
               {plantJobImportSourceName ? <p className="plant-job-import-source">Local file: {plantJobImportSourceName}</p> : null}
             </div>
           </section>
