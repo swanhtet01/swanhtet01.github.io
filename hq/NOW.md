@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 25 recoveries and exact final actions for all 32 Shop plus 16 Plant action kinds pass. Plant Today now focuses output, blockers, material entry, and new-job planning on desktop and mobile. Next: `plant-today-shift-close-focus`; pilots stay owner-gated.
+- 25 recoveries and exact final actions for all 32 Shop plus 16 Plant action kinds pass. Plant Today now focuses output, blockers, material entry, job planning, and shift close on desktop and mobile. Next: `plant-shop-demand-job-focus`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-212 carries Plant planning intent across tabs, opens Add job, and visibly focuses Job ID after route restoration. Historical local receipts remain digest-bound outside the hot portfolio without weakening duplicate-work rejection. CLAUDE-007 remains a manual read-only review of exact checkpoint `2744b28f`.
+- Codex is sole integrator. OPS-213 retains Plant shift-close intent until the existing review is mounted, then focuses Shift reference after route restoration on desktop and mobile. Historical local receipts remain digest-bound outside the hot portfolio without weakening duplicate-work rejection. CLAUDE-007 remains a manual read-only review of exact checkpoint `2744b28f`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `plant-today-shift-close-focus`: retain shift-close intent until the existing review disclosure and first field are visible and focusable.
+1. Complete `plant-shop-demand-job-focus`: make governed Shop-demand selection focus the existing Job ID field instead of the CSV upload.
 2. Use CLAUDE-007 only as an optional owner-controlled review of checkpoint `2744b28f`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

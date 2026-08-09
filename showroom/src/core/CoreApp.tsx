@@ -7840,6 +7840,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const materialUnitSelectRef = useRef<HTMLSelectElement>(null)
   const materialShiftInputRef = useRef<HTMLInputElement>(null)
   const shiftCloseDisclosureRef = useRef<HTMLDetailsElement>(null)
+  const shiftCloseInputRef = useRef<HTMLInputElement>(null)
   const openIssues = production.issues
     .filter((issue) => issue.status === 'open')
     .sort((left, right) => {
@@ -8626,19 +8627,21 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       return
     }
     if (focus === 'shift-close' && tab === 'control') {
+      const disclosure = shiftCloseDisclosureRef.current
+      if (!disclosure || !shiftCloseInputRef.current) return
       const suggestedShiftRef = canonicalShiftRef || shiftReferencePlaceholder()
-      requestAnimationFrame(() => {
-        setShiftRef(suggestedShiftRef)
-        setHandoffShiftRef(suggestedShiftRef)
-        setShiftCloseGuideOpen(true)
-        requestAnimationFrame(() => {
-          const disclosure = shiftCloseDisclosureRef.current
-          if (!disclosure) return
-          disclosure.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          disclosure.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true })
-        })
-      })
+      setShiftRef(suggestedShiftRef)
+      setHandoffShiftRef(suggestedShiftRef)
+      setShiftCloseGuideOpen(true)
+      disclosure.open = true
       navigate('/plant/?tab=control', { replace: true })
+      window.setTimeout(() => {
+        const input = shiftCloseInputRef.current
+        if (!shiftCloseDisclosureRef.current?.open || !input) return
+        input.scrollIntoView({ block: 'center' })
+        input.focus({ preventScroll: true })
+      }, 220)
+      return
     }
   }, [canonicalShiftRef, guidedPlantJobId, heldJobs.length, managedIdentity, navigate, openDowntimeIntervals.length, openMaintenanceRecords.length, productionLocation.search, shiftCloseProblemCount, shiftRef, tab, urgentIssueCount])
 
@@ -9013,10 +9016,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setShiftCloseGuideOpen(true)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const disclosure = shiftCloseDisclosureRef.current
-        if (!disclosure) return
-        disclosure.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        disclosure.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true })
+        const input = shiftCloseInputRef.current
+        if (!input) return
+        input.scrollIntoView({ block: 'center' })
+        input.focus({ preventScroll: true })
       })
     })
   }
@@ -10193,7 +10196,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 <p className="panel-copy"><strong>{batchGenealogyDownload.report.job.product}</strong> · {batchGenealogyDownload.report.job.goodUnits.toLocaleString()} good · {batchGenealogyDownload.report.job.scrapUnits.toLocaleString()} scrap · {batchGenealogyDownload.report.materialEntries.length} material records · {batchGenealogyDownload.report.qualityEvents.length} quality events.</p>
                 <p className="panel-copy">{batchGenealogyDownload.report.shopDemandSource ? `${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length || 'Reorder'} Shop source ${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length === 1 ? 'order' : 'orders'} retained without customer details.` : 'No retained Shop-demand source exists for this legacy or manual job.'}</p>
                 <a className="core-button" download={batchGenealogyDownload.filename} href={batchGenealogyDownload.href}>Download batch genealogy</a>
-                <p className="panel-copy">Read-only evidence. It does not issue inventory, control equipment, post costs, issue a certificate, or contact another system.</p>
+                <p className="panel-copy">Read-only evidence. No inventory, equipment, costing, certificate, or external action.</p>
               </> : null}
               <form className="core-form compact-form" onSubmit={(event) => { event.preventDefault(); setRecallSearchId(recallQuery.trim()) }}>
                 <label>Recall lot or output batch<input autoCapitalize="characters" maxLength={120} onChange={(event) => { setRecallQuery(event.target.value); setRecallSearchId('') }} placeholder="LOT-INPUT-001 or BATCH-OUTPUT-001" required spellCheck={false} value={recallQuery} /></label>
@@ -10204,16 +10207,16 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 <strong>{recallTraceDownload.report.match.directJobIds.length} direct {recallTraceDownload.report.match.directJobIds.length === 1 ? 'job' : 'jobs'} · {recallTraceDownload.report.downstream.outputBatchIds.length} downstream {recallTraceDownload.report.downstream.outputBatchIds.length === 1 ? 'batch' : 'batches'} · {recallTraceDownload.report.upstream.inputLotIds.length} upstream {recallTraceDownload.report.upstream.inputLotIds.length === 1 ? 'lot' : 'lots'}</strong>
                 <span>{recallTraceDownload.report.completeness.reason}</span>
                 <a className="core-button" download={recallTraceDownload.filename} href={recallTraceDownload.href}>Download recall trace</a>
-              </div> : recallSearchId ? <p className="panel-copy">No exact retained input-lot or output-batch link matches this ID.</p> : <p className="panel-copy">Enter one exact lot or output batch to trace origins and downstream production without customer details.</p>}
-              <p className="panel-copy">Recall review only. No inventory block, customer contact, certificate, message, payment, or external action runs from this trace.</p>
-            </div> : <p className="panel-copy">Create a production job before building a batch trace.</p>}
+              </div> : recallSearchId ? <p className="panel-copy">No retained lot or output batch matches this ID.</p> : <p className="panel-copy">Enter an exact lot or output batch to trace production without customer details.</p>}
+              <p className="panel-copy">Read-only recall trace. No inventory block, contact, certificate, payment, or external action.</p>
+            </div> : <p className="panel-copy">Add a job before building a batch trace.</p>}
           </details>
           <details className="compact-disclosure production-history" onToggle={(event) => { if (!event.currentTarget.open && shiftCloseGuideOpen) setShiftCloseGuideOpen(false) }} open={shiftCloseGuideOpen || Boolean(shiftHandoff || currentShiftClose)} ref={shiftCloseDisclosureRef}>
             <summary>Shift close <span>{currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? shiftCloseReady ? 'Ready' : 'Blocked' : 'Build'}</span></summary>
             <form autoComplete="off" className="core-form compact-form" onSubmit={buildShiftHandoff}>
-              <label>Shift reference<input maxLength={80} onChange={(event) => setHandoffShiftRef(event.target.value)} placeholder={shiftReferencePlaceholder()} required value={handoffShiftRef} /></label>
+              <label>Shift reference<input maxLength={80} onChange={(event) => setHandoffShiftRef(event.target.value)} placeholder={shiftReferencePlaceholder()} ref={shiftCloseInputRef} required value={handoffShiftRef} /></label>
               <button className="core-button" disabled={!handoffShiftRef.trim() && !shiftRef.trim()} type="submit">Prepare shift close file</button>
-              <p className="panel-copy">Preparing changes nothing; close requires owner, reason, and evidence.</p>
+              <p className="panel-copy">No change yet. Close needs owner, reason, and evidence.</p>
             </form>
             {shiftCloseRows.length ? <div aria-label="Shift close checklist" className="plant-shift-close-grid">{shiftCloseRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div> : null}
             {currentShiftClose ? <div className="form-notice" role="status"><strong>Shift closed by {currentShiftClose.actor}</strong><br />{currentShiftClose.shiftRef} | revision {currentShiftClose.sourceRevision} | {currentShiftClose.goodUnits} good | {currentShiftClose.materialEntryCount} material entries | {currentShiftCloseEvidence?.handoff.controlledOrders.length ?? 0} controlled orders | quality clear | WCM clear<br />Evidence: {currentShiftClose.evidenceReference}</div> : null}
