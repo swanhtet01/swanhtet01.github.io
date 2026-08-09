@@ -25,7 +25,7 @@ type ShopTodayProps = {
 }
 
 const capabilityGroups = [
-  ['Sell', 'Visual counter, multi-item sales, payment choice, tax snapshot'],
+  ['Sell', 'Counter sales, payments, tax'],
   ['Orders', 'Omnichannel intake, promise, allocation, fulfilment, returns'],
   ['Stock', 'Locations, lots, available-to-promise, counts, transfers'],
   ['Supply', 'Reorder, purchase orders, receiving, discrepancy, suppliers'],
@@ -44,7 +44,7 @@ export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDeta
       </div>
       <div className="shop-today-actions">
         <Link className="core-button primary" to={nextTo}>{nextLabel}</Link>
-        {financeAttention ? <Link className="core-button" to={financeAttention.to}>Open finance</Link> : catalogReady ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
+        {financeAttention ? <Link className="core-button" to={financeAttention.to}>{financeAttention.status}</Link> : catalogReady ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
       </div>
     </section>
 
