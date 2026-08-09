@@ -1801,3 +1801,41 @@
     scroll-margin-top: 112px;
   }
 }
+
+/* The cockpits keep their light tints in dark mode -- see the .ecommerce-today-priority h2
+   note above for why the cards themselves cannot flip while their text is theme-blind. The
+   consequence is that any SHARED token-coloured text landing on them inherits the dark
+   theme's palette and disappears: --core-accent resolves to the bright mint #56f0c1, which
+   measured 1.36:1 on the ops cockpits and 1.44:1 on the AI desk across 23 elements.
+   Only reachable with the enterprise controls expanded, which is why earlier sweeps of this
+   route reported it clean.
+   The fix matches the rest of this file: on a theme-blind card, the text must be theme-blind
+   too. #0b745e is exactly what --core-green resolves to in LIGHT, so these read identically
+   in both themes rather than introducing a new colour. Verified: 5.9:1 on the cockpit tint,
+   5.73:1 on white.
+   Attempting the opposite -- darkening the cards -- was measured and reverted: it took the
+   failures from 25 to 201, because it hid every deliberately dark literal already on them. */
+.theme-dark .ecommerce-ops-cockpit .core-eyebrow,
+.theme-dark .ecommerce-ops-cockpit .text-link,
+.theme-dark .ecommerce-ai-desk .core-eyebrow,
+.theme-dark .ecommerce-ai-desk .text-link {
+  color: #0b745e;
+}
+
+/* The mirror image of the block above, and the reason a blanket rule would be wrong here.
+   This summary sits on .ecommerce-business-controls, which DOES use var(--core-panel) and so
+   is genuinely dark in dark mode -- but its text is a theme-blind dark literal, giving
+   1.42:1 for the label and 3.8:1 for the sub-line. On a themed card the text must be themed
+   too, which is the exact opposite of what the light cockpits need. */
+.theme-dark .ecommerce-enterprise-controls > summary {
+  color: var(--core-ink);
+}
+
+/* Scoped to the enterprise-controls summary ALONE. The original rule these share also
+   styles .ecommerce-order-import-workspace summaries, which sit on a LIGHT cockpit -- and
+   --core-quiet resolves to #7a8a9c in dark, giving 3.34:1 there. Including it made one
+   surface better and another worse; the light one keeps its #66746b literal, which measures
+   4.6:1 on that tint. */
+.theme-dark .ecommerce-enterprise-controls > summary small {
+  color: var(--core-quiet);
+}
