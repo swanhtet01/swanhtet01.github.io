@@ -557,7 +557,8 @@ if (!ecommerceSource.includes('const aiDeskRows = [')
   || !ecommerceSource.includes("'Start sample order'")
   || !ecommerceSource.includes('aria-label="Order workspace"')
   || !ecommerceSource.includes('Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.')
-  || !ecommerceSource.includes("customerRequestState === 'waiting_shop_review' ? 'Request sent' : 'No queue'")
+  || !ecommerceSource.includes('const customerRequestNeedsQuoteReview = Boolean(customerQuoteNextAction)')
+  || !ecommerceSource.includes("customerRequestNeedsQuoteReview ? customerQuoteNextAction?.action ?? 'Review quote'")
   || !ecommerceSource.includes("'View the customer request receipt'")
   || !ecommerceSource.includes("'Request sent to Shop'")
   || !ecommerceCssSource.includes('.ecommerce-ai-desk')
@@ -578,6 +579,44 @@ if (!ecommerceSource.includes('const orderAutopilotStage =')
   || ecommerceSource.includes('Run next step')
   || ecommerceSource.includes('aria-label="Order Autopilot"')
   || ecommerceCssSource.includes('.ecommerce-order-command-center')) fail('ecommerce_ai_operator_not_consolidated')
+const quoteRequestStateStart = ecommerceBuyingLifecycleSource.indexOf('export function deriveEcommerceCustomerRequestState(')
+const quoteRequestStateEnd = ecommerceBuyingLifecycleSource.indexOf('function roundedTax(', quoteRequestStateStart)
+const quoteRequestStateProjection = ecommerceBuyingLifecycleSource.slice(quoteRequestStateStart, quoteRequestStateEnd)
+const focusCheckoutQuoteReviewStart = ecommerceSource.indexOf('function focusCheckoutQuoteReview()')
+const focusCheckoutQuoteReviewEnd = ecommerceSource.indexOf('function prepareCustomerFollowUpDraft()', focusCheckoutQuoteReviewStart)
+const focusCheckoutQuoteReviewAction = ecommerceSource.slice(focusCheckoutQuoteReviewStart, focusCheckoutQuoteReviewEnd)
+const focusCheckoutQuoteReviewFrame = focusCheckoutQuoteReviewAction.indexOf('requestAnimationFrame(() => {')
+const focusCheckoutQuoteReviewImmediateFocus = focusCheckoutQuoteReviewAction.indexOf('target.focus({ preventScroll: true })')
+const quoteNextActionForbidden = ['fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'saveEcommerceOrderRequestV2', 'onRecordManagedRequest', 'navigate(', 'chargePayment', 'authorizePayment']
+if (quoteRequestStateStart < 0
+  || quoteRequestStateEnd < 0
+  || focusCheckoutQuoteReviewStart < 0
+  || focusCheckoutQuoteReviewEnd < 0
+  || !quoteRequestStateProjection.includes("return input.checkoutMatches ? 'waiting_shop_review' : 'checkout_changed'")
+  || !quoteRequestStateProjection.includes("return 'quote_expired'")
+  || !quoteRequestStateProjection.includes("action: 'Review current total'")
+  || !quoteRequestStateProjection.includes("action: 'Review changed checkout'")
+  || !quoteRequestStateProjection.includes("action: 'Add products'")
+  || quoteNextActionForbidden.some((marker) => quoteRequestStateProjection.includes(marker) || focusCheckoutQuoteReviewAction.includes(marker))
+  || !ecommerceBuyingUiSource.includes('const latestRequestCheckoutMatches = Boolean(latestRequest')
+  || !ecommerceBuyingUiSource.includes('latestRequest.sourceStorefrontRevision === (sourceStorefront?.revision ?? null)')
+  || !ecommerceBuyingUiSource.includes('const customerRequestState = deriveEcommerceCustomerRequestState({')
+  || !ecommerceBuyingUiSource.includes('const quoteNextAction = ecommerceQuoteNextAction(')
+  || !ecommerceBuyingUiSource.includes('setQuoteClock(Date.now())')
+  || !ecommerceBuyingUiSource.includes('data-ecommerce-quote-review-action="true"')
+  || !ecommerceBuyingUiSource.includes("quoteNextAction?.headline ?? 'Review the current total'")
+  || !ecommerceSource.includes('const customerQuoteNextAction = ecommerceQuoteNextAction(customerRequestState, ecommerceTodayCartUnits)')
+  || !ecommerceSource.includes("customerRequestState === 'quote_expired' ? 'Quote expired' : 'New quote needed'")
+  || !ecommerceSource.includes('storefrontSetupRequired || customerRequestNeedsQuoteReview')
+  || !focusCheckoutQuoteReviewAction.includes('[data-ecommerce-quote-review-action="true"]:not(:disabled)')
+  || !focusCheckoutQuoteReviewAction.includes('[aria-invalid="true"]')
+  || focusCheckoutQuoteReviewFrame < 0
+  || focusCheckoutQuoteReviewImmediateFocus < 0
+  || focusCheckoutQuoteReviewImmediateFocus > focusCheckoutQuoteReviewFrame
+  || !ecommerceSource.includes('if (customerRequestNeedsQuoteReview) {')
+  || ecommerceSource.indexOf('if (customerRequestNeedsQuoteReview) {') > ecommerceSource.indexOf("if (customerRequestState === 'waiting_shop_review') {")) {
+  fail('ecommerce_stale_quote_next_action_missing_or_consequential')
+}
 if (!ecommerceSource.includes('const orderOpsRows = [')
   || !ecommerceSource.includes('commerceStorefrontOrderTimeline')
   || !ecommerceSource.includes("entry.nextAction === 'review_in_shop'")
@@ -3475,14 +3514,14 @@ if (addToCartStart < 0
   || !coreSource.includes('&& (current.paymentPolicies?.length ?? 0) === 0')
   || !coreSource.includes('restoreBrowserLocalSamplePaymentPolicies(')
   || !ecommerceBuyingUiSource.includes('Request for {latestRequest.customerReference}')
-  || !ecommerceBuyingUiSource.includes("const customerRequestState = latestRequestOrder ? 'confirmed' : latestRequest ? 'waiting_shop_review' : 'idle'")
+  || !ecommerceBuyingUiSource.includes('const customerRequestState = deriveEcommerceCustomerRequestState({')
   || !ecommerceBuyingUiSource.includes('useEffect(() => onRequestStateChange(customerRequestState)')
-  || !ecommerceBuyingUiSource.includes("onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void")
+  || !ecommerceBuyingUiSource.includes('onRequestStateChange: (state: EcommerceCustomerRequestState) => void')
   || !ecommerceBuyingUiSource.includes('Send order request')
   || !ecommerceBuyingUiSource.includes('Request sent')
   || !ecommerceBuyingUiSource.includes('Open Shop operator review')
-  || !ecommerceBuyingUiSource.includes('Cart changed — review a new total')
-  || !ecommerceBuyingUiSource.includes('The previous quote remains in Your orders and cannot continue with this cart.')
+  || !ecommerceBuyingUiSource.includes("quoteNextAction?.headline ?? 'Review the current total'")
+  || !ecommerceBuyingUiSource.includes("quoteNextAction?.summary ?? 'The previous request remains in Your orders and cannot continue with this checkout.'")
   || !ecommerceBuyingUiSource.includes("const [orderHistoryExpanded, setOrderHistoryExpanded] = useState(false)")
   || !ecommerceBuyingUiSource.includes('const customerOrderHistoryLimit = Math.min(5, customerOrderTimeline.length)')
   || !ecommerceBuyingUiSource.includes('const visibleCustomerOrderTimeline = customerOrderTimeline.slice(0, orderHistoryExpanded ? customerOrderHistoryLimit : 1)')
@@ -3645,7 +3684,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceBuyingUiSource.includes('Send order request')
   || !ecommerceBuyingUiSource.includes('Request sent')
   || !ecommerceBuyingUiSource.includes('Open Shop operator review')
-  || !ecommerceBuyingUiSource.includes("onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void")
+  || !ecommerceBuyingUiSource.includes('onRequestStateChange: (state: EcommerceCustomerRequestState) => void')
   || ecommerceBuyingUiSource.includes('I checked the items, total, fulfilment, and payment.')
   || ecommerceBuyingUiSource.includes('Continue to Shop review')
   || ecommerceBuyingUiSource.includes('handoffConfirmed')
@@ -16409,6 +16448,38 @@ async function verifyStorefrontRuntime() {
     }
     const buyingScope = 'ecommerce:runtime-client'
     const seededBuyingCommerce = commerce.createSeedCommerce(Date.parse('2026-07-24T08:00:00.000Z'))
+    const quoteNow = Date.parse('2026-07-24T09:00:00.000Z')
+    const freshQuoteState = {
+      checkoutMatches: true,
+      hasConfirmedOrder: false,
+      hasRequest: true,
+      now: quoteNow,
+      quoteExpiresAt: '2026-07-24T09:15:00.000Z',
+    }
+    buyingAssert(buyingModel.deriveEcommerceCustomerRequestState({ ...freshQuoteState, hasRequest: false }) === 'idle',
+      'ecommerce_request_without_receipt_not_idle')
+    buyingAssert(buyingModel.deriveEcommerceCustomerRequestState({ ...freshQuoteState, hasConfirmedOrder: true }) === 'confirmed',
+      'ecommerce_confirmed_request_not_authoritative')
+    buyingAssert(buyingModel.deriveEcommerceCustomerRequestState(freshQuoteState) === 'waiting_shop_review',
+      'ecommerce_current_request_not_waiting_for_shop')
+    buyingAssert(buyingModel.deriveEcommerceCustomerRequestState({ ...freshQuoteState, now: Date.parse(freshQuoteState.quoteExpiresAt) }) === 'quote_expired',
+      'ecommerce_quote_expiry_boundary_not_closed')
+    buyingAssert(buyingModel.deriveEcommerceCustomerRequestState({ ...freshQuoteState, quoteExpiresAt: 'invalid' }) === 'quote_expired',
+      'ecommerce_invalid_quote_expiry_not_failed_closed')
+    buyingAssert(buyingModel.deriveEcommerceCustomerRequestState({ ...freshQuoteState, checkoutMatches: false }) === 'checkout_changed',
+      'ecommerce_changed_checkout_still_reported_sent')
+    buyingAssert(buyingModel.ecommerceQuoteNextAction('quote_expired', 2)?.action === 'Review current total'
+      && buyingModel.ecommerceQuoteNextAction('quote_expired', 2)?.headline === 'Quote expired — review current total',
+    'ecommerce_expired_quote_next_action_not_truthful')
+    buyingAssert(buyingModel.ecommerceQuoteNextAction('checkout_changed', 2)?.action === 'Review changed checkout'
+      && buyingModel.ecommerceQuoteNextAction('checkout_changed', 2)?.headline === 'Checkout changed — review current total',
+    'ecommerce_changed_checkout_next_action_not_truthful')
+    buyingAssert(buyingModel.ecommerceQuoteNextAction('checkout_changed', 0)?.action === 'Add products'
+      && buyingModel.ecommerceQuoteNextAction('checkout_changed', 0)?.headline === 'Start a new customer quote',
+    'ecommerce_empty_changed_checkout_has_no_start_action')
+    buyingAssert(buyingModel.ecommerceQuoteNextAction('waiting_shop_review', 2) === null
+      && buyingModel.ecommerceQuoteNextAction('confirmed', 2) === null,
+    'ecommerce_current_or_confirmed_request_received_duplicate_action')
     const removedCartLine = { line: { sku: 'SM-1001', quantity: 2 }, index: 1 }
     const cartAfterRemoval = [
       { sku: 'SM-1003', quantity: 1 },

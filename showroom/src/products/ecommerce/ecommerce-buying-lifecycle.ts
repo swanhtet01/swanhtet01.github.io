@@ -63,6 +63,49 @@ export type EcommerceTaxDecision = CommerceTaxDecision
 export type EcommerceReturnDisposition = 'restock' | 'not_restocked'
 export type EcommerceSupportCategory = 'order_status' | 'delivery_issue' | 'payment_question' | 'item_issue' | 'other'
 export type EcommerceCancellationReasonCode = 'changed_mind' | 'duplicate_order' | 'order_error' | 'delivery_too_slow' | 'other'
+export type EcommerceCustomerRequestState = 'idle' | 'waiting_shop_review' | 'quote_expired' | 'checkout_changed' | 'confirmed'
+
+export type EcommerceQuoteNextAction = Readonly<{
+  action: 'Add products' | 'Review changed checkout' | 'Review current total'
+  headline: string
+  summary: string
+}>
+
+export function deriveEcommerceCustomerRequestState(input: Readonly<{
+  checkoutMatches: boolean
+  hasConfirmedOrder: boolean
+  hasRequest: boolean
+  now: number
+  quoteExpiresAt: string | null
+}>): EcommerceCustomerRequestState {
+  if (!input.hasRequest) return 'idle'
+  if (input.hasConfirmedOrder) return 'confirmed'
+  const expiresAt = typeof input.quoteExpiresAt === 'string' ? Date.parse(input.quoteExpiresAt) : Number.NaN
+  if (!Number.isFinite(input.now) || !Number.isFinite(expiresAt) || expiresAt <= input.now) return 'quote_expired'
+  return input.checkoutMatches ? 'waiting_shop_review' : 'checkout_changed'
+}
+
+export function ecommerceQuoteNextAction(
+  state: EcommerceCustomerRequestState,
+  cartUnits: number,
+): EcommerceQuoteNextAction | null {
+  if (state !== 'quote_expired' && state !== 'checkout_changed') return null
+  if (!Number.isSafeInteger(cartUnits) || cartUnits < 1) return {
+    action: 'Add products',
+    headline: 'Start a new customer quote',
+    summary: 'The previous request stays in history. Add products only when the customer wants a new quote.',
+  }
+  if (state === 'quote_expired') return {
+    action: 'Review current total',
+    headline: 'Quote expired — review current total',
+    summary: 'The previous request stays in history, but its total is no longer current. Review the checkout before sending another request.',
+  }
+  return {
+    action: 'Review changed checkout',
+    headline: 'Checkout changed — review current total',
+    summary: 'The current cart or checkout details no longer match the retained request. Review the exact total before sending again.',
+  }
+}
 
 function roundedTax(numerator: bigint, denominator: bigint) {
   return (numerator * 2n + denominator) / (denominator * 2n)

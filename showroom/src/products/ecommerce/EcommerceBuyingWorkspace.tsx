@@ -13,7 +13,9 @@ import {
   buildEcommerceReturnIntent,
   buildEcommerceSupportIntent,
   createEmptyEcommerceBuyingState,
+  deriveEcommerceCustomerRequestState,
   ecommerceAvailablePaymentAdapters,
+  ecommerceQuoteNextAction,
   ecommerceBuyingStateStorageKey,
   ecommercePaymentMatchesFulfilment,
   prepareEcommerceShopDraftV2,
@@ -36,6 +38,7 @@ import {
   type EcommerceOrderAmendmentIntent,
   type EcommerceOrderRescheduleIntent,
   type EcommerceCartLine,
+  type EcommerceCustomerRequestState,
   type EcommerceRemovedCartLine,
   type EcommerceFulfilment,
   type EcommercePaymentAdapter,
@@ -104,7 +107,7 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
   onRecoveryPendingChange: (pending: boolean) => void
-  onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void
+  onRequestStateChange: (state: EcommerceCustomerRequestState) => void
   preview: StorefrontPreview
   scope: string
   sourcePreviewDigest: string
@@ -447,6 +450,7 @@ export function EcommerceBuyingWorkspace({
     if (!latest || latest.id !== freshQuoteId) return
     const remainingMs = Date.parse(latest.quote.expiresAt) - Date.now()
     const timeoutId = window.setTimeout(() => {
+      setQuoteClock(Date.now())
       setFreshQuoteId((current) => current === latest.id ? '' : current)
     }, Math.max(0, remainingMs))
     return () => window.clearTimeout(timeoutId)
@@ -469,8 +473,6 @@ export function EcommerceBuyingWorkspace({
     ? combinedOrderTimeline.find((entry) => entry.request.id === latestRequest.id) ?? null
     : null
   const latestRequestOrder = latestRequestEntry?.order ?? null
-  const customerRequestState = latestRequestOrder ? 'confirmed' : latestRequest ? 'waiting_shop_review' : 'idle'
-  useEffect(() => onRequestStateChange(customerRequestState), [customerRequestState, onRequestStateChange])
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
   const replacementRequestIds = new Set([
@@ -659,10 +661,11 @@ export function EcommerceBuyingWorkspace({
     ? paymentAdapter
     : availablePaymentAdapters[0] ?? paymentAdapter
   const paymentPolicyReady = availablePaymentAdapters.includes(effectivePaymentAdapter)
-  const quoteCurrent = Boolean(latestRequest
-    && latestRequest.id === freshQuoteId
+  const latestRequestCheckoutMatches = Boolean(latestRequest
     && latestRequest.scope === scope
     && latestRequest.sourcePreviewDigest === sourcePreviewDigest
+    && latestRequest.sourceStorefrontRevision === (sourceStorefront?.revision ?? null)
+    && latestRequest.sourceStorefrontActionId === (sourceStorefront?.actionId ?? null)
     && latestRequest.customerReference === customerReference
     && (!latestRequest.customerProfile || latestRequest.customerProfile.name === customerName.trim())
     && (!latestRequest.customerProfile || latestRequest.customerProfile.phone === customerPhone.trim())
@@ -676,6 +679,19 @@ export function EcommerceBuyingWorkspace({
     && (latestRequest.quote.promotion.code ?? '') === promotionCode.trim()
     && !cartHasQuantityIssue
     && cartMatchesRequest(cart, latestRequest))
+  const quoteCurrent = Boolean(latestRequestCheckoutMatches && latestRequest?.id === freshQuoteId)
+  const customerRequestState = deriveEcommerceCustomerRequestState({
+    checkoutMatches: latestRequestCheckoutMatches,
+    hasConfirmedOrder: Boolean(latestRequestOrder),
+    hasRequest: Boolean(latestRequest),
+    now: quoteClock,
+    quoteExpiresAt: latestRequest?.quote.expiresAt ?? null,
+  })
+  const quoteNextAction = ecommerceQuoteNextAction(
+    customerRequestState,
+    cart.reduce((total, line) => total + line.quantity, 0),
+  )
+  useEffect(() => onRequestStateChange(customerRequestState), [customerRequestState, onRequestStateChange])
   const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
   const checkoutEntryDraftInput = {
     lines: cart.map((line) => ({
@@ -2017,7 +2033,7 @@ export function EcommerceBuyingWorkspace({
               <span>Promotion code <small>optional · Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => setPromotionCode(event.target.value)} placeholder="Optional" value={promotionCode} />
             </label>
-            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
+            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" data-ecommerce-quote-review-action="true" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
               {quoteBusy ? 'Sending…' : 'Send order request'}
             </button> : null}
           </form>
@@ -2056,10 +2072,10 @@ export function EcommerceBuyingWorkspace({
             </article>
           ) : (
             <div className="ecommerce-stale-quote" role="status">
-              <strong>{latestRequestOrder ? 'Start another order' : 'Cart changed — review a new total'}</strong>
+              <strong>{latestRequestOrder ? 'Start another order' : quoteNextAction?.headline ?? 'Review the current total'}</strong>
               <small>{latestRequestOrder
                 ? `Order ${latestRequestOrder.id} is already confirmed. Review a new total only when creating another order.`
-                : 'The previous quote remains in Your orders and cannot continue with this cart.'}</small>
+                : quoteNextAction?.summary ?? 'The previous request remains in Your orders and cannot continue with this checkout.'}</small>
             </div>
           ) : null}
 

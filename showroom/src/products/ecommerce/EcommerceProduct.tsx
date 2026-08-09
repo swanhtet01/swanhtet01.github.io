@@ -29,8 +29,10 @@ import {
 } from '../../core/managed-trial'
 import { EcommerceBuyingWorkspace } from './EcommerceBuyingWorkspace'
 import {
+  ecommerceQuoteNextAction,
   type EcommerceCartLine,
   type EcommerceCancellationIntent,
+  type EcommerceCustomerRequestState,
   type EcommerceOrderAmendmentIntent,
   type EcommerceOrderRescheduleIntent,
   type EcommerceOrderRequestV2,
@@ -306,7 +308,7 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [checkoutEntryRecoveryPending, setCheckoutEntryRecoveryPending] = useState(false)
-  const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
+  const [customerRequestState, setCustomerRequestState] = useState<EcommerceCustomerRequestState>('idle')
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
   const [orderImportReview, setOrderImportReview] = useState<EcommerceOrderImportReview | null>(null)
@@ -1239,6 +1241,24 @@ export function EcommerceProduct() {
     })
   }
 
+  function focusCheckoutQuoteReview() {
+    const workspace = document.getElementById('ecommerce-buying-workspace')
+    if (workspace instanceof HTMLDetailsElement) workspace.open = true
+    const target = workspace?.querySelector<HTMLElement>('[aria-invalid="true"]')
+      ?? workspace?.querySelector<HTMLButtonElement>('[data-ecommerce-quote-review-action="true"]:not(:disabled)')
+      ?? workspace?.querySelector<HTMLElement>('[data-checkout-primary-field="true"]')
+      ?? workspace
+    if (!target) return
+    target.scrollIntoView({ block: 'center' })
+    target.focus({ preventScroll: true })
+    if (target instanceof HTMLInputElement) target.select()
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ block: 'center' })
+      target.focus({ preventScroll: true })
+      if (target instanceof HTMLInputElement) target.select()
+    })
+  }
+
   function prepareCustomerFollowUpDraft() {
     if (!pendingManagedRequests.length) {
       if (!buyingReady) {
@@ -1816,16 +1836,21 @@ export function EcommerceProduct() {
     })
     setDraftNotice('Ecommerce go-live file downloaded. No product, customer, payment, delivery, stock, Shop, or company account state changed.')
   }
+  const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
+  const customerQuoteNextAction = ecommerceQuoteNextAction(customerRequestState, ecommerceTodayCartUnits)
+  const customerRequestNeedsQuoteReview = Boolean(customerQuoteNextAction)
   const aiDeskRows = [
     ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
     ['Merchandise', selectedSkus.length ? `${selectedSkus.length} selected` : 'Pick products'],
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
-    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? 'Request sent' : 'No queue'],
+    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestNeedsQuoteReview ? customerQuoteNextAction?.action ?? 'Review quote' : customerRequestState === 'waiting_shop_review' ? 'Request sent' : 'No queue'],
   ] as const
   const aiAgentJob = checkoutEntryRecoveryPending
     ? 'Review unfinished checkout'
     : pendingManagedRequests.length
     ? 'Review Ecommerce requests in Shop'
+    : customerRequestNeedsQuoteReview
+      ? customerQuoteNextAction?.action ?? 'Review current total'
     : customerRequestState === 'waiting_shop_review'
       ? 'View the customer request receipt'
     : ecommerceActiveOrderCount
@@ -1843,6 +1868,8 @@ export function EcommerceProduct() {
     ? 'A source-bound customer checkout must be resumed or discarded before the cart can change.'
     : pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
+    : customerRequestNeedsQuoteReview
+      ? customerQuoteNextAction?.summary ?? 'The retained request needs a current checkout review.'
     : customerRequestState === 'waiting_shop_review'
       ? 'The customer request is retained separately from the Shop operator review.'
     : ecommerceActiveOrderCount
@@ -1860,6 +1887,8 @@ export function EcommerceProduct() {
     ? 'Resume or discard only; recovery cannot create a quote, order, payment, stock change, or message.'
     : pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
+    : customerRequestNeedsQuoteReview
+      ? 'Review one current total. No request is resent until the customer checkout is submitted again.'
     : customerRequestState === 'waiting_shop_review'
       ? 'The Shop operator confirms stock, promise, payment, and delivery.'
     : ecommerceActiveOrderCount
@@ -1888,6 +1917,8 @@ export function EcommerceProduct() {
           ? 'Repair order batch'
           : pendingManagedRequests.length
             ? 'Open Shop review'
+            : customerRequestNeedsQuoteReview
+              ? customerQuoteNextAction?.action ?? 'Review current total'
             : customerRequestState === 'waiting_shop_review'
               ? 'View request receipt'
             : ecommerceActiveOrderCount
@@ -1895,14 +1926,13 @@ export function EcommerceProduct() {
             : buyingReady
               ? 'Ready for customer orders'
               : 'Check setup'
-  const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
   const ecommerceTodayState = hasStorefrontEditRecovery
     ? 'attention'
     : checkoutEntryRecoveryPending
       ? 'attention'
     : importNeeded || storefrontSetupRequired
     ? 'setup'
-    : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || pendingManagedRequests.length || customerRequestState === 'waiting_shop_review'
+    : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || pendingManagedRequests.length || customerRequestNeedsQuoteReview || customerRequestState === 'waiting_shop_review'
       ? 'attention'
       : 'ready'
   const ecommerceTodayHeadline = hasStorefrontEditRecovery
@@ -1919,6 +1949,8 @@ export function EcommerceProduct() {
           ? `${ecommercePaymentAttentionCount} payment${ecommercePaymentAttentionCount === 1 ? '' : 's'} need confirmation`
           : pendingManagedRequests.length
             ? `${pendingManagedRequests.length} order request${pendingManagedRequests.length === 1 ? '' : 's'} need review`
+            : customerRequestNeedsQuoteReview
+              ? customerQuoteNextAction?.headline ?? 'Review the current quote'
             : customerRequestState === 'waiting_shop_review'
               ? 'Request sent to Shop'
             : ecommerceActiveOrderCount
@@ -1940,6 +1972,8 @@ export function EcommerceProduct() {
       ? 'Review the customer view once, then save the exact products, prices, and page customers will see.'
       : pendingManagedRequests.length
         ? 'Shop keeps the accountable order record. Review stock, payment, and delivery before customer contact.'
+        : customerRequestNeedsQuoteReview
+          ? customerQuoteNextAction?.summary ?? 'The retained request needs a current checkout review.'
         : customerRequestState === 'waiting_shop_review'
           ? 'No charge or stock change happens until Shop confirms the order.'
         : ecommerceActiveOrderCount
@@ -1961,6 +1995,8 @@ export function EcommerceProduct() {
           ? 'Fix order import'
           : pendingManagedRequests.length
             ? 'Review orders in Shop'
+            : customerRequestNeedsQuoteReview
+              ? customerQuoteNextAction?.action ?? 'Review current total'
             : customerRequestState === 'waiting_shop_review'
               ? 'View request receipt'
             : ecommerceActiveOrderCount
@@ -1975,6 +2011,8 @@ export function EcommerceProduct() {
     ['2. Cart', checkoutEntryRecoveryPending ? 'Resume available' : ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['3. Shop', pendingManagedRequests.length
       ? `${pendingManagedRequests.length} to review`
+      : customerRequestNeedsQuoteReview
+        ? customerRequestState === 'quote_expired' ? 'Quote expired' : 'New quote needed'
       : customerRequestState === 'waiting_shop_review'
         ? 'Review waiting'
       : ecommerceActiveOrderCount
@@ -1983,7 +2021,7 @@ export function EcommerceProduct() {
           ? `${ecommerceCompletedOrderCount} completed`
           : 'No order yet'],
   ] as const
-  const ecommerceTodayGuided = hasStorefrontEditRecovery || checkoutEntryRecoveryPending || importNeeded || storefrontSetupRequired
+  const ecommerceTodayGuided = hasStorefrontEditRecovery || checkoutEntryRecoveryPending || importNeeded || storefrontSetupRequired || customerRequestNeedsQuoteReview
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -2016,6 +2054,14 @@ export function EcommerceProduct() {
     }
     if (pendingManagedRequests.length) {
       navigate('/shop/?tab=orders&source=ecommerce')
+      return
+    }
+    if (customerRequestNeedsQuoteReview) {
+      if (!ecommerceTodayCartUnits) {
+        prepareQuoteRecovery()
+        return
+      }
+      focusCheckoutQuoteReview()
       return
     }
     if (customerRequestState === 'waiting_shop_review') {
