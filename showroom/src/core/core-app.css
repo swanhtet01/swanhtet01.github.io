@@ -572,7 +572,7 @@ textarea { min-height: 72px; resize: vertical; }
 .channel-intake-actions { display: grid; grid-template-columns: minmax(150px,auto) minmax(0,1fr); align-items: center; gap: 10px; }
 .channel-intake-actions > small { color: var(--core-quiet); font-size: 11px; line-height: 1.4; }
 .channel-intake-actions > .core-button { min-height: 44px; }
-.channel-mapping-list { border-top: 1px solid var(--core-line); background: #fff; }
+.channel-mapping-list { border-top: 1px solid var(--core-line); background: var(--core-panel); }
 .channel-mapping-row { display: grid; grid-template-columns: minmax(130px,.8fr) minmax(180px,1.2fr); gap: 9px; padding: 12px; }
 .channel-mapping-row:last-child { border-bottom: 0; }
 .channel-mapping-actions { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--core-line); padding: 8px 10px; }
@@ -830,7 +830,7 @@ textarea { min-height: 72px; resize: vertical; }
 .settings-step-fields[hidden] { display: none; }
 .setup-product-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .setup-product-grid button { min-width: 0; min-height: 92px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: start; border: 1px solid var(--core-line); border-radius: 10px; padding: 13px; background: var(--core-panel-raised); color: var(--core-ink); text-align: left; cursor: pointer; }
-.setup-product-grid button:hover { border-color: var(--core-line-strong); background: #fff; }
+.setup-product-grid button:hover { border-color: var(--core-line-strong); background: var(--core-panel); }
 .setup-product-grid button[aria-pressed="true"] { border-color: var(--core-green); box-shadow: inset 0 0 0 1px var(--core-green); background: var(--core-green-soft); }
 .setup-product-grid button > span { min-width: 0; display: grid; gap: 5px; }
 .setup-product-grid strong { font-size: 15px; }
@@ -1320,7 +1320,7 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-repair strong { color: var(--core-ink); font-size: 12px; }
 .catalog-import-repair small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
 .catalog-import-repair-list { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 6px; }
-.catalog-import-repair-list span { min-width: 0; min-height: 44px; display: grid; align-content: center; gap: 2px; border-right: 1px solid var(--core-line); padding: 6px 8px; background: #fff; }
+.catalog-import-repair-list span { min-width: 0; min-height: 44px; display: grid; align-content: center; gap: 2px; border-right: 1px solid var(--core-line); padding: 6px 8px; background: var(--core-panel); }
 .catalog-import-repair-list span:last-child { border-right: 0; }
 .catalog-import-repair-list small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .catalog-import-repair-list b { overflow: hidden; color: var(--core-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1344,7 +1344,12 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-totals span[data-result="issue"] strong { color: var(--core-warn); }
 .catalog-import-totals small { color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-transform: uppercase; }
 .catalog-import-file-issues { display: grid; gap: 4px; margin: 0; border: 1px solid rgba(148,98,0,.22); border-radius: 8px; padding: 9px 9px 9px 27px; background: rgba(148,98,0,.06); color: var(--core-warn); font-size: 9px; }
-.catalog-import-table { max-height: 340px; overflow: auto; background: #fff; }
+/* The import preview rows. A static audit passed over this one because the rule declares no
+   colour of its own -- the SKU and status text INHERIT --core-ink from an ancestor, so there
+   is no `color: var(...)` here to notice. In dark mode that put near-white SKUs on pure white
+   at 2.2:1 and the Ready badge at 1.44:1, on the screen where a shopkeeper checks their
+   catalog before importing it. Found by opening the flow, not by reading the stylesheet. */
+.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }
 .catalog-import-row-review .panel-copy { margin: 8px 11px 11px; }
 .catalog-import-row { min-height: 48px; display: grid; grid-template-columns: 44px minmax(120px,.6fr) 110px minmax(220px,1.4fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--core-line); padding: 7px 10px; color: var(--core-muted); font-size: 10px; }
 .catalog-import-row:last-child { border-bottom: 0; }
@@ -1361,7 +1366,7 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-technical { margin-top: 3px; }
 .catalog-import-technical > summary { width: max-content; color: var(--core-quiet); font-size: 9px; cursor: pointer; }
 .catalog-import-technical p { margin: 5px 0 0; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; line-height: 1.45; overflow-wrap: anywhere; }
-.agent-create-form { position: absolute; z-index: 8; top: 42px; right: 0; width: 300px; border: 1px solid var(--core-line-strong); border-radius: 12px; padding: 12px; background: #fff; box-shadow: 0 18px 50px rgba(25,54,42,.16); }
+.agent-create-form { position: absolute; z-index: 8; top: 42px; right: 0; width: 300px; border: 1px solid var(--core-line-strong); border-radius: 12px; padding: 12px; background: var(--core-panel); box-shadow: 0 18px 50px rgba(25,54,42,.16); }
 .evidence-disclosure .compact-disclosure { margin-top: 2px; }
 .evidence-disclosure .inline-evidence { margin-bottom: 3px; }
 .evidence-disclosure .evidence-record-list { max-height: 190px; }
@@ -1405,7 +1410,7 @@ textarea { min-height: 72px; resize: vertical; }
 .legacy-website-intake > summary::after { color: var(--core-green); font-size: 18px; content: "+"; }
 .legacy-website-intake[open] > summary::after { content: "−"; }
 .legacy-website-intake > .website-intake { border: 0; border-top: 1px solid var(--core-line); border-radius: 0; box-shadow: none; }
-.website-intake-confirm { min-height: 44px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 9px; padding: 7px 9px; background: #fff; font-size: 9px; line-height: 1.35; }
+.website-intake-confirm { min-height: 44px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 9px; padding: 7px 9px; background: var(--core-panel); font-size: 9px; line-height: 1.35; }
 .website-intake-confirm input { width: 16px; min-height: 16px; margin: 0; }
 .website-intake-completion { display: grid; gap: 8px; }
 .website-intake-completion > .core-button { justify-self: start; }
