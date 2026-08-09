@@ -6818,11 +6818,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     supportWorkloadDownload={supportWorkloadDownload}
   />
   <details className="core-panel today-more order-daily-controls" id="shop-close-controls" open={commerceLocation.hash === '#shop-close-controls' || undefined}>
-    <summary><span>Pricing, credit, and close</span><small>{paymentReview.length + lowStock.length} {paymentReview.length + lowStock.length === 1 ? 'item needs' : 'items need'} attention</small></summary>
+    <summary><span>Daily close</span><small>{closePreview ? `${closePreview.orderIds.length} order${closePreview.orderIds.length === 1 ? '' : 's'} ready` : latestClose ? 'Today is closed' : 'Nothing to close'}</small></summary>
     <div className="today-more-content">
-      <div className="exception-summary"><span><strong>{paymentReview.length}</strong><small>payment review</small></span><span><strong>{lowStock.length}</strong><small>reorder boundaries</small></span></div>
-      <div className="boundary-list">{lowStock.map((item) => <Link key={item.sku} to="/shop/?tab=inventory"><strong>{item.name}</strong><small>{item.onHand} on hand</small></Link>)}</div>
+      <div className="exception-summary"><span><strong>{closePreview?.orderIds.length ?? 0}</strong><small>orders ready</small></span><span><strong>{paymentReview.length}</strong><small>payment review</small></span></div>
       <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
+      <details className="compact-disclosure" data-shop-policy-controls>
+        <summary><span>Policies and accounting setup</span><small>6 reviewed controls</small></summary>
+        <div className="today-more-content">
       <details className="compact-disclosure" data-promotion-policy="versioned">
         <summary><span>Promotions</span><small>{currentPromotionPolicy ? `${currentPromotionPolicy.code} · ${formatTaxRate(currentPromotionPolicy.discountBasisPoints)} · ${currentPromotionPolicy.status}` : 'No policy for this code'}</small></summary>
         <form className="core-form compact-form" onSubmit={reviewPromotionPolicy}>
@@ -6937,6 +6939,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <p className="panel-copy">Applies only to closes saved after this mapping. Corrections retain their source order and document, and split reviewed receivable, payable, tax, and sales adjustment lines. Historical exports do not change. Every accounting CSV remains review-only and never posts externally.</p>
           {currentAccountMappingConfiguration ? <p className="form-notice">Revision {currentAccountMappingConfiguration.revision} · saved by {currentAccountMappingConfiguration.proof.actor} · evidence {currentAccountMappingConfiguration.proof.evidenceReference}</p> : null}
         </form>
+      </details>
+        </div>
       </details>
       <details className="compact-disclosure" data-close-settlement={closeSettlement?.status ?? 'incomplete'} open={Boolean(closePreview)}>
         <summary><span>Settlement count</span><small>{closePreview ? `${closeExpectedByPayment.size} payment method${closeExpectedByPayment.size === 1 ? '' : 's'} · ${closeSettlement?.status === 'matched' ? 'matched' : closeSettlement?.status === 'variance_review' ? 'variance needs review' : 'complete the count'}` : 'No open close'}</small></summary>
