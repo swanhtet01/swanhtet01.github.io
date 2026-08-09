@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 20 local recoveries pass. Next: `shop-counter-sale-tab-recovery`; pilots stay owner-gated.
+- 21 local recoveries pass. Next: `plant-output-entry-tab-recovery`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,8 +63,8 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. Product checkpoint `b6dfc3d3` completes Ecommerce storefront-edit tab recovery and advances one finite Shop continuation. The current ENG-002 packet is manual, read-only, and bound to that exact checkpoint.
-- Autonomous cycles remain Llama-only and scale to zero. The Claude CLI is unauthenticated, no provider request or automatic dispatch lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
+- Codex is sole integrator. Product checkpoint `2ffcc757` completes Shop counter-sale tab recovery and advances one finite Plant continuation. The current CLAUDE-003 packet is manual, read-only, and bound to that exact checkpoint.
+- Autonomous cycles remain Llama-only and scale to zero. No automatic Claude dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
 ## Blockers
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete the finite local `shop-counter-sale-tab-recovery` slice with exact catalogue/stock binding, one Resume/Discard decision, mobile acceptance, and no order or stock side effect.
-2. Use ENG-002 only as an optional owner-controlled review of checkpoint `b6dfc3d3`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
+1. Complete the finite local `plant-output-entry-tab-recovery` slice with exact active-job/Plant-state binding, one Resume/Discard decision, mobile acceptance, and no production side effect.
+2. Use CLAUDE-003 only as an optional owner-controlled review of checkpoint `2ffcc757`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

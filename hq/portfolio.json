@@ -37,10 +37,11 @@
     {"productId":"shop","workOrderId":"shop-purchase-order-close-recovery","checkpoint":"OPS-183"},
     {"productId":"plant","workOrderId":"plant-availability-order-switch-recovery","checkpoint":"OPS-184"},
     {"productId":"website","workOrderId":"website-edit-session-tab-recovery","checkpoint":"OPS-185"},
-    {"productId":"ecommerce","workOrderId":"ecommerce-storefront-edit-tab-recovery","checkpoint":"OPS-186"}
+    {"productId":"ecommerce","workOrderId":"ecommerce-storefront-edit-tab-recovery","checkpoint":"OPS-186"},
+    {"productId":"shop","workOrderId":"shop-counter-sale-tab-recovery","checkpoint":"OPS-187"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"shop","workOrderId":"shop-counter-sale-tab-recovery","priority":100,"status":"ready-local","workOrder":"Shop: recover one unfinished counter sale after reload or tab closure without creating an order or moving stock.","reason":"Counter quantities, customer, payment, and drawer state are memory-only; Resume/Discard must bind exact Shop catalogue and stock."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"plant","workOrderId":"plant-output-entry-tab-recovery","priority":100,"status":"ready-local","workOrder":"Plant: recover one unfinished output entry after reload or tab closure without recording output, material use, or production evidence.","reason":"Selected job, quantity, good or scrap choice, shift, and output-panel state are memory-only; Resume/Discard must bind the exact active job and current Plant state."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",

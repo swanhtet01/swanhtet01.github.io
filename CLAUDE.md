@@ -1,31 +1,31 @@
 # Claude Code: owner-controlled SuperMega review packet
 
-Status: ENG-002 is ready for manual use in the founder's existing Claude Code session. No automated Claude dispatch lane exists in this repository. The local CLI authentication check was unavailable on 2026-08-09, so no provider request was started.
+Status: CLAUDE-003 is ready for manual use in the founder's existing Claude Code session. No automated Claude dispatch lane exists in this repository. This packet starts no provider request.
 
 Codex is the sole integrator on the ROG Ally. Autonomous company cycles use loopback Ollama with `llama3.2:1b`, immediate unload, one run at a time, and no cloud fallback. Claude is an optional independent reviewer only; it never replaces the Llama-only autonomous path.
 
-## Assignment ENG-002
+## Assignment CLAUDE-003
 
-Review the exact local product checkpoint `b6dfc3d31473819b7bdda3afa5c5da0df44d7b88` for defects in Ecommerce storefront edit recovery after reload or tab closure.
+Review the exact local product checkpoint `2ffcc757206ced8f595efaaa03e32ebf57cae960` for defects in Shop counter-sale recovery after reload or tab closure.
 
 Read only these files:
 
-1. `showroom/src/products/ecommerce/storefront-edit-recovery.ts`
-2. `showroom/src/products/ecommerce/EcommerceProduct.tsx`
-3. `showroom/src/products/ecommerce/ecommerce-product.css`
+1. `showroom/src/core/shop-counter-sale-recovery.ts`
+2. `showroom/src/core/CoreApp.tsx`
+3. `showroom/src/core/core-app.css`
 4. `tools/verify_app_build.mjs`
 
 Use Read, Grep, and Glob only. Do not use a shell, edit or create files, start an agent or subagent, inspect or control another Claude session, access secrets, browse the web, call a connector, send a message, or change repository, account, database, deployment, domain, payment, customer, or hosted state. Return one response in the founder's current session and stop.
 
 ## Review questions
 
-1. Does an unchanged first-run storefront avoid creating recovery evidence?
-2. Does a real edit retain the exact name, summary, SKU order, merchandising, view, and device without saving or sending?
-3. Does Resume reject a changed scope, saved revision, saved fingerprint, catalog digest, unknown SKU, malformed payload, or newer-tab recovery?
-4. Can Discard or Save remove only the exact recovery they own without clearing a newer tab's draft?
-5. While recovery is pending, are editing, storefront switching, add-to-cart, and consequential buying actions blocked behind one clear Resume/Discard decision?
-6. Does the single Start-here surface remain usable in light/dark themes and at mobile touch sizes without adding another page or duplicate callout?
-7. Are any tests tautological, missing a race, or asserting source strings without meaningful runtime coverage?
+1. Does an empty counter avoid creating recovery evidence while a real sale retains exact ordered SKU quantities, customer text, payment choice, and mobile drawer state?
+2. Is every recovery bound to the exact workspace scope and SHA-256 catalogue/stock source, including names, variants, on-hand counts, reorder levels, and prices?
+3. Does Resume reject changed scope, catalogue or stock, unknown SKU, excessive quantity, malformed payload, tampering, or newer-tab ownership?
+4. Can Discard, Clear sale, and successful reviewed order creation remove only the exact recovery they own without clearing a newer tab's draft?
+5. Do Resume and Discard avoid creating an order, reserving or moving stock, changing payment state, or calling a network mutation?
+6. While recovery is pending, is the counter hidden behind one clear recovery-only Resume/Discard surface that remains usable in light/dark themes and at mobile touch sizes?
+7. Are any tests tautological, missing a write/clear race, or asserting source strings without meaningful runtime coverage?
 
 ## Required report
 
