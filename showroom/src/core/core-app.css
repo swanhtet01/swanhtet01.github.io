@@ -973,7 +973,7 @@ textarea { min-height: 72px; resize: vertical; }
 .plant-job-import strong { color: var(--core-ink); font-size: 12px; }
 .plant-job-import small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
 .plant-job-import-actions { min-width: 0; display: grid; gap: 7px; }
-.plant-job-import-upload { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed rgba(29,78,216,.42); border-radius: 7px; padding: 8px 10px; color: var(--core-ink); background: #fff; font-size: 11px; font-weight: 760; cursor: pointer; }
+.plant-job-import-upload { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed rgba(29,78,216,.42); border-radius: 7px; padding: 8px 10px; color: var(--core-ink); background: #fff; font-size: 11px; font-weight: 760; cursor: pointer; }
 .plant-job-import-upload input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
 .plant-job-import-repair { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
 .plant-job-import-repair span { min-width: 0; display: grid; gap: 2px; border: 1px solid rgba(217,119,6,.18); border-radius: 7px; padding: 7px; background: var(--core-bg); }

@@ -701,6 +701,11 @@ function plantJobImportCsvCell(value: string | number) {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 
+function buildPlantJobImportTemplateCsv() {
+  const now = Date.now()
+  return `job_id,line,product,target,owner,priority,due_at\r\nJOB-${now},Line A,Product,100,Production lead,normal,${localDateTimeInputValue(new Date(now + 6048e5))}`
+}
+
 function parsePlantJobImportCsv(source: string) {
   const rows: string[][] = []
   let row: string[] = []
@@ -10117,10 +10122,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
           <section aria-label="Plant job CSV import" className="plant-job-import">
-            <div><span className="core-eyebrow">Job CSV import</span><strong>Upload job list</strong><small>Checks fields and duplicates. Never creates jobs.</small></div>
+            <div><span className="core-eyebrow">Job CSV import</span><strong>Prepare job list</strong><small>Download, edit, then upload. Checked locally; no jobs created.</small><button className="text-link" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Or try a sample</button></div>
             <div className="plant-job-import-actions">
-              <button className="core-button" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Try sample batch</button>
-              <label className="plant-job-import-upload">Upload job CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
+              <a className="core-button primary" download="supermega-plant-job-template.csv" href={`data:text/csv;charset=utf-8,%EF%BB%BF${encodeURIComponent(buildPlantJobImportTemplateCsv())}`}>Download template</a>
+              <label className="plant-job-import-upload">Upload completed CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
               {plantJobImportReview ? <><div className={`plant-job-import-review ${plantJobImportReview.blockedRows ? 'blocked' : 'ready'}`} role="status"><strong>{plantJobImportReview.blockedRows ? plantJobImportReady.length ? 'Review jobs + fixes' : 'Repair blocked rows' : plantJobImportReady.length ? 'Ready for review' : 'Import reviewed'}</strong><span>{plantJobImportSummary}</span><small>{plantJobImportReady.length} ready / {plantJobImportReview.blockedRows} blocked / review only</small></div>{plantJobImportReview.readyRows > 1 && plantJobImportReady.length ? <label className="core-form"><small>Ready job</small><select aria-label="Ready imported job" disabled={Boolean(pendingAction)} onChange={(event) => { const draft = plantJobImportReady.find((candidate) => candidate.id === event.target.value); if (draft) loadPlantJobImportDraft(draft) }} value={plantJobImportReady.some((draft) => draft.id === jobDraft.id) ? jobDraft.id : ''}><option value="">Choose ready job</option>{plantJobImportReady.map((draft) => <option key={draft.id} value={draft.id}>{draft.id} · {draft.product}</option>)}</select></label> : null}{plantJobImportReview.issues.length ? <details className="compact-disclosure"><summary>Fix {plantJobImportReview.issues.length} blocked rows</summary><div aria-label="Blocked imported jobs" className="plant-job-import-repair" role="list">{plantJobImportReview.issues.map((issue) => <span key={issue.row} role="listitem"><small>Row {issue.row} · {issue.id || 'No ID'}</small><strong>{issue.reasons.join(' · ')}</strong></span>)}</div></details> : null}</> : null}
               {plantJobImportSourceName ? <p className="plant-job-import-source">File: {plantJobImportSourceName}</p> : null}
             </div>
