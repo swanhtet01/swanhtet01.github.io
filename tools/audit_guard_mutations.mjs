@@ -18,6 +18,7 @@ const WEBMODEL = `${ROOT}/showroom/src/products/website/website-model.ts`
 const PRODWS = `${ROOT}/showroom/src/core/production-workspace.ts`
 const STORAGE = `${ROOT}/showroom/src/core/local-workspace-storage.ts`
 const INVENTORY = `${ROOT}/showroom/src/core/shop-inventory-foundation.ts`
+const STOREFRONT = `${ROOT}/showroom/src/products/ecommerce/storefront-draft.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
 const MUTATIONS = [
@@ -68,6 +69,9 @@ const MUTATIONS = [
     '.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }',
     '.catalog-import-table { max-height: 340px; overflow: auto; background: #fff; }',
     'a fixed light surface reverts to hardcoded white'],
+  ['test_storefront_reconciliation.mjs', STOREFRONT,
+    '    missingSkus: saved.filter((sku) => !catalogSet.has(sku)),', '    missingSkus: [],',
+    'items removed from the catalog vanish from the storefront without being reported'],
   ['test_shop_inventory_foundation.mjs', INVENTORY,
     "  if (digest(expectedHeadDigest, 'expected_head_digest') !== current.headDigest) throw new Error('The inventory snapshot changed before this command was applied.')",
     "  digest(expectedHeadDigest, 'expected_head_digest')",
