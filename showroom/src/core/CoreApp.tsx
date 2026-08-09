@@ -7785,6 +7785,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [shopDemandIssue, setShopDemandIssue] = useState('')
   const [selectedShopDemandDigest, setSelectedShopDemandDigest] = useState('')
   const jobDisclosureRef = useRef<HTMLDetailsElement>(null)
+  const plantJobIdInputRef = useRef<HTMLInputElement>(null)
   const [plantJobImportReview, setPlantJobImportReview] = useState<PlantJobImportReview | null>(null)
   const [plantJobImportSourceName, setPlantJobImportSourceName] = useState('')
   const [scheduleDraft, setScheduleDraft] = useState<ProductionJobPlanDraft | null>(null)
@@ -8407,7 +8408,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           : plantTodayStep === 'shift-close'
             ? `${canonicalShiftRef} has output, materials, and clear controls. Prepare the close.`
             : plantTodayStep === 'plan'
-              ? 'Add the next owned job and due time.'
+              ? 'Add an owned job with a due time.'
               : currentShiftClose
                 ? `${currentShiftClose.shiftRef} is closed. Record the next output.`
                 : activeJobs[0]
@@ -8552,6 +8553,19 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   useEffect(() => {
     const focus = new URLSearchParams(productionLocation.search).get('focus')
+    if (focus === 'plan' && tab === 'production') {
+      const disclosure = jobDisclosureRef.current
+      if (!disclosure) return
+      disclosure.open = true
+      navigate('/plant/?tab=production', { replace: true })
+      window.setTimeout(() => {
+        const jobIdInput = plantJobIdInputRef.current
+        if (!jobIdInput) return
+        jobIdInput.scrollIntoView({ block: 'center' })
+        jobIdInput.focus({ preventScroll: true })
+      }, 220)
+      return
+    }
     if (focus === 'output' && tab === 'production') {
       if (!guidedPlantJobId) return
       requestAnimationFrame(() => {
@@ -9207,7 +9221,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     })
     if (jobDisclosureRef.current) jobDisclosureRef.current.open = true
     requestAnimationFrame(() => jobDisclosureRef.current?.querySelector<HTMLInputElement>('input')?.focus())
-    setNotice('Shop demand is bound to this draft. Review the owner, line, due time, and accountable action before creating the job.')
+    setNotice('Shop demand attached. Review owner, line, due time, and evidence.')
   }
 
   function buildPlantJobImportReview(csvText: string): PlantJobImportReview {
@@ -9961,6 +9975,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       openJobOutput(activeJobs[0], trigger)
       return
     }
+    if (plantTodayStep === 'plan') {
+      navigate('/plant/?tab=production&focus=plan')
+      return
+    }
     if (tab !== 'production') {
       navigate('/plant/?tab=production')
       return
@@ -9968,7 +9986,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     if (jobDisclosureRef.current) {
       jobDisclosureRef.current.open = true
       jobDisclosureRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      requestAnimationFrame(() => jobDisclosureRef.current?.querySelector<HTMLInputElement>('input')?.focus())
+      requestAnimationFrame(() => plantJobIdInputRef.current?.focus({ preventScroll: true }))
     }
   }
   const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState} data-step={plantTodayStep}>
@@ -10054,7 +10072,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
           <section aria-label="Plant job CSV import" className="plant-job-import">
-            <div><span className="core-eyebrow">Job CSV import</span><strong>Upload job list</strong><small>Check job ID, line, product, target, owner, priority, due time, and duplicates before copying one ready job into review. No production job, equipment command, material movement, accounting post, or managed write runs from this importer.</small></div>
+            <div><span className="core-eyebrow">Job CSV import</span><strong>Upload job list</strong><small>Check owner, target, due time, and duplicates. Import never creates Plant records.</small></div>
             <div className="plant-job-import-actions">
               <button className="core-button" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Load sample job batch</button>
               <label className="plant-job-import-upload">Upload Plant job CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
@@ -10064,13 +10082,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             </div>
           </section>
           <form className="core-form compact-form" onSubmit={createJob}>
-            <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
+            <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" ref={plantJobIdInputRef} required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
             <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
             <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setJobDraft((current) => ({ ...current, priority: event.target.value as ProductionJobPriority }))} value={jobDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setJobDraft((current) => ({ ...current, dueAt: event.target.value }))} required type="datetime-local" value={jobDraft.dueAt} /></label></div>
             <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, owner: event.target.value }))} placeholder="Named person or role" required value={jobDraft.owner} /></label>
             {selectedShopDemand ? <div className="form-notice" role="status"><strong>Governed Shop source.</strong> {selectedShopDemand.evidenceReference} · {selectedShopDemand.sourceOrderIds.join(', ') || 'reorder threshold'}<button className="text-link" disabled={Boolean(pendingAction)} onClick={() => setSelectedShopDemandDigest('')} type="button">Remove source</button></div> : null}
             <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review job</button>
-            <p className="panel-copy">Owner, priority, and due time make responsibility and run order visible. The accountable operator, reason, and source record are confirmed in the next step.</p>
+            <p className="panel-copy">Set owner, priority, and due time. Confirm reason and source in review.</p>
           </form>
         </details>
       </section>
@@ -10313,7 +10331,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 }
 
 function JobList({ disabled = false, jobs, now, onOutput, onSchedule }: { disabled?: boolean; jobs: ProductionJob[]; now: number; onOutput?: (job: ProductionJob, trigger: HTMLButtonElement) => void; onSchedule?: (job: ProductionJob, trigger: HTMLButtonElement) => void }) {
-  if (!jobs.length) return <Empty>No active jobs. Add a job below to start recording output.</Empty>
+  if (!jobs.length) return <Empty>No active jobs. Add one below.</Empty>
   return <div className="job-list">{jobs.map((job) => {
     const scrap = job.scrap ?? 0
     const accounted = job.output + scrap
