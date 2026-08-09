@@ -60,6 +60,15 @@ import {
   type WebsiteWorkspace,
   type WebsiteWorkspaceUpdate,
 } from './website-model'
+import {
+  createWebsiteClosedEditSession,
+  restoreWebsiteClosedEditSession,
+  reviewWebsiteClosedEditSession,
+  websiteClosedEditSessionMatchesDraft,
+  websiteClosedEditSessionsMatch,
+  websiteClosedEditSessionStorageKey,
+  type WebsiteClosedEditSession,
+} from './website-edit-session-recovery'
 import './website-product.css'
 
 type WebsiteView = 'content' | 'publish'
@@ -67,6 +76,11 @@ type WebsiteView = 'content' | 'publish'
 type WebsiteEditSessionState = {
   scope: string
   session: WebsiteEditSession
+}
+
+type WebsiteClosedEditSessionState = {
+  scope: string
+  recovery: WebsiteClosedEditSession
 }
 
 const DEFAULT_NOTICE = 'Website example loaded. Nothing has been deployed.'
@@ -167,6 +181,7 @@ export function WebsiteProduct() {
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false)
   const [starterDismissed, setStarterDismissed] = useState(true)
   const [editSessionState, setEditSessionState] = useState<WebsiteEditSessionState | null>(null)
+  const [closedEditSessionState, setClosedEditSessionState] = useState<WebsiteClosedEditSessionState | null>(null)
   const [savingDraft, setSavingDraft] = useState(false)
   const [repairConfirmationRevision, setRepairConfirmationRevision] = useState<number | null>(null)
   const [repairing, setRepairing] = useState(false)
@@ -201,6 +216,13 @@ export function WebsiteProduct() {
     ? managedActorId ? `managed:${managedActorId}` : ''
     : storageMode
   const activeEditSession = editSessionState?.scope === editSessionScope ? editSessionState.session : null
+  const activeClosedEditSession = closedEditSessionState?.scope === editSessionScope
+    ? closedEditSessionState.recovery
+    : null
+  const closedEditSessionReview = activeClosedEditSession
+    ? reviewWebsiteClosedEditSession(activeClosedEditSession, editSessionScope, workspace)
+    : null
+  const hasClosedEditSession = Boolean(activeClosedEditSession)
   const editorWorkspace = activeEditSession?.workspace ?? workspace
   const selectedPage = editorWorkspace.pages.find((page) => page.id === selectedPageId)
     ?? editorWorkspace.pages.find((page) => page.id === editorWorkspace.selectedPageId)
@@ -220,13 +242,13 @@ export function WebsiteProduct() {
   const publish = getCurrentPublish(workspace)
   const approvalIsCurrent = Boolean(approval)
   const publishIsCurrent = Boolean(publish)
-  const starterAvailable = !hasUnsavedChanges && isUntouchedWebsiteStarter(editorWorkspace)
+  const starterAvailable = !hasUnsavedChanges && !hasClosedEditSession && isUntouchedWebsiteStarter(editorWorkspace)
   const workingSampleTemplate = workspace.workingSample
     ? websiteStarterTemplates.find((template) => template.id === workspace.workingSample?.templateId) ?? null
     : null
   const workingSampleIsCurrent = Boolean(workspace.workingSample
     && workspace.workingSample.contentFingerprint === fingerprint)
-  const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
+  const canReview = !hasUnsavedChanges && !hasClosedEditSession && !starterAvailable && contentChecksPass
   const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
@@ -295,18 +317,30 @@ export function WebsiteProduct() {
     if (editSessionRef.current?.scope === editSessionScope) return
     const restoreTimer = window.setTimeout(() => {
       if (editSessionRef.current?.scope === editSessionScope) return
-      const storageKey = editSessionStorageKey(editSessionScope)
+      let restoredSession: WebsiteEditSession | null = null
+      let restoredClosedSession: WebsiteClosedEditSession | null = null
       try {
+        const storageKey = editSessionStorageKey(editSessionScope)
         const raw = window.sessionStorage.getItem(storageKey)
-        const restored = raw ? restoreWebsiteEditSession(raw) : null
-        const next = restored ? { scope: editSessionScope, session: restored } : null
-        if (raw && !restored) window.sessionStorage.removeItem(storageKey)
-        editSessionRef.current = next
-        setEditSessionState(next)
+        restoredSession = raw ? restoreWebsiteEditSession(raw) : null
+        if (raw && !restoredSession) window.sessionStorage.removeItem(storageKey)
       } catch {
-        editSessionRef.current = null
-        setEditSessionState(null)
+        // Device recovery can still be offered when tab storage is unavailable.
       }
+      try {
+        const recoveryKey = websiteClosedEditSessionStorageKey(editSessionScope)
+        const raw = window.localStorage.getItem(recoveryKey)
+        restoredClosedSession = raw ? restoreWebsiteClosedEditSession(raw) : null
+        if (raw && !restoredClosedSession) window.localStorage.removeItem(recoveryKey)
+      } catch {
+        // The saved Website remains authoritative when device recovery is unavailable.
+      }
+      const next = restoredSession ? { scope: editSessionScope, session: restoredSession } : null
+      editSessionRef.current = next
+      setEditSessionState(next)
+      setClosedEditSessionState(!restoredSession && restoredClosedSession
+        ? { scope: editSessionScope, recovery: restoredClosedSession }
+        : null)
     }, 0)
     return () => window.clearTimeout(restoreTimer)
   }, [editSessionScope])
@@ -364,6 +398,10 @@ export function WebsiteProduct() {
   function openContentSurface(nextSurface: 'work' | 'preview') {
     setSurface(nextSurface)
     setSiteSettingsOpen(false)
+    const retained = editSessionRef.current
+    if (retained?.scope === editSessionScope) {
+      persistEditSession(retained, { selectedPageId, surface: nextSurface })
+    }
     requestHeadingFocus()
   }
 
@@ -402,11 +440,36 @@ export function WebsiteProduct() {
     setEditSessionState(next)
   }
 
-  function persistEditSession(next: WebsiteEditSessionState) {
+  function persistEditSession(
+    next: WebsiteEditSessionState,
+    editor = { selectedPageId, surface },
+  ) {
+    let tabStored = false
+    let recoveryStored = false
     try {
       window.sessionStorage.setItem(editSessionStorageKey(next.scope), JSON.stringify(next.session))
-    } catch {
-      setNotice('This tab holds the preview. Save or Discard still works.')
+      tabStored = true
+    } catch { /* Device recovery may still preserve the preview. */ }
+    try {
+      const recoveryPageId = next.session.workspace.pages.some((page) => page.id === editor.selectedPageId)
+        ? editor.selectedPageId
+        : next.session.workspace.selectedPageId
+      const recovery = createWebsiteClosedEditSession(
+        next.scope,
+        next.session,
+        recoveryPageId,
+        editor.surface,
+      )
+      window.localStorage.setItem(websiteClosedEditSessionStorageKey(next.scope), JSON.stringify(recovery))
+      recoveryStored = true
+      setClosedEditSessionState(null)
+    } catch { /* The active tab still retains the in-memory preview. */ }
+    if (!tabStored && !recoveryStored) {
+      setNotice('This tab holds the preview. Save or Discard before leaving.')
+    } else if (!recoveryStored) {
+      setNotice('Preview is safe in this tab, but closing it will discard unsaved edits.')
+    } else if (!tabStored) {
+      setNotice('Preview recovery is saved on this device. Save or Discard when ready.')
     }
   }
 
@@ -417,14 +480,91 @@ export function WebsiteProduct() {
       } catch {
         // The in-memory edit session can still be cleared safely.
       }
+      try {
+        const recoveryKey = websiteClosedEditSessionStorageKey(target.scope)
+        const raw = window.localStorage.getItem(recoveryKey)
+        const current = raw ? restoreWebsiteClosedEditSession(raw) : null
+        if (current && websiteClosedEditSessionMatchesDraft(current, target.scope, target.session)) {
+          window.localStorage.removeItem(recoveryKey)
+        }
+      } catch {
+        // A retained or newer recovery remains source-bound and cannot overwrite the saved Website.
+      }
     }
     setRemovedDraftPage(null)
     replaceEditSession(null)
   }
 
+  function closedEditSessionIsCurrent(target: WebsiteClosedEditSessionState) {
+    try {
+      const raw = window.localStorage.getItem(websiteClosedEditSessionStorageKey(target.scope))
+      const current = raw ? restoreWebsiteClosedEditSession(raw) : null
+      if (current && websiteClosedEditSessionsMatch(current, target.recovery)) return true
+      setClosedEditSessionState(current ? { scope: target.scope, recovery: current } : null)
+      setNotice(current
+        ? 'Another tab changed these edits. Review the newer recovery before continuing.'
+        : 'These edits were already resolved in another tab.')
+    } catch {
+      setNotice('Recovery could not be checked on this device. The saved Website did not change.')
+    }
+    return false
+  }
+
+  function clearClosedEditSession(target = closedEditSessionState) {
+    if (!target) return true
+    if (!closedEditSessionIsCurrent(target)) return false
+    try {
+      window.localStorage.removeItem(websiteClosedEditSessionStorageKey(target.scope))
+    } catch {
+      setNotice('Recovery could not be removed from this device. The saved Website did not change.')
+      return false
+    }
+    if (closedEditSessionState === target) setClosedEditSessionState(null)
+    return true
+  }
+
+  function resumeClosedEditSession() {
+    const target = closedEditSessionState
+    if (!target
+      || target.scope !== editSessionScope
+      || !activeClosedEditSession
+      || !closedEditSessionReview?.ok
+      || savingDraft) {
+      setNotice('These edits cannot be resumed because the saved Website changed. Discard the recovery to continue.')
+      return
+    }
+    if (!closedEditSessionIsCurrent(target)) return
+    const next = { scope: editSessionScope, session: closedEditSessionReview.session }
+    replaceEditSession(next)
+    setClosedEditSessionState(null)
+    setSelectedPageId(closedEditSessionReview.selectedPageId)
+    setSurface(closedEditSessionReview.surface)
+    setSiteSettingsOpen(false)
+    persistEditSession(next, {
+      selectedPageId: closedEditSessionReview.selectedPageId,
+      surface: closedEditSessionReview.surface,
+    })
+    requestHeadingFocus()
+    setNotice('Unsaved edits resumed. Nothing was saved, published, sent, or deployed.')
+  }
+
+  function discardClosedEditSession() {
+    if (!activeClosedEditSession || savingDraft) return
+    if (!clearClosedEditSession()) return
+    setSurface('preview')
+    setSiteSettingsOpen(false)
+    requestHeadingFocus()
+    setNotice('Unsaved edits discarded. The saved Website did not change.')
+  }
+
   function stageWorkspace(update: WebsiteWorkspaceUpdate, options: { retainPageRemoval?: boolean } = {}) {
     if (savingDraft) {
       setNotice('Save is still running.')
+      return null
+    }
+    if (activeClosedEditSession) {
+      setNotice('Resume or discard the recovered edits before starting another preview.')
+      requestRecoveryFocus()
       return null
     }
     if (!editSessionScope) {
@@ -500,6 +640,10 @@ export function WebsiteProduct() {
     setDeleteCandidateId('')
     setRemovedDraftPage(null)
     setNotice(DEFAULT_NOTICE)
+    const retained = editSessionRef.current
+    if (retained?.scope === editSessionScope) {
+      persistEditSession(retained, { selectedPageId: pageId, surface })
+    }
     return true
   }
 
@@ -808,9 +952,11 @@ export function WebsiteProduct() {
   const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
   const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
   const releaseRecordRequired = storageMode === 'managed'
-  const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges
+  const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges && !hasClosedEditSession
   const websiteTodayStep = storageIssue || canRepairLocalStorage
     ? 'recover'
+    : hasClosedEditSession
+      ? 'recover-edit'
     : starterSetupActive || starterAvailable
       ? 'setup'
       : hasUnsavedChanges
@@ -828,6 +974,8 @@ export function WebsiteProduct() {
                 : 'ready'
   const websiteAgentJob = storageIssue || canRepairLocalStorage
     ? 'Recover Website workspace'
+    : hasClosedEditSession
+      ? closedEditSessionReview?.ok ? 'Resume unsaved edits' : 'Discard outdated edits'
     : starterSetupActive
       ? 'Answer 5 questions'
     : starterAvailable
@@ -849,6 +997,10 @@ export function WebsiteProduct() {
                     : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
     ? 'Fix local saving first.'
+    : hasClosedEditSession
+      ? closedEditSessionReview?.ok
+        ? 'A previous tab closed before these edits were saved.'
+        : 'The saved Website changed, so the older edits cannot be resumed.'
     : starterAvailable || starterSetupActive
       ? 'Answer five questions to replace the example.'
       : hasUnsavedChanges
@@ -858,27 +1010,35 @@ export function WebsiteProduct() {
           : leadCounts.new
             ? `${leadCounts.new} inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} review.`
             : 'Complete this step; nothing goes live automatically.'
-  const websiteReviewNote = hasUnsavedChanges
+  const websiteReviewNote = hasClosedEditSession
+    ? 'Resume or discard; recovery never saves automatically.'
+    : hasUnsavedChanges
     ? 'Save or discard first.'
     : 'You approve every save, download, and go-live action.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
+    : hasClosedEditSession
+      ? 'Review recovery'
     : starterSetupActive || starterAvailable
       ? 'Customize demo'
       : websiteAgentJob
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'
+    : hasClosedEditSession
+      ? closedEditSessionReview?.ok ? 'attention' : 'blocked'
     : starterAvailable || starterSetupActive
       ? 'setup'
       : hasUnsavedChanges || failingContentChecks.length || leadCounts.new
         ? 'attention'
         : 'ready'
-  const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace
+  const statusWorkspace = hasUnsavedChanges
+    ? editorWorkspace
+    : activeClosedEditSession?.session.workspace ?? workspace
   const websiteTodayMetrics = [
     ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
-    ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
+    ['Readiness', hasClosedEditSession ? 'Recovery waiting' : hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
     ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
-    ['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
+    ['File', hasClosedEditSession || hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
   ] as const
   const websiteTodaySource = storageMode === 'managed'
     ? `Company account · ${managedActorId || 'signed in'}`
@@ -913,6 +1073,10 @@ export function WebsiteProduct() {
       detail: `Website next step: ${websiteAgentJob}`,
     })
     if (storageIssue || canRepairLocalStorage) {
+      requestRecoveryFocus()
+      return
+    }
+    if (hasClosedEditSession) {
       requestRecoveryFocus()
       return
     }
@@ -1020,6 +1184,45 @@ export function WebsiteProduct() {
     <div className="website-product">
       <div className="website-shell">
         <div id="website-workspace" className="website-main">
+          {activeClosedEditSession ? (
+            <section
+              aria-labelledby="website-closed-edit-title"
+              aria-live="polite"
+              className="website-edit-recovery"
+              data-state={closedEditSessionReview?.ok ? 'ready' : 'conflict'}
+            >
+              <div>
+                <span className="website-eyebrow">Unsaved edits found</span>
+                <strong id="website-closed-edit-title">
+                  {closedEditSessionReview?.ok ? 'Continue where you stopped?' : 'Older edits need review'}
+                </strong>
+                <p>{closedEditSessionReview?.ok
+                  ? `${formatRecoveryDate(activeClosedEditSession.capturedAt)} · Resume the exact page and preview. Nothing saves automatically.`
+                  : 'The saved Website changed after this preview began. Discard these older edits to protect the newer version.'}</p>
+              </div>
+              <div className="website-edit-recovery-actions">
+                <button
+                  ref={closedEditSessionReview?.ok ? undefined : recoveryPrimaryActionRef}
+                  className="website-button is-quiet"
+                  onClick={discardClosedEditSession}
+                  type="button"
+                >
+                  Discard
+                </button>
+                {closedEditSessionReview?.ok ? (
+                  <button
+                    ref={recoveryPrimaryActionRef}
+                    className="website-button is-primary"
+                    onClick={resumeClosedEditSession}
+                    type="button"
+                  >
+                    Resume edits
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
           {noticePriority !== 'routine' ? (
             <div className="website-notice" aria-busy={repairing} aria-live="polite" data-priority={noticePriority} role="status">
               <p>{repairArmed
@@ -1072,7 +1275,7 @@ export function WebsiteProduct() {
             </div>
           </section> : null}
 
-          {view === 'content' ? (
+          {view === 'content' && !hasClosedEditSession ? (
             <section
               aria-label="Website actions"
               className="website-action-bar"

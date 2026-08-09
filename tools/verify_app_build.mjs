@@ -114,6 +114,7 @@ const websiteStarterSource = await readFile(resolve(root, 'showroom', 'src', 'pr
 const websiteLeadSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts'), 'utf8')
 const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'WebsiteStarterSetup.tsx'), 'utf8')
 const websiteSectionRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-section-recovery.ts'), 'utf8')
+const websiteEditSessionRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-edit-session-recovery.ts'), 'utf8')
 const localMerchandisingImportSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts'), 'utf8')
 const productionJobPlanDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-job-plan-draft.ts'), 'utf8')
 const plantAvailabilityDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-availability-draft.ts'), 'utf8')
@@ -291,7 +292,7 @@ if (!plantOrderUiSource.includes('<details className="compact-disclosure product
 if (!websiteSource.includes("const releaseRecordRequired = storageMode === 'managed'")
   || !websiteSource.includes("const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges")
   || !websiteSource.includes('releaseRecordRequired && !approvalIsCurrent')
-  || !websiteSource.includes("['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download']")) fail('website_durable_trial_release_gates_missing')
+  || !websiteSource.includes("['File', hasClosedEditSession || hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download']")) fail('website_durable_trial_release_gates_missing')
 if (websiteSource.includes("{websiteTodayState !== 'ready' ? <section")
   || !websiteSource.includes("'Review go-live plan'")
   || !websiteSource.includes("'Download website'")
@@ -2206,9 +2207,10 @@ if (!websiteSource.includes('aria-labelledby="website-today-title"')
   || !websiteSource.includes('Export inquiries')
   || !websiteSource.includes('Inquiry saved for manager review.')
   || !websiteSource.includes('No message or external write ran.')
-  || !websiteSource.includes('const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace')
-  || !websiteSource.includes("['Readiness', hasUnsavedChanges ? 'Review draft'")
-  || !websiteSource.includes("['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download']")
+  || !websiteSource.includes('const statusWorkspace = hasUnsavedChanges')
+  || !websiteSource.includes(': activeClosedEditSession?.session.workspace ?? workspace')
+  || !websiteSource.includes("['Readiness', hasClosedEditSession ? 'Recovery waiting' : hasUnsavedChanges ? 'Review draft'")
+  || !websiteSource.includes("['File', hasClosedEditSession || hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download']")
   || websiteSource.includes("['Approval', hasUnsavedChanges ? 'Blocked by draft'")
   || websiteSource.includes("['Site package', hasUnsavedChanges ? 'Blocked by draft'")
   || !websiteSource.includes('Company account ·')
@@ -4080,6 +4082,44 @@ if (!websiteSource.includes('createWebsiteEditSession(workspace)')
   || !websiteCssSource.includes('.website-save-state[data-state="unsaved"]')
   || !websiteCssSource.includes('.website-action-bar[data-editing="true"]')) fail('website_transactional_edit_session_missing')
 if (!/function discardDraft\(\)[\s\S]*?setStarterDismissed\(true\)[\s\S]*?setSurface\('preview'\)[\s\S]*?setNotice\('Preview discarded\. The saved site did not change\.'\)/.test(websiteSource)) fail('website_discard_does_not_restore_saved_preview')
+const websiteClosedEditResumeStart = websiteSource.indexOf('function resumeClosedEditSession()')
+const websiteClosedEditDiscardStart = websiteSource.indexOf('function discardClosedEditSession()', websiteClosedEditResumeStart)
+const websiteClosedEditDiscardEnd = websiteSource.indexOf('function stageWorkspace(', websiteClosedEditDiscardStart)
+const websiteClosedEditResumeAction = websiteSource.slice(websiteClosedEditResumeStart, websiteClosedEditDiscardStart)
+const websiteClosedEditDiscardAction = websiteSource.slice(websiteClosedEditDiscardStart, websiteClosedEditDiscardEnd)
+const websiteClosedEditForbiddenActions = ['commitWorkspace(', 'mutateWorkspace(', 'saveDraft(', 'recordWebsite', 'publishWorkspace', 'deploy(', 'deployWebsite', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon']
+const websiteClosedEditPureForbiddenActions = ['localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'commitWebsiteEditSession(', 'applyWebsiteWorkspaceUpdate(', 'publish', 'deploy']
+if (websiteClosedEditResumeStart < 0
+  || websiteClosedEditDiscardStart < 0
+  || websiteClosedEditDiscardEnd < 0
+  || !websiteEditSessionRecoverySource.includes("export const WEBSITE_CLOSED_EDIT_SESSION_CONTRACT = 'supermega.website.closed-edit-session.v1'")
+  || !websiteEditSessionRecoverySource.includes('export function createWebsiteClosedEditSession(')
+  || !websiteEditSessionRecoverySource.includes('export function restoreWebsiteClosedEditSession(')
+  || !websiteEditSessionRecoverySource.includes('export function reviewWebsiteClosedEditSession(')
+  || !websiteEditSessionRecoverySource.includes('export function websiteClosedEditSessionMatchesDraft(')
+  || !websiteEditSessionRecoverySource.includes('export function websiteClosedEditSessionsMatch(')
+  || !websiteEditSessionRecoverySource.includes("reason: 'saved_website_changed'")
+  || !websiteEditSessionRecoverySource.includes('websiteEditSessionMatches(restored.session, workspace)')
+  || !websiteEditSessionRecoverySource.includes('workspaceFingerprint(restored.session.workspace) === workspaceFingerprint(workspace)')
+  || websiteClosedEditPureForbiddenActions.some((marker) => websiteEditSessionRecoverySource.includes(marker))
+  || !websiteSource.includes('window.localStorage.setItem(websiteClosedEditSessionStorageKey(next.scope), JSON.stringify(recovery))')
+  || !websiteSource.includes('window.localStorage.removeItem(websiteClosedEditSessionStorageKey(target.scope))')
+  || !websiteSource.includes('!restoredSession && restoredClosedSession')
+  || !websiteSource.includes('if (!closedEditSessionIsCurrent(target)) return')
+  || !websiteSource.includes('websiteClosedEditSessionMatchesDraft(current, target.scope, target.session)')
+  || !websiteSource.includes('persistEditSession(retained, { selectedPageId, surface: nextSurface })')
+  || !websiteSource.includes('persistEditSession(retained, { selectedPageId: pageId, surface })')
+  || !websiteSource.includes("{view === 'content' && !hasClosedEditSession ? (")
+  || !websiteSource.includes('Resume edits')
+  || !websiteSource.includes('Unsaved edits discarded. The saved Website did not change.')
+  || !websiteClosedEditResumeAction.includes('reviewWebsiteClosedEditSession') && !websiteSource.includes('const closedEditSessionReview = activeClosedEditSession')
+  || !websiteClosedEditResumeAction.includes('persistEditSession(next, {')
+  || !websiteClosedEditDiscardAction.includes('clearClosedEditSession()')
+  || websiteClosedEditForbiddenActions.some((marker) => websiteClosedEditResumeAction.includes(marker) || websiteClosedEditDiscardAction.includes(marker))
+  || !websiteCssSource.includes('.website-edit-recovery[data-state="conflict"]')
+  || !websiteCssSource.includes('.website-edit-recovery-actions .website-button {\n  min-height: 44px;')
+  || !websiteCssSource.includes('.theme-dark .website-product .website-button.is-primary {\n  color: #04110e;')
+  || !websiteCssSource.includes('.theme-dark .website-today-source small {\n  color: var(--website-muted);')) fail('website_closed_edit_session_recovery_contract_missing')
 if (!websiteCssSource.includes('.website-workspace-grid[data-surface="work"] > .website-preview-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-work-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-preview-surface')
@@ -10865,6 +10905,7 @@ async function verifyWebsiteRuntime() {
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-model.ts')).href}?website-verify=${Date.now()}`)
     const sectionRecovery = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-section-recovery.ts')).href}?website-section-recovery-verify=${Date.now()}`)
+    const editSessionRecovery = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-edit-session-recovery.ts')).href}?website-edit-session-recovery-verify=${Date.now()}`)
     const exporter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-export.ts')).href}?website-export-verify=${Date.now()}`)
     const starter = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-starter.ts')).href}?website-starter-verify=${Date.now()}`)
     const leads = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'website', 'website-leads.ts')).href}?website-leads-verify=${Date.now()}`)
@@ -11258,6 +11299,59 @@ async function verifyWebsiteRuntime() {
     assert(seed.revision === 0 && seed.contentRevision === 0 && editSession.workspace.revision === 0 && editSession.workspace.contentRevision === 0, 'website_typing_advanced_authoritative_revision')
     const restoredEditSession = model.restoreWebsiteEditSession(JSON.stringify(editSession))
     assert(restoredEditSession && model.websiteEditSessionMatches(restoredEditSession, seed), 'website_edit_session_did_not_resume_against_exact_base')
+    const closedEditRecovery = editSessionRecovery.createWebsiteClosedEditSession(
+      'browser-local',
+      restoredEditSession,
+      seed.pages[0].id,
+      'work',
+      at(150),
+    )
+    const restoredClosedEditRecovery = editSessionRecovery.restoreWebsiteClosedEditSession(JSON.stringify(closedEditRecovery))
+    const reviewedClosedEditRecovery = restoredClosedEditRecovery
+      ? editSessionRecovery.reviewWebsiteClosedEditSession(restoredClosedEditRecovery, 'browser-local', seed)
+      : null
+    assert(editSessionRecovery.websiteClosedEditSessionStorageKey('managed:owner@example.com') === 'supermega.website.closed-edit-session.v1.managed%3Aowner%40example.com'
+      && restoredClosedEditRecovery?.capturedAt === at(150)
+      && reviewedClosedEditRecovery?.ok
+      && reviewedClosedEditRecovery.selectedPageId === seed.pages[0].id
+      && reviewedClosedEditRecovery.surface === 'work'
+      && reviewedClosedEditRecovery.session.workspace.pages[0].hero.headline === 'Unsaved Website headline 20',
+    'website_closed_edit_session_did_not_restore_exact_draft')
+    const movedClosedEditRecovery = editSessionRecovery.createWebsiteClosedEditSession(
+      'browser-local',
+      restoredEditSession,
+      seed.pages[1].id,
+      'preview',
+      at(152),
+    )
+    assert(editSessionRecovery.websiteClosedEditSessionMatchesDraft(closedEditRecovery, 'browser-local', restoredEditSession)
+      && editSessionRecovery.websiteClosedEditSessionsMatch(closedEditRecovery, structuredClone(closedEditRecovery))
+      && !editSessionRecovery.websiteClosedEditSessionsMatch(closedEditRecovery, movedClosedEditRecovery),
+    'website_closed_edit_session_newer_tab_identity_not_enforced')
+    const unchangedClosedEditRecovery = editSessionRecovery.createWebsiteClosedEditSession(
+      'browser-local',
+      model.createWebsiteEditSession(seed),
+      seed.pages[0].id,
+      'preview',
+      at(151),
+    )
+    const unchangedClosedEditReview = editSessionRecovery.reviewWebsiteClosedEditSession(unchangedClosedEditRecovery, 'browser-local', seed)
+    const wrongScopeClosedEditReview = editSessionRecovery.reviewWebsiteClosedEditSession(closedEditRecovery, 'managed:other', seed)
+    assert(!unchangedClosedEditReview.ok
+      && unchangedClosedEditReview.reason === 'no_changes'
+      && !wrongScopeClosedEditReview.ok
+      && wrongScopeClosedEditReview.reason === 'scope_changed',
+    'website_closed_edit_session_scope_or_change_gate_failed')
+    const tamperedClosedEditRecovery = structuredClone(closedEditRecovery)
+    tamperedClosedEditRecovery.source.baseFingerprint = '0'.repeat(64)
+    const selectedPageTamper = structuredClone(closedEditRecovery)
+    selectedPageTamper.selectedPageId = 'missing-page'
+    const extraFieldTamper = { ...structuredClone(closedEditRecovery), automaticSave: true }
+    assert(editSessionRecovery.restoreWebsiteClosedEditSession(tamperedClosedEditRecovery) === null
+      && editSessionRecovery.restoreWebsiteClosedEditSession(selectedPageTamper) === null
+      && editSessionRecovery.restoreWebsiteClosedEditSession(extraFieldTamper) === null
+      && editSessionRecovery.restoreWebsiteClosedEditSession('{broken') === null,
+    'website_closed_edit_session_tamper_accepted')
     const savedEditSession = model.applyWebsiteWorkspaceUpdate(
       seed,
       (current) => model.commitWebsiteEditSession(current, restoredEditSession),
@@ -11269,6 +11363,15 @@ async function verifyWebsiteRuntime() {
       && savedEditSession.workspace.pages[0].hero.headline === 'Unsaved Website headline 20', 'website_edit_session_did_not_commit_exactly_once')
     const competingEdit = model.applyWebsiteWorkspaceUpdate(seed, (current) => ({ ...current, siteName: 'Competing Website edit' }))
     assert(competingEdit.ok && !model.websiteEditSessionMatches(editSession, competingEdit.workspace), 'website_edit_session_did_not_detect_newer_base')
+    const staleClosedEditReview = editSessionRecovery.reviewWebsiteClosedEditSession(closedEditRecovery, 'browser-local', competingEdit.workspace)
+    assert(!staleClosedEditReview.ok
+      && staleClosedEditReview.reason === 'saved_website_changed'
+      && !editSessionRecovery.websiteClosedEditSessionMatchesDraft(
+        closedEditRecovery,
+        'browser-local',
+        model.createWebsiteEditSession(competingEdit.workspace),
+      ),
+    'website_closed_edit_session_overwrote_newer_base')
     let staleEditRefused = false
     try {
       model.commitWebsiteEditSession(competingEdit.workspace, editSession)
@@ -19937,8 +20040,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 16 KB allowance for Shop procurement and Plant availability recovery; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_816_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 24 KB allowance for Shop procurement, Plant availability, and Website tab recovery; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_824_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

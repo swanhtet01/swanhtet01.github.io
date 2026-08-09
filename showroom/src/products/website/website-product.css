@@ -2327,6 +2327,65 @@
   color: #fff;
 }
 
+.website-edit-recovery {
+  order: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid color-mix(in srgb, var(--website-warn) 52%, var(--website-line));
+  border-radius: 12px;
+  padding: 13px 14px;
+  background: color-mix(in srgb, var(--website-warn) 7%, var(--website-panel-raised));
+}
+
+.website-edit-recovery[data-state="conflict"] {
+  border-color: color-mix(in srgb, var(--website-danger) 52%, var(--website-line));
+  background: color-mix(in srgb, var(--website-danger) 7%, var(--website-panel-raised));
+}
+
+.website-edit-recovery > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.website-edit-recovery strong {
+  color: var(--website-ink);
+  font-size: 15px;
+}
+
+.website-edit-recovery p {
+  margin: 0;
+  color: var(--website-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.website-edit-recovery-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.website-edit-recovery-actions .website-button {
+  min-height: 44px;
+}
+
+.theme-dark .website-product .website-button.is-primary {
+  color: #04110e;
+}
+
+.theme-dark .website-product .website-button.is-primary:hover:not(:disabled) {
+  color: #ffffff;
+}
+
+.theme-dark .website-today-source small {
+  color: var(--website-muted);
+}
+
 .website-heading {
   min-height: 60px;
   flex: 0 0 auto;
@@ -3758,6 +3817,20 @@
 }
 
 @media screen and (max-width: 900px) {
+  .website-edit-recovery {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .website-edit-recovery-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .website-edit-recovery-actions .website-button {
+    width: 100%;
+  }
+
   .website-action-bar {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 10px;
@@ -3827,6 +3900,10 @@
 }
 
 @media screen and (max-width: 560px) {
+  .website-edit-recovery-actions {
+    grid-template-columns: 1fr;
+  }
+
   .website-notice-actions {
     width: 100%;
     display: grid;
