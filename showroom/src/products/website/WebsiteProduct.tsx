@@ -41,9 +41,11 @@ import {
   previewDevices,
   readinessChecks,
   readWebsiteRecoveryArchive,
+  recoverWebsiteDraftPage,
   recordWebsiteEvidence,
   recordWebsiteSnapshot,
   restoreWebsiteEditSession,
+  removeWebsiteDraftPage,
   updateWebsiteEditSession,
   WEBSITE_EDIT_SESSION_KEY,
   websiteEditSessionMatches,
@@ -54,6 +56,7 @@ import {
   type WebsiteEditSession,
   type WebsitePage,
   type WebsiteRecoveryArchiveSummary,
+  type WebsiteRemovedDraftPage,
   type WebsiteWorkspace,
   type WebsiteWorkspaceUpdate,
 } from './website-model'
@@ -100,7 +103,7 @@ function TrialReadyWorkspace({
         <div>
           <span className="website-eyebrow">Ready to use</span>
           <h2 id="website-ready-title">Download your website</h2>
-          <p>Open one file on any phone or computer, or hand it to a hosting provider.</p>
+          <p>One file works on any phone or computer.</p>
         </div>
         <span className="website-status is-ready">Ready</span>
       </header>
@@ -119,7 +122,7 @@ function TrialReadyWorkspace({
           </li>
           <li>
             <span aria-hidden="true">2</span>
-            <div><strong>Download</strong><p>Get a standalone HTML website with your ready pages.</p></div>
+            <div><strong>Download</strong><p>Get one standalone HTML file.</p></div>
           </li>
         </ol>
 
@@ -182,6 +185,8 @@ export function WebsiteProduct() {
   ))
   const [notice, setNotice] = useState(DEFAULT_NOTICE)
   const [deleteCandidateId, setDeleteCandidateId] = useState('')
+  const [removedDraftPage, setRemovedDraftPage] = useState<WebsiteRemovedDraftPage | null>(null)
+  const pageRemovalActionRef = useRef<HTMLButtonElement>(null)
   const [localLeadLedger, setLocalLeadLedger] = useState(() => {
     if (typeof window === 'undefined') return emptyWebsiteLeadLedger()
     try { return readWebsiteLeadLedger(window.localStorage) } catch { return emptyWebsiteLeadLedger() }
@@ -200,6 +205,10 @@ export function WebsiteProduct() {
   const selectedPage = editorWorkspace.pages.find((page) => page.id === selectedPageId)
     ?? editorWorkspace.pages.find((page) => page.id === editorWorkspace.selectedPageId)
     ?? editorWorkspace.pages[0]
+  const activeRemovedDraftPage = removedDraftPage
+  const pageRemovalRecoveryKey = activeRemovedDraftPage
+    ? `${activeRemovedDraftPage.page.id}:${activeRemovedDraftPage.postRemovalFingerprint}`
+    : ''
   const hasUnsavedChanges = Boolean(activeEditSession)
   const editConflict = Boolean(activeEditSession && !websiteEditSessionMatches(activeEditSession, workspace))
   const fingerprint = workspaceFingerprint(workspace)
@@ -228,28 +237,24 @@ export function WebsiteProduct() {
     : starterSetupActive
     ? {
         title: 'Make this website yours',
-        copy: 'Edit the ready example, then preview it before anything is saved.',
+        copy: 'Edit the example, then preview it.',
       }
     : view === 'content' && surface === 'preview'
     ? {
         title: hasUnsavedChanges ? 'Preview unsaved changes' : 'Preview page',
         copy: hasUnsavedChanges
-          ? 'This preview is not saved yet. Return to edit, then save or discard it.'
+          ? 'Unsaved preview. Edit, save, or discard it.'
           : selectedPage.stage === 'draft'
-            ? 'This page is saved as a draft. Select Edit page to update it and mark it ready.'
-            : 'Check the selected page at desktop, tablet, or mobile size.',
+            ? 'Saved draft. Edit it, then mark it ready.'
+            : 'Check this page at each screen size.',
       }
     : view === 'publish' && storageMode === 'session-only'
       ? {
           title: 'Your website is ready',
-          copy: 'Download it now. Go live only after final review.',
+          copy: 'Download it. Go live after review.',
         }
       : viewCopy[view]
-  const savedStateNotice = storageMode === 'managed'
-    ? 'Changes are saved to this company account. Nothing has been deployed.'
-    : storageMode === 'browser-local'
-      ? 'Changes are saved on this device. Nothing has been deployed.'
-      : 'Changes last for this session only. Nothing has been deployed.'
+  const savedStateNotice = `${storageMode === 'managed' ? 'Company account' : storageMode === 'browser-local' ? 'This device' : 'This session'} only. Nothing has been deployed.`
   const saveStateLabel = starterAvailable
     ? 'Sample only'
     : editConflict
@@ -266,7 +271,7 @@ export function WebsiteProduct() {
     : 'Preview'
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
-    ? 'The saved Website changed after this edit session started. Your preview is preserved, but it cannot overwrite the newer version. Discard it and review the saved website.'
+    ? 'The saved site changed. Discard this preserved preview before editing.'
     : storageIssue || (notice === DEFAULT_NOTICE ? savedStateNotice : notice)
   const noticePriority = editConflict || storageIssue ? 'error' : notice === DEFAULT_NOTICE ? 'routine' : 'update'
   const repairArmed = canRepairLocalStorage
@@ -321,6 +326,11 @@ export function WebsiteProduct() {
     if (recoveryFocusRequest > 0) recoveryPrimaryActionRef.current?.focus()
   }, [recoveryFocusRequest])
 
+  useEffect(() => {
+    if (!pageRemovalRecoveryKey) return
+    pageRemovalActionRef.current?.focus({ preventScroll: true })
+  }, [pageRemovalRecoveryKey])
+
   function requestHeadingFocus() {
     setHeadingFocusRequest((current) => current + 1)
   }
@@ -335,11 +345,11 @@ export function WebsiteProduct() {
 
   function openWorkspaceView(nextView: WebsiteView) {
     if (nextView === 'publish' && hasUnsavedChanges) {
-      setNotice('Save or discard the unsaved Website preview before reviewing the file checklist.')
+      setNotice('Save or discard the preview before file review.')
       return
     }
     if (nextView === 'publish' && !canReview) {
-      setNotice('Finish and save every page before reviewing the file checklist.')
+      setNotice('Finish and save every page first.')
       return
     }
     const next = new URLSearchParams(searchParams)
@@ -396,7 +406,7 @@ export function WebsiteProduct() {
     try {
       window.sessionStorage.setItem(editSessionStorageKey(next.scope), JSON.stringify(next.session))
     } catch {
-      setNotice('The unsaved preview is held in this tab only. Browser draft recovery is unavailable, but Save and Discard still work.')
+      setNotice('This tab holds the preview. Save or Discard still works.')
     }
   }
 
@@ -408,26 +418,27 @@ export function WebsiteProduct() {
         // The in-memory edit session can still be cleared safely.
       }
     }
+    setRemovedDraftPage(null)
     replaceEditSession(null)
   }
 
-  function stageWorkspace(update: WebsiteWorkspaceUpdate) {
+  function stageWorkspace(update: WebsiteWorkspaceUpdate, options: { retainPageRemoval?: boolean } = {}) {
     if (savingDraft) {
-      setNotice('Website Save is still being confirmed. Wait for it to finish before making another change.')
+      setNotice('Save is still running.')
       return null
     }
     if (!editSessionScope) {
-      setNotice('Website workspace is still loading. Try the edit again.')
+      setNotice('Website is still loading.')
       return null
     }
     const retained = editSessionRef.current
     if (retained && retained.scope !== editSessionScope) {
-      setNotice('Website workspace identity changed. Review the loaded workspace before editing.')
+      setNotice('Workspace changed. Review it before editing.')
       return null
     }
     const base = retained?.session ?? createWebsiteEditSession(workspace)
     if (!websiteEditSessionMatches(base, workspace)) {
-      setNotice('The saved Website changed after this edit session started. Discard the preview before making more changes.')
+      setNotice('The saved site changed. Discard this preview first.')
       return null
     }
     const result = updateWebsiteEditSession(base, update)
@@ -436,6 +447,7 @@ export function WebsiteProduct() {
       return null
     }
     if (!result.changed) return retained?.session ?? null
+    if (!options.retainPageRemoval) setRemovedDraftPage(null)
     const next = { scope: editSessionScope, session: result.session }
     replaceEditSession(next)
     persistEditSession(next)
@@ -446,7 +458,7 @@ export function WebsiteProduct() {
     const retained = editSessionRef.current
     if (!retained || retained.scope !== editSessionScope) return
     if (!websiteEditSessionMatches(retained.session, workspace)) {
-      setNotice('This preview started from an older saved version. Nothing was overwritten; discard it and review the newer Website.')
+      setNotice('This preview is older. Discard it to review the saved site.')
       return
     }
     setSavingDraft(true)
@@ -459,7 +471,7 @@ export function WebsiteProduct() {
     if (editSessionRef.current === retained) clearEditSession(retained)
     setNotice(result.changed
       ? `Website saved once as content revision ${result.workspace.contentRevision}. Nothing was deployed.`
-      : 'The preview already matched the saved Website. No revision was added.')
+      : 'No change; preview already matched.')
   }
 
   function discardDraft() {
@@ -470,22 +482,23 @@ export function WebsiteProduct() {
     setSurface('preview')
     setSiteSettingsOpen(false)
     requestHeadingFocus()
-    setNotice('Unsaved Website changes discarded. The saved website was not changed.')
+    setNotice('Preview discarded. The saved site did not change.')
   }
 
   function requireSavedWorkspace(action: string) {
     if (!hasUnsavedChanges) return true
-    setNotice(`Save or discard the unsaved Website preview before ${action}.`)
+    setNotice(`Save or discard before ${action}.`)
     return false
   }
 
   function selectPage(pageId: string) {
     if (!editorWorkspace.pages.some((page) => page.id === pageId)) {
-      setNotice('That page is no longer available. The current page was preserved.')
+      setNotice('That page is unavailable. The current page stayed open.')
       return false
     }
     setSelectedPageId(pageId)
     setDeleteCandidateId('')
+    setRemovedDraftPage(null)
     setNotice(DEFAULT_NOTICE)
     return true
   }
@@ -504,9 +517,9 @@ export function WebsiteProduct() {
     if (result.ok) {
       setRepairArchiveKey(result.archiveKey)
       const cleanupNotice = result.legacyCleanup === 'retained'
-        ? ' The old Website storage key could not be removed; it remains on this device and should be reviewed in Recovery archives.'
+        ? ' Old storage remains; review Recovery archives.'
         : ''
-      setNotice(`Website data repaired and confirmed. The previous unreadable value is archived in this browser as ${result.archiveKey}.${cleanupNotice} No deployment occurred.`)
+      setNotice(`Website repaired. Archive: ${result.archiveKey}.${cleanupNotice} No deployment occurred.`)
     } else if (result.archiveConfirmed && result.archiveKey) {
       setRepairArchiveKey(result.archiveKey)
     }
@@ -528,7 +541,7 @@ export function WebsiteProduct() {
     try {
       const content = readWebsiteRecoveryArchive(archiveKey, window.localStorage)
       if (!content) {
-        setNotice('The Website recovery archive could not be read or validated.')
+        setNotice('Recovery archive is invalid.')
         return
       }
       const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }))
@@ -540,16 +553,16 @@ export function WebsiteProduct() {
       link.click()
       link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 5_000)
-      setNotice('Website recovery archive downloaded. No local data or deployment state changed.')
+      setNotice('Recovery archive downloaded. Nothing changed.')
     } catch (error) {
-      setNotice(`Website recovery archive download failed: ${error instanceof Error ? error.message : 'unknown error'}`)
+      setNotice(`Archive download failed: ${error instanceof Error ? error.message : 'unknown error'}`)
     }
   }
 
   async function removeRecoveryArchive(archiveKey: string) {
     if (recoveryDeleteCandidate !== archiveKey) {
       setRecoveryDeleteCandidate(archiveKey)
-      setNotice('Confirm removal only after downloading the recovery archive if you may need it later.')
+      setNotice('Download the archive first if you may need it.')
       return
     }
     const result = await deleteWebsiteRecoveryArchive(
@@ -564,7 +577,7 @@ export function WebsiteProduct() {
     }
     setRecoveryArchives(result.archives)
     if (repairArchiveKey === archiveKey) setRepairArchiveKey('')
-    setNotice('Website recovery archive removed from this browser. Website content and deployment state were unchanged.')
+    setNotice('Recovery archive removed. Website content stayed unchanged.')
   }
 
   function updatePage(pageId: string, update: (page: WebsitePage) => WebsitePage) {
@@ -579,7 +592,7 @@ export function WebsiteProduct() {
 
   function addPage() {
     if (editorWorkspace.pages.length >= MAX_WEBSITE_PAGES) {
-      setNotice('This workspace supports up to four pages. Remove a draft before adding another.')
+      setNotice('Four-page limit reached. Remove a draft first.')
       return
     }
     const staged = stageWorkspace((current) => {
@@ -591,20 +604,20 @@ export function WebsiteProduct() {
       setSelectedPageId(staged.workspace.selectedPageId)
       openWorkspaceView('content')
       setDeleteCandidateId('')
-      setNotice('New page added to the unsaved preview.')
+      setNotice('New page added to the preview.')
     }
   }
 
   function startWithBusiness(brief: WebsiteStarterBrief) {
     if (!starterAvailable) {
-      setNotice('The Website example has already changed. Nothing was replaced.')
+      setNotice('The example already changed. Nothing was replaced.')
       return
     }
     const staged = stageWorkspace((current) => (
       applyWebsiteStarterBrief(current, brief, new Date().toISOString())
     ))
     if (!staged) {
-      setNotice('The business brief was not applied. Review every required field and try again.')
+      setNotice('Complete the required brief fields.')
       return
     }
     setSelectedPageId(staged.workspace.selectedPageId)
@@ -616,7 +629,7 @@ export function WebsiteProduct() {
       route: location.pathname + location.search,
       detail: `Website starter brief generated: ${brief.businessName}`,
     })
-    setNotice('Your three-page site is ready as an unsaved preview. Review every page, then Save or Discard.')
+    setNotice('Three-page preview ready. Review, then Save or Discard.')
   }
 
   function openStarterSetup() {
@@ -632,7 +645,7 @@ export function WebsiteProduct() {
 
   function copySelectedPage() {
     if (editorWorkspace.pages.length >= MAX_WEBSITE_PAGES) {
-      setNotice('This workspace supports up to four pages. Remove a draft before duplicating.')
+      setNotice('Four-page limit reached. Remove a draft first.')
       return
     }
     const sourcePageId = selectedPage.id
@@ -646,7 +659,7 @@ export function WebsiteProduct() {
       setSelectedPageId(staged.workspace.selectedPageId)
       openWorkspaceView('content')
       setDeleteCandidateId('')
-      setNotice('Page copy added to the unsaved preview with navigation hidden.')
+      setNotice('Page copied with navigation hidden.')
     }
   }
 
@@ -658,21 +671,31 @@ export function WebsiteProduct() {
       return
     }
 
-    const staged = stageWorkspace((current) => {
-      const target = current.pages.find((page) => page.id === selectedPage.id)
-      if (!target || target.slug === '/' || target.stage !== 'draft') return current
-      const pages = current.pages.filter((page) => page.id !== target.id)
-      return {
-        ...current,
-        pages,
-        selectedPageId: pages[0]?.id ?? '',
-      }
-    })
-    if (staged) {
+    const removal = removeWebsiteDraftPage(editorWorkspace, selectedPage.id)
+    if (!removal.ok) return
+    const staged = stageWorkspace(() => removal.workspace, { retainPageRemoval: true })
+    if (staged && removal?.ok) {
       setSelectedPageId(staged.workspace.selectedPageId)
       setDeleteCandidateId('')
-      setNotice('Draft page removed from the unsaved preview.')
+      setRemovedDraftPage(removal.removed)
+      setNotice('Draft page removed. Undo is ready; nothing was saved or published.')
     }
+  }
+
+  function undoPageRemoval() {
+    const removed = activeRemovedDraftPage
+    if (!removed) return
+    const recovery = recoverWebsiteDraftPage(editorWorkspace, removed)
+    setRemovedDraftPage(null)
+    if (!recovery.ok) {
+      setNotice('Recovery expired because the preview changed.')
+      return
+    }
+    const staged = stageWorkspace(() => recovery.workspace, { retainPageRemoval: true })
+    if (!staged) return
+    setSelectedPageId(removed.page.id)
+    setDeleteCandidateId('')
+    setNotice('Draft page restored at its exact position. Nothing was saved or published.')
   }
 
   function movePage(pageId: string, direction: -1 | 1) {
@@ -685,7 +708,7 @@ export function WebsiteProduct() {
       pages.splice(nextIndex, 0, page)
       return { ...current, pages }
     })
-    if (staged) setNotice('Navigation order changed in the unsaved preview.')
+    if (staged) setNotice('Navigation order changed.')
   }
 
   async function addEvidence(input: {
@@ -733,7 +756,7 @@ export function WebsiteProduct() {
   function downloadPublishedSite(recordId: string) {
     const record = workspace.localPublishes.find((entry) => entry.id === recordId)
     if (!record?.artifact) {
-      setNotice('This older site record has no retained file. Approve the current revision and create a new site file.')
+      setNotice('No file retained. Approve and create a new one.')
       return
     }
     try {
@@ -747,9 +770,9 @@ export function WebsiteProduct() {
       link.click()
       link.remove()
       window.setTimeout(() => URL.revokeObjectURL(url), 5_000)
-      setNotice(`${download.filename} downloaded. No site or domain was changed.`)
+      setNotice(`${download.filename} downloaded. Nothing changed online.`)
     } catch (error) {
-      setNotice('The retained site file failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
+      setNotice('File download failed: ' + (error instanceof Error ? error.message : 'unknown error'))
     }
   }
 
@@ -770,11 +793,11 @@ export function WebsiteProduct() {
         event: 'first_value_completed',
         product: 'website',
         route: location.pathname + location.search,
-        detail: 'Produced a reviewable Website preview file from saved content.',
+        detail: 'Downloaded saved Website preview.',
       })
-      setNotice(`${download.filename} downloaded. It is a standalone preview; no site or domain was deployed.`)
+      setNotice(`${download.filename} downloaded. Nothing was deployed.`)
     } catch (error) {
-      setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
+      setNotice('Download failed: ' + (error instanceof Error ? error.message : 'unknown error'))
     }
   }
 
@@ -825,66 +848,24 @@ export function WebsiteProduct() {
                     ? 'Review go-live plan'
                     : 'Download website'
   const websiteAgentReason = storageIssue || canRepairLocalStorage
-    ? 'Saving or recovery needs attention before Website work can be trusted.'
-    : starterSetupActive
-      ? 'Answer a short brief to replace the example with client-specific pages.'
-      : starterAvailable
-        ? 'Review the working sample first. Customize it only when you are ready to add business details.'
-        : hasUnsavedChanges
-          ? 'Save the preview or discard it before review.'
-          : localPreviewReady
-            ? 'Your saved customization is ready as a standalone review file. Page checks and managed approval remain separate before go-live.'
-          : failingContentChecks.length
-            ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} need attention before approval.`
-            : leadCounts.new
-              ? `${leadCounts.new} new inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} a responsible person and a local decision before follow-up.`
-              : releaseRecordRequired && !approvalIsCurrent
-                ? 'Final review is required before a website file is saved.'
-                : releaseRecordRequired && !publishIsCurrent
-                  ? 'Save a static release file for the approved website.'
-                  : releaseRecordRequired
-                    ? 'Review the go-live checklist. Deployment still happens separately.'
-                    : 'Your reviewed site is ready to download. Nothing is deployed here.'
-  const websiteReviewNote = storageIssue || canRepairLocalStorage
-    ? 'Export a backup or confirm repair before continuing.'
-    : starterSetupActive
-      ? 'Review the generated pages before saving.'
-      : starterAvailable
-        ? 'The working sample stays unchanged until you choose Customize demo.'
-        : hasUnsavedChanges
-          ? 'Save or discard the preview.'
-          : localPreviewReady
-            ? 'Downloading does not deploy a site, connect a domain, or approve a managed release.'
-          : failingContentChecks.length
-            ? 'Fix content, navigation, proof, and contact readiness.'
-            : leadCounts.new
-              ? 'You qualify or close each inquiry; no customer message is sent here.'
-              : releaseRecordRequired && !approvalIsCurrent
-                ? 'You record review evidence.'
-                : releaseRecordRequired && !publishIsCurrent
-                  ? 'You create the website file.'
-                  : releaseRecordRequired
-                    ? 'You review the go-live checklist before deployment planning.'
-                    : 'You decide where it goes live.'
+    ? 'Fix local saving first.'
+    : starterAvailable || starterSetupActive
+      ? 'Answer five questions to replace the example.'
+      : hasUnsavedChanges
+        ? 'Save or discard this preview.'
+        : failingContentChecks.length
+          ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} remain.`
+          : leadCounts.new
+            ? `${leadCounts.new} inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} review.`
+            : 'Complete this step; nothing goes live automatically.'
+  const websiteReviewNote = hasUnsavedChanges
+    ? 'Save or discard first.'
+    : 'You approve every save, download, and go-live action.'
   const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
     ? 'Open recovery'
     : starterSetupActive || starterAvailable
       ? 'Customize demo'
-      : hasUnsavedChanges
-        ? 'Review edits'
-        : localPreviewReady
-          ? 'Download preview'
-        : failingContentChecks.length
-          ? 'Fix page checks'
-        : leadCounts.new
-          ? 'Review inquiries'
-          : releaseRecordRequired && !approvalIsCurrent
-            ? 'Review website'
-            : releaseRecordRequired && !publishIsCurrent
-              ? 'Create site file'
-              : releaseRecordRequired
-                ? 'Download or go live'
-                : 'Download website'
+      : websiteAgentJob
   const websiteTodayState = storageIssue || canRepairLocalStorage
     ? 'blocked'
     : starterAvailable || starterSetupActive
@@ -897,7 +878,6 @@ export function WebsiteProduct() {
     ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
     ['Readiness', hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
     ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
-    ['Review', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required'],
     ['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
   ] as const
   const websiteTodaySource = storageMode === 'managed'
@@ -992,10 +972,10 @@ export function WebsiteProduct() {
         }), { durable: true })
         if (!result.ok) throw new Error(result.error)
         setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
-        setNotice('Inquiry saved to the company Website inbox for manager review. No message, CRM write, or external send ran.')
+        setNotice('Inquiry saved for manager review. No message or external write ran.')
         return
       }
-      if (saveLeadLedger(next, 'Inquiry saved to the local Website inbox. No message, CRM write, or external send ran.')) {
+      if (saveLeadLedger(next, 'Inquiry saved locally. No message or external write ran.')) {
         setLeadDraft({ name: '', contact: '', request: '', consentRecorded: false })
       }
     } catch (error) {
@@ -1024,13 +1004,13 @@ export function WebsiteProduct() {
         if (!result.ok) throw new Error(result.error)
         setLeadDecisionNote('')
         setNotice(status === 'qualified'
-          ? 'Inquiry qualified and assigned in this company account. No customer message was sent.'
-          : 'Inquiry closed in this company account. No customer message was sent.')
+          ? 'Inquiry qualified and assigned. No message was sent.'
+          : 'Inquiry closed. No message was sent.')
         return
       }
       if (saveLeadLedger(next, status === 'qualified'
-        ? 'Inquiry qualified and assigned locally. No customer message was sent.'
-        : 'Inquiry closed locally. No customer message was sent.')) setLeadDecisionNote('')
+        ? 'Inquiry qualified locally. No message was sent.'
+        : 'Inquiry closed locally. No message was sent.')) setLeadDecisionNote('')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The Website inquiry decision is invalid.')
     }
@@ -1043,7 +1023,7 @@ export function WebsiteProduct() {
           {noticePriority !== 'routine' ? (
             <div className="website-notice" aria-busy={repairing} aria-live="polite" data-priority={noticePriority} role="status">
               <p>{repairArmed
-                ? 'SuperMega will keep a recovery copy on this device, then restore saving with the valid Website shown here. Nothing will be published; Shop, Plant, company data, and domains stay unchanged.'
+                ? 'Keep an archive, then restore local saving. Nothing is published or sent.'
                 : repairing ? 'Keeping a recovery copy and restoring Website saving…' : statusNotice}</p>
               {repairArchiveKey && !repairArmed ? (
                 <div className="website-notice-actions">
@@ -1169,7 +1149,7 @@ export function WebsiteProduct() {
                         <details className="website-recovery-manager">
                           <summary>Recovery archives <span>{recoveryArchives.length}</span></summary>
                           <div className="website-recovery-list">
-                            <p>Unreadable Website values kept on this device. Download before removing anything you may need.</p>
+                            <p>Unreadable local copies. Download before removal.</p>
                             {recoveryArchives.map((archive) => {
                               const deleteArmed = recoveryDeleteCandidate === archive.archiveKey
                               return (
@@ -1239,15 +1219,36 @@ export function WebsiteProduct() {
                 ) : null}
                 </div>
               ) : null}
+              {activeRemovedDraftPage ? (
+                <div
+                  className="website-section-remove-recovery website-page-remove-recovery"
+                  data-website-page-remove-recovery={activeRemovedDraftPage.page.id}
+                  role="status"
+                >
+                  <div>
+                    <strong>{activeRemovedDraftPage.page.internalName.trim() || 'Untitled page'} removed</strong>
+                    <small>Undo restores page {activeRemovedDraftPage.index + 1} with all content and navigation. Nothing was saved or published.</small>
+                  </div>
+                  <button
+                    aria-label={`Undo remove ${activeRemovedDraftPage.page.internalName.trim() || 'untitled page'}`}
+                    className="website-button is-secondary"
+                    onClick={undoPageRemoval}
+                    ref={pageRemovalActionRef}
+                    type="button"
+                  >
+                    Undo remove
+                  </button>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
           {!starterSetupActive ? <details className="website-start-tools website-business-controls">
-            <summary><span><strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small></span><b>{leadCounts.new} new</b></summary>
+            <summary><span><strong>Inquiries</strong><small>Capture, assign, decide, export</small></span><b>{leadCounts.new} new</b></summary>
             <div className="website-business-controls-content">
               <section aria-labelledby="website-lead-inbox-title" className="website-lead-inbox" id="website-lead-inbox">
                 <header>
-                  <div><span className="core-eyebrow">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Inquiries stay in this company account with ownership and decision history.' : 'Try the full workflow locally. Contact data stays in this browser.'} Nothing is sent to customers, CRM, or Shop from this screen.</p></div>
+                  <div><span className="core-eyebrow">Inquiry inbox</span><h2 id="website-lead-inbox-title" tabIndex={-1}>Capture customer inquiries</h2><p>{storageMode === 'managed' ? 'Saved with owner and decision history.' : 'Contact data stays in this browser.'} Nothing is sent.</p></div>
                   <div className="website-lead-counts"><span><strong>{leadCounts.new}</strong><small>New</small></span><span><strong>{leadCounts.qualified}</strong><small>Qualified</small></span><span><strong>{leadCounts.closed}</strong><small>Closed</small></span></div>
                 </header>
 
@@ -1257,7 +1258,7 @@ export function WebsiteProduct() {
                   <label className="website-lead-request">What do they need?<textarea maxLength={500} onChange={(event) => setLeadDraft((current) => ({ ...current, request: event.target.value }))} placeholder="Product, service, quantity, timing, or question" required rows={3} value={leadDraft.request} /></label>
                   <label className="website-lead-consent"><input checked={leadDraft.consentRecorded} onChange={(event) => setLeadDraft((current) => ({ ...current, consentRecorded: event.target.checked }))} required type="checkbox" /> Customer agreed to save these contact details for follow-up.</label>
                   <button className="website-button is-primary is-compact" disabled={!readyBuyerCtaPages.length} type="submit">Add inquiry</button>
-                  {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action before capturing inquiries.</small> : null}
+                  {!readyBuyerCtaPages.length ? <small className="website-field-error">Add a ready page with a contact action first.</small> : null}
                 </form>
 
                 {websiteLeads.length ? <div className="website-lead-review-controls"><label>Responsible person<input maxLength={120} onChange={(event) => setLeadOwner(event.target.value)} placeholder="Name or role" value={leadOwner} /></label><label>Decision note <small>optional</small><input maxLength={500} onChange={(event) => setLeadDecisionNote(event.target.value)} placeholder="Need, budget, timing, or closure reason" value={leadDecisionNote} /></label></div> : null}
@@ -1265,7 +1266,7 @@ export function WebsiteProduct() {
                   {websiteLeads.length ? websiteLeads.slice(0, 8).map((lead) => <article data-status={lead.status} key={lead.id}>
                     <div><span>{lead.status}</span><strong>{lead.name}</strong><small>{lead.contact} · {lead.sourcePage} · {formatRecoveryDate(lead.createdAt)}</small><p>{lead.request}</p>{lead.owner ? <small>Person: {lead.owner}{lead.decisionNote ? ` · ${lead.decisionNote}` : ''}</small> : null}</div>
                     {lead.status !== 'closed' ? <div><button className="website-button is-secondary is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'qualified')} type="button">Qualify</button><button className="website-button is-quiet is-compact" disabled={leadOwner.trim().length < 2} onClick={() => decideLead(lead.id, 'closed')} type="button">Close</button></div> : null}
-                  </article>) : <p className="website-lead-empty">No inquiry yet. Add one above to test capture, assignment, decision, persistence, and export.</p>}
+                  </article>) : <p className="website-lead-empty">No inquiry yet.</p>}
                 </div>
                 {websiteLeads.length ? <a className="website-button is-secondary is-compact website-lead-export" download={`website-leads-${workspace.siteName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'site'}.json`} href={leadExportHref}>Export inquiries</a> : null}
               </section>

@@ -628,6 +628,107 @@ export function workspaceFingerprint(workspace: WebsiteWorkspace) {
   return 'web-' + canonicalDigest(publishableState)
 }
 
+export const WEBSITE_DRAFT_PAGE_REMOVAL_CONTRACT = 'supermega.website.draft-page-removal.v1'
+
+export type WebsiteRemovedDraftPage = Readonly<{
+  contract: typeof WEBSITE_DRAFT_PAGE_REMOVAL_CONTRACT
+  sourceFingerprint: string
+  postRemovalFingerprint: string
+  page: WebsitePage
+  index: number
+  selectedPageIdBefore: string
+  selectedPageIdAfter: string
+  remainingPageIds: readonly string[]
+}>
+
+export type WebsiteDraftPageRemoval =
+  | Readonly<{ ok: true; workspace: WebsiteWorkspace; removed: WebsiteRemovedDraftPage }>
+  | Readonly<{ ok: false; reason: 'invalid_workspace' | 'page_missing' | 'page_not_removable' }>
+
+export type WebsiteDraftPageRecovery =
+  | Readonly<{ ok: true; workspace: WebsiteWorkspace }>
+  | Readonly<{ ok: false; reason: 'already_present' | 'invalid_recovery' | 'workspace_changed' }>
+
+function cloneWebsitePage(page: WebsitePage): WebsitePage {
+  return {
+    ...page,
+    navigation: { ...page.navigation },
+    hero: { ...page.hero },
+    sections: page.sections.map((section) => ({ ...section })),
+    seo: { ...page.seo },
+  }
+}
+
+function isRemovedDraftPage(value: unknown): value is WebsiteRemovedDraftPage {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['contract', 'sourceFingerprint', 'postRemovalFingerprint', 'page', 'index', 'selectedPageIdBefore', 'selectedPageIdAfter', 'remainingPageIds'])
+    || value.contract !== WEBSITE_DRAFT_PAGE_REMOVAL_CONTRACT
+    || typeof value.sourceFingerprint !== 'string'
+    || !fingerprintPattern.test(value.sourceFingerprint)
+    || typeof value.postRemovalFingerprint !== 'string'
+    || !fingerprintPattern.test(value.postRemovalFingerprint)
+    || !isWebsitePage(value.page)
+    || value.page.stage !== 'draft'
+    || value.page.slug === '/'
+    || !isNonNegativeInteger(value.index)
+    || !isText(value.selectedPageIdBefore, 80)
+    || !isText(value.selectedPageIdAfter, 80)
+    || !Array.isArray(value.remainingPageIds)
+    || !value.remainingPageIds.every((id) => isText(id, 80))
+    || new Set(value.remainingPageIds).size !== value.remainingPageIds.length) return false
+  return value.selectedPageIdBefore === value.page.id
+    && value.index <= value.remainingPageIds.length
+    && value.remainingPageIds.length >= 1
+    && value.remainingPageIds.length < MAX_WEBSITE_PAGES
+    && !value.remainingPageIds.includes(value.page.id)
+    && value.remainingPageIds.includes(value.selectedPageIdAfter)
+}
+
+export function removeWebsiteDraftPage(workspace: WebsiteWorkspace, pageId: string): WebsiteDraftPageRemoval {
+  if (!isWebsiteWorkspace(workspace) || !isText(pageId, 80) || workspace.selectedPageId !== pageId) {
+    return { ok: false, reason: 'invalid_workspace' }
+  }
+  const index = workspace.pages.findIndex((page) => page.id === pageId)
+  if (index < 0) return { ok: false, reason: 'page_missing' }
+  const page = workspace.pages[index]
+  if (page.slug === '/' || page.stage !== 'draft' || workspace.pages.length < 2) {
+    return { ok: false, reason: 'page_not_removable' }
+  }
+  const pages = workspace.pages.filter((candidate) => candidate.id !== pageId).map(cloneWebsitePage)
+  const selectedPageId = pages[0].id
+  const next = { ...workspace, pages, selectedPageId }
+  return {
+    ok: true,
+    workspace: next,
+    removed: {
+      contract: WEBSITE_DRAFT_PAGE_REMOVAL_CONTRACT,
+      sourceFingerprint: workspaceFingerprint(workspace),
+      postRemovalFingerprint: workspaceFingerprint(next),
+      page: cloneWebsitePage(page),
+      index,
+      selectedPageIdBefore: pageId,
+      selectedPageIdAfter: selectedPageId,
+      remainingPageIds: pages.map((candidate) => candidate.id),
+    },
+  }
+}
+
+export function recoverWebsiteDraftPage(workspace: WebsiteWorkspace, removed: WebsiteRemovedDraftPage): WebsiteDraftPageRecovery {
+  if (!isWebsiteWorkspace(workspace) || !isRemovedDraftPage(removed)) return { ok: false, reason: 'invalid_recovery' }
+  if (workspace.pages.some((page) => page.id === removed.page.id)) return { ok: false, reason: 'already_present' }
+  if (workspace.selectedPageId !== removed.selectedPageIdAfter
+    || workspace.pages.length !== removed.remainingPageIds.length
+    || !workspace.pages.every((page, index) => page.id === removed.remainingPageIds[index])
+    || workspaceFingerprint(workspace) !== removed.postRemovalFingerprint) return { ok: false, reason: 'workspace_changed' }
+  const pages = workspace.pages.map(cloneWebsitePage)
+  pages.splice(removed.index, 0, cloneWebsitePage(removed.page))
+  const next = { ...workspace, pages, selectedPageId: removed.selectedPageIdBefore }
+  if (!isWebsiteWorkspace(next) || workspaceFingerprint(next) !== removed.sourceFingerprint) {
+    return { ok: false, reason: 'invalid_recovery' }
+  }
+  return { ok: true, workspace: next }
+}
+
 export function createWebsiteEditSession(workspace: WebsiteWorkspace): WebsiteEditSession {
   return {
     schema: WEBSITE_EDIT_SESSION_SCHEMA,

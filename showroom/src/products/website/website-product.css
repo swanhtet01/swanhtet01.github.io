@@ -2754,6 +2754,11 @@
   min-height: 44px;
 }
 
+.website-page-remove-recovery {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
 .website-section-editor > header > strong,
 .website-record-count,
 .website-field-help,

@@ -287,12 +287,12 @@ if (!localWorkspaceStorageSource.includes("'supermega.plant.order-foundation.v1:
 if (!plantOrderUiSource.includes('<details className="compact-disclosure production-history" open>')) fail('plant_required_batch_fields_hidden_by_default')
 if (!websiteSource.includes("const releaseRecordRequired = storageMode === 'managed'")
   || !websiteSource.includes("const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges")
-  || !websiteSource.includes("['Review', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required']")
+  || !websiteSource.includes('releaseRecordRequired && !approvalIsCurrent')
   || !websiteSource.includes("['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download']")) fail('website_durable_trial_release_gates_missing')
 if (websiteSource.includes("{websiteTodayState !== 'ready' ? <section")
-  || !websiteSource.includes("'Download or go live'")
+  || !websiteSource.includes("'Review go-live plan'")
   || !websiteSource.includes("'Download website'")
-  || !websiteSource.includes('Your reviewed site is ready to download. Nothing is deployed here.')
+  || !websiteSource.includes('Complete this step; nothing goes live automatically.')
   || !websiteSource.includes('Go back, then Preview to check desktop, tablet, or mobile.')) fail('website_ready_state_repeats_completed_next_action')
 if (!websiteCssSource.includes('.website-preview-frame.is-tablet')
   || !websiteCssSource.includes('max-width: 768px')
@@ -397,7 +397,7 @@ if (!websiteModelSource.includes('leadLedger?: WebsiteLeadLedger')
   || !managedWebsitePythonRuntime.includes('"website.inquiry.reviewed"')
   || !managedWebsitePythonRuntime.includes('Website inquiry review is invalid or rewrites customer evidence.')
   || !managedTrialStoreRuntime.includes('event_type == "website.inquiry.received"')
-  || !websiteSource.includes('Inquiry saved to the company Website inbox')
+  || !websiteSource.includes('Inquiry saved for manager review.')
   || websiteSource.includes('Managed Website inquiries require the managed form endpoint')
   || websiteSource.includes("disabled={storageMode === 'managed'}")) fail('managed_website_inquiry_lifecycle_missing')
 
@@ -2194,19 +2194,17 @@ if (!websiteSource.includes('aria-labelledby="website-today-title"')
   || !websiteSource.includes('aria-labelledby="website-lead-inbox-title"')
   || !websiteSource.includes('Inquiry inbox')
   || !websiteSource.includes('Capture customer inquiries')
-  || !websiteSource.includes('Inquiries stay in this company account with ownership and decision history.')
-  || websiteSource.includes('Inquiries stay in this managed workspace with ownership and decision history.')
+  || !websiteSource.includes('Saved with owner and decision history.')
   || !websiteSource.includes('function captureDemoInquiry(')
   || !websiteSource.includes('function decideLead(')
   || !websiteSource.includes('Add inquiry')
   || !websiteSource.includes('Qualify')
   || !websiteSource.includes('Close')
   || !websiteSource.includes('Export inquiries')
-  || !websiteSource.includes('Inquiry saved to the company Website inbox for manager review.')
-  || !websiteSource.includes('No message, CRM write, or external send ran.')
+  || !websiteSource.includes('Inquiry saved for manager review.')
+  || !websiteSource.includes('No message or external write ran.')
   || !websiteSource.includes('const statusWorkspace = hasUnsavedChanges ? editorWorkspace : workspace')
   || !websiteSource.includes("['Readiness', hasUnsavedChanges ? 'Review draft'")
-  || !websiteSource.includes("['Review', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? approvalIsCurrent ? 'Recorded' : 'Needed' : 'Not required']")
   || !websiteSource.includes("['File', hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download']")
   || websiteSource.includes("['Approval', hasUnsavedChanges ? 'Blocked by draft'")
   || websiteSource.includes("['Site package', hasUnsavedChanges ? 'Blocked by draft'")
@@ -2214,10 +2212,10 @@ if (!websiteSource.includes('aria-labelledby="website-today-title"')
   || websiteSource.includes('Managed Website ·')
   || !websiteSource.includes('Responsible person')
   || websiteSource.includes('Responsible owner')
-  || !websiteSource.includes('<strong>Inquiries</strong><small>Inquiry inbox, customer capture, ownership, and export</small>')
+  || !websiteSource.includes('<strong>Inquiries</strong><small>Capture, assign, decide, export</small>')
   || websiteSource.includes('<strong>Leads</strong><small>Capture and owner review</small>')
   || !websiteSource.includes("? 'Review new inquiries'")
-  || !websiteSource.includes("? 'Review inquiries'")
+  || !websiteSource.includes(': websiteAgentJob')
   || !websiteSource.includes('function runWebsiteAutopilot()')
   || !websiteSource.includes("document.querySelector<HTMLDetailsElement>('.website-business-controls')")
   || !websiteSource.includes("document.getElementById('website-lead-inbox-title')?.focus")
@@ -3668,6 +3666,38 @@ if (websiteSectionRemoveStart < 0
   || !websiteCssSource.includes('.website-section-remove-recovery .website-button {\n    width: 100%;')
   || !websiteCssSource.includes('/* Website runs inside the shared SuperMega shell. */\n.website-product {\n  height: 100%;\n  min-width: 0;\n  min-height: 0;\n  overflow-x: hidden;\n  overflow-y: auto;')
   || websiteSectionRecoveryForbiddenActions.some((marker) => websiteSectionRecoverySource.includes(marker) || websiteSectionRemoveAction.includes(marker) || websiteSectionUndoAction.includes(marker))) fail('website_section_remove_recovery_contract_missing')
+const websitePageRemoveStart = websiteSource.indexOf('function requestDeletePage(')
+const websitePageUndoStart = websiteSource.indexOf('function undoPageRemoval(', websitePageRemoveStart)
+const websitePageUndoEnd = websiteSource.indexOf('function movePage(', websitePageUndoStart)
+const websitePageRemoveAction = websiteSource.slice(websitePageRemoveStart, websitePageUndoStart)
+const websitePageUndoAction = websiteSource.slice(websitePageUndoStart, websitePageUndoEnd)
+const websitePageModelStart = websiteModelSource.indexOf("export const WEBSITE_DRAFT_PAGE_REMOVAL_CONTRACT = 'supermega.website.draft-page-removal.v1'")
+const websitePageModelEnd = websiteModelSource.indexOf('export function createWebsiteEditSession(', websitePageModelStart)
+const websitePageRecoveryModelSource = websiteModelSource.slice(websitePageModelStart, websitePageModelEnd)
+const websitePageRecoveryForbiddenActions = ['fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'mutateWorkspace(', 'commitWorkspace(', 'saveDraft(', 'downloadTrialSite(', 'recordWebsite']
+if (websitePageRemoveStart < 0
+  || websitePageUndoStart < 0
+  || websitePageUndoEnd < 0
+  || websitePageModelStart < 0
+  || websitePageModelEnd < 0
+  || !websitePageRecoveryModelSource.includes('export function removeWebsiteDraftPage')
+  || !websitePageRecoveryModelSource.includes('export function recoverWebsiteDraftPage')
+  || !websitePageRecoveryModelSource.includes('sourceFingerprint: workspaceFingerprint(workspace)')
+  || !websitePageRecoveryModelSource.includes('postRemovalFingerprint: workspaceFingerprint(next)')
+  || !websitePageRecoveryModelSource.includes('workspaceFingerprint(workspace) !== removed.postRemovalFingerprint')
+  || !websitePageRecoveryModelSource.includes('workspaceFingerprint(next) !== removed.sourceFingerprint')
+  || !websitePageRecoveryModelSource.includes('pages.splice(removed.index, 0, cloneWebsitePage(removed.page))')
+  || !websitePageRemoveAction.includes('removeWebsiteDraftPage(editorWorkspace, selectedPage.id)')
+  || !websitePageRemoveAction.includes('{ retainPageRemoval: true }')
+  || !websitePageRemoveAction.includes('setRemovedDraftPage(removal.removed)')
+  || !websitePageUndoAction.includes('recoverWebsiteDraftPage(editorWorkspace, removed)')
+  || !websitePageUndoAction.includes("setNotice('Draft page restored at its exact position. Nothing was saved or published.')")
+  || !websiteSource.includes('if (!options.retainPageRemoval) setRemovedDraftPage(null)')
+  || !websiteSource.includes('data-website-page-remove-recovery={activeRemovedDraftPage.page.id}')
+  || !websiteSource.includes('ref={pageRemovalActionRef}')
+  || !websiteSource.includes('Undo restores page {activeRemovedDraftPage.index + 1} with all content and navigation. Nothing was saved or published.')
+  || !websiteCssSource.includes('.website-page-remove-recovery {\n  grid-column: 1 / -1;\n  margin-bottom: 0;')
+  || websitePageRecoveryForbiddenActions.some((marker) => websitePageRecoveryModelSource.includes(marker) || websitePageRemoveAction.includes(marker) || websitePageUndoAction.includes(marker))) fail('website_page_remove_recovery_contract_missing')
 if (!appPackage.scripts?.lint?.includes('src/products')) fail('prototype_sources_not_linted')
 if (!websiteSource.includes('Nothing has been deployed.')
   || !websiteSource.includes('Nothing was deployed.')
@@ -3868,7 +3898,7 @@ if (!websiteModelSource.includes('repairInvalidWebsiteWorkspace')
   || !websiteSource.includes('Download archive')
   || !websiteSource.includes('Recovery archives')
   || !websiteSource.includes('Confirm remove')
-  || !websiteSource.includes('Shop, Plant, company data, and domains stay unchanged.')
+  || !websiteSource.includes('Nothing is published or sent.')
   || !websiteSource.includes('aria-busy={repairing}')) fail('website_targeted_repair_contract_missing')
 const managedWebsiteCommandStart = managedTrialSource.indexOf('export async function saveManagedWebsiteCommand')
 const managedWebsiteCommandEnd = managedTrialSource.indexOf('export async function createManagedApproval', managedWebsiteCommandStart)
@@ -3939,7 +3969,7 @@ if (!websiteSource.includes("storageMode === 'managed' ? canReview ? (")
   || !websiteSource.includes(': null : localPreviewReady ? (')
   || !websiteSource.includes('onClick={downloadTrialSite}')
   || !websiteSource.includes('createWebsiteHtmlDownload(createWebsitePreviewArtifact(workspace))')
-  || !websiteSource.includes('no site or domain was deployed')
+  || !websiteSource.includes('downloaded. Nothing was deployed.')
   || !websiteSource.includes('Downloading does not deploy a site, connect a domain, or send customer data.')
   || !websiteCssSource.includes('.website-trial-ready-body')
   || !websiteCssSource.includes('.website-trial-download')) fail('website_release_completion_not_durable_or_honest')
@@ -3971,8 +4001,9 @@ if (!websiteCssSource.includes('.website-action-bar {\n  order: 2;')
   || !websiteSource.includes('<span className="core-eyebrow">Start here</span>')
   || !websiteSource.includes('const websiteTodayStep =')
   || !websiteSource.includes('data-step={websiteTodayStep}')
-  || !websiteSource.includes("? 'Review website'")
-  || !websiteSource.includes("? 'Create site file'")
+  || !websiteSource.includes("? 'Final review'")
+  || !websiteSource.includes("? 'Save website file'")
+  || !websiteSource.includes(': websiteAgentJob')
   || websiteSource.includes('aria-label="Website setup steps"')
   || websiteSource.includes('Try the sample. Then make it yours.')
   || websiteSource.includes('aria-label="Website guided jobs"')
@@ -3993,7 +4024,7 @@ if (!websiteSource.includes("const [surface, setSurface] = useState<'work' | 'pr
   || !websiteSource.includes("? starterAvailable ? 'Edit sample' : 'Edit page'")
   || !websiteSource.includes('{websiteSurfaceActionLabel}')
   || !websiteSource.includes("surface === 'preview' && !starterAvailable ? 'is-primary' : 'is-secondary'")
-  || !websiteSource.includes('Select Edit page to update it and mark it ready.')) fail('website_focus_mode_missing')
+  || !websiteSource.includes('Saved draft. Edit it, then mark it ready.')) fail('website_focus_mode_missing')
 if (!websiteSource.includes('createWebsiteEditSession(workspace)')
   || !websiteSource.includes('commitWebsiteEditSession(current, retained.session)')
   || !websiteSource.includes('restoreWebsiteEditSession(raw)')
@@ -4007,7 +4038,7 @@ if (!websiteSource.includes('createWebsiteEditSession(workspace)')
   || !websiteModelSource.includes('sameReleaseHistory')
   || !websiteCssSource.includes('.website-save-state[data-state="unsaved"]')
   || !websiteCssSource.includes('.website-action-bar[data-editing="true"]')) fail('website_transactional_edit_session_missing')
-if (!/function discardDraft\(\)[\s\S]*?setStarterDismissed\(true\)[\s\S]*?setSurface\('preview'\)[\s\S]*?setNotice\('Unsaved Website changes discarded\. The saved website was not changed\.'\)/.test(websiteSource)) fail('website_discard_does_not_restore_saved_preview')
+if (!/function discardDraft\(\)[\s\S]*?setStarterDismissed\(true\)[\s\S]*?setSurface\('preview'\)[\s\S]*?setNotice\('Preview discarded\. The saved site did not change\.'\)/.test(websiteSource)) fail('website_discard_does_not_restore_saved_preview')
 if (!websiteCssSource.includes('.website-workspace-grid[data-surface="work"] > .website-preview-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-work-surface')
   || !websiteCssSource.includes('.website-workspace-grid[data-surface="preview"] > .website-preview-surface')
@@ -10686,6 +10717,82 @@ async function verifyWebsiteRuntime() {
         )
       : null
     assert(malformedRecovery && !malformedRecovery.ok && malformedRecovery.reason === 'invalid_recovery', 'website_section_recovery_accepted_malformed_position')
+    const pageRemovalSeed = {
+      ...seed,
+      siteName: 'Edited before removal',
+      selectedPageId: seed.pages[1].id,
+      pages: seed.pages.map((page, index) => index === 0
+        ? { ...page, hero: { ...page.hero, headline: 'Unrelated home edit stays.' } }
+        : index === 1
+          ? {
+              ...page,
+              stage: 'draft',
+              internalName: 'Recovered catalog',
+              navigation: { label: 'Restored catalog', visible: false },
+              hero: { ...page.hero, headline: 'Exact recovered headline.' },
+              sections: page.sections.map((section, sectionIndex) => sectionIndex === 0
+                ? { ...section, body: 'Exact recovered section body.' }
+                : section),
+              seo: { title: 'Recovered SEO title', description: 'Recovered SEO description for exact page recovery.' },
+            }
+          : page),
+    }
+    const pageRemoval = model.removeWebsiteDraftPage(pageRemovalSeed, pageRemovalSeed.selectedPageId)
+    assert(pageRemoval.ok
+      && pageRemoval.removed.index === 1
+      && pageRemoval.removed.page.internalName === 'Recovered catalog'
+      && pageRemoval.removed.page.navigation.label === 'Restored catalog'
+      && pageRemoval.removed.page.sections[0].body === 'Exact recovered section body.'
+      && pageRemoval.workspace.pages.map((page) => page.id).join(',') === `${seed.pages[0].id},${seed.pages[2].id}`
+      && pageRemoval.workspace.selectedPageId === seed.pages[0].id
+      && pageRemoval.removed.page !== pageRemovalSeed.pages[1]
+      && pageRemoval.removed.page.hero !== pageRemovalSeed.pages[1].hero,
+    'website_page_removal_not_bound_to_exact_page_position_and_full_clone')
+    const pageRestored = pageRemoval.ok
+      ? model.recoverWebsiteDraftPage(pageRemoval.workspace, pageRemoval.removed)
+      : null
+    assert(pageRestored?.ok
+      && pageRestored.workspace.pages.map((page) => page.id).join(',') === seed.pages.map((page) => page.id).join(',')
+      && pageRestored.workspace.selectedPageId === seed.pages[1].id
+      && pageRestored.workspace.pages[0].hero.headline === 'Unrelated home edit stays.'
+      && JSON.stringify(pageRestored.workspace.pages[1]) === JSON.stringify(pageRemovalSeed.pages[1])
+      && pageRestored.workspace.pages[1] !== pageRemovalSeed.pages[1]
+      && model.workspaceFingerprint(pageRestored.workspace) === pageRemoval.removed.sourceFingerprint,
+    'website_page_recovery_did_not_restore_exact_clone_and_preserve_prior_edits')
+    const changedPageRecovery = pageRemoval.ok
+      ? model.recoverWebsiteDraftPage({
+          ...pageRemoval.workspace,
+          pages: pageRemoval.workspace.pages.map((page, index) => index === 0
+            ? { ...page, hero: { ...page.hero, headline: 'Changed after removal.' } }
+            : page),
+        }, pageRemoval.removed)
+      : null
+    assert(changedPageRecovery && !changedPageRecovery.ok && changedPageRecovery.reason === 'workspace_changed', 'website_page_recovery_ignored_changed_remaining_content')
+    const reorderedPageRecovery = pageRemoval.ok
+      ? model.recoverWebsiteDraftPage({ ...pageRemoval.workspace, pages: [...pageRemoval.workspace.pages].reverse() }, pageRemoval.removed)
+      : null
+    assert(reorderedPageRecovery && !reorderedPageRecovery.ok && reorderedPageRecovery.reason === 'workspace_changed', 'website_page_recovery_ignored_changed_page_sequence')
+    const changedSelectionRecovery = pageRemoval.ok
+      ? model.recoverWebsiteDraftPage({ ...pageRemoval.workspace, selectedPageId: seed.pages[2].id }, pageRemoval.removed)
+      : null
+    assert(changedSelectionRecovery && !changedSelectionRecovery.ok && changedSelectionRecovery.reason === 'workspace_changed', 'website_page_recovery_ignored_changed_selection')
+    const duplicatePageRecovery = pageRemoval.ok && pageRestored?.ok
+      ? model.recoverWebsiteDraftPage(pageRestored.workspace, pageRemoval.removed)
+      : null
+    assert(duplicatePageRecovery && !duplicatePageRecovery.ok && duplicatePageRecovery.reason === 'already_present', 'website_page_recovery_duplicated_a_restored_page')
+    const malformedPageRecovery = pageRemoval.ok
+      ? model.recoverWebsiteDraftPage(pageRemoval.workspace, { ...pageRemoval.removed, unexpected: true })
+      : null
+    assert(malformedPageRecovery && !malformedPageRecovery.ok && malformedPageRecovery.reason === 'invalid_recovery', 'website_page_recovery_accepted_extra_evidence_fields')
+    const protectedPageRemoval = model.removeWebsiteDraftPage(seed, seed.pages[0].id)
+    assert(!protectedPageRemoval.ok && protectedPageRemoval.reason === 'page_not_removable', 'website_page_removal_allowed_the_root_page')
+    const readyPageRemoval = model.removeWebsiteDraftPage({ ...seed, selectedPageId: seed.pages[1].id }, seed.pages[1].id)
+    assert(!readyPageRemoval.ok && readyPageRemoval.reason === 'page_not_removable', 'website_page_removal_allowed_a_ready_page')
+    const nonSelectedPageRemoval = model.removeWebsiteDraftPage({
+      ...pageRemovalSeed,
+      selectedPageId: seed.pages[2].id,
+    }, seed.pages[1].id)
+    assert(!nonSelectedPageRemoval.ok && nonSelectedPageRemoval.reason === 'invalid_workspace', 'website_page_removal_crossed_the_selected_page_boundary')
     const incompletePage = {
       ...seedPage,
       internalName: ' ',
