@@ -30,10 +30,11 @@
     {"productId":"plant","workOrderId":"plant-job-plan-close-recovery","checkpoint":"OPS-176"},
     {"productId":"website","workOrderId":"website-section-remove-recovery","checkpoint":"OPS-177"},
     {"productId":"ecommerce","workOrderId":"ecommerce-order-change-close-recovery","checkpoint":"OPS-178"},
-    {"productId":"shop","workOrderId":"shop-stock-move-close-recovery","checkpoint":"OPS-179"}
+    {"productId":"shop","workOrderId":"shop-stock-move-close-recovery","checkpoint":"OPS-179"},
+    {"productId":"plant","workOrderId":"plant-plan-revision-close-recovery","checkpoint":"OPS-180"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"plant","workOrderId":"plant-plan-revision-close-recovery","priority":100,"status":"ready-local","workOrder":"Plant: recover one accidentally closed controlled-plan revision exactly; never revise a plan or record production.","reason":"Revise plan rebuilds the complete BOM and routing draft whenever the setup dialog reopens."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"website","workOrderId":"website-page-remove-recovery","priority":100,"status":"ready-local","workOrder":"Website: undo one confirmed page removal exactly; never save or publish.","reason":"Recovery otherwise discards unrelated edits."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
