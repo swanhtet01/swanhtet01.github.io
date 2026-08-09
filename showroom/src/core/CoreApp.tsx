@@ -678,13 +678,14 @@ function defaultJobDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 8 * 60 * 60 * 1000))
 }
 
+type PlantJobDraft = { id: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string }
+
 type PlantJobImportReview = {
   status: 'ready' | 'blocked'
   totalRows: number
   readyRows: number
   blockedRows: number
-  firstReady?: { id: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string }
-  summary: string
+  readyJobs: PlantJobDraft[]
 }
 
 const PLANT_JOB_IMPORT_MAX_BYTES = 180 * 1024
@@ -7776,7 +7777,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     procedureCompleted: boolean
     returnToService: ProductionMaintenanceReturnToService
   } | null>(null)
-  const [jobDraft, setJobDraft] = useState<{ id: string; line: string; product: string; target: string; owner: string; priority: ProductionJobPriority; dueAt: string }>({
+  const [jobDraft, setJobDraft] = useState<PlantJobDraft>({
     id: '',
     line: '',
     product: '',
@@ -9249,8 +9250,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   function buildPlantJobImportReview(csvText: string): PlantJobImportReview {
     const parsed = parsePlantJobImportCsv(csvText)
-    if (parsed.length < 2) throw new Error('Upload the Plant job CSV header and at least one job row.')
-    if (parsed.length - 1 > PLANT_JOB_IMPORT_MAX_ROWS) throw new Error(`Review at most ${PLANT_JOB_IMPORT_MAX_ROWS} Plant job rows at a time.`)
+    if (parsed.length < 2) throw new Error('CSV needs a header and one job row.')
+    if (parsed.length - 1 > PLANT_JOB_IMPORT_MAX_ROWS) throw new Error(`CSV supports up to ${PLANT_JOB_IMPORT_MAX_ROWS} job rows.`)
     const headers = parsed[0].map((header) => header.trim())
     const jobIdIndex = plantJobImportColumn(headers, ['jobid', 'job', 'id', 'workorder', 'order'])
     const lineIndex = plantJobImportColumn(headers, ['line', 'team', 'station', 'workcenter', 'workcentre'])
@@ -9267,13 +9268,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ['owner', ownerIndex],
       ['due_at', dueAtIndex],
     ] as Array<[string, number]>).filter(([, index]) => index < 0).map(([label]) => label)
-    if (missingColumns.length) throw new Error(`Plant job CSV is missing ${missingColumns.join(', ')}.`)
+    if (missingColumns.length) throw new Error(`CSV missing ${missingColumns.join(', ')}.`)
 
     const existingIds = new Set(production.jobs.map((job) => job.id.toUpperCase()))
     const seenIds = new Set<string>()
-    let readyRows = 0
     let blockedRows = 0
-    let firstReady: PlantJobImportReview['firstReady']
+    const readyJobs: PlantJobDraft[] = []
     for (const cells of parsed.slice(1)) {
       const id = (cells[jobIdIndex] ?? '').trim().toUpperCase()
       const line = (cells[lineIndex] ?? '').trim()
@@ -9296,21 +9296,18 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       if (blocked) {
         blockedRows += 1
       } else {
-        readyRows += 1
         seenIds.add(id)
-        firstReady ??= { id, line, product, target: String(targetNumber), owner, priority, dueAt }
+        readyJobs.push({ id, line, product, target: String(targetNumber), owner, priority, dueAt })
       }
     }
+    const readyRows = readyJobs.length
     const totalRows = readyRows + blockedRows
     return {
       status: readyRows > 0 && blockedRows === 0 ? 'ready' : 'blocked',
       totalRows,
       readyRows,
       blockedRows,
-      firstReady,
-      summary: firstReady
-        ? `${readyRows} ready of ${totalRows}. First ready job ${firstReady.id} was copied into the review form.`
-        : `${blockedRows} blocked of ${totalRows}. Fix IDs, line, product, target, owner, future due time, and duplicates.`,
+      readyJobs,
     }
   }
 
@@ -9323,23 +9320,29 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     return rows.map((row) => row.map(plantJobImportCsvCell).join(',')).join('\r\n')
   }
 
-  function loadPlantJobImportReview(review: PlantJobImportReview) {
-    setPlantJobImportReview(review)
-    if (!review.firstReady) return
-    setJobDraft(review.firstReady)
+  function loadPlantJobImportDraft(draft: PlantJobDraft) {
+    setSelectedShopDemandDigest('')
+    setJobDraft(draft)
     if (jobDisclosureRef.current) jobDisclosureRef.current.open = true
     requestAnimationFrame(focusPlantJobIdInput)
+    setNotice(`Ready job ${draft.id} copied below; no Plant write ran.`)
+  }
+
+  function loadPlantJobImportReview(review: PlantJobImportReview) {
+    setPlantJobImportReview(review)
+    const firstReady = review.readyJobs[0]
+    if (firstReady) loadPlantJobImportDraft(firstReady)
   }
 
   function loadSamplePlantJobImportBatch() {
     if (pendingAction) {
-      setNotice('Finish or cancel the pending Plant review before loading a sample job batch.')
+      setNotice('Finish or cancel the pending review first.')
       return
     }
     const review = buildPlantJobImportReview(buildSamplePlantJobImportCsv())
     loadPlantJobImportReview(review)
     setPlantJobImportSourceName('sample-plant-job-batch.csv')
-    setNotice(review.firstReady
+    setNotice(review.readyRows
       ? 'Sample checked. First ready job copied below; no Plant write ran.'
       : 'Sample checked; no row is ready and no Plant write ran.')
     recordBehaviorSignal(window.localStorage, {
@@ -9357,19 +9360,19 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setPlantJobImportSourceName(file.name)
     if (!file.name.toLowerCase().endsWith('.csv') && file.type !== 'text/csv') {
       setPlantJobImportReview(null)
-      setNotice('Plant job upload rejected locally. Choose a CSV file. No production job, equipment command, material movement, accounting post, or managed write ran.')
+      setNotice('Choose a Plant job CSV. No Plant write ran.')
       return
     }
     if (file.size > PLANT_JOB_IMPORT_MAX_BYTES) {
       setPlantJobImportReview(null)
-      setNotice('Plant job CSV is too large. Upload at most 180 KB or split the file into 50-row batches. No production job, equipment command, material movement, accounting post, or managed write ran.')
+      setNotice('CSV exceeds 180 KB. Split into 50-row files; no Plant write ran.')
       return
     }
     try {
       const text = await file.text()
       const review = buildPlantJobImportReview(text)
       loadPlantJobImportReview(review)
-      setNotice(review.firstReady
+      setNotice(review.readyRows
         ? 'CSV checked. First ready job copied below; no Plant write ran.'
         : 'CSV checked; no row is ready and no Plant write ran.')
       recordBehaviorSignal(window.localStorage, {
@@ -9380,7 +9383,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       })
     } catch (error) {
       setPlantJobImportReview(null)
-      setNotice(error instanceof Error ? error.message : 'Uploaded Plant job CSV could not be reviewed locally.')
+      setNotice(error instanceof Error ? error.message : 'CSV could not be checked locally.')
     }
   }
 
@@ -10059,16 +10062,22 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div><span className="core-eyebrow">Compliance file</span><strong>{plantComplianceDossierNext}</strong><small>Summarize quality release, maintenance closure, material traceability, output evidence, shift close, and cost-readiness into one audit packet. No certificate, quality release, costing, inventory valuation, equipment command, customer claim, or production write runs from this file.</small></div>
     <div className="plant-control-rows">{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
+  const plantJobImportReady = plantJobImportReview?.readyJobs.filter((draft) => !production.jobs.some((job) => job.id === draft.id)) ?? []
+  const plantJobImportSummary = plantJobImportReview
+    ? plantJobImportReady.length
+      ? `${plantJobImportReady.length} of ${plantJobImportReview.readyRows} ready jobs remain.`
+      : plantJobImportReview.blockedRows ? `Repair ${plantJobImportReview.blockedRows} blocked rows.` : 'All reviewed jobs are in Plant.'
+    : ''
   const plantJobRepairRows = plantJobImportReview
     ? [
-        ['Ready rows', `${plantJobImportReview.readyRows}`],
+        ['Ready rows', `${plantJobImportReady.length}`],
         ['Blocked rows', `${plantJobImportReview.blockedRows}`],
-        ['Next fix', plantJobImportReview.status === 'ready' ? 'Review copied job' : 'Fix ID, line, product, target, owner, due time, duplicates'],
+        ['Next fix', plantJobImportReady.length ? 'Review imported job' : plantJobImportReview.blockedRows ? 'Repair blocked rows' : 'Done'],
       ] as const
     : [
         ['Step 1', 'Load sample or upload CSV'],
         ['Step 2', 'Checks job fields locally'],
-        ['Step 3', 'Review one copied job'],
+        ['Step 3', 'Review imported jobs'],
       ] as const
   const plantBusinessControls = <details className="product-guidance-disclosure plant-business-controls">
     <summary><span>Advanced Plant controls</span><small>Planning, MRP, quality, maintenance, traceability, compliance, and costing</small></summary>
@@ -10101,12 +10110,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
           <section aria-label="Plant job CSV import" className="plant-job-import">
-            <div><span className="core-eyebrow">Job CSV import</span><strong>Upload job list</strong><small>Check owner, target, due time, and duplicates. Import never creates Plant records.</small></div>
+            <div><span className="core-eyebrow">Job CSV import</span><strong>Upload job list</strong><small>Checks required fields and duplicates. Review never creates jobs.</small></div>
             <div className="plant-job-import-actions">
               <button className="core-button" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Load sample job batch</button>
               <label className="plant-job-import-upload">Upload Plant job CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
               <div aria-label="Plant job repair checklist" className="plant-job-import-repair">{plantJobRepairRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-              {plantJobImportReview ? <div className={`plant-job-import-review ${plantJobImportReview.status}`} role="status"><strong>{plantJobImportReview.status === 'ready' ? 'Ready for review' : 'Repair before Plant review'}</strong><span>{plantJobImportReview.summary}</span><small>{plantJobImportReview.readyRows} ready / {plantJobImportReview.blockedRows} blocked / no Plant write</small></div> : null}
+              {plantJobImportReview ? <><div className={`plant-job-import-review ${plantJobImportReview.status}`} role="status"><strong>{plantJobImportReady.length ? 'Ready for review' : plantJobImportReview.blockedRows ? 'Repair before Plant review' : 'Import reviewed'}</strong><span>{plantJobImportSummary}</span><small>{plantJobImportReady.length} ready / {plantJobImportReview.blockedRows} blocked / review only</small></div>{plantJobImportReview.readyRows > 1 && plantJobImportReady.length ? <label className="core-form"><small>Ready job</small><select aria-label="Ready imported job" disabled={Boolean(pendingAction)} onChange={(event) => { const draft = plantJobImportReady.find((candidate) => candidate.id === event.target.value); if (draft) loadPlantJobImportDraft(draft) }} value={plantJobImportReady.some((draft) => draft.id === jobDraft.id) ? jobDraft.id : ''}><option value="">Choose ready job</option>{plantJobImportReady.map((draft) => <option key={draft.id} value={draft.id}>{draft.id} · {draft.product}</option>)}</select></label> : null}</> : null}
               {plantJobImportSourceName ? <p className="plant-job-import-source">Local file: {plantJobImportSourceName}</p> : null}
             </div>
           </section>

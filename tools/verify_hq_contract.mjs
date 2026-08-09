@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-194'
   && completedAutomationArchive.entries?.length === 42
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 22
+  && portfolioSource.completedLocalAutomations.length === 23
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 64
+  && portfolio.completedLocalAutomations.length === 65
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -477,10 +477,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[63]?.productId === 'plant'
   && portfolio.completedLocalAutomations[63]?.workOrderId === 'plant-job-import-ready-focus'
   && portfolio.completedLocalAutomations[63]?.checkpoint === 'OPS-216'
+  && portfolio.completedLocalAutomations[64]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[64]?.workOrderId === 'plant-job-import-ready-row-review'
+  && portfolio.completedLocalAutomations[64]?.checkpoint === 'OPS-217'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-job-import-ready-row-review'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-job-import-blocked-row-detail'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1662,6 +1665,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-216 | CEO + Plant Import Focus / Agent Operations Codex | done-local |')
   && workboard.includes('One shared reviewed-draft handoff now records the review')
   && workboard.includes('The receipt advances `plant-job-import-ready-row-review`')
+  && workboard.includes('| OPS-217 | CEO + Plant Import Row Review / Agent Operations Codex | done-local |')
+  && workboard.includes('The review now keeps ordered ready drafts')
+  && workboard.includes('The receipt advances `plant-job-import-blocked-row-detail`')
   && workboard.includes('| CLAUDE-007 | Claude Code | ready |')
   && workboard.includes('Shop Finance checkpoint `2744b28f`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -1694,7 +1700,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-shop-demand-job-focus' && entry.checkpoint === 'OPS-214')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-shop-demand-covered-job-open' && entry.checkpoint === 'OPS-215')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-job-import-ready-focus' && entry.checkpoint === 'OPS-216')
-  && portfolio.localImprovementQueue[0].workOrderId === 'plant-job-import-ready-row-review')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-job-import-ready-row-review' && entry.checkpoint === 'OPS-217')
+  && portfolio.localImprovementQueue[0].workOrderId === 'plant-job-import-blocked-row-detail')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
