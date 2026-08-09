@@ -1619,6 +1619,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     sourceRequestId: string
     successorRequestId: string | null
   } | null>(null)
+  const [localEcommerceReplacement, setLocalEcommerceReplacement] = useState<{
+    sourceRequestId: string
+    successorRequestId: string
+  } | null>(null)
   const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
   const [orderDraftRead, setOrderDraftRead] = useState<CommerceOrderDraftReadResult>({ status: 'empty', draft: null, error: '' })
   const [orderDraftActive, setOrderDraftActive] = useState(false)
@@ -1629,6 +1633,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [orderDraftInitializedScope, setOrderDraftInitializedScope] = useState('')
   const orderDraftInitialized = orderDraftInitializedScope === orderDraftScope
   const orderComposerRef = useRef<HTMLDialogElement>(null)
+  const ecommerceReplacementLinkRef = useRef<HTMLAnchorElement>(null)
   const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
   const orderReviewRef = useRef<HTMLButtonElement>(null)
@@ -1981,13 +1986,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setOrderDraftConflict(false)
       setOrderEntryMode('online')
       const localOnlySuccessor = !preparedEcommerceManagedSuccessorRequestId && preparedEcommerceLocalSuccessorRequestId
+      setLocalEcommerceReplacement(localOnlySuccessor
+        ? { sourceRequestId: supersededRequestId, successorRequestId: localOnlySuccessor }
+        : null)
       setNotice(localOnlySuccessor
-        ? `${supersededRequestId} was replaced by ${localOnlySuccessor}. The stale Shop draft was closed; open Ecommerce to hand off the replacement.`
+        ? `${supersededRequestId} was replaced by ${localOnlySuccessor}. The stale Shop draft was closed; open the replacement in Ecommerce.`
         : `${supersededRequestId} was replaced by ${preparedEcommerceSupersededByRequestId}. The stale Shop draft was closed; review the replacement instead.`)
       requestAnimationFrame(() => {
         if (localOnlySuccessor) {
           orderComposerRef.current?.close()
-          document.querySelector<HTMLAnchorElement>('a[href="/ecommerce/"]')?.focus({ preventScroll: true })
+          ecommerceReplacementLinkRef.current?.focus({ preventScroll: true })
           return
         }
         document.querySelector<HTMLButtonElement>(`[data-ecommerce-request-id="${preparedEcommerceSupersededByRequestId}"]`)?.focus({ preventScroll: true })
@@ -2553,6 +2561,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           : null
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(ecommerceNavigationDraft)
+        setLocalEcommerceReplacement(null)
         setCustomer(navigationCustomer)
         setChannel('Ecommerce')
         const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)
@@ -2995,6 +3004,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
       : !commerceCanWrite && commerceSync.status !== 'checking'
         ? <Link to="/settings/#controls">Open Settings</Link>
+        : localEcommerceReplacement
+          ? <Link
+              data-ecommerce-local-replacement={localEcommerceReplacement.successorRequestId}
+              ref={ecommerceReplacementLinkRef}
+              to="/ecommerce/"
+            >Open replacement</Link>
         : null}
   </div>
   const orderNotice = notice || commerceStorageError
