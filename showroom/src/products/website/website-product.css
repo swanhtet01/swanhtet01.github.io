@@ -33,7 +33,10 @@
   --website-panel-raised: #121b25;
   --website-ink: #f5f8fb;
   --website-muted: #a4b0be;
-  --website-quiet: #718093;
+  /* #718093 measures 4.31:1 against the dark panel, under the 4.5:1 AA floor for body
+     text. The identical value was already lifted to #7a8a9c (4.91:1) for --core-quiet in
+     core-app.css; this file kept the old one, so the same defect survived here. */
+  --website-quiet: #7a8a9c;
   --website-line: rgba(166, 190, 214, .13);
   --website-line-strong: rgba(166, 190, 214, .24);
   --website-green: #56f0c1;
@@ -871,6 +874,22 @@
 .website-button.is-primary:hover:not(:disabled) {
   border-color: #075c4b;
   background: #075c4b;
+}
+
+/* --website-green is a dark green (#0b745e) in light, where white text reads cleanly, and
+   a bright mint (#56f0c1) in dark, where white text measures 1.44:1 -- the primary action
+   in this product, effectively unreadable. The fill is what carries the brand here, so the
+   text flips to the dark background colour instead (13.4:1) rather than the fill changing.
+   Hover has to move with it: the light-theme hover is a dark green that would be invisible
+   under dark text, so dark mode gets a deeper mint that keeps the same ink (10.7:1). */
+.theme-dark .website-button.is-primary {
+  color: var(--website-bg);
+}
+
+.theme-dark .website-button.is-primary:hover:not(:disabled) {
+  border-color: #3ad9a8;
+  background: #3ad9a8;
+  color: var(--website-bg);
 }
 
 .website-button.is-quiet {
