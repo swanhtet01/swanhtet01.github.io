@@ -5978,14 +5978,40 @@ if (!commerceSource.includes("export type CommerceStockMovementKind = 'opening' 
 const commerceTabsContract = coreSource.slice(coreSource.indexOf('const commerceTabs'), coreSource.indexOf('const productionTabs'))
 if (!commerceTabsContract.includes("{ id: 'today', label: 'Today' }") || !commerceTabsContract.includes("{ id: 'counter', label: 'Sell' }") || !commerceTabsContract.includes("{ id: 'orders', label: 'Orders' }") || !commerceTabsContract.includes("{ id: 'inventory', label: 'Stock' }") || (commerceTabsContract.match(/^\s*\{ id:/gm) || []).length !== 4) fail('commerce_today_sell_orders_stock_contract_changed')
 const counterConfirmationContract = coreSource.slice(coreSource.indexOf('function AccountableActionGate'), coreSource.indexOf('function ActionHistory'))
+const expectedPlantActionSubmitLabels = {
+  production_job: 'Create job',
+  production_job_schedule: 'Update job plan',
+  production_job_close: 'Close job short',
+  production_output: 'Record output',
+  production_scrap: 'Record scrap',
+  production_material: 'Record material use',
+  issue_create: 'Open problem',
+  issue_resolution: 'Resolve problem',
+  quality_hold: 'Place quality hold',
+  quality_release: 'Release quality hold',
+  machine_state: 'Record machine status',
+  downtime_start: 'Start downtime',
+  downtime_end: 'End downtime',
+  maintenance_start: 'Start maintenance',
+  maintenance_complete: 'Complete maintenance',
+  production_shift_close: 'Close shift',
+}
+const actionSubmitLabelBody = coreSource.match(/const accountableActionSubmitLabels:[^{]+ = \{([\s\S]*?)\n\}/)?.[1] ?? ''
+const actionSubmitLabels = Object.fromEntries([...actionSubmitLabelBody.matchAll(/^\s+([a-z_]+): '([^']+)',?$/gm)].map((match) => [match[1], match[2]]))
+const expectedPlantActionKinds = Object.keys(expectedPlantActionSubmitLabels).sort()
+const actualPlantActionKinds = Object.keys(actionSubmitLabels).filter((kind) => kind !== 'order_create').sort()
+const plantActionQueueContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
+const queuedPlantActionKinds = new Set([...plantActionQueueContract.matchAll(/kind:\s*'([^']+)'/g)].map((match) => match[1]))
+queuedPlantActionKinds.add('production_output').add('production_scrap')
+const plantActionSubmitLabelsComplete = expectedPlantActionKinds.join(',') === actualPlantActionKinds.join(',')
+  && expectedPlantActionKinds.length === queuedPlantActionKinds.size
+  && expectedPlantActionKinds.every((kind) => queuedPlantActionKinds.has(kind) && actionSubmitLabels[kind] === expectedPlantActionSubmitLabels[kind])
 if (!counterConfirmationContract.includes('isCounterConfirmation && !authenticatedActor')
   || !counterConfirmationContract.includes('Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.')
   || !counterConfirmationContract.includes("const isOrderCreation = action.kind === 'order_create'")
-  || !coreSource.includes('const accountableActionSubmitLabels: Partial<Record<ActionKind, string>> = {')
+  || !coreSource.includes('const accountableActionSubmitLabels: Partial<Record<ActionKind, string>> & Record<PlantActionKind, string> = {')
   || !coreSource.includes("order_create: 'Create order'")
-  || !coreSource.includes("production_output: 'Record output'")
-  || !coreSource.includes("production_scrap: 'Record scrap'")
-  || !coreSource.includes("production_material: 'Record material use'")
+  || !plantActionSubmitLabelsComplete
   || !counterConfirmationContract.includes("isCounterConfirmation ? 'Review counter order' : isOrderCreation ? 'Confirm order' : 'Confirm'")
   || !counterConfirmationContract.includes("accountableActionSubmitLabels[action.kind] ?? 'Confirm change'")
   || counterConfirmationContract.includes("isOrderCreation ? 'Complete sale' : 'Confirm change'")
@@ -21178,8 +21204,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 100 KB allowance for Shop, Plant, Website, and Ecommerce recovery, including source-bound inquiry and checkout tab recovery; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_900_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 101 KB allowance for four-product recovery and exact Plant action language; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_901_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

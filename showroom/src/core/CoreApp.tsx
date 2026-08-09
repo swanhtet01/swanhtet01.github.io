@@ -868,11 +868,42 @@ function commerceOrderReturnLines(order: CommerceOrder) {
   })) ?? (order.itemSku ? [{ sku: order.itemSku, name: order.item, quantity: order.quantity }] : [])
 }
 
-const accountableActionSubmitLabels: Partial<Record<ActionKind, string>> = {
+type PlantActionKind =
+  | 'production_job'
+  | 'production_job_schedule'
+  | 'production_job_close'
+  | 'production_output'
+  | 'production_scrap'
+  | 'production_material'
+  | 'issue_create'
+  | 'issue_resolution'
+  | 'quality_hold'
+  | 'quality_release'
+  | 'machine_state'
+  | 'downtime_start'
+  | 'downtime_end'
+  | 'maintenance_start'
+  | 'maintenance_complete'
+  | 'production_shift_close'
+
+const accountableActionSubmitLabels: Partial<Record<ActionKind, string>> & Record<PlantActionKind, string> = {
   order_create: 'Create order',
+  production_job: 'Create job',
+  production_job_schedule: 'Update job plan',
+  production_job_close: 'Close job short',
   production_output: 'Record output',
   production_scrap: 'Record scrap',
   production_material: 'Record material use',
+  issue_create: 'Open problem',
+  issue_resolution: 'Resolve problem',
+  quality_hold: 'Place quality hold',
+  quality_release: 'Release quality hold',
+  machine_state: 'Record machine status',
+  downtime_start: 'Start downtime',
+  downtime_end: 'End downtime',
+  maintenance_start: 'Start maintenance',
+  maintenance_complete: 'Complete maintenance',
+  production_shift_close: 'Close shift',
 }
 
 function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm, returnFocus }: {
