@@ -462,6 +462,27 @@ function websiteImportContent(workspace: WebsiteWorkspace) {
   }
 }
 
+/**
+ * True when the workspace still holds exactly what a working-sample install put
+ * there: the marker's fingerprint still matches, and no review, release, publish
+ * or lead evidence has been recorded. Real owner work therefore still blocks a
+ * replacing import. Mirrors replaceableWebsiteWorkingSample in website-starter,
+ * which cannot be imported here without a cycle.
+ */
+export function isReplaceableWebsiteSampleWorkspace(workspace: WebsiteWorkspace) {
+  const marker = workspace.workingSample
+  const releaseRecords = workspace.releaseRecords ?? []
+  const workspaceLeads = workspace.leadLedger
+  return Boolean(marker
+    && marker.contentFingerprint === workspaceFingerprint(workspace)
+    && workspace.evidence.length === 0
+    && workspace.approvals.length === 0
+    && workspace.localPublishes.length === 0
+    && workspace.events.length === 0
+    && releaseRecords.every((record) => record.revision === 0)
+    && (!workspaceLeads || (workspaceLeads.revision === 0 && workspaceLeads.leads.length === 0)))
+}
+
 export function importWebsitePageDrafts(current: WebsiteWorkspace, input: {
   siteName: string
   pages: WebsitePageImportDraft[]
@@ -495,7 +516,11 @@ export function importWebsitePageDrafts(current: WebsiteWorkspace, input: {
   if (serialize(websiteImportContent(current)) === serialize(websiteImportContent(imported))) {
     return { workspace: current, created: 0, alreadyPresent: pages.length, replayed: true }
   }
-  if (serialize(current) !== serialize(createInitialWorkspace()) || !isWebsiteWorkspace(imported)) return null
+  // A pristine workspace or an untouched working sample may both be replaced by the
+  // client's own pages: onboarding installs the sample itself, so blocking on it
+  // would make the app's own setup prevent the client's first real import.
+  if ((serialize(current) !== serialize(createInitialWorkspace()) && !isReplaceableWebsiteSampleWorkspace(current))
+    || !isWebsiteWorkspace(imported)) return null
   return { workspace: imported, created: pages.length, alreadyPresent: 0, replayed: false }
 }
 

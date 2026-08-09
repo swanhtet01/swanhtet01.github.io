@@ -110,3 +110,37 @@ test('every client preset maps to a real website template with its own second pa
   // The presets must exercise more than one template, or client type is not reaching Website.
   assert.ok(seen.size >= 2, `presets collapse to a single website template: ${JSON.stringify([...seen])}`)
 })
+
+test('a client can import their real pages over a working sample, but not over real work', async () => {
+  const { importWebsitePageDrafts, isReplaceableWebsiteSampleWorkspace } = await import(
+    '../showroom/src/products/website/website-model.ts'
+  )
+  const sampleInstall = installWebsiteWorkingSample(createInitialWorkspace(), {
+    templateId: 'catalog-showcase',
+    businessName: 'Yangon Wellness Spa',
+    capturedAt: CAPTURED_AT,
+  })
+  assert.ok(sampleInstall)
+  const sample = sampleInstall.workspace ?? sampleInstall
+  assert.ok(isReplaceableWebsiteSampleWorkspace(sample), 'a fresh working sample must be replaceable')
+
+  const importInput = {
+    siteName: 'Yangon Wellness Spa',
+    pages: [
+      { slug: 'home', title: 'Home', headline: 'Book a treatment today', body: 'Real client copy for the home page.', contactUrl: '' },
+      { slug: 'treatments', title: 'Treatments', headline: 'Our treatments', body: 'Real client copy for the treatments page.', contactUrl: '' },
+    ],
+    sourceDigest: `sha256:${'b'.repeat(64)}`,
+    capturedAt: CAPTURED_AT,
+  }
+  // The app's own onboarding installed the sample, so it must not block the first import.
+  const imported = importWebsitePageDrafts(sample, importInput)
+  assert.ok(imported, 'importing over an untouched working sample must succeed')
+  assert.equal(imported.created, 2)
+  assert.deepEqual(imported.workspace.pages.map((page) => page.slug), ['/', '/treatments'])
+
+  // Real owner evidence still blocks a replacing import.
+  const withOwnerEvidence = { ...sample, localPublishes: [...(sample.localPublishes ?? []), { id: 'pub-1' }] }
+  assert.equal(isReplaceableWebsiteSampleWorkspace(withOwnerEvidence), false)
+  assert.equal(importWebsitePageDrafts(withOwnerEvidence, importInput), null)
+})
