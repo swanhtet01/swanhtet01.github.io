@@ -14,6 +14,8 @@ const TEMPLATES = `${ROOT}/showroom/src/products/shop/business-templates.ts`
 const ONBOARD = `${ROOT}/showroom/src/core/client-onboarding.ts`
 const EXPORT = `${ROOT}/showroom/src/products/website/website-export.ts`
 const CORECSS = `${ROOT}/showroom/src/core/core-app.css`
+const WEBMODEL = `${ROOT}/showroom/src/products/website/website-model.ts`
+const PRODWS = `${ROOT}/showroom/src/core/production-workspace.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
 const MUTATIONS = [
@@ -64,6 +66,25 @@ const MUTATIONS = [
     '.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }',
     '.catalog-import-table { max-height: 340px; overflow: auto; background: #fff; }',
     'a fixed light surface reverts to hardcoded white'],
+  ['test_ecommerce_correction_support.mjs', LIFECYCLE,
+    "    || order.paymentStatus !== 'reconciled'", '    || false',
+    'a correction runs against an unreconciled order'],
+  ['test_plant_industry_packs.mjs', ONBOARD,
+    'planningDateAfter(resolvedPlanningDate, 14)', 'planningDateAfter(resolvedPlanningDate, -14)',
+    'plant sample due dates drift into the past'],
+  // NOTE: '|| job.qualityHold' and '|| job.closure' each appear four times in this file, and
+  // String.replace takes the FIRST -- which is a different function. Anchored on a line that
+  // is unique instead: the hold recording who placed it, which the guard asserts.
+  ['test_production_quality_hold.mjs', PRODWS,
+    '    heldBy: proof.actor,', "    heldBy: 'someone else',",
+    'a quality hold records the wrong operator'],
+  ['test_website_edit_session.mjs', WEBMODEL,
+    '    && session.baseFingerprint === workspaceFingerprint(workspace)', '    && true',
+    'edit session stops detecting content drift the counters miss'],
+  ['test_website_publish_gate.mjs', WEBMODEL,
+    'workspace.evidence.find((entry) => entry.kind === requirement.id && sameSource(entry.source, source))',
+    'workspace.evidence.find((entry) => entry.kind === requirement.id)',
+    'evidence stops being bound to the content it was recorded against'],
 ]
 
 const results = []
