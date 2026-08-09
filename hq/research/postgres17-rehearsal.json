@@ -1,8 +1,8 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v2",
-  "recordedAt": "2026-08-09T21:34:37.462Z",
+  "recordedAt": "2026-08-09T21:43:17.548Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "39b2c2280e21cd65238ec3b672b98d797eb903b5",
+  "implementationCommit": "f473e9b33000b5b2a4ea067c0d8c549c04e3dc69",
   "implementation": {
     "digest": "sha256:53ad134871b04342fadb2f322e67e33bb1d1842c36889f14294a06cb7b3805f8",
     "paths": [
