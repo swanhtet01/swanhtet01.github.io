@@ -46,6 +46,14 @@ import {
 } from './plant-order-foundation'
 import type { CommerceState } from './commerce-workspace'
 import { pendingProductionMaterialHandoffs, projectProductionMaterialRequirements, projectProductionPortfolioMrp } from './production-material-handoff'
+import {
+  closePlantPlanRevisionDraft,
+  createPlantPlanRevisionOpening,
+  recoverPlantPlanRevisionDraft,
+  type PlantClosedPlanRevisionDraft,
+  type PlantPlanRevisionDraft,
+  type PlantPlanRevisionOpening,
+} from './production-job-plan-draft'
 import { productionJobPlanSourceDigest, validateProductionState, type ProductionJob, type ProductionState } from './production-workspace'
 import {
   productionOrderExecutionForJob,
@@ -81,26 +89,7 @@ type ReviewedTransition = {
   apply: PlantOrderTransition
 }
 
-type SetupDraft = {
-  jobId: string
-  outputBatchId: string
-  effectiveFrom: string
-  effectiveUntil: string
-  revisionReason: string
-  materialId: string
-  materialName: string
-  materialUnit: PlantOrderMaterial['unit']
-  quantityPerUnit: string
-  standardCostPerUnitMmk: string
-  shopSku: string
-  materialQuantityPerStockUnit: string
-  additionalMaterials: string
-  workCentreId: string
-  workCentreName: string
-  minutesPerUnit: string
-  standardCostPerMinuteMmk: string
-  additionalOperations: string
-}
+type SetupDraft = PlantPlanRevisionDraft
 
 type AvailabilityDraft = {
   materials: Record<string, { inputLotId: string; availableQuantity: string }>
@@ -297,6 +286,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const [setupOpen, setSetupOpen] = useState(false)
   const industryPack = plantIndustryPack(industryPackId)
   const [setupDraft, setSetupDraft] = useState(() => defaultSetup(activeJobs[0], industryPackId))
+  const [closedPlanRevisionDraft, setClosedPlanRevisionDraft] = useState<PlantClosedPlanRevisionDraft | null>(null)
   const [availabilityDraft, setAvailabilityDraft] = useState(() => availabilityDefaults(initial.state))
   const [operationDraft, setOperationDraft] = useState<OperationDraft>({ operationId: '', quantity: '', actualMinutes: '' })
   const [effectivenessDraft, setEffectivenessDraft] = useState<EffectivenessDraft>({ windowStart: '', windowEnd: '', workCentres: {}, downtimeIntervals: '' })
@@ -307,6 +297,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const [review, setReview] = useState<ReviewedTransition | null>(null)
   const setupDialogRef = useRef<HTMLDialogElement>(null)
   const setupTriggerRef = useRef<HTMLButtonElement>(null)
+  const planRevisionOpeningRef = useRef<PlantPlanRevisionOpening | null>(null)
   const reviewDialogRef = useRef<HTMLDialogElement>(null)
   const projection = useMemo(() => projectPlantOrder(state), [state])
   const effectiveness = useMemo(() => projectPlantOrderEffectiveness(projection), [projection])
@@ -361,6 +352,11 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const selectedSetupJob = activeJobs.find((job) => job.id === setupDraft.jobId) ?? activeJobs[0]
   const boundJob = projection.plan ? jobs.find((job) => job.id === projection.plan?.job.jobId) : undefined
   const bindingCurrent = Boolean(!projection.plan || (boundJob && productionJobPlanSourceDigest(scope, boundJob) === projection.plan.sourceDigest))
+  const revisionJob = projection.plan ? activeJobs.find((job) => job.id === projection.plan?.job.jobId) : undefined
+  const revisionReady = Boolean(effectivePlan && !projection.orderRelease && revisionJob && bindingCurrent)
+  const planRevisionRecovery = !setupOpen && closedPlanRevisionDraft && projection.plan && revisionJob
+    ? recoverPlantPlanRevisionDraft(null, closedPlanRevisionDraft, state, projection.plan, revisionJob, scope, industryPackId, revisionReady)
+    : null
   const controlsDisabled = disabled || busy || Boolean(review) || (!bindingCurrent && projection.status !== 'released_to_stock')
   const nextMaterial = projection.materials.find((material) => material.remainingToIssueMilli > 0)
   const nextMaterialSubstitution = nextMaterial ? projection.materialSubstitutions.find((approval) => approval.materialId === nextMaterial.materialId) : undefined
@@ -401,31 +397,31 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     state: flowActiveIndex === 6 || index < flowActiveIndex ? 'complete' : index === flowActiveIndex ? flowBlocked ? 'blocked' : 'current' : 'upcoming',
   }))
   const flowNext = projection.status === 'unplanned'
-    ? activeJobs.length ? { title: 'Set up this batch', detail: 'Choose one active job, then review its BOM and routing.' } : { title: 'Add a production job first', detail: 'A controlled batch must start from one scheduled, owned job.' }
+    ? activeJobs.length ? { title: 'Set up this batch', detail: 'Choose a job, BOM, and route.' } : { title: 'Add a production job first', detail: 'Schedule and own one job.' }
     : releaseWindowExpired
-      ? { title: 'Create a current plan revision', detail: 'Keep the expired package in history and review its accountable successor.' }
+      ? { title: 'Create a current plan revision', detail: 'Keep history; review a successor.' }
     : calibrationDueCentre
-      ? { title: `Review ${calibrationDueCentre.name} calibration`, detail: 'Bind one current certificate before release or routed work continues.' }
+      ? { title: `Review ${calibrationDueCentre.name} calibration`, detail: 'Add a current certificate.' }
     : qualityReworkRequired
-      ? { title: 'Record accountable rework', detail: `${projection.qualityHold?.rejectedQuantity ?? 0} rejected units need cause, owner, corrective action, and actual time.` }
+      ? { title: 'Record accountable rework', detail: `${projection.qualityHold?.rejectedQuantity ?? 0} rejected: owner, cause, fix, and time.` }
     : projection.status === 'planned' || projection.status === 'shortfall'
-      ? { title: projection.status === 'shortfall' ? 'Resolve the availability shortfall' : 'Check material and capacity', detail: 'Record exact lots and work-centre minutes before release.' }
+      ? { title: projection.status === 'shortfall' ? 'Resolve the availability shortfall' : 'Check material and capacity', detail: 'Enter lots and centre minutes.' }
       : projection.status === 'ready'
-        ? releaseWindowOpen ? { title: 'Release the work package', detail: 'Confirm the effective reviewed plan before any material or operation record.' } : { title: effectivePlan && evaluationTime < Date.parse(projection.plan!.effectiveFrom!) ? 'Wait for the effective window' : 'Create a current plan revision', detail: releaseWindowStatus }
+        ? releaseWindowOpen ? { title: 'Release the work package', detail: 'Confirm the effective plan.' } : { title: effectivePlan && evaluationTime < Date.parse(projection.plan!.effectiveFrom!) ? 'Wait for the effective window' : 'Create a current plan revision', detail: releaseWindowStatus }
         : projection.status === 'released' || projection.status === 'in_process'
-          ? awaitingWarehouse ? { title: 'Issue requested material in Shop', detail: 'Shop remains the stock authority; return here after the reviewed issue.' }
+          ? awaitingWarehouse ? { title: 'Issue requested material in Shop', detail: 'Shop remains the stock authority.' }
             : nextMaterial ? nextMaterialSubstitution
-              ? { title: `Request ${nextMaterialSubstitution.substituteName}`, detail: `Use approved substitute ${nextMaterialSubstitution.substituteMaterialId} without changing the original BOM.` }
-              : { title: `Request ${nextMaterial.name}`, detail: 'Use the reviewed original lot or record one approved substitute.' }
-              : nextOperation ? { title: `Record ${nextOperation.name}`, detail: 'Enter completed units and actual time for the current routing step.' }
-                : { title: 'Record batch output', detail: `${outputRemaining.toLocaleString()} units remain before inspection.` }
+              ? { title: `Request ${nextMaterialSubstitution.substituteName}`, detail: `Approved ${nextMaterialSubstitution.substituteMaterialId}; BOM unchanged.` }
+              : { title: `Request ${nextMaterial.name}`, detail: 'Use the original lot or an approved substitute.' }
+              : nextOperation ? { title: `Record ${nextOperation.name}`, detail: 'Enter units and actual time.' }
+                : { title: 'Record batch output', detail: `${outputRemaining.toLocaleString()} units before inspection.` }
           : projection.status === 'inspection_due'
-            ? { title: 'Inspect the completed batch', detail: 'Record accepted and rejected units before release.' }
+            ? { title: 'Inspect the completed batch', detail: 'Record accepted and rejected units.' }
             : projection.status === 'quality_hold'
-              ? { title: 'Reinspect the corrected batch', detail: 'Rework is recorded; the current output still needs a new passing inspection.' }
+              ? { title: 'Reinspect the corrected batch', detail: 'A new passing inspection is required.' }
               : projection.status === 'ready_to_release'
-                ? { title: 'Release the accepted batch', detail: 'Record the final human quality release to stock.' }
-                : { title: 'Batch execution complete', detail: 'The released quantity is ready for a separate reviewed Shop receipt.' }
+                ? { title: 'Release the accepted batch', detail: 'Record human quality release.' }
+                : { title: 'Batch execution complete', detail: 'Ready for reviewed Shop receipt.' }
 
   const orderChoices = [...new Map([
     ...portfolioEntries.map((entry) => [entry.jobId, jobs.find((job) => job.id === entry.jobId)] as const),
@@ -446,7 +442,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     if (!dialog) return
     if (setupOpen && !dialog.open) {
       dialog.showModal()
-      requestAnimationFrame(() => dialog.querySelector('select')?.focus())
+      requestAnimationFrame(() => (dialog.querySelector<HTMLElement>('[data-plant-plan-revision-primary]') ?? dialog.querySelector<HTMLElement>('select:not(:disabled)'))?.focus())
     }
     if (!setupOpen && dialog.open) dialog.close()
   }, [setupOpen])
@@ -473,6 +469,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     setState(next)
     setAvailabilityDraft(availabilityDefaults(next))
     setSetupDraft(defaultSetup(activeJobs.find((job) => job.id === jobId), industryPackId))
+    planRevisionOpeningRef.current = null
+    setClosedPlanRevisionDraft(null)
     setReview(null)
     setSetupOpen(false)
     setError('')
@@ -481,9 +479,11 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
 
   function stage(next: Omit<ReviewedTransition, 'commandId'>) {
     setError('')
+    planRevisionOpeningRef.current = null
+    setClosedPlanRevisionDraft(null)
     setSetupOpen(false)
     setReview({ ...next, commandId: managedCommandId() })
-    setNotice('Review this one change. Nothing has been written yet.')
+    setNotice('Review only. Nothing written yet.')
   }
 
   async function mutateManaged(reviewed: ReviewedTransition) {
@@ -514,6 +514,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     setBusy(true); setError('')
     try {
       const accepted = await mutateManaged(review)
+      planRevisionOpeningRef.current = null
+      setClosedPlanRevisionDraft(null)
       setState(accepted.state); setEvaluationTime(Date.now()); setReview(null); setSetupOpen(false)
       const acceptedJobId = projectPlantOrder(accepted.state).plan?.job.jobId
       if (acceptedJobId) setSelectedOrderJobId(acceptedJobId)
@@ -526,24 +528,57 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   }
 
   function closeSetup() {
+    const recovery = closePlantPlanRevisionDraft(setupDraft, planRevisionOpeningRef.current)
+    planRevisionOpeningRef.current = null
+    setClosedPlanRevisionDraft(recovery)
     setSetupOpen(false)
+    setNotice(recovery
+      ? 'Revision kept. Reopen once; no plan or production changed.'
+      : projection.plan ? 'Revision closed unchanged. No plan or production changed.' : 'Setup closed. Nothing recorded.')
+    requestAnimationFrame(() => setupTriggerRef.current?.focus())
+  }
+
+  function discardSetup() {
+    planRevisionOpeningRef.current = null
+    setClosedPlanRevisionDraft(null)
+    setSetupOpen(false)
+    setNotice(projection.plan ? 'Revision discarded. No plan or production changed.' : 'Setup cancelled. Nothing recorded.')
     requestAnimationFrame(() => setupTriggerRef.current?.focus())
   }
 
   function openPlanRevision() {
     if (!projection.plan || projection.orderRelease || projection.plan.contract !== PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT) return
-    const job = activeJobs.find((candidate) => candidate.id === projection.plan?.job.jobId)
-    if (!job) return setError('The bound production job is no longer active. Reconcile the job before revising its execution plan.')
-    setSetupDraft(revisionSetup(projection.plan, job, industryPackId))
+    const job = revisionJob
+    if (!job) return setError('The bound job is inactive. Reconcile it before revision.')
+    if (planRevisionRecovery?.ok) {
+      setSetupDraft(planRevisionRecovery.draft)
+      planRevisionOpeningRef.current = planRevisionRecovery.opening
+      setClosedPlanRevisionDraft(null)
+      setNotice('Revision restored exactly. Review or Cancel; nothing recorded.')
+    } else {
+      const draft = revisionSetup(projection.plan, job, industryPackId)
+      const opening = createPlantPlanRevisionOpening(draft, state, projection.plan, job, scope, industryPackId, revisionReady)
+      if (!opening) return setError('Plan and job no longer match. Reconcile before revision.')
+      setSetupDraft(draft)
+      planRevisionOpeningRef.current = opening
+      setClosedPlanRevisionDraft(null)
+      setNotice('Editing a successor. The current plan stays unchanged.')
+    }
     setReview(null)
     setSetupOpen(true)
   }
 
   function editReview() {
     const editsSetup = projection.status === 'unplanned' || review?.title === 'Plan revision'
+    const editsRevision = review?.title === 'Plan revision'
     if (reviewDialogRef.current?.open) reviewDialogRef.current.close()
     setReview(null)
-    if (editsSetup) setSetupOpen(true)
+    if (editsSetup) {
+      if (editsRevision && projection.plan && revisionJob) {
+        planRevisionOpeningRef.current = createPlantPlanRevisionOpening(setupDraft, state, projection.plan, revisionJob, scope, industryPackId, revisionReady)
+      }
+      setSetupOpen(true)
+    }
   }
 
   function reviewSetup(event: FormEvent) {
@@ -553,9 +588,9 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       const quantityPerUnitMilli = parsePlantOrderQuantityMilli(setupDraft.quantityPerUnit); const minutesPerUnitMilli = parsePlantOrderQuantityMilli(setupDraft.minutesPerUnit)
       const standardCostPerUnitMmk = parsePlantOrderMmkRate(setupDraft.standardCostPerUnitMmk); const standardCostPerMinuteMmk = parsePlantOrderMmkRate(setupDraft.standardCostPerMinuteMmk)
       const shopSku = setupDraft.shopSku.trim(); const materialQuantityMilliPerStockUnit = parsePlantOrderQuantityMilli(setupDraft.materialQuantityPerStockUnit)
-      if (!quantityPerUnitMilli || !minutesPerUnitMilli) throw new Error('Material and work-centre quantities must be positive numbers with up to three decimals.')
-      if (!standardCostPerUnitMmk || !standardCostPerMinuteMmk) throw new Error('Reviewed standard rates must be positive whole-MMK amounts.')
-      if (Boolean(shopSku) !== Boolean(materialQuantityMilliPerStockUnit)) throw new Error('Choose both the Shop supply SKU and its material quantity per stock unit, or leave both blank.')
+      if (!quantityPerUnitMilli || !minutesPerUnitMilli) throw new Error('Material and centre quantities need positive values, up to three decimals.')
+      if (!standardCostPerUnitMmk || !standardCostPerMinuteMmk) throw new Error('Rates need positive whole-MMK values.')
+      if (Boolean(shopSku) !== Boolean(materialQuantityMilliPerStockUnit)) throw new Error('Choose both Shop SKU and stock conversion, or neither.')
       const primaryMaterial: PlantOrderMaterial = {
         materialId: setupDraft.materialId.trim().toUpperCase(),
         name: setupDraft.materialName.trim(),
@@ -566,14 +601,14 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       }
       const materials = [primaryMaterial, ...parsePlantOrderMaterialPaste(setupDraft.additionalMaterials)]
         .sort((left, right) => left.materialId < right.materialId ? -1 : left.materialId > right.materialId ? 1 : 0)
-      if (new Set(materials.map((material) => material.materialId)).size !== materials.length) throw new Error('Each BOM material ID must be unique, including the primary material.')
-      if (materials.some((material) => !material.standardCostPerUnitMmk)) throw new Error('Every additional BOM row needs its reviewed MMK cost per material unit.')
+      if (new Set(materials.map((material) => material.materialId)).size !== materials.length) throw new Error('BOM material IDs must be unique.')
+      if (materials.some((material) => !material.standardCostPerUnitMmk)) throw new Error('Every BOM row needs an MMK rate.')
       const primaryWorkCentreId = setupDraft.workCentreId.trim().toUpperCase()
       const primaryWorkCentreName = setupDraft.workCentreName.trim()
       const additionalOperations = parsePlantOrderRoutingPaste(setupDraft.additionalOperations)
       const routing = [{ operationId: `OP-${primaryWorkCentreId.replace(/^WC-/, '')}-10`, sequence: 1, name: primaryWorkCentreName, workCentreId: primaryWorkCentreId, minutesPerUnitMilli, standardCostPerMinuteMmk }, ...additionalOperations.map((operation, index) => ({ operationId: operation.operationId, sequence: index + 2, name: operation.name, workCentreId: operation.workCentreId, minutesPerUnitMilli: operation.minutesPerUnitMilli, ...(operation.standardCostPerMinuteMmk ? { standardCostPerMinuteMmk: operation.standardCostPerMinuteMmk } : {}) }))]
-      if (new Set(routing.map((operation) => operation.operationId)).size !== routing.length) throw new Error('Each routing operation ID must be unique, including the primary operation.')
-      if (routing.some((operation) => !operation.standardCostPerMinuteMmk)) throw new Error('Every additional routing row needs its reviewed MMK cost per minute.')
+      if (new Set(routing.map((operation) => operation.operationId)).size !== routing.length) throw new Error('Routing operation IDs must be unique.')
+      if (routing.some((operation) => !operation.standardCostPerMinuteMmk)) throw new Error('Every routing row needs an MMK rate.')
       const workCentreNames = new Map([[primaryWorkCentreId, primaryWorkCentreName]])
       additionalOperations.forEach((operation) => {
         const retainedName = workCentreNames.get(operation.workCentreId)
@@ -612,7 +647,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
           { label: 'Materials', value: materials.map((material) => `${material.name} (${material.materialId}) · ${formatMilli(material.quantityPerUnitMilli)} ${material.unit}/unit · ${formatMmk(material.standardCostPerUnitMmk!)}/${material.unit}`).join(' · ') },
           { label: 'Routing', value: routing.map((operation) => `${operation.name} (${operation.operationId}) · ${formatMilli(operation.minutesPerUnitMilli)} min/unit · ${formatMmk(operation.standardCostPerMinuteMmk!)}/min · ${operation.workCentreId}`).join(' → ') },
         ],
-        boundary: previousPlan ? 'Appends a successor while retaining the prior package and reason in immutable history. Earlier availability and calibration are invalidated; release requires a new check and current certificates. No production, stock, accounting, or machine action occurs.' : 'Creates an immutable effective-dated execution package. Release is blocked before or after its reviewed window; a released package is frozen for the batch. Current calibration is still required before release and each routed operation. No staff schedule, stock move, accounting post, or machine command occurs.',
+        boundary: previousPlan ? 'Keeps the prior plan; clears checks. No production, stock, accounting, or machine action.' : 'Creates a dated plan; release freezes it. No schedule, stock, accounting, or machine command.',
         proof: actionProof,
         apply: (current) => previousPlan
           ? supersedePlantOrderPlan(current, { revisionId, supersededPlanId: previousPlan.planId, plan, reason: revisionReason, proof: actionProof, expectedHeadDigest })
@@ -647,7 +682,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       stage({
         title: 'Availability check',
         summary: `${materials.length} material ${materials.length === 1 ? 'lot' : 'lots'} · ${workCentres.length} work ${workCentres.length === 1 ? 'centre' : 'centres'}`,
-        boundary: 'Records a reviewed snapshot only. A shortfall blocks order release; no purchase, reservation, or dispatch occurs.',
+        boundary: 'Records availability only. Shortfall blocks release; no purchase or dispatch.',
         proof: actionProof,
         apply: (current) => checkPlantOrderAvailability(current, { checkId, sourceDigest, materials, workCentres, proof: actionProof, expectedHeadDigest }),
       })
@@ -686,7 +721,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
           { label: 'Validity', value: `${calibratedAt} → ${validUntil}` },
           { label: 'Standard', value: standardReference },
         ],
-        boundary: 'Records attributable certificate evidence only. It does not calibrate, control, or certify equipment by itself; expired evidence blocks order release and routed operation recording.',
+        boundary: 'Records certificate evidence only; no calibration or equipment control. Expired evidence blocks work.',
         proof: actionProof,
         apply: (current) => recordPlantOrderCalibration(current, { calibrationId, workCentreId: calibrationDueCentre.workCentreId, certificateId, calibratedAt, validUntil, standardReference, proof: actionProof, expectedHeadDigest }),
       })
@@ -715,7 +750,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         title: 'Effectiveness evidence',
         summary: `${workCentres.length} work ${workCentres.length === 1 ? 'centre' : 'centres'} · ${downtimeIntervals.length} closed downtime ${downtimeIntervals.length === 1 ? 'interval' : 'intervals'}`,
         details: [{ label: 'Order', value: projection.plan.job.jobId }, { label: 'Window', value: `${windowStart} → ${windowEnd}` }],
-        boundary: 'Records reviewed order-bound timing evidence only. It does not infer runtime from released capacity, control equipment, or post labour, cost, inventory, or accounting entries.',
+        boundary: 'Records timing only; no inferred runtime, equipment, labour, cost, stock, or accounting action.',
         proof: actionProof,
         apply: (current) => recordPlantOrderEffectiveness(current, { effectivenessId, ...source, sourceDigest, proof: actionProof, expectedHeadDigest }),
       })
@@ -727,13 +762,13 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   function reviewOrderRelease() {
     if (!projection.latestAvailability) return
     const releaseId = commandId('REL'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, 'human production-order release')
-    stage({ title: 'Order release', summary: `${projection.plan?.job.jobId} · materials, capacity, calibration, and effective window passed`, boundary: 'Freezes this exact effective-dated work package for the batch. It sends no machine command and makes no inventory or accounting entry.', proof: actionProof, apply: (current) => releasePlantOrder(current, { releaseId, availabilityCheckId: projection.latestAvailability!.checkId, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: 'Order release', summary: `${projection.plan?.job.jobId} · materials, capacity, calibration, and window passed`, boundary: 'Freezes this plan. No machine, inventory, or accounting action.', proof: actionProof, apply: (current) => releasePlantOrder(current, { releaseId, availabilityCheckId: projection.latestAvailability!.checkId, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewMaterialIssue() {
     if (!nextMaterial?.inputLotId) return
     const issueId = commandId('ISSUE'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, `request for ${nextMaterial.materialId}`)
-    stage({ title: 'Material request', summary: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.inputLotId}`, boundary: 'Creates genealogy and a linked Shop request. Shop stock changes only after a separate human-reviewed issue; no purchase, costing, or accounting entry occurs.', proof: actionProof, apply: (current) => issuePlantOrderMaterial(current, { issueId, materialId: nextMaterial.materialId, inputLotId: nextMaterial.inputLotId!, quantityMilli: nextMaterial.remainingToIssueMilli, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: 'Material request', summary: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.inputLotId}`, boundary: 'Links genealogy to a Shop request. Stock needs separate review; no purchase, cost, or accounting post.', proof: actionProof, apply: (current) => issuePlantOrderMaterial(current, { issueId, materialId: nextMaterial.materialId, inputLotId: nextMaterial.inputLotId!, quantityMilli: nextMaterial.remainingToIssueMilli, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewSubstitutionApproval(event: FormEvent) {
@@ -746,7 +781,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       const sourceReference = substitutionDraft.sourceReference.trim()
       const technicalBasis = substitutionDraft.technicalBasis.trim()
       if (!/^MAT-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(substituteMaterialId) || substituteMaterialId === nextMaterial.materialId) throw new Error('Enter a distinct canonical substitute material ID.')
-      if (!substituteName || !substituteQuantityPerUnitMilli || !sourceReference || !technicalBasis) throw new Error('Enter the substitute name, exact per-unit quantity, approval reference, and technical basis.')
+      if (!substituteName || !substituteQuantityPerUnitMilli || !sourceReference || !technicalBasis) throw new Error('Enter substitute name, quantity, approval, and basis.')
       const substitutionId = commandId('SUB'); const expectedHeadDigest = state.headDigest
       const approvalSourceDigest = plantOrderEvidenceDigest({ sourceReference, originalMaterialId: nextMaterial.materialId, substituteMaterialId, originalQuantityPerUnitMilli: nextMaterial.quantityPerUnitMilli, substituteQuantityPerUnitMilli })
       const actionProof = { ...proof(actor, `substitute for ${nextMaterial.materialId}`), evidenceReference: sourceReference }
@@ -754,7 +789,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         title: 'Material substitute',
         summary: `${substituteName} · ${formatMilli(substituteQuantityPerUnitMilli)} ${substitutionDraft.substituteUnit} per output unit`,
         details: [{ label: 'Original BOM', value: `${nextMaterial.materialId} · ${formatMilli(nextMaterial.quantityPerUnitMilli)} ${nextMaterial.unit}` }, { label: 'Approved substitute', value: `${substituteMaterialId} · ${formatMilli(substituteQuantityPerUnitMilli)} ${substitutionDraft.substituteUnit}` }, { label: 'Approval evidence', value: sourceReference }, { label: 'Technical basis', value: technicalBasis }],
-        boundary: 'Records one job-bound human approval only. It does not rewrite the BOM, issue stock, infer equivalence, post cost or accounting, or control equipment.',
+        boundary: 'Records approval only; no BOM, stock, cost, accounting, or equipment action.',
         proof: actionProof,
         apply: (current) => approvePlantOrderMaterialSubstitution(current, { substitutionId, materialId: nextMaterial.materialId, substituteMaterialId, substituteName, substituteUnit: substitutionDraft.substituteUnit, originalQuantityPerUnitMilli: nextMaterial.quantityPerUnitMilli, substituteQuantityPerUnitMilli, approvalSourceDigest, technicalBasis, proof: actionProof, expectedHeadDigest }),
       })
@@ -779,7 +814,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         title: 'Substitute request',
         summary: `${formatMilli(substituteQuantityMilli)} ${nextMaterialSubstitution.substituteUnit} · ${inputLotId}`,
         details: [{ label: 'Original BOM credit', value: `${formatMilli(nextMaterial.remainingToIssueMilli)} ${nextMaterial.unit} · ${nextMaterial.materialId}` }, { label: 'Physical substitute', value: `${nextMaterialSubstitution.substituteMaterialId} · ${formatMilli(substituteQuantityMilli)} ${nextMaterialSubstitution.substituteUnit}` }, { label: 'Approval', value: nextMaterialSubstitution.id }],
-        boundary: 'Creates one linked Shop request for the physical substitute lot. Shop remains stock authority; the original BOM and approval remain immutable.',
+        boundary: 'Links a substitute request. Shop owns stock; BOM and approval stay fixed.',
         proof: actionProof,
         apply: (current) => issuePlantOrderSubstituteMaterial(current, { issueId, substitutionId: nextMaterialSubstitution.id, materialId: nextMaterial.materialId, substituteMaterialId: nextMaterialSubstitution.substituteMaterialId, inputLotId, substituteQuantityMilli, proof: actionProof, expectedHeadDigest }),
       })
@@ -790,22 +825,22 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
 
   function reviewOperation(event: FormEvent) {
     event.preventDefault()
-    if (pendingWarehouseIssues.length) return setError('Shop must issue every linked material request before operation progress can be recorded.')
+    if (pendingWarehouseIssues.length) return setError('Issue all linked material in Shop first.')
     if (!nextOperation || operationAvailableQuantity < 1) return
     const quantity = /^\d+$/.test(activeOperationDraft.quantity) ? Number(activeOperationDraft.quantity) : Number.NaN
     const actualMinutesMilli = parsePlantOrderQuantityMilli(activeOperationDraft.actualMinutes)
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > operationAvailableQuantity || !actualMinutesMilli) {
-      return setError(`Enter 1 to ${operationAvailableQuantity.toLocaleString()} completed units and observed minutes with up to three decimals.`)
+      return setError(`Enter 1–${operationAvailableQuantity.toLocaleString()} units and observed minutes.`)
     }
     const operationRunId = commandId('OPRUN'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, `progress for ${nextOperation.operationId}`)
-    stage({ title: nextOperation.name, summary: `${quantity.toLocaleString()} units · ${formatMilli(actualMinutesMilli)} actual minutes · ${nextOperation.workCentreId}`, boundary: 'Records reviewed operation progress and time evidence only. It does not control equipment, post labour cost, or move inventory.', proof: actionProof, apply: (current) => recordPlantOrderOperation(current, { operationRunId, operationId: nextOperation.operationId, quantity, actualMinutesMilli, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: nextOperation.name, summary: `${quantity.toLocaleString()} units · ${formatMilli(actualMinutesMilli)} minutes · ${nextOperation.workCentreId}`, boundary: 'Records progress and time only; no equipment, labour cost, or stock action.', proof: actionProof, apply: (current) => recordPlantOrderOperation(current, { operationRunId, operationId: nextOperation.operationId, quantity, actualMinutesMilli, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewOutput() {
-    if (pendingWarehouseIssues.length) return setError('Shop must issue every linked material request before batch output can be recorded.')
+    if (pendingWarehouseIssues.length) return setError('Issue all linked material in Shop first.')
     if (!projection.plan || outputRemaining < 1) return
     const outputId = commandId('OUT'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, 'produced output quantity')
-    stage({ title: 'Batch output', summary: `${outputRemaining.toLocaleString()} units · ${projection.plan.job.outputBatchId}`, boundary: 'Records this execution package output. The existing Plant output ledger and Shop receipt remain separate reviewed steps.', proof: actionProof, apply: (current) => recordPlantOrderOutput(current, { outputId, outputBatchId: projection.plan!.job.outputBatchId, quantity: outputRemaining, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: 'Batch output', summary: `${outputRemaining.toLocaleString()} units · ${projection.plan.job.outputBatchId}`, boundary: 'Records output only. Plant ledger and Shop receipt stay separate.', proof: actionProof, apply: (current) => recordPlantOrderOutput(current, { outputId, outputBatchId: projection.plan!.job.outputBatchId, quantity: outputRemaining, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewQualityRework(event: FormEvent) {
@@ -814,13 +849,13 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     const operation = projection.routing.find((candidate) => candidate.operationId === activeReworkDraft.operationId)
     const actualMinutesMilli = parsePlantOrderQuantityMilli(activeReworkDraft.actualMinutes)
     const owner = activeReworkDraft.owner.trim(); const cause = activeReworkDraft.cause.trim(); const correctiveAction = activeReworkDraft.correctiveAction.trim()
-    if (!operation || !actualMinutesMilli || !owner || !cause || !correctiveAction) return setError('Choose the rework operation and enter actual minutes, owner, cause, and corrective action.')
+    if (!operation || !actualMinutesMilli || !owner || !cause || !correctiveAction) return setError('Enter rework operation, minutes, owner, cause, and fix.')
     const reworkId = commandId('RWK'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, `quality rework for ${projection.latestInspection.id}`)
     stage({
       title: 'Quality rework',
       summary: `${projection.qualityHold.rejectedQuantity.toLocaleString()} units · ${operation.name} · ${formatMilli(actualMinutesMilli)} minutes`,
       details: [{ label: 'Responsible owner', value: owner }, { label: 'Cause', value: cause }, { label: 'Corrective action', value: correctiveAction }],
-      boundary: 'Records attributed rework evidence and actual routed time only. It does not clear the quality hold; a separate full reinspection is still required.',
+      boundary: 'Records rework and time only. Hold needs full reinspection.',
       proof: actionProof,
       apply: (current) => recordPlantOrderQualityRework(current, { reworkId, inspectionId: projection.latestInspection!.id, operationId: operation.operationId, quantity: projection.qualityHold!.rejectedQuantity, actualMinutesMilli, owner, cause, correctiveAction, proof: actionProof, expectedHeadDigest }),
     })
@@ -831,13 +866,13 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     if (!projection.plan || !inspectionValid || inspectedQuantity < 1) return
     const inspectionId = commandId('INSP'); const expectedHeadDigest = state.headDigest; const acceptedQuantity = inspectedQuantity - rejected
     const actionProof = proof(actor, inspectionDraft.result === 'pass' ? 'passing batch inspection' : 'failed batch inspection and quality hold')
-    stage({ title: inspectionDraft.result === 'pass' ? 'Passing inspection' : 'Quality hold', summary: `${inspectedQuantity.toLocaleString()} inspected · ${acceptedQuantity.toLocaleString()} accepted · ${rejected.toLocaleString()} rejected`, boundary: inspectionDraft.result === 'pass' ? 'Acceptance remains separate from final human batch release.' : 'A failed inspection blocks more issue and output until a later passing reinspection.', proof: actionProof, apply: (current) => inspectPlantOrderOutput(current, { inspectionId, outputBatchId: projection.plan!.job.outputBatchId, inspectedQuantity, acceptedQuantity, rejectedQuantity: rejected, result: inspectionDraft.result, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: inspectionDraft.result === 'pass' ? 'Passing inspection' : 'Quality hold', summary: `${inspectedQuantity.toLocaleString()} inspected · ${acceptedQuantity.toLocaleString()} accepted · ${rejected.toLocaleString()} rejected`, boundary: inspectionDraft.result === 'pass' ? 'Acceptance still needs human batch release.' : 'Failure blocks issue and output until reinspection.', proof: actionProof, apply: (current) => inspectPlantOrderOutput(current, { inspectionId, outputBatchId: projection.plan!.job.outputBatchId, inspectedQuantity, acceptedQuantity, rejectedQuantity: rejected, result: inspectionDraft.result, proof: actionProof, expectedHeadDigest }) })
   }
 
   function reviewBatchRelease() {
     if (!projection.plan || !projection.latestInspection) return
     const qualityReleaseId = commandId('QREL'); const expectedHeadDigest = state.headDigest; const actionProof = proof(actor, 'human batch release')
-    stage({ title: 'Batch release', summary: `${projection.plan.job.outputBatchId} · ${projection.totalOutput.toLocaleString()} accepted units`, boundary: 'Records human quality release only. Shop receipt, delivery, costing, and accounting are not posted automatically.', proof: actionProof, apply: (current) => releasePlantOrderBatch(current, { qualityReleaseId, outputBatchId: projection.plan!.job.outputBatchId, inspectionId: projection.latestInspection!.id, proof: actionProof, expectedHeadDigest }) })
+    stage({ title: 'Batch release', summary: `${projection.plan.job.outputBatchId} · ${projection.totalOutput.toLocaleString()} accepted units`, boundary: 'Records human quality release only; no Shop receipt, delivery, cost, or accounting post.', proof: actionProof, apply: (current) => releasePlantOrderBatch(current, { qualityReleaseId, outputBatchId: projection.plan!.job.outputBatchId, inspectionId: projection.latestInspection!.id, proof: actionProof, expectedHeadDigest }) })
   }
 
   return <>
@@ -846,15 +881,16 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         <div>
           <span className="core-eyebrow">Execution control</span>
           <h3 id="plant-execution-title">{projection.plan ? `${projection.plan.job.jobId} · ${visibleStatus}` : 'Run one controlled batch'}</h3>
-          <p>{projection.plan ? `${projection.totalOutput.toLocaleString()} / ${projection.metrics.targetQuantity.toLocaleString()} output · ${projection.genealogy.length} traced input ${projection.genealogy.length === 1 ? 'lot' : 'lots'} · revision ${projection.revision}` : 'Turn an active job into one reviewed BOM, routing, material, output, inspection, and release chain.'}</p>
+          <p>{projection.plan ? `${projection.totalOutput.toLocaleString()} / ${projection.metrics.targetQuantity.toLocaleString()} output · ${projection.genealogy.length} traced ${projection.genealogy.length === 1 ? 'lot' : 'lots'} · revision ${projection.revision}` : 'Create one reviewed BOM, route, and batch release.'}</p>
           {projection.plan ? <small>{releaseWindowStatus}</small> : null}
         </div>
-        {!projection.plan ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { setSetupOpen(true); setReview(null) }} ref={setupTriggerRef} type="button">Set up batch</button> : null}
-        {effectivePlan && !projection.orderRelease ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className={`core-button ${releaseWindowExpired ? 'primary' : ''}`} disabled={disabled || busy || Boolean(review)} onClick={openPlanRevision} ref={setupTriggerRef} type="button">{releaseWindowExpired ? 'Create current revision' : 'Revise plan'}</button> : null}
+        {!projection.plan ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { planRevisionOpeningRef.current = null; setClosedPlanRevisionDraft(null); setSetupOpen(true); setReview(null) }} ref={setupTriggerRef} type="button">Set up batch</button> : null}
+        {effectivePlan && !projection.orderRelease ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className={`core-button ${releaseWindowExpired || planRevisionRecovery?.ok ? 'primary' : ''}`} disabled={disabled || busy || Boolean(review) || !revisionReady} onClick={openPlanRevision} ref={setupTriggerRef} type="button">{planRevisionRecovery?.ok ? 'Reopen revision' : releaseWindowExpired ? 'Create current revision' : 'Revise plan'}</button> : null}
         {projection.plan ? <span className={`status-pill ${calibrationDueCentre || awaitingWarehouse || projection.status === 'quality_hold' || projection.status === 'shortfall' ? 'pending' : 'bounded'}`}>{visibleStatus}</span> : null}
       </div>
+      {planRevisionRecovery?.ok ? <div className="order-draft-recovery plant-plan-recovery" data-plant-plan-revision-recovery role="status"><div><strong>Revision draft kept</strong><small>Reopen or cancel. No plan or production changed.</small></div></div> : null}
       {orderChoices.length > 1 ? <label className="plant-order-switcher">Controlled order<select aria-label="Controlled production order" disabled={busy || Boolean(review)} onChange={(event) => selectOrder(event.target.value)} value={selectedOrderJobId}>{orderChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.id} · {choice.job?.product ?? 'Retained order'} · {choice.execution ? 'planned' : 'not planned'}</option>)}</select></label> : null}
-      {portfolioMrp && portfolioMrp.orders.length > 1 ? <div className="plant-portfolio-mrp" role="status"><div><span className="core-eyebrow">Portfolio material plan</span><strong>{portfolioMrp.summary.orders} controlled orders share Shop supply once</strong><small>Urgent work first, then earliest due. Protected stock and open purchase quantities are never counted twice.</small></div><div className="plant-portfolio-counts"><span>{portfolioMrp.summary.ready} ready</span><span>{portfolioMrp.summary.coveredByPurchase} on purchase orders</span><span>{portfolioMrp.summary.atRisk} at risk</span><span>{portfolioMrp.summary.shortage + portfolioMrp.summary.mappingRequired} blocked</span></div>{selectedPortfolioOrder ? <small>{selectedPortfolioOrder.jobId}: {selectedPortfolioOrder.rows.map((row) => row.sku ? `${row.sku} ${row.allocatedOnHandStockUnits} stock + ${row.allocatedScheduledPurchaseStockUnits} PO + ${row.allocatedAtRiskPurchaseStockUnits} risk; ${row.shortageStockUnits} short` : `${row.materialId} needs Shop mapping`).join(' · ')}</small> : null}</div> : null}
+      {portfolioMrp && portfolioMrp.orders.length > 1 ? <div className="plant-portfolio-mrp" role="status"><div><span className="core-eyebrow">Portfolio material plan</span><strong>{portfolioMrp.summary.orders} orders share Shop supply once</strong><small>Urgent, then earliest due; supply is counted once.</small></div><div className="plant-portfolio-counts"><span>{portfolioMrp.summary.ready} ready</span><span>{portfolioMrp.summary.coveredByPurchase} on PO</span><span>{portfolioMrp.summary.atRisk} at risk</span><span>{portfolioMrp.summary.shortage + portfolioMrp.summary.mappingRequired} blocked</span></div>{selectedPortfolioOrder ? <small>{selectedPortfolioOrder.jobId}: {selectedPortfolioOrder.rows.map((row) => row.sku ? `${row.sku} ${row.allocatedOnHandStockUnits} stock + ${row.allocatedScheduledPurchaseStockUnits} PO + ${row.allocatedAtRiskPurchaseStockUnits} risk; ${row.shortageStockUnits} short` : `${row.materialId} needs Shop mapping`).join(' · ')}</small> : null}</div> : null}
       <section aria-label="Plant operating flow" className="plant-operating-flow" id="plant-operating-flow">
         <div className={`plant-next-work${flowBlocked ? ' is-blocked' : ''}`}>
           <div><span className="core-eyebrow">Next required step</span><strong>{flowNext.title}</strong><small>{flowNext.detail}</small></div>
@@ -871,7 +907,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         <div><strong>{calibrationDueCentre.name}</strong><small>{calibrationDueCentre.workCentreId} · current certificate required</small></div>
         <div className="form-row"><label>Certificate ID<input disabled={controlsDisabled} maxLength={80} onChange={(event) => setCalibrationDraft({ ...activeCalibrationDraft, certificateId: event.target.value })} required value={activeCalibrationDraft.certificateId} /></label><label>Procedure / standard<input disabled={controlsDisabled} maxLength={180} onChange={(event) => setCalibrationDraft({ ...activeCalibrationDraft, standardReference: event.target.value })} required value={activeCalibrationDraft.standardReference} /></label></div>
         <div className="form-row"><label>Calibrated at<input disabled={controlsDisabled} onChange={(event) => setCalibrationDraft({ ...activeCalibrationDraft, calibratedAt: event.target.value })} required type="datetime-local" value={activeCalibrationDraft.calibratedAt} /></label><label>Valid until<input disabled={controlsDisabled} onChange={(event) => setCalibrationDraft({ ...activeCalibrationDraft, validUntil: event.target.value })} required type="datetime-local" value={activeCalibrationDraft.validUntil} /></label></div>
-        <p className="form-notice warning-text" role="alert">Release and routed operation records stay blocked until every required work centre has current reviewed evidence.</p>
+        <p className="form-notice warning-text" role="alert">Current evidence is required before release or routing.</p>
         <button className="core-button primary" disabled={controlsDisabled} type="submit">Review calibration evidence</button>
       </form> : null}
 
@@ -897,7 +933,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         <button className="core-button primary" disabled={controlsDisabled} type="submit">Review availability</button>
       </form> : null}
 
-      {!calibrationDueCentre && projection.status === 'ready' ? <><button className="core-button primary" disabled={controlsDisabled || !releaseWindowOpen} onClick={reviewOrderRelease} type="button">Review order release</button>{!releaseWindowOpen ? <p className="form-notice warning-text" role="alert">This reviewed plan is outside its release window. Create a newly reviewed revision; the old package cannot be silently reused.</p> : null}</> : null}
+      {!calibrationDueCentre && projection.status === 'ready' ? <><button className="core-button primary" disabled={controlsDisabled || !releaseWindowOpen} onClick={reviewOrderRelease} type="button">Review order release</button>{!releaseWindowOpen ? <p className="form-notice warning-text" role="alert">Plan outside release window. Review a new revision; the old plan cannot be reused.</p> : null}</> : null}
       {!calibrationDueCentre && (projection.status === 'released' || projection.status === 'in_process') && nextMaterial && !nextMaterialSubstitution ? <div className="core-form compact-form">
         <button className="core-button primary" disabled={controlsDisabled} onClick={reviewMaterialIssue} type="button">Request reviewed lot</button>
         <details className="compact-disclosure production-history"><summary>Use an approved substitute <span>Optional</span></summary><form className="core-form compact-form" onSubmit={reviewSubstitutionApproval}>
@@ -935,43 +971,43 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
       {!calibrationDueCentre && projection.status === 'ready_to_release' ? <button className="core-button primary" disabled={controlsDisabled} onClick={reviewBatchRelease} type="button">Review batch release</button> : null}
       {projection.status === 'released_to_stock' ? <div className="stock-receipt-preview" role="status"><small>Human-released batch</small><strong>{projection.plan?.job.outputBatchId} · {projection.metrics.acceptedQuantity.toLocaleString()} accepted</strong></div> : null}
 
-      {!bindingCurrent && projection.status !== 'released_to_stock' ? <p className="form-notice warning-text" role="alert">The bound Plant job changed after this execution plan was reviewed. This chain is paused; reconcile the job snapshot before continuing.</p> : null}
+      {!bindingCurrent && projection.status !== 'released_to_stock' ? <p className="form-notice warning-text" role="alert">The bound job changed. Reconcile its plan before continuing.</p> : null}
       {controlledPlan ? <details className="compact-disclosure production-history"><summary>Calibration control <span>{projection.calibrations.length}/{new Set(projection.routing.map((operation) => operation.workCentreId)).size} records</span></summary><div className="issue-list">{projection.plan?.workCentres.filter((centre) => projection.routing.some((operation) => operation.workCentreId === centre.workCentreId)).map((centre) => {
         const calibration = calibrationByCentre.get(centre.workCentreId); const current = Boolean(calibration && Date.parse(calibration.validUntil) > evaluationTime)
         return <article key={centre.workCentreId}><span aria-hidden="true" className={`issue-mark ${current ? 'resolved' : ''}`}>CAL</span><div><strong>{centre.name}</strong><small>{calibration ? `${calibration.certificateId} · ${calibration.standardReference} · valid until ${calibration.validUntil}` : `${centre.workCentreId} · certificate evidence required`}</small></div></article>
-      })}</div><p className="panel-copy">Certificate evidence is immutable and attributable. It gates release and each routed operation but never claims SuperMega calibrated the equipment.</p></details> : null}
-      {projection.qualityReworks.length ? <details className="compact-disclosure production-history"><summary>Quality rework <span>{projection.qualityReworks.length}</span></summary><div className="issue-list">{projection.qualityReworks.map((rework) => <article key={rework.id}><span aria-hidden="true" className="issue-mark resolved">RWK</span><div><strong>{rework.quantity} units · {rework.operationId}</strong><small>{formatMilli(rework.actualMinutesMilli)} minutes · owner {rework.owner} · {rework.cause} → {rework.correctiveAction}</small></div></article>)}</div><p className="panel-copy">Rework time is included in actual conversion cost and variance. Only a later full passing inspection clears the hold.</p></details> : null}
+      })}</div><p className="panel-copy">Certificates gate work; SuperMega does not calibrate equipment.</p></details> : null}
+      {projection.qualityReworks.length ? <details className="compact-disclosure production-history"><summary>Quality rework <span>{projection.qualityReworks.length}</span></summary><div className="issue-list">{projection.qualityReworks.map((rework) => <article key={rework.id}><span aria-hidden="true" className="issue-mark resolved">RWK</span><div><strong>{rework.quantity} units · {rework.operationId}</strong><small>{formatMilli(rework.actualMinutesMilli)} minutes · owner {rework.owner} · {rework.cause} → {rework.correctiveAction}</small></div></article>)}</div><p className="panel-copy">Only a later full passing inspection clears the hold.</p></details> : null}
       {requiresOperationEvidence ? <details className="compact-disclosure production-history"><summary>Routing progress <span>{projection.metrics.completedOperationCount}/{projection.operations.length}</span></summary><div className="issue-list">{projection.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.status === 'complete' ? 'resolved' : ''}`}>{operation.sequence}</span><div><strong>{operation.name}</strong><small>{operation.completedQuantity.toLocaleString()} / {projection.metrics.targetQuantity.toLocaleString()} units · {formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.plannedMinutesMilli)} planned minutes · {operation.status.replace('_', ' ')}</small></div></article>)}</div></details> : null}
-      {materialRequirements ? <details className="compact-disclosure production-history" open><summary>Material requirements <span>{materialRequirements.status.replaceAll('_', ' ')}</span></summary><div className="issue-list">{materialRequirements.rows.map((row) => <article key={row.materialId}><span aria-hidden="true" className={`issue-mark ${row.status === 'fulfilled' || row.status === 'ready_to_issue' ? 'resolved' : ''}`}>MRP</span><div><strong>{row.materialName} · {row.status.replaceAll('_', ' ')}</strong><small>{formatMilli(row.remainingQuantityMilli)} {row.unit} remaining{row.shopSupply ? ` · ${row.shopSupply.sku}: ${row.shopSupply.onHandStockUnits} on hand − ${row.shopSupply.protectedStockUnits} Shop floor = ${row.shopSupply.availableToIssueStockUnits} issue-ready · ${row.shopSupply.openPurchaseOrderStockUnits} open PO${row.shopSupply.atRiskPurchaseOrderStockUnits ? ` (${row.shopSupply.atRiskPurchaseOrderStockUnits} outside window or undated)` : ''} · issue ${row.shopSupply.suggestedIssueStockUnits} / expedite ${row.shopSupply.suggestedExpediteStockUnits} / order ${row.shopSupply.suggestedOrderStockUnits} stock units${row.shopSupply.nextExpectedAt ? ` · next confirmed ${new Date(row.shopSupply.nextExpectedAt).toLocaleDateString()}` : ''}` : ' · bind one Shop SKU and conversion in the reviewed BOM'}</small></div></article>)}</div>{materialRequirementsDownload ? <><a className="core-button" download={materialRequirementsDownload.filename} href={materialRequirementsDownload.href}>Download material requirements</a><p className="panel-copy">Evidence-bound planning only. Shop reorder stock stays protected; purchase orders outside the reviewed production window or without an expected date are supply at risk. No purchase order, supplier message, stock issue, production change, or provider call occurs.</p></> : null}</details> : null}
+      {materialRequirements ? <details className="compact-disclosure production-history" open><summary>Material requirements <span>{materialRequirements.status.replaceAll('_', ' ')}</span></summary><div className="issue-list">{materialRequirements.rows.map((row) => <article key={row.materialId}><span aria-hidden="true" className={`issue-mark ${row.status === 'fulfilled' || row.status === 'ready_to_issue' ? 'resolved' : ''}`}>MRP</span><div><strong>{row.materialName} · {row.status.replaceAll('_', ' ')}</strong><small>{formatMilli(row.remainingQuantityMilli)} {row.unit} remaining{row.shopSupply ? ` · ${row.shopSupply.sku}: ${row.shopSupply.availableToIssueStockUnits} ready · ${row.shopSupply.openPurchaseOrderStockUnits} PO · ${row.shopSupply.atRiskPurchaseOrderStockUnits} risk · issue ${row.shopSupply.suggestedIssueStockUnits} / order ${row.shopSupply.suggestedOrderStockUnits}${row.shopSupply.nextExpectedAt ? ` · next ${new Date(row.shopSupply.nextExpectedAt).toLocaleDateString()}` : ''}` : ' · map a Shop SKU and conversion'}</small></div></article>)}</div>{materialRequirementsDownload ? <><a className="core-button" download={materialRequirementsDownload.filename} href={materialRequirementsDownload.href}>Download material requirements</a><p className="panel-copy">Shop reorder stock stays protected. Supply outside the reviewed production window is at risk. No purchase order, supplier message, stock issue, production change, or provider call occurs.</p></> : null}</details> : null}
       {projection.plan ? <details className="compact-disclosure production-history"><summary>Standard vs actual <span>{financialCost.status === 'setup_required' ? 'Rates required' : formatMmk(financialCost.varianceMmk ?? 0)}</span></summary>{financialCost.status !== 'setup_required' ? <div className="form-row"><span className="status-pill">Planned {formatMmk(financialCost.planned.totalMmk)}</span><span className="status-pill">Earned {formatMmk(financialCost.earned.totalMmk)}</span><span className="status-pill">Actual {formatMmk(financialCost.actual.totalMmk)}</span><span className={`status-pill ${(financialCost.varianceMmk ?? 0) <= 0 ? 'bounded' : 'pending'}`}>Variance {formatMmk(financialCost.varianceMmk ?? 0)}</span><span className={`status-pill ${(financialCost.qualityLossMmk ?? 0) === 0 ? 'bounded' : 'pending'}`}>Quality loss {formatMmk(financialCost.qualityLossMmk ?? 0)}</span></div> : null}<div className="issue-list">
         {costDrivers.materials.map((material) => <article key={material.materialId}><span aria-hidden="true" className={`issue-mark ${material.varianceQuantityMilli <= 0 ? 'resolved' : ''}`}>MAT</span><div><strong>{material.name}</strong><small>{formatMilli(material.actualQuantityMilli)} actual / {formatMilli(material.standardQuantityMilli)} standard {material.unit} · {formatMilli(material.varianceQuantityMilli)} variance</small></div></article>)}
         {costDrivers.operations.map((operation) => <article key={operation.operationId}><span aria-hidden="true" className={`issue-mark ${operation.varianceMinutesMilli <= 0 ? 'resolved' : ''}`}>MIN</span><div><strong>{operation.name}</strong><small>{formatMilli(operation.actualMinutesMilli)} actual / {formatMilli(operation.standardMinutesMilli)} standard minutes · {formatMilli(operation.varianceMinutesMilli)} variance</small></div></article>)}
-      </div><p className="panel-copy">{financialCost.status === 'setup_required' ? `${costDrivers.financialCostReason} Missing: ${financialCost.missingRates.join(', ') || 'reviewed execution plan'}.` : 'MMK costs are calculated only from the immutable reviewed rate card, BOM allowances, issued materials, completed routing units, actual minutes, and current inspection.'}</p>{costReviewDownload ? <><a className="core-button" download={costReviewDownload.filename} href={costReviewDownload.href}>Download cost review packet</a><p className="panel-copy">Internal evidence for ERP review only. No cost, inventory, journal, payroll, invoice, provider, or production write occurs.</p></> : null}</details> : null}
+      </div><p className="panel-copy">{financialCost.status === 'setup_required' ? `Missing: ${financialCost.missingRates.join(', ') || 'reviewed plan'}.` : 'MMK cost uses reviewed rates and actual evidence.'}</p>{costReviewDownload ? <><a className="core-button" download={costReviewDownload.filename} href={costReviewDownload.href}>Download cost review packet</a><p className="panel-copy">ERP evidence only; no financial, stock, provider, or production write.</p></> : null}</details> : null}
       {projection.plan ? <details className="compact-disclosure production-history"><summary>Effectiveness <span>{effectiveness.oeeBasisPoints !== null ? formatBasisPoints(effectiveness.oeeBasisPoints) : effectiveness.status === 'availability_setup_required' ? 'Setup availability' : 'Collecting'}</span></summary><div className="issue-list">
-        <article><span aria-hidden="true" className={`issue-mark ${effectiveness.availability ? 'resolved' : ''}`}>A</span><div><strong>Availability · {effectiveness.availability ? formatBasisPoints(effectiveness.availability.basisPoints) : 'Setup required'}</strong><small>{effectiveness.availability ? `${formatMilli(effectiveness.availability.operatingMinutesMilli)} operating / ${formatMilli(effectiveness.availability.plannedProductiveMinutesMilli)} planned productive minutes · ${formatMilli(effectiveness.availability.downtimeMinutesMilli)} downtime · ${effectiveness.availability.downtimeIntervalCount} closed intervals` : 'Bind planned productive time and closed downtime to this exact order, window, and routed work centre.'}</small></div></article>
+        <article><span aria-hidden="true" className={`issue-mark ${effectiveness.availability ? 'resolved' : ''}`}>A</span><div><strong>Availability · {effectiveness.availability ? formatBasisPoints(effectiveness.availability.basisPoints) : 'Setup required'}</strong><small>{effectiveness.availability ? `${formatMilli(effectiveness.availability.operatingMinutesMilli)} operating / ${formatMilli(effectiveness.availability.plannedProductiveMinutesMilli)} planned · ${formatMilli(effectiveness.availability.downtimeMinutesMilli)} downtime · ${effectiveness.availability.downtimeIntervalCount} intervals` : 'Add order-window productive time and downtime.'}</small></div></article>
         <article><span aria-hidden="true" className={`issue-mark ${effectiveness.performance ? 'resolved' : ''}`}>P</span><div><strong>Performance · {effectiveness.performance ? formatBasisPoints(effectiveness.performance.basisPoints) : 'Collecting'}</strong><small>{effectiveness.performance ? `${formatMilli(effectiveness.performance.designedMinutesMilli)} designed / ${formatMilli(effectiveness.performance.actualMinutesMilli)} actual minutes · ${formatMilli(effectiveness.performance.speedLossMinutesMilli)} speed loss` : 'Record completed routing units and actual minutes.'}</small></div></article>
         <article><span aria-hidden="true" className={`issue-mark ${effectiveness.quality ? 'resolved' : ''}`}>Q</span><div><strong>Quality · {effectiveness.quality ? formatBasisPoints(effectiveness.quality.basisPoints) : 'Collecting'}</strong><small>{effectiveness.quality ? `${effectiveness.quality.acceptedQuantity.toLocaleString()} accepted / ${effectiveness.quality.inspectedQuantity.toLocaleString()} inspected · ${effectiveness.quality.rejectedQuantity.toLocaleString()} rejected` : 'Complete the current output inspection.'}</small></div></article>
-        <article><span aria-hidden="true" className={`issue-mark ${effectiveness.oeeBasisPoints !== null ? 'resolved' : ''}`}>OEE</span><div><strong>OEE · {effectiveness.oeeBasisPoints !== null ? formatBasisPoints(effectiveness.oeeBasisPoints) : 'Not calculated'}</strong><small>Availability × Performance × Quality. Available capacity is never substituted for actual productive time.</small></div></article>
+        <article><span aria-hidden="true" className={`issue-mark ${effectiveness.oeeBasisPoints !== null ? 'resolved' : ''}`}>OEE</span><div><strong>OEE · {effectiveness.oeeBasisPoints !== null ? formatBasisPoints(effectiveness.oeeBasisPoints) : 'Not calculated'}</strong><small>Availability × Performance × Quality; uses actual time.</small></div></article>
       </div>{projection.orderRelease ? <form className="core-form compact-form" onSubmit={reviewEffectiveness}>
         <div className="form-row"><label>Window start<input disabled={controlsDisabled} onChange={(event) => setEffectivenessDraft((current) => ({ ...current, windowStart: event.target.value }))} required type="datetime-local" value={effectivenessDraft.windowStart} /></label><label>Window end<input disabled={controlsDisabled} onChange={(event) => setEffectivenessDraft((current) => ({ ...current, windowEnd: event.target.value }))} required type="datetime-local" value={effectivenessDraft.windowEnd} /></label></div>
         <div className="plant-availability-fields"><section aria-label="Planned productive time" className="plant-availability-group">{projection.plan.workCentres.filter((centre) => projection.routing.some((operation) => operation.workCentreId === centre.workCentreId)).map((centre) => <div className="plant-availability-item" key={centre.workCentreId}><div><strong>{centre.name}</strong><small>{centre.workCentreId} · exact order window</small></div><label>Planned productive minutes<input disabled={controlsDisabled} inputMode="decimal" min="0.001" onChange={(event) => setEffectivenessDraft((current) => ({ ...current, workCentres: { ...current.workCentres, [centre.workCentreId]: event.target.value } }))} required step="0.001" type="number" value={effectivenessDraft.workCentres[centre.workCentreId] ?? ''} /></label></div>)}</section></div>
-        <label>Closed downtime intervals (optional)<textarea disabled={controlsDisabled} maxLength={32_000} onChange={(event) => setEffectivenessDraft((current) => ({ ...current, downtimeIntervals: event.target.value }))} placeholder="DT-LINESTOP-01 | WC-ASSEMBLY-01 | 2026-07-28T08:20:00+06:30 | 2026-07-28T08:35:00+06:30" rows={3} value={effectivenessDraft.downtimeIntervals} /><small>One row per closed interval: downtime ID | work centre ID | started at | ended at. Intervals must be inside this order window and cannot overlap.</small></label>
+        <label>Closed downtime intervals (optional)<textarea disabled={controlsDisabled} maxLength={32_000} onChange={(event) => setEffectivenessDraft((current) => ({ ...current, downtimeIntervals: event.target.value }))} placeholder="DT-01 | WC-01 | start | end" rows={3} value={effectivenessDraft.downtimeIntervals} /><small>ID | centre | start | end; inside window, no overlap.</small></label>
         <button className="core-button" disabled={controlsDisabled} type="submit">Review effectiveness evidence</button>
       </form> : <p className="panel-copy">Release the reviewed order before recording its production window.</p>}</details> : null}
-      {projection.planRevisions.length ? <details className="compact-disclosure production-history"><summary>Plan revisions <span>{projection.planRevisions.length}/{PLANT_ORDER_PLAN_REVISION_MAX}</span></summary><div className="issue-list">{projection.planRevisions.map((revision, index) => <article key={revision.id}><span aria-hidden="true" className="issue-mark resolved">REV</span><div><strong>{revision.supersededPlanId} → {projection.planHistory[index + 1]?.planId}</strong><small>{revision.reason} · {new Date(revision.proof.capturedAt).toLocaleString()} · {revision.proof.actor}</small></div></article>)}</div><p className="panel-copy">Every predecessor remains digest-bound. A successor clears prior availability and calibration evidence and cannot replace a released package.</p></details> : null}
+      {projection.planRevisions.length ? <details className="compact-disclosure production-history"><summary>Plan revisions <span>{projection.planRevisions.length}/{PLANT_ORDER_PLAN_REVISION_MAX}</span></summary><div className="issue-list">{projection.planRevisions.map((revision, index) => <article key={revision.id}><span aria-hidden="true" className="issue-mark resolved">REV</span><div><strong>{revision.supersededPlanId} → {projection.planHistory[index + 1]?.planId}</strong><small>{revision.reason} · {new Date(revision.proof.capturedAt).toLocaleString()} · {revision.proof.actor}</small></div></article>)}</div></details> : null}
       {projection.genealogy.length ? <details className="compact-disclosure production-history"><summary>Batch genealogy <span>{projection.genealogy.length}</span></summary><div className="issue-list">{projection.genealogy.map((row, index) => <article key={`${row.materialId}-${row.inputLotId}-${index}`}><span aria-hidden="true" className="issue-mark resolved">LOT</span><div><strong>{row.inputLotId} → {row.outputBatchId}</strong><small>{row.substituteMaterialId ? `${row.substituteMaterialId} · ${formatMilli(row.substituteQuantityMilli ?? 0)} ${row.substituteUnit} → ${row.materialId} credit ${formatMilli(row.issuedQuantityMilli)} ${row.unit}` : `${row.materialId} · ${formatMilli(row.issuedQuantityMilli)} ${row.unit}`}</small></div></article>)}</div></details> : null}
-      <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch release is recorded. Post Shop receipt, costing, and accounting only through their own reviewed controls.' : 'Production workspace evidence only. No machine command, external send, inventory posting, payment, or accounting action occurs.')}</p>
+      <p aria-live="polite" className="form-notice">{error || notice || (projection.status === 'released_to_stock' ? 'Batch released. Shop receipt and finance need separate review.' : 'Evidence only. No machine, external, stock, payment, or accounting action.')}</p>
     </section>
 
     <dialog aria-labelledby="plant-execution-setup-title" className="production-issue-dialog" id="plant-execution-setup" onCancel={(event) => { event.preventDefault(); closeSetup() }} ref={setupDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Plant execution</span><h2 id="plant-execution-setup-title">{projection.plan ? 'Revise controlled batch' : 'Set up controlled batch'}</h2></div><button aria-label="Close batch setup" className="text-link" onClick={closeSetup} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
       {(!projection.plan || (effectivePlan && !projection.orderRelease)) ? <form autoComplete="off" className="core-form" onSubmit={reviewSetup}>
-        <p className="form-notice"><strong>{industryPack.name} pack.</strong> {projection.plan ? 'Review a successor without deleting the prior package.' : `${industryPack.firstWorkflow}. Review quantities and costs before recording.`}</p>
+        <p className="form-notice"><strong>{industryPack.name}.</strong> {projection.plan ? 'The current plan stays intact until confirmation.' : 'Review quantities and costs before recording.'}</p>
         <label>Active job<select disabled={disabled || Boolean(review) || Boolean(projection.plan)} onChange={(event) => { const job = activeJobs.find((candidate) => candidate.id === event.target.value); setSetupDraft(defaultSetup(job, industryPackId)) }} value={selectedSetupJob?.id ?? ''}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {remaining(job).toLocaleString()} left</option>) : <option value="">No active jobs</option>}</select></label>
         <label>Output batch ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, outputBatchId: event.target.value }))} required value={setupDraft.outputBatchId} /></label>
-        {projection.plan ? <label>Revision reason<textarea disabled={disabled || Boolean(review)} maxLength={300} onChange={(event) => setSetupDraft((current) => ({ ...current, revisionReason: event.target.value }))} placeholder="Supplier specification changed; revise BOM and release window." required rows={2} value={setupDraft.revisionReason} /><small>This reason and both plan packages remain in the append-only evidence chain.</small></label> : null}
+        {projection.plan ? <label>Revision reason<textarea data-plant-plan-revision-primary disabled={disabled || Boolean(review)} maxLength={300} onChange={(event) => setSetupDraft((current) => ({ ...current, revisionReason: event.target.value }))} placeholder="Supplier specification changed." required rows={2} value={setupDraft.revisionReason} /><small>Reason and both plans stay in evidence.</small></label> : null}
         <div className="form-row"><label>Plan effective from<input disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={setupDraft.effectiveFrom} /></label><label>Plan valid until<input disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} required type="datetime-local" value={setupDraft.effectiveUntil} /></label></div>
-        <small>Supervisors can release only inside this reviewed window. Once released, this exact BOM and routing remain frozen for the batch.</small>
+        <small>Release window; release freezes this BOM and route.</small>
         <details className="compact-disclosure production-history" open>
           <summary>Customize material and routing <span>Up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX + 1} materials · {PLANT_ORDER_ADDITIONAL_OPERATION_MAX + 1} operations</span></summary>
           <div className="core-form compact-form">
@@ -979,15 +1015,15 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
             <div className="form-row"><label>Material unit<select disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, materialUnit: event.target.value as PlantOrderMaterial['unit'] }))} value={setupDraft.materialUnit}>{setupMaterialUnits.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label><label>Per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, quantityPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.quantityPerUnit} /></label></div>
             <label>Standard material cost (MMK per material unit)<input disabled={disabled || Boolean(review)} inputMode="numeric" min="1" onChange={(event) => setSetupDraft((current) => ({ ...current, standardCostPerUnitMmk: event.target.value }))} placeholder="Enter reviewed rate" required step="1" type="number" value={setupDraft.standardCostPerUnitMmk} /></label>
             <div className="form-row"><label>Shop supply SKU<select disabled={disabled || Boolean(review)} onChange={(event) => setSetupDraft((current) => ({ ...current, shopSku: event.target.value }))} value={setupDraft.shopSku}><option value="">Map later</option>{commerceState.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku} · {item.onHand} available</option>)}</select></label><label>Material per Shop stock unit<input disabled={disabled || Boolean(review) || !setupDraft.shopSku} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, materialQuantityPerStockUnit: event.target.value }))} placeholder="25 for one 25 kg bag" required={Boolean(setupDraft.shopSku)} step="0.001" type="number" value={setupDraft.materialQuantityPerStockUnit} /></label></div>
-            <small>Explicit conversion powers MRP. Example: one Shop bag supplies 25.000 kg. No name matching is used.</small>
-            <label>Additional BOM materials (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalMaterials: event.target.value }))} placeholder="MAT-RUBBER-01 | Natural rubber | kg | 1.5 | 4200 | SKU-RUBBER-BAG | 25" rows={4} value={setupDraft.additionalMaterials} /><small>One row: material ID | name | unit | quantity per output unit | MMK per material unit | optional Shop SKU | material quantity per stock unit. Add up to {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX}.</small></label>
+            <small>Example: one Shop bag supplies 25 kg. Names are not matched.</small>
+            <label>Additional BOM materials (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalMaterials: event.target.value }))} placeholder="MAT-01 | Material | kg | 1.5 | 4200 | SKU-BAG | 25" rows={4} value={setupDraft.additionalMaterials} /><small>ID | name | unit | quantity | MMK rate | optional Shop mapping. Maximum {PLANT_ORDER_ADDITIONAL_MATERIAL_MAX}.</small></label>
             <div className="form-row"><label>Work centre ID<input disabled={disabled || Boolean(review)} maxLength={80} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreId: event.target.value }))} required value={setupDraft.workCentreId} /></label><label>Work centre name<input disabled={disabled || Boolean(review)} maxLength={180} onChange={(event) => setSetupDraft((current) => ({ ...current, workCentreName: event.target.value }))} required value={setupDraft.workCentreName} /></label></div>
             <div className="form-row"><label>Minutes per output unit<input disabled={disabled || Boolean(review)} inputMode="decimal" min="0.001" onChange={(event) => setSetupDraft((current) => ({ ...current, minutesPerUnit: event.target.value }))} required step="0.001" type="number" value={setupDraft.minutesPerUnit} /></label><label>Standard conversion cost (MMK per minute)<input disabled={disabled || Boolean(review)} inputMode="numeric" min="1" onChange={(event) => setSetupDraft((current) => ({ ...current, standardCostPerMinuteMmk: event.target.value }))} placeholder="Enter reviewed rate" required step="1" type="number" value={setupDraft.standardCostPerMinuteMmk} /></label></div>
-            <label>Additional routing operations (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalOperations: event.target.value }))} placeholder="OP-TEST-20 | Pressure test | WC-TEST-01 | Test bench | 1.5 | 600" rows={4} value={setupDraft.additionalOperations} /><small>One row: operation ID | name | work centre ID | work centre name | minutes per output unit | MMK per minute. Sequence follows row order.</small></label>
+            <label>Additional routing operations (optional)<textarea disabled={disabled || Boolean(review)} maxLength={16_000} onChange={(event) => setSetupDraft((current) => ({ ...current, additionalOperations: event.target.value }))} placeholder="OP-20 | Test | WC-02 | Test bench | 1.5 | 600" rows={4} value={setupDraft.additionalOperations} /><small>ID | name | centre ID | centre | minutes | MMK rate; row order sets sequence.</small></label>
           </div>
         </details>
-        <p className="panel-copy">One material and one operation are prefilled. Add only the BOM and routing steps this batch needs. No stock, staff, machine, costing, or accounting action occurs.</p>
-        <div className="form-actions"><button className="core-button" onClick={closeSetup} type="button">Cancel</button><button className="core-button primary" disabled={disabled || Boolean(review) || !selectedSetupJob} type="submit">{projection.plan ? 'Review plan revision' : 'Review execution plan'}</button></div>
+        <p className="panel-copy">No stock, staff, machine, cost, or accounting action here.</p>
+        <div className="form-actions"><button className="core-button" onClick={discardSetup} type="button">Cancel</button><button className="core-button primary" disabled={disabled || Boolean(review) || !selectedSetupJob} type="submit">{projection.plan ? 'Review plan revision' : 'Review execution plan'}</button></div>
       </form> : null}
     </dialog>
 
@@ -997,7 +1033,6 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         <div className="stock-receipt-preview plant-execution-review" role="status"><small>{review.title} ready</small><strong>{review.summary}</strong></div>
         {review.details?.length ? <dl aria-label={`${review.title} details`} className="action-change-flow">{review.details.map((detail) => <div key={detail.label}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl> : null}
         <p className="panel-copy">{review.boundary}</p>
-        <p className="panel-copy">Nothing changes until this one action is confirmed.</p>
         <div className="form-actions"><button className="core-button" disabled={busy} onClick={editReview} type="button">Back</button><button className="core-button primary" data-plant-review-primary disabled={busy} onClick={() => void confirmReview()} type="button">{busy ? 'Recording…' : `Confirm ${review.title.toLowerCase()}`}</button></div>
       </> : null}
     </dialog>

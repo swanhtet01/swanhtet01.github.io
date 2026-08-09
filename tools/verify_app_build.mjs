@@ -4823,7 +4823,8 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('buildPlantOrderEffectivePlan({')
   || !plantOrderUiSource.includes('Plan effective from')
   || !plantOrderUiSource.includes('Plan valid until')
-  || !plantOrderUiSource.includes('Create a newly reviewed revision; the old package cannot be silently reused.')
+  || !plantOrderUiSource.includes('Plan outside release window.')
+  || !plantOrderUiSource.includes('old plan cannot be reused.')
   || !plantOrderUiSource.includes('Create current revision')
   || !plantOrderUiSource.includes('Revision reason')
   || !plantOrderUiSource.includes('Plan revisions')
@@ -4836,15 +4837,15 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !plantOrderUiSource.includes('Routing progress')
   || !plantOrderUiSource.includes('Calibration control')
   || !plantOrderUiSource.includes('Review calibration evidence')
-  || !plantOrderUiSource.includes('expired evidence blocks order release and routed operation recording')
+  || !plantOrderUiSource.includes('Expired evidence blocks work.')
   || !plantOrderUiSource.includes('Review quality rework')
   || !plantOrderUiSource.includes('Only a later full passing inspection clears the hold.')
   || !plantOrderUiSource.includes('Effectiveness')
   || !plantOrderUiSource.includes('Review effectiveness evidence')
   || !plantOrderUiSource.includes('Closed downtime intervals (optional)')
-  || !plantOrderUiSource.includes('Available capacity is never substituted for actual productive time.')
+  || !plantOrderUiSource.includes('uses actual time.')
   || !plantOrderUiSource.includes('Download cost review packet')
-  || !plantOrderUiSource.includes('Internal evidence for ERP review only. No cost, inventory, journal, payroll, invoice, provider, or production write occurs.')
+  || !plantOrderUiSource.includes('ERP evidence only; no financial, stock, provider, or production write.')
   || !plantOrderUiSource.includes('aria-label="Plant operating flow"')
   || !plantOrderUiSource.includes('<ol aria-label="Plant workflow stages" className="plant-flow-stages" tabIndex={0}>')
   || !plantOrderUiSource.includes('id="plant-operating-flow"')
@@ -4854,8 +4855,8 @@ if (!coreSource.includes('<PlantOrderFoundation')
   || !coreCssSource.includes('.plant-flow-stages')
   || !coreCssSource.includes('.plant-execution-foundation { display: grid')
   || (plantOrderUiSource.match(/>Review availability<\/button>/g) || []).length !== 1
-  || !plantOrderUiSource.includes('No machine command')
-  || !plantOrderUiSource.includes('Shop receipt, delivery, costing, and accounting are not posted automatically.')
+  || !plantOrderUiSource.includes('No machine, external, stock, payment, or accounting action.')
+  || !plantOrderUiSource.includes('Shop receipt and finance need separate review.')
   || !plantOrderUiSource.includes('upsertProductionOrderExecution(current, result.state)')
   || plantOrderUiSource.includes('fetch(')) fail('plant_order_foundation_ui_boundary_missing')
 if (!plantOrderPythonSource.includes('PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "supermega.plant.reviewed_plan.v3"')
@@ -4875,7 +4876,7 @@ if (!plantOrderPythonSource.includes('PLANT_ORDER_CONTROLLED_PLAN_CONTRACT = "su
 if (!plantOrderUiSource.includes('productionState: ProductionState')
   || !plantOrderUiSource.includes('onProductionCommand: (')
   || !plantOrderUiSource.includes('await onProductionCommand(')
-  || !plantOrderUiSource.includes('Production workspace evidence only.')
+  || !plantOrderUiSource.includes('Evidence only.')
   || !productionSource.includes('orderExecution?: PlantOrderState')
   || !productionSource.includes('orderPortfolio?: ProductionOrderPortfolio')
   || !productionSource.includes('supermega.plant.order_foundation.v1')
@@ -4951,7 +4952,7 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !shopProductionHandoffUiSource.includes('plantOrderStorageKey(LOCAL_PLANT_SCOPE)')
   || !shopProductionHandoffUiSource.includes("const LEGACY_LOCAL_PLANT_SCOPE = 'plant:'")
   || !plantOrderUiSource.includes('Await Shop issue')
-  || !plantOrderUiSource.includes('Shop must issue every linked material request before operation progress')
+  || !plantOrderUiSource.includes('Issue all linked material in Shop first.')
   || !plantOrderUiSource.includes('Review in Shop')
   || !plantOrderUiSource.includes("loadPlantOrderWorkspace(localStorage, 'plant:')")
   || shopProductionHandoffUiSource.includes('fetch(')) fail('plant_shop_material_handoff_ui_boundary_missing')
@@ -6348,6 +6349,37 @@ if (recoverProductionJobPlanDraftStart < 0
   || !coreCssSource.includes('.job-panel > .plant-plan-recovery')
   || !coreCssSource.includes('.plant-plan-recovery .core-button { min-height: 44px; }')
   || plantPlanRecoveryForbiddenActions.some((marker) => closeJobScheduleContract.includes(marker) || undoClosedJobScheduleContract.includes(marker) || recoverProductionJobPlanDraftContract.includes(marker))) fail('production_job_plan_close_recovery_missing')
+const closePlantRevisionContract = plantOrderUiSource.slice(plantOrderUiSource.indexOf('function closeSetup'), plantOrderUiSource.indexOf('function discardSetup'))
+const discardPlantRevisionContract = plantOrderUiSource.slice(plantOrderUiSource.indexOf('function discardSetup'), plantOrderUiSource.indexOf('function openPlanRevision'))
+const openPlantRevisionContract = plantOrderUiSource.slice(plantOrderUiSource.indexOf('function openPlanRevision'), plantOrderUiSource.indexOf('function editReview'))
+const recoverPlantPlanRevisionStart = productionJobPlanDraftSource.indexOf('export function recoverPlantPlanRevisionDraft')
+const recoverPlantPlanRevisionContract = productionJobPlanDraftSource.slice(recoverPlantPlanRevisionStart)
+const plantRevisionRecoveryForbiddenActions = ['supersedePlantOrderPlan(', 'applyPlantOrderPlan(', 'onProductionCommand(', 'stage(', 'setReview({', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(']
+if (recoverPlantPlanRevisionStart < 0
+  || !productionJobPlanDraftSource.includes("PLANT_CLOSED_PLAN_REVISION_DRAFT_CONTRACT = 'supermega.plant.closed_plan_revision_draft.v1'")
+  || !productionJobPlanDraftSource.includes('export function createPlantPlanRevisionOpening')
+  || !productionJobPlanDraftSource.includes('export function closePlantPlanRevisionDraft')
+  || !productionJobPlanDraftSource.includes("reason: 'already_editing'")
+  || !productionJobPlanDraftSource.includes("reason: 'invalid_recovery'")
+  || !productionJobPlanDraftSource.includes("reason: 'revision_unavailable'")
+  || !productionJobPlanDraftSource.includes("reason: 'source_changed'")
+  || !productionJobPlanDraftSource.includes('plan.sourceDigest !== jobSourceDigest')
+  || !productionJobPlanDraftSource.includes('plantOrderEvidenceDigest({ state, plan, jobSourceDigest, scope, industryPackId })')
+  || !productionJobPlanDraftSource.includes('sourceDigest !== closed.sourceDigest')
+  || !plantOrderUiSource.includes('const [closedPlanRevisionDraft, setClosedPlanRevisionDraft] = useState<PlantClosedPlanRevisionDraft | null>(null)')
+  || !plantOrderUiSource.includes('const planRevisionOpeningRef = useRef<PlantPlanRevisionOpening | null>(null)')
+  || !closePlantRevisionContract.includes('closePlantPlanRevisionDraft(setupDraft, planRevisionOpeningRef.current)')
+  || closePlantRevisionContract.indexOf('closePlantPlanRevisionDraft(setupDraft, planRevisionOpeningRef.current)') > closePlantRevisionContract.indexOf('setSetupOpen(false)')
+  || !discardPlantRevisionContract.includes('setClosedPlanRevisionDraft(null)')
+  || !plantOrderUiSource.includes('recoverPlantPlanRevisionDraft(null, closedPlanRevisionDraft')
+  || !openPlantRevisionContract.includes('createPlantPlanRevisionOpening(draft, state, projection.plan, job, scope, industryPackId, revisionReady)')
+  || !plantOrderUiSource.includes('data-plant-plan-revision-recovery')
+  || !plantOrderUiSource.includes('data-plant-plan-revision-primary')
+  || !plantOrderUiSource.includes("planRevisionRecovery?.ok ? 'Reopen revision'")
+  || !plantOrderUiSource.includes('Revision draft kept')
+  || !plantOrderUiSource.includes('onCancel={(event) => { event.preventDefault(); closeSetup() }}')
+  || !plantOrderUiSource.includes('onClick={discardSetup} type="button">Cancel</button>')
+  || plantRevisionRecoveryForbiddenActions.some((marker) => closePlantRevisionContract.includes(marker) || discardPlantRevisionContract.includes(marker) || openPlantRevisionContract.includes(marker) || recoverPlantPlanRevisionContract.includes(marker))) fail('plant_plan_revision_close_recovery_missing')
 const productionStatusPosition = productionJobsContract.indexOf('{plantToday}')
 const productionCommandPosition = productionJobsContract.indexOf('{plantBusinessControls}')
 const productionWorkPosition = productionJobsContract.indexOf('<h2>Jobs to finish</h2>')
@@ -13963,6 +13995,82 @@ async function verifyProductionJobPlanDraftRuntime() {
     assert(!alreadyEditing.ok && alreadyEditing.reason === 'already_editing', 'production_job_plan_overwrote_open_draft')
     const tampered = model.recoverProductionJobPlanDraft(null, { ...closed, openedDraft: { ...editedDraft } }, [job])
     assert(!tampered.ok && tampered.reason === 'invalid_recovery', 'production_job_plan_unchanged_recovery_accepted')
+
+    const plantModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?plant-plan-revision-draft=${Date.now()}`)
+    const scope = 'trial-plant-revision-recovery'
+    const revisionJob = { ...job, id: 'JOB-REV-301' }
+    const jobSourceDigest = plantModel.plantOrderEvidenceDigest({
+      scope,
+      job: {
+        id: revisionJob.id,
+        product: revisionJob.product,
+        target: revisionJob.target,
+        output: revisionJob.output,
+        scrap: revisionJob.scrap,
+        qualityHoldActionId: null,
+        closureActionId: null,
+      },
+    })
+    const revisionState = { schema: plantModel.PLANT_ORDER_STATE_SCHEMA, revision: 1, headDigest: `sha256:${'1'.repeat(64)}`, commands: [] }
+    const revisionPlan = {
+      contract: plantModel.PLANT_ORDER_EFFECTIVE_PLAN_CONTRACT,
+      planId: 'PLN-REV-301',
+      sourceDigest: jobSourceDigest,
+      effectiveFrom: '2026-08-10T08:00:00.000+06:30',
+      effectiveUntil: '2026-09-10T08:00:00.000+06:30',
+      job: { jobId: revisionJob.id, product: revisionJob.product, targetQuantity: 74, outputBatchId: 'BATCH-301' },
+      materials: [{ materialId: 'MAT-301', name: 'Filter media', unit: 'kg', quantityPerUnitMilli: 1_250, standardCostPerUnitMmk: 4_200 }],
+      workCentres: [{ workCentreId: 'WC-301', name: 'Filter line' }],
+      routing: [{ operationId: 'OP-301', sequence: 1, name: 'Assembly', workCentreId: 'WC-301', minutesPerUnitMilli: 2_000, standardCostPerMinuteMmk: 600 }],
+      packageDigest: `sha256:${'2'.repeat(64)}`,
+    }
+    const revisionDraft = {
+      jobId: revisionJob.id,
+      outputBatchId: revisionPlan.job.outputBatchId,
+      effectiveFrom: '2026-08-10T08:00',
+      effectiveUntil: '2026-09-10T08:00',
+      revisionReason: '',
+      materialId: 'MAT-301',
+      materialName: 'Filter media',
+      materialUnit: 'kg',
+      quantityPerUnit: '1.25',
+      standardCostPerUnitMmk: '4200',
+      shopSku: '',
+      materialQuantityPerStockUnit: '',
+      additionalMaterials: '',
+      workCentreId: 'WC-301',
+      workCentreName: 'Filter line',
+      minutesPerUnit: '2',
+      standardCostPerMinuteMmk: '600',
+      additionalOperations: '',
+    }
+    const revisionOpening = model.createPlantPlanRevisionOpening(revisionDraft, revisionState, revisionPlan, revisionJob, scope, 'general-manufacturing', true)
+    assert(revisionOpening && JSON.stringify(revisionOpening.draft) === JSON.stringify(revisionDraft) && revisionOpening.draft !== revisionDraft, 'plant_plan_revision_opening_not_bound_exactly')
+    assert(model.closePlantPlanRevisionDraft(revisionDraft, revisionOpening) === null, 'plant_plan_revision_unchanged_close_became_recoverable')
+    const editedRevisionDraft = { ...revisionDraft, revisionReason: 'Supplier specification changed', materialName: 'Premium filter media', additionalOperations: 'OP-TEST-20 | Pressure test | WC-TEST-01 | Test bench | 1.5 | 600' }
+    const closedRevision = model.closePlantPlanRevisionDraft(editedRevisionDraft, revisionOpening)
+    assert(closedRevision && JSON.stringify(closedRevision.draft) === JSON.stringify(editedRevisionDraft) && closedRevision.draft !== editedRevisionDraft, 'plant_plan_revision_close_not_exact')
+    const recoveredRevision = model.recoverPlantPlanRevisionDraft(null, closedRevision, revisionState, revisionPlan, revisionJob, scope, 'general-manufacturing', true)
+    assert(recoveredRevision.ok
+      && JSON.stringify(recoveredRevision.draft) === JSON.stringify(editedRevisionDraft)
+      && recoveredRevision.draft !== closedRevision.draft
+      && JSON.stringify(recoveredRevision.opening.draft) === JSON.stringify(editedRevisionDraft),
+    'plant_plan_revision_closed_draft_not_restored_exactly')
+    assert(recoveredRevision.ok && model.closePlantPlanRevisionDraft(recoveredRevision.draft, recoveredRevision.opening) === null, 'plant_plan_revision_recovered_unchanged_close_repeated')
+    const revisionAlreadyEditing = model.recoverPlantPlanRevisionDraft(revisionDraft, closedRevision, revisionState, revisionPlan, revisionJob, scope, 'general-manufacturing', true)
+    assert(!revisionAlreadyEditing.ok && revisionAlreadyEditing.reason === 'already_editing', 'plant_plan_revision_overwrote_open_draft')
+    const malformedRevision = model.recoverPlantPlanRevisionDraft(null, { ...closedRevision, draft: { ...closedRevision.draft, unexpected: 'field' } }, revisionState, revisionPlan, revisionJob, scope, 'general-manufacturing', true)
+    assert(!malformedRevision.ok && malformedRevision.reason === 'invalid_recovery', 'plant_plan_revision_malformed_draft_restored')
+    const releasedRevision = model.recoverPlantPlanRevisionDraft(null, closedRevision, revisionState, revisionPlan, revisionJob, scope, 'general-manufacturing', false)
+    assert(!releasedRevision.ok && releasedRevision.reason === 'revision_unavailable', 'plant_plan_revision_released_context_restored')
+    const changedRevisionState = model.recoverPlantPlanRevisionDraft(null, closedRevision, { ...revisionState, revision: 2, headDigest: `sha256:${'3'.repeat(64)}` }, revisionPlan, revisionJob, scope, 'general-manufacturing', true)
+    assert(!changedRevisionState.ok && changedRevisionState.reason === 'source_changed', 'plant_plan_revision_changed_state_restored')
+    const changedRevisionPlan = model.recoverPlantPlanRevisionDraft(null, closedRevision, revisionState, { ...revisionPlan, job: { ...revisionPlan.job, outputBatchId: 'BATCH-CHANGED' } }, revisionJob, scope, 'general-manufacturing', true)
+    assert(!changedRevisionPlan.ok && changedRevisionPlan.reason === 'source_changed', 'plant_plan_revision_changed_plan_restored')
+    const changedRevisionPack = model.recoverPlantPlanRevisionDraft(null, closedRevision, revisionState, revisionPlan, revisionJob, scope, 'assembly', true)
+    assert(!changedRevisionPack.ok && changedRevisionPack.reason === 'source_changed', 'plant_plan_revision_changed_pack_restored')
+    const inactiveRevisionJob = model.recoverPlantPlanRevisionDraft(null, closedRevision, revisionState, revisionPlan, { ...revisionJob, output: 98 }, scope, 'general-manufacturing', true)
+    assert(!inactiveRevisionJob.ok && inactiveRevisionJob.reason === 'revision_unavailable', 'plant_plan_revision_inactive_job_restored')
   } catch (error) {
     fail(`production_job_plan_draft_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
