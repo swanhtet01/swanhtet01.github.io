@@ -17,6 +17,7 @@ const CORECSS = `${ROOT}/showroom/src/core/core-app.css`
 const WEBMODEL = `${ROOT}/showroom/src/products/website/website-model.ts`
 const PRODWS = `${ROOT}/showroom/src/core/production-workspace.ts`
 const STORAGE = `${ROOT}/showroom/src/core/local-workspace-storage.ts`
+const INVENTORY = `${ROOT}/showroom/src/core/shop-inventory-foundation.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
 const MUTATIONS = [
@@ -67,6 +68,10 @@ const MUTATIONS = [
     '.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }',
     '.catalog-import-table { max-height: 340px; overflow: auto; background: #fff; }',
     'a fixed light surface reverts to hardcoded white'],
+  ['test_shop_inventory_foundation.mjs', INVENTORY,
+    "  if (digest(expectedHeadDigest, 'expected_head_digest') !== current.headDigest) throw new Error('The inventory snapshot changed before this command was applied.')",
+    "  digest(expectedHeadDigest, 'expected_head_digest')",
+    'a stock write computed against a stale ledger applies on top instead of being refused'],
   ['test_workspace_storage_registry.mjs', STORAGE,
     "  'supermega.shop.counter_draft.v1',", '  // removed by mutation',
     'the in-progress counter sale stops being backed up or cleared'],
