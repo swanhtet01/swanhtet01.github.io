@@ -47,6 +47,14 @@ import {
 import type { CommerceState } from './commerce-workspace'
 import { pendingProductionMaterialHandoffs, projectProductionMaterialRequirements, projectProductionPortfolioMrp } from './production-material-handoff'
 import {
+  closePlantAvailabilityDraft,
+  createPlantAvailabilityOpening,
+  recoverPlantAvailabilityDraft,
+  type PlantAvailabilityDraft,
+  type PlantAvailabilityOpening,
+  type PlantClosedAvailabilityDraft,
+} from './plant-availability-draft'
+import {
   closePlantPlanRevisionDraft,
   createPlantPlanRevisionOpening,
   recoverPlantPlanRevisionDraft,
@@ -90,11 +98,6 @@ type ReviewedTransition = {
 }
 
 type SetupDraft = PlantPlanRevisionDraft
-
-type AvailabilityDraft = {
-  materials: Record<string, { inputLotId: string; availableQuantity: string }>
-  workCentres: Record<string, string>
-}
 
 type OperationDraft = { operationId: string; quantity: string; actualMinutes: string }
 type EffectivenessDraft = {
@@ -216,7 +219,7 @@ function revisionSetup(plan: PlantOrderPlan, job: ProductionJob | undefined, ind
   }
 }
 
-function availabilityDefaultsForPlan(plan: PlantOrderPlan): AvailabilityDraft {
+function availabilityDefaultsForPlan(plan: PlantOrderPlan): PlantAvailabilityDraft {
   const requiredMinutes = new Map(plan.workCentres.map((centre) => [centre.workCentreId, 0]))
   plan.routing.forEach((operation) => {
     const next = (requiredMinutes.get(operation.workCentreId) ?? 0) + operation.minutesPerUnitMilli * plan.job.targetQuantity
@@ -236,8 +239,24 @@ function availabilityDefaultsForPlan(plan: PlantOrderPlan): AvailabilityDraft {
 }
 
 function availabilityDefaults(state: PlantOrderState) {
-  const plan = projectPlantOrder(state).plan
-  return plan ? availabilityDefaultsForPlan(plan) : { materials: {}, workCentres: {} }
+  const projection = projectPlantOrder(state)
+  if (!projection.plan) return { materials: {}, workCentres: {} }
+  const defaults = availabilityDefaultsForPlan(projection.plan)
+  if (!projection.latestAvailability) return defaults
+  const materials = new Map(projection.latestAvailability.materials.map((row) => [row.materialId, row]))
+  const workCentres = new Map(projection.latestAvailability.workCentres.map((row) => [row.workCentreId, row]))
+  return {
+    materials: Object.fromEntries(projection.plan.materials.map((material) => {
+      const retained = materials.get(material.materialId)
+      return [material.materialId, retained
+        ? { inputLotId: retained.inputLotId, availableQuantity: milliInputValue(retained.availableQuantityMilli) }
+        : defaults.materials[material.materialId]]
+    })),
+    workCentres: Object.fromEntries(projection.plan.workCentres.map((centre) => [
+      centre.workCentreId,
+      workCentres.has(centre.workCentreId) ? String(workCentres.get(centre.workCentreId)!.availableMinutes) : defaults.workCentres[centre.workCentreId],
+    ])),
+  }
 }
 
 function loadState(scope: string) {
@@ -288,6 +307,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const [setupDraft, setSetupDraft] = useState(() => defaultSetup(activeJobs[0], industryPackId))
   const [closedPlanRevisionDraft, setClosedPlanRevisionDraft] = useState<PlantClosedPlanRevisionDraft | null>(null)
   const [availabilityDraft, setAvailabilityDraft] = useState(() => availabilityDefaults(initial.state))
+  const [closedAvailabilityDraft, setClosedAvailabilityDraft] = useState<PlantClosedAvailabilityDraft | null>(null)
   const [operationDraft, setOperationDraft] = useState<OperationDraft>({ operationId: '', quantity: '', actualMinutes: '' })
   const [effectivenessDraft, setEffectivenessDraft] = useState<EffectivenessDraft>({ windowStart: '', windowEnd: '', workCentres: {}, downtimeIntervals: '' })
   const [calibrationDraft, setCalibrationDraft] = useState<CalibrationDraft>(() => calibrationDefaults())
@@ -298,6 +318,8 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const setupDialogRef = useRef<HTMLDialogElement>(null)
   const setupTriggerRef = useRef<HTMLButtonElement>(null)
   const planRevisionOpeningRef = useRef<PlantPlanRevisionOpening | null>(null)
+  const availabilityOpeningRef = useRef<PlantAvailabilityOpening | null>(null)
+  const availabilityRecoveryRef = useRef<HTMLButtonElement>(null)
   const reviewDialogRef = useRef<HTMLDialogElement>(null)
   const projection = useMemo(() => projectPlantOrder(state), [state])
   const effectiveness = useMemo(() => projectPlantOrderEffectiveness(projection), [projection])
@@ -357,7 +379,20 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   const planRevisionRecovery = !setupOpen && closedPlanRevisionDraft && projection.plan && revisionJob
     ? recoverPlantPlanRevisionDraft(null, closedPlanRevisionDraft, state, projection.plan, revisionJob, scope, industryPackId, revisionReady)
     : null
-  const controlsDisabled = disabled || busy || Boolean(review) || (!bindingCurrent && projection.status !== 'released_to_stock')
+  const availabilityReady = Boolean(projection.plan && boundJob && bindingCurrent && (projection.status === 'planned' || projection.status === 'shortfall'))
+  const availabilityRecoveryState = closedAvailabilityDraft
+    ? productionOrderExecutionForJob(productionState, closedAvailabilityDraft.orderJobId)
+    : null
+  const availabilityRecoveryProjection = availabilityRecoveryState ? projectPlantOrder(availabilityRecoveryState) : null
+  const availabilityRecoveryJob = closedAvailabilityDraft ? jobs.find((job) => job.id === closedAvailabilityDraft.orderJobId) : undefined
+  const availabilityRecoveryReady = Boolean(availabilityRecoveryProjection?.plan
+    && availabilityRecoveryJob
+    && productionJobPlanSourceDigest(scope, availabilityRecoveryJob) === availabilityRecoveryProjection.plan.sourceDigest
+    && (availabilityRecoveryProjection.status === 'planned' || availabilityRecoveryProjection.status === 'shortfall'))
+  const availabilityRecovery = closedAvailabilityDraft && availabilityRecoveryState && availabilityRecoveryProjection?.plan && availabilityRecoveryJob
+    ? recoverPlantAvailabilityDraft(null, closedAvailabilityDraft, availabilityRecoveryState, availabilityRecoveryProjection.plan, availabilityRecoveryJob, scope, availabilityRecoveryReady)
+    : null
+  const controlsDisabled = disabled || busy || Boolean(review) || Boolean(closedAvailabilityDraft) || (!bindingCurrent && projection.status !== 'released_to_stock')
   const nextMaterial = projection.materials.find((material) => material.remainingToIssueMilli > 0)
   const nextMaterialSubstitution = nextMaterial ? projection.materialSubstitutions.find((approval) => approval.materialId === nextMaterial.materialId) : undefined
   const requiresOperationEvidence = projection.plan?.contract === PLANT_ORDER_EXECUTION_PLAN_CONTRACT || controlledPlan
@@ -463,18 +498,61 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
   }, [scope, state.headDigest])
 
   function selectOrder(jobId: string) {
+    if (jobId === selectedOrderJobId) return
+    if (closedAvailabilityDraft) {
+      setError('Return to or discard the kept availability check before changing orders again.')
+      return
+    }
+    const opening = availabilityOpeningRef.current ?? (projection.plan && boundJob
+      ? createPlantAvailabilityOpening(availabilityDefaults(state), state, projection.plan, boundJob, scope, availabilityReady)
+      : null)
+    const keptAvailability = closePlantAvailabilityDraft(availabilityDraft, opening)
     const retained = productionOrderExecutionForJob(productionState, jobId)
     const next = retained ?? createEmptyPlantOrderState()
+    availabilityOpeningRef.current = null
     setSelectedOrderJobId(jobId)
     setState(next)
     setAvailabilityDraft(availabilityDefaults(next))
+    setClosedAvailabilityDraft(keptAvailability)
     setSetupDraft(defaultSetup(activeJobs.find((job) => job.id === jobId), industryPackId))
     planRevisionOpeningRef.current = null
     setClosedPlanRevisionDraft(null)
     setReview(null)
     setSetupOpen(false)
     setError('')
-    setNotice(retained ? `Loaded ${jobId}.` : `${jobId} is ready for one reviewed BOM and routing.`)
+    setNotice(keptAvailability
+      ? `${keptAvailability.orderJobId} availability entries are kept. Return or discard them before editing ${jobId}.`
+      : retained ? `Loaded ${jobId}.` : `${jobId} is ready for one reviewed BOM and routing.`)
+    if (keptAvailability) requestAnimationFrame(() => availabilityRecoveryRef.current?.focus())
+  }
+
+  function restoreAvailabilityAfterOrderSwitch() {
+    if (!closedAvailabilityDraft || !availabilityRecovery?.ok || !availabilityRecoveryState || !availabilityRecoveryJob) {
+      setError('The kept availability check no longer matches current Plant evidence. Discard it and review the order again.')
+      return
+    }
+    setSelectedOrderJobId(closedAvailabilityDraft.orderJobId)
+    setState(availabilityRecoveryState)
+    setAvailabilityDraft(availabilityRecovery.draft)
+    availabilityOpeningRef.current = availabilityRecovery.opening
+    setSetupDraft(defaultSetup(availabilityRecoveryJob, industryPackId))
+    planRevisionOpeningRef.current = null
+    setClosedPlanRevisionDraft(null)
+    setClosedAvailabilityDraft(null)
+    setReview(null)
+    setSetupOpen(false)
+    setError('')
+    setNotice(`${closedAvailabilityDraft.orderJobId} material lots, quantities, and centre minutes restored exactly. Nothing recorded.`)
+    requestAnimationFrame(() => document.querySelector<HTMLInputElement>('[data-plant-availability-editor] input:not(:disabled)')?.focus())
+  }
+
+  function discardSwitchedAvailabilityDraft() {
+    setClosedAvailabilityDraft(null)
+    availabilityOpeningRef.current = projection.plan && boundJob
+      ? createPlantAvailabilityOpening(availabilityDraft, state, projection.plan, boundJob, scope, availabilityReady)
+      : null
+    setError('')
+    setNotice('Kept availability entries discarded. No availability or production evidence changed.')
   }
 
   function stage(next: Omit<ReviewedTransition, 'commandId'>) {
@@ -515,6 +593,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     try {
       const accepted = await mutateManaged(review)
       planRevisionOpeningRef.current = null
+      availabilityOpeningRef.current = null
       setClosedPlanRevisionDraft(null)
       setState(accepted.state); setEvaluationTime(Date.now()); setReview(null); setSetupOpen(false)
       const acceptedJobId = projectPlantOrder(accepted.state).plan?.job.jobId
@@ -691,7 +770,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
     }
   }
 
-  function updateMaterialAvailability(materialId: string, patch: Partial<AvailabilityDraft['materials'][string]>) {
+  function updateMaterialAvailability(materialId: string, patch: Partial<PlantAvailabilityDraft['materials'][string]>) {
     setAvailabilityDraft((current) => {
       const existing = current.materials[materialId] ?? { inputLotId: '', availableQuantity: '' }
       return { ...current, materials: { ...current.materials, [materialId]: { ...existing, ...patch } } }
@@ -884,12 +963,16 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
           <p>{projection.plan ? `${projection.totalOutput.toLocaleString()} / ${projection.metrics.targetQuantity.toLocaleString()} output · ${projection.genealogy.length} traced ${projection.genealogy.length === 1 ? 'lot' : 'lots'} · revision ${projection.revision}` : 'Create one reviewed BOM, route, and batch release.'}</p>
           {projection.plan ? <small>{releaseWindowStatus}</small> : null}
         </div>
-        {!projection.plan ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { planRevisionOpeningRef.current = null; setClosedPlanRevisionDraft(null); setSetupOpen(true); setReview(null) }} ref={setupTriggerRef} type="button">Set up batch</button> : null}
-        {effectivePlan && !projection.orderRelease ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className={`core-button ${releaseWindowExpired || planRevisionRecovery?.ok ? 'primary' : ''}`} disabled={disabled || busy || Boolean(review) || !revisionReady} onClick={openPlanRevision} ref={setupTriggerRef} type="button">{planRevisionRecovery?.ok ? 'Reopen revision' : releaseWindowExpired ? 'Create current revision' : 'Revise plan'}</button> : null}
+        {!projection.plan && !closedAvailabilityDraft ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={() => { planRevisionOpeningRef.current = null; setClosedPlanRevisionDraft(null); setSetupOpen(true); setReview(null) }} ref={setupTriggerRef} type="button">Set up batch</button> : null}
+        {effectivePlan && !projection.orderRelease && !closedAvailabilityDraft ? <button aria-controls="plant-execution-setup" aria-expanded={setupOpen} className={`core-button ${releaseWindowExpired || planRevisionRecovery?.ok ? 'primary' : ''}`} disabled={disabled || busy || Boolean(review) || !revisionReady} onClick={openPlanRevision} ref={setupTriggerRef} type="button">{planRevisionRecovery?.ok ? 'Reopen revision' : releaseWindowExpired ? 'Create current revision' : 'Revise plan'}</button> : null}
         {projection.plan ? <span className={`status-pill ${calibrationDueCentre || awaitingWarehouse || projection.status === 'quality_hold' || projection.status === 'shortfall' ? 'pending' : 'bounded'}`}>{visibleStatus}</span> : null}
       </div>
       {planRevisionRecovery?.ok ? <div className="order-draft-recovery plant-plan-recovery" data-plant-plan-revision-recovery role="status"><div><strong>Revision draft kept</strong><small>Reopen or cancel. No plan or production changed.</small></div></div> : null}
-      {orderChoices.length > 1 ? <label className="plant-order-switcher">Controlled order<select aria-label="Controlled production order" disabled={busy || Boolean(review)} onChange={(event) => selectOrder(event.target.value)} value={selectedOrderJobId}>{orderChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.id} · {choice.job?.product ?? 'Retained order'} · {choice.execution ? 'planned' : 'not planned'}</option>)}</select></label> : null}
+      {closedAvailabilityDraft ? <div className={`order-draft-recovery plant-availability-recovery ${availabilityRecovery?.ok ? '' : 'is-blocked'}`} data-plant-availability-recovery={availabilityRecovery?.ok ? 'ready' : 'expired'} role={availabilityRecovery?.ok ? 'status' : 'alert'}>
+        <div><strong>{closedAvailabilityDraft.orderJobId} availability check kept</strong><small>{availabilityRecovery?.ok ? `${Object.keys(closedAvailabilityDraft.draft.materials).length} material ${Object.keys(closedAvailabilityDraft.draft.materials).length === 1 ? 'lot' : 'lots'} · ${Object.keys(closedAvailabilityDraft.draft.workCentres).length} work ${Object.keys(closedAvailabilityDraft.draft.workCentres).length === 1 ? 'centre' : 'centres'}. Undo once or discard; no availability, purchase, stock, plan, or production evidence was recorded.` : 'The source order, plan, job, or production evidence changed. Discard these expired entries and review current Plant data.'}</small></div>
+        <div className="order-draft-recovery-actions">{availabilityRecovery?.ok ? <button className="core-button primary compact" onClick={restoreAvailabilityAfterOrderSwitch} ref={availabilityRecoveryRef} type="button">Undo switch</button> : null}<button className="text-link danger-text" onClick={discardSwitchedAvailabilityDraft} type="button">Discard</button></div>
+      </div> : null}
+      {orderChoices.length > 1 ? <label className="plant-order-switcher">Controlled order<select aria-label="Controlled production order" disabled={busy || Boolean(review) || Boolean(closedAvailabilityDraft)} onChange={(event) => selectOrder(event.target.value)} value={selectedOrderJobId}>{orderChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.id} · {choice.job?.product ?? 'Retained order'} · {choice.execution ? 'planned' : 'not planned'}</option>)}</select></label> : null}
       {portfolioMrp && portfolioMrp.orders.length > 1 ? <div className="plant-portfolio-mrp" role="status"><div><span className="core-eyebrow">Portfolio material plan</span><strong>{portfolioMrp.summary.orders} orders share Shop supply once</strong><small>Urgent, then earliest due; supply is counted once.</small></div><div className="plant-portfolio-counts"><span>{portfolioMrp.summary.ready} ready</span><span>{portfolioMrp.summary.coveredByPurchase} on PO</span><span>{portfolioMrp.summary.atRisk} at risk</span><span>{portfolioMrp.summary.shortage + portfolioMrp.summary.mappingRequired} blocked</span></div>{selectedPortfolioOrder ? <small>{selectedPortfolioOrder.jobId}: {selectedPortfolioOrder.rows.map((row) => row.sku ? `${row.sku} ${row.allocatedOnHandStockUnits} stock + ${row.allocatedScheduledPurchaseStockUnits} PO + ${row.allocatedAtRiskPurchaseStockUnits} risk; ${row.shortageStockUnits} short` : `${row.materialId} needs Shop mapping`).join(' · ')}</small> : null}</div> : null}
       <section aria-label="Plant operating flow" className="plant-operating-flow" id="plant-operating-flow">
         <div className={`plant-next-work${flowBlocked ? ' is-blocked' : ''}`}>
@@ -911,7 +994,7 @@ export function PlantOrderFoundation({ actor, commerceState, disabled, industryP
         <button className="core-button primary" disabled={controlsDisabled} type="submit">Review calibration evidence</button>
       </form> : null}
 
-      {projection.plan && !calibrationDueCentre && (projection.status === 'planned' || projection.status === 'shortfall') ? <form className="core-form compact-form" onSubmit={reviewAvailability}>
+      {projection.plan && !calibrationDueCentre && (projection.status === 'planned' || projection.status === 'shortfall') ? <form className="core-form compact-form" data-plant-availability-editor onSubmit={reviewAvailability}>
         <div aria-label="Material and capacity availability" className="plant-availability-fields">
           <section aria-label="Material lots" className="plant-availability-group">
             {projection.materials.map((material) => {
