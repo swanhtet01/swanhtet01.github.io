@@ -3852,6 +3852,11 @@ const ecommerceOrderSubmitEnd = coreSource.indexOf('</div>', ecommerceOrderSubmi
 const ecommerceOrderSubmit = coreSource.slice(ecommerceOrderSubmitStart, ecommerceOrderSubmitEnd)
 const ecommercePaymentPosition = ecommerceOrderSubmit.indexOf('preparedEcommerceDraft ? <label className="order-ecommerce-payment">')
 const ecommerceReviewPosition = ecommerceOrderSubmit.indexOf('className="core-button primary"')
+const ecommerceNavigationHydration = sourceBlock(
+  coreSource,
+  '  useEffect(() => {\n    if (!ecommerceNavigationDraft',
+  '\n\n  useEffect(() => {\n    if (!ecommerceReturnNavigationIntent',
+)
 if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceConfirmSource.includes('await storefrontPreviewDigest(preview)')
   || !ecommerceConfirmSource.includes('await storefrontPreviewDigest(currentPreview)')
@@ -3904,6 +3909,8 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !coreSource.includes('orderPaymentRef.current?.focus({ preventScroll: true })')
   || !coreSource.includes('const orderReviewRef = useRef<HTMLButtonElement>(null)')
   || !coreSource.includes('preparedEcommerceDraft && orderReviewRef.current?.isConnected')
+  || !ecommerceNavigationHydration.includes('|| pendingAction')
+  || !ecommerceNavigationHydration.includes('navigate, pendingAction, preparedEcommerceDraft')
   || !coreSource.includes("const restorePreparedEcommerce = pendingAction?.kind === 'order_create' && Boolean(preparedEcommerceDraft)")
   || !coreSource.includes('if (dialog && !dialog.open) dialog.showModal()\n      orderReviewRef.current?.focus({ preventScroll: true })')
   || !coreSource.includes('Review cancelled. The prepared Ecommerce request and Payment are unchanged; Shop data was not modified.')

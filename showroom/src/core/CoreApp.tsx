@@ -2660,6 +2660,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   useEffect(() => {
     if (!ecommerceNavigationDraft
+      || pendingAction
       || managedIdentity && workspaceMode !== 'managed-ready'
       || consumedEcommerceDraftId.current === ecommerceNavigationDraft.id) return
     let current = true
@@ -2724,7 +2725,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         if (current) setNotice('The Ecommerce request guard could not load. Nothing was prepared.')
       })
     return () => { current = false }
-  }, [commerce.inventoryFoundation, commerce.items, ecommerceNavigationDraft, managedIdentity, managedInventoryProjection, navigate, preparedEcommerceDraft, workspaceMode])
+  }, [commerce.inventoryFoundation, commerce.items, ecommerceNavigationDraft, managedIdentity, managedInventoryProjection, navigate, pendingAction, preparedEcommerceDraft, workspaceMode])
 
   useEffect(() => {
     if (!ecommerceReturnNavigationIntent
