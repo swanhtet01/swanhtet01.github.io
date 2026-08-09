@@ -47,13 +47,13 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- The deterministic 12-profile rehearsal passes 24 rows. Live Shop reaches the counter; Plant mobile passes output through next output; Website mobile passes edit through standalone file; Ecommerce mobile passes sample start, cart, quote, review, Shop order, return, and reload. All four product missions are overflow-free on desktop. Rendered mobile Website and Ecommerce mission acceptance is complete.
-- Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
-- Both domains serve deployed `4ce500c29b1cca9617eeba83528293bc1af6c83e`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Vercel reports both deployments READY with no grouped runtime errors in the current review window.
+- The deterministic 12-profile rehearsal passes 24 rows. All desktop missions are overflow-free. Rendered mobile Website and Ecommerce mission acceptance is complete.
+- Proof baseline: fresh setup is `0 proven`; a counter sale alone remains unproven; completed/reconciled Shop is `1 proven` across reload; reset returns to zero.
+- Both domains serve deployed `4ce500c29b1cca9617eeba83528293bc1af6c83e`; paired brand, context, and catalog identities match; scheduler ceiling is one job, and exact live verification passes.
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 24 recoveries plus stale-quote guidance and exact supersession pass. Next: `ecommerce-supersession-review-context`; pilots stay owner-gated.
+- 24 recoveries, stale-quote guidance, exact supersession, and Shop replacement context pass. Next: `ecommerce-replacement-rendered-acceptance`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,8 +63,8 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. Product checkpoint `1be600ef` binds a replacement request to the exact stale request, retains immutable history, and leaves only the successor actionable in Shop. The current CLAUDE-006 packet remains manual, read-only, and bound to its earlier `b8808439` review checkpoint.
-- Autonomous cycles remain Llama-only and scale to zero. No automatic Claude dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
+- Codex is sole integrator. Product checkpoint `4eb2ebc9` shows the exact predecessor on the actionable successor, closes an already-open stale Shop draft, focuses the replacement, and rejects superseded order creation in both runtimes. The current CLAUDE-006 packet remains manual, read-only, and bound to its earlier `b8808439` review checkpoint.
+- Autonomous cycles and the local coding entrypoint remain Llama-only and scale to zero: Ollama is the only enabled OpenCode provider, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
 ## Blockers
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete the finite local `ecommerce-supersession-review-context` slice so the Shop reviewer can see the predecessor link on the one actionable successor without restoring the superseded request to the queue.
+1. Complete `ecommerce-replacement-rendered-acceptance`: submit one replacement in the browser, see predecessor lineage on the sole Shop inbox item, and prove an already-open stale draft closes and focuses the successor without creating an order or stock write.
 2. Use CLAUDE-006 only as an optional owner-controlled review of checkpoint `b8808439`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

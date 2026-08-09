@@ -249,7 +249,7 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.status === 'ready-local'
     && entry.reason?.trim())
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 40
+  && portfolio.completedLocalAutomations.length === 41
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
     && portfolio.products.some((product) => product.id === entry.productId)
@@ -377,10 +377,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[39]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[39]?.workOrderId === 'ecommerce-stale-quote-supersession'
   && portfolio.completedLocalAutomations[39]?.checkpoint === 'OPS-192'
+  && portfolio.completedLocalAutomations[40]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[40]?.workOrderId === 'ecommerce-supersession-review-context'
+  && portfolio.completedLocalAutomations[40]?.checkpoint === 'OPS-193'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-supersession-review-context'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-replacement-rendered-acceptance'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1490,6 +1493,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-192 | CEO + Ecommerce/Shop Integrity / Agent Operations Codex | done-local |')
   && workboard.includes('Product checkpoint `1be600ef` adds optional v2 `supersedesRequestId` evidence')
   && workboard.includes('`ecommerce-supersession-review-context` because Shop now queues the correct successor')
+  && workboard.includes('| OPS-193 | CEO + Ecommerce/Shop Currentness / Agent Operations Codex | done-local |')
+  && workboard.includes('Product checkpoint `4eb2ebc9` derives one validated storefront timeline')
+  && workboard.includes('`ecommerce-replacement-rendered-acceptance` because the transition still needs one rendered click-through')
   && workboard.includes('| CLAUDE-006 | Claude Code | ready |')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
@@ -1497,7 +1503,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-checkout-entry-tab-recovery' && entry.checkpoint === 'OPS-190')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-stale-quote-next-action' && entry.checkpoint === 'OPS-191')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-stale-quote-supersession' && entry.checkpoint === 'OPS-192')
-  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-supersession-review-context')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-supersession-review-context' && entry.checkpoint === 'OPS-193')
+  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-replacement-rendered-acceptance')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")

@@ -43,10 +43,11 @@
     {"productId":"website","workOrderId":"website-inquiry-entry-tab-recovery","checkpoint":"OPS-189"},
     {"productId":"ecommerce","workOrderId":"ecommerce-checkout-entry-tab-recovery","checkpoint":"OPS-190"},
     {"productId":"ecommerce","workOrderId":"ecommerce-stale-quote-next-action","checkpoint":"OPS-191"},
-    {"productId":"ecommerce","workOrderId":"ecommerce-stale-quote-supersession","checkpoint":"OPS-192"}
+    {"productId":"ecommerce","workOrderId":"ecommerce-stale-quote-supersession","checkpoint":"OPS-192"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-supersession-review-context","checkpoint":"OPS-193"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-supersession-review-context","priority":100,"status":"ready-local","workOrder":"Ecommerce: show replacement lineage in Shop review.","reason":"Shop cannot see which prior quote the successor replaced."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-replacement-rendered-acceptance","priority":100,"status":"ready-local","workOrder":"Ecommerce: prove the replacement Shop path in-browser.","reason":"Submit, lineage, and stale-draft closure lack rendered proof."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
@@ -199,7 +200,7 @@
       "kind": "maker-product",
       "status": "release-candidate-local",
       "path": "/ecommerce/",
-      "job": "Create a storefront from a read-only Shop catalogue, quote a recoverable cart, send order intent into Shop, and keep Shop as the sole order, stock, payment, refund, tax, and correction authority.",
+      "job": "Build from a read-only Shop catalogue, recover carts, and send intent to Shop, the sole authority for orders, stock, payments, refunds, tax, and corrections.",
       "surfaces": ["Store", "Edit store", "Cart", "Quote", "Shop review"],
       "templateContract": { "file": "../site-manifest.json", "productId": "ecommerce" },
       "localAutomation": {
@@ -214,7 +215,7 @@
       "nextGate": "Prove cart-to-Shop on a protected preview and isolated managed tenant; add tax, shipping, and payment adapters only with accountable approval and duplicate-safe recovery."
     }
   ],
-  "sharedCapabilities": [{"id":"ai-assistance","name":"AI assistance","kind":"shared-capability","status":"gated-r-and-d","compatibilityPath":"/agents/","appAnchor":"/work/?view=agents","job":"Prepare bounded, reviewable work inside Shop, Plant, Website, and Ecommerce from approved records.","surfaces":["Choose approved input","Review source-backed draft","Approve or discard"],"firstWorkflow":"Order Intake","nextGate":"Pass the server-only golden-set evaluation for Order Intake with provenance, zero side effects, human review, and measured correction effort before exposing an interactive capability."}],
+  "sharedCapabilities": [{"id":"ai-assistance","name":"AI assistance","kind":"shared-capability","status":"gated-r-and-d","compatibilityPath":"/agents/","appAnchor":"/work/?view=agents","job":"Prepare reviewable work inside the four products from approved records.","surfaces":["Choose approved input","Review source-backed draft","Approve or discard"],"firstWorkflow":"Order Intake","nextGate":"Pass server-only golden-set provenance, zero side effects, human review, and correction-effort gates before interactive use."}],
   "internalSystems": [
     {"id":"company-system","name":"SuperMega HQ","path":"/","job":"Coordinate SuperMega product, engineering, growth, finance, evidence, and owner decisions.","surfaces":["Home","Work","Products","Settings (utility)","Agent teams (internal)"]},
     {"id":"rnd-system","name":"R&D and resource intelligence","path":"hq/","job":"Turn verified resources into reusable implementation guidance.","public":false}
