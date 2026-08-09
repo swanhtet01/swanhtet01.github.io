@@ -785,6 +785,10 @@ function commerceOrderTargetId(orderId: string) {
   return `shop-order-${orderId.replace(/[^A-Za-z0-9_-]+/g, '-')}`
 }
 
+function plantJobTargetId(jobId: string) {
+  return `plant-job-${encodeURIComponent(jobId)}`
+}
+
 function commandUuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16))
@@ -8640,6 +8644,18 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
   }, [canonicalShiftRef, guidedPlantJobId, heldJobs.length, managedIdentity, navigate, openDowntimeIntervals.length, openMaintenanceRecords.length, productionLocation.search, shiftCloseProblemCount, shiftRef, tab, urgentIssueCount])
 
+  useEffect(() => {
+    if (tab !== 'production' || !productionLocation.hash.startsWith('#plant-job-')) return
+    const targetId = productionLocation.hash.slice(1)
+    window.setTimeout(() => {
+      const target = document.getElementById(targetId)
+      if (!target) return
+      const control = target.querySelector<HTMLButtonElement>('button:not(:disabled)')
+      target.scrollIntoView({ block: 'center' })
+      ;(control ?? target).focus({ preventScroll: true })
+    }, 220)
+  }, [activeJobs.length, productionLocation.hash, tab])
+
   async function initializeManagedProduction(event: FormEvent) {
     event.preventDefault()
     if (!managedIdentity) return
@@ -9210,8 +9226,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 
   function selectShopDemand(signal: ShopProductionDemandSignal) {
     if (signal.existingActiveJobIds.length) {
-      setJobId(signal.existingActiveJobIds[0])
-      setNotice(`${signal.productName} is already covered by ${signal.existingActiveJobIds.join(', ')}.`)
+      const coveredJobId = signal.existingActiveJobIds[0]
+      setJobId(coveredJobId)
+      navigate(`/plant/?tab=production#${plantJobTargetId(coveredJobId)}`)
+      setNotice(`Covered by ${signal.existingActiveJobIds.join(', ')}.`)
       return
     }
     setSelectedShopDemandDigest(signal.sourceDigest)
@@ -10072,7 +10090,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <div><strong>{closedScheduleDraft.draft.jobId} plan draft is still available</strong><small>{closedScheduleDraft.draft.owner.trim() || 'Owner blank'} · {productionJobPriorityLabels[closedScheduleDraft.draft.priority]} · due {closedScheduleDraft.draft.dueAt || 'blank'}. Restore once or discard; no schedule, dispatch, or production write occurred.</small></div>
           <div className="order-draft-recovery-actions"><button className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={undoClosedJobSchedule} ref={scheduleDraftRecoveryRef} type="button">Undo close</button><button className="text-link" onClick={discardClosedJobSchedule} type="button">Discard</button></div>
         </div> : null}
-        {nextShopDemand ? <section aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'} className="stock-receipt-preview" data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'} data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>{nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'} · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} suggested</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} active order units · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} below reorder · {nextShopDemand.sourceOrderIds.length || 'no'} source {nextShopDemand.sourceOrderIds.length === 1 ? 'order' : 'orders'}</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? nextShopDemand.sourceOrderIds.length ? 'Shop demand selected' : 'Replenishment selected' : nextShopDemand.sourceOrderIds.length ? 'Use Shop demand' : 'Plan replenishment'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
+        {nextShopDemand ? <section aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'} className="stock-receipt-preview" data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'} data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>{nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'} · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} units</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} demand · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} gap · {nextShopDemand.sourceOrderIds.length} orders</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? nextShopDemand.sourceOrderIds.length ? 'Shop demand selected' : 'Replenishment selected' : nextShopDemand.sourceOrderIds.length ? 'Use Shop demand' : 'Plan replenishment'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
         <CompletedJobHistory jobs={completedJobs} now={issueClock} />
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
@@ -10336,7 +10354,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
 }
 
 function JobList({ disabled = false, jobs, now, onOutput, onSchedule }: { disabled?: boolean; jobs: ProductionJob[]; now: number; onOutput?: (job: ProductionJob, trigger: HTMLButtonElement) => void; onSchedule?: (job: ProductionJob, trigger: HTMLButtonElement) => void }) {
-  if (!jobs.length) return <Empty>No active jobs. Add one below.</Empty>
+  if (!jobs.length) return <Empty>No active jobs. Add one.</Empty>
   return <div className="job-list">{jobs.map((job) => {
     const scrap = job.scrap ?? 0
     const accounted = job.output + scrap
@@ -10345,9 +10363,9 @@ function JobList({ disabled = false, jobs, now, onOutput, onSchedule }: { disabl
     const overdue = Boolean(!job.closure && job.dueAt && Date.parse(job.dueAt) <= now)
     const scheduleLabel = scheduled
       ? `${productionJobPriorityLabels[job.priority ?? 'normal']} · ${overdue ? 'OVERDUE ' : job.closure ? 'Was due ' : 'Due '}${formatIssueDue(job.dueAt ?? '')}`
-      : 'Schedule not recorded · legacy job'
-    const ownerLabel = job.owner ? `Owner ${job.owner}` : 'Owner not recorded · legacy job'
-    return <article key={job.id}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{ownerLabel} · {scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · Shift {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} not produced</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{!job.closure && accounted < job.target && (onOutput || onSchedule) ? <div className="job-row-actions">{onOutput ? <button aria-controls="plant-output-panel" className="text-link job-output-link" disabled={disabled} onClick={(event) => onOutput(job, event.currentTarget)} type="button">Record output</button> : null}{onSchedule ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}</div> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
+      : 'Legacy schedule missing'
+    const ownerLabel = job.owner ? `Owner ${job.owner}` : 'Legacy owner missing'
+    return <article id={plantJobTargetId(job.id)} key={job.id} tabIndex={-1}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{ownerLabel} · {scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} remaining</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{!job.closure && accounted < job.target && (onOutput || onSchedule) ? <div className="job-row-actions">{onOutput ? <button aria-controls="plant-output-panel" className="text-link job-output-link" disabled={disabled} onClick={(event) => onOutput(job, event.currentTarget)} type="button">Record output</button> : null}{onSchedule ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}</div> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
   })}</div>
 }
 
