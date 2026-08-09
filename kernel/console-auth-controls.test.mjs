@@ -56,10 +56,21 @@ test('a key below the strength floor is refused, and is indistinguishable from n
 })
 
 test('the weak-key cause is reported to the server log, where the owner can see it', async () => {
-  const errors = await withOpsKey('short-owner-key', async (handle, captured) => {
-    await handle({ method: 'GET', path: '/api/state', headers: {} })
-    return captured
-  })
+  // Tested against the shared helper rather than through handle(): every owner surface now
+  // routes through usableOpsKey, and it warns once per process so a second consumer must not
+  // be able to swallow the message for the first. A fresh import gives a clean warn state.
+  const originalError = console.error
+  const errors = []
+  try {
+    console.error = (...args) => { errors.push(args.join(' ')) }
+    const { usableOpsKey, OPS_KEY_MINIMUM_LENGTH } = await import(`./ops-key.mjs?weak-key=${Date.now()}-${Math.random()}`)
+    assert.equal(OPS_KEY_MINIMUM_LENGTH, 32)
+    assert.equal(usableOpsKey('short-owner-key'), '', 'a below-floor key must read as absent to every caller')
+    assert.equal(usableOpsKey(''), '', 'a blank key stays blank')
+    assert.equal(usableOpsKey(`  ${CONFORMING_KEY}  `), CONFORMING_KEY, 'a conforming key is returned trimmed')
+  } finally {
+    console.error = originalError
+  }
   const logged = errors.join('\n')
   assert.match(logged, /SUPERMEGA_OPS_KEY/, 'the owner needs to be told which variable is wrong')
   assert.match(logged, /at least 32/, 'and what the requirement is')

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 
 import { handleWorkcellPlan } from './workcell-plan.mjs'
 
-const KEY = 'ops-secret'
+const KEY = 'ops-secret-0123456789abcdef012345'
 const request = {
   method: 'POST',
   headers: { 'x-ops-key': KEY },

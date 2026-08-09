@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { handleWorkcells } from './workcells.mjs'
 
-const KEY = 'ops-secret'
+const KEY = 'ops-secret-0123456789abcdef012345'
 const headers = { 'x-ops-key': KEY }
 const env = {
   SUPERMEGA_OPS_KEY: KEY,

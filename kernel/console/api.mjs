@@ -1,6 +1,7 @@
 // SUPERMEGA console — API handlers (host-agnostic). One handle() the dev server and a
 // Vercel function both call. Passcode-gated (x-ops-key). See ../../PLATFORM.md.
 
+import { usableOpsKey } from '../ops-key.mjs'
 import store from '../store.mjs'
 import { generateDeal } from './deal.mjs'
 import { onDealSaved, onProjectShipped } from './graduation.mjs'
@@ -9,13 +10,10 @@ import { companyDailyBudgetCap, currentDailyBudgetWindow, providerChain } from '
 import { listLeadsForReview, markLeadReviewed } from './leads-review.mjs'
 import crypto from 'node:crypto'
 
-const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
-// The ops key is typed by a human into a single "Owner key" field and it gates every
-// console surface. Nothing here can tell a strong key from a weak one, so refuse to run
-// below a floor rather than silently defending the whole console with a short passcode.
-// Mirrors the floor already enforced on the contact secret in
-// tools/create_public_vercel_output.mjs.
-const OPS_KEY_MINIMUM_LENGTH = 32
+// One implementation of the floor for every owner surface — see kernel/ops-key.mjs. A key
+// below it reads as absent here, so the existing missing-key branch refuses everything and
+// the console behaves identically to crew, approvals, operator and the workcell endpoints.
+const OPS_KEY = usableOpsKey(process.env.SUPERMEGA_OPS_KEY)
 // A rejected request is worth recording — a credential-stuffing run against the console
 // currently leaves no trace at all. But the log write happens BEFORE authentication, so
 // writing one row per failure would hand an unauthenticated caller a way to flood the
@@ -130,15 +128,9 @@ function recordAuthFailure(method, path) {
 /** @param {{method:string, path:string, query?:object, body?:object, headers?:object}} req */
 export async function handle({ method, path, query = {}, body = {}, headers = {} }) {
   // Fail CLOSED: a missing/blank ops key must DENY all requests — never authenticate everyone.
-  // A key below the floor is treated exactly like a missing one: same status, same reason.
-  // The earlier 'ops_key_too_weak' told an unauthenticated caller that the owner key is
-  // short — precisely the fact that makes guessing worth attempting — and it invented a
-  // failure mode the other eight entry points sharing this key do not have. The specific
-  // cause goes to the server log, where the owner can see it and an attacker cannot.
-  if (!OPS_KEY || OPS_KEY.length < OPS_KEY_MINIMUM_LENGTH) {
-    if (OPS_KEY) console.error(`SUPERMEGA_OPS_KEY is ${OPS_KEY.length} characters; the console requires at least ${OPS_KEY_MINIMUM_LENGTH} and is refusing all requests until it is longer.`)
-    return bad(503, 'ops_key_not_configured')
-  }
+  // usableOpsKey has already reduced a below-floor key to '', so this one branch covers both
+  // "never set" and "too short" with a single reason that discloses nothing.
+  if (!OPS_KEY) return bad(503, 'ops_key_not_configured')
   if (!constantTimeEqual(String(headers['x-ops-key'] || ''), OPS_KEY)) {
     recordAuthFailure(method, path)
     return bad(401, 'unauthorized')
