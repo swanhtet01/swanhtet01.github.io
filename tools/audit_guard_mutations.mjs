@@ -92,6 +92,12 @@ const MUTATIONS = [
   ['test_production_quality_hold.mjs', PRODWS,
     '    heldBy: proof.actor,', "    heldBy: 'someone else',",
     'a quality hold records the wrong operator'],
+  // Anchored on the v2 branch CONDITION, not the legacy read: the v2 branch returns early,
+  // so editing the legacy read can never execute when a v2 key is present. That mutation
+  // reported "not caught" while testing nothing.
+  ['test_website_workspace_load.mjs', WEBMODEL,
+    '    if (currentRaw !== null) {', '    if (currentRaw !== null && parseStoredWorkspace(currentRaw)) {',
+    'corrupt saved work silently falls through instead of failing closed'],
   ['test_website_edit_session.mjs', WEBMODEL,
     '    && session.baseFingerprint === workspaceFingerprint(workspace)', '    && true',
     'edit session stops detecting content drift the counters miss'],
