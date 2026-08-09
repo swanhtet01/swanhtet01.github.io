@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-194'
   && completedAutomationArchive.entries?.length === 42
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 26
+  && portfolioSource.completedLocalAutomations.length === 27
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 68
+  && portfolio.completedLocalAutomations.length === 69
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -489,10 +489,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[67]?.productId === 'plant'
   && portfolio.completedLocalAutomations[67]?.workOrderId === 'plant-job-import-latest-file-wins'
   && portfolio.completedLocalAutomations[67]?.checkpoint === 'OPS-220'
+  && portfolio.completedLocalAutomations[68]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[68]?.workOrderId === 'plant-job-import-field-length-parity'
+  && portfolio.completedLocalAutomations[68]?.checkpoint === 'OPS-221'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-job-import-field-length-parity'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-job-import-all-row-repeat-detection'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1686,6 +1689,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-220 | CEO + Plant Latest-file Review / Agent Operations Codex | done-local |')
   && workboard.includes('ignores stale results after both resolved reads and rejected reads')
   && workboard.includes('The receipt advances `plant-job-import-field-length-parity`')
+  && workboard.includes('| OPS-221 | CEO + Plant Import Length Parity / Agent Operations Codex | done-local |')
+  && workboard.includes('Import now applies all four exact limits')
+  && workboard.includes('The receipt advances `plant-job-import-all-row-repeat-detection`')
   && workboard.includes('| CLAUDE-007 | Claude Code | ready |')
   && workboard.includes('Shop Finance checkpoint `2744b28f`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -1722,7 +1728,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-job-import-blocked-row-detail' && entry.checkpoint === 'OPS-218')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-job-import-same-file-retry' && entry.checkpoint === 'OPS-219')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-job-import-latest-file-wins' && entry.checkpoint === 'OPS-220')
-  && portfolio.localImprovementQueue[0].workOrderId === 'plant-job-import-field-length-parity')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-job-import-field-length-parity' && entry.checkpoint === 'OPS-221')
+  && portfolio.localImprovementQueue[0].workOrderId === 'plant-job-import-all-row-repeat-detection')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
