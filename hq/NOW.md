@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 23 local recoveries pass. Next: `ecommerce-checkout-entry-tab-recovery`; pilots stay owner-gated.
+- 24 local recoveries pass. Next: `ecommerce-stale-quote-next-action`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. Product checkpoint `b7797f23` completes Website inquiry-entry tab recovery and advances one finite Ecommerce continuation. The current CLAUDE-005 packet is manual, read-only, and bound to that exact checkpoint.
+- Codex is sole integrator. Product checkpoint `f756da11` completes source-bound Ecommerce checkout-entry tab recovery and advances one finite Ecommerce next-action correction. The current CLAUDE-005 packet is manual, read-only, and bound to that exact checkpoint.
 - Autonomous cycles remain Llama-only and scale to zero. No automatic Claude dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete the finite local `ecommerce-checkout-entry-tab-recovery` slice with exact storefront/catalog/buying-state binding, one Resume/Discard decision, mobile acceptance, and no quote, Shop request, payment, stock, or delivery side effect.
-2. Use CLAUDE-005 only as an optional owner-controlled review of checkpoint `b7797f23`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
+1. Complete the finite local `ecommerce-stale-quote-next-action` slice so an expired or cart-invalidated quote replaces misleading Request sent guidance with one truthful review action and no new page or business write.
+2. Use CLAUDE-005 only as an optional owner-controlled review of checkpoint `f756da11`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

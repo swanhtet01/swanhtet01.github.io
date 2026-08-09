@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
   "asOf": "2026-08-08T12:23:36.370Z",
-  "sourceDigest": "sha256:a2c838c05284597c9cefe320e385cfd8957017651a693adcd843ae2d77ba31aa",
+  "sourceDigest": "sha256:4e9cec74ecdb9f20fbdb158780276b506336ad878c79f157c040a4b44fc12c6b",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -139,8 +139,8 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "shop-managed-order-close-pilot",
-      "proposedWork": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
-      "blockingReason": "Needs a founder-selected operator and approved isolated tenant.",
+      "proposedWork": "Shop: run one named order-to-close and return pilot on an approved isolated tenant.",
+      "blockingReason": "Needs a named operator and approved tenant.",
       "requiredProof": "Run one authenticated order-to-close and return-exception pilot on an isolated tenant with a named operator and five-day baseline."
     },
     {
@@ -149,8 +149,8 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "plant-managed-oee-pilot",
-      "proposedWork": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
-      "blockingReason": "Needs named timing evidence and an approved managed tenant.",
+      "proposedWork": "Plant: run one named OEE pilot on an approved isolated tenant.",
+      "blockingReason": "Needs named timing evidence and approved tenant.",
       "requiredProof": "Validate one order-bound OEE window on an isolated managed tenant with named operators, exact downtime, and measured correction effort."
     },
     {
@@ -159,8 +159,8 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "website-managed-brief-acceptance",
-      "proposedWork": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
-      "blockingReason": "Needs a named business brief and accepted owner review.",
+      "proposedWork": "Website: accept one named brief and retain its managed artifact.",
+      "blockingReason": "Needs a named brief and owner acceptance.",
       "requiredProof": "Accept one named-business brief in responsive preview and retain its artifact before any domain or publish authority."
     },
     {
@@ -169,8 +169,8 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "ecommerce-managed-order-exception-pilot",
-      "proposedWork": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
-      "blockingReason": "Needs a founder-selected operator and approved isolated tenant.",
+      "proposedWork": "Ecommerce: run one named checkout-to-exception pilot on an approved isolated tenant.",
+      "blockingReason": "Needs a named operator and approved tenant.",
       "requiredProof": "Prove cart-to-Shop on a protected preview and isolated managed tenant; add tax, shipping, and payment adapters only with accountable approval and duplicate-safe recovery."
     }
   ],
@@ -197,7 +197,7 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:7d9162816b8efd32abaef273db20e4df4db6074b51eb4f1533000c700d36df21"
+      "digest": "sha256:575072c632b9b0a5ac40dced1e0d6b58e569472f338fbc7c8c3eb7a8e1bf666e"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
@@ -213,7 +213,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:88f662f7d09c78629952fea7773f383b2f41774bf717c2b24e9a4b4013921f85"
+      "digest": "sha256:cfa7f7bead0cd2faf3ca8d98cd8ffda4d8f131031b6521d3017d9e6a9be3ad98"
     },
     {
       "path": "package.json",

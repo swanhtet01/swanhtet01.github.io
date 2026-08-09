@@ -40,10 +40,11 @@
     {"productId":"ecommerce","workOrderId":"ecommerce-storefront-edit-tab-recovery","checkpoint":"OPS-186"},
     {"productId":"shop","workOrderId":"shop-counter-sale-tab-recovery","checkpoint":"OPS-187"},
     {"productId":"plant","workOrderId":"plant-output-entry-tab-recovery","checkpoint":"OPS-188"},
-    {"productId":"website","workOrderId":"website-inquiry-entry-tab-recovery","checkpoint":"OPS-189"}
+    {"productId":"website","workOrderId":"website-inquiry-entry-tab-recovery","checkpoint":"OPS-189"},
+    {"productId":"ecommerce","workOrderId":"ecommerce-checkout-entry-tab-recovery","checkpoint":"OPS-190"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-checkout-entry-tab-recovery","priority":100,"status":"ready-local","workOrder":"Ecommerce: recover checkout after reload.","reason":"React-only until Review total; bind current source state."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"ecommerce","workOrderId":"ecommerce-stale-quote-next-action","priority":100,"status":"ready-local","workOrder":"Ecommerce: correct stale quote guidance.","reason":"Today can mislabel an expired or cart-changed quote as Request sent."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
@@ -143,8 +144,8 @@
         "workOrderId": "shop-managed-order-close-pilot",
         "priority": 80,
         "status": "owner-gated",
-        "workOrder": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
-        "reason": "Needs a founder-selected operator and approved isolated tenant."
+        "workOrder": "Shop: run one named order-to-close and return pilot on an approved isolated tenant.",
+        "reason": "Needs a named operator and approved tenant."
       },
       "nextGate": "Run one authenticated order-to-close and return-exception pilot on an isolated tenant with a named operator and five-day baseline."
     },
@@ -165,8 +166,8 @@
         "workOrderId": "plant-managed-oee-pilot",
         "priority": 70,
         "status": "owner-gated",
-        "workOrder": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
-        "reason": "Needs named timing evidence and an approved managed tenant."
+        "workOrder": "Plant: run one named OEE pilot on an approved isolated tenant.",
+        "reason": "Needs named timing evidence and approved tenant."
       },
       "nextGate": "Validate one order-bound OEE window on an isolated managed tenant with named operators, exact downtime, and measured correction effort."
     },
@@ -185,8 +186,8 @@
         "workOrderId": "website-managed-brief-acceptance",
         "priority": 60,
         "status": "owner-gated",
-        "workOrder": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
-        "reason": "Needs a named business brief and accepted owner review."
+        "workOrder": "Website: accept one named brief and retain its managed artifact.",
+        "reason": "Needs a named brief and owner acceptance."
       },
       "nextGate": "Accept one named-business brief in responsive preview and retain its artifact before any domain or publish authority."
     },
@@ -205,8 +206,8 @@
         "workOrderId": "ecommerce-managed-order-exception-pilot",
         "priority": 95,
         "status": "owner-gated",
-        "workOrder": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
-        "reason": "Needs a founder-selected operator and approved isolated tenant."
+        "workOrder": "Ecommerce: run one named checkout-to-exception pilot on an approved isolated tenant.",
+        "reason": "Needs a named operator and approved tenant."
       },
       "nextGate": "Prove cart-to-Shop on a protected preview and isolated managed tenant; add tax, shipping, and payment adapters only with accountable approval and duplicate-safe recovery."
     }

@@ -8,12 +8,13 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const packet = await readFile(resolve(root, 'CLAUDE.md'), 'utf8')
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 
-const checkpoint = 'b7797f23f1794824026180363950551706834bff'
+const checkpoint = 'f756da119f58c785bdd97abeddcee00731423cf3'
 const requiredFiles = [
   'showroom/src/core/local-workspace-storage.ts',
-  'showroom/src/products/website/website-inquiry-entry-recovery.ts',
-  'showroom/src/products/website/WebsiteProduct.tsx',
-  'showroom/src/products/website/website-product.css',
+  'showroom/src/products/ecommerce/ecommerce-checkout-entry-recovery.ts',
+  'showroom/src/products/ecommerce/EcommerceBuyingWorkspace.tsx',
+  'showroom/src/products/ecommerce/EcommerceProduct.tsx',
+  'showroom/src/products/ecommerce/ecommerce-product.css',
   'tools/verify_app_build.mjs',
 ]
 const requiredStatements = [
@@ -32,6 +33,7 @@ const forbiddenStaleMarkers = [
   'bdcb6a58d9615f4d73f0d2b4b7afd16c65468a82',
   '2ffcc757206ced8f595efaaa03e32ebf57cae960',
   'b6dfc3d31473819b7bdda3afa5c5da0df44d7b88',
+  'b7797f23f1794824026180363950551706834bff',
   'PR #411',
   'PR #412',
   'PR #413',
