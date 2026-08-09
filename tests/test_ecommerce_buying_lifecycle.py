@@ -649,6 +649,21 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(replacement["supersedesRequestId"], original["id"])
         self.assertEqual(validate_ecommerce_lifecycle_state(superseded), superseded)
+        replacement_draft = prepare_ecommerce_shop_handoff(
+            replacement,
+            current_catalog=current_catalog(),
+            current_promotion_policies=promotion_policies(),
+            current_shipping_policies=shipping_policies(),
+            current_payment_policies=payment_policies(),
+            current_tax_configurations=tax_configurations(),
+            catalog_revision=7,
+            confirmed_at="2026-07-26T10:10:00+06:30",
+        )
+        self.assertEqual(replacement_draft["supersedesRequestId"], original["id"])
+        self.assertIn(
+            f":replaces:{original['id']}:",
+            replacement_draft["evidenceReference"],
+        )
 
         with self.assertRaisesRegex(EcommerceLifecycleValidationError, "older recovered"):
             record_ecommerce_order_request(

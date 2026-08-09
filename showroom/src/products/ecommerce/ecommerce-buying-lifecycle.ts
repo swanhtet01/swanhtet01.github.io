@@ -487,6 +487,7 @@ export type EcommerceShopDraftV2 = {
   state: 'review_required'
   id: string
   sourceRequestId: string
+  supersedesRequestId?: string
   sourcePreviewDigest: string
   quoteDigest: string
   quoteExpiresAt: string
@@ -3363,6 +3364,7 @@ export async function prepareEcommerceShopDraftV2(input: {
     state: 'review_required',
     id: `ESD-${request.id.slice(4)}`,
     sourceRequestId: request.id,
+    ...(request.supersedesRequestId ? { supersedesRequestId: request.supersedesRequestId } : {}),
     sourcePreviewDigest: request.sourcePreviewDigest,
     quoteDigest: request.quote.quoteDigest,
     quoteExpiresAt: request.quote.expiresAt,
@@ -3393,7 +3395,7 @@ export async function prepareEcommerceShopDraftV2(input: {
       totalMmk,
     },
     totalMmk,
-    evidenceReference: `ECOMMERCE:${request.id}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}:${request.scope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotion.status}:${promotion.policyRevision ?? 'none'}:${promotion.discountMmk}:shipping:${shipping.status}:${shipping.policyRevision ?? 'none'}:${shipping.feeMmk}:tax:${tax.status}:${tax.taxConfigurationRevision ?? 'none'}:${tax.policyActionId ?? 'none'}:${tax.taxMode}:${tax.taxMmk}:${tax.totalMmk}:payment:${payment.status}:${payment.policyRevision ?? 'none'}:${payment.adapter}`,
+    evidenceReference: `ECOMMERCE:${request.id}${request.supersedesRequestId ? `:replaces:${request.supersedesRequestId}` : ''}:${request.sourcePreviewDigest}:${request.quote.quoteDigest}:${request.scope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotion.status}:${promotion.policyRevision ?? 'none'}:${promotion.discountMmk}:shipping:${shipping.status}:${shipping.policyRevision ?? 'none'}:${shipping.feeMmk}:tax:${tax.status}:${tax.taxConfigurationRevision ?? 'none'}:${tax.policyActionId ?? 'none'}:${tax.taxMode}:${tax.taxMmk}:${tax.totalMmk}:payment:${payment.status}:${payment.policyRevision ?? 'none'}:${payment.adapter}`,
   }
 }
 
@@ -3440,7 +3442,12 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
   ]
   const structuredFields = ['customerProfile', 'deliveryAddress']
   const structured = isRecord(value) && structuredFields.some((field) => field in value)
-  const source = exactObject(value, 'Shop draft', structured ? [...baseFields, ...structuredFields] : baseFields)
+  const supersedes = isRecord(value) && 'supersedesRequestId' in value
+  const source = exactObject(value, 'Shop draft', [
+    ...baseFields,
+    ...(supersedes ? ['supersedesRequestId'] : []),
+    ...(structured ? structuredFields : []),
+  ])
   if (source.schema !== ECOMMERCE_SHOP_DRAFT_SCHEMA_V7
     || source.mode !== 'browser-memory-shop-draft'
     || source.state !== 'review_required'
@@ -3448,8 +3455,13 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || source.lines.length < 1
     || source.lines.length > maxLines) throw new Error('Shop draft boundary is invalid.')
   const sourceRequestId = canonicalText(source.sourceRequestId, 'Shop draft.sourceRequestId', 40)
+  const supersedesRequestId = supersedes
+    ? canonicalText(source.supersedesRequestId, 'Shop draft.supersedesRequestId', 40)
+    : null
   const id = canonicalText(source.id, 'Shop draft.id', 40)
-  if (!requestIdPattern.test(sourceRequestId) || id !== `ESD-${sourceRequestId.slice(4)}`) {
+  if (!requestIdPattern.test(sourceRequestId)
+    || id !== `ESD-${sourceRequestId.slice(4)}`
+    || supersedesRequestId && (!requestIdPattern.test(supersedesRequestId) || supersedesRequestId === sourceRequestId)) {
     throw new Error('Shop draft identity is invalid.')
   }
   const sourcePreviewDigest = canonicalDigest(source.sourcePreviewDigest, 'Shop draft.sourcePreviewDigest')
@@ -3574,7 +3586,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     || !ecommercePaymentMatchesFulfilment(fulfilment as EcommerceFulfilment, payment.adapter as EcommercePaymentAdapter)
     || paymentMaximumOrderMmk !== null && totalMmk > paymentMaximumOrderMmk) throw new Error('Shop draft payment boundary is invalid.')
   if (tax.reviewedAt !== confirmedAt) throw new Error('Shop draft tax review time is invalid.')
-  const evidenceReference = `ECOMMERCE:${sourceRequestId}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotionStatus}:${policyRevision ?? 'none'}:${discountMmk}:shipping:${shipping.status}:${shippingPolicyRevision ?? 'none'}:${shippingFeeMmk}:tax:${tax.status}:${tax.taxConfigurationRevision ?? 'none'}:${tax.policyActionId ?? 'none'}:${tax.taxMode}:${tax.taxMmk}:${tax.totalMmk}:payment:${payment.status}:${paymentPolicyRevision}:${payment.adapter}`
+  const evidenceReference = `ECOMMERCE:${sourceRequestId}${supersedesRequestId ? `:replaces:${supersedesRequestId}` : ''}:${sourcePreviewDigest}:${quoteDigest}:${organizationScope}:LOC-MAIN:ecommerce>commerce:human_review_required:${promotionStatus}:${policyRevision ?? 'none'}:${discountMmk}:shipping:${shipping.status}:${shippingPolicyRevision ?? 'none'}:${shippingFeeMmk}:tax:${tax.status}:${tax.taxConfigurationRevision ?? 'none'}:${tax.policyActionId ?? 'none'}:${tax.taxMode}:${tax.taxMmk}:${tax.totalMmk}:payment:${payment.status}:${paymentPolicyRevision}:${payment.adapter}`
   if (source.evidenceReference !== evidenceReference) throw new Error('Shop draft evidence reference is invalid.')
   return {
     schema: ECOMMERCE_SHOP_DRAFT_SCHEMA_V7,
@@ -3582,6 +3594,7 @@ export function validateEcommerceShopDraftV2(value: unknown): EcommerceShopDraft
     state: 'review_required',
     id,
     sourceRequestId,
+    ...(supersedesRequestId ? { supersedesRequestId } : {}),
     sourcePreviewDigest,
     quoteDigest,
     quoteExpiresAt,

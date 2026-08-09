@@ -3738,6 +3738,12 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !commerceSource.includes('paymentPolicies?: CommercePaymentPolicy[]')
   || !ecommerceBuyingLifecycleSource.includes("operatingUnitLocationId: 'LOC-MAIN'")
   || !ecommerceBuyingLifecycleSource.includes("writePolicy: 'human_review_required'")
+  || !ecommerceBuyingLifecycleSource.includes('...(request.supersedesRequestId ? { supersedesRequestId: request.supersedesRequestId } : {})')
+  || !ecommerceBuyingLifecycleSource.includes(':replaces:${request.supersedesRequestId}')
+  || !coreSource.includes('preparedEcommerceLocalCurrentness')
+  || !coreSource.includes('ecommerceBuyingStateStorageKey')
+  || !coreSource.includes('readEcommerceBuyingState')
+  || !coreSource.includes('open Ecommerce to hand off the replacement.')
   || !managedEcommerceBuyingLifecycleSource.includes('ECOMMERCE_SHOP_DRAFT_SCHEMA = "supermega.ecommerce.shop_draft.v7"')
   || !managedEcommerceBuyingLifecycleSource.includes('"operatingUnitLocationId": "LOC-MAIN"')
   || !coreSource.includes("import('../products/ecommerce/ecommerce-shop-handoff')")
@@ -16892,6 +16898,29 @@ async function verifyStorefrontRuntime() {
     buyingAssert(localSupersessionState.requests.length === 2
       && localSupersessionState.requests[0].supersedesRequestId === buyingRequest.id,
     'ecommerce_local_supersession_history_was_not_recoverable')
+    const replacementBuyingDraft = await buyingModel.prepareEcommerceShopDraftV2({
+      request: staleQuoteReplacementRequest,
+      state: localSupersessionState,
+      currentCatalog: catalog,
+      currentPromotionPolicies: promotionPolicies,
+      currentShippingPolicies: shippingPolicies,
+      currentPaymentPolicies: paymentPolicies,
+      currentTaxConfigurations: taxConfigurations,
+      catalogRevision: 0,
+      confirmedAt: '2026-07-24T09:10:00.000Z',
+    })
+    buyingAssert(replacementBuyingDraft.supersedesRequestId === buyingRequest.id
+      && replacementBuyingDraft.evidenceReference.includes(`:replaces:${buyingRequest.id}:`)
+      && buyingModel.ecommerceShopDraftV2MatchesCatalog(replacementBuyingDraft, catalog),
+    'ecommerce_replacement_shop_draft_lost_bound_predecessor')
+    const replacementIdentityTamper = structuredClone(replacementBuyingDraft)
+    replacementIdentityTamper.supersedesRequestId = replacementBuyingDraft.sourceRequestId
+    buyingAssert(!buyingModel.ecommerceShopDraftV2MatchesCatalog(replacementIdentityTamper, catalog),
+      'ecommerce_replacement_shop_draft_identity_tamper_accepted')
+    const replacementPredecessorTamper = structuredClone(replacementBuyingDraft)
+    replacementPredecessorTamper.supersedesRequestId = staleQuoteReplacementRequest.id
+    buyingAssert(!buyingModel.ecommerceShopDraftV2MatchesCatalog(replacementPredecessorTamper, catalog),
+      'ecommerce_replacement_shop_draft_predecessor_tamper_accepted')
     const linkedOrderProof = {
       actionId: 'ACT-ECOMMERCE-ORDER-1',
       capturedAt: '2026-07-24T09:10:00.000Z',

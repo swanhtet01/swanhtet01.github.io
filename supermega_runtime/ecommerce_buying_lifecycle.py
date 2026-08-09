@@ -1465,12 +1465,18 @@ def prepare_ecommerce_shop_handoff(
     )
     if payment["status"] == "rejected":
         raise _fail(f"Shop payment method is unavailable ({payment['reason']}).")
+    supersession_evidence = (
+        f":replaces:{request['supersedesRequestId']}"
+        if request.get("supersedesRequestId")
+        else ""
+    )
     draft = {
         "schema": ECOMMERCE_SHOP_DRAFT_SCHEMA,
         "mode": "browser-memory-shop-draft",
         "state": "review_required",
         "id": f"ESD-{request['id'][4:]}",
         "sourceRequestId": request["id"],
+        **({"supersedesRequestId": request["supersedesRequestId"]} if request.get("supersedesRequestId") else {}),
         "sourcePreviewDigest": request["sourcePreviewDigest"],
         "quoteDigest": quote["quoteDigest"],
         "quoteExpiresAt": quote["expiresAt"],
@@ -1502,7 +1508,7 @@ def prepare_ecommerce_shop_handoff(
         },
         "totalMmk": total_mmk,
         "evidenceReference": (
-            f"ECOMMERCE:{request['id']}:{request['sourcePreviewDigest']}:"
+            f"ECOMMERCE:{request['id']}{supersession_evidence}:{request['sourcePreviewDigest']}:"
             f"{quote['quoteDigest']}:{request['scope']}:LOC-MAIN:"
             f"ecommerce>commerce:human_review_required:{promotion['status']}:"
             f"{promotion['policyRevision'] if promotion['policyRevision'] is not None else 'none'}:"

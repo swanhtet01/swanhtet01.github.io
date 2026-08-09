@@ -1615,6 +1615,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [paymentTermsDays, setPaymentTermsDays] = useState<0 | 7 | 30>(0)
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
+  const [preparedEcommerceLocalCurrentness, setPreparedEcommerceLocalCurrentness] = useState<{
+    sourceRequestId: string
+    successorRequestId: string | null
+  } | null>(null)
   const [orderEntryMode, setOrderEntryMode] = useState<'manual' | 'message' | 'online'>('manual')
   const [orderDraftRead, setOrderDraftRead] = useState<CommerceOrderDraftReadResult>({ status: 'empty', draft: null, error: '' })
   const [orderDraftActive, setOrderDraftActive] = useState(false)
@@ -1906,18 +1910,54 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const preparedEcommerceSourceTimeline = preparedEcommerceDraft
     ? storefrontOrderTimeline.find((entry) => entry.request.id === preparedEcommerceDraft.sourceRequestId) ?? null
     : null
-  const preparedEcommerceSupersededByRequestId = preparedEcommerceSourceTimeline?.stage === 'superseded'
+  const preparedEcommerceLocalSuccessorRequestId = preparedEcommerceDraft
+    && preparedEcommerceLocalCurrentness?.sourceRequestId === preparedEcommerceDraft.sourceRequestId
+    ? preparedEcommerceLocalCurrentness.successorRequestId
+    : null
+  const preparedEcommerceManagedSuccessorRequestId = preparedEcommerceSourceTimeline?.stage === 'superseded'
     ? preparedEcommerceSourceTimeline.supersededByRequestId
     : null
-  const preparedEcommerceReplacesRequestId = preparedEcommerceSourceTimeline?.request.schema === 'supermega.ecommerce.order_request.v2'
-    ? preparedEcommerceSourceTimeline.request.supersedesRequestId ?? null
-    : null
+  const preparedEcommerceSupersededByRequestId = preparedEcommerceManagedSuccessorRequestId
+    ?? preparedEcommerceLocalSuccessorRequestId
+  const preparedEcommerceReplacesRequestId = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    ? preparedEcommerceDraft.supersedesRequestId ?? null
+    : preparedEcommerceSourceTimeline?.request.schema === 'supermega.ecommerce.order_request.v2'
+      ? preparedEcommerceSourceTimeline.request.supersedesRequestId ?? null
+      : null
   const preparedEcommerceRequestIsWaiting = Boolean(
     preparedEcommerceDraft
     && !preparedEcommerceSourceTimeline
     && !commerce.orders.some((order) => order.sourceRecordId === preparedEcommerceDraft.sourceRequestId),
   )
   const pendingEcommerceReviewCount = pendingStorefrontRequests.length + Number(preparedEcommerceRequestIsWaiting)
+  useEffect(() => {
+    if (preparedEcommerceDraft?.schema !== 'supermega.ecommerce.shop_draft.v7') return
+    const sourceRequestId = preparedEcommerceDraft.sourceRequestId
+    const scope = preparedEcommerceDraft.operatingContext.organizationScope
+    let current = true
+    let removeStorageListener = () => {}
+    void import('../products/ecommerce/ecommerce-buying-lifecycle').then(({ ecommerceBuyingStateStorageKey, readEcommerceBuyingState }) => {
+      if (!current) return
+      const refresh = () => {
+        void readEcommerceBuyingState(scope).then((result) => {
+          if (!current) return
+          const successor = result.state?.requests.find((request) => request.supersedesRequestId === sourceRequestId) ?? null
+          setPreparedEcommerceLocalCurrentness({ sourceRequestId, successorRequestId: successor?.id ?? null })
+        })
+      }
+      const storageKey = ecommerceBuyingStateStorageKey(scope)
+      const onStorage = (event: StorageEvent) => {
+        if (event.key === storageKey || event.key === null) refresh()
+      }
+      window.addEventListener('storage', onStorage)
+      removeStorageListener = () => window.removeEventListener('storage', onStorage)
+      refresh()
+    }).catch(() => { /* Managed timeline remains authoritative; local currentness fails closed. */ })
+    return () => {
+      current = false
+      removeStorageListener()
+    }
+  }, [preparedEcommerceDraft])
   useEffect(() => {
     if (!preparedEcommerceDraft || !preparedEcommerceSupersededByRequestId || pendingAction) return
     const supersededRequestId = preparedEcommerceDraft.sourceRequestId
@@ -1940,11 +1980,21 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setResumedOrderDraft(null)
       setOrderDraftConflict(false)
       setOrderEntryMode('online')
-      setNotice(`${supersededRequestId} was replaced by ${preparedEcommerceSupersededByRequestId}. The stale Shop draft was closed; review the replacement instead.`)
-      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-ecommerce-request-id="${preparedEcommerceSupersededByRequestId}"]`)?.focus({ preventScroll: true }))
+      const localOnlySuccessor = !preparedEcommerceManagedSuccessorRequestId && preparedEcommerceLocalSuccessorRequestId
+      setNotice(localOnlySuccessor
+        ? `${supersededRequestId} was replaced by ${localOnlySuccessor}. The stale Shop draft was closed; open Ecommerce to hand off the replacement.`
+        : `${supersededRequestId} was replaced by ${preparedEcommerceSupersededByRequestId}. The stale Shop draft was closed; review the replacement instead.`)
+      requestAnimationFrame(() => {
+        if (localOnlySuccessor) {
+          orderComposerRef.current?.close()
+          document.querySelector<HTMLAnchorElement>('a[href="/ecommerce/"]')?.focus({ preventScroll: true })
+          return
+        }
+        document.querySelector<HTMLButtonElement>(`[data-ecommerce-request-id="${preparedEcommerceSupersededByRequestId}"]`)?.focus({ preventScroll: true })
+      })
     })
     return () => cancelAnimationFrame(frameId)
-  }, [commerce.items, pendingAction, preparedEcommerceDraft, preparedEcommerceSupersededByRequestId])
+  }, [commerce.items, pendingAction, preparedEcommerceDraft, preparedEcommerceLocalSuccessorRequestId, preparedEcommerceManagedSuccessorRequestId, preparedEcommerceSupersededByRequestId])
   const requestedStorefrontRequestIsWaiting = Boolean(
     requestedRequestId
     && pendingStorefrontRequests.some((request) => request.id === requestedRequestId),
