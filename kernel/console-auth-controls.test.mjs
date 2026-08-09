@@ -66,6 +66,34 @@ test('the weak-key cause is reported to the server log, where the owner can see 
   assert.ok(!logged.includes('short-owner-key'), 'the key itself must never be logged')
 })
 
+test('a burst of rejected attempts is recorded even when it stops inside the throttle window', async () => {
+  const saved = captureEnvironment()
+  try {
+    for (const name of ENV_KEYS) delete process.env[name]
+    process.env.SUPERMEGA_OPS_KEY = CONFORMING_KEY
+    const { handle } = await import(`./console/api.mjs?burst=${Date.now()}-${Math.random()}`)
+    const store = (await import('./store.mjs')).default
+    assert.equal(store.mode, 'memory', 'this test must not touch a real database')
+
+    const before = (await store.listActivity(500)).filter((entry) => entry.kind === 'console.auth_rejected').length
+    // 250 attempts far faster than the 60s window. A pure time throttle logs the first and
+    // silently drops the rest, which is the defect this pins.
+    for (let attempt = 0; attempt < 250; attempt += 1) {
+      await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'wrong' } })
+    }
+    const entries = (await store.listActivity(500)).filter((entry) => entry.kind === 'console.auth_rejected')
+    const written = entries.length - before
+
+    assert.ok(written > 1, `a 250-attempt burst must leave more than one trace, got ${written}`)
+    assert.ok(written <= 12, `writes must stay bounded so the log cannot be flooded, got ${written}`)
+    // The magnitude has to be recoverable from the log itself.
+    const loudest = entries.map((entry) => Number((/Rejected (\d+) console requests/.exec(entry.summary) || [])[1] || 1))
+    assert.ok(Math.max(...loudest) >= 100, `the recorded count must reveal the scale, saw ${Math.max(...loudest)}`)
+  } finally {
+    restoreEnvironment(saved)
+  }
+})
+
 test('a conforming key still authenticates, and a rejected attempt never records the supplied key', async () => {
   await withOpsKey(CONFORMING_KEY, async (handle, errors) => {
     const wrong = await handle({ method: 'GET', path: '/api/state', headers: { 'x-ops-key': 'guessed-value-that-is-long-enough-x' } })

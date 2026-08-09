@@ -23,7 +23,9 @@ const OPS_KEY_MINIMUM_LENGTH = 32
 // at the WAF, not here.
 const AUTH_FAILURE_LOG_INTERVAL_MS = 60_000
 let lastAuthFailureLoggedAt = 0
-let suppressedAuthFailures = 0
+let authFailureCount = 0
+// Next count that forces an entry: 1, then 10, 100, 1000 …
+let nextAuthFailureThreshold = 1
 // Constant-time, length-safe equality (hash both to fixed-width digests so timingSafeEqual
 // never throws on unequal lengths and no length is leaked via timing).
 function constantTimeEqual(a, b) {
@@ -102,15 +104,25 @@ const escapeHtml = (value) => String(value ?? '')
 // Records a rejected console request. Never logs the supplied key or any part of it —
 // only that a rejection happened, where, and how many were folded into this entry.
 function recordAuthFailure(method, path) {
-  suppressedAuthFailures += 1
+  authFailureCount += 1
   const now = Date.now()
-  if (now - lastAuthFailureLoggedAt < AUTH_FAILURE_LOG_INTERVAL_MS) return
-  const collapsed = suppressedAuthFailures
+  // Log on the first failure, then at each power of ten, and otherwise at most once per
+  // window. A time window alone silently loses a burst that STOPS inside it: 500 attempts
+  // in thirty seconds logged the first and discarded the other 499, so the entry meant to
+  // reveal credential stuffing under-reported it 500-fold. The count thresholds guarantee a
+  // burst is always visible while the number of writes grows logarithmically rather than
+  // with the attack — 500 attempts produce three entries, not five hundred.
+  const hitThreshold = authFailureCount >= nextAuthFailureThreshold
+  const windowElapsed = now - lastAuthFailureLoggedAt >= AUTH_FAILURE_LOG_INTERVAL_MS
+  if (!hitThreshold && !windowElapsed) return
+  if (hitThreshold) nextAuthFailureThreshold *= 10
   lastAuthFailureLoggedAt = now
-  suppressedAuthFailures = 0
   const route = String(path || '').slice(0, 120)
-  const summary = collapsed > 1
-    ? `Rejected ${collapsed} console requests (latest ${method} ${route})`
+  // The running total is reported, not a delta, so a reader never has to add up entries.
+  // It is per process: serverless fan-out means several instances each count their own,
+  // which errs toward more entries rather than fewer.
+  const summary = authFailureCount > 1
+    ? `Rejected ${authFailureCount} console requests on this instance (latest ${method} ${route})`
     : `Rejected console request ${method} ${route}`
   log('console.auth_rejected', summary, route)
 }
