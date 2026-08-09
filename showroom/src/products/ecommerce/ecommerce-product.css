@@ -55,7 +55,9 @@
 
 .ecommerce-workspace-switch > span,
 .ecommerce-preview-size > span {
-  color: #56665d;
+  /* --core-muted is #56665d in light, so this is byte-identical there and only changes
+     dark mode, where the literal measured 3.07:1 on the themed panel behind it. */
+  color: var(--core-muted);
   font-size: 11px;
   font-weight: 760;
 }
@@ -1448,15 +1450,20 @@
   font-size: 10px;
 }
 
+/* This block sits on the themed panel, so its light-theme literals carried straight into
+   dark mode and failed AA there: #66746b measured 3.80:1 and #0b745e 3.26:1 against
+   --core-panel. --core-green is exactly #0b745e in light, so that one is byte-identical
+   there. #66746b is not a token; --core-quiet (#5f6f67 light) is the nearest and is a
+   shade darker, which only moves light mode further above the floor. */
 .ecommerce-after-purchase > summary small,
 .ecommerce-after-purchase > div p {
-  color: #66746b;
+  color: var(--core-quiet);
   font-size: 9px;
   line-height: 1.4;
 }
 
 .ecommerce-after-purchase > summary b {
-  color: #0b745e;
+  color: var(--core-green);
   font-size: 9px;
   text-transform: uppercase;
 }
