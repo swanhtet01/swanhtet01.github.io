@@ -433,7 +433,12 @@ export function CoreLayout() {
           <div className="core-route-content">
             <RouteErrorBoundary resetKey={location.pathname}><Outlet context={runtime} /></RouteErrorBoundary>
           </div>
-          {routeProduct ? <Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense> : null}
+          {/* The navigator is its own lazy chunk, so a stale deploy can fail it independently
+              of the route. Outside a boundary that failure escapes to the root and unmounts
+              the entire shell — the exact blank page the boundary exists to prevent, reached
+              by a different door. It is secondary furniture, so its own boundary is enough:
+              the route content beside it keeps working. */}
+          {routeProduct ? <RouteErrorBoundary resetKey={`nav:${location.pathname}`}><Suspense fallback={null}><ProductSystemNavigator key={`${location.pathname}${location.search}`} managed={runtime.status === 'enterprise'} product={routeProduct} /></Suspense></RouteErrorBoundary> : null}
         </main>
       </div>
     </div>
