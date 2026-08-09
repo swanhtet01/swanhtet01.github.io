@@ -38,6 +38,7 @@ let shopPurchaseOrderDraftRuntimeChecks = 0
 let shopCounterSaleRecoveryRuntimeChecks = 0
 let plantOutputEntryRecoveryRuntimeChecks = 0
 let websiteInquiryEntryRecoveryRuntimeChecks = 0
+let ecommerceCheckoutEntryRecoveryRuntimeChecks = 0
 let shopServiceScheduleRuntimeChecks = 0
 let shopBusinessTemplateRuntimeChecks = 0
 let plantOrderRuntimeChecks = 0
@@ -120,6 +121,7 @@ const websiteStarterSetupSource = await readFile(resolve(root, 'showroom', 'src'
 const websiteSectionRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-section-recovery.ts'), 'utf8')
 const websiteEditSessionRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-edit-session-recovery.ts'), 'utf8')
 const websiteInquiryEntryRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'website', 'website-inquiry-entry-recovery.ts'), 'utf8')
+const ecommerceCheckoutEntryRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-checkout-entry-recovery.ts'), 'utf8')
 const storefrontEditRecoverySource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-edit-recovery.ts'), 'utf8')
 const localMerchandisingImportSource = await readFile(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'local-merchandising-import.ts'), 'utf8')
 const productionJobPlanDraftSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-job-plan-draft.ts'), 'utf8')
@@ -512,7 +514,7 @@ if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
   || !ecommerceSource.includes("'Enter checkout details'")
   || !ecommerceSource.includes("'Sample ready'")
   || !ecommerceSource.includes('if (storefrontSetupRequired)')
-  || !ecommerceSource.includes("['2. Cart', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed'")
+  || !ecommerceSource.includes("['2. Cart', checkoutEntryRecoveryPending ? 'Resume available' : ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed'")
   || !ecommerceSource.includes("['3. Shop', pendingManagedRequests.length")
   || !ecommerceSource.includes("? `${pendingManagedRequests.length} to review`")
   || !ecommerceSource.includes("? `${ecommerceActiveOrderCount} in progress`")
@@ -3127,6 +3129,55 @@ if (removeCartLineStart < 0
   || cartRemovalForbiddenActions.some((marker) => removeCartLineAction.includes(marker) || undoCartRemovalAction.includes(marker) || recoverCartRemovalAction.includes(marker))
   || !ecommerceCssSource.includes('.ecommerce-cart-remove-recovery')
   || !/\.ecommerce-cart-remove-recovery button\s*\{[^}]*min-height:\s*44px;/s.test(ecommerceCssSource)) fail('ecommerce_cart_line_remove_recovery_contract_missing')
+const checkoutEntryResumeStart = ecommerceBuyingUiSource.indexOf('function resumeCheckoutEntryRecovery()')
+const checkoutEntryDiscardStart = ecommerceBuyingUiSource.indexOf('function discardCheckoutEntryRecovery()', checkoutEntryResumeStart)
+const checkoutEntryFocusStart = ecommerceBuyingUiSource.indexOf('function focusCartQuantity(', checkoutEntryDiscardStart)
+const checkoutEntryResumeAction = ecommerceBuyingUiSource.slice(checkoutEntryResumeStart, checkoutEntryDiscardStart)
+const checkoutEntryDiscardAction = ecommerceBuyingUiSource.slice(checkoutEntryDiscardStart, checkoutEntryFocusStart)
+const checkoutEntryConsequentialActions = ['saveEcommerceOrderRequestV2', 'buildEcommerceCheckoutQuote', 'buildEcommerceOrderRequestV2', 'onRecordManagedRequest', 'onOpenManagedRequest', 'onDraft(', 'navigate(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'reserveCommerceOrder', 'settleCommerce', 'chargePayment', 'authorizePayment']
+const checkoutEntryHelperForbiddenActions = ['localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'saveEcommerceOrderRequestV2', 'buildEcommerceCheckoutQuote', 'buildEcommerceOrderRequestV2']
+if (checkoutEntryResumeStart < 0
+  || checkoutEntryDiscardStart < 0
+  || checkoutEntryFocusStart < 0
+  || !ecommerceCheckoutEntryRecoverySource.includes("ECOMMERCE_CHECKOUT_ENTRY_RECOVERY_CONTRACT = 'supermega.ecommerce.closed-checkout-entry.v1'")
+  || !ecommerceCheckoutEntryRecoverySource.includes("globalThis.crypto.subtle.digest('SHA-256', bytes)")
+  || !ecommerceCheckoutEntryRecoverySource.includes('validateCommerceState(input.commerceState)')
+  || !ecommerceCheckoutEntryRecoverySource.includes('validateStorefrontPreview(input.preview)')
+  || !ecommerceCheckoutEntryRecoverySource.includes('validateEcommerceBuyingState(input.buyingState, retainedScope)')
+  || !ecommerceCheckoutEntryRecoverySource.includes('export function reviewEcommerceCheckoutEntryRecovery(')
+  || checkoutEntryHelperForbiddenActions.some((marker) => ecommerceCheckoutEntryRecoverySource.includes(marker))
+  || !localWorkspaceStorageSource.includes("'supermega.ecommerce.closed-checkout-entry.v1.'")
+  || !ecommerceBuyingUiSource.includes('window.localStorage.setItem(key, JSON.stringify(next))')
+  || !ecommerceBuyingUiSource.includes("window.addEventListener('storage', refreshCheckoutEntryRecovery)")
+  || !ecommerceBuyingUiSource.includes('ecommerceCheckoutEntryRecoveriesMatch(')
+  || !ecommerceBuyingUiSource.includes('ecommerceCheckoutEntryRecoveryMatchesDraft(')
+  || !ecommerceBuyingUiSource.includes('Another tab has an unfinished checkout. Resume or discard it before replacing it.')
+  || !ecommerceBuyingUiSource.includes('className="ecommerce-checkout-entry-recovery"')
+  || !ecommerceBuyingUiSource.includes("data-state={checkoutEntryRecoveryReview?.ok ? 'ready' : 'conflict'}")
+  || !ecommerceBuyingUiSource.includes("checkoutEntryRecoveryReview?.ok ? 'Continue this checkout?' : 'This checkout needs a fresh start'")
+  || !ecommerceBuyingUiSource.includes('Resume checkout')
+  || !ecommerceBuyingUiSource.includes('No quote, request, order, stock, payment, delivery, provider, message, or company write happens here.')
+  || !checkoutEntryResumeAction.includes('checkoutEntryRecoveryIsCurrent(target)')
+  || !checkoutEntryResumeAction.includes('onCartChange(recovered.lines.map')
+  || !checkoutEntryResumeAction.includes('setCartQuantityDrafts(quantityDrafts)')
+  || !checkoutEntryResumeAction.includes('setRemovedCartLine(recovered.removedCartLine')
+  || !checkoutEntryResumeAction.includes('setCustomerName(recovered.customerName)')
+  || !checkoutEntryResumeAction.includes('setDeliveryInstructions(recovered.deliveryInstructions)')
+  || !checkoutEntryResumeAction.includes('setPaymentAdapter(recovered.paymentAdapter)')
+  || !checkoutEntryResumeAction.includes('setOpen(true)')
+  || !checkoutEntryDiscardAction.includes('clearCheckoutEntryRecovery()')
+  || !checkoutEntryDiscardAction.includes('onCartChange([])')
+  || !checkoutEntryDiscardAction.includes("setCustomerName('')")
+  || !checkoutEntryDiscardAction.includes("setPaymentAdapter('pay_on_pickup')")
+  || !checkoutEntryDiscardAction.includes('setOpen(false)')
+  || (ecommerceBuyingUiSource.match(/clearMatchingCheckoutEntryRecovery\(reviewedRecoveryDraft, reviewedRecoverySource\)/g) ?? []).length !== 2
+  || checkoutEntryConsequentialActions.some((marker) => checkoutEntryResumeAction.includes(marker) || checkoutEntryDiscardAction.includes(marker))
+  || !ecommerceSource.includes('const [checkoutEntryRecoveryPending, setCheckoutEntryRecoveryPending] = useState(false)')
+  || !ecommerceSource.includes('disabled={catalogHydrating || checkoutEntryRecoveryPending}')
+  || !ecommerceSource.includes('onRecoveryPendingChange={setCheckoutEntryRecoveryPending}')
+  || !ecommerceCssSource.includes('.ecommerce-checkout-entry-recovery[data-state="conflict"]')
+  || !/\.ecommerce-checkout-entry-recovery-actions \.core-button\s*\{[^}]*min-height:\s*44px;/s.test(ecommerceCssSource)
+  || !ecommerceCssSource.includes('@media (max-width: 520px)')) fail('ecommerce_checkout_entry_tab_recovery_contract_missing_or_consequential')
 const openOrderChangeStart = ecommerceBuyingUiSource.indexOf('function openAmendmentRequest')
 const closeOrderChangeStart = ecommerceBuyingUiSource.indexOf('function closeAmendmentRequest')
 const reopenOrderChangeStart = ecommerceBuyingUiSource.indexOf('function reopenAmendmentRequest')
@@ -15851,6 +15902,148 @@ async function verifyWebsiteInquiryEntryRecoveryRuntime() {
   }
 }
 
+async function verifyEcommerceCheckoutEntryRecoveryRuntime() {
+  const assert = (condition, reason) => {
+    if (!condition) throw new Error(reason)
+    ecommerceCheckoutEntryRecoveryRuntimeChecks += 1
+  }
+  try {
+    const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-checkout-entry-recovery.ts')).href}?ecommerce-checkout-entry-recovery=${Date.now()}`)
+    const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?ecommerce-checkout-entry-commerce=${Date.now()}`)
+    const storefront = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'storefront-model.ts')).href}?ecommerce-checkout-entry-storefront=${Date.now()}`)
+    const buying = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'ecommerce', 'ecommerce-buying-lifecycle.ts')).href}?ecommerce-checkout-entry-buying=${Date.now()}`)
+    const scope = 'ecommerce:local'
+    const commerceState = commerce.createSeedCommerce()
+    const availableItems = commerceState.items.filter((item) => item.onHand > 0).slice(0, 2)
+    if (availableItems.length < 2) throw new Error('seed_catalog_needs_two_available_items')
+    const preview = storefront.buildStorefrontPreview(commerceState.items, {
+      storeName: 'Mingalar Market',
+      summary: 'Practical local ordering with accountable Shop review.',
+      selectedSkus: availableItems.map((item) => item.sku),
+    })
+    const sourcePreviewDigest = await storefront.storefrontPreviewDigest(preview)
+    const buyingState = buying.createEmptyEcommerceBuyingState(scope)
+    const sourceInput = {
+      commerceState,
+      currentCatalog: commerceState.items,
+      preview,
+      buyingState,
+      sourcePreviewDigest,
+      sourceStorefront: null,
+    }
+    const source = await model.ecommerceCheckoutEntryRecoverySource(scope, sourceInput)
+    const repeatedSource = await model.ecommerceCheckoutEntryRecoverySource(scope, structuredClone(sourceInput))
+    const changedCatalog = structuredClone(commerceState.items)
+    changedCatalog[0].onHand += 1
+    const changedSource = await model.ecommerceCheckoutEntryRecoverySource(scope, { ...sourceInput, currentCatalog: changedCatalog })
+    assert(source.stateDigest === repeatedSource.stateDigest
+      && source.stateDigest !== changedSource.stateDigest
+      && source.sourcePreviewDigest === sourcePreviewDigest
+      && source.buyingRevision === 0
+      && source.buyingHeadDigest === buyingState.headDigest
+      && /^sha256:[0-9a-f]{64}$/.test(source.stateDigest),
+    'ecommerce_checkout_entry_recovery_source_digest_not_exact')
+    const draft = {
+      lines: [{ sku: availableItems[0].sku, quantity: 1, quantityDraft: '' }],
+      removedCartLine: {
+        line: { sku: availableItems[1].sku, quantity: 1 },
+        index: 1,
+        itemName: availableItems[1].name,
+      },
+      customerName: ' Mya Thida ',
+      customerPhone: '09 123 456 789 ',
+      addressLine1: ' No. 12, Inya Road ',
+      addressTownship: ' Hlaing ',
+      addressCity: ' Yangon ',
+      deliveryInstructions: ' Call after 5.\nUse the side gate. ',
+      fulfilment: 'delivery',
+      paymentAdapter: 'cash_on_delivery',
+      promotionCode: ' WELCOME ',
+      panelOpen: true,
+    }
+    const recovery = model.createEcommerceCheckoutEntryRecovery(scope, source, draft, '2026-08-09T06:10:00.000Z')
+    const restored = model.restoreEcommerceCheckoutEntryRecovery(JSON.stringify(recovery))
+    assert(restored
+      && restored.schema === model.ECOMMERCE_CHECKOUT_ENTRY_RECOVERY_CONTRACT
+      && restored.scope === scope
+      && restored.draft.lines[0].quantityDraft === ''
+      && restored.draft.customerName === draft.customerName
+      && restored.draft.customerPhone === draft.customerPhone
+      && restored.draft.deliveryInstructions === draft.deliveryInstructions
+      && restored.draft.removedCartLine.itemName === draft.removedCartLine.itemName
+      && restored.draft.panelOpen === true,
+    'ecommerce_checkout_entry_recovery_did_not_restore_exact_draft')
+    const current = model.reviewEcommerceCheckoutEntryRecovery(recovery, scope, source, commerceState.items, preview)
+    assert(current.ok
+      && current.draft.lines[0].sku === draft.lines[0].sku
+      && current.draft.removedCartLine.line.sku === draft.removedCartLine.line.sku,
+    'ecommerce_checkout_entry_recovery_current_source_not_resumable')
+    assert(model.ecommerceCheckoutEntryRecoveryMatchesDraft(recovery, scope, source, draft)
+      && model.ecommerceCheckoutEntryRecoveriesMatch(recovery, structuredClone(recovery))
+      && !model.ecommerceCheckoutEntryRecoveryMatchesDraft(recovery, scope, source, { ...draft, customerPhone: '09 999 999 999' }),
+    'ecommerce_checkout_entry_recovery_exact_identity_not_enforced')
+    const newer = model.createEcommerceCheckoutEntryRecovery(
+      scope,
+      source,
+      { ...draft, customerName: 'Newer tab customer' },
+      '2026-08-09T06:10:01.000Z',
+    )
+    assert(!model.ecommerceCheckoutEntryRecoveriesMatch(recovery, newer), 'ecommerce_checkout_entry_recovery_newer_tab_identity_not_enforced')
+    const wrongScope = model.reviewEcommerceCheckoutEntryRecovery(recovery, 'ecommerce:other', source, commerceState.items, preview)
+    assert(!wrongScope.ok && wrongScope.reason === 'scope_changed', 'ecommerce_checkout_entry_recovery_wrong_scope_accepted')
+    const staleSource = model.reviewEcommerceCheckoutEntryRecovery(recovery, scope, changedSource, changedCatalog, preview)
+    assert(!staleSource.ok && staleSource.reason === 'source_changed', 'ecommerce_checkout_entry_recovery_catalog_change_ignored')
+    const unavailableCatalog = structuredClone(commerceState.items)
+    unavailableCatalog.find((item) => item.sku === availableItems[0].sku).onHand = 0
+    const unavailableReview = model.reviewEcommerceCheckoutEntryRecovery(recovery, scope, source, unavailableCatalog, preview)
+    assert(!unavailableReview.ok && unavailableReview.reason === 'source_changed', 'ecommerce_checkout_entry_recovery_unavailable_cart_accepted')
+    const badDigest = structuredClone(recovery)
+    badDigest.source.stateDigest = 'sha256:not-valid'
+    const extraField = { ...structuredClone(recovery), autoCreateRequest: true }
+    assert(model.restoreEcommerceCheckoutEntryRecovery(badDigest) === null
+      && model.restoreEcommerceCheckoutEntryRecovery(extraField) === null
+      && model.restoreEcommerceCheckoutEntryRecovery('{broken') === null,
+    'ecommerce_checkout_entry_recovery_tamper_accepted')
+    let duplicateLineRejected = false
+    try {
+      model.createEcommerceCheckoutEntryRecovery(scope, source, { ...draft, lines: [draft.lines[0], draft.lines[0]] })
+    } catch { duplicateLineRejected = true }
+    assert(duplicateLineRejected, 'ecommerce_checkout_entry_recovery_duplicate_line_created')
+    let quantityMismatchRejected = false
+    try {
+      model.createEcommerceCheckoutEntryRecovery(scope, source, { ...draft, lines: [{ ...draft.lines[0], quantityDraft: '2' }] })
+    } catch { quantityMismatchRejected = true }
+    assert(quantityMismatchRejected, 'ecommerce_checkout_entry_recovery_quantity_mismatch_created')
+    let emptyDraftRejected = false
+    try {
+      model.createEcommerceCheckoutEntryRecovery(scope, source, {
+        ...draft,
+        lines: [],
+        removedCartLine: null,
+        customerName: '',
+        customerPhone: '',
+        addressLine1: '',
+        addressTownship: '',
+        addressCity: 'Yangon',
+        deliveryInstructions: '',
+        fulfilment: 'pickup',
+        paymentAdapter: 'pay_on_pickup',
+        promotionCode: '',
+      })
+    } catch { emptyDraftRejected = true }
+    assert(emptyDraftRejected, 'ecommerce_checkout_entry_recovery_empty_draft_created')
+    let closedPanelRejected = false
+    try {
+      model.createEcommerceCheckoutEntryRecovery(scope, source, { ...draft, panelOpen: false })
+    } catch { closedPanelRejected = true }
+    assert(closedPanelRejected, 'ecommerce_checkout_entry_recovery_closed_panel_created')
+    assert(/^supermega\.ecommerce\.closed-checkout-entry\.v1\./.test(model.ecommerceCheckoutEntryRecoveryStorageKey(scope)),
+      'ecommerce_checkout_entry_recovery_storage_scope_missing')
+  } catch (error) {
+    fail(`ecommerce_checkout_entry_recovery_runtime:${error instanceof Error ? error.message : 'unknown'}`)
+  }
+}
+
 async function verifyPlantOutputEntryRecoveryRuntime() {
   const assert = (condition, reason) => {
     if (!condition) throw new Error(reason)
@@ -20638,6 +20831,7 @@ await verifyStorefrontDraftRuntime()
 await verifyStorefrontEditRecoveryRuntime()
 await verifyShopCounterSaleRecoveryRuntime()
 await verifyWebsiteInquiryEntryRecoveryRuntime()
+await verifyEcommerceCheckoutEntryRecoveryRuntime()
 await verifyPlantOutputEntryRecoveryRuntime()
 await verifyStorefrontRuntime()
 await verifyManagedWebsiteRuntime()
@@ -20649,8 +20843,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 80 KB allowance for Shop, Plant, Website, and Ecommerce recovery, including Website inquiry tab recovery; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_880_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 100 KB allowance for Shop, Plant, Website, and Ecommerce recovery, including source-bound inquiry and checkout tab recovery; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_900_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -21153,4 +21347,4 @@ if (failures.length) {
   console.error(JSON.stringify({ ok: false, contract: 'supermega_app_build', failures }, null, 2))
   process.exit(1)
 }
-console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopCounterSaleRecoveryRuntimeChecks, plantOutputEntryRecoveryRuntimeChecks, websiteInquiryEntryRecoveryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontEditRecoveryRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))
+console.log(JSON.stringify({ ok: true, contract: 'supermega_app_build', customerProducts: 4, sharedCapabilities: 1, primaryRoutes: 5, operatingModules: 2, makerModules: 2, compatibilityRedirects: 5, workflowProfiles, behaviorTrailRuntimeChecks, operationalReportRuntimeChecks, shopOperatingFlowRuntimeChecks, shopNextActionRuntimeChecks, channelOrderRuntimeChecks, shopInventoryRuntimeChecks, shopPurchaseOrderDraftRuntimeChecks, shopCounterSaleRecoveryRuntimeChecks, plantOutputEntryRecoveryRuntimeChecks, websiteInquiryEntryRecoveryRuntimeChecks, ecommerceCheckoutEntryRecoveryRuntimeChecks, shopServiceScheduleRuntimeChecks, shopBusinessTemplateRuntimeChecks, shopProductionDemandRuntimeChecks, shopDemandIntelligenceRuntimeChecks, shopReplenishmentRuntimeChecks, shopProcurementDecisionRuntimeChecks, plantOrderRuntimeChecks, websiteReleaseRuntimeChecks, catalogImportRuntimeChecks, clientOnboardingRuntimeChecks, managedClientImportRuntimeChecks, plantEquipmentImportRuntimeChecks, managedContextRuntimeChecks, operatingBaselineRuntimeChecks, websiteRuntimeChecks, orderCompletionRuntimeChecks, commerceOrderDraftRuntimeChecks, storefrontDraftRuntimeChecks, storefrontEditRecoveryRuntimeChecks, storefrontRuntimeChecks, storefrontRequestRuntimeChecks, managedWebsiteRuntimeChecks, managedStorefrontRuntimeChecks, ecommerceActivationRuntimeChecks, ecommerceHandoffRuntimeChecks, ecommerceBuyingRuntimeChecks, commerceRuntimeChecks, productionRuntimeChecks, businessCommandRuntimeChecks, ownerControlRuntimeChecks, pilotOutcomeRuntimeChecks, companyBackupRuntimeChecks, largestJavascriptBytes, bytes }, null, 2))

@@ -305,6 +305,7 @@ export function EcommerceProduct() {
     error: '',
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
+  const [checkoutEntryRecoveryPending, setCheckoutEntryRecoveryPending] = useState(false)
   const [customerRequestState, setCustomerRequestState] = useState<'idle' | 'waiting_shop_review' | 'confirmed'>('idle')
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
@@ -1191,6 +1192,12 @@ export function EcommerceProduct() {
   }
 
   function addToCart(sku: string) {
+    if (checkoutEntryRecoveryPending) {
+      const recovery = document.getElementById('ecommerce-buying-workspace')
+      recovery?.scrollIntoView({ block: 'center' })
+      recovery?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
+      return
+    }
     if (catalogHydrating || hasStorefrontEditRecovery || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)) return
     setBuyingCart((current) => current.some((line) => line.sku === sku)
       ? current
@@ -1815,7 +1822,9 @@ export function EcommerceProduct() {
     ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
     ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestState === 'waiting_shop_review' ? 'Request sent' : 'No queue'],
   ] as const
-  const aiAgentJob = pendingManagedRequests.length
+  const aiAgentJob = checkoutEntryRecoveryPending
+    ? 'Review unfinished checkout'
+    : pendingManagedRequests.length
     ? 'Review Ecommerce requests in Shop'
     : customerRequestState === 'waiting_shop_review'
       ? 'View the customer request receipt'
@@ -1830,7 +1839,9 @@ export function EcommerceProduct() {
           : managedIdentity
             ? 'Open store for ordering'
             : 'Start sample order'
-  const aiAgentReason = pendingManagedRequests.length
+  const aiAgentReason = checkoutEntryRecoveryPending
+    ? 'A source-bound customer checkout must be resumed or discarded before the cart can change.'
+    : pendingManagedRequests.length
     ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
     : customerRequestState === 'waiting_shop_review'
       ? 'The customer request is retained separately from the Shop operator review.'
@@ -1845,7 +1856,9 @@ export function EcommerceProduct() {
           : managedIdentity
             ? 'The store is saved and ready for a customer request.'
             : 'The sample store is ready for one customer-order walkthrough.'
-  const aiOwnerGate = pendingManagedRequests.length
+  const aiOwnerGate = checkoutEntryRecoveryPending
+    ? 'Resume or discard only; recovery cannot create a quote, order, payment, stock change, or message.'
+    : pendingManagedRequests.length
     ? 'Shop confirms stock, delivery, payment, and customer contact.'
     : customerRequestState === 'waiting_shop_review'
       ? 'The Shop operator confirms stock, promise, payment, and delivery.'
@@ -1863,7 +1876,9 @@ export function EcommerceProduct() {
     ['Why', aiAgentReason],
     ['Review', aiOwnerGate],
   ] as const
-  const orderAutopilotStage = importNeeded
+  const orderAutopilotStage = checkoutEntryRecoveryPending
+    ? 'Review checkout recovery'
+    : importNeeded
     ? 'Connect products'
     : storefrontSetupRequired
       ? 'Save store'
@@ -1883,6 +1898,8 @@ export function EcommerceProduct() {
   const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
   const ecommerceTodayState = hasStorefrontEditRecovery
     ? 'attention'
+    : checkoutEntryRecoveryPending
+      ? 'attention'
     : importNeeded || storefrontSetupRequired
     ? 'setup'
     : ecommerceRefundAttentionCount || ecommercePaymentAttentionCount || orderOpsStockRiskCount || pendingManagedRequests.length || customerRequestState === 'waiting_shop_review'
@@ -1890,6 +1907,8 @@ export function EcommerceProduct() {
       : 'ready'
   const ecommerceTodayHeadline = hasStorefrontEditRecovery
     ? storefrontEditRecoveryReview?.ok ? 'Continue your unsaved store' : 'Review older store edits'
+    : checkoutEntryRecoveryPending
+      ? 'Continue your unfinished checkout'
     : importNeeded
     ? 'Connect your products to start selling'
     : storefrontSetupRequired
@@ -1913,6 +1932,8 @@ export function EcommerceProduct() {
     ? storefrontEditRecoveryReview?.ok
       ? 'Resume the exact name, description, products, and display details before taking another action.'
       : 'The saved store or Shop catalog changed. Discard the older recovery to protect the current version.'
+    : checkoutEntryRecoveryPending
+      ? 'Resume the exact cart and customer details, or discard them. Nothing was sent and the cart stays locked until you choose.'
     : importNeeded
     ? 'Import one Shop catalog. Products, stock, prices, checkout, and order review will use that source.'
     : storefrontSetupRequired
@@ -1928,6 +1949,8 @@ export function EcommerceProduct() {
             : 'Add one sample item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.'
   const ecommerceTodayAction = hasStorefrontEditRecovery
     ? 'Review store edits'
+    : checkoutEntryRecoveryPending
+      ? 'Review checkout'
     : importNeeded
     ? 'Connect products'
     : storefrontSetupRequired
@@ -1949,7 +1972,7 @@ export function EcommerceProduct() {
                 : 'Start sample order'
   const ecommerceTodayMetrics = [
     ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : 'Sample ready'],
-    ['2. Cart', ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
+    ['2. Cart', checkoutEntryRecoveryPending ? 'Resume available' : ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['3. Shop', pendingManagedRequests.length
       ? `${pendingManagedRequests.length} to review`
       : customerRequestState === 'waiting_shop_review'
@@ -1960,7 +1983,7 @@ export function EcommerceProduct() {
           ? `${ecommerceCompletedOrderCount} completed`
           : 'No order yet'],
   ] as const
-  const ecommerceTodayGuided = hasStorefrontEditRecovery || importNeeded || storefrontSetupRequired
+  const ecommerceTodayGuided = hasStorefrontEditRecovery || checkoutEntryRecoveryPending || importNeeded || storefrontSetupRequired
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -1971,6 +1994,12 @@ export function EcommerceProduct() {
     if (hasStorefrontEditRecovery) {
       document.getElementById('ecommerce-edit-recovery')?.scrollIntoView({ block: 'center' })
       storefrontRecoveryActionRef.current?.focus({ preventScroll: true })
+      return
+    }
+    if (checkoutEntryRecoveryPending) {
+      const recovery = document.getElementById('ecommerce-buying-workspace')
+      recovery?.scrollIntoView({ block: 'center' })
+      recovery?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true })
       return
     }
     if (importNeeded) {
@@ -2502,7 +2531,7 @@ export function EcommerceProduct() {
                           aria-controls="ecommerce-buying-workspace"
                           aria-label={`${buyingCart.some((line) => line.sku === item.sku) ? 'View' : 'Add'} ${displayName} ${buyingCart.some((line) => line.sku === item.sku) ? 'in cart' : 'to cart'}`}
                           className="storefront-request-button"
-                          disabled={catalogHydrating}
+                          disabled={catalogHydrating || checkoutEntryRecoveryPending}
                           onClick={() => addToCart(item.sku)}
                           type="button"
                         >
@@ -2541,6 +2570,7 @@ export function EcommerceProduct() {
               onOpenReturns={(intent: EcommerceReturnIntent) => navigate('/shop/?tab=orders', { state: { ecommerceReturnIntent: intent } })}
               onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
               onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}
+              onRecoveryPendingChange={setCheckoutEntryRecoveryPending}
               onRequestStateChange={setCustomerRequestState}
               preview={previewResult.preview}
               scope={buyingScope}

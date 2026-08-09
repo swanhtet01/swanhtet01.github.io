@@ -38,6 +38,7 @@ const workspaceKeyPrefixes = [
   'supermega.website.closed-inquiry-entry.v1.',
   'supermega.website.release-foundation.v1:',
   'supermega.ecommerce.buying_lifecycle.v1.',
+  'supermega.ecommerce.closed-checkout-entry.v1.',
 ]
 
 type WorkspaceStorageReader = Pick<Storage, 'key' | 'length'>

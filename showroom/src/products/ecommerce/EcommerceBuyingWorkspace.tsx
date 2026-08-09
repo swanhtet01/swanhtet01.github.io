@@ -60,6 +60,20 @@ import {
   type EcommerceOrderRescheduleOpening,
 } from './ecommerce-order-change-draft'
 import {
+  createEcommerceCheckoutEntryRecovery,
+  ecommerceCheckoutEntryDraft,
+  ecommerceCheckoutEntryDraftHasContent,
+  ecommerceCheckoutEntryRecoveriesMatch,
+  ecommerceCheckoutEntryRecoveryMatchesDraft,
+  ecommerceCheckoutEntryRecoverySource,
+  ecommerceCheckoutEntryRecoveryStorageKey,
+  restoreEcommerceCheckoutEntryRecovery,
+  reviewEcommerceCheckoutEntryRecovery,
+  type EcommerceCheckoutEntryDraft,
+  type EcommerceCheckoutEntryRecovery,
+  type EcommerceCheckoutEntryRecoverySource,
+} from './ecommerce-checkout-entry-recovery'
+import {
   commerceOrderAcknowledgement,
   commerceOrderCorrectionExpectation,
   commerceStorefrontOrderTimeline,
@@ -89,6 +103,7 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenReturns: (intent: EcommerceReturnIntent) => void
   onOpenSupport: (intent: EcommerceSupportIntent) => void
   onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
+  onRecoveryPendingChange: (pending: boolean) => void
   onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void
   preview: StorefrontPreview
   scope: string
@@ -110,6 +125,11 @@ type EcommerceAmendmentStatus = {
 }
 
 type EcommerceCartQuantityIssues = Record<string, string>
+
+type EcommerceCheckoutEntryRecoveryState = {
+  scope: string
+  recovery: EcommerceCheckoutEntryRecovery
+}
 
 type EcommerceRemovedCartLineNotice = EcommerceRemovedCartLine & Readonly<{
   itemName: string
@@ -165,6 +185,7 @@ export function EcommerceBuyingWorkspace({
   onOpenReturns,
   onOpenSupport,
   onRecordManagedRequest,
+  onRecoveryPendingChange,
   onRequestStateChange,
   preview,
   scope,
@@ -196,6 +217,23 @@ export function EcommerceBuyingWorkspace({
   const [cartQuantityDrafts, setCartQuantityDrafts] = useState<Record<string, string>>({})
   const [cartQuantityIssues, setCartQuantityIssues] = useState<EcommerceCartQuantityIssues>({})
   const [removedCartLine, setRemovedCartLine] = useState<EcommerceRemovedCartLineNotice | null>(null)
+  const [checkoutEntryRecoveryState, setCheckoutEntryRecoveryState] = useState<EcommerceCheckoutEntryRecoveryState | null>(null)
+  const [checkoutEntryRecoveryNotice, setCheckoutEntryRecoveryNotice] = useState('')
+  const [checkoutEntryHydratedIdentity, setCheckoutEntryHydratedIdentity] = useState('')
+  const [checkoutEntrySourceState, setCheckoutEntrySourceState] = useState<{
+    context: {
+      scope: string
+      commerceState: CommerceState
+      currentCatalog: CommerceItem[]
+      preview: StorefrontPreview
+      buyingState: EcommerceBuyingState
+      sourcePreviewDigest: string
+      sourceStorefrontRevision: number | null
+      sourceStorefrontActionId: string | null
+    } | null
+    value: EcommerceCheckoutEntryRecoverySource | null
+    error: string
+  }>({ context: null, value: null, error: '' })
   const [returnDraft, setReturnDraft] = useState<{
     orderId: string
     sku: string
@@ -231,6 +269,11 @@ export function EcommerceBuyingWorkspace({
   const [closedRescheduleDraft, setClosedRescheduleDraft] = useState<EcommerceClosedOrderRescheduleDraft | null>(null)
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
   const requestReceiptRef = useRef<HTMLElement>(null)
+  const checkoutSummaryRef = useRef<HTMLElement>(null)
+  const checkoutRecoveryActionRef = useRef<HTMLButtonElement>(null)
+  const checkoutRecoveryHydrationRef = useRef('')
+  const checkoutLastWrittenRecoveryRef = useRef<EcommerceCheckoutEntryRecovery | null>(null)
+  const customerNameRef = useRef<HTMLInputElement>(null)
   const cartQuantityRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const cartRemovalUndoRef = useRef<HTMLButtonElement>(null)
   const amendmentOpeningRef = useRef<EcommerceOrderChangeOpening | null>(null)
@@ -252,6 +295,21 @@ export function EcommerceBuyingWorkspace({
     : emptyBuyingState
   const recoveryStatus = recoveryRead.scope === scope ? recoveryRead.status : 'checking'
   const recoveryIssue = recoveryRead.scope === scope ? recoveryRead.issue : ''
+  const checkoutEntrySourceBuyingState = buyingState.scope === scope ? buyingState : emptyBuyingState
+  const sourceStorefrontRevision = sourceStorefront?.revision ?? null
+  const sourceStorefrontActionId = sourceStorefront?.actionId ?? null
+  const checkoutEntrySourceContext = checkoutEntrySourceState.context
+  const checkoutEntrySource = checkoutEntrySourceContext
+    && checkoutEntrySourceContext.scope === scope
+    && checkoutEntrySourceContext.commerceState === commerceState
+    && checkoutEntrySourceContext.currentCatalog === currentCatalog
+    && checkoutEntrySourceContext.preview === preview
+    && checkoutEntrySourceContext.buyingState === checkoutEntrySourceBuyingState
+    && checkoutEntrySourceContext.sourcePreviewDigest === sourcePreviewDigest
+    && checkoutEntrySourceContext.sourceStorefrontRevision === sourceStorefrontRevision
+    && checkoutEntrySourceContext.sourceStorefrontActionId === sourceStorefrontActionId
+    ? checkoutEntrySourceState.value
+    : null
 
   useEffect(() => {
     let current = true
@@ -306,6 +364,52 @@ export function EcommerceBuyingWorkspace({
     })
     return () => { current = false }
   }, [onCartChange, scope, sourcePreviewDigest])
+
+  useEffect(() => {
+    if (recoveryStatus === 'checking') return
+    let current = true
+    void ecommerceCheckoutEntryRecoverySource(scope, {
+      commerceState,
+      currentCatalog,
+      preview,
+      buyingState: checkoutEntrySourceBuyingState,
+      sourcePreviewDigest,
+      sourceStorefront: sourceStorefrontRevision === null || sourceStorefrontActionId === null
+        ? null
+        : { revision: sourceStorefrontRevision, actionId: sourceStorefrontActionId },
+    }).then((value) => {
+      if (current) setCheckoutEntrySourceState({
+        context: {
+          scope,
+          commerceState,
+          currentCatalog,
+          preview,
+          buyingState: checkoutEntrySourceBuyingState,
+          sourcePreviewDigest,
+          sourceStorefrontRevision,
+          sourceStorefrontActionId,
+        },
+        value,
+        error: '',
+      })
+    }).catch(() => {
+      if (current) setCheckoutEntrySourceState({
+        context: {
+          scope,
+          commerceState,
+          currentCatalog,
+          preview,
+          buyingState: checkoutEntrySourceBuyingState,
+          sourcePreviewDigest,
+          sourceStorefrontRevision,
+          sourceStorefrontActionId,
+        },
+        value: null,
+        error: 'Unfinished checkout recovery is unavailable on this device.',
+      })
+    })
+    return () => { current = false }
+  }, [checkoutEntrySourceBuyingState, commerceState, currentCatalog, preview, recoveryStatus, scope, sourcePreviewDigest, sourceStorefrontActionId, sourceStorefrontRevision])
 
   useEffect(() => {
     const storageKey = ecommerceBuyingStateStorageKey(scope)
@@ -573,6 +677,185 @@ export function EcommerceBuyingWorkspace({
     && !cartHasQuantityIssue
     && cartMatchesRequest(cart, latestRequest))
   const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
+  const checkoutEntryDraftInput = {
+    lines: cart.map((line) => ({
+      sku: line.sku,
+      quantity: line.quantity,
+      quantityDraft: cartQuantityDrafts[line.sku] ?? String(line.quantity),
+    })),
+    removedCartLine: removedCartLine ? {
+      line: { ...removedCartLine.line },
+      index: removedCartLine.index,
+      itemName: removedCartLine.itemName,
+    } : null,
+    customerName,
+    customerPhone,
+    addressLine1,
+    addressTownship,
+    addressCity,
+    deliveryInstructions,
+    fulfilment,
+    paymentAdapter,
+    promotionCode,
+  }
+  const checkoutEntryHasMeaningfulDraft = ecommerceCheckoutEntryDraftHasContent(checkoutEntryDraftInput)
+  let currentCheckoutEntryDraft: EcommerceCheckoutEntryDraft | null = null
+  if (checkoutEntryHasMeaningfulDraft) {
+    try {
+      currentCheckoutEntryDraft = ecommerceCheckoutEntryDraft(checkoutEntryDraftInput)
+    } catch {
+      currentCheckoutEntryDraft = null
+    }
+  }
+  const checkoutEntryMatchesLatestRequest = Boolean(currentCheckoutEntryDraft
+    && latestRequest
+    && !currentCheckoutEntryDraft.removedCartLine
+    && latestRequest.scope === scope
+    && latestRequest.sourcePreviewDigest === sourcePreviewDigest
+    && latestRequest.sourceStorefrontRevision === (sourceStorefront?.revision ?? null)
+    && latestRequest.sourceStorefrontActionId === (sourceStorefront?.actionId ?? null)
+    && currentCheckoutEntryDraft.lines.every((line) => line.quantityDraft === String(line.quantity))
+    && cartMatchesRequest(currentCheckoutEntryDraft.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })), latestRequest)
+    && currentCheckoutEntryDraft.customerName === (latestRequest.customerProfile?.name ?? latestRequest.customerReference)
+    && currentCheckoutEntryDraft.customerPhone === (latestRequest.customerProfile?.phone ?? '')
+    && currentCheckoutEntryDraft.fulfilment === latestRequest.fulfilment
+    && currentCheckoutEntryDraft.paymentAdapter === latestRequest.quote.payment.adapter
+    && currentCheckoutEntryDraft.promotionCode === (latestRequest.quote.promotion.code ?? '')
+    && (latestRequest.fulfilment === 'delivery'
+      ? Boolean(latestRequest.deliveryAddress
+        && currentCheckoutEntryDraft.addressLine1 === latestRequest.deliveryAddress.line1
+        && currentCheckoutEntryDraft.addressTownship === latestRequest.deliveryAddress.township
+        && currentCheckoutEntryDraft.addressCity === latestRequest.deliveryAddress.city
+        && currentCheckoutEntryDraft.deliveryInstructions === (latestRequest.deliveryAddress.instructions ?? ''))
+      : !currentCheckoutEntryDraft.addressLine1
+        && !currentCheckoutEntryDraft.addressTownship
+        && currentCheckoutEntryDraft.addressCity === 'Yangon'
+        && !currentCheckoutEntryDraft.deliveryInstructions))
+  const checkoutEntryDraftJson = currentCheckoutEntryDraft ? JSON.stringify(currentCheckoutEntryDraft) : ''
+  const checkoutEntrySourceIdentity = checkoutEntrySource ? JSON.stringify(checkoutEntrySource) : ''
+  const checkoutEntryHydrationIdentity = checkoutEntrySource
+    ? `${scope}|${checkoutEntrySource.stateDigest}`
+    : ''
+  const activeCheckoutEntryRecovery = checkoutEntryRecoveryState?.scope === scope
+    ? checkoutEntryRecoveryState.recovery
+    : null
+  const checkoutEntryRecoveryReview = activeCheckoutEntryRecovery && checkoutEntrySource
+    ? reviewEcommerceCheckoutEntryRecovery(
+        activeCheckoutEntryRecovery,
+        scope,
+        checkoutEntrySource,
+        currentCatalog,
+        preview,
+      )
+    : null
+  const hasCheckoutEntryRecovery = Boolean(activeCheckoutEntryRecovery)
+  const hasActiveCheckoutEntryDraft = Boolean(
+    checkoutEntrySource
+    && currentCheckoutEntryDraft
+    && !checkoutEntryMatchesLatestRequest
+    && !hasCheckoutEntryRecovery
+    && (recoveryStatus === 'empty' || recoveryStatus === 'ready'),
+  )
+
+  useEffect(() => {
+    if (!checkoutEntryHydrationIdentity || !checkoutEntrySource) return
+    if (checkoutRecoveryHydrationRef.current === checkoutEntryHydrationIdentity
+      && checkoutEntryHydratedIdentity === checkoutEntryHydrationIdentity) return
+    checkoutRecoveryHydrationRef.current = checkoutEntryHydrationIdentity
+    setCheckoutEntryHydratedIdentity('')
+    const timer = window.setTimeout(() => {
+      try {
+        const key = ecommerceCheckoutEntryRecoveryStorageKey(scope)
+        const raw = window.localStorage.getItem(key)
+        const restored = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
+        if (raw && !restored) window.localStorage.removeItem(key)
+        checkoutLastWrittenRecoveryRef.current = null
+        setCheckoutEntryRecoveryState(restored ? { scope, recovery: restored } : null)
+        setCheckoutEntryHydratedIdentity(checkoutEntryHydrationIdentity)
+        if (restored) requestAnimationFrame(() => checkoutRecoveryActionRef.current?.focus({ preventScroll: true }))
+      } catch {
+        setCheckoutEntryRecoveryState(null)
+        setCheckoutEntryHydratedIdentity(checkoutEntryHydrationIdentity)
+        setCheckoutEntryRecoveryNotice('Checkout recovery is unavailable. Finish or clear this checkout before leaving.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [checkoutEntryHydratedIdentity, checkoutEntryHydrationIdentity, checkoutEntrySource, scope])
+
+  useEffect(() => {
+    if (!checkoutEntrySourceIdentity
+      || !checkoutEntryDraftJson
+      || !hasActiveCheckoutEntryDraft
+      || checkoutEntryHydratedIdentity !== checkoutEntryHydrationIdentity) return
+    const timer = window.setTimeout(() => {
+      try {
+        const sourceForPersistence = JSON.parse(checkoutEntrySourceIdentity) as EcommerceCheckoutEntryRecoverySource
+        const draftForPersistence = JSON.parse(checkoutEntryDraftJson) as EcommerceCheckoutEntryDraft
+        const key = ecommerceCheckoutEntryRecoveryStorageKey(scope)
+        const raw = window.localStorage.getItem(key)
+        const retained = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
+        const lastWritten = checkoutLastWrittenRecoveryRef.current
+        if (retained && (!lastWritten || !ecommerceCheckoutEntryRecoveriesMatch(retained, lastWritten))) {
+          setCheckoutEntryRecoveryState({ scope, recovery: retained })
+          setCheckoutEntryRecoveryNotice('Another tab has an unfinished checkout. Resume or discard it before replacing it.')
+          requestAnimationFrame(() => checkoutRecoveryActionRef.current?.focus({ preventScroll: true }))
+          return
+        }
+        const next = createEcommerceCheckoutEntryRecovery(scope, sourceForPersistence, draftForPersistence)
+        window.localStorage.setItem(key, JSON.stringify(next))
+        checkoutLastWrittenRecoveryRef.current = next
+        setCheckoutEntryRecoveryNotice('')
+      } catch {
+        setCheckoutEntryRecoveryNotice('This checkout stays in this tab. Send or clear it before leaving Ecommerce.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [checkoutEntryDraftJson, checkoutEntryHydratedIdentity, checkoutEntryHydrationIdentity, checkoutEntrySourceIdentity, hasActiveCheckoutEntryDraft, scope])
+
+  useEffect(() => {
+    if (hasActiveCheckoutEntryDraft || hasCheckoutEntryRecovery) return
+    const lastWritten = checkoutLastWrittenRecoveryRef.current
+    if (!lastWritten) return
+    const timer = window.setTimeout(() => {
+      try {
+        const key = ecommerceCheckoutEntryRecoveryStorageKey(scope)
+        const raw = window.localStorage.getItem(key)
+        const current = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
+        if (current && ecommerceCheckoutEntryRecoveriesMatch(current, lastWritten)) window.localStorage.removeItem(key)
+        checkoutLastWrittenRecoveryRef.current = null
+      } catch {
+        setCheckoutEntryRecoveryNotice('The cleared checkout recovery could not be removed from this device.')
+      }
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [hasActiveCheckoutEntryDraft, hasCheckoutEntryRecovery, scope])
+
+  useEffect(() => {
+    const recoveryKey = ecommerceCheckoutEntryRecoveryStorageKey(scope)
+    function refreshCheckoutEntryRecovery(event: StorageEvent) {
+      if (event.key !== recoveryKey && event.key !== null) return
+      try {
+        const raw = window.localStorage.getItem(recoveryKey)
+        const restored = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
+        checkoutLastWrittenRecoveryRef.current = null
+        setCheckoutEntryRecoveryState(restored ? { scope, recovery: restored } : null)
+        if (restored) {
+          setCheckoutEntryRecoveryNotice('The unfinished checkout changed in another tab. Review it before continuing.')
+          requestAnimationFrame(() => checkoutRecoveryActionRef.current?.focus({ preventScroll: true }))
+        }
+      } catch {
+        setCheckoutEntryRecoveryState(null)
+      }
+    }
+    window.addEventListener('storage', refreshCheckoutEntryRecovery)
+    return () => window.removeEventListener('storage', refreshCheckoutEntryRecovery)
+  }, [scope])
+
+  useEffect(() => {
+    onRecoveryPendingChange(hasCheckoutEntryRecovery)
+    return () => onRecoveryPendingChange(false)
+  }, [hasCheckoutEntryRecovery, onRecoveryPendingChange])
+
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
   const recoveredCheckoutNotice = latestRequest
     ? Date.parse(latestRequest.quote.expiresAt) > quoteClock
@@ -583,11 +866,146 @@ export function EcommerceBuyingWorkspace({
     ? cartQuantityIssues[firstCartQuantityIssueSku]
     : latestRequestConfirmed && latestRequestOrder
     ? `${latestRequest?.id} is confirmed as ${latestRequestOrder.id}. ${latestRequestEntry?.paymentStatus === 'reconciled' ? 'Payment is reconciled in Shop.' : 'Payment still needs Shop reconciliation.'}`
-    : notice || (latestRequestOrder
+    : notice || checkoutEntryRecoveryNotice || checkoutEntrySourceState.error || (latestRequestOrder
       ? `${latestRequest?.id} is already confirmed as ${latestRequestOrder.id}. Review a new total only to start another order.`
       : recoveredCheckoutNotice || recoveryIssue || (cart.length
         ? 'Review the cart. Shop controls order and payment actions.'
         : 'Add a product to begin.'))
+
+  function checkoutEntryRecoveryIsCurrent(target: EcommerceCheckoutEntryRecoveryState) {
+    try {
+      const raw = window.localStorage.getItem(ecommerceCheckoutEntryRecoveryStorageKey(target.scope))
+      const current = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
+      if (current && ecommerceCheckoutEntryRecoveriesMatch(current, target.recovery)) return true
+      checkoutLastWrittenRecoveryRef.current = null
+      setCheckoutEntryRecoveryState(current ? { scope: target.scope, recovery: current } : null)
+      setCheckoutEntryRecoveryNotice(current
+        ? 'Another tab changed this checkout. Review the newer recovery before continuing.'
+        : 'This checkout was already resolved in another tab.')
+    } catch {
+      setCheckoutEntryRecoveryNotice('Checkout recovery could not be checked. No request, payment, or stock change was created.')
+    }
+    return false
+  }
+
+  function clearCheckoutEntryRecovery(target = checkoutEntryRecoveryState) {
+    if (!target) return true
+    if (!checkoutEntryRecoveryIsCurrent(target)) return false
+    try {
+      window.localStorage.removeItem(ecommerceCheckoutEntryRecoveryStorageKey(target.scope))
+    } catch {
+      setCheckoutEntryRecoveryNotice('Checkout recovery could not be removed. No request, payment, or stock change was created.')
+      return false
+    }
+    checkoutLastWrittenRecoveryRef.current = null
+    if (checkoutEntryRecoveryState === target) setCheckoutEntryRecoveryState(null)
+    return true
+  }
+
+  function clearMatchingCheckoutEntryRecovery(
+    draft = currentCheckoutEntryDraft,
+    source = checkoutEntrySource,
+  ) {
+    if (!draft || !source) return
+    try {
+      const key = ecommerceCheckoutEntryRecoveryStorageKey(scope)
+      const raw = window.localStorage.getItem(key)
+      const current = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
+      if (current && ecommerceCheckoutEntryRecoveryMatchesDraft(current, scope, source, draft)) {
+        window.localStorage.removeItem(key)
+        checkoutLastWrittenRecoveryRef.current = null
+      }
+    } catch {
+      // A retained or newer source-bound recovery cannot create an Ecommerce request.
+    }
+  }
+
+  function quantityIssueForDraft(draft: string, itemName: string, quantityLimit: number) {
+    const quantity = Number(draft)
+    if (quantityLimit < 1) return `${itemName} is no longer available. Remove this line to continue. Your cart and checkout are unchanged.`
+    if (!draft.trim() || !Number.isSafeInteger(quantity) || quantity < 1) {
+      return `Enter a whole number from 1 to ${quantityLimit} for ${itemName}. Your cart and checkout are unchanged.`
+    }
+    if (quantity > quantityLimit) {
+      return `Only ${quantityLimit} ${quantityLimit === 1 ? 'unit is' : 'units are'} available for ${itemName}. Your cart and checkout are unchanged.`
+    }
+    return ''
+  }
+
+  function resumeCheckoutEntryRecovery() {
+    const target = checkoutEntryRecoveryState
+    if (!target
+      || target.scope !== scope
+      || !activeCheckoutEntryRecovery
+      || !checkoutEntryRecoveryReview?.ok) {
+      setCheckoutEntryRecoveryNotice('This checkout cannot resume because the storefront, catalog, or Shop record changed. Discard it to continue.')
+      return
+    }
+    if (!checkoutEntryRecoveryIsCurrent(target)) return
+    const recovered = checkoutEntryRecoveryReview.draft
+    const quantityDrafts = Object.fromEntries(recovered.lines.map((line) => [line.sku, line.quantityDraft]))
+    const quantityIssues = Object.fromEntries(recovered.lines.flatMap((line) => {
+      const item = preview.items.find((candidate) => candidate.sku === line.sku)
+      const quantityLimit = Math.min(99, Math.max(0, currentCatalog.find((candidate) => candidate.sku === line.sku)?.onHand ?? 0))
+      const issue = quantityIssueForDraft(line.quantityDraft, item?.name ?? line.sku, quantityLimit)
+      return issue ? [[line.sku, issue]] : []
+    }))
+    onCartChange(recovered.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
+    setCartQuantityDrafts(quantityDrafts)
+    setCartQuantityIssues(quantityIssues)
+    setRemovedCartLine(recovered.removedCartLine ? {
+      line: { ...recovered.removedCartLine.line },
+      index: recovered.removedCartLine.index,
+      itemName: recovered.removedCartLine.itemName,
+    } : null)
+    setCustomerName(recovered.customerName)
+    setCustomerPhone(recovered.customerPhone)
+    setAddressLine1(recovered.addressLine1)
+    setAddressTownship(recovered.addressTownship)
+    setAddressCity(recovered.addressCity)
+    setDeliveryInstructions(recovered.deliveryInstructions)
+    setFulfilment(recovered.fulfilment)
+    setPaymentAdapter(recovered.paymentAdapter)
+    setPromotionCode(recovered.promotionCode)
+    setOpen(true)
+    setFreshQuoteId('')
+    checkoutLastWrittenRecoveryRef.current = target.recovery
+    setCheckoutEntryRecoveryState(null)
+    setCheckoutEntryRecoveryNotice('Unfinished checkout resumed. No request, order, payment, stock, or message changed.')
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const firstIssueSku = recovered.lines.find((line) => Boolean(quantityIssues[line.sku]))?.sku
+      const focusTarget = recovered.removedCartLine
+        ? cartRemovalUndoRef.current
+        : firstIssueSku
+          ? cartQuantityRefs.current[firstIssueSku]
+          : customerNameRef.current
+      focusTarget?.scrollIntoView({ block: 'center' })
+      focusTarget?.focus({ preventScroll: true })
+      if (focusTarget instanceof HTMLInputElement) focusTarget.select()
+    }))
+  }
+
+  function discardCheckoutEntryRecovery() {
+    if (!activeCheckoutEntryRecovery) return
+    if (!clearCheckoutEntryRecovery()) return
+    setCartQuantityDrafts({})
+    setCartQuantityIssues({})
+    setRemovedCartLine(null)
+    onCartChange([])
+    setCustomerName('')
+    setCustomerPhone('')
+    setAddressLine1('')
+    setAddressTownship('')
+    setAddressCity('Yangon')
+    setDeliveryInstructions('')
+    setFulfilment('pickup')
+    setPaymentAdapter('pay_on_pickup')
+    setPromotionCode('')
+    setOpen(false)
+    setFreshQuoteId('')
+    setCheckoutEntryRecoveryNotice('Unfinished checkout discarded. No request, order, payment, stock, or message changed.')
+    requestAnimationFrame(() => requestAnimationFrame(() => checkoutSummaryRef.current?.focus({ preventScroll: true })))
+  }
 
   function focusCartQuantity(sku: string) {
     requestAnimationFrame(() => {
@@ -602,13 +1020,7 @@ export function EcommerceBuyingWorkspace({
   function updateCart(sku: string, draft: string, itemName: string, quantityLimit: number) {
     setCartQuantityDrafts((current) => ({ ...current, [sku]: draft }))
     const quantity = Number(draft)
-    const issue = quantityLimit < 1
-      ? `${itemName} is no longer available. Remove this line to continue. Your cart and checkout are unchanged.`
-      : !draft.trim() || !Number.isSafeInteger(quantity) || quantity < 1
-        ? `Enter a whole number from 1 to ${quantityLimit} for ${itemName}. Your cart and checkout are unchanged.`
-        : quantity > quantityLimit
-          ? `Only ${quantityLimit} ${quantityLimit === 1 ? 'unit is' : 'units are'} available for ${itemName}. Your cart and checkout are unchanged.`
-          : ''
+    const issue = quantityIssueForDraft(draft, itemName, quantityLimit)
     if (issue) {
       setCartQuantityIssues((current) => ({ ...current, [sku]: issue }))
       setNotice(issue)
@@ -677,6 +1089,7 @@ export function EcommerceBuyingWorkspace({
   }
 
   function beginAnotherOrder() {
+    clearMatchingCheckoutEntryRecovery()
     expireOrderChangeRecovery()
     setCartQuantityDrafts({})
     setCartQuantityIssues({})
@@ -1334,6 +1747,8 @@ export function EcommerceBuyingWorkspace({
       setNotice('Secure checkout identity is unavailable. Nothing was recorded.')
       return
     }
+    const reviewedRecoveryDraft = currentCheckoutEntryDraft
+    const reviewedRecoverySource = checkoutEntrySource
     setQuoteBusy(true)
     setNotice('')
     try {
@@ -1362,6 +1777,7 @@ export function EcommerceBuyingWorkspace({
         && cartMatchesRequest(cart, retained))
       if (retainedMatches && retained && onRecordManagedRequest) {
         await onRecordManagedRequest(retained)
+        clearMatchingCheckoutEntryRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
         setNotice('This order request is in the Company Shop inbox. No order, stock, message, or charge changed.')
@@ -1400,6 +1816,7 @@ export function EcommerceBuyingWorkspace({
       setRecoveryRead({ scope, status: 'ready', issue: '' })
       setFreshQuoteId('')
       if (onRecordManagedRequest) await onRecordManagedRequest(request)
+      clearMatchingCheckoutEntryRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
       recordBehaviorSignal(window.localStorage, {
         event: 'first_value_completed',
         product: 'ecommerce',
@@ -1456,6 +1873,44 @@ export function EcommerceBuyingWorkspace({
     }
   }
 
+  if (activeCheckoutEntryRecovery) {
+    const recoveredDraft = checkoutEntryRecoveryReview?.ok
+      ? checkoutEntryRecoveryReview.draft
+      : activeCheckoutEntryRecovery.draft
+    const recoveredUnits = recoveredDraft.lines.reduce((total, line) => total + line.quantity, 0)
+    return (
+      <section
+        aria-labelledby="ecommerce-checkout-recovery-title"
+        aria-live="polite"
+        className="ecommerce-checkout-entry-recovery"
+        data-state={checkoutEntryRecoveryReview?.ok ? 'ready' : 'conflict'}
+        id="ecommerce-buying-workspace"
+        tabIndex={-1}
+      >
+        <div className="ecommerce-checkout-entry-recovery-copy">
+          <span className="core-eyebrow">Unfinished checkout found</span>
+          <h2 id="ecommerce-checkout-recovery-title">{checkoutEntryRecoveryReview?.ok ? 'Continue this checkout?' : 'This checkout needs a fresh start'}</h2>
+          <p>{checkoutEntryRecoveryReview?.ok
+            ? 'Resume the exact cart, raw quantities, customer details, delivery, payment, promotion, and undo state. Nothing is sent automatically.'
+            : 'The storefront, Shop catalog, or order record changed after this checkout began. Discard the older recovery to protect the current source.'}</p>
+        </div>
+        <div aria-label="Recovered checkout summary" className="ecommerce-checkout-entry-recovery-summary" role="group">
+          <span><small>Cart</small><strong>{recoveredUnits ? `${recoveredUnits} item${recoveredUnits === 1 ? '' : 's'}` : 'No current line'}</strong></span>
+          <span><small>Customer</small><strong>{recoveredDraft.customerName || 'Name not entered'}</strong></span>
+          <span><small>Receive</small><strong>{recoveredDraft.fulfilment === 'delivery' ? recoveredDraft.addressTownship || 'Delivery details unfinished' : 'Pickup'}</strong></span>
+          <span><small>Payment</small><strong>{paymentLabel(recoveredDraft.paymentAdapter)}</strong></span>
+          {recoveredDraft.removedCartLine ? <span><small>Undo</small><strong>{recoveredDraft.removedCartLine.itemName} can be restored</strong></span> : null}
+        </div>
+        <div className="ecommerce-checkout-entry-recovery-actions">
+          <button className="core-button secondary" onClick={discardCheckoutEntryRecovery} ref={checkoutEntryRecoveryReview?.ok ? undefined : checkoutRecoveryActionRef} type="button">Discard</button>
+          {checkoutEntryRecoveryReview?.ok ? <button className="core-button primary" onClick={resumeCheckoutEntryRecovery} ref={checkoutRecoveryActionRef} type="button">Resume checkout</button> : null}
+        </div>
+        {checkoutEntryRecoveryNotice ? <p className="form-notice" role="status">{checkoutEntryRecoveryNotice}</p> : null}
+        <small className="ecommerce-checkout-entry-recovery-boundary">No quote, request, order, stock, payment, delivery, provider, message, or company write happens here. Source: buying revision {activeCheckoutEntryRecovery.source.buyingRevision}.</small>
+      </section>
+    )
+  }
+
   return (
     <>
       <details
@@ -1465,7 +1920,7 @@ export function EcommerceBuyingWorkspace({
         open={open}
         tabIndex={-1}
       >
-        <summary>
+        <summary ref={checkoutSummaryRef} tabIndex={-1}>
           <span><strong>Cart and checkout</strong><small>Review one total before Shop</small></span>
           <b>{cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : latestRequest ? 'Recovered' : 'Empty'}</b>
         </summary>
@@ -1514,7 +1969,7 @@ export function EcommerceBuyingWorkspace({
           <form onSubmit={(event) => void reviewOrder(event)}>
             <label>
               <span>Name</span>
-              <input autoComplete="name" data-checkout-primary-field="true" maxLength={80} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Ma Su" required value={customerName} />
+              <input autoComplete="name" data-checkout-primary-field="true" maxLength={80} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Ma Su" ref={customerNameRef} required value={customerName} />
             </label>
             <label>
               <span>Phone</span>
