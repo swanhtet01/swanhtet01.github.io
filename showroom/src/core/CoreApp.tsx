@@ -9305,10 +9305,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         existingIds.has(id) && 'job_id: exists',
         seenIds.has(id) && 'job_id: repeated',
       ].filter(Boolean) as string[]
+      if (id) seenIds.add(id)
       if (reasons.length) {
         issues.push({ row: rowIndex + 2, id, reasons })
       } else {
-        seenIds.add(id)
         readyJobs.push({ id, line, product, target: String(targetNumber), owner, priority, dueAt })
       }
     }
