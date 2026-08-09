@@ -34,10 +34,11 @@
     {"productId":"plant","workOrderId":"plant-plan-revision-close-recovery","checkpoint":"OPS-180"},
     {"productId":"website","workOrderId":"website-page-remove-recovery","checkpoint":"OPS-181"},
     {"productId":"ecommerce","workOrderId":"ecommerce-reschedule-close-recovery","checkpoint":"OPS-182"},
-    {"productId":"shop","workOrderId":"shop-purchase-order-close-recovery","checkpoint":"OPS-183"}
+    {"productId":"shop","workOrderId":"shop-purchase-order-close-recovery","checkpoint":"OPS-183"},
+    {"productId":"plant","workOrderId":"plant-availability-order-switch-recovery","checkpoint":"OPS-184"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"plant","workOrderId":"plant-availability-order-switch-recovery","priority":100,"status":"ready-local","workOrder":"Plant: recover one unfinished material-and-capacity check after an order switch without recording production.","reason":"Switching orders replaces entered lots, quantities, and centre minutes; recovery must stay source-bound to prevent cross-order evidence."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"website","workOrderId":"website-edit-session-tab-recovery","priority":100,"status":"ready-local","workOrder":"Website: recover one unsaved edit session after a tab closes without saving or publishing.","reason":"Website edits use sessionStorage, so tab closure drops multi-page work; Resume and Discard must stay source-bound and conflict-safe."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
@@ -239,24 +240,9 @@
     {"candidate":"durable-workflows","decision":"evaluate","gate":"Compare Vercel Workflows with the existing Cloud Tasks runtime using one approval-wait use case.","source":"https://vercel.com/docs/workflows"},
     {"candidate":"order-intake-agent","decision":"evaluate","gate":"Adopt only after the existing fixture corpus, server-only structured output, provenance, budget, human review, and zero-side-effect checks pass.","source":"https://platform.openai.com/docs/guides/structured-outputs"},
     {"candidate":"opentelemetry","decision":"adopt-with-managed-mode","gate":"Redact customer content and correlate request, workflow, model, tool, and database operations.","source":"https://vercel.com/docs/tracing/instrumentation"},
-    {
-      "candidate": "dense-data-grid",
-      "decision": "defer",
-      "gate": "Adopt TanStack Table or virtualization only after measured row volume exceeds the native interface.",
-      "source": "https://tanstack.com/table/latest/docs/guide/virtualization"
-    },
-    {
-      "candidate": "realtime-broadcast",
-      "decision": "defer",
-      "gate": "Add only when simultaneous operators create a measured refresh problem.",
-      "source": "https://supabase.com/docs/guides/realtime/authorization"
-    },
-    {
-      "candidate": "second-queue-or-crm",
-      "decision": "reject",
-      "gate": "Reconsider only if the existing relational system of record and worker runtime cannot meet a documented requirement.",
-      "source": "https://supabase.com/docs/guides/queues"
-    }
+    {"candidate":"dense-data-grid","decision":"defer","gate":"Adopt TanStack Table or virtualization only after measured row volume exceeds the native interface.","source":"https://tanstack.com/table/latest/docs/guide/virtualization"},
+    {"candidate":"realtime-broadcast","decision":"defer","gate":"Add only when simultaneous operators create a measured refresh problem.","source":"https://supabase.com/docs/guides/realtime/authorization"},
+    {"candidate":"second-queue-or-crm","decision":"reject","gate":"Reconsider only if the existing relational system of record and worker runtime cannot meet a documented requirement.","source":"https://supabase.com/docs/guides/queues"}
   ],
   "nonGoals": [
     "Commerce or Production as public product names",
