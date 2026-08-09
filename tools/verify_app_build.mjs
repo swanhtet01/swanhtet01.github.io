@@ -3124,15 +3124,15 @@ if (openOrderChangeStart < 0
   || !ecommerceOrderChangeDraftSource.includes('export function createEcommerceOrderChangeOpening')
   || !ecommerceOrderChangeDraftSource.includes('export function closeEcommerceOrderChangeDraft')
   || !ecommerceOrderChangeDraftSource.includes('export function recoverEcommerceOrderChangeDraft')
-  || !ecommerceOrderChangeDraftSource.includes("return { ok: false, reason: 'already_editing' }")
-  || !ecommerceOrderChangeDraftSource.includes("return { ok: false, reason: 'order_inactive' }")
-  || !ecommerceOrderChangeDraftSource.includes("return { ok: false, reason: 'change_pending' }")
-  || !ecommerceOrderChangeDraftSource.includes("return { ok: false, reason: 'order_changed' }")
-  || !ecommerceOrderChangeDraftSource.includes('currentSource.entryEvidence !== closed.source.entryEvidence')
+  || !ecommerceOrderChangeDraftSource.includes("reason: 'already_editing'")
+  || !ecommerceOrderChangeDraftSource.includes("reason: 'order_inactive'")
+  || !ecommerceOrderChangeDraftSource.includes("reason: 'change_pending'")
+  || !ecommerceOrderChangeDraftSource.includes("reason: 'order_changed'")
+  || !ecommerceOrderChangeDraftSource.includes('currentSource.entryEvidence !== source.entryEvidence')
   || !ecommerceBuyingUiSource.includes('const [closedAmendmentDraft, setClosedAmendmentDraft] = useState<EcommerceClosedOrderChangeDraft | null>(null)')
   || !ecommerceBuyingUiSource.includes('const amendmentOpeningRef = useRef<EcommerceOrderChangeOpening | null>(null)')
   || !ecommerceBuyingUiSource.includes('data-ecommerce-order-change-recovery={orderChangeRecovery.draft.orderId}')
-  || !ecommerceBuyingUiSource.includes('correctionDraft || orderChangeRecovery?.ok)')
+  || !ecommerceBuyingUiSource.includes('const orderHelpOpen = orderHelpDraftOpen || Boolean(orderChangeRecovery?.ok || rescheduleRecovery?.ok)')
   || !ecommerceBuyingUiSource.includes('onClick={reopenAmendmentRequest} ref={amendmentRecoveryRef}')
   || !ecommerceBuyingUiSource.includes('ref={amendmentModeRef}')
   || !openOrderChangeAction.includes('createEcommerceOrderChangeOpening(draft, entry)')
@@ -3149,6 +3149,44 @@ if (openOrderChangeStart < 0
   || !ecommerceCssSource.includes('.ecommerce-order-change-recovery')
   || !/\.ecommerce-order-change-recovery button\s*\{[^}]*min-height:\s*44px;/s.test(ecommerceCssSource)
   || !/\.ecommerce-order-change-recovery button\s*\{[^}]*width:\s*100%;/s.test(ecommerceCssSource)) fail('ecommerce_closed_order_change_recovery_contract_missing')
+const closeRescheduleStart = ecommerceBuyingUiSource.indexOf('function closeRescheduleRequest')
+const reopenRescheduleStart = ecommerceBuyingUiSource.indexOf('function reopenRescheduleRequest')
+const openRescheduleInShopStart = ecommerceBuyingUiSource.indexOf('async function openRescheduleInShop')
+const submitRescheduleStart = ecommerceBuyingUiSource.indexOf('async function submitRescheduleRequest')
+const submitCancellationStart = ecommerceBuyingUiSource.indexOf('async function submitCancellationRequest')
+const openRescheduleAction = ecommerceBuyingUiSource.slice(rescheduleOrderChangeStart, closeRescheduleStart)
+const closeRescheduleAction = ecommerceBuyingUiSource.slice(closeRescheduleStart, reopenRescheduleStart)
+const reopenRescheduleAction = ecommerceBuyingUiSource.slice(reopenRescheduleStart, openRescheduleInShopStart)
+const submitRescheduleAction = ecommerceBuyingUiSource.slice(submitRescheduleStart, submitCancellationStart)
+const rescheduleRecoveryForbiddenActions = ['saveEcommerceOrderReschedule', 'saveEcommerceOrderRequestV2', 'buildEcommerceCheckoutQuote', 'buildEcommerceOrderRequestV2', 'buildEcommerceOrderRescheduleIntent', 'onRecordManagedRequest', 'onOpenReschedule', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'reserveCommerceOrder', 'settleCommerce', 'chargePayment', 'authorizePayment']
+if (closeRescheduleStart < 0
+  || reopenRescheduleStart < 0
+  || openRescheduleInShopStart < 0
+  || submitRescheduleStart < 0
+  || submitCancellationStart < 0
+  || !ecommerceOrderChangeDraftSource.includes("contract: 'supermega.ecommerce.closed_order_reschedule_draft.v1'")
+  || !ecommerceOrderChangeDraftSource.includes('export function createEcommerceOrderRescheduleOpening')
+  || !ecommerceOrderChangeDraftSource.includes('export function closeEcommerceOrderRescheduleDraft')
+  || !ecommerceOrderChangeDraftSource.includes('export function recoverEcommerceOrderRescheduleDraft')
+  || !ecommerceOrderChangeDraftSource.includes('(promisedAtRequired && !order.promisedAt)')
+  || !ecommerceBuyingUiSource.includes('const [closedRescheduleDraft, setClosedRescheduleDraft] = useState<EcommerceClosedOrderRescheduleDraft | null>(null)')
+  || !ecommerceBuyingUiSource.includes('const rescheduleOpeningRef = useRef<EcommerceOrderRescheduleOpening | null>(null)')
+  || !ecommerceBuyingUiSource.includes('data-ecommerce-order-reschedule-recovery={rescheduleRecovery.draft.orderId}')
+  || !ecommerceBuyingUiSource.includes('onClick={reopenRescheduleRequest} ref={rescheduleRecoveryRef}')
+  || !ecommerceBuyingUiSource.includes('ref={rescheduleDateRef}')
+  || !ecommerceBuyingUiSource.includes('orderChangeRecovery?.ok || rescheduleRecovery?.ok')
+  || !openRescheduleAction.includes('createEcommerceOrderRescheduleOpening(draft, entry)')
+  || openRescheduleAction.indexOf('createEcommerceOrderRescheduleOpening(draft, entry)') > openRescheduleAction.indexOf('setRescheduleDraft(draft)')
+  || !closeRescheduleAction.includes('closeEcommerceOrderRescheduleDraft(rescheduleDraft, rescheduleOpeningRef.current)')
+  || closeRescheduleAction.indexOf('closeEcommerceOrderRescheduleDraft(rescheduleDraft, rescheduleOpeningRef.current)') > closeRescheduleAction.indexOf('setRescheduleDraft(null)')
+  || !reopenRescheduleAction.includes('recoverEcommerceOrderRescheduleDraft(null, closedRescheduleDraft, activeCustomerOrders, orderChangeConflictIds)')
+  || !reopenRescheduleAction.includes('setRescheduleDraft(recovery.draft)')
+  || !reopenRescheduleAction.includes('rescheduleDateRef.current?.focus')
+  || !submitRescheduleAction.includes('setClosedRescheduleDraft(null)')
+  || !submitRescheduleAction.includes('rescheduleOpeningRef.current = null')
+  || rescheduleRecoveryForbiddenActions.some((marker) => closeRescheduleAction.includes(marker) || reopenRescheduleAction.includes(marker) || ecommerceOrderChangeDraftSource.includes(marker))
+  || !/\.ecommerce-order-change-recovery button\s*\{[^}]*min-height:\s*44px;/s.test(ecommerceCssSource)
+  || !/\.ecommerce-order-change-recovery button\s*\{[^}]*width:\s*100%;/s.test(ecommerceCssSource)) fail('ecommerce_closed_order_reschedule_recovery_contract_missing')
 const storefrontSaveStart = ecommerceSource.indexOf('async function saveCurrentStorefront')
 const storefrontSaveEnd = ecommerceSource.indexOf('function discardStorefrontChanges', storefrontSaveStart)
 const storefrontSaveAction = ecommerceSource.slice(storefrontSaveStart, storefrontSaveEnd)
@@ -3354,7 +3392,7 @@ if (addToCartStart < 0
   || ecommerceBuyingUiSource.includes('handoffConfirmed')
   || ecommerceBuyingUiSource.includes('Needs owner check')
   || ecommerceBuyingUiSource.includes('Managed Shop inbox only.')
-  || !ecommerceBuyingUiSource.includes('Shop handles orders, stock, delivery, refunds, and payment review.')
+  || !ecommerceBuyingUiSource.includes('Shop controls order and payment actions.')
   || ecommerceBuyingUiSource.includes('Shop remains the only order, stock, delivery, refund, and payment authority.')
   || ecommerceBuyingUiSource.includes('Review current Shop values before handoff.')
   || !ecommerceBuyingUiSource.includes('<small>Receive order</small>')
@@ -15597,6 +15635,65 @@ async function verifyStorefrontRuntime() {
     const malformedOrderChangeRecovery = orderChangeModel.recoverEcommerceOrderChangeDraft(null, { ...closedOrderChange, unexpected: true }, confirmedTimeline, [])
     buyingAssert(!malformedOrderChangeRecovery.ok && malformedOrderChangeRecovery.reason === 'invalid_recovery',
       'ecommerce_malformed_order_change_recovery_accepted')
+    const rescheduleDraft = {
+      orderId: 'ORD-ECOMMERCE-1',
+      requestedPromisedAt: '2026-07-25T14:30',
+      reason: '',
+    }
+    const rescheduleOpening = orderChangeModel.createEcommerceOrderRescheduleOpening(rescheduleDraft, confirmedTimeline[0])
+    buyingAssert(rescheduleOpening
+      && rescheduleOpening.source.orderId === rescheduleDraft.orderId
+      && rescheduleOpening.source.requestId === buyingRequest.id
+      && rescheduleOpening.draft !== rescheduleDraft,
+    'ecommerce_reschedule_opening_not_exactly_source_bound')
+    buyingAssert(orderChangeModel.closeEcommerceOrderRescheduleDraft(rescheduleDraft, rescheduleOpening) === null,
+      'ecommerce_unchanged_reschedule_became_recoverable')
+    const editedRescheduleDraft = {
+      ...rescheduleDraft,
+      requestedPromisedAt: '2026-07-26T09:45',
+      reason: '  Customer needs the exact later delivery window.  ',
+    }
+    const closedReschedule = orderChangeModel.closeEcommerceOrderRescheduleDraft(editedRescheduleDraft, rescheduleOpening)
+    buyingAssert(closedReschedule
+      && JSON.stringify(closedReschedule.draft) === JSON.stringify(editedRescheduleDraft)
+      && closedReschedule.draft !== editedRescheduleDraft,
+    'ecommerce_edited_reschedule_not_closed_as_exact_copy')
+    const recoveredReschedule = orderChangeModel.recoverEcommerceOrderRescheduleDraft(null, closedReschedule, confirmedTimeline, [])
+    buyingAssert(recoveredReschedule.ok
+      && JSON.stringify(recoveredReschedule.draft) === JSON.stringify(editedRescheduleDraft)
+      && recoveredReschedule.draft !== closedReschedule.draft,
+    'ecommerce_closed_reschedule_not_recovered_exactly')
+    buyingAssert(recoveredReschedule.ok
+      && orderChangeModel.closeEcommerceOrderRescheduleDraft(recoveredReschedule.draft, recoveredReschedule.opening) === null,
+    'ecommerce_reopened_unchanged_reschedule_created_second_recovery')
+    const editingRescheduleRecovery = orderChangeModel.recoverEcommerceOrderRescheduleDraft(editedRescheduleDraft, closedReschedule, confirmedTimeline, [])
+    buyingAssert(!editingRescheduleRecovery.ok && editingRescheduleRecovery.reason === 'already_editing',
+      'ecommerce_reschedule_recovery_replaced_active_editor')
+    const pendingRescheduleRecovery = orderChangeModel.recoverEcommerceOrderRescheduleDraft(null, closedReschedule, confirmedTimeline, ['ORD-ECOMMERCE-1'])
+    buyingAssert(!pendingRescheduleRecovery.ok && pendingRescheduleRecovery.reason === 'change_pending',
+      'ecommerce_reschedule_recovered_over_pending_shop_change')
+    const changedRescheduleRecovery = orderChangeModel.recoverEcommerceOrderRescheduleDraft(null, closedReschedule, [{
+      ...confirmedTimeline[0],
+      order: { ...confirmedTimeline[0].order, promisedAt: '2026-07-24T10:01:00.000Z' },
+    }], [])
+    buyingAssert(!changedRescheduleRecovery.ok && changedRescheduleRecovery.reason === 'order_changed',
+      'ecommerce_reschedule_recovered_against_changed_promise_evidence')
+    const inactiveRescheduleRecovery = orderChangeModel.recoverEcommerceOrderRescheduleDraft(null, closedReschedule, [{
+      ...confirmedTimeline[0],
+      stage: 'preparing',
+      order: { ...confirmedTimeline[0].order, status: 'preparing' },
+    }], [])
+    buyingAssert(!inactiveRescheduleRecovery.ok && inactiveRescheduleRecovery.reason === 'order_inactive',
+      'ecommerce_reschedule_recovered_after_preparation_started')
+    const missingPromiseRecovery = orderChangeModel.recoverEcommerceOrderRescheduleDraft(null, closedReschedule, [{
+      ...confirmedTimeline[0],
+      order: { ...confirmedTimeline[0].order, promisedAt: null },
+    }], [])
+    buyingAssert(!missingPromiseRecovery.ok && missingPromiseRecovery.reason === 'order_inactive',
+      'ecommerce_reschedule_recovered_without_current_promise')
+    const malformedRescheduleRecovery = orderChangeModel.recoverEcommerceOrderRescheduleDraft(null, { ...closedReschedule, unexpected: true }, confirmedTimeline, [])
+    buyingAssert(!malformedRescheduleRecovery.ok && malformedRescheduleRecovery.reason === 'invalid_recovery',
+      'ecommerce_malformed_reschedule_recovery_accepted')
     const preparingOrderState = linkedOrderState && commerce.advanceCommerceOrder(linkedOrderState, 'ORD-ECOMMERCE-1', 'confirmed', {
       actionId: 'ACT-ECOMMERCE-PREPARING-1',
       capturedAt: '2026-07-24T09:20:00.000Z',

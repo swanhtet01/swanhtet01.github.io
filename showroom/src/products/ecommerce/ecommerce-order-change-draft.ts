@@ -44,6 +44,35 @@ export type EcommerceOrderChangeRecovery =
       reason: 'already_editing' | 'invalid_recovery' | 'order_inactive' | 'order_changed' | 'change_pending'
     }>
 
+export type EcommerceOrderRescheduleDraft = Readonly<{
+  orderId: string
+  requestedPromisedAt: string
+  reason: string
+}>
+
+export type EcommerceOrderRescheduleOpening = Readonly<{
+  contract: 'supermega.ecommerce.order_reschedule_opening.v1'
+  source: EcommerceOrderChangeSource
+  draft: EcommerceOrderRescheduleDraft
+}>
+
+export type EcommerceClosedOrderRescheduleDraft = Readonly<{
+  contract: 'supermega.ecommerce.closed_order_reschedule_draft.v1'
+  source: EcommerceOrderChangeSource
+  draft: EcommerceOrderRescheduleDraft
+}>
+
+export type EcommerceOrderRescheduleRecovery =
+  | Readonly<{
+      ok: true
+      draft: EcommerceOrderRescheduleDraft
+      opening: EcommerceOrderRescheduleOpening
+    }>
+  | Readonly<{
+      ok: false
+      reason: 'already_editing' | 'invalid_recovery' | 'order_inactive' | 'order_changed' | 'change_pending'
+    }>
+
 const DRAFT_KEYS = [
   'addressCity',
   'addressLine1',
@@ -119,6 +148,19 @@ function cloneDraft(value: unknown): EcommerceOrderChangeDraft | null {
   }
 }
 
+function cloneRescheduleDraft(value: unknown): EcommerceOrderRescheduleDraft | null {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['orderId', 'reason', 'requestedPromisedAt'])
+    || !boundedString(value.orderId, 160, true)
+    || !boundedString(value.requestedPromisedAt, 40)
+    || !boundedString(value.reason, 300)) return null
+  return {
+    orderId: value.orderId,
+    requestedPromisedAt: value.requestedPromisedAt,
+    reason: value.reason,
+  }
+}
+
 function canonicalValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map((entry) => canonicalValue(entry))
   if (!isRecord(value)) return value
@@ -164,53 +206,113 @@ function cloneSource(value: unknown): EcommerceOrderChangeSource | null {
   }
 }
 
-function cloneOpening(value: unknown): EcommerceOrderChangeOpening | null {
+type OrderDraft = Readonly<{ orderId: string }>
+type DraftClone<T extends OrderDraft> = (value: unknown) => T | null
+
+function cloneEnvelope<T extends OrderDraft>(value: unknown, contract: string, clone: DraftClone<T>) {
   if (!isRecord(value)
     || !hasExactKeys(value, ['contract', 'draft', 'source'])
-    || value.contract !== 'supermega.ecommerce.order_change_opening.v1') return null
+    || value.contract !== contract) return null
   const source = cloneSource(value.source)
-  const draft = cloneDraft(value.draft)
+  const draft = clone(value.draft)
   if (!source || !draft || source.orderId !== draft.orderId) return null
   return { contract: value.contract, source, draft }
 }
 
-function cloneClosed(value: unknown): EcommerceClosedOrderChangeDraft | null {
-  if (!isRecord(value)
-    || !hasExactKeys(value, ['contract', 'draft', 'source'])
-    || value.contract !== 'supermega.ecommerce.closed_order_change_draft.v1') return null
-  const source = cloneSource(value.source)
-  const draft = cloneDraft(value.draft)
-  if (!source || !draft || source.orderId !== draft.orderId) return null
-  return { contract: value.contract, source, draft }
+function createOpening<T extends OrderDraft>(
+  contract: string,
+  draft: T,
+  entry: CommerceStorefrontOrderTimelineEntry,
+  clone: DraftClone<T>,
+  promisedAtRequired = false,
+) {
+  const safeDraft = clone(draft)
+  const source = sourceFromEntry(entry)
+  if (!safeDraft || !source || safeDraft.orderId !== source.orderId || (promisedAtRequired && !entry.order?.promisedAt)) return null
+  return { contract, source, draft: safeDraft }
+}
+
+function closeDraft<T extends OrderDraft>(
+  contract: string,
+  openingContract: string,
+  draft: T,
+  opening: unknown,
+  clone: DraftClone<T>,
+) {
+  const safeDraft = clone(draft)
+  const safeOpening = cloneEnvelope(opening, openingContract, clone)
+  if (!safeDraft || !safeOpening || safeDraft.orderId !== safeOpening.source.orderId
+    || JSON.stringify(safeDraft) === JSON.stringify(safeOpening.draft)) return null
+  return { contract, source: safeOpening.source, draft: safeDraft }
+}
+
+function recoverSource(
+  source: EcommerceOrderChangeSource,
+  currentEntries: CommerceStorefrontOrderTimelineEntry[],
+  conflictingOrderIds: readonly string[],
+  promisedAtRequired: boolean,
+) {
+  if (!Array.isArray(currentEntries) || !Array.isArray(conflictingOrderIds)) {
+    return { ok: false as const, reason: 'invalid_recovery' as const }
+  }
+  const entry = currentEntries.find((candidate) => candidate.order?.id === source.orderId)
+  const order = entry?.order
+  if (!entry
+    || !order
+    || order.status !== 'confirmed'
+    || order.paymentStatus !== 'pending'
+    || order.refundStatus !== 'none'
+    || !order.lines?.length
+    || (promisedAtRequired && !order.promisedAt)
+    || entry.request.schema !== 'supermega.ecommerce.order_request.v2'
+    || !entry.request.customerProfile
+    || order.sourceRecordId !== entry.request.id) return { ok: false as const, reason: 'order_inactive' as const }
+  if (conflictingOrderIds.some((orderId) => orderId === order.id)) {
+    return { ok: false as const, reason: 'change_pending' as const }
+  }
+  const currentSource = sourceFromEntry(entry)
+  if (!currentSource
+    || currentSource.requestId !== source.requestId
+    || currentSource.entryEvidence !== source.entryEvidence) return { ok: false as const, reason: 'order_changed' as const }
+  return { ok: true as const, source: currentSource }
+}
+
+function recoverDraft<T extends OrderDraft>(
+  currentDraft: T | null,
+  closedDraft: unknown,
+  currentEntries: CommerceStorefrontOrderTimelineEntry[],
+  conflictingOrderIds: readonly string[],
+  closedContract: string,
+  openingContract: string,
+  clone: DraftClone<T>,
+  promisedAtRequired = false,
+) {
+  if (currentDraft) return { ok: false as const, reason: 'already_editing' as const }
+  const closed = cloneEnvelope(closedDraft, closedContract, clone)
+  if (!closed) return { ok: false as const, reason: 'invalid_recovery' as const }
+  const sourceRecovery = recoverSource(closed.source, currentEntries, conflictingOrderIds, promisedAtRequired)
+  if (!sourceRecovery.ok) return sourceRecovery
+  const draft = clone(closed.draft)
+  if (!draft) return { ok: false as const, reason: 'invalid_recovery' as const }
+  return {
+    ok: true as const,
+    draft,
+    opening: { contract: openingContract, source: sourceRecovery.source, draft: clone(draft) as T },
+  }
 }
 
 export function createEcommerceOrderChangeOpening(
   draft: EcommerceOrderChangeDraft,
   entry: CommerceStorefrontOrderTimelineEntry,
 ): EcommerceOrderChangeOpening | null {
-  const safeDraft = cloneDraft(draft)
-  const source = sourceFromEntry(entry)
-  if (!safeDraft || !source || safeDraft.orderId !== source.orderId) return null
-  return {
-    contract: 'supermega.ecommerce.order_change_opening.v1',
-    source,
-    draft: safeDraft,
-  }
+  return createOpening('supermega.ecommerce.order_change_opening.v1', draft, entry, cloneDraft) as EcommerceOrderChangeOpening | null
 }
 
 export function closeEcommerceOrderChangeDraft(
   draft: EcommerceOrderChangeDraft,
   opening: EcommerceOrderChangeOpening,
 ): EcommerceClosedOrderChangeDraft | null {
-  const safeDraft = cloneDraft(draft)
-  const safeOpening = cloneOpening(opening)
-  if (!safeDraft || !safeOpening || safeDraft.orderId !== safeOpening.source.orderId) return null
-  if (JSON.stringify(safeDraft) === JSON.stringify(safeOpening.draft)) return null
-  return {
-    contract: 'supermega.ecommerce.closed_order_change_draft.v1',
-    source: safeOpening.source,
-    draft: safeDraft,
-  }
+  return closeDraft('supermega.ecommerce.closed_order_change_draft.v1', 'supermega.ecommerce.order_change_opening.v1', draft, opening, cloneDraft) as EcommerceClosedOrderChangeDraft | null
 }
 
 export function recoverEcommerceOrderChangeDraft(
@@ -219,36 +321,28 @@ export function recoverEcommerceOrderChangeDraft(
   currentEntries: CommerceStorefrontOrderTimelineEntry[],
   conflictingOrderIds: readonly string[],
 ): EcommerceOrderChangeRecovery {
-  if (currentDraft) return { ok: false, reason: 'already_editing' }
-  const closed = cloneClosed(closedDraft)
-  if (!closed || !Array.isArray(currentEntries) || !Array.isArray(conflictingOrderIds)) {
-    return { ok: false, reason: 'invalid_recovery' }
-  }
-  const entry = currentEntries.find((candidate) => candidate.order?.id === closed.source.orderId)
-  const order = entry?.order
-  if (!entry
-    || !order
-    || order.status !== 'confirmed'
-    || order.paymentStatus !== 'pending'
-    || order.refundStatus !== 'none'
-    || !order.lines?.length
-    || entry.request.schema !== 'supermega.ecommerce.order_request.v2'
-    || !entry.request.customerProfile
-    || order.sourceRecordId !== entry.request.id) return { ok: false, reason: 'order_inactive' }
-  if (conflictingOrderIds.some((orderId) => orderId === order.id)) return { ok: false, reason: 'change_pending' }
-  const currentSource = sourceFromEntry(entry)
-  if (!currentSource
-    || currentSource.requestId !== closed.source.requestId
-    || currentSource.entryEvidence !== closed.source.entryEvidence) return { ok: false, reason: 'order_changed' }
-  const draft = cloneDraft(closed.draft)
-  if (!draft) return { ok: false, reason: 'invalid_recovery' }
-  return {
-    ok: true,
-    draft,
-    opening: {
-      contract: 'supermega.ecommerce.order_change_opening.v1',
-      source: currentSource,
-      draft: cloneDraft(draft) as EcommerceOrderChangeDraft,
-    },
-  }
+  return recoverDraft(currentDraft, closedDraft, currentEntries, conflictingOrderIds, 'supermega.ecommerce.closed_order_change_draft.v1', 'supermega.ecommerce.order_change_opening.v1', cloneDraft) as EcommerceOrderChangeRecovery
+}
+
+export function createEcommerceOrderRescheduleOpening(
+  draft: EcommerceOrderRescheduleDraft,
+  entry: CommerceStorefrontOrderTimelineEntry,
+): EcommerceOrderRescheduleOpening | null {
+  return createOpening('supermega.ecommerce.order_reschedule_opening.v1', draft, entry, cloneRescheduleDraft, true) as EcommerceOrderRescheduleOpening | null
+}
+
+export function closeEcommerceOrderRescheduleDraft(
+  draft: EcommerceOrderRescheduleDraft,
+  opening: EcommerceOrderRescheduleOpening,
+): EcommerceClosedOrderRescheduleDraft | null {
+  return closeDraft('supermega.ecommerce.closed_order_reschedule_draft.v1', 'supermega.ecommerce.order_reschedule_opening.v1', draft, opening, cloneRescheduleDraft) as EcommerceClosedOrderRescheduleDraft | null
+}
+
+export function recoverEcommerceOrderRescheduleDraft(
+  currentDraft: EcommerceOrderRescheduleDraft | null,
+  closedDraft: EcommerceClosedOrderRescheduleDraft,
+  currentEntries: CommerceStorefrontOrderTimelineEntry[],
+  conflictingOrderIds: readonly string[],
+): EcommerceOrderRescheduleRecovery {
+  return recoverDraft(currentDraft, closedDraft, currentEntries, conflictingOrderIds, 'supermega.ecommerce.closed_order_reschedule_draft.v1', 'supermega.ecommerce.order_reschedule_opening.v1', cloneRescheduleDraft, true) as EcommerceOrderRescheduleRecovery
 }
