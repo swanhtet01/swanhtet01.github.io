@@ -20,6 +20,7 @@ type ShopTodayProps = {
   modules: ShopTodayModule[]
   nextAction: string
   nextDetail: string
+  nextLabel: string
   nextTo: string
 }
 
@@ -32,7 +33,7 @@ const capabilityGroups = [
   ['Control', 'Daily close, settlement review, accounting export, audit'],
 ] as const
 
-export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDetail, nextTo }: ShopTodayProps) {
+export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDetail, nextLabel, nextTo }: ShopTodayProps) {
   const financeAttention = modules.find((module) => module.label === 'Finance controls' && module.tone === 'attention')
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Next Shop action">
@@ -42,7 +43,7 @@ export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDeta
         <p>{nextDetail}</p>
       </div>
       <div className="shop-today-actions">
-        <Link className="core-button primary" to={nextTo}>Open next step</Link>
+        <Link className="core-button primary" to={nextTo}>{nextLabel}</Link>
         {financeAttention ? <Link className="core-button" to={financeAttention.to}>Open finance</Link> : catalogReady ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
       </div>
     </section>

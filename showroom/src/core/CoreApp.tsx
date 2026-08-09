@@ -3185,7 +3185,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   })
   const shopAgentJob = shopNextAction.job
   const shopAgentReason = shopNextAction.reason
-  const shopAgentPath = shopNextAction.path
+  const shopAgentPath = shopNextAction.stage === 'Finish order queue'
+    ? `/shop/?tab=orders#${commerceOrderTargetId(actionOrders[0].id)}`
+    : shopNextAction.path
   const shopAutopilotStage = shopNextAction.stage
   const shopAutopilotNextAction = shopNextAction.nextAction
   const shopAutopilotRows = [
@@ -6499,12 +6501,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
   ]
   const shopTodayModules = [
-    { label: 'Sell & POS', detail: 'Counter, cart, payment choice, tax and receipt evidence', status: `${commerce.items.length} items`, to: '/shop/?tab=counter' },
-    { label: 'Orders & fulfilment', detail: 'Channel intake, allocation, promise, delivery and returns', status: actionOrders.length ? `${actionOrders.length} need action` : `${openOrders.length} open`, to: '/shop/?tab=orders', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
-    { label: 'Inventory & purchasing', detail: 'Locations, lots, ATP, counts, suppliers and receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
-    { label: 'Customers & after-sales', detail: 'Credit, receivables, appointments, support and warranty trail', status: afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history' },
+    { label: 'Sell & POS', detail: 'Counter sales, payments, receipts', status: `${commerce.items.length} items`, to: '/shop/?tab=counter' },
+    { label: 'Orders & fulfilment', detail: 'Orders, fulfilment, delivery, returns', status: actionOrders.length ? `${actionOrders.length} need action` : `${openOrders.length} open`, to: '/shop/?tab=orders', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
+    { label: 'Inventory & purchasing', detail: 'Stock, lots, purchasing, receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
+    { label: 'Customers & after-sales', detail: 'Customers, credit, service, support', status: afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history' },
     { label: 'Finance controls', detail: 'Payments and close', status: paymentReview.length ? `${paymentReview.length} review` : latestClose ? 'Close recorded' : 'Ready to close', to: paymentReview.length ? `/shop/?tab=orders#${commerceOrderTargetId(paymentReview[0].id)}` : '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length || closePreview ? 'attention' as const : 'ready' as const },
-    { label: 'Online channels', detail: 'Website and Ecommerce requests enter one Shop authority', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
+    { label: 'Online channels', detail: 'Website and Ecommerce requests', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
   ]
   const stockAttentionRows = stockRows.filter(({ item }) => item.onHand <= item.reorderAt)
   const stockCatalogRows = stockRows.filter(({ item }) => item.onHand > item.reorderAt)
@@ -6535,7 +6537,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {commerceBoundary}
-    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextTo={shopAgentPath} /></Suspense>
+    <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextLabel={shopAutopilotNextAction} nextTo={shopAgentPath} /></Suspense>
     {actionGate}
   </div>
 
