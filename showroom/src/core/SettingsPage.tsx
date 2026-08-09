@@ -131,6 +131,7 @@ import {
   type PlantIndustryPackId,
 } from './plant-industry-packs'
 import { provisionLocalShopIndustryPack, readLocalShopIndustryPackId } from './product-onboarding-runtime'
+import { activateLocalWebsiteWorkingSample, type WebsiteStarterTemplateId } from '../products/website/website-starter'
 import {
   LOCAL_WORKSPACE_BACKUP_MAX_BYTES,
   LOCAL_WORKSPACE_RESTORE_POINT_KEY,
@@ -1250,7 +1251,7 @@ export function SettingsPage() {
     window.requestAnimationFrame(() => document.getElementById('client-data-setup')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
-  function installDemoBlueprint(blueprint: ClientDemoBlueprint, origin: 'created' | 'loaded') {
+  async function installDemoBlueprint(blueprint: ClientDemoBlueprint, origin: 'created' | 'loaded') {
     let shopPackNotice = ''
     if (origin === 'created' && blueprint.products.some((product) => product.product === 'commerce')) {
       try {
@@ -1264,6 +1265,20 @@ export function SettingsPage() {
     if (origin === 'created' && blueprint.products.some((product) => product.product === 'production')) {
       savePlantIndustryPackId(blueprint.client.plantIndustryPackId, window.localStorage)
       plantPackNotice = ` ${plantIndustryPack(blueprint.client.plantIndustryPackId).name} Plant setup is prepared.`
+    }
+    // The launchpad links straight to /website/, bypassing product onboarding, so
+    // provision the client's site here too or that entry shows the untouched starter.
+    let websitePackNotice = ''
+    const websiteSelection = blueprint.products.find((product) => product.product === 'website')
+    if (origin === 'created' && websiteSelection) {
+      const activation = await activateLocalWebsiteWorkingSample({
+        templateId: websiteSelection.templateId as WebsiteStarterTemplateId,
+        businessName: blueprint.client.workspace,
+        capturedAt: new Date().toISOString(),
+      })
+      websitePackNotice = activation.ok
+        ? ` ${templateFor('website', websiteSelection.templateId).label} Website sample is prepared.`
+        : ` ${activation.error}`
     }
     // Retain the client's chosen template for every selected product, not only the
     // first: without this the Website and Ecommerce onboarding pages fall back to
@@ -1298,7 +1313,7 @@ export function SettingsPage() {
     }
     setNotice(origin === 'loaded'
       ? `${blueprint.products.length}-product setup loaded. Client records, product packs, and progress were not changed; prepare the data again on this device.`
-      : `${blueprint.products.length}-product demo kit ready.${shopPackNotice}${plantPackNotice} Prepare data or open a product.`)
+      : `${blueprint.products.length}-product demo kit ready.${shopPackNotice}${plantPackNotice}${websitePackNotice} Prepare data or open a product.`)
   }
 
   async function loadDemoKit(file: File | null) {
@@ -1307,7 +1322,7 @@ export function SettingsPage() {
       if (file.size < 1 || file.size > CLIENT_DEMO_KIT_MAX_BYTES) throw new Error('Choose a SuperMega setup kit smaller than 128 KB.')
       const kit = restoreClientDemoKit(JSON.parse(await file.text()))
       if (!kit) throw new Error('This setup kit is invalid or has been changed.')
-      installDemoBlueprint(kit.blueprint, 'loaded')
+      await installDemoBlueprint(kit.blueprint, 'loaded')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The setup kit could not be loaded.')
     }
@@ -1320,7 +1335,7 @@ export function SettingsPage() {
       if (file.size < 1 || file.size > CLIENT_DEMO_PREPARATION_MAX_BYTES) throw new Error('Choose a private SuperMega package smaller than 5 MB.')
       const artifact = await restoreClientDemoPreparationArtifact(JSON.parse(await file.text()))
       if (!artifact) throw new Error('This private package is invalid, unsafe, or has been changed.')
-      installDemoBlueprint(clientDemoPreparationBlueprint(artifact), 'loaded')
+      await installDemoBlueprint(clientDemoPreparationBlueprint(artifact), 'loaded')
       setPreparedArtifact(artifact)
       setPreparedConfirmation('')
       setPreparedBlockedProduct(null)
@@ -1419,7 +1434,7 @@ export function SettingsPage() {
     }
   }
 
-  function createDemoKit() {
+  async function createDemoKit() {
     try {
       const blueprint = buildClientDemoBlueprint({
         workspace: setup.workspace,
@@ -1429,7 +1444,7 @@ export function SettingsPage() {
         plantIndustryPackId,
         selections: selectedDemoEntries.map(([product, templateId]) => ({ product, templateId })),
       })
-      installDemoBlueprint(blueprint, 'created')
+      await installDemoBlueprint(blueprint, 'created')
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The client demo kit could not be prepared.')
     }
