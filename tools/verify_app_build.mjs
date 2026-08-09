@@ -498,7 +498,7 @@ if (!indexSource.includes('<title>SuperMega</title>')
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Demo mode', 'Name your workspace', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Demo mode', 'Name your workspace', 'Request managed trial', 'Create order', 'Record stock count', 'Close business day', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
@@ -5978,6 +5978,40 @@ if (!commerceSource.includes("export type CommerceStockMovementKind = 'opening' 
 const commerceTabsContract = coreSource.slice(coreSource.indexOf('const commerceTabs'), coreSource.indexOf('const productionTabs'))
 if (!commerceTabsContract.includes("{ id: 'today', label: 'Today' }") || !commerceTabsContract.includes("{ id: 'counter', label: 'Sell' }") || !commerceTabsContract.includes("{ id: 'orders', label: 'Orders' }") || !commerceTabsContract.includes("{ id: 'inventory', label: 'Stock' }") || (commerceTabsContract.match(/^\s*\{ id:/gm) || []).length !== 4) fail('commerce_today_sell_orders_stock_contract_changed')
 const counterConfirmationContract = coreSource.slice(coreSource.indexOf('function AccountableActionGate'), coreSource.indexOf('function ActionHistory'))
+const expectedShopActionSubmitLabels = {
+  order_create: 'Create order',
+  order_status: 'Advance fulfilment',
+  order_cancel: 'Cancel order',
+  order_cancellation_review: 'Decline cancellation',
+  order_return: 'Record return',
+  order_support_open: 'Open support case',
+  order_support_reopen: 'Reopen support case',
+  order_support_service: 'Record support step',
+  order_support_resolve: 'Resolve support case',
+  order_correction: 'Record correction',
+  payment_reconcile: 'Reconcile payment',
+  collection_contact: 'Record collection follow-up',
+  refund_settle: 'Record refund settlement',
+  catalog_item_create: 'Add catalog item',
+  catalog_item_update: 'Update catalog item',
+  inventory_receipt: 'Record inventory receipt',
+  inventory_count: 'Record stock count',
+  purchase_order_create: 'Create purchase order',
+  purchase_budget_approve: 'Approve buying limits',
+  supplier_sourcing_approve: 'Approve supplier award',
+  purchase_requisition_approve: 'Approve requisition',
+  purchase_order_receive: 'Record purchase update',
+  purchase_order_cancel: 'Cancel outstanding units',
+  supplier_return_authorize: 'Authorize supplier return',
+  supplier_credit_record: 'Record supplier credit',
+  daily_close: 'Close business day',
+  tax_configuration: 'Save tax configuration',
+  account_mapping: 'Save accounting mapping',
+  customer_credit_policy: 'Save credit policy',
+  promotion_policy: 'Save promotion policy',
+  shipping_policy: 'Save delivery policy',
+  payment_policy: 'Save payment policy',
+}
 const expectedPlantActionSubmitLabels = {
   production_job: 'Create job',
   production_job_schedule: 'Update job plan',
@@ -5996,25 +6030,63 @@ const expectedPlantActionSubmitLabels = {
   maintenance_complete: 'Complete maintenance',
   production_shift_close: 'Close shift',
 }
+const expectedActionSubmitLabels = { ...expectedShopActionSubmitLabels, ...expectedPlantActionSubmitLabels }
 const actionSubmitLabelBody = coreSource.match(/const accountableActionSubmitLabels:[^{]+ = \{([\s\S]*?)\n\}/)?.[1] ?? ''
 const actionSubmitLabels = Object.fromEntries([...actionSubmitLabelBody.matchAll(/^\s+([a-z_]+): '([^']+)',?$/gm)].map((match) => [match[1], match[2]]))
+const actionKindBody = workspaceRuntimeSource.match(/export type ActionKind =([\s\S]*?)\n\nexport type AccountableAction/)?.[1] ?? ''
+const declaredActionKinds = [...actionKindBody.matchAll(/\| '([^']+)'/g)].map((match) => match[1]).sort()
+const plantActionKindBody = coreSource.match(/type PlantActionKind =([\s\S]*?)\n\ntype ShopActionKind/)?.[1] ?? ''
+const declaredPlantActionKinds = [...plantActionKindBody.matchAll(/\| '([^']+)'/g)].map((match) => match[1]).sort()
+const declaredPlantActionKindSet = new Set(declaredPlantActionKinds)
+const declaredShopActionKinds = declaredActionKinds.filter((kind) => !declaredPlantActionKindSet.has(kind))
+const expectedShopActionKinds = Object.keys(expectedShopActionSubmitLabels).sort()
 const expectedPlantActionKinds = Object.keys(expectedPlantActionSubmitLabels).sort()
-const actualPlantActionKinds = Object.keys(actionSubmitLabels).filter((kind) => kind !== 'order_create').sort()
-const plantActionQueueContract = coreSource.slice(coreSource.indexOf('function ProductionPage'), coreSource.indexOf('function JobList'))
-const queuedPlantActionKinds = new Set([...plantActionQueueContract.matchAll(/kind:\s*'([^']+)'/g)].map((match) => match[1]))
-queuedPlantActionKinds.add('production_output').add('production_scrap')
-const plantActionSubmitLabelsComplete = expectedPlantActionKinds.join(',') === actualPlantActionKinds.join(',')
-  && expectedPlantActionKinds.length === queuedPlantActionKinds.size
-  && expectedPlantActionKinds.every((kind) => queuedPlantActionKinds.has(kind) && actionSubmitLabels[kind] === expectedPlantActionSubmitLabels[kind])
+const expectedActionKinds = Object.keys(expectedActionSubmitLabels).sort()
+const actualActionKinds = Object.keys(actionSubmitLabels).sort()
+const actionSubmitLabelsComplete = expectedShopActionKinds.length === 32
+  && expectedPlantActionKinds.length === 16
+  && expectedActionKinds.length === 48
+  && declaredShopActionKinds.join(',') === expectedShopActionKinds.join(',')
+  && declaredPlantActionKinds.join(',') === expectedPlantActionKinds.join(',')
+  && declaredActionKinds.join(',') === expectedActionKinds.join(',')
+  && actualActionKinds.join(',') === expectedActionKinds.join(',')
+  && expectedActionKinds.every((kind) => actionSubmitLabels[kind] === expectedActionSubmitLabels[kind])
+const actionSubmitResolverContract = coreSource.slice(coreSource.indexOf('function accountableActionSubmitLabel'), coreSource.indexOf('function AccountableActionGate'))
+const requiredDynamicShopSubmitLabels = [
+  "if (action.kind === 'order_status')",
+  "if (action.after === 'preparing') return 'Start preparing'",
+  "if (action.after === 'ready') return 'Mark order ready'",
+  "if (action.after === 'completed') return 'Complete order'",
+  "if (action.kind === 'order_cancel')",
+  "return 'Cancel and prepare reschedule'",
+  "return 'Cancel and prepare replacement'",
+  "if (action.kind === 'order_support_service')",
+  "return 'Acknowledge support case'",
+  "return 'Escalate support case'",
+  "return 'Record first response ready'",
+  "if (action.kind === 'order_correction')",
+  "return 'Record credit note'",
+  "return 'Record debit note'",
+  "if (action.kind === 'purchase_order_receive')",
+  "return 'Record purchase receipt'",
+  "return 'Record supplier invoice'",
+  "return 'Mark invoice payable-ready'",
+  "return 'Place credit hold'",
+  "return action.summary.startsWith('Stop ') ? 'Stop promotion' : 'Set promotion policy'",
+  "return action.summary.startsWith('Stop ') ? 'Stop delivery zone' : 'Set delivery zone'",
+  "return action.summary.startsWith('Stop ') ? 'Stop payment method' : 'Set payment method'",
+  'return accountableActionSubmitLabels[action.kind]',
+]
 if (!counterConfirmationContract.includes('isCounterConfirmation && !authenticatedActor')
   || !counterConfirmationContract.includes('Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.')
   || !counterConfirmationContract.includes("const isOrderCreation = action.kind === 'order_create'")
-  || !coreSource.includes('const accountableActionSubmitLabels: Partial<Record<ActionKind, string>> & Record<PlantActionKind, string> = {')
-  || !coreSource.includes("order_create: 'Create order'")
-  || !plantActionSubmitLabelsComplete
+  || !coreSource.includes('type ShopActionKind = Exclude<ActionKind, PlantActionKind>')
+  || !coreSource.includes('const accountableActionSubmitLabels: Record<ShopActionKind | PlantActionKind, string> = {')
+  || !actionSubmitLabelsComplete
+  || requiredDynamicShopSubmitLabels.some((fragment) => !actionSubmitResolverContract.includes(fragment))
   || !counterConfirmationContract.includes("isCounterConfirmation ? 'Review counter order' : isOrderCreation ? 'Confirm order' : 'Confirm'")
-  || !counterConfirmationContract.includes("accountableActionSubmitLabels[action.kind] ?? 'Confirm change'")
-  || counterConfirmationContract.includes("isOrderCreation ? 'Complete sale' : 'Confirm change'")
+  || !counterConfirmationContract.includes('accountableActionSubmitLabel(action)')
+  || counterConfirmationContract.includes('Confirm change')
   || !coreCssSource.includes('.counter-local-boundary')) fail('shop_counter_local_boundary_missing')
 const shopCounterContract = coreSource.slice(coreSource.indexOf('function ShopCounter'), coreSource.indexOf('function localCommerceOrderDraftScope'))
 const shopCounterRouteContract = coreSource.slice(coreSource.indexOf("if (tab === 'counter')"), coreSource.indexOf("if (tab === 'orders')"))
@@ -21204,8 +21276,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 101 KB allowance for four-product recovery and exact Plant action language; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_901_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 104 KB allowance for four-product recovery and exhaustive Shop/Plant action language; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_904_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

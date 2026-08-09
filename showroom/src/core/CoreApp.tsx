@@ -886,8 +886,41 @@ type PlantActionKind =
   | 'maintenance_complete'
   | 'production_shift_close'
 
-const accountableActionSubmitLabels: Partial<Record<ActionKind, string>> & Record<PlantActionKind, string> = {
+type ShopActionKind = Exclude<ActionKind, PlantActionKind>
+
+const accountableActionSubmitLabels: Record<ShopActionKind | PlantActionKind, string> = {
   order_create: 'Create order',
+  order_status: 'Advance fulfilment',
+  order_cancel: 'Cancel order',
+  order_cancellation_review: 'Decline cancellation',
+  order_return: 'Record return',
+  order_support_open: 'Open support case',
+  order_support_reopen: 'Reopen support case',
+  order_support_service: 'Record support step',
+  order_support_resolve: 'Resolve support case',
+  order_correction: 'Record correction',
+  payment_reconcile: 'Reconcile payment',
+  collection_contact: 'Record collection follow-up',
+  refund_settle: 'Record refund settlement',
+  catalog_item_create: 'Add catalog item',
+  catalog_item_update: 'Update catalog item',
+  inventory_receipt: 'Record inventory receipt',
+  inventory_count: 'Record stock count',
+  purchase_order_create: 'Create purchase order',
+  purchase_budget_approve: 'Approve buying limits',
+  supplier_sourcing_approve: 'Approve supplier award',
+  purchase_requisition_approve: 'Approve requisition',
+  purchase_order_receive: 'Record purchase update',
+  purchase_order_cancel: 'Cancel outstanding units',
+  supplier_return_authorize: 'Authorize supplier return',
+  supplier_credit_record: 'Record supplier credit',
+  daily_close: 'Close business day',
+  tax_configuration: 'Save tax configuration',
+  account_mapping: 'Save accounting mapping',
+  customer_credit_policy: 'Save credit policy',
+  promotion_policy: 'Save promotion policy',
+  shipping_policy: 'Save delivery policy',
+  payment_policy: 'Save payment policy',
   production_job: 'Create job',
   production_job_schedule: 'Update job plan',
   production_job_close: 'Close job short',
@@ -904,6 +937,37 @@ const accountableActionSubmitLabels: Partial<Record<ActionKind, string>> & Recor
   maintenance_start: 'Start maintenance',
   maintenance_complete: 'Complete maintenance',
   production_shift_close: 'Close shift',
+}
+
+function accountableActionSubmitLabel(action: PendingAccountableAction) {
+  if (action.kind === 'order_status') {
+    if (action.after === 'preparing') return 'Start preparing'
+    if (action.after === 'ready') return 'Mark order ready'
+    if (action.after === 'completed') return 'Complete order'
+  }
+  if (action.kind === 'order_cancel') {
+    if (action.summary.includes('rescheduled replacement')) return 'Cancel and prepare reschedule'
+    if (action.summary.includes('prepare replacement')) return 'Cancel and prepare replacement'
+  }
+  if (action.kind === 'order_support_service') {
+    if (action.summary.startsWith('Acknowledge ')) return 'Acknowledge support case'
+    if (action.summary.startsWith('Escalate ')) return 'Escalate support case'
+    if (action.summary.startsWith('Record first response ready ')) return 'Record first response ready'
+  }
+  if (action.kind === 'order_correction') {
+    if (action.after.startsWith('credit ')) return 'Record credit note'
+    if (action.after.startsWith('debit ')) return 'Record debit note'
+  }
+  if (action.kind === 'purchase_order_receive') {
+    if (action.summary.startsWith('Receive ')) return 'Record purchase receipt'
+    if (action.summary.startsWith('Record supplier invoice ')) return 'Record supplier invoice'
+    if (action.summary.startsWith('Mark supplier invoice ')) return 'Mark invoice payable-ready'
+  }
+  if (action.kind === 'customer_credit_policy' && action.summary.startsWith('Hold ')) return 'Place credit hold'
+  if (action.kind === 'promotion_policy') return action.summary.startsWith('Stop ') ? 'Stop promotion' : 'Set promotion policy'
+  if (action.kind === 'shipping_policy') return action.summary.startsWith('Stop ') ? 'Stop delivery zone' : 'Set delivery zone'
+  if (action.kind === 'payment_policy') return action.summary.startsWith('Stop ') ? 'Stop payment method' : 'Set payment method'
+  return accountableActionSubmitLabels[action.kind]
 }
 
 function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm, returnFocus }: {
@@ -972,7 +1036,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
-      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : accountableActionSubmitLabels[action.kind] ?? 'Confirm change'}</button></div>
+      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : accountableActionSubmitLabel(action)}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
   </dialog>

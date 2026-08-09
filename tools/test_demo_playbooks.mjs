@@ -97,6 +97,7 @@ const requiredSections = [
 
 for (const file of files) {
   const text = read(`${playbookDir}/${file}`)
+  check(!text.includes('`Confirm change`'), `${file}:stale_generic_action_label`)
   const tokens = [...text.matchAll(/`([^`\n]+)`/g)].map((match) => match[1])
   check(tokens.length >= 5, `${file}:token_floor:${tokens.length}`)
   for (const token of tokens) check(tokenOk(token), `${file}:unknown_token:${token}`)

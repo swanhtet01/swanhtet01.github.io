@@ -24,7 +24,7 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 3. The panel advances to materials: headline `Record materials used`. Record the shift's material usage — this is the trace the owner reviews later.
 4. Point at the metrics row: `Active jobs`, `Shift output`, `Problems & quality`, `Maintenance`, `Materials used`, `Shift close` — one glance tells a supervisor what is open.
 5. Open the `Problems` tab (`/plant/?tab=control`) — quality, equipment, downtime, and maintenance containment. Show that open problems block the owner close, which is the accountability argument.
-6. Return to `Jobs`. With output and materials recorded and gates clear, the panel offers `Close this shift`; press `Close shift`. The accountable gate opens (`Confirm change`) asking for the responsible name, reason, and evidence reference — read it aloud.
+6. Return to `Jobs`. With output and materials recorded and gates clear, the panel offers `Close this shift`; press `Close shift`. The accountable gate keeps `Close shift` as the exact final action and asks for the responsible name, reason, and evidence reference — read it aloud.
 7. Confirm the close and show the recorded shift evidence, then `Plan next job` as the natural next-morning step.
 
 ## 4. Objection handling: the boundary
@@ -35,7 +35,7 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 
 "What do I get free, and what is paid?" — approved framing only: `Free product. Managed intelligence.`, `Run the products free. Add managed company intelligence when the workflow proves value.`, free lane `Operate without a stripped-down plan.` with `No account or model call required`; managed gate `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.` No prices — the public site carries none.
 
-"Who is accountable for a bad entry?" — every change goes through the `Confirm change` gate with a named person, reason, and evidence reference, and the trust line applies: `Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.`
+"Who is accountable for a bad entry?" — every change goes through an exact final-action gate — such as `Record output`, `Record material use`, or `Close shift` — with a named person, reason, and evidence reference, and the trust line applies: `Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.`
 
 ## 5. The close
 
