@@ -38,10 +38,11 @@
     {"productId":"plant","workOrderId":"plant-availability-order-switch-recovery","checkpoint":"OPS-184"},
     {"productId":"website","workOrderId":"website-edit-session-tab-recovery","checkpoint":"OPS-185"},
     {"productId":"ecommerce","workOrderId":"ecommerce-storefront-edit-tab-recovery","checkpoint":"OPS-186"},
-    {"productId":"shop","workOrderId":"shop-counter-sale-tab-recovery","checkpoint":"OPS-187"}
+    {"productId":"shop","workOrderId":"shop-counter-sale-tab-recovery","checkpoint":"OPS-187"},
+    {"productId":"plant","workOrderId":"plant-output-entry-tab-recovery","checkpoint":"OPS-188"}
   ],
   "localImprovementQueue": [
-    {"contract":"supermega.product-improvement-authority.v1","productId":"plant","workOrderId":"plant-output-entry-tab-recovery","priority":100,"status":"ready-local","workOrder":"Plant: recover one unfinished output entry after reload or tab closure without recording output, material use, or production evidence.","reason":"Selected job, quantity, good or scrap choice, shift, and output-panel state are memory-only; Resume/Discard must bind the exact active job and current Plant state."}
+    {"contract":"supermega.product-improvement-authority.v1","productId":"website","workOrderId":"website-inquiry-entry-tab-recovery","priority":100,"status":"ready-local","workOrder":"Website: recover one unfinished inquiry after reload without creating a lead or message.","reason":"Inquiry fields and page are React-only until Add inquiry; Resume/Discard must bind Website and lead-ledger state."}
   ],
   "agentOperatingModel": {
     "mode": "bounded-demand-driven",
