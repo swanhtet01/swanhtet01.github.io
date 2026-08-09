@@ -20,6 +20,7 @@ const STORAGE = `${ROOT}/showroom/src/core/local-workspace-storage.ts`
 const INVENTORY = `${ROOT}/showroom/src/core/shop-inventory-foundation.ts`
 const STOREFRONT = `${ROOT}/showroom/src/products/ecommerce/storefront-draft.ts`
 const SCHEDULING = `${ROOT}/showroom/src/core/shop-service-scheduling.ts`
+const INTAKE = `${ROOT}/showroom/src/core/channel-order-intake.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
 const MUTATIONS = [
@@ -70,6 +71,9 @@ const MUTATIONS = [
     '.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }',
     '.catalog-import-table { max-height: 340px; overflow: auto; background: #fff; }',
     'a fixed light surface reverts to hardcoded white'],
+  ['test_channel_order_intake.mjs', INTAKE,
+    '    if (matches.length === 0) {', '    if (false) {',
+    'an order detail quoted from a message that never contained it is accepted'],
   ['test_shop_service_scheduling.mjs', SCHEDULING,
     "    && booking.status !== 'cancelled'", '    && true',
     'a cancelled appointment keeps blocking its slot'],
