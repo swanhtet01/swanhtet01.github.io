@@ -4426,7 +4426,12 @@ export function validateCommerceState(value: unknown): CommerceState {
         value.inventoryFoundation as ShopInventoryState,
         value.items as CommerceItem[],
       )) throw new Error('available-to-promise stock does not match the Shop catalog')
-      const inventory = projectShopInventory(value.inventoryFoundation as ShopInventoryState, itemSkus)
+      // Sorted, because projectShopInventory requires canonical SKU order and itemSkus is
+      // built in CATALOG order. Every other caller sorts; this one did not, so validating any
+      // workspace that had an inventory foundation threw for any catalog whose SKUs were not
+      // already alphabetical -- which is essentially every real shop. The effect was that
+      // location setup could never be confirmed.
+      const inventory = projectShopInventory(value.inventoryFoundation as ShopInventoryState, [...itemSkus].sort())
       for (const decision of supplierSourcingDecisionById.values()) {
         for (const quote of decision.quotes) {
           const vendor = inventory.vendors.find((candidate) => candidate.name === quote.supplier)
