@@ -522,9 +522,14 @@ if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
   || !ecommerceSource.includes("'Start sample order'")
   || !ecommerceSource.includes("'Start customer order'")
   || !ecommerceSource.includes("'Enter checkout details'")
+  || !ecommerceSource.includes('const retainedCompletedCheckout = currentRequestReceiptRetained')
+  || !ecommerceSource.includes("&& customerRequestState === 'confirmed'")
+  || !ecommerceSource.includes("? 'Order completed in Shop'")
+  || !ecommerceSource.includes("? 'View completed order'")
+  || !ecommerceSource.includes('if (retainedCompletedCheckout)')
   || !ecommerceSource.includes("'Sample ready'")
   || !ecommerceSource.includes('if (storefrontSetupRequired)')
-  || !ecommerceSource.includes("['2. Cart', checkoutEntryRecoveryPending ? 'Resume available' : ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed'")
+  || !ecommerceSource.includes("['2. Cart', checkoutEntryRecoveryPending ? 'Resume available' : retainedCompletedCheckout ? 'Completed'")
   || !ecommerceSource.includes("['3. Shop', pendingManagedRequests.length")
   || !ecommerceSource.includes("? `${pendingManagedRequests.length} to review`")
   || !ecommerceSource.includes("? `${ecommerceActiveOrderCount} in progress`")
@@ -3375,6 +3380,25 @@ const closeOrderChangeAction = ecommerceBuyingUiSource.slice(closeOrderChangeSta
 const reopenOrderChangeAction = ecommerceBuyingUiSource.slice(reopenOrderChangeStart, rescheduleOrderChangeStart)
 const beginAnotherOrderAction = ecommerceBuyingUiSource.slice(beginAnotherOrderStart, changeFulfilmentStart)
 const reorderForOrderChangeAction = ecommerceBuyingUiSource.slice(reorderForOrderChangeStart, orderStageLabelStart)
+if (!ecommerceBuyingLifecycleSource.includes("export const ECOMMERCE_REQUEST_RECEIPT_DISMISSAL_SCHEMA = 'supermega.ecommerce.request_receipt_dismissal.v1' as const")
+  || !ecommerceBuyingLifecycleSource.includes('export function ecommerceRequestReceiptDismissalStorageKey(scope: string)')
+  || !ecommerceBuyingLifecycleSource.includes('export function readEcommerceRequestReceiptDismissal(')
+  || !ecommerceBuyingLifecycleSource.includes('export function saveEcommerceRequestReceiptDismissal(')
+  || !ecommerceBuyingLifecycleSource.includes("exactObject(value, 'request receipt dismissal', ['schema', 'scope', 'requestId'])")
+  || !ecommerceBuyingLifecycleSource.includes("if (storage.getItem(key) !== raw) throw new Error('Request receipt dismissal write could not be confirmed.')")
+  || !ecommerceBuyingUiSource.includes('dismissedRequestId = readEcommerceRequestReceiptDismissal(window.localStorage, scope)')
+  || !ecommerceBuyingUiSource.includes('if (dismissedRequestId === latest.id)')
+  || !beginAnotherOrderAction.includes('saveEcommerceRequestReceiptDismissal(window.localStorage, scope, latestRequest.id)')
+  || beginAnotherOrderAction.indexOf('saveEcommerceRequestReceiptDismissal(window.localStorage, scope, latestRequest.id)') > beginAnotherOrderAction.indexOf('onCartChange([])')
+  || !beginAnotherOrderAction.includes("setCustomerName('')")
+  || !beginAnotherOrderAction.includes("setCustomerPhone('')")
+  || !beginAnotherOrderAction.includes("setAddressLine1('')")
+  || !beginAnotherOrderAction.includes("setAddressTownship('')")
+  || !beginAnotherOrderAction.includes("setDeliveryInstructions('')")
+  || !beginAnotherOrderAction.includes("setFulfilment('pickup')")
+  || !beginAnotherOrderAction.includes("setPaymentAdapter('pay_on_pickup')")
+  || !beginAnotherOrderAction.includes("setPromotionCode('')")
+  || !beginAnotherOrderAction.includes('setOpen(false)')) fail('ecommerce_request_receipt_dismissal_contract_missing')
 const orderChangeForbiddenActions = ['saveEcommerceOrderAmendment', 'saveEcommerceOrderRequestV2', 'buildEcommerceCheckoutQuote', 'buildEcommerceOrderRequestV2', 'buildEcommerceOrderAmendmentIntent', 'onRecordManagedRequest', 'onOpenAmendment', 'fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'localStorage', 'sessionStorage', 'setItem(', 'removeItem(', 'reserveCommerceOrder', 'settleCommerce', 'chargePayment', 'authorizePayment']
 if (openOrderChangeStart < 0
   || closeOrderChangeStart < 0
@@ -3647,9 +3671,15 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('currentPaymentPolicies: checkoutPaymentPolicies')
   || !ecommerceBuyingUiSource.includes('Browser-local sample payment. No charge or payment-provider request is made.')
   || !ecommerceBuyingUiSource.includes('const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)')
+  || !ecommerceBuyingUiSource.includes("const latestRequestCompleted = latestRequestEntry?.stage === 'completed'")
   || !ecommerceBuyingUiSource.includes("latestRequestConfirmed || !quoteCurrent")
   || !ecommerceBuyingUiSource.includes('Confirmed in Shop')
+  || !ecommerceBuyingUiSource.includes('Completed in Shop')
   || !ecommerceBuyingUiSource.includes('Shop recorded the order and stock reservation.')
+  || !ecommerceBuyingUiSource.includes('Shop completed fulfilment and retained the accountable order.')
+  || !ecommerceBuyingUiSource.includes('onOpenShopOrder(latestRequestOrder.id)')
+  || !ecommerceBuyingUiSource.includes('View completed Shop order')
+  || !ecommerceBuyingUiSource.includes('data-current="true" ref={requestReceiptRef} tabIndex={-1}')
   || !ecommerceBuyingUiSource.includes('Start another order')
   || !ecommerceBuyingUiSource.includes('Payment still needs Shop reconciliation.')
   || !ecommerceBuyingUiSource.includes('is already confirmed as')
@@ -3665,7 +3695,9 @@ if (addToCartStart < 0
   || !coreSource.includes('restoreBrowserLocalSamplePaymentPolicies(')
   || !ecommerceBuyingUiSource.includes('Request for {latestRequest.customerReference}')
   || !ecommerceBuyingUiSource.includes('const customerRequestState = deriveEcommerceCustomerRequestState({')
-  || !ecommerceBuyingUiSource.includes('useEffect(() => onRequestStateChange(customerRequestState)')
+  || !ecommerceBuyingUiSource.includes('onRequestStateChange(customerRequestState)')
+  || !ecommerceBuyingUiSource.includes('onRequestCurrentChange(latestRequestConfirmed)')
+  || !ecommerceBuyingUiSource.includes('onRequestCurrentChange: (current: boolean) => void')
   || !ecommerceBuyingUiSource.includes('onRequestStateChange: (state: EcommerceCustomerRequestState) => void')
   || !ecommerceBuyingUiSource.includes('const replacingCurrentRequest = Boolean(latestRequest && !latestRequestOrder && quoteNextAction)')
   || !ecommerceBuyingUiSource.includes('Request sent')
@@ -6345,7 +6377,9 @@ if (!shopCounterContract.includes('Tap an item to add it')
   || coreSource.includes("`${record.id} applied and added to the action history.`")
   || !coreSource.includes("returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''")
   || !coreSource.includes('const correctionOrderIndex = correctionDraft ? orders.findIndex')
-  || !coreSource.includes('returnOrderIndex >= 0 ? returnOrderIndex : correctionOrderIndex >= 0 ? correctionOrderIndex : supportOrderIndex')
+  || !coreSource.includes('const highlightedOrderIndex = highlightedTargetId')
+  || !coreSource.includes('const focusedOrderIndex = returnOrderIndex >= 0')
+  || !coreSource.includes(': highlightedOrderIndex')
   || !coreSource.includes('open={Boolean(returnDraft || correctionDraft || supportDraft')
   || !coreSource.includes("const paymentDueAt = paymentTermsDays === 0\n      ? undefined")
   || !coreSource.includes("...(paymentDueAt ? { paymentDueAt } : {})")
@@ -6574,6 +6608,12 @@ if (!commercePageContract.includes("if (tab === 'orders' && commerceLocation.has
   || !commerceOrdersContract.includes('data-close-primary')
   || !commerceOrdersContract.includes("open={commerceLocation.hash === '#shop-close-controls' || undefined}")) fail('commerce_close_deep_link_recovery_missing')
 if (!commercePageContract.includes("if (tab === 'orders' && commerceLocation.hash.startsWith('#shop-order-'))")
+  || !commercePageContract.includes("target?.closest<HTMLDetailsElement>('details')")
+  || !commercePageContract.includes('if (archive) archive.open = true')
+  || !coreSource.includes("highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''}")
+  || !coreSource.includes('const highlightedOrderIndex = highlightedTargetId')
+  || !coreSource.includes('highlightedOrderIndex >= 0')
+  || !coreSource.includes("data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId}")
   || !commercePageContract.includes("target?.querySelector<HTMLElement>('.order-row-actions .core-button.primary:not(:disabled)') ?? target")
   || !commercePageContract.includes("action?.scrollIntoView({ block: 'center' })")
   || !commercePageContract.includes('action?.focus({ preventScroll: true })')) fail('commerce_finance_attention_routing_missing')
@@ -16854,6 +16894,46 @@ async function verifyStorefrontRuntime() {
       ecommerceBuyingRuntimeChecks += 1
     }
     const buyingScope = 'ecommerce:runtime-client'
+    const dismissedRequestId = 'ECR-12345678-1234-4ABC-8ABC-1234567890AB'
+    const receiptDismissalValues = new Map()
+    const receiptDismissalStorage = {
+      getItem: (key) => receiptDismissalValues.get(key) ?? null,
+      setItem: (key, value) => receiptDismissalValues.set(key, value),
+    }
+    buyingAssert(
+      buyingModel.saveEcommerceRequestReceiptDismissal(receiptDismissalStorage, buyingScope, dismissedRequestId) === dismissedRequestId
+        && buyingModel.readEcommerceRequestReceiptDismissal(receiptDismissalStorage, buyingScope) === dismissedRequestId,
+      'ecommerce_request_receipt_dismissal_roundtrip_failed',
+    )
+    buyingAssert(
+      buyingModel.ecommerceRequestReceiptDismissalStorageKey(buyingScope)
+        !== buyingModel.ecommerceRequestReceiptDismissalStorageKey('ecommerce:other-client')
+        && buyingModel.readEcommerceRequestReceiptDismissal(receiptDismissalStorage, 'ecommerce:other-client') === '',
+      'ecommerce_request_receipt_dismissal_scope_not_isolated',
+    )
+    receiptDismissalValues.set(buyingModel.ecommerceRequestReceiptDismissalStorageKey(buyingScope), '{broken')
+    let malformedReceiptDismissalRejected = false
+    try { buyingModel.readEcommerceRequestReceiptDismissal(receiptDismissalStorage, buyingScope) } catch { malformedReceiptDismissalRejected = true }
+    buyingAssert(malformedReceiptDismissalRejected, 'ecommerce_malformed_request_receipt_dismissal_accepted')
+    receiptDismissalValues.set(buyingModel.ecommerceRequestReceiptDismissalStorageKey(buyingScope), JSON.stringify({
+      schema: 'supermega.ecommerce.request_receipt_dismissal.v1',
+      scope: 'ecommerce:other-client',
+      requestId: dismissedRequestId,
+    }))
+    let crossScopeReceiptDismissalRejected = false
+    try { buyingModel.readEcommerceRequestReceiptDismissal(receiptDismissalStorage, buyingScope) } catch { crossScopeReceiptDismissalRejected = true }
+    buyingAssert(crossScopeReceiptDismissalRejected, 'ecommerce_cross_scope_request_receipt_dismissal_accepted')
+    let invalidReceiptRequestIdRejected = false
+    try { buyingModel.saveEcommerceRequestReceiptDismissal(receiptDismissalStorage, buyingScope, 'ECR-NOT-VALID') } catch { invalidReceiptRequestIdRejected = true }
+    buyingAssert(invalidReceiptRequestIdRejected, 'ecommerce_invalid_request_receipt_dismissal_id_accepted')
+    let unconfirmedReceiptDismissalWriteRejected = false
+    try {
+      buyingModel.saveEcommerceRequestReceiptDismissal({
+        getItem: () => null,
+        setItem: () => undefined,
+      }, buyingScope, dismissedRequestId)
+    } catch { unconfirmedReceiptDismissalWriteRejected = true }
+    buyingAssert(unconfirmedReceiptDismissalWriteRejected, 'ecommerce_unconfirmed_request_receipt_dismissal_write_accepted')
     const seededBuyingCommerce = commerce.createSeedCommerce(Date.parse('2026-07-24T08:00:00.000Z'))
     const quoteNow = Date.parse('2026-07-24T09:00:00.000Z')
     const freshQuoteState = {

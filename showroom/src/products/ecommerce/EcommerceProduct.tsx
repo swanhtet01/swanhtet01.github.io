@@ -309,6 +309,7 @@ export function EcommerceProduct() {
   })
   const [buyingCart, setBuyingCart] = useState<EcommerceCartLine[]>([])
   const [checkoutEntryRecoveryPending, setCheckoutEntryRecoveryPending] = useState(false)
+  const [currentRequestReceiptRetained, setCurrentRequestReceiptRetained] = useState(false)
   const [customerRequestState, setCustomerRequestState] = useState<EcommerceCustomerRequestState>('idle')
   const [requestInboxFilter, setRequestInboxFilter] = useState<RequestInboxFilter>('all')
   const [orderImportText, setOrderImportText] = useState('')
@@ -1851,6 +1852,10 @@ export function EcommerceProduct() {
     setDraftNotice('Ecommerce go-live file downloaded. No product, customer, payment, delivery, stock, Shop, or company account state changed.')
   }
   const ecommerceTodayCartUnits = buyingCart.reduce((total, line) => total + line.quantity, 0)
+  const retainedCompletedCheckout = currentRequestReceiptRetained
+    && customerRequestState === 'confirmed'
+    && ecommerceCompletedOrderCount > 0
+    && ecommerceTodayCartUnits > 0
   const customerQuoteNextAction = ecommerceQuoteNextAction(customerRequestState, ecommerceTodayCartUnits)
   const customerRequestNeedsQuoteReview = Boolean(customerQuoteNextAction)
   const aiDeskRows = [
@@ -1869,6 +1874,8 @@ export function EcommerceProduct() {
       ? 'View the customer request receipt'
     : ecommerceActiveOrderCount
       ? 'Continue Ecommerce order in Shop'
+    : retainedCompletedCheckout
+      ? 'Review completed Ecommerce order'
     : importNeeded
       ? 'Prepare catalog import'
       : storefrontSetupRequired
@@ -1888,6 +1895,8 @@ export function EcommerceProduct() {
       ? 'The customer request is retained separately from the Shop operator review.'
     : ecommerceActiveOrderCount
       ? `${ecommerceActiveOrderCount} Ecommerce order${ecommerceActiveOrderCount === 1 ? '' : 's'} now use the Shop-owned fulfilment record.`
+    : retainedCompletedCheckout
+      ? 'The retained checkout belongs to a completed Shop order and cannot create a duplicate request.'
     : importNeeded
       ? 'The order desk needs a real Shop catalog before the store can sell.'
       : storefrontSetupRequired
@@ -1907,6 +1916,8 @@ export function EcommerceProduct() {
       ? 'The Shop operator confirms stock, promise, payment, and delivery.'
     : ecommerceActiveOrderCount
       ? 'Shop remains authoritative for fulfilment, payment, cancellation, and returns.'
+    : retainedCompletedCheckout
+      ? 'View the completed Shop record or explicitly start another order; Ecommerce does not rewrite the result.'
     : importNeeded
       ? 'Review the imported catalog before going live.'
       : storefrontSetupRequired
@@ -1937,6 +1948,8 @@ export function EcommerceProduct() {
               ? 'View request receipt'
             : ecommerceActiveOrderCount
               ? 'Continue fulfilment'
+            : retainedCompletedCheckout
+              ? 'Review completed order'
             : buyingReady
               ? 'Ready for customer orders'
               : 'Check setup'
@@ -1969,6 +1982,8 @@ export function EcommerceProduct() {
               ? 'Request sent to Shop'
             : ecommerceActiveOrderCount
               ? `${ecommerceActiveOrderCount} order${ecommerceActiveOrderCount === 1 ? '' : 's'} in progress`
+              : retainedCompletedCheckout
+                ? 'Order completed in Shop'
               : ecommerceTodayCartUnits
                 ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'} ready for checkout`
                 : managedIdentity
@@ -1992,6 +2007,8 @@ export function EcommerceProduct() {
           ? 'No charge or stock change happens until Shop confirms the order.'
         : ecommerceActiveOrderCount
           ? 'Shop owns fulfilment for this order. The storefront stays ready for the next customer.'
+          : retainedCompletedCheckout
+            ? 'Shop completed fulfilment and payment. View the exact receipt or start another customer order.'
           : managedIdentity
             ? 'Customers can browse and build a cart. Shop remains in control of payment, stock, delivery, and returns.'
             : sampleStore ? 'Add one sample item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.' : 'Add one customer item and review pickup, delivery, and payment choices. Nothing reaches Shop until confirmation.'
@@ -2015,6 +2032,8 @@ export function EcommerceProduct() {
               ? 'View request receipt'
             : ecommerceActiveOrderCount
               ? 'Open Shop'
+            : retainedCompletedCheckout
+              ? 'View completed order'
             : ecommerceTodayCartUnits
               ? 'Enter checkout details'
               : managedIdentity
@@ -2022,7 +2041,7 @@ export function EcommerceProduct() {
                 : sampleStore ? 'Start sample order' : 'Start customer order'
   const ecommerceTodayMetrics = [
     ['1. Store', savedDraftIsCurrent ? 'Ready' : catalogHydrating ? 'Checking' : storefrontSetupRequired ? 'Needs setup' : sampleStore ? 'Sample ready' : 'Ready'],
-    ['2. Cart', checkoutEntryRecoveryPending ? 'Resume available' : ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
+    ['2. Cart', checkoutEntryRecoveryPending ? 'Resume available' : retainedCompletedCheckout ? 'Completed' : ecommerceActiveOrderCount && ecommerceTodayCartUnits ? 'Confirmed' : ecommerceTodayCartUnits ? `${ecommerceTodayCartUnits} item${ecommerceTodayCartUnits === 1 ? '' : 's'}` : buyingReady ? 'Ready' : 'Locked'],
     ['3. Shop', pendingManagedRequests.length
       ? `${pendingManagedRequests.length} to review`
       : customerRequestNeedsQuoteReview
@@ -2084,6 +2103,10 @@ export function EcommerceProduct() {
     }
     if (ecommerceActiveOrderCount) {
       navigate('/shop/?tab=orders')
+      return
+    }
+    if (retainedCompletedCheckout) {
+      focusCurrentRequestReceipt()
       return
     }
     prepareQuoteRecovery()
@@ -2620,7 +2643,7 @@ export function EcommerceProduct() {
               currentCatalog={catalog.items}
               disabled={catalogHydrating}
               onCartChange={setBuyingCart}
-              onContinueInShop={(requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`)}
+              onOpenShopOrder={(orderId) => navigate(`/shop/?tab=orders#shop-order-${orderId.replace(/[^A-Za-z0-9_-]+/g, '-')}`)}
               onDraft={openShopDraft}
               onOpenManagedRequest={managedIdentity ? (requestId) => navigate(`/shop/?tab=orders&source=ecommerce&request=${encodeURIComponent(requestId)}`) : undefined}
               onOpenCancellation={(intent: EcommerceCancellationIntent) => navigate('/shop/?tab=orders', { state: { ecommerceCancellationIntent: intent } })}
@@ -2631,6 +2654,7 @@ export function EcommerceProduct() {
               onOpenSupport={(intent: EcommerceSupportIntent) => navigate('/shop/?tab=orders', { state: { ecommerceSupportIntent: intent } })}
               onRecordManagedRequest={managedIdentity ? recordManagedBuyingRequest : undefined}
               onRecoveryPendingChange={setCheckoutEntryRecoveryPending}
+              onRequestCurrentChange={setCurrentRequestReceiptRetained}
               onRequestStateChange={setCustomerRequestState}
               preview={previewResult.preview}
               scope={buyingScope}

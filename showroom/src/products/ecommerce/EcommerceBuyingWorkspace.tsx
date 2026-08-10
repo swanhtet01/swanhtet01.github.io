@@ -18,6 +18,7 @@ import {
   ecommerceQuoteNextAction,
   ecommerceBuyingStateStorageKey,
   ecommercePaymentMatchesFulfilment,
+  readEcommerceRequestReceiptDismissal,
   prepareEcommerceShopDraftV2,
   projectEcommerceReturnOutcome,
   projectEcommerceCorrectionOutcome,
@@ -25,6 +26,7 @@ import {
   recoverEcommerceCartRemoval,
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
+  saveEcommerceRequestReceiptDismissal,
   saveEcommerceCancellationIntent,
   saveEcommerceCorrectionIntent,
   saveEcommerceOrderAmendment,
@@ -96,7 +98,7 @@ type EcommerceBuyingWorkspaceProps = {
   currentCatalog: CommerceItem[]
   disabled: boolean
   onCartChange: (cart: EcommerceCartLine[]) => void
-  onContinueInShop: (requestId: string) => void
+  onOpenShopOrder: (orderId: string) => void
   onDraft: (draft: EcommerceShopDraftV2) => void
   onOpenManagedRequest?: (requestId: string) => void
   onOpenCancellation: (intent: EcommerceCancellationIntent) => void
@@ -110,6 +112,7 @@ type EcommerceBuyingWorkspaceProps = {
     supersededRequest?: EcommerceBuyingState['requests'][number] | null,
   ) => Promise<void>
   onRecoveryPendingChange: (pending: boolean) => void
+  onRequestCurrentChange: (current: boolean) => void
   onRequestStateChange: (state: EcommerceCustomerRequestState) => void
   preview: StorefrontPreview
   scope: string
@@ -181,7 +184,7 @@ export function EcommerceBuyingWorkspace({
   currentCatalog,
   disabled,
   onCartChange,
-  onContinueInShop,
+  onOpenShopOrder,
   onDraft,
   onOpenManagedRequest,
   onOpenCancellation,
@@ -192,6 +195,7 @@ export function EcommerceBuyingWorkspace({
   onOpenSupport,
   onRecordManagedRequest,
   onRecoveryPendingChange,
+  onRequestCurrentChange,
   onRequestStateChange,
   preview,
   scope,
@@ -353,6 +357,17 @@ export function EcommerceBuyingWorkspace({
       setNotice('')
       const latest = recoveredState.requests[0]
       if (!latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
+      let dismissedRequestId: string
+      try {
+        dismissedRequestId = readEcommerceRequestReceiptDismissal(window.localStorage, scope)
+      } catch {
+        setNotice('Saved order-receipt recovery needs review. The previous checkout was not restored.')
+        return
+      }
+      if (dismissedRequestId === latest.id) {
+        setNotice('Ready for a new order. The previous order remains in Shop history.')
+        return
+      }
       onCartChange(latest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
       setCustomerName(latest.customerProfile?.name ?? latest.customerReference)
       setCustomerPhone(latest.customerProfile?.phone ?? '')
@@ -476,6 +491,7 @@ export function EcommerceBuyingWorkspace({
     ? combinedOrderTimeline.find((entry) => entry.request.id === latestRequest.id) ?? null
     : null
   const latestRequestOrder = latestRequestEntry?.order ?? null
+  const latestRequestCompleted = latestRequestEntry?.stage === 'completed'
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
   const replacementRequestIds = new Set([
@@ -695,8 +711,11 @@ export function EcommerceBuyingWorkspace({
     cart.reduce((total, line) => total + line.quantity, 0),
   )
   const replacingCurrentRequest = Boolean(latestRequest && !latestRequestOrder && quoteNextAction)
-  useEffect(() => onRequestStateChange(customerRequestState), [customerRequestState, onRequestStateChange])
   const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
+  useEffect(() => {
+    onRequestStateChange(customerRequestState)
+    onRequestCurrentChange(latestRequestConfirmed)
+  }, [customerRequestState, latestRequestConfirmed, onRequestCurrentChange, onRequestStateChange])
   const checkoutEntryDraftInput = {
     lines: cart.map((line) => ({
       sku: line.sku,
@@ -1109,14 +1128,32 @@ export function EcommerceBuyingWorkspace({
   }
 
   function beginAnotherOrder() {
+    if (latestRequest && latestRequestOrder) {
+      try {
+        saveEcommerceRequestReceiptDismissal(window.localStorage, scope, latestRequest.id)
+      } catch {
+        setNotice('The previous order receipt could not be closed safely. Nothing was cleared; try again before entering another customer order.')
+        return
+      }
+    }
     clearMatchingCheckoutEntryRecovery()
     expireOrderChangeRecovery()
     setCartQuantityDrafts({})
     setCartQuantityIssues({})
     setRemovedCartLine(null)
     onCartChange([])
+    setCustomerName('')
+    setCustomerPhone('')
+    setAddressLine1('')
+    setAddressTownship('')
+    setAddressCity('Yangon')
+    setDeliveryInstructions('')
+    setFulfilment('pickup')
+    setPaymentAdapter('pay_on_pickup')
+    setPromotionCode('')
+    setOpen(false)
     setFreshQuoteId('')
-    setNotice('Ready for a new order. Add products, then review the current total.')
+    setNotice('Ready for a new order. The previous order remains in Shop history.')
   }
 
   function changeFulfilment(next: EcommerceFulfilment) {
@@ -2054,8 +2091,8 @@ export function EcommerceBuyingWorkspace({
           </form>
 
           {latestRequest ? latestRequestOrder && latestRequestConfirmed ? (
-            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true">
-              <span className="status-pill ready">Confirmed in Shop</span>
+            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={requestReceiptRef} tabIndex={-1}>
+              <span className="status-pill ready">{latestRequestCompleted ? 'Completed in Shop' : 'Confirmed in Shop'}</span>
               <strong>Order {latestRequestOrder.id}</strong>
               <b>{formatMmk(latestRequestOrder.total)}</b>
               <div className="ecommerce-quote-boundaries">
@@ -2064,8 +2101,8 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Payment</small><b>{latestRequestEntry?.paymentStatus === 'reconciled' ? 'Confirmed' : 'Pending in Shop'}</b></span>
                 <span><small>Promise</small><b>{latestRequestOrder.promisedAt ? new Date(latestRequestOrder.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not set'}</b></span>
               </div>
-              <small>Request {latestRequest.id} · Shop recorded the order and stock reservation.</small>
-              <button className="core-button primary" disabled={disabled} onClick={() => onContinueInShop(latestRequest.id)} type="button">Continue in Shop</button>
+              <small>Request {latestRequest.id} · {latestRequestCompleted ? 'Shop completed fulfilment and retained the accountable order.' : 'Shop recorded the order and stock reservation.'}</small>
+              <button className="core-button primary" disabled={disabled} onClick={() => onOpenShopOrder(latestRequestOrder.id)} type="button">{latestRequestCompleted ? 'View completed Shop order' : 'Continue in Shop'}</button>
               <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
             </article>
           ) : quoteCurrent ? (

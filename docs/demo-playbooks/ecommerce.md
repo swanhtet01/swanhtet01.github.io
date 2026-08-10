@@ -28,8 +28,9 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 4. Fill the customer fields — Name and Phone — then `Receive order`: `Pickup · included` or `Delivery · Shop confirms`. Payment shows the sample notice (quoted in section 4); the empty-cart copy already set the rule: `Nothing goes to Shop until you review the exact quote.`
 5. Press `Send order request`. The receipt appears with the `Request sent` pill, one exact total, and a countdown — the approved workflow step is `Review a 15-minute whole-MMK quote`.
 6. Press `Continue in Shop`. The app navigates to the Shop order queue (`/shop/?tab=orders&source=ecommerce`) where a named person reviews the request — this is the accountability handoff, the core selling moment.
-7. Confirm the draft in Shop, then return to Ecommerce: the receipt now reads `Confirmed in Shop` with the Shop order ID, and offers `Start another order`.
-8. Wrap on the order workspace panel (`Order workspace`): in the business-data path it reads `Take a customer order`, and after confirmation the timeline shows the one path from cart to return, with `Open Shop order queue` linking back.
+7. Confirm the draft in Shop, then use the same Shop record to start preparation, mark it ready, reconcile payment, complete fulfilment, and save the daily close. Every step has its own accountable review; Ecommerce never performs those writes.
+8. Return to Ecommerce: the retained receipt now reads `Completed in Shop`, shows payment as confirmed, and offers `View completed Shop order`. That action opens and focuses the exact completed record inside Shop history; `Start another order` explicitly clears the retained checkout for the next customer.
+9. Wrap on the order workspace panel (`Order workspace`): in the business-data path it reads `Take a customer order`, and the timeline shows the one path from cart to return, with `Open Shop order queue` linking back.
 
 ## 4. Objection handling: the boundary
 

@@ -55,6 +55,8 @@ export const ECOMMERCE_ORDER_RESCHEDULE_INTENT_SCHEMA = 'supermega.ecommerce.ord
 export const ECOMMERCE_BUYING_STATE_SCHEMA = 'supermega.ecommerce.buying_lifecycle.v1' as const
 export const ECOMMERCE_BUYING_EVENT_SCHEMA = 'supermega.ecommerce.buying_event.v1' as const
 export const ECOMMERCE_BUYING_STATE_KEY_PREFIX = 'supermega.ecommerce.buying_lifecycle.v1.'
+export const ECOMMERCE_REQUEST_RECEIPT_DISMISSAL_SCHEMA = 'supermega.ecommerce.request_receipt_dismissal.v1' as const
+export const ECOMMERCE_REQUEST_RECEIPT_DISMISSAL_KEY_PREFIX = 'supermega.ecommerce.request_receipt_dismissal.v1.'
 export const EMPTY_ECOMMERCE_BUYING_DIGEST = `sha256:${'0'.repeat(64)}`
 
 export type EcommercePaymentAdapter = 'pay_on_pickup' | 'cash_on_delivery' | 'kbzpay_manual'
@@ -1028,6 +1030,58 @@ function browserLocks(): EcommerceBuyingLocks | undefined {
 
 export function ecommerceBuyingStateStorageKey(scope: string) {
   return `${ECOMMERCE_BUYING_STATE_KEY_PREFIX}${encodeURIComponent(canonicalToken(scope, 'scope'))}`
+}
+
+export function ecommerceRequestReceiptDismissalStorageKey(scope: string) {
+  return `${ECOMMERCE_REQUEST_RECEIPT_DISMISSAL_KEY_PREFIX}${encodeURIComponent(canonicalToken(scope, 'scope'))}`
+}
+
+function ecommerceRequestReceiptDismissal(value: unknown, expectedScope: string) {
+  const source = exactObject(value, 'request receipt dismissal', ['schema', 'scope', 'requestId'])
+  if (source.schema !== ECOMMERCE_REQUEST_RECEIPT_DISMISSAL_SCHEMA) {
+    throw new Error('Request receipt dismissal schema is unsupported.')
+  }
+  const scope = canonicalToken(source.scope, 'request receipt dismissal.scope')
+  if (scope !== canonicalToken(expectedScope, 'expectedScope')) {
+    throw new Error('Request receipt dismissal belongs to a different Ecommerce workspace.')
+  }
+  const requestId = canonicalText(source.requestId, 'request receipt dismissal.requestId', 40)
+  if (!requestIdPattern.test(requestId)) throw new Error('Request receipt dismissal request ID is invalid.')
+  return { schema: ECOMMERCE_REQUEST_RECEIPT_DISMISSAL_SCHEMA, scope, requestId }
+}
+
+export function readEcommerceRequestReceiptDismissal(
+  storage: Pick<EcommerceBuyingStorage, 'getItem'>,
+  scope: string,
+) {
+  const canonicalScope = canonicalToken(scope, 'scope')
+  const raw = storage.getItem(ecommerceRequestReceiptDismissalStorageKey(canonicalScope))
+  if (raw === null) return ''
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    throw new Error('Saved request receipt dismissal is invalid and was left unchanged.')
+  }
+  return ecommerceRequestReceiptDismissal(value, canonicalScope).requestId
+}
+
+export function saveEcommerceRequestReceiptDismissal(
+  storage: Pick<EcommerceBuyingStorage, 'getItem' | 'setItem'>,
+  scope: string,
+  requestId: string,
+) {
+  const canonicalScope = canonicalToken(scope, 'scope')
+  const record = ecommerceRequestReceiptDismissal({
+    schema: ECOMMERCE_REQUEST_RECEIPT_DISMISSAL_SCHEMA,
+    scope: canonicalScope,
+    requestId,
+  }, canonicalScope)
+  const key = ecommerceRequestReceiptDismissalStorageKey(canonicalScope)
+  const raw = canonicalJson(record)
+  storage.setItem(key, raw)
+  if (storage.getItem(key) !== raw) throw new Error('Request receipt dismissal write could not be confirmed.')
+  return record.requestId
 }
 
 function pimItem(value: unknown, field: string): EcommercePimItem {

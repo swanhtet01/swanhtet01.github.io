@@ -2476,6 +2476,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       }
       if (tab === 'orders' && commerceLocation.hash.startsWith('#shop-order-')) {
         const target = document.getElementById(commerceLocation.hash.slice(1))
+        const archive = target?.closest<HTMLDetailsElement>('details')
+        if (archive) archive.open = true
         const action = target?.querySelector<HTMLElement>('.order-row-actions .core-button.primary:not(:disabled)') ?? target
         action?.scrollIntoView({ block: 'center' })
         action?.focus({ preventScroll: true })
@@ -6846,6 +6848,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     correctionCalculation={correctionCalculation}
     correctionDraft={correctionDraft}
     disabled={commerceControlsDisabled}
+    highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''}
     onCancelCorrection={cancelCorrectionEditor}
     onCancelReturn={cancelReturnEditor}
     onChangeCorrection={(patch) => setCorrectionDraft((current) => current ? { ...current, ...patch } : current)}
@@ -7397,6 +7400,7 @@ function ClosedOrderHistory({
   correctionCalculation,
   correctionDraft,
   disabled,
+  highlightedTargetId,
   onCancelCorrection,
   onCancelReturn,
   onChangeCorrection,
@@ -7439,6 +7443,7 @@ function ClosedOrderHistory({
   correctionCalculation: ReturnType<typeof commerceCorrectionCalculation>
   correctionDraft: CommerceCorrectionDraft | null
   disabled: boolean
+  highlightedTargetId: string
   onCancelCorrection: () => void
   onCancelReturn: () => void
   onChangeCorrection: (patch: Partial<CommerceCorrectionDraft>) => void
@@ -7488,12 +7493,21 @@ function ClosedOrderHistory({
   const correctionOrderIndex = correctionDraft ? orders.findIndex((order) => order.id === correctionDraft.orderId) : -1
   const supportOrderId = supportDraft?.intent.orderId ?? supportReopenDraft?.orderId ?? supportServiceDraft?.orderId ?? supportResolutionDraft?.orderId
   const supportOrderIndex = supportOrderId ? orders.findIndex((order) => order.id === supportOrderId) : -1
-  const focusedOrderIndex = returnOrderIndex >= 0 ? returnOrderIndex : correctionOrderIndex >= 0 ? correctionOrderIndex : supportOrderIndex
+  const highlightedOrderIndex = highlightedTargetId
+    ? orders.findIndex((order) => commerceOrderTargetId(order.id) === highlightedTargetId)
+    : -1
+  const focusedOrderIndex = returnOrderIndex >= 0
+    ? returnOrderIndex
+    : correctionOrderIndex >= 0
+      ? correctionOrderIndex
+      : supportOrderIndex >= 0
+        ? supportOrderIndex
+        : highlightedOrderIndex
   const currentPage = focusedOrderIndex >= 0 ? Math.floor(focusedOrderIndex / pageSize) : Math.min(page, pageCount - 1)
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
   const supportWorkQueue = commerceSupportQueue(orders, supportClock)
   const supportSla = commerceSupportSlaSummary(orders, supportClock)
-  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft) || undefined}>
+  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || highlightedOrderIndex >= 0) || undefined}>
     <summary><span>Completed and cancelled orders</span><small>{supportWorkQueue.length ? `${supportSla.openCases} help open · ${supportSla.overdueCases} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
     {supportWorkloadDownload ? <section aria-label="Support workload export" className="order-return-records" data-support-workload="privacy-minimal">
       <div><strong>Support workload record</strong><small>{supportWorkloadDownload.artifact.summary.totalCases} cases · {supportWorkloadDownload.artifact.summary.reopenedCases} repeat contacts · {supportWorkloadDownload.artifact.summary.responseTargetMisses} target misses</small></div>
@@ -7537,7 +7551,8 @@ function ClosedOrderHistory({
       const correctable = canCorrect(order.id)
       const adjustedTotal = commerceOrderAdjustedTotal(order) ?? order.total
       const acknowledgement = acknowledgementDownloads.get(order.id)
-      return <article className={editing || correcting ? 'is-returning' : undefined} key={order.id}>
+      const targetId = commerceOrderTargetId(order.id)
+      return <article className={editing || correcting ? 'is-returning' : undefined} data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div className="order-archive-main">
         <strong>{order.customer} · {order.lines
           ? order.lines.length === 1
