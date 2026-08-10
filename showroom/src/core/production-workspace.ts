@@ -3794,6 +3794,10 @@ const guidedSampleActionPrefix = 'ACT-GUIDED-SAMPLE-'
 export function isGuidedSampleProduction(stateValue: ProductionState) {
   let state: ProductionState
   try { state = validateProductionState(stateValue) } catch { return false }
+  // Controlled-order and equipment work append no events, so the event log alone
+  // cannot prove this workspace is still a pure sample. A released batch is the
+  // only Plant proof; treating such a workspace as replaceable would destroy it.
+  if (state.orderExecution || state.orderPortfolio || state.equipmentMaster) return false
   return state.events.every((event) => event.actor === WORKING_SAMPLE_SETUP_ACTOR || event.actor === GUIDED_SAMPLE_PRODUCTION_ACTOR)
 }
 
@@ -3811,14 +3815,18 @@ export function appendGuidedSampleProductionActivity(stateValue: ProductionState
   let state: ProductionState
   try { state = validateProductionState(stateValue) } catch { return null }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.planningDay) || !Number.isFinite(Date.parse(`${input.planningDay}T00:00:00.000Z`))) return null
-  if (!isGuidedSampleProduction(state) || hasGuidedSampleProductionActivity(state)) return null
+  // Nothing to seed is a legitimate no-op, not a failure: returning the exact input
+  // makes the write boundary report an unchanged replay rather than an error, so a
+  // caller can treat any { ok: false } as a real problem worth surfacing.
+  if (!isGuidedSampleProduction(state) || hasGuidedSampleProductionActivity(state)) return stateValue
   const activeJobs = state.jobs
     .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+    .sort(compareProductionJobSchedule)
     .slice(0, 2)
-  if (!activeJobs.length) return null
+  if (!activeJobs.length) return stateValue
   const shiftRef = `${input.planningDay} Day`
   const latestEventAt = state.events.length ? Date.parse(state.events[0].createdAt) : 0
-  const base = Math.max(latestEventAt + 60_000, Date.parse(`${input.planningDay}T01:30:00.000Z`))
+  const base = latestEventAt ? latestEventAt + 60_000 : Date.parse(`${input.planningDay}T01:30:00.000Z`)
   let step = 0
   const proof = (reason: string): ProductionActionProof => ({
     actionId: `${guidedSampleActionPrefix}${String(step += 1).padStart(3, '0')}`,

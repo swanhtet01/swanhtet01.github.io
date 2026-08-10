@@ -7086,7 +7086,7 @@ async function verifyShopServiceScheduleRuntime() {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts')).href}?shop-service-schedule-verify=${Date.now()}`)
     const proof = (minute, reason) => ({ actor: 'Shop owner', reason, happenedAt: `2026-07-29T03:${String(minute).padStart(2, '0')}:00.000Z` })
     let state = model.createShopServiceSchedule()
-    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
+    assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'retail', 'shop_service_schedule_seed_invalid')
     assert(state.services.length === 2 && state.resources.length === 2 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
     assert(model.shopIndustryPacks.map((pack) => pack.id).join(',') === 'retail,cafe,restaurant,spa,gym,school' && new Set(model.shopIndustryPacks.map((pack) => pack.id)).size === 6, 'shop_industry_pack_catalog_wrong')
     assert(model.shopIndustryPacks.map((pack) => `${pack.id}:${pack.workflowTemplateId}:${pack.entryPoint}`).join(',') === 'retail:retail-wholesale:Walk-in,cafe:restaurant-ordering:Walk-in,restaurant:restaurant-ordering:Walk-in,spa:social-commerce:Phone,gym:social-commerce:Phone,school:social-commerce:Phone', 'shop_industry_pack_workflow_binding_wrong')

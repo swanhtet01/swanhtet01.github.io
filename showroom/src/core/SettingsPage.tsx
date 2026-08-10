@@ -1277,7 +1277,7 @@ export function SettingsPage() {
         capturedAt: new Date().toISOString(),
       })
       websitePackNotice = activation.ok
-        ? ` ${templateFor('website', websiteSelection.templateId).label} Website sample is prepared.`
+        ? ` ${templateFor('website', websiteSelection.templateId).name} Website sample is prepared.`
         : ` ${activation.error}`
     }
     // Retain the client's chosen template for every selected product, not only the

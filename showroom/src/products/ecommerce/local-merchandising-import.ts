@@ -250,7 +250,7 @@ export async function activateLocalEcommerceWorkingSample(
       sourcePreviewDigest: sourceDigest,
       capturedAt: input.capturedAt,
       storefrontRevision: result.revision,
-      storefrontActionId: result.actionId ?? 'demo-working-sample',
+      storefrontActionId: 'demo-working-sample',
     })
     if (guidedRequest) {
       try {

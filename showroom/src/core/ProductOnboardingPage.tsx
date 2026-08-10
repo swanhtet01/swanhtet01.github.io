@@ -191,10 +191,13 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     try {
       if (product === 'commerce') {
         provisionLocalShopIndustryPack(selectedShopIndustryPack.id)
-        if (selectedBusinessTemplate) {
-          await provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)
-        } else {
-          await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)
+        // Shop reports a preserved workspace by return value too, so surface it
+        // here or setup falsely reports success on any second run.
+        const disposition = selectedBusinessTemplate
+          ? await provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)
+          : await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)
+        if (disposition === 'preserved') {
+          throw new Error('Your existing Shop catalog and orders were kept. Reset the local Shop data first to install this sample.')
         }
       }
       if (product === 'production') {

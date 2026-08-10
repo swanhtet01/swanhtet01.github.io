@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { shopBusinessTemplates } from '../products/shop/business-templates'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import './core-app.css'
@@ -1181,7 +1182,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync] = useCommerceWorkspace(managedIdentity)
-  const shopSampleCatalogActive = Boolean(shopPack && commerceWorkingSampleCatalogId(commerce) === shopPack.id)
+  // The installed sample id is either an industry pack id or a business template id;
+  // comparing only the pack id reported a successful template install as "preserved".
+  const installedShopSampleId = commerceWorkingSampleCatalogId(commerce)
+  const shopSampleCatalogActive = Boolean(shopPack && installedShopSampleId && (
+    installedShopSampleId === shopPack.id
+    || shopBusinessTemplates.some((template) => template.id === installedShopSampleId && template.industryPackId === shopPack.id)
+  ))
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)

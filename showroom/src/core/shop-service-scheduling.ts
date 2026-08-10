@@ -236,7 +236,7 @@ function proofRecord(proof: ShopServiceScheduleProof) {
   }
 }
 
-export function createShopServiceSchedule(industryPackId: ShopIndustryPackId = 'spa'): ShopServiceSchedule {
+export function createShopServiceSchedule(industryPackId: ShopIndustryPackId = 'retail'): ShopServiceSchedule {
   const pack = shopIndustryPack(industryPackId)
   return {
     schema: SHOP_SERVICE_SCHEDULE_SCHEMA,
