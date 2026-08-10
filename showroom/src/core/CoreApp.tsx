@@ -5401,6 +5401,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(`${order.id} inventory references are unavailable, so cancellation failed closed.`)
       return
     }
+    const setupRecoveryNextOrder = returnToLocationSetup
+      ? actionOrders.find((candidate) => candidate.id !== orderId)
+      : undefined
     const paymentAfter = order.paymentStatus === 'reconciled' ? 'reconciled · refund due' : 'pending'
     queueAction({
       kind: 'order_cancel',
@@ -5431,6 +5434,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           throw error
         }
         if (reviewRequired) throw new ShopReviewRequiredError(`${sourceIntent?.id ?? order.id} changed during review. Nothing was cancelled; reopen the current request.`)
+        if (returnToLocationSetup) navigate(setupRecoveryNextOrder
+          ? `/shop/?tab=orders&return=location-setup#${commerceOrderTargetId(setupRecoveryNextOrder.id)}`
+          : '/shop/?tab=orders&return=location-setup', { replace: true })
         if (sourceIntent) setCancellationDraft(null)
       },
     })
