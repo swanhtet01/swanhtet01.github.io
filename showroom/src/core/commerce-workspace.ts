@@ -19,10 +19,11 @@ export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as co
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
-export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
-export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v3' as const
+export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v4' as const
+export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v4' as const
 export const COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1' as const
-export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
+const COMMERCE_CLOSE_SETTLEMENT_V1_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
+export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v2' as const
 export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
 export const COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = 'supermega.commerce.order-acknowledgement.v1' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
@@ -643,14 +644,22 @@ export type CommerceCloseSettlementLine = {
   varianceReason: string | null
 }
 
-export type CommerceCloseSettlement = {
-  schema: typeof COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+type CommerceCloseSettlementBase = {
   status: 'matched' | 'variance_review'
   totalExpectedMmk: number
   totalCountedMmk: number
   totalVarianceMmk: number
   lines: CommerceCloseSettlementLine[]
 }
+
+export type CommerceCloseSettlement = CommerceCloseSettlementBase & ({
+  schema: typeof COMMERCE_CLOSE_SETTLEMENT_V1_SCHEMA
+} | {
+  schema: typeof COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+  netOrderTotalMmk: number
+  correctionReceivableMmk: number
+  correctionPayableMmk: number
+})
 
 export type CommerceCloseSettlementInputLine = {
   paymentMethod: string
@@ -722,6 +731,7 @@ export type CommerceDailyCloseExport = {
   orderCount: number
   paymentExceptionOrderIds: string[]
   stockExceptionSkus: string[]
+  settlement: CommerceCloseSettlement | null
   orders: CommerceDailyCloseExportOrder[]
   digest: string
 }
@@ -751,6 +761,14 @@ export type CommerceAccountingHandoff = {
   sourceCloseDigest: string
   accountMappingRevision: number | null
   accountMappingEvidenceReference: string | null
+  settlementSchema: CommerceCloseSettlement['schema'] | null
+  settlementStatus: CommerceCloseSettlement['status'] | null
+  settlementExpectedMmk: number | null
+  settlementCountedMmk: number | null
+  settlementVarianceMmk: number | null
+  settlementNetOrderTotalMmk: number | null
+  settlementCorrectionReceivableMmk: number | null
+  settlementCorrectionPayableMmk: number | null
   originalOrderTotalMmk: number
   netOrderTotalMmk: number
   correctionCount: number
@@ -4161,15 +4179,25 @@ export function validateCommerceState(value: unknown): CommerceState {
       canonicalText(candidate.evidenceReference, `closes[${index}].evidenceReference`)
       if (candidate.settlement !== undefined) {
         const settlement = candidate.settlement
-        if (!isRecord(settlement) || !hasExactKeys(settlement, ['schema', 'status', 'totalExpectedMmk', 'totalCountedMmk', 'totalVarianceMmk', 'lines'])
-          || settlement.schema !== COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+        if (!isRecord(settlement)) throw new Error(`closes[${index}].settlement is invalid.`)
+        const legacySettlement = settlement.schema === COMMERCE_CLOSE_SETTLEMENT_V1_SCHEMA
+        if (!hasExactKeys(settlement, legacySettlement
+          ? ['schema', 'status', 'totalExpectedMmk', 'totalCountedMmk', 'totalVarianceMmk', 'lines']
+          : ['schema', 'status', 'totalExpectedMmk', 'totalCountedMmk', 'totalVarianceMmk', 'netOrderTotalMmk', 'correctionReceivableMmk', 'correctionPayableMmk', 'lines'])
+          || (!legacySettlement && settlement.schema !== COMMERCE_CLOSE_SETTLEMENT_SCHEMA)
           || !['matched', 'variance_review'].includes(String(settlement.status))
           || !Array.isArray(settlement.lines)) throw new Error(`closes[${index}].settlement is invalid.`)
-        const expectedByPayment = new Map<string, number>()
-        for (const order of memberOrders) {
-          const adjustedTotal = commerceOrderAdjustedTotal(order)
-          if (adjustedTotal === null) throw new Error(`closes[${index}].settlement order total is invalid.`)
-          expectedByPayment.set(order.payment, (expectedByPayment.get(order.payment) ?? 0) + adjustedTotal)
+        const settlementBasis = commerceCloseSettlementBasis(memberOrders)
+        if (!settlementBasis) throw new Error(`closes[${index}].settlement order total is invalid.`)
+        const expectedByPayment = legacySettlement ? new Map<string, number>() : settlementBasis.expectedByPayment
+        if (legacySettlement) {
+          for (const [orderIndex, order] of memberOrders.entries()) {
+            const adjustedTotal = memberAdjustedTotals[orderIndex]
+            if (adjustedTotal === null) throw new Error(`closes[${index}].settlement order total is invalid.`)
+            const nextExpected = (expectedByPayment.get(order.payment) ?? 0) + adjustedTotal
+            if (!Number.isSafeInteger(nextExpected)) throw new Error(`closes[${index}].settlement order total is invalid.`)
+            expectedByPayment.set(order.payment, nextExpected)
+          }
         }
         const expectedMethods = [...expectedByPayment.keys()].sort()
         const settlementLines = settlement.lines.map((lineCandidate, lineIndex): CommerceCloseSettlementLine => {
@@ -4201,9 +4229,26 @@ export function validateCommerceState(value: unknown): CommerceState {
           || settlement.totalExpectedMmk !== totalExpectedMmk
           || settlement.totalCountedMmk !== totalCountedMmk
           || settlement.totalVarianceMmk !== totalVarianceMmk
-          || totalExpectedMmk !== candidate.total
           || settlement.status !== (settlementLines.some((line) => line.status === 'variance_review') ? 'variance_review' : 'matched')) {
           throw new Error(`closes[${index}].settlement totals are invalid.`)
+        }
+        if (legacySettlement) {
+          if (totalExpectedMmk !== candidate.total) throw new Error(`closes[${index}].settlement totals are invalid.`)
+        } else {
+          const correctionBasisValues = [settlement.netOrderTotalMmk, settlement.correctionReceivableMmk, settlement.correctionPayableMmk]
+          if (!correctionBasisValues.every((value) => Number.isSafeInteger(value) && Number(value) >= 0)) {
+            throw new Error(`closes[${index}].settlement correction basis is invalid.`)
+          }
+          const netOrderTotalMmk = Number(settlement.netOrderTotalMmk)
+          const correctionReceivableMmk = Number(settlement.correctionReceivableMmk)
+          const correctionPayableMmk = Number(settlement.correctionPayableMmk)
+          if (netOrderTotalMmk !== settlementBasis.netOrderTotalMmk
+            || correctionReceivableMmk !== settlementBasis.correctionReceivableMmk
+            || correctionPayableMmk !== settlementBasis.correctionPayableMmk
+            || totalExpectedMmk !== settlementBasis.totalExpectedMmk
+            || totalExpectedMmk !== netOrderTotalMmk + correctionPayableMmk - correctionReceivableMmk) {
+            throw new Error(`closes[${index}].settlement correction basis is invalid.`)
+          }
         }
       }
     }
@@ -5599,6 +5644,36 @@ export function commerceOrderAdjustedTotal(order: CommerceOrder) {
     if (!Number.isSafeInteger(total) || total < 0) return null
   }
   return total
+}
+
+function commerceCloseSettlementBasis(orders: CommerceOrder[]) {
+  const expectedByPayment = new Map<string, number>()
+  let netOrderTotalMmk = 0
+  let correctionReceivableMmk = 0
+  let correctionPayableMmk = 0
+  for (const order of orders) {
+    const adjustedTotal = commerceOrderAdjustedTotal(order)
+    if (adjustedTotal === null) return null
+    const expectedForPayment = (expectedByPayment.get(order.payment) ?? 0) + order.total
+    netOrderTotalMmk += adjustedTotal
+    if (![expectedForPayment, netOrderTotalMmk].every(Number.isSafeInteger)) return null
+    expectedByPayment.set(order.payment, expectedForPayment)
+    for (const correction of order.corrections ?? []) {
+      if (correction.kind === 'credit') correctionPayableMmk += correction.calculation.totalMmk
+      else correctionReceivableMmk += correction.calculation.totalMmk
+      if (![correctionReceivableMmk, correctionPayableMmk].every(Number.isSafeInteger)) return null
+    }
+  }
+  const totalExpectedMmk = [...expectedByPayment.values()].reduce((total, value) => total + value, 0)
+  if (!Number.isSafeInteger(totalExpectedMmk)
+    || totalExpectedMmk !== netOrderTotalMmk + correctionPayableMmk - correctionReceivableMmk) return null
+  return {
+    expectedByPayment,
+    totalExpectedMmk,
+    netOrderTotalMmk,
+    correctionReceivableMmk,
+    correctionPayableMmk,
+  }
 }
 
 export function commerceStorefrontRequests(state: CommerceState) {
@@ -9380,13 +9455,15 @@ function buildCommerceCloseSettlement(
     }
   }
   const orderById = new Map(sourceState.orders.map((order) => [order.id, order]))
-  const expectedByPayment = new Map<string, number>()
+  const memberOrders: CommerceOrder[] = []
   for (const orderId of expected.orderIds) {
     const order = orderById.get(orderId)
-    const adjustedTotal = order ? commerceOrderAdjustedTotal(order) : null
-    if (!order || adjustedTotal === null) return null
-    expectedByPayment.set(order.payment, (expectedByPayment.get(order.payment) ?? 0) + adjustedTotal)
+    if (!order) return null
+    memberOrders.push(order)
   }
+  const settlementBasis = commerceCloseSettlementBasis(memberOrders)
+  if (!settlementBasis || settlementBasis.netOrderTotalMmk !== expected.total) return null
+  const { expectedByPayment } = settlementBasis
   const expectedMethods = [...expectedByPayment.keys()].sort()
   if (input.length !== expectedMethods.length) return null
   try {
@@ -9415,13 +9492,17 @@ function buildCommerceCloseSettlement(
     const totalExpectedMmk = lines.reduce((total, line) => total + line.expectedMmk, 0)
     const totalCountedMmk = lines.reduce((total, line) => total + line.countedMmk, 0)
     const totalVarianceMmk = lines.reduce((total, line) => total + line.varianceMmk, 0)
-    if (![totalExpectedMmk, totalCountedMmk, totalVarianceMmk].every(Number.isSafeInteger) || totalExpectedMmk !== expected.total) return null
+    if (![totalExpectedMmk, totalCountedMmk, totalVarianceMmk].every(Number.isSafeInteger)
+      || totalExpectedMmk !== settlementBasis.totalExpectedMmk) return null
     return {
       schema: COMMERCE_CLOSE_SETTLEMENT_SCHEMA,
       status: lines.some((line) => line.status === 'variance_review') ? 'variance_review' : 'matched',
       totalExpectedMmk,
       totalCountedMmk,
       totalVarianceMmk,
+      netOrderTotalMmk: settlementBasis.netOrderTotalMmk,
+      correctionReceivableMmk: settlementBasis.correctionReceivableMmk,
+      correctionPayableMmk: settlementBasis.correctionPayableMmk,
       lines,
     }
   } catch {
@@ -9476,6 +9557,29 @@ export function saveCommerceClose(
   return validateCommerceState({ ...current, closes: [close, ...current.closes] })
 }
 
+function commerceCloseSettlementProjection(settlement: CommerceCloseSettlement | null) {
+  if (!settlement) return null
+  return [
+    settlement.schema,
+    settlement.status,
+    settlement.totalExpectedMmk,
+    settlement.totalCountedMmk,
+    settlement.totalVarianceMmk,
+    settlement.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? settlement.netOrderTotalMmk : null,
+    settlement.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? settlement.correctionReceivableMmk : null,
+    settlement.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? settlement.correctionPayableMmk : null,
+    settlement.lines.map((line) => [
+      line.paymentMethod,
+      line.expectedMmk,
+      line.countedMmk,
+      line.varianceMmk,
+      line.status,
+      line.varianceOwner,
+      line.varianceReason,
+    ]),
+  ]
+}
+
 function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExport, 'digest'>) {
   return [
     artifact.schema,
@@ -9490,6 +9594,7 @@ function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExp
     artifact.orderCount,
     artifact.paymentExceptionOrderIds,
     artifact.stockExceptionSkus,
+    commerceCloseSettlementProjection(artifact.settlement),
     artifact.orders.map((order) => [
       order.orderId,
       order.orderCreatedAt,
@@ -9603,6 +9708,7 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
     orderCount: close.orders,
     paymentExceptionOrderIds: [...close.paymentExceptionOrderIds],
     stockExceptionSkus: [...close.stockExceptionSkus],
+    settlement: close.settlement ? { ...close.settlement, lines: close.settlement.lines.map((line) => ({ ...line })) } : null,
     orders,
   }
   return {
@@ -9736,6 +9842,15 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     'total_mmk',
     'corrections_json',
     'calculation_status',
+    'settlement_schema',
+    'settlement_status',
+    'settlement_expected_mmk',
+    'settlement_counted_mmk',
+    'settlement_variance_mmk',
+    'settlement_net_order_total_mmk',
+    'settlement_correction_receivable_mmk',
+    'settlement_correction_payable_mmk',
+    'settlement_lines_json',
     'payment_exception_order_ids',
     'stock_exception_skus',
     'artifact_digest',
@@ -9768,6 +9883,15 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     artifact.totalMmk,
     null,
     null,
+    artifact.settlement?.schema ?? null,
+    artifact.settlement?.status ?? null,
+    artifact.settlement?.totalExpectedMmk ?? null,
+    artifact.settlement?.totalCountedMmk ?? null,
+    artifact.settlement?.totalVarianceMmk ?? null,
+    artifact.settlement?.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? artifact.settlement.netOrderTotalMmk : null,
+    artifact.settlement?.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? artifact.settlement.correctionReceivableMmk : null,
+    artifact.settlement?.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? artifact.settlement.correctionPayableMmk : null,
+    artifact.settlement ? JSON.stringify(artifact.settlement.lines) : null,
     artifact.paymentExceptionOrderIds,
     artifact.stockExceptionSkus,
     artifact.digest,
@@ -9802,6 +9926,15 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     order.calculationStatus,
     null,
     null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
     artifact.digest,
   ]))
   return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
@@ -9820,6 +9953,14 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
     artifact.sourceCloseDigest,
     artifact.accountMappingRevision,
     artifact.accountMappingEvidenceReference,
+    artifact.settlementSchema,
+    artifact.settlementStatus,
+    artifact.settlementExpectedMmk,
+    artifact.settlementCountedMmk,
+    artifact.settlementVarianceMmk,
+    artifact.settlementNetOrderTotalMmk,
+    artifact.settlementCorrectionReceivableMmk,
+    artifact.settlementCorrectionPayableMmk,
     artifact.originalOrderTotalMmk,
     artifact.netOrderTotalMmk,
     artifact.correctionCount,
@@ -9981,6 +10122,12 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
   const totalCreditMmk = entries.filter((entry) => entry.side === 'credit').reduce((total, entry) => total + entry.amountMmk, 0)
   const expectedControlTotalMmk = originalOrderTotalMmk + creditCorrectionMmk + debitCorrectionMmk
   if (totalDebitMmk !== expectedControlTotalMmk || totalCreditMmk !== expectedControlTotalMmk) return null
+  const settlement = closeExport.settlement
+  if (settlement?.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+    && (settlement.totalExpectedMmk !== originalOrderTotalMmk
+      || settlement.netOrderTotalMmk !== closeExport.totalMmk
+      || settlement.correctionReceivableMmk !== debitCorrectionMmk
+      || settlement.correctionPayableMmk !== creditCorrectionMmk)) return null
   const artifact: Omit<CommerceAccountingHandoff, 'digest'> = {
     schema: COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
     status: 'review_required',
@@ -9993,6 +10140,14 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
     sourceCloseDigest: closeExport.digest,
     accountMappingRevision: accountMapping?.revision ?? null,
     accountMappingEvidenceReference: accountMapping?.proof.evidenceReference ?? null,
+    settlementSchema: settlement?.schema ?? null,
+    settlementStatus: settlement?.status ?? null,
+    settlementExpectedMmk: settlement?.totalExpectedMmk ?? null,
+    settlementCountedMmk: settlement?.totalCountedMmk ?? null,
+    settlementVarianceMmk: settlement?.totalVarianceMmk ?? null,
+    settlementNetOrderTotalMmk: settlement?.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? settlement.netOrderTotalMmk : null,
+    settlementCorrectionReceivableMmk: settlement?.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? settlement.correctionReceivableMmk : null,
+    settlementCorrectionPayableMmk: settlement?.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? settlement.correctionPayableMmk : null,
     originalOrderTotalMmk,
     netOrderTotalMmk: closeExport.totalMmk,
     correctionCount,
@@ -10026,6 +10181,14 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     'source_close_digest',
     'account_mapping_revision',
     'account_mapping_evidence_reference',
+    'settlement_schema',
+    'settlement_status',
+    'settlement_expected_mmk',
+    'settlement_counted_mmk',
+    'settlement_variance_mmk',
+    'settlement_net_order_total_mmk',
+    'settlement_correction_receivable_mmk',
+    'settlement_correction_payable_mmk',
     'original_order_total_mmk',
     'net_order_total_mmk',
     'correction_count',
@@ -10060,6 +10223,14 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     artifact.sourceCloseDigest,
     artifact.accountMappingRevision,
     artifact.accountMappingEvidenceReference,
+    artifact.settlementSchema,
+    artifact.settlementStatus,
+    artifact.settlementExpectedMmk,
+    artifact.settlementCountedMmk,
+    artifact.settlementVarianceMmk,
+    artifact.settlementNetOrderTotalMmk,
+    artifact.settlementCorrectionReceivableMmk,
+    artifact.settlementCorrectionPayableMmk,
     artifact.originalOrderTotalMmk,
     artifact.netOrderTotalMmk,
     artifact.correctionCount,

@@ -5009,7 +5009,7 @@ if (!coreSource.includes('data-tax-configuration="versioned"')
   || !managedCommerceRuntime.includes('command evidence must match the saved tax configuration proof.')) fail('commerce_tax_configuration_ui_or_managed_boundary_missing')
 if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !coreSource.includes('Download close CSV')
-  || !commerceSource.includes('supermega.commerce.daily-close-export.v3')
+  || !commerceSource.includes('supermega.commerce.daily-close-export.v4')
   || !commerceSource.includes("calculationStatus: calculation ? 'accepted' : 'legacy_unverified'")
   || !commerceSource.includes("taxMode: calculation?.taxMode ?? 'not_recorded'")
   || !commerceSource.includes("if (/^[=+@-]/.test(raw)) raw = `'${raw}`")
@@ -5026,7 +5026,7 @@ if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !coreSource.includes('data-account-mapping="versioned"')
   || !coreSource.includes("kind: 'account_mapping'")
   || !coreSource.includes("'commerce.account_mapping.saved'")
-  || !commerceSource.includes('supermega.commerce.accounting-handoff.v3')
+  || !commerceSource.includes('supermega.commerce.accounting-handoff.v4')
   || !commerceSource.includes("postingAuthority: 'none'")
   || !commerceSource.includes('externalPostingPerformed: false')
   || !commerceSource.includes("accountRole: 'payment_clearing'")
@@ -6627,7 +6627,11 @@ if (!commercePageContract.includes("if (tab === 'orders' && commerceLocation.has
 if (!coreSource.includes('data-close-settlement=')
   || !coreSource.includes('Settlement count')
   || !coreSource.includes('variance needs a responsible owner')
+  || !coreSource.includes('data-close-accounting-basis="correction-aware"')
+  || !coreSource.includes('they do not pretend money moved')
   || !commerceSource.includes('supermega.commerce.close-settlement.v1')
+  || !commerceSource.includes('supermega.commerce.close-settlement.v2')
+  || !commerceSource.includes('totalExpectedMmk !== netOrderTotalMmk + correctionPayableMmk - correctionReceivableMmk')
   || !commerceSource.includes('export function commerceCloseSettlementReview')
   || !managedCommerceRuntime.includes('COMMERCE_CLOSE_SETTLEMENT_SCHEMA')
   || !managedCommerceRuntime.includes('varianceOwner')
@@ -13945,11 +13949,14 @@ async function verifyCommerceRuntime() {
     }]
     const matchedSettlement = model.commerceCloseSettlementReview(completed, accountingCloseExpectation, matchedSettlementInput)
     const accountingClosed = model.saveCommerceClose(completed, accountingCloseId, accountingCloseProof, accountingCloseExpectation, matchedSettlementInput)
-    assert(matchedSettlement?.schema === 'supermega.commerce.close-settlement.v1'
+    assert(matchedSettlement?.schema === 'supermega.commerce.close-settlement.v2'
       && matchedSettlement.status === 'matched'
       && matchedSettlement.totalExpectedMmk === 200
       && matchedSettlement.totalCountedMmk === 200
       && matchedSettlement.totalVarianceMmk === 0
+      && matchedSettlement.netOrderTotalMmk === 200
+      && matchedSettlement.correctionReceivableMmk === 0
+      && matchedSettlement.correctionPayableMmk === 0
       && matchedSettlement.lines[0].varianceOwner === null
       && accountingClosed?.closes[0].settlement?.status === 'matched',
     'daily_close_matched_settlement_not_persisted')
@@ -13971,14 +13978,20 @@ async function verifyCommerceRuntime() {
     const forgedSettlementState = structuredClone(accountingClosed)
     forgedSettlementState.closes[0].settlement.totalCountedMmk = 201
     assertThrows(() => model.validateCommerceState(forgedSettlementState), 'daily_close_forged_settlement_total_validated')
+    const forgedSettlementBasis = structuredClone(accountingClosed)
+    forgedSettlementBasis.closes[0].settlement.netOrderTotalMmk = '200'
+    assertThrows(() => model.validateCommerceState(forgedSettlementBasis), 'daily_close_string_correction_basis_validated')
     const accountingExport = model.commerceDailyCloseExport(accountingClosed, accountingCloseId)
-    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v3'
+    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v4'
       && accountingExport.orderCount === 1
       && accountingExport.orders[0].calculationStatus === 'accepted'
       && accountingExport.orders[0].subtotalMmk === 200
       && accountingExport.orders[0].taxMode === 'not_configured'
       && accountingExport.orders[0].originalTotalMmk === 200
       && accountingExport.orders[0].corrections.length === 0
+      && accountingExport.settlement.schema === 'supermega.commerce.close-settlement.v2'
+      && accountingExport.settlement.totalExpectedMmk === 200
+      && accountingExport.settlement.netOrderTotalMmk === 200
       && accountingExport.digest === model.commerceDailyCloseExport(accountingClosed, accountingCloseId).digest
       && !JSON.stringify(accountingExport).includes('Customer'),
     'daily_close_export_not_deterministic_or_minimal')
@@ -13989,13 +14002,21 @@ async function verifyCommerceRuntime() {
       && accountingCsv.split('\r\n').length - 1 === 3,
     'daily_close_csv_not_complete_or_minimal')
     const accountingHandoff = model.commerceAccountingHandoff(accountingClosed, accountingCloseId)
-    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v3'
+    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v4'
       && accountingHandoff.status === 'review_required'
       && accountingHandoff.postingAuthority === 'none'
       && accountingHandoff.externalPostingPerformed === false
       && accountingHandoff.sourceCloseDigest === accountingExport.digest
       && accountingHandoff.accountMappingRevision === null
       && accountingHandoff.accountMappingEvidenceReference === null
+      && accountingHandoff.settlementSchema === 'supermega.commerce.close-settlement.v2'
+      && accountingHandoff.settlementStatus === 'matched'
+      && accountingHandoff.settlementExpectedMmk === 200
+      && accountingHandoff.settlementCountedMmk === 200
+      && accountingHandoff.settlementVarianceMmk === 0
+      && accountingHandoff.settlementNetOrderTotalMmk === 200
+      && accountingHandoff.settlementCorrectionReceivableMmk === 0
+      && accountingHandoff.settlementCorrectionPayableMmk === 0
       && accountingHandoff.originalOrderTotalMmk === 200
       && accountingHandoff.netOrderTotalMmk === 200
       && accountingHandoff.correctionCount === 0
@@ -14054,10 +14075,37 @@ async function verifyCommerceRuntime() {
       evidenceReference: 'EV-CORRECTED-CLOSE-099',
     })
     const correctedCloseExpectation = model.commerceCloseExpectation(corrected, accountingCloseAt)
-    const correctedClosed = model.saveCommerceClose(corrected, correctedCloseId, correctedCloseProof, correctedCloseExpectation)
+    const correctedSettlementInput = [{
+      paymentMethod: corrected.orders[0].payment,
+      countedMmk: 200,
+      varianceOwner: '',
+      varianceReason: '',
+    }]
+    const correctedSettlement = model.commerceCloseSettlementReview(corrected, correctedCloseExpectation, correctedSettlementInput)
+    const correctedShortCount = model.commerceCloseSettlementReview(corrected, correctedCloseExpectation, [{
+      ...correctedSettlementInput[0],
+      countedMmk: 150,
+      varianceOwner: 'Shift lead',
+      varianceReason: 'Cash count is below the reconciled payment.',
+    }])
+    const correctedClosed = model.saveCommerceClose(corrected, correctedCloseId, correctedCloseProof, correctedCloseExpectation, correctedSettlementInput)
     const correctedExport = model.commerceDailyCloseExport(correctedClosed, correctedCloseId)
     assert(correctedCloseExpectation?.total === 150
+      && correctedSettlement?.schema === 'supermega.commerce.close-settlement.v2'
+      && correctedSettlement.status === 'matched'
+      && correctedSettlement.totalExpectedMmk === 200
+      && correctedSettlement.totalCountedMmk === 200
+      && correctedSettlement.netOrderTotalMmk === 150
+      && correctedSettlement.correctionReceivableMmk === 0
+      && correctedSettlement.correctionPayableMmk === 50
+      && model.commerceCloseSettlementReview(corrected, correctedCloseExpectation, [{ ...correctedSettlementInput[0], countedMmk: 150 }]) === null
+      && correctedShortCount?.status === 'variance_review'
+      && correctedShortCount.totalVarianceMmk === -50
       && correctedExport?.totalMmk === 150
+      && correctedExport.settlement.totalExpectedMmk === 200
+      && correctedExport.settlement.totalCountedMmk === 200
+      && correctedExport.settlement.netOrderTotalMmk === 150
+      && correctedExport.settlement.correctionPayableMmk === 50
       && correctedExport.orders[0].originalTotalMmk === 200
       && correctedExport.orders[0].totalMmk === 150
       && correctedExport.orders[0].corrections[0].documentId === corrected.orders[0].corrections[0].documentId
@@ -14067,9 +14115,16 @@ async function verifyCommerceRuntime() {
     const correctedHandoff = model.commerceAccountingHandoff(correctedClosed, correctedCloseId)
     const correctedDocumentId = corrected.orders[0].corrections[0].documentId
     const correctedEntries = correctedHandoff?.entries.filter((entry) => entry.sourceDocumentId === correctedDocumentId) ?? []
-    assert(correctedHandoff?.schema === 'supermega.commerce.accounting-handoff.v3'
+    assert(correctedHandoff?.schema === 'supermega.commerce.accounting-handoff.v4'
       && correctedHandoff.originalOrderTotalMmk === 200
       && correctedHandoff.netOrderTotalMmk === 150
+      && correctedHandoff.settlementSchema === 'supermega.commerce.close-settlement.v2'
+      && correctedHandoff.settlementExpectedMmk === 200
+      && correctedHandoff.settlementCountedMmk === 200
+      && correctedHandoff.settlementVarianceMmk === 0
+      && correctedHandoff.settlementNetOrderTotalMmk === 150
+      && correctedHandoff.settlementCorrectionReceivableMmk === 0
+      && correctedHandoff.settlementCorrectionPayableMmk === 50
       && correctedHandoff.correctionCount === 1
       && correctedHandoff.creditCorrectionMmk === 50
       && correctedHandoff.debitCorrectionMmk === 0

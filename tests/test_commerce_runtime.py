@@ -6742,6 +6742,26 @@ class CommerceRuntimeTests(unittest.TestCase):
             close_id=CLOSE_ID_2,
             captured_at="2026-07-23T10:00:00.000Z",
         )
+        payment_method = corrected["orders"][0]["payment"]  # type: ignore[index]
+        close["settlement"] = {
+            "schema": "supermega.commerce.close-settlement.v2",
+            "status": "matched",
+            "totalExpectedMmk": 200,
+            "totalCountedMmk": 200,
+            "totalVarianceMmk": 0,
+            "netOrderTotalMmk": 150,
+            "correctionReceivableMmk": 0,
+            "correctionPayableMmk": 50,
+            "lines": [{
+                "paymentMethod": payment_method,
+                "expectedMmk": 200,
+                "countedMmk": 200,
+                "varianceMmk": 0,
+                "status": "matched",
+                "varianceOwner": None,
+                "varianceReason": None,
+            }],
+        }
         self.assertEqual(close["total"], 150)
         closed = deepcopy(corrected)
         closed["closes"] = [close]
@@ -6749,15 +6769,25 @@ class CommerceRuntimeTests(unittest.TestCase):
         export = commerce_daily_close_export(accepted_close, CLOSE_ID_2)
         self.assertIsNotNone(export)
         assert export is not None
-        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v3")
+        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v4")
         self.assertEqual(export["totalMmk"], 150)
+        self.assertEqual(export["settlement"]["totalExpectedMmk"], 200)
+        self.assertEqual(export["settlement"]["netOrderTotalMmk"], 150)
+        self.assertEqual(export["settlement"]["correctionPayableMmk"], 50)
         self.assertEqual(export["orders"][0]["originalTotalMmk"], 200)
         self.assertEqual(export["orders"][0]["totalMmk"], 150)
         self.assertEqual(export["orders"][0]["corrections"][0]["documentId"], record["documentId"])
         handoff = commerce_accounting_handoff(accepted_close, CLOSE_ID_2)
         self.assertIsNotNone(handoff)
         assert handoff is not None
-        self.assertEqual(handoff["schema"], "supermega.commerce.accounting-handoff.v3")
+        self.assertEqual(handoff["schema"], "supermega.commerce.accounting-handoff.v4")
+        self.assertEqual(handoff["settlementSchema"], "supermega.commerce.close-settlement.v2")
+        self.assertEqual(handoff["settlementExpectedMmk"], 200)
+        self.assertEqual(handoff["settlementCountedMmk"], 200)
+        self.assertEqual(handoff["settlementVarianceMmk"], 0)
+        self.assertEqual(handoff["settlementNetOrderTotalMmk"], 150)
+        self.assertEqual(handoff["settlementCorrectionPayableMmk"], 50)
+        self.assertEqual(handoff["settlementCorrectionReceivableMmk"], 0)
         self.assertEqual(handoff["originalOrderTotalMmk"], 200)
         self.assertEqual(handoff["netOrderTotalMmk"], 150)
         self.assertEqual(handoff["correctionCount"], 1)
@@ -6781,6 +6811,36 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn('"source_document_id"', correction_csv)
         self.assertIn(f'"{record["documentId"]}"', correction_csv)
         self.assertEqual(handoff, commerce_accounting_handoff(accepted_close, CLOSE_ID_2))
+        false_match = deepcopy(closed)
+        false_match["closes"][0]["settlement"].update({  # type: ignore[index]
+            "totalExpectedMmk": 150,
+            "totalCountedMmk": 150,
+        })
+        false_match["closes"][0]["settlement"]["lines"][0].update({  # type: ignore[index]
+            "expectedMmk": 150,
+            "countedMmk": 150,
+        })
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(false_match)
+
+        short_count = deepcopy(closed)
+        short_count["closes"][0]["settlement"].update({  # type: ignore[index]
+            "status": "variance_review",
+            "totalCountedMmk": 150,
+            "totalVarianceMmk": -50,
+        })
+        short_count["closes"][0]["settlement"]["lines"][0].update({  # type: ignore[index]
+            "countedMmk": 150,
+            "varianceMmk": -50,
+            "status": "variance_review",
+            "varianceOwner": "Shift lead",
+            "varianceReason": "Cash count is below the reconciled payment.",
+        })
+        short_count_accepted = apply_event(corrected, "commerce.close.saved", short_count)
+        self.assertEqual(
+            short_count_accepted["closes"][0]["settlement"]["totalVarianceMmk"],  # type: ignore[index]
+            -50,
+        )
         legacy_mapped_close = deepcopy(accepted_close)
         legacy_mapped_close["accountMappingConfigurations"] = [
             account_mapping_configuration(1, legacy=True)
@@ -6833,11 +6893,14 @@ class CommerceRuntimeTests(unittest.TestCase):
         close = close_record(current, CLOSE_ACTION_ID_2, close_id=CLOSE_ID_2, captured_at="2026-07-23T10:00:00.000Z")
         payment_method = current["orders"][0]["payment"]  # type: ignore[index]
         close["settlement"] = {
-            "schema": "supermega.commerce.close-settlement.v1",
+            "schema": "supermega.commerce.close-settlement.v2",
             "status": "matched",
             "totalExpectedMmk": 200,
             "totalCountedMmk": 200,
             "totalVarianceMmk": 0,
+            "netOrderTotalMmk": 200,
+            "correctionReceivableMmk": 0,
+            "correctionPayableMmk": 0,
             "lines": [{
                 "paymentMethod": payment_method,
                 "expectedMmk": 200,
@@ -6879,6 +6942,11 @@ class CommerceRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(forged_total)
 
+        forged_basis = deepcopy(matched_state)
+        forged_basis["closes"][0]["settlement"]["netOrderTotalMmk"] = "200"  # type: ignore[index]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(forged_basis)
+
         unowned_variance = deepcopy(variance_state)
         unowned_variance["closes"][0]["settlement"]["lines"][0]["varianceOwner"] = None  # type: ignore[index]
         with self.assertRaises(TrialValidationError):
@@ -6888,6 +6956,17 @@ class CommerceRuntimeTests(unittest.TestCase):
         wrong_payment["closes"][0]["settlement"]["lines"][0]["paymentMethod"] = "Unknown"  # type: ignore[index]
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(wrong_payment)
+
+        legacy_state = deepcopy(matched_state)
+        legacy_settlement = legacy_state["closes"][0]["settlement"]  # type: ignore[index]
+        legacy_settlement["schema"] = "supermega.commerce.close-settlement.v1"
+        legacy_settlement.pop("netOrderTotalMmk")
+        legacy_settlement.pop("correctionReceivableMmk")
+        legacy_settlement.pop("correctionPayableMmk")
+        self.assertEqual(
+            validate_commerce_state(legacy_state)["closes"][0]["settlement"]["schema"],  # type: ignore[index]
+            "supermega.commerce.close-settlement.v1",
+        )
 
     def test_daily_close_snapshots_exact_exceptions_and_legacy_records_still_load(self) -> None:
         current = created_state("ORD-EXCEPTION")
@@ -7674,7 +7753,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(artifact)
         assert artifact is not None
         self.assertEqual(artifact, commerce_daily_close_export(closed, CLOSE_ID))
-        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v3")
+        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v4")
         self.assertEqual(artifact["orderCount"], 1)
         self.assertEqual(artifact["orders"][0]["calculationStatus"], "accepted")
         self.assertEqual(artifact["orders"][0]["subtotalMmk"], 200)
@@ -7682,7 +7761,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertNotIn("customer", json.dumps(artifact))
         self.assertEqual(
             artifact["digest"],
-            "sha256:7365e864485958b4fa104d3d73f31102a4a4814d64d820afdafb28eb801dc8ce",
+            "sha256:e247dbb123c57d91b126ed3438048ca8cfc0e86999c25f4be54059ef14bc2217",
         )
 
         csv_text = commerce_daily_close_csv(closed, CLOSE_ID)
@@ -7696,7 +7775,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         unmapped_handoff = commerce_accounting_handoff(closed, CLOSE_ID)
         self.assertIsNotNone(unmapped_handoff)
         assert unmapped_handoff is not None
-        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v3")
+        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v4")
         self.assertEqual(unmapped_handoff["originalOrderTotalMmk"], 200)
         self.assertEqual(unmapped_handoff["netOrderTotalMmk"], 200)
         self.assertEqual(unmapped_handoff["correctionCount"], 0)

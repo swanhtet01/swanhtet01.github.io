@@ -72,6 +72,7 @@ import {
   type PlantOutputEntryRecoverySource,
 } from './plant-output-entry-recovery'
 import {
+  COMMERCE_CLOSE_SETTLEMENT_SCHEMA,
   advanceCommerceOrder,
   approveCommercePurchaseBudgetEnvelope,
   approveCommercePurchaseRequisition,
@@ -1942,12 +1943,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const closePreview = commerceCloseExpectation(commerce, new Date().toISOString())
   const closePreviewOrderIds = new Set(closePreview?.orderIds ?? [])
   const closableOrders = commerce.orders.filter((order) => closePreviewOrderIds.has(order.id))
-  const reconciledValue = closePreview?.total ?? 0
+  const netCloseValue = closePreview?.total ?? 0
   const closeExpectedByPayment = new Map<string, number>()
   for (const order of closableOrders) {
-    const adjustedTotal = commerceOrderAdjustedTotal(order)
-    if (adjustedTotal !== null) closeExpectedByPayment.set(order.payment, (closeExpectedByPayment.get(order.payment) ?? 0) + adjustedTotal)
+    closeExpectedByPayment.set(order.payment, (closeExpectedByPayment.get(order.payment) ?? 0) + order.total)
   }
+  const closeExpectedPaymentValue = [...closeExpectedByPayment.values()].reduce((total, value) => total + value, 0)
+  const closeCorrectionPayableMmk = closableOrders.flatMap((order) => order.corrections ?? [])
+    .filter((correction) => correction.kind === 'credit')
+    .reduce((total, correction) => total + correction.calculation.totalMmk, 0)
+  const closeCorrectionReceivableMmk = closableOrders.flatMap((order) => order.corrections ?? [])
+    .filter((correction) => correction.kind === 'debit')
+    .reduce((total, correction) => total + correction.calculation.totalMmk, 0)
   const effectiveCloseSettlementDraft = [...closeExpectedByPayment.entries()]
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
     .map(([paymentMethod, expectedMmk]) => closeSettlementDraft.find((line) => line.paymentMethod === paymentMethod) ?? {
@@ -6467,7 +6474,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       subjectId: closeId,
       summary: `Close ${expected.businessDate}`,
       before: `${commerce.closes.length} snapshots`,
-      after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · expected ${formatMoney(expected.total)} · counted ${formatMoney(settlement.totalCountedMmk)} · settlement ${settlement.status.replace('_', ' ')} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
+      after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · reconciled payments ${formatMoney(settlement.totalExpectedMmk)} · counted ${formatMoney(settlement.totalCountedMmk)} · net sales ${formatMoney(expected.total)} · settlement ${settlement.status.replace('_', ' ')} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
       apply: (action) => mutateCommerce(
         'commerce.close.saved',
         action.commandId,
@@ -7107,19 +7114,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               </div> : null}
             </div>
           }) : <p className="form-notice">No reconciled payments are waiting. Save a zero-value close only if the business date still needs an accountable snapshot.</p>}
-          <p className="panel-copy">Expected amounts come from completed, reconciled orders. Counted amounts come from the cashier. A variance is retained with its owner and reason; SuperMega does not move money or post externally.</p>
+          <p className="form-notice" data-close-accounting-basis="correction-aware"><strong>{formatMoney(closeExpectedPaymentValue)} reconciled payments</strong> · {formatMoney(netCloseValue)} net sales{closeCorrectionPayableMmk ? ` · ${formatMoney(closeCorrectionPayableMmk)} correction payable` : ''}{closeCorrectionReceivableMmk ? ` · ${formatMoney(closeCorrectionReceivableMmk)} correction receivable` : ''}</p>
+          <p className="panel-copy">Expected amounts preserve the payment already reconciled at sale. Credit and debit corrections change net sales and create a payable or receivable; they do not pretend money moved. Counted amounts come from the cashier. A variance keeps its owner and reason, and SuperMega never posts externally.</p>
         </section>
       </details>
       <button className="core-button" data-close-primary disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
-      <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(reconciledValue)} ready to close.`}</p>
+      <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(closeExpectedPaymentValue)} payments · ${formatMoney(netCloseValue)} net sales ready to close.`}</p>
       {latestClose?.operator ? <details className="compact-disclosure">
         <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
         <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
         <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
-        {latestClose.settlement ? <p className="form-notice" data-close-settlement-status={latestClose.settlement.status}><strong>Settlement {latestClose.settlement.status === 'matched' ? 'matched' : 'variance under review'}</strong> · expected {formatMoney(latestClose.settlement.totalExpectedMmk)} · counted {formatMoney(latestClose.settlement.totalCountedMmk)} · variance {latestClose.settlement.totalVarianceMmk > 0 ? '+' : ''}{formatMoney(latestClose.settlement.totalVarianceMmk)}</p> : <p className="form-notice">Legacy close · settlement count not recorded</p>}
+        {latestClose.settlement ? <p className="form-notice" data-close-settlement-status={latestClose.settlement.status}><strong>Settlement {latestClose.settlement.status === 'matched' ? 'matched' : 'variance under review'}</strong> · expected {formatMoney(latestClose.settlement.totalExpectedMmk)} · counted {formatMoney(latestClose.settlement.totalCountedMmk)} · variance {latestClose.settlement.totalVarianceMmk > 0 ? '+' : ''}{formatMoney(latestClose.settlement.totalVarianceMmk)}{latestClose.settlement.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? ` · net sales ${formatMoney(latestClose.settlement.netOrderTotalMmk)}${latestClose.settlement.correctionPayableMmk ? ` · correction payable ${formatMoney(latestClose.settlement.correctionPayableMmk)}` : ''}${latestClose.settlement.correctionReceivableMmk ? ` · correction receivable ${formatMoney(latestClose.settlement.correctionReceivableMmk)}` : ''}` : ' · legacy correction basis'}</p> : <p className="form-notice">Legacy close · settlement count not recorded</p>}
         {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
         {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
-          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
+          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · {latestAccountingDownload.artifact.settlementExpectedMmk === null ? 'settlement not recorded' : `payments expected ${formatMoney(latestAccountingDownload.artifact.settlementExpectedMmk)} / counted ${formatMoney(latestAccountingDownload.artifact.settlementCountedMmk ?? 0)}`} · net sales {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)}{latestAccountingDownload.artifact.settlementCorrectionPayableMmk ? ` · correction payable ${formatMoney(latestAccountingDownload.artifact.settlementCorrectionPayableMmk)}` : ''}{latestAccountingDownload.artifact.settlementCorrectionReceivableMmk ? ` · correction receivable ${formatMoney(latestAccountingDownload.artifact.settlementCorrectionReceivableMmk)}` : ''} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
           <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href}>Download accounting CSV</a>
         </div> : null}
       </details> : null}

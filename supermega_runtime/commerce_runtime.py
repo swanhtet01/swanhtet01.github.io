@@ -8,7 +8,7 @@ import json
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Sequence
 from urllib.parse import quote
 
 from supermega_runtime.client_import_runtime import (
@@ -41,10 +41,11 @@ from supermega_runtime.trial_store import TrialValidationError
 
 
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
-COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v3"
-COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v3"
+COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v4"
+COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v4"
 COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"
-COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v1"
+_COMMERCE_CLOSE_SETTLEMENT_V1_SCHEMA = "supermega.commerce.close-settlement.v1"
+COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v2"
 COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = "supermega.commerce.order-acknowledgement.v1"
 COMMERCE_EVENTS = frozenset(
     {
@@ -658,8 +659,11 @@ _PRODUCTION_RETURN_EXCLUSIVE_FIELDS = frozenset(
     }
 )
 _CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"settlement"}
-_CLOSE_SETTLEMENT_FIELDS = frozenset(
+_CLOSE_SETTLEMENT_V1_FIELDS = frozenset(
     {"schema", "status", "totalExpectedMmk", "totalCountedMmk", "totalVarianceMmk", "lines"}
+)
+_CLOSE_SETTLEMENT_FIELDS = _CLOSE_SETTLEMENT_V1_FIELDS | frozenset(
+    {"netOrderTotalMmk", "correctionReceivableMmk", "correctionPayableMmk"}
 )
 _CLOSE_SETTLEMENT_LINE_FIELDS = frozenset(
     {"paymentMethod", "expectedMmk", "countedMmk", "varianceMmk", "status", "varianceOwner", "varianceReason"}
@@ -4174,18 +4178,33 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             _text(close["evidenceReference"], f"closes[{index}].evidenceReference")
             if "settlement" in close:
                 settlement = _object(close["settlement"], f"closes[{index}].settlement")
+                legacy_settlement = settlement.get("schema") == _COMMERCE_CLOSE_SETTLEMENT_V1_SCHEMA
                 _exact_fields(
                     settlement,
                     f"closes[{index}].settlement",
-                    required=_CLOSE_SETTLEMENT_FIELDS,
+                    required=(
+                        _CLOSE_SETTLEMENT_V1_FIELDS
+                        if legacy_settlement
+                        else _CLOSE_SETTLEMENT_FIELDS
+                    ),
                 )
-                if settlement["schema"] != COMMERCE_CLOSE_SETTLEMENT_SCHEMA or settlement["status"] not in {"matched", "variance_review"}:
+                if (
+                    (not legacy_settlement and settlement["schema"] != COMMERCE_CLOSE_SETTLEMENT_SCHEMA)
+                    or settlement["status"] not in {"matched", "variance_review"}
+                ):
                     raise TrialValidationError(f"closes[{index}].settlement contract is invalid.")
-                expected_by_payment: dict[str, int] = {}
-                for order, adjusted_total in zip(member_orders, member_adjusted_totals, strict=True):
-                    assert adjusted_total is not None
-                    payment_method = str(order["payment"])
-                    expected_by_payment[payment_method] = expected_by_payment.get(payment_method, 0) + adjusted_total
+                settlement_basis = _close_settlement_basis(member_orders)
+                if settlement_basis is None:
+                    raise TrialValidationError(f"closes[{index}].settlement order total is invalid.")
+                expected_by_payment = dict(settlement_basis["expectedByPayment"])
+                if legacy_settlement:
+                    expected_by_payment = {}
+                    for order, adjusted_total in zip(member_orders, member_adjusted_totals, strict=True):
+                        assert adjusted_total is not None
+                        payment_method = str(order["payment"])
+                        expected_by_payment[payment_method] = expected_by_payment.get(payment_method, 0) + adjusted_total
+                        if expected_by_payment[payment_method] > _MAX_SAFE_INTEGER:
+                            raise TrialValidationError(f"closes[{index}].settlement order total is invalid.")
                 settlement_lines: list[dict[str, Any]] = []
                 for line_index, candidate_line in enumerate(_list(settlement["lines"], f"closes[{index}].settlement.lines")):
                     field = f"closes[{index}].settlement.lines[{line_index}]"
@@ -4219,10 +4238,36 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     or settlement["totalExpectedMmk"] != total_expected
                     or settlement["totalCountedMmk"] != total_counted
                     or settlement["totalVarianceMmk"] != total_variance
-                    or total_expected != close["total"]
                     or settlement["status"] != ("variance_review" if any(line["status"] == "variance_review" for line in settlement_lines) else "matched")
                 ):
                     raise TrialValidationError(f"closes[{index}].settlement totals are invalid.")
+                if legacy_settlement:
+                    if total_expected != close["total"]:
+                        raise TrialValidationError(f"closes[{index}].settlement totals are invalid.")
+                else:
+                    net_order_total_mmk = _integer(
+                        settlement["netOrderTotalMmk"],
+                        f"closes[{index}].settlement.netOrderTotalMmk",
+                    )
+                    correction_receivable_mmk = _integer(
+                        settlement["correctionReceivableMmk"],
+                        f"closes[{index}].settlement.correctionReceivableMmk",
+                    )
+                    correction_payable_mmk = _integer(
+                        settlement["correctionPayableMmk"],
+                        f"closes[{index}].settlement.correctionPayableMmk",
+                    )
+                    if (
+                        net_order_total_mmk != settlement_basis["netOrderTotalMmk"]
+                        or correction_receivable_mmk != settlement_basis["correctionReceivableMmk"]
+                        or correction_payable_mmk != settlement_basis["correctionPayableMmk"]
+                        or total_expected != settlement_basis["totalExpectedMmk"]
+                        or total_expected
+                        != net_order_total_mmk + correction_payable_mmk - correction_receivable_mmk
+                    ):
+                        raise TrialValidationError(
+                            f"closes[{index}].settlement correction basis is invalid."
+                        )
     _unique(close_ids, "Daily close ID")
     _unique(close_business_dates, "Daily close business date")
     _unique(closed_order_ids, "Closed order ID")
@@ -6458,6 +6503,78 @@ def _order_adjusted_total(order: Mapping[str, Any]) -> int | None:
     return total
 
 
+def _close_settlement_basis(orders: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
+    expected_by_payment: dict[str, int] = {}
+    net_order_total_mmk = 0
+    correction_receivable_mmk = 0
+    correction_payable_mmk = 0
+    for order in orders:
+        adjusted_total = _order_adjusted_total(order)
+        if adjusted_total is None:
+            return None
+        payment_method = str(order["payment"])
+        expected_by_payment[payment_method] = (
+            expected_by_payment.get(payment_method, 0) + int(order["total"])
+        )
+        net_order_total_mmk += adjusted_total
+        for correction in order.get("corrections", []):
+            amount_mmk = int(correction["calculation"]["totalMmk"])
+            if correction["kind"] == "credit":
+                correction_payable_mmk += amount_mmk
+            else:
+                correction_receivable_mmk += amount_mmk
+        values = (
+            expected_by_payment[payment_method],
+            net_order_total_mmk,
+            correction_receivable_mmk,
+            correction_payable_mmk,
+        )
+        if any(value < 0 or value > _MAX_SAFE_INTEGER for value in values):
+            return None
+    total_expected_mmk = sum(expected_by_payment.values())
+    if (
+        total_expected_mmk > _MAX_SAFE_INTEGER
+        or total_expected_mmk
+        != net_order_total_mmk + correction_payable_mmk - correction_receivable_mmk
+    ):
+        return None
+    return {
+        "expectedByPayment": expected_by_payment,
+        "totalExpectedMmk": total_expected_mmk,
+        "netOrderTotalMmk": net_order_total_mmk,
+        "correctionReceivableMmk": correction_receivable_mmk,
+        "correctionPayableMmk": correction_payable_mmk,
+    }
+
+
+def _close_settlement_projection(settlement: Mapping[str, Any] | None) -> list[Any] | None:
+    if settlement is None:
+        return None
+    current_contract = settlement["schema"] == COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+    return [
+        settlement["schema"],
+        settlement["status"],
+        settlement["totalExpectedMmk"],
+        settlement["totalCountedMmk"],
+        settlement["totalVarianceMmk"],
+        settlement["netOrderTotalMmk"] if current_contract else None,
+        settlement["correctionReceivableMmk"] if current_contract else None,
+        settlement["correctionPayableMmk"] if current_contract else None,
+        [
+            [
+                line["paymentMethod"],
+                line["expectedMmk"],
+                line["countedMmk"],
+                line["varianceMmk"],
+                line["status"],
+                line["varianceOwner"],
+                line["varianceReason"],
+            ]
+            for line in settlement["lines"]
+        ],
+    ]
+
+
 def commerce_catalog_baseline_digest(baseline: Mapping[str, Any]) -> str:
     """Bind one opening price and reorder snapshot to its accountable proof."""
 
@@ -6623,6 +6740,7 @@ def commerce_daily_close_export(
         "orderCount": close["orders"],
         "paymentExceptionOrderIds": list(close["paymentExceptionOrderIds"]),
         "stockExceptionSkus": list(close["stockExceptionSkus"]),
+        "settlement": deepcopy(close.get("settlement")),
         "orders": rows,
     }
     artifact["digest"] = _projection_digest(
@@ -6639,6 +6757,7 @@ def commerce_daily_close_export(
             artifact["orderCount"],
             artifact["paymentExceptionOrderIds"],
             artifact["stockExceptionSkus"],
+            _close_settlement_projection(artifact["settlement"]),
             [
                 [
                     row["orderId"],
@@ -6737,6 +6856,15 @@ def commerce_daily_close_csv(
         "total_mmk",
         "corrections_json",
         "calculation_status",
+        "settlement_schema",
+        "settlement_status",
+        "settlement_expected_mmk",
+        "settlement_counted_mmk",
+        "settlement_variance_mmk",
+        "settlement_net_order_total_mmk",
+        "settlement_correction_receivable_mmk",
+        "settlement_correction_payable_mmk",
+        "settlement_lines_json",
         "payment_exception_order_ids",
         "stock_exception_skus",
         "artifact_digest",
@@ -6770,6 +6898,38 @@ def commerce_daily_close_csv(
             artifact["totalMmk"],
             None,
             None,
+            artifact["settlement"]["schema"] if artifact["settlement"] else None,
+            artifact["settlement"]["status"] if artifact["settlement"] else None,
+            artifact["settlement"]["totalExpectedMmk"] if artifact["settlement"] else None,
+            artifact["settlement"]["totalCountedMmk"] if artifact["settlement"] else None,
+            artifact["settlement"]["totalVarianceMmk"] if artifact["settlement"] else None,
+            (
+                artifact["settlement"]["netOrderTotalMmk"]
+                if artifact["settlement"]
+                and artifact["settlement"]["schema"] == COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+                else None
+            ),
+            (
+                artifact["settlement"]["correctionReceivableMmk"]
+                if artifact["settlement"]
+                and artifact["settlement"]["schema"] == COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+                else None
+            ),
+            (
+                artifact["settlement"]["correctionPayableMmk"]
+                if artifact["settlement"]
+                and artifact["settlement"]["schema"] == COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+                else None
+            ),
+            (
+                json.dumps(
+                    artifact["settlement"]["lines"],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                if artifact["settlement"]
+                else None
+            ),
             artifact["paymentExceptionOrderIds"],
             artifact["stockExceptionSkus"],
             artifact["digest"],
@@ -6804,6 +6964,15 @@ def commerce_daily_close_csv(
             row["totalMmk"],
             json.dumps(row["corrections"], ensure_ascii=False, separators=(",", ":")),
             row["calculationStatus"],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
             None,
             None,
             artifact["digest"],
@@ -6985,6 +7154,18 @@ def commerce_accounting_handoff(
     )
     if total_debit_mmk != expected_control_total_mmk or total_credit_mmk != expected_control_total_mmk:
         return None
+    settlement = close_export["settlement"]
+    if (
+        settlement is not None
+        and settlement["schema"] == COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+        and (
+            settlement["totalExpectedMmk"] != original_order_total_mmk
+            or settlement["netOrderTotalMmk"] != close_export["totalMmk"]
+            or settlement["correctionReceivableMmk"] != debit_correction_mmk
+            or settlement["correctionPayableMmk"] != credit_correction_mmk
+        )
+    ):
+        return None
     artifact: dict[str, Any] = {
         "schema": COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
         "status": "review_required",
@@ -6997,6 +7178,26 @@ def commerce_accounting_handoff(
         "sourceCloseDigest": close_export["digest"],
         "accountMappingRevision": account_mapping["revision"] if account_mapping else None,
         "accountMappingEvidenceReference": account_mapping["proof"]["evidenceReference"] if account_mapping else None,
+        "settlementSchema": settlement["schema"] if settlement else None,
+        "settlementStatus": settlement["status"] if settlement else None,
+        "settlementExpectedMmk": settlement["totalExpectedMmk"] if settlement else None,
+        "settlementCountedMmk": settlement["totalCountedMmk"] if settlement else None,
+        "settlementVarianceMmk": settlement["totalVarianceMmk"] if settlement else None,
+        "settlementNetOrderTotalMmk": (
+            settlement["netOrderTotalMmk"]
+            if settlement and settlement["schema"] == COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+            else None
+        ),
+        "settlementCorrectionReceivableMmk": (
+            settlement["correctionReceivableMmk"]
+            if settlement and settlement["schema"] == COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+            else None
+        ),
+        "settlementCorrectionPayableMmk": (
+            settlement["correctionPayableMmk"]
+            if settlement and settlement["schema"] == COMMERCE_CLOSE_SETTLEMENT_SCHEMA
+            else None
+        ),
         "originalOrderTotalMmk": original_order_total_mmk,
         "netOrderTotalMmk": close_export["totalMmk"],
         "correctionCount": len(corrections),
@@ -7016,6 +7217,11 @@ def commerce_accounting_handoff(
         artifact["externalPostingPerformed"], artifact["currency"], artifact["closeId"],
         artifact["businessDate"], artifact["closedAt"], artifact["sourceCloseDigest"],
         artifact["accountMappingRevision"], artifact["accountMappingEvidenceReference"],
+        artifact["settlementSchema"], artifact["settlementStatus"],
+        artifact["settlementExpectedMmk"], artifact["settlementCountedMmk"],
+        artifact["settlementVarianceMmk"], artifact["settlementNetOrderTotalMmk"],
+        artifact["settlementCorrectionReceivableMmk"],
+        artifact["settlementCorrectionPayableMmk"],
         artifact["originalOrderTotalMmk"], artifact["netOrderTotalMmk"],
         artifact["correctionCount"], artifact["creditCorrectionMmk"],
         artifact["debitCorrectionMmk"], artifact["totalDebitMmk"],
@@ -7039,6 +7245,10 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
         "schema", "status", "posting_authority", "external_posting_performed",
         "close_id", "business_date", "closed_at", "currency", "source_close_digest",
         "account_mapping_revision", "account_mapping_evidence_reference",
+        "settlement_schema", "settlement_status", "settlement_expected_mmk",
+        "settlement_counted_mmk", "settlement_variance_mmk",
+        "settlement_net_order_total_mmk", "settlement_correction_receivable_mmk",
+        "settlement_correction_payable_mmk",
         "original_order_total_mmk", "net_order_total_mmk", "correction_count",
         "credit_correction_mmk", "debit_correction_mmk", "line_id",
         "side", "account_role", "external_account_code", "payment_method",
@@ -7053,7 +7263,12 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
             str(artifact["externalPostingPerformed"]).lower(), artifact["closeId"],
             artifact["businessDate"], artifact["closedAt"], artifact["currency"],
             artifact["sourceCloseDigest"], artifact["accountMappingRevision"],
-            artifact["accountMappingEvidenceReference"], artifact["originalOrderTotalMmk"],
+            artifact["accountMappingEvidenceReference"], artifact["settlementSchema"],
+            artifact["settlementStatus"], artifact["settlementExpectedMmk"],
+            artifact["settlementCountedMmk"], artifact["settlementVarianceMmk"],
+            artifact["settlementNetOrderTotalMmk"],
+            artifact["settlementCorrectionReceivableMmk"],
+            artifact["settlementCorrectionPayableMmk"], artifact["originalOrderTotalMmk"],
             artifact["netOrderTotalMmk"], artifact["correctionCount"],
             artifact["creditCorrectionMmk"], artifact["debitCorrectionMmk"],
             entry["lineId"], entry["side"],
