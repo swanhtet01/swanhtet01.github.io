@@ -2,13 +2,14 @@ import {
   createInitialWorkspace,
   loadWebsiteWorkspace,
   mutateWebsiteWorkspace,
-  WEBSITE_EDIT_SESSION_KEY,
+  websiteEditSessionStorageKey,
+  WEBSITE_LOCAL_EDIT_SESSION_SCOPES,
   workspaceFingerprint,
   type WebsiteLockManager,
   type WebsiteStorage,
   type WebsiteWorkspace,
 } from './website-model.ts'
-import { restoreWebsiteLeadLedger, WEBSITE_LEAD_LEDGER_KEY } from './website-leads.ts'
+import { readStoredWebsiteLeads, websiteInboxLeads } from './website-leads.ts'
 
 export const websiteStarterTemplates = [
   { id: 'business-presence', label: 'Business presence', detail: 'Home, About, and Contact for a clear company website.' },
@@ -294,29 +295,41 @@ export function installWebsiteWorkingSample(workspace: WebsiteWorkspace, input: 
   }
 }
 
+// `sessions` is where the builder holds an unsaved preview: sessionStorage, under the scoped key
+// websiteEditSessionStorageKey(scope). This guard used to read the bare WEBSITE_EDIT_SESSION_KEY
+// out of `storage` (localStorage) -- a different medium AND a different key shape from what
+// WebsiteProduct writes -- so it never once fired, and running onboarding replaced page copy the
+// owner had typed but not yet saved. The shared key builder is imported from the model now, and
+// both device-local scopes are checked because the workspace being replaced here is the local one.
 export async function activateLocalWebsiteWorkingSample(
   input: WebsiteWorkingSampleInput,
   storage: WebsiteStorage | undefined = globalThis.localStorage,
   locks: WebsiteLockManager | undefined = globalThis.navigator?.locks as WebsiteLockManager | undefined,
+  sessions: Pick<WebsiteStorage, 'getItem'> | undefined = globalThis.sessionStorage,
 ): Promise<WebsiteWorkingSampleActivationResult> {
   if (!storage) return { ok: false, error: 'Browser storage is unavailable.' }
   const loaded = loadWebsiteWorkspace(storage)
   if (!loaded.ok) return loaded
-  let storedLeads = null
-  try {
-    const raw = storage.getItem(WEBSITE_LEAD_LEDGER_KEY)
-    storedLeads = raw === null ? null : restoreWebsiteLeadLedger(JSON.parse(raw))
-    if (raw !== null && !storedLeads) return { ok: false, error: 'Website inquiry data needs recovery before the sample can change.' }
-  } catch {
-    return { ok: false, error: 'Website inquiry data needs recovery before the sample can change.' }
-  }
+  const storedLeads = readStoredWebsiteLeads(storage, 'the sample can change')
+  if (!storedLeads.ok) return storedLeads
+  const unsavedPreviewHeld = sessions !== undefined && WEBSITE_LOCAL_EDIT_SESSION_SCOPES.some((scope) => {
+    try {
+      return sessions.getItem(websiteEditSessionStorageKey(scope)) !== null
+    } catch {
+      // An unreadable preview store is treated as holding a preview: refusing costs the owner one
+      // retry, guessing wrong costs them the copy they typed.
+      return true
+    }
+  })
   let installed: WebsiteWorkspace | null = null
   const mutation = await mutateWebsiteWorkspace((current) => {
     installed = installWebsiteWorkingSample(current, input)
     if (!installed) throw new Error('Existing Website edits or release evidence were preserved.')
+    // Inquiries are keyed to this device's ledger, not to the site's display name. Checking the
+    // name here meant a renamed site looked lead-free and its customers' details were handed to
+    // whatever business onboarding installed next.
     if (installed !== current
-      && (storage.getItem(WEBSITE_EDIT_SESSION_KEY) !== null
-        || storedLeads?.leads.some((lead) => lead.siteName === current.siteName))) {
+      && (unsavedPreviewHeld || websiteInboxLeads(storedLeads.ledger).length > 0)) {
       throw new Error('Unsaved Website edits or inquiries were preserved.')
     }
     return installed

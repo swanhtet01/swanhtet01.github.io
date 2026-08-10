@@ -26,6 +26,9 @@ const PLAYBOOK = `${ROOT}/docs/demo-playbooks/ecommerce.md`
 const PLANTPACKS = `${ROOT}/showroom/src/core/plant-industry-packs.ts`
 const PUBLICGEN = `${ROOT}/tools/create_public_vercel_output.mjs`
 const ONBOARDRUN = `${ROOT}/showroom/src/core/product-onboarding-runtime.ts`
+const ECOMCSS = `${ROOT}/showroom/src/products/ecommerce/ecommerce-product.css`
+const COREAPP = `${ROOT}/showroom/src/core/CoreApp.tsx`
+const PILOTWORKSPACETESTS = `${ROOT}/tools/create_shop_pilot_handoff.test.mjs`
 
 // WHICH GUARDS ARE NOT LISTED HERE, AND WHY THAT IS NOT THE SAME AS UNVERIFIED.
 //
@@ -99,6 +102,17 @@ const MUTATIONS = [
     '.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }',
     '.catalog-import-table { max-height: 340px; overflow: auto; background: #fff; }',
     'a fixed light surface reverts to hardcoded white'],
+  // The same defect written in the notation the guard used to be blind to. Verified 2026-08-11:
+  // caught by the strengthened guard, NOT caught by the version of it in HEAD before this change.
+  ['test_theme_surface_contract.mjs', CORECSS,
+    '.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }',
+    '.catalog-import-table { max-height: 340px; overflow: auto; background: rgba(255, 255, 255, 1); }',
+    'the same light surface reverts to hardcoded white written as rgba() rather than hex'],
+  // The stale-exception check. `.ecommerce-cart` loses its own rule while `.ecommerce-cart-line
+  // input` keeps the string alive, which is exactly what the old substring test could not see.
+  ['test_theme_surface_contract.mjs', ECOMCSS,
+    '.ecommerce-cart {', '.ecommerce-preview-frame {',
+    'a documented theme-blind rule disappears while a longer selector keeps its name alive as a substring'],
   ['test_plant_to_shop_journey.mjs', COMMERCE,
     '      || (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(checkedReceipt.releasedAt) as bigint)) return null',
     '      ) return null',
@@ -188,6 +202,19 @@ const MUTATIONS = [
   ['test_workspace_storage_registry.mjs', STORAGE,
     "  'supermega.shop.counter_draft.v1',", '  // removed by mutation',
     'the in-progress counter sale stops being backed up or cleared'],
+  // The other direction: the KEY moves rather than the registry. Written in the codebase's
+  // dominant style -- a plainly named const read back by name -- which is precisely what the
+  // old name-based scan could not see. Verified 2026-08-11: caught now, NOT caught by HEAD.
+  ['test_workspace_storage_registry.mjs', COREAPP,
+    "const LAST_OPERATOR_KEY = 'supermega.last_operator.v1'",
+    "const LAST_OPERATOR_KEY = 'supermega.last_operator.v2'",
+    'a version-bumped storage key ships unregistered, so it is in no backup and survives every reset'],
+  // The workspace gate. Renaming the test out of the gate's selection is the failure the old
+  // `--test-name-pattern=workspace` form reported as "pass 1".
+  ['test_shop_pilot_workspace.mjs', PILOTWORKSPACETESTS,
+    "test('runs the complete private workspace lifecycle without external action'",
+    "test('runs the complete private lifecycle without external action'",
+    'the private pilot workspace lifecycle test stops being selected and nothing says so'],
   ['test_commerce_state_validator.mjs', COMMERCE,
     '        || candidate.total !== calculation.totalMmk) throw new Error(`orders[${index}].calculation totals are invalid.`)',
     '        || false) throw new Error(`orders[${index}].calculation totals are invalid.`)',

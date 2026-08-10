@@ -3586,15 +3586,26 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSource.includes('isUntouchedWebsiteStarter')
   || !websiteStarterSource.includes("stage: 'draft'")
   || !websiteStarterSource.includes('websiteStarterBriefIssues')
-  || ['fetch(', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))
+  // The starter module reaches storage only through injected, defaulted parameters -- localStorage
+  // for the workspace and the inquiry ledger, sessionStorage for an unsaved preview it must not
+  // overwrite. What it must never do is talk to the network, and the setup COMPONENT must not touch
+  // any device store at all.
+  || ['fetch(', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))
+  || websiteStarterSetupSource.includes('sessionStorage')
   || websiteStarterSetupSource.includes('localStorage')) fail('website_named_business_starter_missing_or_side_effectful')
 if (!websiteModelSource.includes("contract: 'supermega.website.working-sample.v1'")
   || !websiteModelSource.includes('workingSample?: WebsiteWorkingSample')
   || !websiteStarterSource.includes('export function installWebsiteWorkingSample')
   || !websiteStarterSource.includes('export async function activateLocalWebsiteWorkingSample')
   || !websiteStarterSource.includes('marker.contentFingerprint === workspaceFingerprint(workspace)')
-  || !websiteStarterSource.includes('WEBSITE_EDIT_SESSION_KEY')
-  || !websiteStarterSource.includes('WEBSITE_LEAD_LEDGER_KEY')
+  // The unsaved-preview check must go through the SHARED key builder in the model, against the
+  // session store the builder actually writes to. Rebuilding the key here is what let the guard
+  // read `supermega.website.edit-session.v1` out of localStorage -- a key nothing ever writes.
+  || !websiteStarterSource.includes('websiteEditSessionStorageKey(scope)')
+  || !websiteStarterSource.includes('WEBSITE_LOCAL_EDIT_SESSION_SCOPES')
+  || !websiteStarterSource.includes('sessions.getItem(')
+  || !websiteModelSource.includes('export function websiteEditSessionStorageKey(scope: string)')
+  || !websiteStarterSource.includes('readStoredWebsiteLeads(storage')
   || !productOnboardingPageSource.includes('await activateLocalWebsiteWorkingSample({')
   || !websiteSource.includes("? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'working sample' : 'starting template'}")
   || !websiteSource.includes('websiteTodayContext')) fail('website_working_sample_activation_missing')
@@ -8421,11 +8432,21 @@ async function verifyClientOnboardingRuntime() {
       owner: 'Sales lead',
       decisionNote: 'Customer chose another supplier.',
     }, '2026-07-29T00:10:00.000Z')
-    const leadCounts = websiteLeadModel.websiteLeadCounts(closedLeadLedger, 'Golden Valley Trading')
+    const leadCounts = websiteLeadModel.websiteLeadCounts(closedLeadLedger)
     assert(closedLeadLedger.revision === 3
       && closedLeadLedger.leads[0].status === 'closed'
       && closedLeadLedger.leads[0].owner === 'Sales lead'
       && leadCounts.total === 1 && leadCounts.closed === 1, 'website_lead_lifecycle_incomplete')
+    // Renaming the site is one field in Navigation. It used to empty the inbox, the "N new" badge
+    // and the export, because all three selected leads by lead.siteName === workspace.siteName --
+    // every already-captured inquiry stayed on disk and disappeared from the screen.
+    assert(closedLeadLedger.leads.every((lead) => lead.siteName !== 'Renamed After The Inquiry')
+      && websiteLeadModel.websiteInboxLeads(closedLeadLedger).length === 1
+      && websiteLeadModel.websiteLeadCounts(closedLeadLedger).total === 1
+      && websiteLeadModel.websiteLeadCounts.length === 1
+      && websiteLeadModel.websiteInboxLeads.length === 1
+      && !websiteSource.includes('lead.siteName ===')
+      && !websiteStarterSource.includes('lead.siteName ==='), 'website_lead_inbox_orphaned_by_site_rename')
     rejectsSync(() => websiteLeadModel.captureWebsiteLead(emptyLeadLedger, {
       siteName: 'Golden Valley Trading', sourcePage: '/contact', name: 'Daw Mya',
       contact: '09 123 456 789', request: 'Needs a quote.', consentRecorded: false,
@@ -10362,7 +10383,16 @@ async function verifyWebsiteRuntime() {
       getItem: (key) => websiteWorkingSampleValues.get(key) ?? null,
       setItem: (key, value) => websiteWorkingSampleValues.set(key, String(value)),
     }
-    const activatedWebsiteWorkingSample = await starter.activateLocalWebsiteWorkingSample(leadWorkingSampleInput, websiteWorkingSampleStorage, locks)
+    // An unsaved preview lives in sessionStorage under the SCOPED key the builder writes, never as
+    // the bare WEBSITE_EDIT_SESSION_KEY in localStorage. Planting the bare key here made
+    // 'website_working_sample_replaced_an_unsaved_owner_preview' pass against a key the app has
+    // never produced, so the assertion held while the protection did nothing.
+    const websiteWorkingSampleSessionValues = new Map()
+    const websiteWorkingSampleSessions = {
+      getItem: (key) => websiteWorkingSampleSessionValues.get(key) ?? null,
+      setItem: (key, value) => websiteWorkingSampleSessionValues.set(key, String(value)),
+    }
+    const activatedWebsiteWorkingSample = await starter.activateLocalWebsiteWorkingSample(leadWorkingSampleInput, websiteWorkingSampleStorage, locks, websiteWorkingSampleSessions)
     const activatedWebsiteWorkingState = model.loadWebsiteWorkspace(websiteWorkingSampleStorage)
     assert(activatedWebsiteWorkingSample.ok
       && activatedWebsiteWorkingState.ok
@@ -10371,18 +10401,25 @@ async function verifyWebsiteRuntime() {
       && activatedWebsiteWorkingState.workspace.workingSample?.templateId === 'lead-generation',
     'website_working_sample_was_not_persisted_atomically')
     const websiteWorkingSampleRaw = websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY)
-    websiteWorkingSampleValues.set(model.WEBSITE_EDIT_SESSION_KEY, 'pending-owner-preview')
+    const websiteWorkingSampleEditSession = model.createWebsiteEditSession(activatedWebsiteWorkingState.workspace)
+    websiteWorkingSampleSessions.setItem(
+      model.websiteEditSessionStorageKey('browser-local'),
+      JSON.stringify(websiteWorkingSampleEditSession),
+    )
     const blockedWebsiteWorkingSample = await starter.activateLocalWebsiteWorkingSample({
       ...leadWorkingSampleInput,
       templateId: 'catalog-showcase',
       capturedAt: at(60),
-    }, websiteWorkingSampleStorage, locks)
+    }, websiteWorkingSampleStorage, locks, websiteWorkingSampleSessions)
     assert(!blockedWebsiteWorkingSample.ok
-      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw,
+      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw
+      && model.websiteEditSessionMatches(websiteWorkingSampleEditSession, model.loadWebsiteWorkspace(websiteWorkingSampleStorage).workspace),
     'website_working_sample_replaced_an_unsaved_owner_preview')
-    websiteWorkingSampleValues.delete(model.WEBSITE_EDIT_SESSION_KEY)
+    websiteWorkingSampleSessionValues.delete(model.websiteEditSessionStorageKey('browser-local'))
+    // Captured under a name the site no longer carries: an owner renamed the site after the
+    // inquiry arrived. Membership follows the ledger, so this still has to block replacement.
     const websiteLeadLedger = leads.captureWebsiteLead(leads.emptyWebsiteLeadLedger(), {
-      siteName: leadWorkingSampleInput.businessName,
+      siteName: 'Golden Valley Services (former name)',
       sourcePage: '/',
       name: 'Website customer',
       contact: 'customer@example.com',
@@ -10394,9 +10431,10 @@ async function verifyWebsiteRuntime() {
       ...leadWorkingSampleInput,
       templateId: 'catalog-showcase',
       capturedAt: at(62),
-    }, websiteWorkingSampleStorage, locks)
+    }, websiteWorkingSampleStorage, locks, websiteWorkingSampleSessions)
     assert(!leadBlockedWebsiteWorkingSample.ok
-      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw,
+      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw
+      && leads.websiteLeadCounts(leads.readWebsiteLeadLedger(websiteWorkingSampleStorage)).total === 1,
     'website_working_sample_hid_retained_customer_inquiries')
     const websiteImportDigest = `sha256:${'b'.repeat(64)}`
     const websiteImportInput = {

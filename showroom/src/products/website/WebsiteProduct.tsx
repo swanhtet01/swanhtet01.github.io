@@ -18,6 +18,7 @@ import {
   emptyWebsiteLeadLedger,
   readWebsiteLeadLedger,
   reviewWebsiteLead,
+  websiteInboxLeads,
   websiteLeadCounts,
   writeWebsiteLeadLedger,
 } from './website-leads'
@@ -49,8 +50,8 @@ import {
   recordWebsiteSnapshot,
   restoreWebsiteEditSession,
   updateWebsiteEditSession,
-  WEBSITE_EDIT_SESSION_KEY,
   websiteEditSessionMatches,
+  websiteEditSessionStorageKey,
   workspaceFingerprint,
   type EvidenceKind,
   type PreviewDevice,
@@ -143,10 +144,6 @@ function TrialReadyWorkspace({
 function formatRecoveryDate(value: string) {
   const timestamp = Date.parse(value)
   return Number.isNaN(timestamp) ? 'Saved recovery' : new Date(timestamp).toLocaleString()
-}
-
-function editSessionStorageKey(scope: string) {
-  return `${WEBSITE_EDIT_SESSION_KEY}.${encodeURIComponent(scope)}`
 }
 
 export function WebsiteProduct() {
@@ -298,7 +295,7 @@ export function WebsiteProduct() {
     if (editSessionRef.current?.scope === editSessionScope) return
     const restoreTimer = window.setTimeout(() => {
       if (editSessionRef.current?.scope === editSessionScope) return
-      const storageKey = editSessionStorageKey(editSessionScope)
+      const storageKey = websiteEditSessionStorageKey(editSessionScope)
       try {
         const raw = window.sessionStorage.getItem(storageKey)
         const restored = raw ? restoreWebsiteEditSession(raw) : null
@@ -402,7 +399,7 @@ export function WebsiteProduct() {
 
   function persistEditSession(next: WebsiteEditSessionState) {
     try {
-      window.sessionStorage.setItem(editSessionStorageKey(next.scope), JSON.stringify(next.session))
+      window.sessionStorage.setItem(websiteEditSessionStorageKey(next.scope), JSON.stringify(next.session))
     } catch {
       setNotice('The unsaved preview is held in this tab only. Browser draft recovery is unavailable, but Save and Discard still work.')
     }
@@ -411,7 +408,7 @@ export function WebsiteProduct() {
   function clearEditSession(target = editSessionRef.current) {
     if (target) {
       try {
-        window.sessionStorage.removeItem(editSessionStorageKey(target.scope))
+        window.sessionStorage.removeItem(websiteEditSessionStorageKey(target.scope))
       } catch {
         // The in-memory edit session can still be cleared safely.
       }
@@ -791,8 +788,11 @@ export function WebsiteProduct() {
   const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
     && Boolean(page.hero.ctaLabel.trim())
     && Boolean(page.hero.ctaHref.trim()))
-  const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
-  const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
+  // Inbox membership follows the ledger this workspace owns, not the name shown on the site.
+  // Filtering these two on workspace.siteName meant one rename in Navigation emptied the inbox,
+  // the "N new" badge, and the export -- with every captured inquiry still sitting on disk.
+  const websiteLeads = websiteInboxLeads(leadLedger)
+  const leadCounts = websiteLeadCounts(leadLedger)
   const releaseRecordRequired = storageMode === 'managed'
   const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges
   const websiteTodayStep = storageIssue || canRepairLocalStorage

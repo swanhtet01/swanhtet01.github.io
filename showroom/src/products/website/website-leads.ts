@@ -114,6 +114,26 @@ export function restoreWebsiteLeadLedger(value: unknown): WebsiteLeadLedger | nu
   }
 }
 
+export type WebsiteStoredLeadsResult =
+  | { ok: true; ledger: WebsiteLeadLedger }
+  | { ok: false; error: string }
+
+// Read the device-local inbox on behalf of a caller that is about to REPLACE the website workspace
+// (onboarding sample, client draft import). Absent storage reads as an empty inbox; unreadable
+// storage is refused rather than reported empty, because "cannot read" must never be mistaken for
+// "nothing to protect".
+export function readStoredWebsiteLeads(storage: StorageReader, subject: string): WebsiteStoredLeadsResult {
+  try {
+    const raw = storage.getItem(WEBSITE_LEAD_LEDGER_KEY)
+    if (raw === null) return { ok: true, ledger: emptyWebsiteLeadLedger() }
+    const ledger = restoreWebsiteLeadLedger(JSON.parse(raw))
+    if (!ledger) return { ok: false, error: `Website inquiry data needs recovery before ${subject}.` }
+    return { ok: true, ledger }
+  } catch {
+    return { ok: false, error: `Website inquiry data needs recovery before ${subject}.` }
+  }
+}
+
 export function readWebsiteLeadLedger(storage: StorageReader): WebsiteLeadLedger {
   const raw = storage.getItem(WEBSITE_LEAD_LEDGER_KEY)
   if (!raw) return emptyWebsiteLeadLedger()
@@ -185,8 +205,26 @@ export function reviewWebsiteLead(
   }
 }
 
-export function websiteLeadCounts(ledger: WebsiteLeadLedger, siteName: string) {
-  const siteLeads = ledger.leads.filter((lead) => lead.siteName === siteName)
+// A ledger IS one website's inbox: the device-local one lives beside the single local workspace
+// under WEBSITE_LEAD_LEDGER_KEY, and the managed one lives inside that company workspace's
+// leadLedger. Inbox membership therefore follows the ledger, never the site's display name.
+//
+// The inbox, the counts and the export all used to filter on `lead.siteName === workspace.siteName`
+// instead. Renaming the site in Navigation is a one-field edit that an owner makes casually, and it
+// silently emptied all three: every inquiry already captured stayed on disk but disappeared from
+// the screen, from the "N new" badge that routes the owner to them, and from the export they would
+// use to get their customers back. lead.siteName is kept, but only as the name the customer saw
+// when they wrote in -- it is a label on the record, never a lookup key.
+//
+// The invariant that makes this safe is enforced upstream: activateLocalWebsiteWorkingSample and
+// activateLocalWebsitePageDrafts both refuse to swap a different business into a workspace whose
+// ledger holds inquiries, so a ledger never mixes two businesses.
+export function websiteInboxLeads(ledger: WebsiteLeadLedger) {
+  return ledger.leads
+}
+
+export function websiteLeadCounts(ledger: WebsiteLeadLedger) {
+  const siteLeads = websiteInboxLeads(ledger)
   return {
     total: siteLeads.length,
     new: siteLeads.filter((lead) => lead.status === 'new').length,
