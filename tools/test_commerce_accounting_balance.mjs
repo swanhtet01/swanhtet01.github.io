@@ -25,7 +25,7 @@ const bundle = await build({
     contents: `export {
       createSeedCommerce, reserveCommerceOrder, advanceCommerceOrder, reconcileCommercePayment,
       commerceCloseExpectation, saveCommerceClose, commerceAccountingHandoff,
-      commerceDailyCloseExport,
+      commerceDailyCloseExport, commerceOrderCorrectionExpectation, recordCommerceOrderCorrection,
     } from './commerce-workspace.ts'`,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/accounting-balance-entry.ts',
@@ -41,6 +41,7 @@ const bundle = await build({
 const {
   createSeedCommerce, reserveCommerceOrder, advanceCommerceOrder, reconcileCommercePayment,
   commerceCloseExpectation, saveCommerceClose, commerceAccountingHandoff, commerceDailyCloseExport,
+  commerceOrderCorrectionExpectation, recordCommerceOrderCorrection,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -182,5 +183,87 @@ check(
 const again = commerceAccountingHandoff(closed, CLOSE_ID)
 assert.deepEqual(again, handoff, 'the handoff is deterministic for a given close')
 checks += 1
+
+// --- and it must still balance once a correction exists -----------------------
+// The case above has one debit pair per payment method and one revenue credit. A credit note
+// adds a SECOND pair -- sales_adjustment against correction_payable -- so the arithmetic that
+// has to hold is genuinely different, and it is the case an accountant actually argues about.
+//
+// Walked live in a browser first: a returned item credited in full produced
+// debit payment_clearing 22,500 / credit sales_revenue 22,500 / debit sales_adjustment 22,500
+// / credit correction_payable 22,500, with the original invoice total preserved and the net
+// order total at zero. This pins that shape.
+const correctable = commerceOrderCorrectionExpectation(state, 'ORD-ACCT-1')
+check(Boolean(correctable), 'a completed, reconciled, unclosed order can take a correction')
+check(
+  correctable.currentBalanceMmk > 0,
+  `and has a balance to credit against, got ${correctable?.currentBalanceMmk}`,
+)
+
+const creditedState = recordCommerceOrderCorrection(state, {
+  orderId: 'ORD-ACCT-1',
+  kind: 'credit',
+  reasonCode: 'service_recovery',
+  listedAmountMmk: correctable.currentBalanceMmk,
+}, {
+  actionId: 'ACT-3C5D7E9F-2A4B-4C6D-8E0F-1A2B3C4D5E6F',
+  capturedAt: at(13),
+  actor: OPERATOR,
+  reason: 'Credit for the returned unit',
+  evidenceReference: 'ACCT-CREDIT-1',
+}, correctable)
+check(Boolean(creditedState), 'the credit note records against that order')
+
+// A credit for MORE than the balance must be refused -- the live screen says "A credit cannot
+// exceed the order's current corrected balance", and that has to be true of the model too.
+check(
+  recordCommerceOrderCorrection(state, {
+    orderId: 'ORD-ACCT-1',
+    kind: 'credit',
+    reasonCode: 'service_recovery',
+    listedAmountMmk: correctable.currentBalanceMmk + 1,
+  }, {
+    actionId: 'ACT-4D6E8F0A-3B5C-4D7E-9F1A-2B3C4D5E6F7A',
+    capturedAt: at(13),
+    actor: OPERATOR,
+    reason: 'Over-credit that must be refused',
+    evidenceReference: 'ACCT-CREDIT-OVER',
+  }, correctable) === null,
+  'a credit larger than the order balance is refused',
+)
+
+const correctedExpectation = commerceCloseExpectation(creditedState, at(14))
+check(Boolean(correctedExpectation), 'a close expectation computes with the correction present')
+const CORRECTED_CLOSE = 'CLOSE-9A1B3C5D-7E2F-4A6B-8C0D-1E3F5A7B9C2D'
+const correctedClose = saveCommerceClose(creditedState, CORRECTED_CLOSE, {
+  actionId: 'ACT-5E7F9A1B-4C6D-4E8F-A0B1-3C4D5E6F7A8B',
+  capturedAt: at(14),
+  actor: OPERATOR,
+  reason: 'End of trading day with a credit note',
+  evidenceReference: 'ACCT-CLOSE-2',
+}, correctedExpectation)
+check(Boolean(correctedClose), 'the close saves with the correction in it')
+
+const correctedHandoff = commerceAccountingHandoff(correctedClose, CORRECTED_CLOSE)
+check(Boolean(correctedHandoff), 'the accounting handoff is produced for the corrected close')
+const correctedDebits = correctedHandoff.entries.filter((entry) => entry.side === 'debit')
+const correctedCredits = correctedHandoff.entries.filter((entry) => entry.side === 'credit')
+check(
+  total(correctedDebits) === total(correctedCredits),
+  `IT STILL BALANCES WITH A CORRECTION: debits ${total(correctedDebits)} equal credits ${total(correctedCredits)}`,
+)
+check(
+  correctedHandoff.correctionCount >= 1,
+  `and the handoff reports the correction rather than hiding it, got ${correctedHandoff.correctionCount}`,
+)
+check(
+  correctedHandoff.originalOrderTotalMmk > correctedHandoff.netOrderTotalMmk,
+  `the original invoice total is preserved above the net (${correctedHandoff.originalOrderTotalMmk} vs ${correctedHandoff.netOrderTotalMmk})`,
+)
+const roles = new Set(correctedHandoff.entries.map((entry) => entry.accountRole))
+check(
+  roles.has('sales_adjustment') && roles.has('correction_payable'),
+  `the correction books its own adjustment pair, got roles ${[...roles].join(', ')}`,
+)
 
 console.log(`commerce accounting balance contract: ${checks} checks passed`)
