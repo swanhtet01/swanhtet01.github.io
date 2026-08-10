@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-194'
   && completedAutomationArchive.entries?.length === 42
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 44
+  && portfolioSource.completedLocalAutomations.length === 45
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 86
+  && portfolio.completedLocalAutomations.length === 87
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -543,10 +543,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[85]?.productId === 'shop'
   && portfolio.completedLocalAutomations[85]?.workOrderId === 'shop-real-order-accounting-close-client-acceptance'
   && portfolio.completedLocalAutomations[85]?.checkpoint === 'OPS-238'
+  && portfolio.completedLocalAutomations[86]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[86]?.workOrderId === 'shop-real-order-accounting-location-client-acceptance'
+  && portfolio.completedLocalAutomations[86]?.checkpoint === 'OPS-239'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-real-order-accounting-location-client-acceptance'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-accounting-inventory-location-alignment-client-acceptance'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1160,6 +1163,7 @@ requireContract('Shop finance roadmap separates reviewed handoff from tax and po
   && workboard.includes('| ENG-107 | Shop + Finance Integrity Codex | done-local |')
   && workboard.includes('sales-adjustment, tax, correction-receivable, and correction-payable lines')
   && workboard.includes('| OPS-238 | CEO + Shop Accounting-close Client Acceptance / Agent Operations Codex | done-local |')
+  && workboard.includes('| OPS-239 | CEO + Shop Accounting-location Client Acceptance / Agent Operations Codex | done-local |')
   && workboard.includes('lowers the largest chunk to 295,449 bytes')
   && enterpriseRoadmap.includes('https://help.sap.com/docs/SAP_BUSINESS_BYDESIGN/')
   && enterpriseRoadmap.includes('https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/'))
@@ -1805,6 +1809,10 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('supermega.commerce.daily-close-export.v4')
   && workboard.includes('supermega.commerce.accounting-handoff.v4')
   && workboard.includes('The receipt advances `shop-real-order-accounting-location-client-acceptance`')
+  && workboard.includes('| OPS-239 | CEO + Shop Accounting-location Client Acceptance / Agent Operations Codex | done-local |')
+  && workboard.includes('supermega.commerce.daily-close-export.v5')
+  && workboard.includes('supermega.commerce.accounting-handoff.v5')
+  && workboard.includes('The receipt advances `shop-accounting-inventory-location-alignment-client-acceptance`')
   && workboard.includes('| CLAUDE-008 | Claude Code | ready |')
   && workboard.includes('Ecommerce order-close checkpoint `969fae03`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -1859,7 +1867,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-real-order-support-client-acceptance' && entry.checkpoint === 'OPS-236')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-real-order-correction-client-acceptance' && entry.checkpoint === 'OPS-237')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-real-order-accounting-close-client-acceptance' && entry.checkpoint === 'OPS-238')
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-real-order-accounting-location-client-acceptance')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-real-order-accounting-location-client-acceptance' && entry.checkpoint === 'OPS-239')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-accounting-inventory-location-alignment-client-acceptance')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")

@@ -38,7 +38,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancellation releases, completion consumes, and sellable returns restore the exact fulfilled location/lot.
-- Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted from rejected units; no posting occurs.
+- Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Every new real order freezes one reviewed business/location scope; same-day closes, account mappings, and review-only exports remain separate by stable location code, mixed books fail closed, and no posting occurs.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant quality problems now require structured CAPA evidence before an actionable record can close. Recurrence is Unicode-safe; release, stock blocks, customer contact, certificates, and effectiveness follow-up stay separate.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
@@ -50,10 +50,10 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - The deterministic 12-profile rehearsal passes 24 rows. All desktop missions are overflow-free. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh setup is `0 proven`; a counter sale alone remains unproven; completed/reconciled Shop is `1 proven` across reload; reset returns to zero.
 - Both domains serve deployed `4ce500c29b1cca9617eeba83528293bc1af6c83e`; paired brand, context, and catalog identities match; scheduler ceiling is one job, and exact live verification passes.
-- Current-branch build and Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables; production is unchanged.
+- Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- Product outcome gates pass. OPS-238 carries a reviewed correction through payment count, daily close, and accounting handoff. Next: `shop-real-order-accounting-location-client-acceptance`; pilots stay owner-gated.
+- Product outcome gates pass. OPS-239 binds reviewed entity/location scope through a real order, same-day close, account mapping, and accounting handoff. Next: `shop-accounting-inventory-location-alignment-client-acceptance`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-238 fixes the false cash match: 9,500 MMK expected/count, 9,000 MMK net sales, 500 MMK payable, balanced review entries, and no posting across reload. CLAUDE-008 stays manual at `969fae03`.
+- Codex is sole integrator. OPS-239 at `8a75b701` makes real orders require reviewed business/location scope, permits separate same-day location closes, scopes mappings and v5 exports, and rejects mixed books. CLAUDE-008 stays manual at `969fae03`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-real-order-accounting-location-client-acceptance`: bind one reviewed entity/location to the order, close, and accounting artifact; reject mixed books.
+1. Complete `shop-accounting-inventory-location-alignment-client-acceptance`: bind the reviewed accounting location to one canonical Shop inventory location so allocation, fulfilment, close, and books cannot diverge.
 2. Use CLAUDE-008 only as an optional owner-controlled review of checkpoint `969fae03`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
