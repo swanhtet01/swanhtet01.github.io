@@ -25,7 +25,8 @@ const bundle = await build({
   stdin: {
     contents: `
       export { clientImportTemplate } from './client-onboarding.ts'
-      export { shopIndustryPacks } from './shop-service-scheduling.ts'
+      export { shopIndustryPacks, shopIndustryPack } from './shop-service-scheduling.ts'
+      export { shopBusinessTemplates } from '../products/shop/business-templates.ts'
     `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/pack-pairing-entry.ts',
@@ -38,7 +39,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { clientImportTemplate, shopIndustryPacks } =
+const { clientImportTemplate, shopIndustryPacks, shopIndustryPack, shopBusinessTemplates } =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -87,5 +88,38 @@ check(
   new Set(catalogSignatures).size === shopIndustryPacks.length,
   `each industry pack ships its own catalog -- ${new Set(catalogSignatures).size} distinct across ${shopIndustryPacks.length} packs`,
 )
+
+// --- every trade template must point at things that exist ---------------------
+// A business template names an industryPackId and a workflowTemplateId. Either one pointing
+// at something that does not resolve breaks onboarding for that trade only, which is the kind
+// of failure that ships because six other trades still work.
+const packIds = new Set(shopIndustryPacks.map((pack) => pack.id))
+for (const template of shopBusinessTemplates) {
+  check(
+    packIds.has(template.industryPackId),
+    `${template.id}: its industry pack ${template.industryPackId} exists`,
+  )
+  let resolved = true
+  try { shopIndustryPack(template.industryPackId) } catch { resolved = false }
+  check(resolved, `${template.id}: and resolves through shopIndustryPack()`)
+
+  let workflowResolved = true
+  try { clientImportTemplate('commerce', template.workflowTemplateId) } catch { workflowResolved = false }
+  check(workflowResolved, `${template.id}: its workflow template ${template.workflowTemplateId} resolves to a catalog CSV`)
+}
+
+// Packs with no trade template are NOT a failure -- restaurant, spa, gym and school are
+// reached through the generic industry-pack sample instead. What would be a failure is that
+// fallback not importing, because then those owners have no path at all.
+const orphanPacks = shopIndustryPacks.filter((pack) => (
+  !shopBusinessTemplates.some((template) => template.industryPackId === pack.id)
+))
+for (const pack of orphanPacks) {
+  const csv = clientImportTemplate('commerce', undefined, { shopIndustryPackId: pack.id })
+  check(
+    dataRows(csv).length > 0,
+    `${pack.id}: has no trade template, so its fallback catalog sample must carry rows`,
+  )
+}
 
 console.log(`industry pack sample pairing contract: ${checks} checks passed`)
