@@ -909,6 +909,10 @@ function accountingScopeCode(scope: { entityCode: string; locationCode: string }
   return scope ? `${scope.entityCode}/${scope.locationCode}` : 'legacy unscoped'
 }
 
+function accountingInventoryLocationCode(locationId: string) {
+  return locationId.slice(4)
+}
+
 function accountingScopeName(scope: { entityName: string; locationName: string } | null | undefined) {
   return scope ? `${scope.entityName} · ${scope.locationName}` : 'Legacy unscoped'
 }
@@ -2547,8 +2551,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const frame = window.requestAnimationFrame(() => {
       if (tab === 'counter' && commerceLocation.hash === '#shop-counter-start' && !pendingAction) {
         const target = document.querySelector<HTMLElement>('[data-shop-counter-primary-field="true"]')
-        target?.scrollIntoView({ block: 'center' })
-        target?.focus({ preventScroll: true })
+        target?.focus()
         return
       }
       if (tab === 'orders' && commerceLocation.hash === '#shop-business-location') {
@@ -6351,11 +6354,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return {
         ...draft,
         inventoryLocationId: location.id,
-        locationCode: draft.locationCode || location.id.replace(/^LOC-/, ''),
+        locationCode: draft.locationCode || accountingInventoryLocationCode(location.id),
         locationName: location.name,
       }
     })
-    setNotice(`Stock is ready. Review ${location.name} / ${location.id}; nothing is saved yet.`)
+    setNotice(`Review ${location.name} / ${location.id}; nothing is saved yet.`)
     navigate('/shop/?tab=orders#shop-business-location', { replace: true })
   }
 
@@ -7129,7 +7132,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <details className="compact-disclosure" data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'} id="shop-business-location" open={!currentAccountingScopeConfiguration || undefined}>
         <summary><span>Business and location</span><small>{currentAccountingScopeConfiguration ? accountingScopeName(currentAccountingScopeConfiguration) : 'Required before real orders'}</small></summary>
         <form className="core-form compact-form" onSubmit={reviewAccountingScope}>
-          {managedInventoryProjection ? <label>Stock location<select disabled={commerceControlsDisabled} id="shop-accounting-stock-location" onChange={(event) => { const location = managedInventoryProjection.locations.find((candidate) => candidate.id === event.target.value); setAccountingScope({ ...effectiveAccountingScope, inventoryLocationId: event.target.value, locationName: location?.name ?? effectiveAccountingScope.locationName }) }} required value={effectiveAccountingScope.inventoryLocationId || defaultReceiptLocationId}><option value="">Choose location</option>{managedInventoryProjection.locations.map((location) => <option key={location.id} value={location.id}>{location.name} / {location.id}</option>)}</select></label> : null}
+          {managedInventoryProjection ? <label>Stock location<select disabled={commerceControlsDisabled} id="shop-accounting-stock-location" onChange={(event) => { const location = managedInventoryProjection.locations.find((candidate) => candidate.id === event.target.value); const derivedCode = accountingInventoryLocationCode(effectiveAccountingScope.inventoryLocationId); setAccountingScope({ ...effectiveAccountingScope, inventoryLocationId: event.target.value, locationCode: !effectiveAccountingScope.locationCode || effectiveAccountingScope.locationCode === derivedCode ? accountingInventoryLocationCode(event.target.value) : effectiveAccountingScope.locationCode, locationName: location?.name ?? effectiveAccountingScope.locationName }) }} required value={effectiveAccountingScope.inventoryLocationId || defaultReceiptLocationId}><option value="">Choose location</option>{managedInventoryProjection.locations.map((location) => <option key={location.id} value={location.id}>{location.name} / {location.id}</option>)}</select></label> : null}
           {accountingScopeFields.map((row, rowIndex) => <div className="form-row" key={rowIndex}>{row.map(([field, label, placeholder, maxLength, uppercase]) => <label key={field}>{label}<input autoCapitalize={uppercase ? 'characters' : undefined} disabled={commerceControlsDisabled} maxLength={maxLength} onChange={(event) => setAccountingScope({ ...effectiveAccountingScope, [field]: uppercase ? event.target.value.toUpperCase() : event.target.value })} placeholder={placeholder} required value={effectiveAccountingScope[field]} /></label>)}</div>)}
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review business and location</button></div>
           {currentAccountingScopeConfiguration ? <p className="form-notice">Revision {currentAccountingScopeConfiguration.revision} · saved by {currentAccountingScopeConfiguration.proof.actor} · evidence {currentAccountingScopeConfiguration.proof.evidenceReference}</p> : null}

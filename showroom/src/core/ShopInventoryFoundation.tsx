@@ -404,8 +404,6 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
           return { ...current, inventoryFoundation: result.state }
         },
       )
-      setSetupReview(null)
-      setSetupOpen(false)
       onSetupComplete(primaryLocation)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Location setup was not confirmed.')
