@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-260 proves a two-material Plant-to-Shop release on mobile. `5a1a128a` locks ordinary issues to reviewed supply and protects reorder stock. Next: `plant-controlled-batch-job-progress-alignment`; pilots stay owner-gated.
+- OPS-261 closes the split between the Plant job list and controlled execution. `3b0bfb25` projects inspected/released batch truth, blocks duplicate legacy entry, and routes the primary action into the controlled batch. Next: `plant-controlled-batch-shift-evidence-alignment`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-260 accepts `5a1a128a`: exact reviewed inputs produced two linked finished units; post-fix replay locked `SM-1001 × 2` and retained `34 → 32` after reload. CLAUDE-009 remains owner-controlled at `0fc5cf7d`; its unauthenticated attempt used zero tokens and $0.00.
+- Codex is sole integrator. OPS-261 accepts `3b0bfb25`: mobile proof shows `2 awaiting inspection` while active, opens the controlled batch directly, then moves the released job to finished with `2 accepted · 0 rejected · 2 / 2 produced`; no duplicate output button remains. CLAUDE-009 remains owner-controlled at `0fc5cf7d`; its unauthenticated attempt used zero tokens and $0.00.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `plant-controlled-batch-job-progress-alignment`: make the top-level Plant job card project the controlled batch's current output/release truth without a second production write, then prove reload and mobile UI.
+1. Complete `plant-controlled-batch-shift-evidence-alignment`: make Plant Today and shift close distinguish and use controlled-batch output, material, quality, and release evidence without duplicate legacy writes, then prove reload and mobile UI.
 2. Use CLAUDE-009 only as an optional owner-controlled review of checkpoint `0fc5cf7d`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
