@@ -336,9 +336,11 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         : state.preview.readyForStaging
           ? managedIdentity
             ? 'The file is clean. Check it with the company account, then confirm the final import.'
-            : `The file is clean. Review it once, then confirm it into this browser's ${productName} demo.`
+            : `The file is clean. Review it once, then confirm it into this browser's ${productName} ${allowSample ? 'demo' : 'workspace'}.`
           : 'Fix the highlighted rows before this can become a clean import.'
-      : `Drop in a CSV or try the sample. SuperMega reads, maps, and checks ${object.label.toLowerCase()} before any write.`
+      : allowSample
+        ? `Drop in a CSV or try the sample. SuperMega reads, maps, and checks ${object.label.toLowerCase()} before any write.`
+        : `Drop in a CSV. SuperMega reads, maps, and checks ${object.label.toLowerCase()} before any write.`
   const missingRequiredColumns = state.preview
     ? state.preview.fields.filter((field) => field.required && !state.preview?.mapping[field.id]).length
     : 0
@@ -403,7 +405,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
                         : managedIdentity
                           ? 'Check with company'
                           : 'Prepare import file'
-                : 'Upload or try sample'
+                : allowSample ? 'Upload or try sample' : 'Upload CSV'
   const importCoachReason = appliedIsCurrent
     ? 'The company import is confirmed and ready to use.'
     : state.preflighting
@@ -416,7 +418,9 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
             ? state.preview.readyForStaging
               ? 'The file is clean; the next step is a company check or setup file.'
               : importRepairMessage
-            : 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.'
+            : allowSample
+              ? 'Start with a CSV or sample so SuperMega can map columns and inspect rows locally.'
+              : 'Start with a CSV so SuperMega can map columns and inspect rows locally.'
   const importCoachRows = [
     ['Next action', importCoachAction],
     ['Reason', importCoachReason],
@@ -1010,7 +1014,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
         </div> : null}
       </div>
     </details>
-    {product === 'production' ? <PlantEquipmentOnboarding managedIdentity={managedIdentity} owner={owner} workspace={workspace} /> : null}
+    {product === 'production' && allowSample ? <PlantEquipmentOnboarding managedIdentity={managedIdentity} owner={owner} workspace={workspace} /> : null}
     </>
   )
 }

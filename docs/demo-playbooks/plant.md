@@ -1,45 +1,46 @@
-# Plant — client demo playbook
+# Plant — client proof playbook
 
 ## 1. Client and the 30-second pitch
 
-Who this is for: factories and workshops that plan jobs and record output by shift — the manifest ships internal template packs for `General manufacturing`, `Batch and process`, `Food and beverage`, `Apparel`, and `Assembly`, over the workflow templates `Production control`, `Maintenance and downtime`, and `Quality and traceability`.
+Who this is for: factories and workshops that plan production jobs, record output and material use by shift, contain problems, and leave an accountable handoff.
 
-The pitch, verbatim from approved copy (eyebrow `Plant operations`):
+The short pitch:
 
 - `Operating software for Myanmar companies.`
 - `Plan jobs, record output, and close shifts.`
-- `Use the working Plant sample for jobs, output, material trace, quality holds, maintenance, problems, and shift close. Machine control and live production writes stay behind review.`
+- Start with the client's reviewed jobs, prove one shift action, and keep consequential changes behind a named review. `Machine control and live production writes stay behind review.`
 
 ## 2. Pre-demo setup
 
-1. Open `https://app.supermega.dev/settings/?product=plant` — the same destination as the `Start free sample` button on the public `/plant/` landing page.
+1. Open `https://app.supermega.dev/settings/?product=plant`.
 2. Under `Name your workspace`, enter the client's name in `Business name`.
-3. Press `Create Plant and open the job`. The app provisions a scheduled job, materials, and line, and opens `/plant/?tab=production`. The stated first result is `Run a sample production job`.
-4. Confirm the sidebar badge reads `Local mode` and the `Start here` panel names the loaded industry working sample (source line: `Local sample records on this device`).
+3. Open `Bring existing data`. It is required before Plant. Download `Download CSV template`, replace the example with the client's opening jobs, and choose the completed CSV.
+4. Check `Column matching` and `Review rows`, approve the clean rows, then use `Confirm import`. Nothing should open Plant until the reviewed rows are accepted.
+5. Open Jobs with the accepted row count. Confirm the first screen says `Local production plan` and `Local business records on this device`; no built-in or industry-sample job should remain.
 
 ## 3. Demo script
 
-1. Start on the `Jobs` tab (`/plant/?tab=production`). The `Start here` panel shows the next real step — on a fresh sample the headline is `Record first shift output` — with one primary button.
-2. Press the primary action (`Record output`). Walk the client through confirming good output against the active job's target.
-3. The panel advances to materials: headline `Record materials used`. Record the shift's material usage — this is the trace the owner reviews later.
-4. Point at the metrics row: `Active jobs`, `Shift output`, `Problems & quality`, `Maintenance`, `Materials used`, `Shift close` — one glance tells a supervisor what is open.
-5. Open the `Problems` tab (`/plant/?tab=control`) — quality, equipment, downtime, and maintenance containment. Show that open problems block the owner close, which is the accountability argument.
-6. Return to `Jobs`. With output and materials recorded and gates clear, the panel offers `Close this shift`; press `Close shift`. The accountable gate keeps `Close shift` as the exact final action and asks for the responsible name, reason, and evidence reference — read it aloud.
-7. Confirm the close and show the recorded shift evidence, then `Plan next job` as the natural next-morning step.
+1. Begin on Jobs. The `Start here` panel should point to the first incomplete action for the reviewed production plan.
+2. Choose the current client job and use `Record output`. Enter a small, truthful good-output quantity rather than completing the target for theatre.
+3. At the accountable gate, retain the imported job owner or `Business owner`, add the real reason and evidence reference, and confirm `Record output`.
+4. Reload the page and show that the same job, output, owner, shift, and local plan recover without a second entry.
+5. Continue with `Record material use` for the same job and shift. The material trace must agree with the production record before close is available.
+6. Open Problems and show that quality, critical/high problems, downtime, or maintenance exceptions prevent an accountable close.
+7. Return to Jobs. Only when output, material trace, and blockers are valid should the owner receive `Close shift`; review the named person, reason, evidence, and shift reference before confirmation.
 
 ## 4. Objection handling: the boundary
 
-"Can this touch my machines or live production?" — approved copy answers directly: `Machine control and live production writes stay behind review.` The on-screen notice repeats it: `Plant changes require accountable review.`
+"Is this another fake demo?" — the primary path begins with reviewed client job rows. An untouched built-in or industry sample is replaced, while a changed workspace fails closed instead of silently mixing records.
 
-"Where does the demo data live?" — the panel's source line says `Local sample records on this device`, and setup says `Stays on this device. Nothing is sent or published.`
+"Can we explore without a file?" — `Just exploring?` keeps `Industry demo is optional`. Choose one of the five industry packs and use its demo button; the resulting workspace stays explicitly labelled `Local sample records on this device`.
 
-"What do I get free, and what is paid?" — approved framing only: `Free product. Managed intelligence.`, `Run the products free. Add managed company intelligence when the workflow proves value.`, free lane `Operate without a stripped-down plan.` with `No account or model call required`; managed gate `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.` No prices — the public site carries none.
+"Where does client data live?" — this current trial says `Local business records on this device`. It is browser-local evidence, not proof of hosted persistence, tenant isolation, backup, or production activation.
 
-"Who is accountable for a bad entry?" — every change goes through an exact final-action gate — such as `Record output`, `Record material use`, or `Close shift` — with a named person, reason, and evidence reference, and the trust line applies: `Every real send, payment, publish, access change, stock movement, or production write stays behind explicit authority and verified server-side controls.`
+"Who is accountable for a bad entry?" — consequential actions use exact gates such as `Record output`, `Record material use`, and `Close shift`, with a named person, reason, and evidence reference. The on-screen boundary remains `Plant changes require accountable review.`
 
 ## 5. The close
 
-- Self-serve close: public `/plant/` page, `Start free sample` (`https://app.supermega.dev/settings/?product=plant`), on the supervisor's own phone.
-- Assisted close: the landing page's `Set up Plant data` button opens `/contact/?product=plant` with Plant pre-selected in `Starting point`; the form submits with `Send workflow` and confirms with `Request received: ` plus an ID.
-- From inside the app: the setup page's "Ask SuperMega to set up Plant" link carries the template, for example `https://supermega.dev/contact/?product=plant&template=production-control&utm_source=app&utm_medium=guided_trial`.
-- Managed pilot close: `/contact/?product=guide&source=managed-intelligence` — submit button becomes `Request managed pilot`.
+- Self-serve proof: open `https://app.supermega.dev/settings/?product=plant`, import reviewed jobs, and complete one recoverable output action on the supervisor's phone.
+- Assisted setup: `Set up Plant data` opens `/contact/?product=plant`; the founder can prepare the CSV with the client without claiming a managed deployment.
+- Inside the app, the setup handoff can use `https://supermega.dev/contact/?product=plant&template=production-control&utm_source=app&utm_medium=guided_trial`.
+- Managed pilot: `/contact/?product=guide&source=managed-intelligence` remains owner-gated until identity, isolation, recovery, write control, and a named operator are proven.

@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- 36 recoveries/audits and all 32 Shop/16 Plant final actions pass. Shop and Ecommerce now replace only an untouched demo with reviewed Shop rows; Shop opens Sell with the accepted catalogue and Ecommerce opens the named customer storefront. Next: `plant-real-job-first-onboarding`; pilots stay owner-gated.
+- 37 recoveries/audits and all 32 Shop/16 Plant final actions pass. Shop and Ecommerce begin with reviewed Shop rows, Website begins with a client brief, and Plant now begins with reviewed production jobs. Untouched samples can be replaced; changed workspaces stay protected. Next: `plant-real-shift-close-client-acceptance`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-229 makes Shop real-catalogue-first, labels browser business records as a local workspace, keeps industry demos explicit, and removes remaining sample language from the real counter-order path. CLAUDE-007 stays manual at `2744b28f`.
+- Codex is sole integrator. OPS-230 makes Plant real-job-first, atomically replaces only untouched sample jobs, labels reviewed browser records as a local production plan, keeps five industry demos explicit, and prevents Shop sample demand from appearing in a real Plant plan. CLAUDE-007 stays manual at `2744b28f`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `plant-real-job-first-onboarding`: make Plant quick setup accept reviewed job rows before offering an explicit industry demo fallback.
+1. Complete `plant-real-shift-close-client-acceptance`: prove one reviewed client job through output, material use, reload recovery, blockers, and accountable shift close without sample records.
 2. Use CLAUDE-007 only as an optional owner-controlled review of checkpoint `2744b28f`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

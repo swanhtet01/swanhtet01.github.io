@@ -219,9 +219,11 @@ import {
   productionMaterialUnits,
   productionQualityCauseCategories,
   productionMachineStates,
+  productionBusinessJobs,
   productionShopDemandSource,
   productionShiftOutput,
   productionStateCanonical,
+  productionWorkspaceIsPristineDemo,
   productionWorkingSamplePackId,
   recordProductionOutput,
   recordProductionScrap,
@@ -7713,17 +7715,34 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const activePlantIndustryPack = plantIndustryPack(plantIndustryPackId)
   const loadedPlantSamplePackId = productionWorkingSamplePackId(production)
   const loadedPlantSamplePack = loadedPlantSamplePackId ? plantIndustryPack(loadedPlantSamplePackId) : null
-  const plantSampleJobsActive = loadedPlantSamplePackId === plantIndustryPackId
-  const plantSampleWorkflow = loadedPlantSamplePack?.firstWorkflow ?? activePlantIndustryPack.firstWorkflow
-  const plantSampleContext = plantSampleJobsActive
-    ? `${activePlantIndustryPack.name} sample jobs are loaded.`
-    : loadedPlantSamplePack
-      ? `${loadedPlantSamplePack.name} sample jobs are preserved. ${activePlantIndustryPack.name} is selected for future setup.`
-      : 'Existing Plant job data was preserved.'
+  const plantBusinessJobs = productionBusinessJobs(production)
+  const pristinePlantDemo = productionWorkspaceIsPristineDemo(production)
+  const plantBusinessWorkspace = !loadedPlantSamplePack && !pristinePlantDemo && plantBusinessJobs.length > 0
+  const plantWorkflow = loadedPlantSamplePack?.firstWorkflow
+    ?? (plantBusinessWorkspace ? 'Run the reviewed production plan' : activePlantIndustryPack.firstWorkflow)
+  const plantWorkspaceLabel = loadedPlantSamplePack
+    ? `${loadedPlantSamplePack.name} working sample`
+    : plantBusinessWorkspace
+      ? managedIdentity ? 'Company production plan' : 'Local production plan'
+      : pristinePlantDemo
+        ? 'Built-in Plant sample'
+        : `${activePlantIndustryPack.name} workspace`
+  const plantWorkspaceContext = loadedPlantSamplePack
+    ? `${loadedPlantSamplePack.name} sample jobs are loaded.`
+    : plantBusinessWorkspace
+      ? `${plantBusinessJobs.length} reviewed business job${plantBusinessJobs.length === 1 ? ' is' : 's are'} loaded.`
+      : pristinePlantDemo
+        ? 'Built-in sample jobs are loaded.'
+        : production.jobs.length
+          ? 'Existing Plant job data was preserved.'
+          : 'No production jobs are loaded yet.'
   const plantOrderScopeWorkspaceId = managedIdentity
     ? managedWorkspaceId || managedIdentity.workspaceId
-    : 'local-sample'
+    : plantBusinessWorkspace ? 'local-workspace' : 'local-sample'
   const plantOrderScope = `plant:${plantOrderScopeWorkspaceId}`
+  const plantShopDemandSourceReady = !plantBusinessWorkspace
+    || Boolean(managedIdentity)
+    || commerceBusinessCatalogItems(relatedCommerce).length > 0
   const plantOutputRecoveryScope = managedIdentity
     ? `managed:${plantOrderScopeWorkspaceId}:${managedIdentity.userId}`
     : 'local:local'
@@ -8153,8 +8172,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedMaintenanceMachine = availableMaintenanceMachines.find((machine) => machine.id === selectedMaintenanceMachineId)
   const selectedMaintenanceStrategy = production.equipmentMaster?.assets.find((asset) => asset.id === selectedMaintenanceMachineId)?.maintenanceStrategy
   const selectedMaintenanceOwner = selectedMaintenanceStrategy?.maintenanceOwner ?? maintenanceOwner.trim()
-  const selectedShopDemand = shopDemandSignals.find((signal) => signal.sourceDigest === selectedShopDemandDigest)
-  const nextShopDemand = shopDemandSignals.find((signal) => !signal.existingActiveJobIds.length) ?? shopDemandSignals[0]
+  const selectedShopDemand = plantShopDemandSourceReady
+    ? shopDemandSignals.find((signal) => signal.sourceDigest === selectedShopDemandDigest)
+    : undefined
+  const nextShopDemand = plantShopDemandSourceReady
+    ? shopDemandSignals.find((signal) => !signal.existingActiveJobIds.length) ?? shopDemandSignals[0]
+    : undefined
   const plantAgentJob = !productionCanWrite
     ? 'Restore Plant write readiness'
     : urgentIssueCount
@@ -8458,7 +8481,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   ] as const
   const plantTodaySource = managedIdentity
     ? `Company Plant · revision ${managedVersion ?? production.revision}`
-    : 'Local sample records on this device'
+    : plantBusinessWorkspace ? 'Local business records on this device' : 'Local sample records on this device'
   const plantTodayNotice = productionStorageError
     ? `Writes paused: ${productionStorageError}`
     : plantOutputRecoveryNotice || plantOutputDigestState.error || notice || (productionCanWrite
@@ -8933,7 +8956,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       summary: `Record ${recordedQuantity} ${recordedOutputKind === 'scrap' ? 'scrap' : 'output'} for ${recordedJobId} · ${recordedShiftRef}`,
       before: `${selectedJob.output} good · ${recordedScrap} scrap · ${recordedShiftOutput.goodUnits} good / ${recordedShiftOutput.scrapUnits} scrap this shift`,
       after: `${nextGood} good · ${nextScrap} scrap · ${recordedShiftOutput.goodUnits + (recordedOutputKind === 'good' ? recordedQuantity : 0)} good / ${recordedShiftOutput.scrapUnits + (recordedOutputKind === 'scrap' ? recordedQuantity : 0)} scrap this shift`,
-      actorSuggestion: managedIdentity ? undefined : 'Plant operator',
+      actorSuggestion: managedIdentity ? undefined : plantBusinessWorkspace ? selectedJob.owner?.trim() || 'Business owner' : 'Plant operator',
       reasonSuggestion: `${recordedOutputKind === 'scrap' ? 'Scrap' : 'Good output'} reviewed for ${recordedJobId} during ${recordedShiftRef}.`,
       evidenceReferenceSuggestion: `Plant shift ${recordedShiftRef} · ${recordedJobId}`,
       evidenceReferenceLocked: true,
@@ -9149,7 +9172,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       summary: `Record ${recordedQuantity} ${materialUnit} ${materialRef}${lotSummary} for ${recordedJobId}`,
       before: `${recordedProduct} · no material-use event${held ? ' · QUALITY HOLD active' : ''}`,
       after: `${recordedQuantity} ${materialUnit} ${materialRef}${lotSummary} · ${recordedShiftRef} · traceability only${held ? ' · QUALITY HOLD active' : ''}`,
-      actorSuggestion: managedIdentity ? undefined : 'Plant operator',
+      actorSuggestion: managedIdentity ? undefined : plantBusinessWorkspace ? selectedMaterialJob.owner?.trim() || 'Business owner' : 'Plant operator',
       reasonSuggestion: `Material use reviewed · ${recordedJobId} · ${recordedShiftRef}.`,
       evidenceReferenceSuggestion: `Plant shift ${recordedShiftRef} · ${recordedJobId} · ${materialRef}${materialLot ? ` · ${materialLot}` : ''}`,
       apply: async (record) => {
@@ -10052,7 +10075,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
   }
   const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState} data-step={plantTodayStep}>
-    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><div className="plant-pack-context"><strong>{loadedPlantSamplePack?.name ?? activePlantIndustryPack.name} working sample</strong><span>{plantSampleWorkflow}. {plantSampleContext}</span></div><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} ref={plantTodayActionRef} type="button">{plantTodayAction}</button></div>
+    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><div className="plant-pack-context"><strong>{plantWorkspaceLabel}</strong><span>{plantWorkflow}. {plantWorkspaceContext}</span></div><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} ref={plantTodayActionRef} type="button">{plantTodayAction}</button></div>
     <div aria-label="Plant today status" className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>

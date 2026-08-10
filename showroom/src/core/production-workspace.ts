@@ -3168,6 +3168,40 @@ export function productionWorkingSamplePackId(stateValue: ProductionState) {
   return sampleIds.size === 1 ? [...sampleIds][0] : null
 }
 
+export function productionBusinessJobs(stateValue: ProductionState) {
+  let state: ProductionState
+  try { state = validateProductionState(stateValue) } catch { return [] }
+  const businessJobIds = new Set(state.events.flatMap((event) => (
+    event.kind === 'job_created' && !event.actionId.startsWith(productionWorkingSampleActionPrefix)
+      ? [event.subjectId]
+      : []
+  )))
+  return state.jobs.filter((job) => businessJobIds.has(job.id))
+}
+
+export function productionWorkspaceIsPristineDemo(stateValue: ProductionState) {
+  let state: ProductionState
+  try { state = validateProductionState(stateValue) } catch { return false }
+  const seed = createSeedProduction()
+  if (JSON.stringify(state) === JSON.stringify(seed)) return true
+  const sampleId = productionWorkingSamplePackId(state)
+  if (!sampleId || state.events.length !== state.jobs.length || state.revision !== state.events.length) return false
+  const [firstEvent] = state.events
+  const sampleNameMatch = /^Seed the (.+) working sample\.$/.exec(firstEvent?.reason ?? '')
+  if (!firstEvent || !sampleNameMatch
+    || state.events.some((event) => event.kind !== 'job_created'
+      || event.createdAt !== firstEvent.createdAt
+      || event.reason !== firstEvent.reason
+      || !event.actionId.startsWith(productionWorkingSampleActionPrefix))) return false
+  const expected = installProductionWorkingSampleJobs(seed, {
+    sampleId,
+    sampleName: sampleNameMatch[1],
+    jobs: state.jobs.map((job) => ({ ...job })),
+    capturedAt: firstEvent.createdAt,
+  })
+  return Boolean(expected) && JSON.stringify(expected) === JSON.stringify(state)
+}
+
 export function importProductionJobs(stateValue: ProductionState, input: {
   jobs: ProductionJob[]
   sourceDigest: string
@@ -3181,7 +3215,10 @@ export function importProductionJobs(stateValue: ProductionState, input: {
   const sourceState = validateProductionState(stateValue)
   const uniqueJobIds = new Set(input.jobs.map((job) => job.id))
   if (uniqueJobIds.size !== input.jobs.length) return null
-  let state = sourceState
+  const pristineDemo = productionWorkspaceIsPristineDemo(sourceState)
+  const builtInSeedJobIds = new Set(createSeedProduction().jobs.map((job) => job.id))
+  if (!pristineDemo && (productionWorkingSamplePackId(sourceState) || sourceState.jobs.some((job) => builtInSeedJobIds.has(job.id)))) return null
+  let state = pristineDemo ? createEmptyProduction() : sourceState
   let created = 0
   let alreadyPresent = 0
   for (const [index, job] of input.jobs.entries()) {

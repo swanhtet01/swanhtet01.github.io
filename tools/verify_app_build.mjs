@@ -4579,8 +4579,10 @@ if (!coreSource.includes('aria-label="Shop attention"')
   || !productOnboardingPageSource.includes('title={`Make ${onboardingProduct.name} yours`}')
   || !productOnboardingPageSource.includes('Name this ${onboardingProduct.name} workspace once. SuperMega prepares a working copy and opens one useful first task.')
   || !productOnboardingPageSource.includes('Name your workspace')
-  || !productOnboardingPageSource.includes('We will add realistic sample records now; replace them with your data whenever you are ready.')
+  || !productOnboardingPageSource.includes('Bring the production jobs you actually plan to run. Industry demo records stay optional.')
+  || !productOnboardingPageSource.includes('We will add a realistic website draft now; replace it with your content whenever you are ready.')
   || !productOnboardingPageSource.includes('First useful result: {onboardingJourney.outcome}.')
+  || !productOnboardingPageSource.includes('aria-label={`${onboardingProduct.name} onboarding`} className="product-onboarding-grid" role="region"')
   || !productOnboardingPageSource.includes('onboardingJourney.actionLabel')
   || !productOnboardingPageSource.includes('navigate(onboardingJourney.firstTaskPath)')
   || !productOnboardingPageSource.includes('workspaceStarted ? `Open my ${onboardingProduct.name}`')
@@ -5552,7 +5554,7 @@ if (!plantEquipmentImportSource.includes("PLANT_EQUIPMENT_IMPORT_SCHEMA = 'super
   || !plantEquipmentImportSource.includes('parseClientCsv')
   || !plantEquipmentOnboardingSource.includes('Add known equipment')
   || !plantEquipmentOnboardingSource.includes('This does not start or commission a machine.')
-  || !clientOnboardingUiSource.includes("product === 'production' ? <PlantEquipmentOnboarding")) fail('plant_equipment_onboarding_contract_missing')
+  || !clientOnboardingUiSource.includes("product === 'production' && allowSample ? <PlantEquipmentOnboarding")) fail('plant_equipment_onboarding_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => plantEquipmentImportSource.toLowerCase().includes(marker.toLowerCase()))) fail('plant_equipment_import_external_or_persistent_side_effect_added')
 if (!plantEquipmentCommissioningSource.includes('Load equipment')
   || !plantEquipmentCommissioningSource.includes('Commission 1 equipment')
@@ -5787,12 +5789,18 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingPageSource.includes("firstTaskPath: '/ecommerce/'")
   || !productOnboardingPageSource.includes('const onboardingJourney = onboardingJourneys[product]')
   || !productOnboardingPageSource.includes('commerceBusinessCatalogItems(commerceWorkspace)')
+  || !productOnboardingPageSource.includes('productionBusinessJobs(production)')
   || !productOnboardingPageSource.includes('<ClientDataOnboarding allowSample={false} managedIdentity=')
   || !productOnboardingPageSource.includes("replacePristineCommerceDemo requiredFor={product === 'commerce' ? 'Shop' : 'Ecommerce'}")
+  || !productOnboardingPageSource.includes('product="production" productName="Plant" productSlug="plant" requiredFor="Plant"')
   || !productOnboardingPageSource.includes('Use demo products')
+  || !productOnboardingPageSource.includes('Use {selectedPlantIndustryPack.name} demo')
+  || !productOnboardingPageSource.includes('plantIndustryPacks.map((pack)')
   || !productOnboardingPageSource.includes('Open Sell with ${reviewedShopCatalogRows} item')
   || !productOnboardingPageSource.includes('Build from ${reviewedShopCatalogRows} Shop product')
-  || !productOnboardingPageSource.includes("(product === 'commerce' || product === 'ecommerce') && !useDemo && !reviewedShopCatalogReady")
+  || !productOnboardingPageSource.includes('Open Jobs with ${reviewedPlantJobRows} job')
+  || !productOnboardingPageSource.includes("(product === 'commerce' || product === 'ecommerce' || product === 'production') && !useDemo && !reviewedBusinessDataReady")
+  || !productOnboardingPageSource.includes('if (useDemo) await provisionLocalPlantWorkingSample')
   || !productOnboardingPageSource.includes('realCatalog ? { catalog: realCatalog } : undefined')
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
   || !productSetupSource.includes("if (product === 'production') return '/plant/'")
@@ -5896,7 +5904,8 @@ if (!productSetupSource.includes('templateId: string')
   || productOnboardingPageSource.includes('product-onboarding-sample')
   || productOnboardingPageSource.includes('onboarding choices')
   || !productOnboardingPageSource.includes('One step')
-  || !productOnboardingPageSource.includes('We will add realistic sample records now; replace them with your data whenever you are ready.')
+  || !productOnboardingPageSource.includes('Bring the production jobs you actually plan to run. Industry demo records stay optional.')
+  || !productOnboardingPageSource.includes('We will add a realistic website draft now; replace it with your content whenever you are ready.')
   || !productOnboardingPageSource.includes('Enter a business name to continue.')
   || productOnboardingPageSource.includes('Open {onboardingProduct.name} sample')
   || productOnboardingPageSource.includes('product-onboarding-demo-action')
@@ -6862,6 +6871,10 @@ if (!productionSource.includes('registerProductionJob')
   || !productionSource.includes('export function importProductionJobs')
   || !productionSource.includes('export function installProductionWorkingSampleJobs')
   || !productionSource.includes('export function productionWorkingSamplePackId')
+  || !productionSource.includes('export function productionBusinessJobs')
+  || !productionSource.includes('export function productionWorkspaceIsPristineDemo')
+  || !productionSource.includes('let state = pristineDemo ? createEmptyProduction() : sourceState')
+  || !productionSource.includes('sourceState.jobs.some((job) => builtInSeedJobIds.has(job.id))')
   || !productionSource.includes('export function mutateProductionWorkingSample')
   || !productionSource.includes('ACT-CLIENT-PLAN-')
   || !productionSource.includes('ACT-DEMO-WORKING-SAMPLE-')
@@ -6869,6 +6882,12 @@ if (!productionSource.includes('registerProductionJob')
   || !productOnboardingRuntimeSource.includes("clientImportTemplate('production', workflowTemplateId, { plantIndustryPackId: industryPackId })")
   || !coreSource.includes('className="plant-pack-context"')
   || !coreSource.includes('sample jobs are loaded.')
+  || !coreSource.includes("managedIdentity ? 'Company production plan' : 'Local production plan'")
+  || !coreSource.includes("? 'Built-in Plant sample'")
+  || !coreSource.includes('reviewed business job${plantBusinessJobs.length === 1')
+  || !coreSource.includes("plantBusinessWorkspace ? 'Local business records on this device' : 'Local sample records on this device'")
+  || !coreSource.includes('const nextShopDemand = plantShopDemandSourceReady')
+  || !coreSource.includes('commerceBusinessCatalogItems(relatedCommerce).length > 0')
   || !coreSource.includes('Existing Plant job data was preserved.')
   || !coreCssSource.includes('.plant-pack-context')
   || !coreSource.includes('production.job.created')
@@ -7169,7 +7188,8 @@ if (!productionJobsContract.includes('This shift:')
   || !productionPageContract.includes("if (!managedIdentity && !shiftRef.trim())")
   || !productionPageContract.includes('const suggestedShiftRef = shiftReferencePlaceholder()')
   || !productionPageContract.includes('setHandoffShiftRef(suggestedShiftRef)')
-  || !coreSource.includes("actorSuggestion: managedIdentity ? undefined : 'Plant operator'")
+  || !coreSource.includes("actorSuggestion: managedIdentity ? undefined : plantBusinessWorkspace ? selectedJob.owner?.trim() || 'Business owner' : 'Plant operator'")
+  || !coreSource.includes("actorSuggestion: managedIdentity ? undefined : plantBusinessWorkspace ? selectedMaterialJob.owner?.trim() || 'Business owner' : 'Plant operator'")
   || !coreSource.includes('evidenceReferenceSuggestion: `Plant shift ${recordedShiftRef} · ${recordedJobId}`')
   || !workspaceRuntimeSource.includes('actorSuggestion?: string')
   || !coreSource.includes('placeholder={shiftReferencePlaceholder()}')
@@ -19595,6 +19615,19 @@ async function verifyProductionRuntime() {
       && clientPlanImport.state.events.length === 2
       && clientPlanImport.state.jobs.slice(0, 2).map((job) => job.id).join(',') === 'JOB-CLIENT-2,JOB-CLIENT-1',
     'client_production_plan_import_not_atomic_or_attributable')
+    const pristineSeedClientImport = model.importProductionJobs(model.createSeedProduction(), {
+      jobs: clientPlanJobs,
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    })
+    assert(pristineSeedClientImport?.state.jobs.length === 2
+      && pristineSeedClientImport.state.issues.length === 0
+      && pristineSeedClientImport.state.machines.length === 0
+      && !pristineSeedClientImport.state.jobs.some((job) => job.id === 'JOB-201')
+      && model.productionBusinessJobs(pristineSeedClientImport.state).length === 2
+      && !model.productionWorkspaceIsPristineDemo(pristineSeedClientImport.state),
+    'client_production_plan_did_not_replace_only_the_pristine_seed')
     const clientPlanReplay = model.importProductionJobs(clientPlanImport.state, {
       jobs: clientPlanJobs,
       sourceDigest: clientPlanDigest,
@@ -19636,6 +19669,19 @@ async function verifyProductionRuntime() {
       && !foodWorkingSample.jobs.some((job) => job.id === 'JOB-201')
       && model.productionWorkingSamplePackId(foodWorkingSample) === 'food-beverage',
     'production_working_sample_was_not_installed_or_identified')
+    assert(model.productionWorkspaceIsPristineDemo(model.createSeedProduction())
+      && model.productionWorkspaceIsPristineDemo(foodWorkingSample),
+    'production_pristine_demo_detection_rejected_untouched_samples')
+    const clientPlanAfterUntouchedSample = model.importProductionJobs(foodWorkingSample, {
+      jobs: clientPlanJobs,
+      sourceDigest: clientPlanDigest,
+      capturedAt: '2026-07-28T09:00:00.000Z',
+      actor: 'Plant owner',
+    })
+    assert(clientPlanAfterUntouchedSample?.state.jobs.length === 2
+      && clientPlanAfterUntouchedSample.state.events.every((event) => event.actionId.startsWith('ACT-CLIENT-PLAN-'))
+      && !clientPlanAfterUntouchedSample.state.jobs.some((job) => job.id === 'FOOD-001'),
+    'client_production_plan_did_not_replace_an_untouched_working_sample')
     const replayedFoodWorkingSample = model.installProductionWorkingSampleJobs(foodWorkingSample, {
       sampleId: 'food-beverage',
       sampleName: 'Food and beverage',
@@ -19677,6 +19723,14 @@ async function verifyProductionRuntime() {
       jobs: [{ id: 'STYLE-001', line: 'Sewing Line 1', product: 'Cotton shirt style', target: 400, output: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-08-15T17:29:59.999Z' }],
       capturedAt: '2026-07-28T10:00:00.000Z',
     }) === null, 'production_working_sample_replaced_operator_output_evidence')
+    assert(usedFoodWorkingSample && !model.productionWorkspaceIsPristineDemo(usedFoodWorkingSample)
+      && model.importProductionJobs(usedFoodWorkingSample, {
+        jobs: clientPlanJobs,
+        sourceDigest: clientPlanDigest,
+        capturedAt: '2026-07-28T10:00:00.000Z',
+        actor: 'Plant owner',
+      }) === null,
+    'client_production_plan_replaced_or_mixed_with_used_sample_evidence')
     assertThrows(() => model.validateProductionState({
       ...withJob,
       jobs: [{ ...withJob.jobs[0], priority: 'low' }, ...withJob.jobs.slice(1)],
@@ -21633,7 +21687,7 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeHookSource.includes('metricOverride ?? buildPilotOutcomeMetric')
   || !settingsPageSource.includes('pilotOutcomeReport')
   || !productOnboardingPageSource.includes("outcome: 'Complete a first counter sale'")
-  || !productOnboardingPageSource.includes("outcome: 'Run a sample production job'")
+  || !productOnboardingPageSource.includes("outcome: 'Record output for a first production job'")
   || !productOnboardingPageSource.includes('detail: onboardingJourney.outcome')
   || !settingsPageSource.includes('const currentPlantShiftClose = currentProductionShiftClose(production)')
   || !settingsPageSource.includes('buildPlantGuidedShiftCloseOutcomeMetric(currentPlantShiftClose ? [currentPlantShiftClose] : [], setup.startedAt)')
