@@ -53,6 +53,7 @@ type ClientDataOnboardingProps = {
   initiallyOpen?: boolean
   allowSample?: boolean
   replacePristineCommerceDemo?: boolean
+  requiredFor?: string
 }
 
 type ValidatedImport = {
@@ -185,7 +186,7 @@ function downloadFile(filename: string, content: string, type: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, shopIndustryPackId, plantIndustryPackId, managedIdentity, onProgress, initiallyOpen = false, allowSample = true, replacePristineCommerceDemo = false }: ClientDataOnboardingProps) {
+export function ClientDataOnboarding({ product, productName, productSlug, workflowTemplateId, workspace, owner, shopIndustryPackId, plantIndustryPackId, managedIdentity, onProgress, initiallyOpen = false, allowSample = true, replacePristineCommerceDemo = false, requiredFor = 'Ecommerce' }: ClientDataOnboardingProps) {
   const object = clientImportObject(product)
   const templateContext = { shopIndustryPackId, plantIndustryPackId }
   const checklist = clientImportChecklist(product, workflowTemplateId, templateContext)
@@ -878,7 +879,7 @@ export function ClientDataOnboarding({ product, productName, productSlug, workfl
   return (
     <>
     <details className="compact-disclosure catalog-import-disclosure" open={initiallyOpen || undefined}>
-      <summary><span>Bring existing data</span><small>{allowSample ? `Optional for ${productName}` : `Required before Ecommerce`}</small></summary>
+      <summary><span>Bring existing data</span><small>{allowSample ? `Optional for ${productName}` : `Required before ${requiredFor}`}</small></summary>
       <div className="catalog-import-workspace">
         <div className="catalog-import-intro">
           <div>

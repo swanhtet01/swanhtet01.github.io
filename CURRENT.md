@@ -18,7 +18,7 @@ AI assistance may prepare work inside these four products only when it exposes i
 
 ## Product status
 
-- **Shop** — available at `/shop/` in the live isolated app under the stable internal `commerce` runtime. `/operations/commerce/` is compatibility-only and resolves to the same records.
+- **Shop** — available at `/shop/` in the live isolated app under the stable internal `commerce` runtime. First-run setup now accepts reviewed product CSV rows before opening Sell; optional industry demos stay separate and explicitly labelled. Browser-local business rows render as a local workspace, while changed records are preserved fail-closed. `/operations/commerce/` is compatibility-only and resolves to the same records.
 - **Plant** — available at `/plant/` in the live isolated app under the stable internal `production` runtime. `/operations/production/` is compatibility-only and resolves to the same records.
 - **Website** — available at `/website/` in the live isolated app; it can produce a deterministic downloadable site artifact but cannot publish or change a domain.
 - **Ecommerce** — available at `/ecommerce/` in the live isolated app. First-run setup now starts from reviewed Shop products; an explicit demo remains optional. It reads versioned Shop catalogue data, builds a multi-item cart, produces a deterministic 15-minute quote, recovers across reload, and sends one duplicate-safe multi-line handoff into Shop. Tax, shipping, and payment remain explicit adapter boundaries; no charge occurs. Only Shop's accountable confirmation can create an order or reserve stock. Hosted managed persistence is not yet proven.

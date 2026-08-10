@@ -4,6 +4,8 @@ import {
   createClientImportPreview,
 } from './client-onboarding'
 import {
+  commerceWorkspaceIsPristineDemo,
+  createEmptyCommerce,
   installCommerceWorkingSampleCatalog,
   loadCommerceWorkspace,
   mutateCommerceWorkspace,
@@ -72,7 +74,8 @@ export async function provisionLocalShopWorkingSample(industryPackId: ShopIndust
   if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
   let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
   const result = await mutateCommerceWorkspace((current) => {
-    const next = installCommerceWorkingSampleCatalog(current, {
+    const base = commerceWorkspaceIsPristineDemo(current) ? createEmptyCommerce() : current
+    const next = installCommerceWorkingSampleCatalog(base, {
       sampleId: pack.id,
       sampleName: pack.name,
       items,
@@ -109,7 +112,8 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
   if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
   let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
   const result = await mutateCommerceWorkspace((current) => {
-    const next = installCommerceWorkingSampleCatalog(current, {
+    const base = commerceWorkspaceIsPristineDemo(current) ? createEmptyCommerce() : current
+    const next = installCommerceWorkingSampleCatalog(base, {
       sampleId: template.id,
       sampleName: template.name.en,
       items,

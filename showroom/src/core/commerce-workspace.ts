@@ -6461,7 +6461,8 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
       return null
     }
   }
-  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce())) return null
+  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce())
+    && JSON.stringify(base) !== JSON.stringify(createEmptyCommerce())) return null
   if (requestedItems.some((item) => base.items.some((existing) => existing.sku === item.sku))) return null
 
   let next = base

@@ -506,7 +506,7 @@ if (!indexSource.includes('<title>SuperMega</title>')
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
 const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')))).join('\n')
-for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Demo mode', 'Name your workspace', 'Request managed trial', 'Create order', 'Record stock count', 'Close business day', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
+for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Local mode', 'Name your workspace', 'Request managed trial', 'Create order', 'Record stock count', 'Close business day', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
 if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
@@ -3025,7 +3025,7 @@ const productOutcomeIndex = productOnboardingPageSource.indexOf('First useful re
 const productWorkspaceIndex = productOnboardingPageSource.indexOf('onboardingJourney.actionLabel', productOutcomeIndex)
 const productBoundaryIndex = productOnboardingPageSource.indexOf('This setup affects {onboardingProduct.name} only.', productWorkspaceIndex)
 const productRepeatEntryIndex = productOnboardingPageSource.indexOf('if (workspaceStarted) {')
-const productProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'commerce') {", productRepeatEntryIndex)
+const productProvisioningIndex = productOnboardingPageSource.indexOf("if (product === 'commerce' && !managedIdentity) {", productRepeatEntryIndex)
 if (settingsAdvancedIndex < 0
   || settingsRestorePointIndex < settingsAdvancedIndex
   || !settingsPageSource.includes('className="setup-complete settings-restore-point"')
@@ -4694,7 +4694,8 @@ if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreSource.includes('orders={closedOrders}')
   || !coreSource.includes('onReviewReturn={reviewOrderReturn}')
   || !coreSource.includes('className="production-mode-banner commerce-mode-banner"')
-  || !coreSource.includes("managedIdentity ? 'Managed records' : 'Sample data'")
+  || !coreSource.includes("managedIdentity ? 'Managed records' : localBusinessWorkspace ? 'Local workspace' : 'Sample data'")
+  || !coreSource.includes('Business data stays on this device. Sign in when this workspace needs team access.')
   || !coreSource.includes('Sample data on this device. Sign in for team data.')
   || coreSource.includes('Sample records saved only in this browser. Connect a managed workspace before using shared operational data.')
   || !coreSource.includes('const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)')
@@ -5787,9 +5788,11 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingPageSource.includes('const onboardingJourney = onboardingJourneys[product]')
   || !productOnboardingPageSource.includes('commerceBusinessCatalogItems(commerceWorkspace)')
   || !productOnboardingPageSource.includes('<ClientDataOnboarding allowSample={false} managedIdentity=')
-  || !productOnboardingPageSource.includes('replacePristineCommerceDemo shopIndustryPackId=')
+  || !productOnboardingPageSource.includes("replacePristineCommerceDemo requiredFor={product === 'commerce' ? 'Shop' : 'Ecommerce'}")
   || !productOnboardingPageSource.includes('Use demo products')
-  || !productOnboardingPageSource.includes('Build from ${ecommerceCatalogRows} Shop product')
+  || !productOnboardingPageSource.includes('Open Sell with ${reviewedShopCatalogRows} item')
+  || !productOnboardingPageSource.includes('Build from ${reviewedShopCatalogRows} Shop product')
+  || !productOnboardingPageSource.includes("(product === 'commerce' || product === 'ecommerce') && !useDemo && !reviewedShopCatalogReady")
   || !productOnboardingPageSource.includes('realCatalog ? { catalog: realCatalog } : undefined')
   || !productSetupSource.includes("if (product === 'commerce') return '/shop/'")
   || !productSetupSource.includes("if (product === 'production') return '/plant/'")
@@ -6233,6 +6236,8 @@ const requiredDynamicShopSubmitLabels = [
 ]
 if (!counterConfirmationContract.includes('isCounterConfirmation && !authenticatedActor')
   || !counterConfirmationContract.includes('Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.')
+  || !counterConfirmationContract.includes('Browser-local business workspace. Confirming creates an accountable local order and reserves this workspace stock.')
+  || !counterConfirmationContract.includes('localBusinessWorkspace = false')
   || !counterConfirmationContract.includes("const isOrderCreation = action.kind === 'order_create'")
   || !coreSource.includes('type ShopActionKind = Exclude<ActionKind, PlantActionKind>')
   || !coreSource.includes('const accountableActionSubmitLabels: Record<ShopActionKind | PlantActionKind, string> = {')
@@ -6247,6 +6252,8 @@ const shopCounterRouteContract = coreSource.slice(coreSource.indexOf("if (tab ==
 if (!shopCounterContract.includes('Tap an item to add it')
   || !shopCounterContract.includes('industryPack.firstWorkflow')
   || !shopCounterContract.includes('sampleCatalogActive')
+  || !shopCounterContract.includes("sampleCatalogActive ? 'working sample' : 'workflow'")
+  || !coreSource.includes('const shopSampleCatalogActive = Boolean(shopPack && commerceWorkingSampleCatalogId(commerce))')
   || !shopCounterContract.includes('sample items are loaded.')
   || !shopCounterContract.includes('Existing Shop catalog data was preserved.')
   || !shopCounterContract.includes('to="/shop/?tab=orders#shop-service-schedule"')
@@ -6292,7 +6299,7 @@ if (!shopCounterContract.includes('Tap an item to add it')
   || !coreSource.includes('subjectId: order.id')
   || !coreSource.includes('summary: `Create ${formatMoney(order.total)} counter order`')
   || !coreSource.includes('after: `Order ${displayReference} confirmed · Reserved stock ${stockReview}`')
-  || !coreSource.includes("actorSuggestion: managedIdentity ? undefined : 'Sample cashier'")
+  || !coreSource.includes("actorSuggestion: managedIdentity || commerceBusinessCatalogItems(commerce).length > 0 ? undefined : 'Sample cashier'")
   || !coreSource.includes("actorSuggestion: managedIdentity ? undefined : 'Shop reviewer'")
   || !coreSource.includes('evidenceReferenceSuggestion: `Counter order ${displayReference}`')
   || !coreSource.includes('reserveCommerceOrder(current, ownedOrder')
@@ -6314,7 +6321,7 @@ if (!shopCounterContract.includes('Tap an item to add it')
   || !coreCssSource.includes('.shop-clear-recovery')
   || !coreCssSource.includes('.shop-clear-recovery .core-button { min-width: 88px; min-height: 44px;')
   || !coreCssSource.includes('.order-list article[data-highlighted="true"]')
-  || !coreCssSource.includes('.shop-pack-context')
+  || !coreCssSource.includes('.shop-pack-context a { min-height: 44px;')
   || !coreCssSource.includes('.shop-mobile-cart')
   || !coreCssSource.includes('.shop-current-sale.is-open')) fail('shop_counter_direct_demo_missing')
 const counterRecoveryResumeStart = shopCounterContract.indexOf('function resumeCounterRecovery()')
@@ -8459,7 +8466,10 @@ async function verifyShopBusinessTemplateRuntime() {
     || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))")
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
     || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
-    || !productOnboardingPageSource.includes('Standard sample (current industry pack)')
+    || !productOnboardingPageSource.includes('<summary><span>Just exploring?</span><small>Business demo is optional</small></summary>')
+    || !productOnboardingPageSource.includes('Demo business type')
+    || !productOnboardingPageSource.includes('Standard Shop demo')
+    || !productOnboardingPageSource.includes('if (useDemo) {')
     || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)')
     || !coreCssSource.includes('.product-onboarding-business-type')) fail('shop_business_template_contract_missing')
   try {
@@ -12755,6 +12765,16 @@ async function verifyCommerceRuntime() {
       && cafeWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
       && model.commerceWorkingSampleCatalogId(cafeWorkingSample) === 'cafe',
     'commerce_working_sample_was_not_installed_or_identified')
+    const cafeOnlyWorkingSample = model.installCommerceWorkingSampleCatalog(model.createEmptyCommerce(), {
+      sampleId: 'cafe',
+      sampleName: 'Cafe',
+      items: cafeSampleItems,
+      capturedAt: '2026-07-23T09:00:00.000Z',
+    })
+    assert(cafeOnlyWorkingSample?.items.length === 2
+      && cafeOnlyWorkingSample.orders.length === 0
+      && model.commerceWorkingSampleCatalogId(cafeOnlyWorkingSample) === 'cafe',
+    'commerce_working_sample_could_not_install_as_an_isolated_demo')
     const replayedCafeWorkingSample = model.installCommerceWorkingSampleCatalog(cafeWorkingSample, {
       sampleId: 'cafe',
       sampleName: 'Cafe',
@@ -21612,7 +21632,7 @@ if (!pilotOutcomeSource.includes("supermega.pilot_outcome_report.v1")
   || !pilotOutcomeHookSource.includes("window.addEventListener('storage', onStorage)")
   || !pilotOutcomeHookSource.includes('metricOverride ?? buildPilotOutcomeMetric')
   || !settingsPageSource.includes('pilotOutcomeReport')
-  || !productOnboardingPageSource.includes("outcome: 'Complete a sample sale'")
+  || !productOnboardingPageSource.includes("outcome: 'Complete a first counter sale'")
   || !productOnboardingPageSource.includes("outcome: 'Run a sample production job'")
   || !productOnboardingPageSource.includes('detail: onboardingJourney.outcome')
   || !settingsPageSource.includes('const currentPlantShiftClose = currentProductionShiftClose(production)')

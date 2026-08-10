@@ -14,25 +14,30 @@ The pitch, verbatim from approved copy (eyebrow `Shop operations`):
 
 1. Open `https://app.supermega.dev/settings/?product=shop` — the same destination as the `Start free sample` button on the public `/shop/` landing page.
 2. Under `Name your workspace`, enter the client's name in `Business name` (the field shows `Example: Golden Valley Trading`).
-3. Press `Create Shop and start selling`. The app provisions the industry sample and opens the first task at `/shop/?tab=counter`. The stated first result is `Complete a sample sale`.
-4. Confirm the sidebar badge reads `Demo mode` and the counter heading shows the working-sample pack context.
+3. Open `Bring existing data`, choose the client's product CSV, review the matched rows, approve them once, and use the count-labelled Add action. The untouched seed is replaced; changed or active records are preserved and the import fails closed.
+4. Press the primary `Open Sell with` action to open `/shop/?tab=counter`. The stated first result is `Complete a first counter sale`.
+5. Confirm the sidebar badge reads `Local mode` and the Shop status reads `Local workspace`. `Just exploring?` is a separate optional path: its industry selector and button say demo, and its records remain labelled `Sample data`.
 
-Parallel-lane note: a Shop business-template deep link into guided setup is landing in a parallel lane; its planned format is a "?template=" query parameter added to the settings route (for example "?product=shop&template=retail"). It is not in the app at this commit — do not add a template parameter to app URLs in a live demo. Template selection happens inside setup today. The only live `template` parameters are on the public contact page (the `Template, if known` field) and in the app-generated contact links quoted in section 5.
+Template note: supported Shop business-template links can preselect the optional demo industry, but they never bypass the visible demo label or the business-name step. For a real client, use the reviewed CSV path.
 
 ## 3. Demo script
 
-1. Start on the `Sell` tab (`/shop/?tab=counter`). Read the heading: `Tap an item to add it`. Point out the sample catalog tiles with prices and stock counts.
+1. Start on the `Sell` tab (`/shop/?tab=counter`). Read the heading: `Tap an item to add it`. Point out that the tiles are the exact reviewed client catalogue, with prices and opening stock.
 2. Tap two or three items. The `Current sale` panel fills; on a phone the cart is the bottom bar. Optionally show `Search or scan SKU`.
 3. In the sale panel, leave Customer as `Guest` or type a name, then pick a payment method: `Cash`, `KBZPay`, or `WavePay`.
 4. Tap `Review order`. The accountable gate opens (`Review counter order`) and asks for the `Cashier` name. Read the boundary line under the form aloud — it is the privacy pitch (quoted in section 4).
-5. Tap `Create order`. The order is created and sample stock is reserved. The footer already told the client: `Confirm to create the order. Finish payment and handoff in Orders.`
+5. Tap `Create order`. The accountable local order is created and workspace stock is reserved. The footer already told the client: `Confirm to create the order. Finish payment and handoff in Orders.`
 6. Open the `Orders` tab (`/shop/?tab=orders`). Advance the new order through its owned steps: `Start preparing`, then `Mark ready`, then `Reconcile payment` when payment review becomes the primary action, then `Complete`.
 7. Open the `Stock` tab (`/shop/?tab=inventory`). Show that the sale moved stock and where low-stock items surface; imports live at `/shop/?tab=inventory#shop-catalog-import`.
 8. Finish on the `Today` tab: the next job with `Open next step` and `New sale`, the metrics `Open orders`, `Catalog items`, `Stock alerts`, `Outstanding`, and the disclosures `More Shop tools` and `Shop safeguards`. For an owner-focused client, show `Save daily close` under finance controls at `/shop/?tab=orders#shop-close-controls`.
 
 ## 4. Objection handling: the boundary
 
-"Is this touching my real money or messaging my customers?" — read the gate's own line:
+"Is this touching my real money or messaging my customers?" — on the reviewed business-data path, read the gate's own line:
+
+- `Browser-local business workspace. Confirming creates an accountable local order and reserves this workspace stock. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, and no server or company account is written.`
+
+On the optional industry demo, the stronger sample boundary remains explicit:
 
 - `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
 

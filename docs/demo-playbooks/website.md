@@ -15,7 +15,7 @@ The pitch, verbatim from approved copy (eyebrow `Website maker`):
 1. Open `https://app.supermega.dev/settings/?product=website` — the same destination as the `Start free sample` button on the public `/website/` landing page.
 2. Under `Name your workspace`, enter the client's name in `Business name`.
 3. Press `Create Website and preview it`. A responsive homepage sample is provisioned and the app opens `/website/`. The stated first result is `Preview a business website`.
-4. Confirm the sidebar badge reads `Demo mode`. A blank Website opens directly on `Start your website`; an explicitly provisioned working sample opens its preview.
+4. Confirm the sidebar badge reads `Local mode`. A blank Website opens directly on `Start your website`; an explicitly provisioned working sample opens its preview.
 
 ## 3. Demo script
 

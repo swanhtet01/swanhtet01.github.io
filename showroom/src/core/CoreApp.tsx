@@ -77,6 +77,7 @@ import {
   countCommerceStock,
   commerceAccountingHandoff,
   commerceAccountingHandoffCsv,
+  commerceBusinessCatalogItems,
   commerceDailyCloseCsv,
   commerceDailyCloseExport,
   commerceCloseExpectation,
@@ -989,9 +990,10 @@ function accountableActionSubmitLabel(action: PendingAccountableAction) {
   return accountableActionSubmitLabels[action.kind]
 }
 
-function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm, returnFocus }: {
+function AccountableActionGate({ action, authenticatedActor, localBusinessWorkspace = false, onCancel, onConfirm, returnFocus }: {
   action: PendingAccountableAction | null
   authenticatedActor?: { id: string; label: string }
+  localBusinessWorkspace?: boolean
   onCancel: () => void
   onConfirm: (details: ActionDetails) => void | Promise<void>
   returnFocus?: HTMLElement | null
@@ -1054,7 +1056,7 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
       {isCounterConfirmation
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
-      {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.</p> : null}
+      {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">{localBusinessWorkspace ? 'Browser-local business workspace. Confirming creates an accountable local order and reserves this workspace stock. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, and no server or company account is written.' : 'Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.'}</p> : null}
       <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : accountableActionSubmitLabel(action)}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
     </form>
@@ -1582,7 +1584,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
-          <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} working sample` : 'Counter open'}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
+          <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} ${sampleCatalogActive ? 'working sample' : 'workflow'}` : 'Counter open'}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
           <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input aria-describedby="shop-counter-search-help shop-counter-search-status" autoComplete="off" data-shop-counter-primary-field="true" disabled={!counterRecoverySource} onChange={(event) => { setQuery(event.target.value); setSearchStatus('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" ref={searchInputRef} type="search" value={query} /><small id="shop-counter-search-help">{counterCatalogDigestState.error || (counterRecoverySource ? 'Enter adds an exact SKU or the only match.' : 'Preparing safe sale recovery…')}</small></label>
         </header>
         <p aria-live="polite" className="sr-only" id="shop-counter-search-status">{searchStatus}</p>
@@ -1710,7 +1712,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync] = useCommerceWorkspace(managedIdentity)
-  const shopSampleCatalogActive = Boolean(shopPack && commerceWorkingSampleCatalogId(commerce) === shopPack.id)
+  const shopSampleCatalogActive = Boolean(shopPack && commerceWorkingSampleCatalogId(commerce))
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
   const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
@@ -3122,8 +3124,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     </section>
   })() : null
 
+  const localBusinessWorkspace = !managedIdentity && commerceBusinessCatalogItems(commerce).length > 0
   const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
-    <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : 'Sample data'}</span>
+    <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : localBusinessWorkspace ? 'Local workspace' : 'Sample data'}</span>
     <p>{commerceStorageError
       ? `Writes paused: ${commerceStorageError}`
       : commerceSync.status === 'checking'
@@ -3134,7 +3137,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? 'Writes paused: this browser could not confirm durable local storage and write locking.'
         : commerceSync.message || notice || (managedIdentity
           ? `Company records - revision ${managedVersion ?? 0}. Writes are confirmed by the company account.`
-          : 'Sample data on this device. Sign in for team data.')}</p>
+          : localBusinessWorkspace
+            ? 'Business data stays on this device. Sign in when this workspace needs team access.'
+            : 'Sample data on this device. Sign in for team data.')}</p>
     {commerceSync.status === 'pending'
       ? <button type="button" onClick={() => window.location.reload()}>Reload Shop</button>
       : !commerceCanWrite && commerceSync.status !== 'checking'
@@ -3940,7 +3945,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       before: `${lineReview} · ${review.payment}`,
       after: `Order ${displayReference} confirmed · Reserved stock ${stockReview}`,
       presentation: 'counter',
-      actorSuggestion: managedIdentity ? undefined : 'Sample cashier',
+      actorSuggestion: managedIdentity || commerceBusinessCatalogItems(commerce).length > 0 ? undefined : 'Sample cashier',
       evidenceReferenceSuggestion: `Counter order ${displayReference}`,
       evidenceReferenceLocked: true,
       reasonSuggestion: 'Walk-in counter order reviewed.',
@@ -6418,7 +6423,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     })
   }
 
-  const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} onCancel={cancelCommerceActionReview} onConfirm={confirmAction} returnFocus={actionTrigger} />
+  const actionGate = <AccountableActionGate authenticatedActor={managedIdentity ? { id: managedIdentity.userId, label: managedIdentity.email } : undefined} key={pendingAction?.id ?? 'commerce-idle'} action={pendingAction} localBusinessWorkspace={localBusinessWorkspace} onCancel={cancelCommerceActionReview} onConfirm={confirmAction} returnFocus={actionTrigger} />
   const actionHistory = managedIdentity ? null : <ActionHistory actions={actions} domain="commerce" />
   const orderDraftRecoveryWarning = orderDraftRead.status === 'ready'
     && orderDraftIssue.startsWith('Order confirmed, but its local recovery copy remains:')

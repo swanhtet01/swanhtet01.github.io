@@ -15,7 +15,7 @@ The pitch, verbatim from approved copy (eyebrow `Plant operations`):
 1. Open `https://app.supermega.dev/settings/?product=plant` — the same destination as the `Start free sample` button on the public `/plant/` landing page.
 2. Under `Name your workspace`, enter the client's name in `Business name`.
 3. Press `Create Plant and open the job`. The app provisions a scheduled job, materials, and line, and opens `/plant/?tab=production`. The stated first result is `Run a sample production job`.
-4. Confirm the sidebar badge reads `Demo mode` and the `Start here` panel names the loaded industry working sample (source line: `Local sample records on this device`).
+4. Confirm the sidebar badge reads `Local mode` and the `Start here` panel names the loaded industry working sample (source line: `Local sample records on this device`).
 
 ## 3. Demo script
 

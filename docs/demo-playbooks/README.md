@@ -12,7 +12,7 @@ One playbook per customer product. A founder or sales agent follows the playbook
 ## Surfaces
 
 - Public site: `https://supermega.dev` — home, `/shop/`, `/plant/`, `/website/`, `/ecommerce/`, `/contact/`, `/privacy/`. The header carries `Company sign in`.
-- App: `https://app.supermega.dev` — the working samples. Opening `/` resumes the last product (Shop on first visit); `/?choose=1` opens the `Switch product` screen. The sidebar shows the current product, `Switch product`, `Company login`, and the runtime badge, which reads `Demo mode` in the browser-local sample.
+- App: `https://app.supermega.dev` — local working products and explicit samples. Opening `/` resumes the last product (Shop on first visit); `/?choose=1` opens the `Switch product` screen. The sidebar shows the current product, `Switch product`, `Company login`, and the runtime badge, which reads `Local mode` before a company account is connected.
 - Guided setup (the target of every public `Start free sample` button): `https://app.supermega.dev/settings/?product=shop`, `/settings/?product=plant`, `/settings/?product=website`, `/settings/?product=ecommerce`. The product parameter also accepts the internal aliases `commerce`, `production`, `retail`, and `factory`.
 - Legacy entry: the app root and the `legacy-entry` route accept a demo query parameter with the values `shop`, `retail`, `plant`, `factory`, `website`, `site`, `ecommerce`, `storefront`, and `online-orders`, redirecting to the matching product route.
 
