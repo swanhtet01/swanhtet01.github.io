@@ -1,4 +1,6 @@
-import { isShopServiceSku } from '../shop/business-templates'
+// Explicit .ts extension: verify_app_build.mjs imports this module directly under node, where an
+// extensionless specifier does not resolve. Vite tolerates either, so the omission only shows in CI.
+import { isShopServiceSku } from '../shop/business-templates.ts'
 import {
   COMMERCE_KEY,
   validateCommerceState,

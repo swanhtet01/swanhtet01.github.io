@@ -7219,7 +7219,12 @@ async function verifyShopBusinessTemplateRuntime() {
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
     || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
     || !productOnboardingPageSource.includes('Standard sample (current industry pack)')
-    || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)')
+    // Was pinned to `provisionLocalShopWorkingSample(shopIndustryPackId, ...)` -- the pack the owner
+    // ASKED for. provisionLocalShopIndustryPack returns the pack actually in force, because an
+    // existing appointment keeps its own, so the sample has to follow the returned schedule or it
+    // installs a catalog for an industry the appointment book is not on. The old literal pinned the
+    // defect in place; this pins the fix.
+    || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(schedule.industryPackId, onboardingTemplate.id)')
     || !coreCssSource.includes('.product-onboarding-business-type')) fail('shop_business_template_contract_missing')
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')).href}?shop-business-template-verify=${Date.now()}`)
@@ -8549,7 +8554,10 @@ async function verifyClientOnboardingRuntime() {
     const apparelTemplate = model.clientImportTemplate('production', 'production-control', { plantIndustryPackId: 'apparel' })
     const apparelPreview = await model.createClientImportPreview(apparelTemplate, 'production', undefined, 'apparel.csv', 'production-control')
     assert(apparelPreview.readyForStaging
-      && apparelPreview.rows[0].key === 'STYLE-001'
+      // STYLE-001 was rejected by the plan contract, which requires a JOB- prefix
+      // (plant-order-foundation.ts identifier(..., 'JOB')). An apparel plant could import this
+      // very sample and then not plan the batch its own pack promises.
+      && apparelPreview.rows[0].key === 'JOB-STYLE-001'
       && apparelPreview.rows[0].values.line === 'Sewing Line 1',
     'client_demo_apparel_pack_did_not_prepare_industry_jobs')
     rejectsSync(() => model.clientImportTemplate('commerce', 'unknown', { shopIndustryPackId: 'school' }), 'client_demo_industry_template_bypassed_workflow_validation')
