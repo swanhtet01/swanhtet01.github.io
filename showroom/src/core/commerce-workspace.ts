@@ -593,6 +593,11 @@ export type CommerceProductionMaterialRequest = {
   inputLotId: string
   quantityMilli: number
   unit: CommerceProductionMaterialUnit
+  shopSupply?: {
+    sku: string
+    materialQuantityMilliPerStockUnit: number
+  }
+  substitutionApprovalId?: string
 }
 
 export type CommerceProductionBatchReceipt = {
@@ -7909,6 +7914,9 @@ export function issueCommerceStockToProduction(
   let checkedSku: string
   let checkedConversionNote: string
   try {
+    const hasReviewedMapping = request.shopSupply !== undefined
+    const hasApprovedSubstitution = request.substitutionApprovalId !== undefined
+    if (hasReviewedMapping === hasApprovedSubstitution) return null
     checkedRequest = {
       requestId: canonicalText(request.requestId, 'production material request ID', 80),
       sourceCommandDigest: request.sourceCommandDigest,
@@ -7917,12 +7925,31 @@ export function issueCommerceStockToProduction(
       inputLotId: canonicalText(request.inputLotId, 'production input lot ID', 80),
       quantityMilli: request.quantityMilli,
       unit: request.unit,
+      ...(request.shopSupply ? {
+        shopSupply: {
+          sku: canonicalText(request.shopSupply.sku, 'reviewed production issue SKU', 80),
+          materialQuantityMilliPerStockUnit: request.shopSupply.materialQuantityMilliPerStockUnit,
+        },
+      } : {}),
+      ...(request.substitutionApprovalId ? {
+        substitutionApprovalId: canonicalText(request.substitutionApprovalId, 'production substitution approval ID', 80),
+      } : {}),
     }
     checkedSku = canonicalText(sku, 'production issue SKU', 80)
     checkedConversionNote = canonicalText(conversionNote, 'production issue conversion note', 240)
     if (!sha256DigestPattern.test(checkedRequest.sourceCommandDigest)) return null
     assertSafeInteger(checkedRequest.quantityMilli, 'production material quantity', 1)
     if (!productionMaterialUnits.has(checkedRequest.unit)) return null
+    if (checkedRequest.shopSupply) {
+      assertSafeInteger(checkedRequest.shopSupply.materialQuantityMilliPerStockUnit, 'reviewed material quantity per Shop stock unit', 1)
+      const requiredStockQuantity = Number(
+        (BigInt(checkedRequest.quantityMilli) + BigInt(checkedRequest.shopSupply.materialQuantityMilliPerStockUnit) - 1n)
+        / BigInt(checkedRequest.shopSupply.materialQuantityMilliPerStockUnit),
+      )
+      if (!Number.isSafeInteger(requiredStockQuantity)
+        || checkedSku !== checkedRequest.shopSupply.sku
+        || stockQuantity !== requiredStockQuantity) return null
+    }
   } catch {
     return null
   }
@@ -7956,7 +7983,7 @@ export function issueCommerceStockToProduction(
   const item = matchingItems.length === 1 ? matchingItems[0] : undefined
   if (!item) return null
   const nextBalance = safeBalance(item.onHand, -stockQuantity)
-  if (nextBalance === null) return null
+  if (nextBalance === null || nextBalance < item.reorderAt) return null
   let inventoryFoundation = current.inventoryFoundation
   if (inventoryFoundation) {
     try {

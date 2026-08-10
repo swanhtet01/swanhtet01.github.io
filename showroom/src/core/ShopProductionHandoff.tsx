@@ -56,7 +56,21 @@ function actionProof(actor: string, request: ProductionMaterialHandoff): Commerc
   }
 }
 
+function productionReadyStock(item: CommerceState['items'][number]) {
+  return Math.max(item.onHand - item.reorderAt, 0)
+}
+
+function requiredMappedStockQuantity(request: ProductionMaterialHandoff) {
+  if (!request.shopSupply) return null
+  return Number(
+    (BigInt(request.quantityMilli) + BigInt(request.shopSupply.materialQuantityMilliPerStockUnit) - 1n)
+    / BigInt(request.shopSupply.materialQuantityMilliPerStockUnit),
+  )
+}
+
 function defaultStockQuantity(request: ProductionMaterialHandoff, available: number) {
+  const mappedQuantity = requiredMappedStockQuantity(request)
+  if (mappedQuantity !== null) return String(mappedQuantity)
   const exactWholeUnits = request.quantityMilli % 1_000 === 0 ? request.quantityMilli / 1_000 : 1
   return String(Math.max(1, Math.min(exactWholeUnits, Math.max(available, 1))))
 }
@@ -92,6 +106,10 @@ type ReturnReview = {
 }
 
 function defaultConversionNote(request: ProductionMaterialHandoff, available: number) {
+  const mappedQuantity = requiredMappedStockQuantity(request)
+  if (request.shopSupply && mappedQuantity !== null) {
+    return `Reviewed Plant mapping ${request.shopSupply.sku}: ${mappedQuantity} Shop stock ${mappedQuantity === 1 ? 'unit provides' : 'units provide'} ${formatPlantQuantity(request)}.`
+  }
   const exactWholeUnits = request.quantityMilli % 1_000 === 0 ? request.quantityMilli / 1_000 : 0
   return request.unit === 'pcs' && exactWholeUnits > 0 && exactWholeUnits <= available
     ? 'One Shop stock unit equals one Plant piece.'
@@ -333,10 +351,16 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
   )
   const pending = handoffs.filter((handoff) => !handoff.fulfilledBy)
   const request = pending[0]
-  const defaultItem = commerce.items.find((item) => item.onHand > 0) ?? commerce.items[0]
+  const mappedItem = request?.shopSupply
+    ? commerce.items.find((item) => item.sku === request.shopSupply?.sku)
+    : undefined
+  const defaultItem = mappedItem
+    ?? (request?.substitutionApprovalId
+      ? commerce.items.find((item) => productionReadyStock(item) > 0) ?? commerce.items[0]
+      : undefined)
   const [openRequestId, setOpenRequestId] = useState('')
   const [sku, setSku] = useState(defaultItem?.sku ?? '')
-  const [stockQuantity, setStockQuantity] = useState(request && defaultItem ? defaultStockQuantity(request, defaultItem.onHand) : '1')
+  const [stockQuantity, setStockQuantity] = useState(request && defaultItem ? defaultStockQuantity(request, productionReadyStock(defaultItem)) : '1')
   const [conversionNote, setConversionNote] = useState('')
   const [review, setReview] = useState<IssueReview | null>(null)
   const [busy, setBusy] = useState(false)
@@ -346,11 +370,15 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
   if (!request) return <ProductionMaterialReturn actor={actor} commerce={commerce} disabled={disabled} handoffs={handoffs} onIssue={onIssue} />
 
   const selectedItem = commerce.items.find((item) => item.sku === sku)
+  const mappedStockQuantity = requiredMappedStockQuantity(request)
   const parsedQuantity = /^\d+$/.test(stockQuantity) ? Number(stockQuantity) : Number.NaN
   const aggregateQuantityValid = Boolean(selectedItem
     && Number.isSafeInteger(parsedQuantity)
     && parsedQuantity > 0
-    && parsedQuantity <= selectedItem.onHand)
+    && parsedQuantity <= productionReadyStock(selectedItem)
+    && (request.shopSupply
+      ? selectedItem.sku === request.shopSupply.sku && parsedQuantity === mappedStockQuantity
+      : Boolean(request.substitutionApprovalId)))
   let locationAllocationReady = !commerce.inventoryFoundation
   let locationPicks: string[] = []
   if (commerce.inventoryFoundation && aggregateQuantityValid) {
@@ -374,13 +402,18 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
   }
   const quantityValid = aggregateQuantityValid && locationAllocationReady
   const open = openRequestId === request.requestId
+  const requestSupplyReady = request.shopSupply
+    ? Boolean(mappedItem && mappedStockQuantity && mappedStockQuantity <= productionReadyStock(mappedItem))
+    : Boolean(request.substitutionApprovalId && commerce.items.some((item) => productionReadyStock(item) > 0))
 
   function begin() {
-    const item = commerce.items.find((candidate) => candidate.onHand > 0) ?? commerce.items[0]
+    const item = request.shopSupply
+      ? commerce.items.find((candidate) => candidate.sku === request.shopSupply?.sku)
+      : commerce.items.find((candidate) => productionReadyStock(candidate) > 0) ?? commerce.items[0]
     setOpenRequestId(request.requestId)
     setSku(item?.sku ?? '')
-    setStockQuantity(item ? defaultStockQuantity(request, item.onHand) : '1')
-    setConversionNote(item ? defaultConversionNote(request, item.onHand) : '')
+    setStockQuantity(item ? defaultStockQuantity(request, productionReadyStock(item)) : '1')
+    setConversionNote(item ? defaultConversionNote(request, productionReadyStock(item)) : '')
     setReview(null)
     setError('')
     setNotice('')
@@ -443,12 +476,15 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
     <h3 id="production-material-handoff-title">{pending.length} material {pending.length === 1 ? 'issue' : 'issues'} waiting</h3>
     <p>{request.materialName} · {formatPlantQuantity(request)} · lot {request.inputLotId}. Shop remains the only stock authority.</p>
     {request.substitution ? <div className="stock-receipt-preview" role="status"><small>Approved substitute · {request.substitution.approvalId}</small><strong>{request.materialId} replaces {request.substitution.originalMaterialId}; issuing {formatPlantQuantity(request)} credits {formatMilli(request.substitution.originalQuantityMilli)} {request.substitution.originalUnit} of the unchanged BOM.</strong><span>{request.substitution.technicalBasis}</span></div> : null}
-    {!open ? <button className="core-button primary" disabled={disabled || !commerce.items.some((item) => item.onHand > 0)} onClick={begin} type="button">Review stock issue</button> : null}
+    {!request.shopSupply && !request.substitutionApprovalId ? <p className="form-notice warning-text" role="alert">Map this material to a Shop SKU in the reviewed Plant plan before issuing stock.</p> : null}
+    {request.shopSupply && !mappedItem ? <p className="form-notice warning-text" role="alert">The reviewed Shop SKU {request.shopSupply.sku} is not in this catalog. Revise the Plant plan or catalog first.</p> : null}
+    {request.shopSupply && mappedItem && !requestSupplyReady ? <p className="form-notice warning-text" role="alert">{request.shopSupply.sku} does not have enough production-ready stock above its reorder reserve.</p> : null}
+    {!open && (request.shopSupply || request.substitutionApprovalId) ? <button className="core-button primary" disabled={disabled || !requestSupplyReady} onClick={begin} type="button">Review stock issue</button> : null}
     {open ? <form className="core-form compact-form" onSubmit={stage}>
-      <label>Shop item<select disabled={disabled || busy || Boolean(review)} onChange={(event) => { setSku(event.target.value); setStockQuantity('1') }} required value={sku}><option value="">Choose stock</option>{commerce.items.map((item) => <option disabled={item.onHand < 1} key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
-      <label>Stock units to issue<input disabled={disabled || busy || Boolean(review) || !selectedItem} inputMode="numeric" max={selectedItem?.onHand ?? 0} min="1" onChange={(event) => setStockQuantity(event.target.value)} required step="1" type="number" value={stockQuantity} /></label>
-      <label>Conversion basis<input disabled={disabled || busy || Boolean(review)} maxLength={240} onChange={(event) => setConversionNote(event.target.value)} placeholder="Example: 2 bags provide the reviewed 10 kg" required value={conversionNote} /></label>
-      {selectedItem ? <div className="stock-receipt-preview" role="status"><small>{request.requestId} → {request.jobId}</small><strong>{quantityValid ? `${selectedItem.onHand} → ${selectedItem.onHand - parsedQuantity} ${selectedItem.sku}${locationPicks.length ? `; pick ${locationPicks.join('; ')}` : ''}` : commerce.inventoryFoundation ? 'Choose a quantity available in managed location stock' : 'Enter available whole stock units'}</strong></div> : null}
+      <label>Shop item<select data-production-mapped-sku={request.shopSupply?.sku} disabled={disabled || busy || Boolean(review) || Boolean(request.shopSupply)} onChange={(event) => { const nextSku = event.target.value; const nextItem = commerce.items.find((item) => item.sku === nextSku); setSku(nextSku); setStockQuantity(nextItem ? defaultStockQuantity(request, productionReadyStock(nextItem)) : '1'); setConversionNote(nextItem ? defaultConversionNote(request, productionReadyStock(nextItem)) : '') }} required value={sku}><option value="">Choose stock</option>{commerce.items.map((item) => <option disabled={productionReadyStock(item) < 1} key={item.sku} value={item.sku}>{item.name} · {item.sku} · {productionReadyStock(item)} production-ready · {item.reorderAt} protected</option>)}</select></label>
+      <label>Stock units to issue<input disabled={disabled || busy || Boolean(review) || !selectedItem || Boolean(request.shopSupply)} inputMode="numeric" max={selectedItem ? productionReadyStock(selectedItem) : 0} min="1" onChange={(event) => setStockQuantity(event.target.value)} required step="1" type="number" value={stockQuantity} /></label>
+      <label>Conversion basis<input disabled={disabled || busy || Boolean(review) || Boolean(request.shopSupply)} maxLength={240} onChange={(event) => setConversionNote(event.target.value)} placeholder="Example: 2 bags provide the reviewed 10 kg" required value={conversionNote} /></label>
+      {selectedItem ? <div className="stock-receipt-preview" role="status"><small>{request.shopSupply ? 'Reviewed Plant mapping' : 'Approved substitute stock mapping'} · {request.requestId} → {request.jobId}</small><strong>{quantityValid ? `${selectedItem.onHand} → ${selectedItem.onHand - parsedQuantity} ${selectedItem.sku}; ${selectedItem.reorderAt} reorder reserve protected${locationPicks.length ? `; pick ${locationPicks.join('; ')}` : ''}` : request.shopSupply ? 'Reviewed mapping is unavailable above the Shop reorder reserve' : commerce.inventoryFoundation ? 'Choose a quantity available in managed location stock' : 'Enter production-ready whole stock units'}</strong></div> : null}
       {review ? <div className="stock-receipt-preview" role="status"><small>Final review</small><strong>Issue {review.stockQuantity} {review.sku}; Plant quantity remains {formatPlantQuantity(review.request)}{review.request.substitution ? `; original BOM credit ${formatMilli(review.request.substitution.originalQuantityMilli)} ${review.request.substitution.originalUnit}` : ''}{review.locationPicks.length ? `; pick ${review.locationPicks.join('; ')}` : ''}</strong></div> : null}
       <div className="form-actions">
         <button className="core-button" disabled={busy} onClick={() => { setReview(null); setOpenRequestId(''); setNotice('') }} type="button">Cancel</button>

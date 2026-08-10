@@ -9827,6 +9827,10 @@ def _validate_production_material_issued(
         raise TrialValidationError(
             "production material issue must decrease only its matching Shop item."
         )
+    if after_item["onHand"] < before_item["reorderAt"]:
+        raise TrialValidationError(
+            "production material issue must preserve the Shop reorder reserve."
+        )
 
 
 def _validate_production_return_inventory_transition(

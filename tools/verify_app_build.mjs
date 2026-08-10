@@ -5538,6 +5538,8 @@ if (!plantOrderUiSource.includes('productionState: ProductionState')
 if (!commerceSource.includes("'production_issue'")
   || !commerceSource.includes('export function issueCommerceStockToProduction')
   || !commerceSource.includes('issueShopInventoryToProduction(inventoryFoundation')
+  || !commerceSource.includes('nextBalance < item.reorderAt')
+  || !commerceSource.includes('checkedSku !== checkedRequest.shopSupply.sku')
   || !commerceSource.includes('productionCommandDigest')
   || !commerceSource.includes('Production material request ID')
   || !managedTrialSource.includes("'commerce.production_material.issued'")
@@ -5569,6 +5571,8 @@ if (!commerceSource.includes("'production_issue'")
   || !productionMaterialHandoffPython.includes('required_supply_stock_units')
   || !productionMaterialHandoffPython.includes('_instant(effective_until)')
   || !productionMaterialHandoffPython.includes('require_shop_issue_matches_plant')
+  || !productionMaterialHandoffPython.includes('movement.get("sku") == shop_supply["sku"]')
+  || !productionMaterialHandoffPython.includes('movement.get("quantityDelta") == -required_stock_units')
   || !productionMaterialHandoffPython.includes('require_shop_issue_before_plant_progress')
   || !managedTrialRuntimeSource.includes('related_surfaces = ("production",)')
   || !managedTrialRuntimeSource.includes('related_surfaces = ("commerce",)')) fail('plant_shop_material_handoff_contract_missing')
@@ -5585,6 +5589,10 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !shopProductionHandoffUiSource.includes('expectedInventoryHeadDigest')
   || !shopProductionHandoffUiSource.includes('locationPicks.join')
   || !shopProductionHandoffUiSource.includes('exactWholeUnits <= available')
+  || !shopProductionHandoffUiSource.includes('data-production-mapped-sku')
+  || !shopProductionHandoffUiSource.includes('productionReadyStock(selectedItem)')
+  || !shopProductionHandoffUiSource.includes('Boolean(request.shopSupply)')
+  || !plantOrderUiSource.includes('production-ready')
   || !shopProductionHandoffUiSource.includes('PLANT_ORDER_WORKSPACE_UPDATED_EVENT')
   || !shopProductionHandoffUiSource.includes('productionOrderPortfolioEntries')
   || !shopProductionHandoffUiSource.includes('event.key === PRODUCTION_KEY')
@@ -8376,6 +8384,7 @@ async function verifyShopInventoryRuntime() {
       inputLotId: 'INPUT-LOT-001',
       quantityMilli: 10_000,
       unit: 'kg',
+      shopSupply: { sku: 'SKU-1', materialQuantityMilliPerStockUnit: 5_000 },
     }
     const locationProductionProof = proof(2, 'production-issue')
     const locationProductionIssued = commerce.issueCommerceStockToProduction(
@@ -8413,7 +8422,7 @@ async function verifyShopInventoryRuntime() {
     ) === locationProductionIssued, 'managed_production_issue_retry_not_idempotent')
     assert(commerce.issueCommerceStockToProduction(
       locationReserved,
-      { ...locationProductionRequest, requestId: 'ISSUE-LOCATION-RESERVED' },
+      { ...locationProductionRequest, requestId: 'ISSUE-LOCATION-RESERVED', quantityMilli: 40_000 },
       'SKU-1',
       8,
       '8 Shop units provide the reviewed Plant issue.',
@@ -13158,6 +13167,7 @@ async function verifyCommerceRuntime() {
       inputLotId: 'LOT-MANAGED-001',
       quantityMilli: 10_000,
       unit: 'kg',
+      shopSupply: { sku: 'SKU-1', materialQuantityMilliPerStockUnit: 4_000 },
     }
     const productionIssueProof = proof('ACT-PRODUCTION-ISSUE-001')
     const productionIssued = model.issueCommerceStockToProduction(
@@ -13173,6 +13183,38 @@ async function verifyCommerceRuntime() {
       && productionIssued.movements[0].productionRequestId === productionRequest.requestId
       && productionIssued.movements[0].productionCommandDigest === productionRequest.sourceCommandDigest,
     'production_material_issue_not_linked_to_exact_plant_request')
+    const twoSkuBase = model.validateCommerceState({
+      ...base,
+      items: [...base.items, { sku: 'SKU-2', name: 'Wrong mapped item', onHand: 10, reorderAt: 2, price: 100 }],
+    })
+    assert(model.issueCommerceStockToProduction(
+      twoSkuBase,
+      productionRequest,
+      'SKU-2',
+      3,
+      'Wrong Shop item for the reviewed Plant mapping.',
+      proof('ACT-PRODUCTION-WRONG-SKU'),
+    ) === null, 'production_material_issue_ignored_reviewed_shop_sku')
+    assert(model.issueCommerceStockToProduction(
+      base,
+      productionRequest,
+      'SKU-1',
+      2,
+      'Wrong stock conversion for the reviewed Plant mapping.',
+      proof('ACT-PRODUCTION-WRONG-CONVERSION'),
+    ) === null, 'production_material_issue_ignored_reviewed_stock_conversion')
+    assert(model.issueCommerceStockToProduction(
+      base,
+      {
+        ...productionRequest,
+        requestId: 'ISSUE-MANAGED-RESERVE',
+        quantityMilli: 36_000,
+      },
+      'SKU-1',
+      9,
+      'Nine stock units would cross the protected Shop reserve.',
+      proof('ACT-PRODUCTION-RESERVE'),
+    ) === null, 'production_material_issue_consumed_shop_reorder_reserve')
     assert(model.issueCommerceStockToProduction(
       productionIssued,
       productionRequest,
@@ -22017,8 +22059,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 104 KB allowance for four-product recovery and exhaustive Shop/Plant action language; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_906_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 108 KB allowance includes reviewed Plant-to-Shop SKU, conversion, and reserve enforcement; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_910_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

@@ -51,6 +51,7 @@ def production_material_requests(value: object) -> list[dict[str, Any]]:
             physical_material_id = payload["materialId"]
             physical_quantity_milli = payload["quantityMilli"]
             physical_unit = material["unit"]
+            shop_supply = material.get("shopSupply")
             substitution = None
         else:
             approval = substitution_by_id.get(payload["substitutionId"])
@@ -66,6 +67,7 @@ def production_material_requests(value: object) -> list[dict[str, Any]]:
             physical_material_id = payload["substituteMaterialId"]
             physical_quantity_milli = payload["substituteQuantityMilli"]
             physical_unit = approval["substituteUnit"]
+            shop_supply = None
             original_quantity_milli = (
                 physical_quantity_milli
                 * approval["originalQuantityPerUnitMilli"]
@@ -89,6 +91,7 @@ def production_material_requests(value: object) -> list[dict[str, Any]]:
                 "inputLotId": payload["inputLotId"],
                 "quantityMilli": physical_quantity_milli,
                 "unit": physical_unit,
+                "shopSupply": shop_supply,
                 "substitution": substitution,
             }
         )
@@ -98,7 +101,7 @@ def production_material_requests(value: object) -> list[dict[str, Any]]:
 def movement_matches_production_request(
     movement: Mapping[str, Any], request: Mapping[str, Any]
 ) -> bool:
-    return (
+    identity_matches = (
         movement.get("kind") == "production_issue"
         and movement.get("productionRequestId") == request["requestId"]
         and movement.get("productionCommandDigest")
@@ -108,6 +111,21 @@ def movement_matches_production_request(
         and movement.get("productionInputLotId") == request["inputLotId"]
         and movement.get("productionQuantityMilli") == request["quantityMilli"]
         and movement.get("productionUnit") == request["unit"]
+    )
+    if not identity_matches:
+        return False
+    if request.get("substitution") is not None:
+        return True
+    shop_supply = request.get("shopSupply")
+    if not isinstance(shop_supply, Mapping):
+        return False
+    required_stock_units = _stock_units_for(
+        int(request["quantityMilli"]),
+        int(shop_supply["materialQuantityMilliPerStockUnit"]),
+    )
+    return (
+        movement.get("sku") == shop_supply["sku"]
+        and movement.get("quantityDelta") == -required_stock_units
     )
 
 

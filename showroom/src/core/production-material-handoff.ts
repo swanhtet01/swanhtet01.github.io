@@ -156,6 +156,13 @@ export function productionMaterialHandoffs(
       inputLotId: payload.inputLotId,
       quantityMilli,
       unit: payload.kind === 'issue_material' ? material.unit : approval!.substituteUnit,
+      ...(payload.kind === 'issue_material' && material.shopSupply ? {
+        shopSupply: {
+          sku: material.shopSupply.sku,
+          materialQuantityMilliPerStockUnit: material.shopSupply.materialQuantityMilliPerStockUnit,
+        },
+      } : {}),
+      ...(payload.kind === 'issue_substitute_material' ? { substitutionApprovalId: approval!.id } : {}),
     }
     return [{
       ...request,

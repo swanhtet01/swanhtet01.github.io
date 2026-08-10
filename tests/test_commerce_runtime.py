@@ -1808,6 +1808,16 @@ class CommerceRuntimeTests(unittest.TestCase):
                 missing_link,
             )
 
+        reserve_crossing = deepcopy(next_state)
+        reserve_crossing["items"][0]["onHand"] = 1  # type: ignore[index]
+        reserve_crossing["movements"][0]["quantityDelta"] = -9  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "reorder reserve"):
+            apply_event(
+                current,
+                "commerce.production_material.issued",
+                reserve_crossing,
+            )
+
     def test_initialization_requires_catalog_without_invented_history(self) -> None:
         initialized = apply_event({}, "commerce.workspace.initialized", catalog_state())
         self.assertEqual(initialized, catalog_state())

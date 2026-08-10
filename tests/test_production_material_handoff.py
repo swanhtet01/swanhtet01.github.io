@@ -49,6 +49,10 @@ def issued_production() -> dict[str, object]:
     execution = planned_order_execution(
         production,
         action_evidence("ACT-HANDOFF-PLAN-001"),
+        shop_supply={
+            "sku": "SKU-1",
+            "materialQuantityMilliPerStockUnit": 5_000,
+        },
     )
     execution = check_plant_order_availability(
         execution,
@@ -296,6 +300,13 @@ class ProductionMaterialHandoffTests(unittest.TestCase):
     def test_shop_issue_must_match_exact_plant_command_digest(self) -> None:
         production = issued_production()
         request = production_material_requests(production)[0]
+        self.assertEqual(
+            request["shopSupply"],
+            {
+                "sku": "SKU-1",
+                "materialQuantityMilliPerStockUnit": 5_000,
+            },
+        )
         current = catalog_state()
         accepted = issued_commerce(request)
 
@@ -305,6 +316,16 @@ class ProductionMaterialHandoffTests(unittest.TestCase):
         spoofed["movements"][0]["productionCommandDigest"] = f"sha256:{'b' * 64}"  # type: ignore[index]
         with self.assertRaises(TrialValidationError):
             require_shop_issue_matches_plant(current, spoofed, production)
+
+        wrong_sku = deepcopy(accepted)
+        wrong_sku["movements"][0]["sku"] = "SKU-NOT-REVIEWED"  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "match one immutable Plant"):
+            require_shop_issue_matches_plant(current, wrong_sku, production)
+
+        wrong_conversion = deepcopy(accepted)
+        wrong_conversion["movements"][0]["quantityDelta"] = -1  # type: ignore[index]
+        with self.assertRaisesRegex(TrialValidationError, "match one immutable Plant"):
+            require_shop_issue_matches_plant(current, wrong_conversion, production)
 
     def test_plant_progress_requires_linked_shop_issue(self) -> None:
         production = issued_production()

@@ -104,6 +104,7 @@ def planned_order_execution(
     evidence: dict[str, str],
     *,
     target: int | None = None,
+    shop_supply: dict[str, object] | None = None,
 ) -> dict[str, object]:
     job = workspace["jobs"][0]  # type: ignore[index]
     plan = build_plant_order_execution_plan(
@@ -121,6 +122,7 @@ def planned_order_execution(
                 "name": "Managed material",
                 "unit": "kg",
                 "quantityPerUnitMilli": 1_000,
+                **({"shopSupply": shop_supply} if shop_supply else {}),
             }
         ],
         work_centres=[{"workCentreId": "WC-MANAGED-001", "name": "Managed line"}],
