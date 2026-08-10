@@ -69,7 +69,10 @@ type ItemRow = readonly [sku: string, name: string, unit: ShopBusinessTemplateUn
 const rows = (source: readonly ItemRow[]): readonly ShopBusinessTemplateItem[] =>
   source.map(([sku, name, unit, costMmk, priceMmk, openingStock, reorderAt]) => ({ sku, name, unit, costMmk, priceMmk, openingStock, reorderAt }))
 
-export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = [
+// Seeds carry the goods a trade actually stocks. The bookable services its industry pack offers
+// are appended below rather than repeated in all eight catalogs, so a new template cannot ship
+// with an unchargeable service by omission.
+const shopBusinessTemplateSeeds: readonly ShopBusinessTemplate[] = [
   {
     id: 'mini-mart',
     schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
@@ -370,6 +373,60 @@ export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = [
     },
   },
 ] as const
+
+// Every industry pack offers bookable services that carry a price, and the appointment book has
+// no path to the ledger -- a booking reaches no order, no daily close and no accounting handoff.
+// So unless the service is also a catalog item, the owner is quoted a price they cannot collect.
+// SKUs and prices mirror the pack samples in client-onboarding.ts exactly, and
+// test_industry_pack_sample_pairing.mjs pins both against shop-service-scheduling.ts so a price
+// edited in one place and not the other fails the build rather than reaching a counter.
+//
+// costMmk is the staff time the service consumes, not a purchased good; the model requires a
+// positive cost strictly below price, so it is carried at 60% of price to keep reported margin
+// honest rather than showing service revenue as pure profit.
+const packServiceRows: Readonly<Record<ShopIndustryPackId, readonly ItemRow[]>> = {
+  retail: [
+    ['RETAIL-SVC-SHOPPING', 'Personal shopping 30 min', 'pcs', 9_000, 15_000, 999, 0],
+    ['RETAIL-SVC-PICKUP', 'Pickup window 15 min', 'pcs', 3_000, 5_000, 999, 0],
+  ],
+  cafe: [
+    ['CAFE-SVC-CATERING', 'Catering consultation 30 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['CAFE-SVC-COLLECTION', 'Preorder collection 15 min', 'pcs', 3_000, 5_000, 999, 0],
+  ],
+  restaurant: [
+    ['REST-SVC-DEPOSIT', 'Table reservation deposit', 'pcs', 6_000, 10_000, 999, 0],
+    ['REST-SVC-EVENT', 'Private event consultation 45 min', 'pcs', 15_000, 25_000, 999, 0],
+  ],
+  spa: [
+    ['SPA-SVC-CONSULT', 'Consultation 30 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['SPA-SVC-MASSAGE', 'Traditional Myanmar massage 60 min', 'pcs', 27_000, 45_000, 999, 0],
+    ['SPA-SVC-OIL', 'Aromatic oil massage 90 min', 'pcs', 39_000, 65_000, 999, 0],
+    ['SPA-SVC-FOOT', 'Foot massage 45 min', 'pcs', 16_800, 28_000, 999, 0],
+    ['SPA-SVC-FACIAL', 'Facial treatment 45 min', 'pcs', 22_800, 38_000, 999, 0],
+    ['SPA-SVC-SCRUB', 'Body scrub 60 min', 'pcs', 25_200, 42_000, 999, 0],
+    ['SPA-SVC-STEAM', 'Herbal steam 30 min', 'pcs', 10_800, 18_000, 999, 0],
+  ],
+  gym: [
+    ['GYM-SVC-CONSULT', 'Fitness consultation 30 min', 'pcs', 9_000, 15_000, 999, 0],
+    ['GYM-SVC-PT', 'Personal training 60 min', 'pcs', 18_000, 30_000, 999, 0],
+    ['GYM-SVC-COMPOSITION', 'Body composition check 20 min', 'pcs', 4_800, 8_000, 999, 0],
+    ['GYM-SVC-CLASS', 'Group class 60 min', 'pcs', 7_200, 12_000, 999, 0],
+    ['GYM-SVC-YOGA', 'Yoga session 60 min', 'pcs', 9_000, 15_000, 999, 0],
+    ['GYM-SVC-NUTRITION', 'Nutrition plan review 30 min', 'pcs', 12_000, 20_000, 999, 0],
+  ],
+  school: [
+    ['SCHOOL-SVC-ENROLL', 'Enrollment consultation 30 min', 'pcs', 6_000, 10_000, 999, 0],
+    ['SCHOOL-SVC-PLACEMENT', 'Placement test 45 min', 'pcs', 3_000, 5_000, 999, 0],
+    ['SCHOOL-SVC-ENGLISH', 'English class session 60 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['SCHOOL-SVC-MATHS', 'Maths class session 60 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['SCHOOL-SVC-TUTORING', 'Private tutoring 60 min', 'pcs', 21_000, 35_000, 999, 0],
+    ['SCHOOL-SVC-EXAM', 'Exam preparation session 90 min', 'pcs', 18_000, 30_000, 999, 0],
+  ],
+}
+
+export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = shopBusinessTemplateSeeds.map(
+  (template) => ({ ...template, catalog: [...template.catalog, ...rows(packServiceRows[template.industryPackId])] }),
+)
 
 export function shopBusinessTemplate(id: ShopBusinessTemplateId) {
   const template = shopBusinessTemplates.find((candidate) => candidate.id === id)

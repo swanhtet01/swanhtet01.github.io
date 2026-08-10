@@ -956,9 +956,16 @@ function resolveWorkflowTemplateId(product: ClientSolutionId, workflowTemplateId
 }
 
 const shopIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
-  retail: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nRICE-25KG,Premium rice 25kg,18,6,72000\r\nOIL-1L,Cooking oil 1L,48,16,9500\r\n',
-  cafe: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nMENU-MOHINGA,Mohinga,80,20,3500\r\nMENU-TEA,Myanmar milk tea,120,30,1800\r\n',
-  restaurant: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nMENU-CURRY,Chicken curry set,60,15,8500\r\nMENU-RICE,Steamed rice,120,30,1200\r\n',
+  // Every pack's bookable services carry a price, and the model forbids a zero-price service, so
+  // a service an owner cannot ring up is money the product told them to charge and then gave
+  // them no way to collect. These SVC rows are not invented pricing -- each one is the price the
+  // pack already declares in shop-service-scheduling.ts. reorder_at 0 keeps them out of stock
+  // alerts and close stock-exceptions, because an hour of someone's time is not a stock unit.
+  retail: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nRETAIL-SVC-SHOPPING,Personal shopping 30 min,999,0,15000\r\nRETAIL-SVC-PICKUP,Pickup window 15 min,999,0,5000\r\nRICE-25KG,Premium rice 25kg,18,6,72000\r\nOIL-1L,Cooking oil 1L,48,16,9500\r\n',
+  cafe: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nCAFE-SVC-CATERING,Catering consultation 30 min,999,0,20000\r\nCAFE-SVC-COLLECTION,Preorder collection 15 min,999,0,5000\r\nMENU-MOHINGA,Mohinga,80,20,3500\r\nMENU-TEA,Myanmar milk tea,120,30,1800\r\n',
+  // The restaurant pack's own stated first workflow is "Record an order and hold one accountable
+  // table reservation", so a deposit it cannot collect breaks the pack's headline promise.
+  restaurant: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nREST-SVC-DEPOSIT,Table reservation deposit,999,0,10000\r\nREST-SVC-EVENT,Private event consultation 45 min,999,0,25000\r\nMENU-CURRY,Chicken curry set,60,15,8500\r\nMENU-RICE,Steamed rice,120,30,1200\r\n',
   // Treatments first, then the retail add-ons. A spa's money comes from the treatment, so it has
   // to be sellable at the counter: the appointment book records WHEN a massage happens, but
   // shop-service-scheduling.ts has zero references to commerce and commerce-workspace.ts has zero
@@ -974,18 +981,14 @@ const shopIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
   // Same reasoning as spa above: a gym sells the session, not the shaker bottle. Prices mirror
   // the scheduling pack so a booked class and a counter sale cannot disagree.
   gym: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nGYM-SVC-CONSULT,Fitness consultation 30 min,999,0,15000\r\nGYM-SVC-PT,Personal training 60 min,999,0,30000\r\nGYM-SVC-COMPOSITION,Body composition check 20 min,999,0,8000\r\nGYM-SVC-CLASS,Group class 60 min,999,0,12000\r\nGYM-SVC-YOGA,Yoga session 60 min,999,0,15000\r\nGYM-SVC-NUTRITION,Nutrition plan review 30 min,999,0,20000\r\nGYM-WHEY-1KG,Whey protein 1kg,18,6,145000\r\nGYM-SHAKER,Shaker bottle 700ml,40,12,9000\r\n',
-  // KNOWN GAP, deliberately not closed here: a school can book a 20,000 MMK class session it
-  // cannot charge for, exactly as the spa could before the fix above. The reason school is
-  // treated differently is that its integrated demo blueprint requires the shop catalog SKUs to
-  // EQUAL the ecommerce storefront SKUs, in order, and the SKU checklist example to be
-  // SCHOOL-ENGLISH (verify_app_build.mjs, client_demo_school_pack_did_not_align_shop_website_and_
-  // ecommerce_samples). Adding lesson SKUs to the shop side alone breaks that pairing.
-  //
-  // Closing it means adding the same lessons to the school STOREFRONT sample too, which is a
-  // change to a demo scenario rather than to a client's shop. There is no school client, so that
-  // is left as a deliberate decision rather than done speculatively. spa and gym have no such
-  // blueprint contract, which is why both are fixed above.
-  school: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSCHOOL-ENGLISH,English coursebook Level 1,60,15,15000\r\nSCHOOL-EXERCISE-80,Exercise book 80 pages,300,80,1200\r\n',
+  // School is the one pack carrying an extra contract, so its lessons are APPENDED rather than
+  // listed first: the integrated demo blueprint requires the shop catalog SKUs to EQUAL the
+  // ecommerce storefront SKUs in order, AND the SKU checklist example to stay SCHOOL-ENGLISH
+  // (verify_app_build.mjs, client_demo_school_pack_did_not_align_shop_website_and_ecommerce_
+  // samples). That example is read from the FIRST data row, so appending keeps SCHOOL-ENGLISH
+  // while still making every bookable lesson sellable. The same SKUs are appended to the school
+  // storefront sample below, in the same order, to hold the pairing.
+  school: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSCHOOL-ENGLISH,English coursebook Level 1,60,15,15000\r\nSCHOOL-EXERCISE-80,Exercise book 80 pages,300,80,1200\r\nSCHOOL-SVC-ENROLL,Enrollment consultation 30 min,999,0,10000\r\nSCHOOL-SVC-PLACEMENT,Placement test 45 min,999,0,5000\r\nSCHOOL-SVC-ENGLISH,English class session 60 min,999,0,20000\r\nSCHOOL-SVC-MATHS,Maths class session 60 min,999,0,20000\r\nSCHOOL-SVC-TUTORING,Private tutoring 60 min,999,0,35000\r\nSCHOOL-SVC-EXAM,Exam preparation session 90 min,999,0,30000\r\n',
 }
 
 const ecommerceIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
@@ -994,7 +997,9 @@ const ecommerceIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> =
   restaurant: 'sku,featured,collection,display_name,merchandising_note\r\nMENU-CURRY,true,Popular meals,Chicken curry set,Show preparation and pickup timing.\r\nMENU-RICE,false,Sides,Steamed rice,Confirm quantity with the meal request.\r\n',
   spa: 'sku,featured,collection,display_name,merchandising_note\r\nSPA-OIL-100ML,true,Home care,Aromatic massage oil 100ml,Offer it after a treatment for home care.\r\nSPA-COMPRESS,false,Home care,Herbal compress ball,Confirm counter stock before promising collection.\r\n',
   gym: 'sku,featured,collection,display_name,merchandising_note\r\nGYM-WHEY-1KG,true,Supplements,Whey protein 1kg,Show the flavour in stock before confirming.\r\nGYM-SHAKER,false,Accessories,Shaker bottle 700ml,Bundle it with a first protein purchase.\r\n',
-  school: 'sku,featured,collection,display_name,merchandising_note\r\nSCHOOL-ENGLISH,true,Course books,English coursebook Level 1,Confirm the class level before collection.\r\nSCHOOL-EXERCISE-80,false,Stationery,Exercise book 80 pages,Sold singly or by the ten pack at reception.\r\n',
+  // Order must match the school shop sample above exactly -- the integrated demo blueprint pairs
+  // the two row-for-row. Lessons are listed as enquiry-led enrollments, not add-to-cart items.
+  school: 'sku,featured,collection,display_name,merchandising_note\r\nSCHOOL-ENGLISH,true,Course books,English coursebook Level 1,Confirm the class level before collection.\r\nSCHOOL-EXERCISE-80,false,Stationery,Exercise book 80 pages,Sold singly or by the ten pack at reception.\r\nSCHOOL-SVC-ENROLL,true,Enrollment,Enrollment consultation 30 min,Book before the term starts to confirm a place.\r\nSCHOOL-SVC-PLACEMENT,false,Enrollment,Placement test 45 min,Sets the right level before the first class.\r\nSCHOOL-SVC-ENGLISH,false,Classes,English class session 60 min,Quote the full term when the parent enquires.\r\nSCHOOL-SVC-MATHS,false,Classes,Maths class session 60 min,Quote the full term when the parent enquires.\r\nSCHOOL-SVC-TUTORING,false,Classes,Private tutoring 60 min,Agree the tutor and schedule before payment.\r\nSCHOOL-SVC-EXAM,false,Classes,Exam preparation session 90 min,Confirm the exam date before enrolling.\r\n',
 }
 
 const websiteIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {

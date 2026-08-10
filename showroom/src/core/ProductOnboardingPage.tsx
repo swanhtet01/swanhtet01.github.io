@@ -96,7 +96,12 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
     () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
   )
-  const [businessTypeOpen, setBusinessTypeOpen] = useState(() => businessTemplateId !== null)
+  // Open by default for Shop. It used to open only when a ?template= deep link supplied the
+  // answer, so an owner arriving at /settings/?product=shop -- which is how everyone actually
+  // arrives -- saw a collapsed summary and completed setup on the default retail catalog. That
+  // silently mis-onboarded every spa, gym and school, the exact businesses that have to choose
+  // here because they have no trade template to pick.
+  const [businessTypeOpen, setBusinessTypeOpen] = useState(() => businessTemplateId !== null || product === 'commerce')
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]

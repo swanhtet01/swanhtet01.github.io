@@ -136,22 +136,46 @@ for (const pack of orphanPacks) {
 // This is not hypothetical. The spa catalog briefly shipped massage oil and compress balls with
 // no treatment at all, which left a real named client -- Sol Luxury Spa -- able to book a 45,000
 // MMK massage and unable to charge for it.
-// school is excluded, and the exclusion is the finding rather than an oversight: its integrated
-// demo blueprint requires the shop catalog SKUs to EQUAL the ecommerce storefront SKUs in order
-// (verify_app_build.mjs), so lessons cannot be added to one side alone. A school can therefore
-// still book a class it cannot charge for. Closing that means changing a demo scenario, and
-// there is no school client to justify it -- see the note in client-onboarding.ts.
-const SERVICE_LED = new Set(['spa', 'gym'])
-for (const pack of shopIndustryPacks.filter((candidate) => SERVICE_LED.has(candidate.id))) {
-  const catalogPrices = new Set(
-    dataRows(clientImportTemplate('commerce', undefined, { shopIndustryPackId: pack.id }))
-      .map((line) => Number(line.split(',')[4])),
-  )
-  const schedule = createShopServiceSchedule(pack.id)
-  for (const service of schedule.services) {
+//
+// Matching on PRICE ALONE is not enough, and that is a correction to an earlier version of this
+// guard: the fashion trade passed it while stocking no service at all, purely because a t-shirt
+// happened to cost 15,000 MMK -- the same as "Personal shopping". A coincidence read as coverage.
+// So each service must have its OWN catalog line: name matching the service and price equal to
+// it. Both halves matter -- the name proves a dedicated item exists, the price proves the counter
+// and the appointment book quote the same number.
+const dedicatedItem = (catalog, service) => catalog.find((item) => (
+  item.name === service.name || item.name.startsWith(`${service.name} `)
+))
+
+// Both onboarding routes are covered. An owner who picks only an industry pack gets the pack
+// sample; an owner who picks a trade gets that template's catalog instead. A service chargeable
+// on one route and not the other is the same defect, just harder to see.
+for (const pack of shopIndustryPacks) {
+  const catalog = dataRows(clientImportTemplate('commerce', undefined, { shopIndustryPackId: pack.id }))
+    .map((line) => { const cells = line.split(','); return { name: cells[1].trim(), priceMmk: Number(cells[4]) } })
+  for (const service of createShopServiceSchedule(pack.id).services) {
+    const item = dedicatedItem(catalog, service)
     check(
-      catalogPrices.has(service.priceMmk),
-      `${pack.id}: "${service.name}" is bookable at ${service.priceMmk.toLocaleString()} MMK but no catalog item sells at that price -- it cannot be charged for`,
+      Boolean(item),
+      `${pack.id} pack: "${service.name}" is bookable at ${service.priceMmk.toLocaleString()} MMK but no catalog item sells it -- it cannot be charged for`,
+    )
+    check(
+      item?.priceMmk === service.priceMmk,
+      `${pack.id} pack: "${service.name}" is booked at ${service.priceMmk.toLocaleString()} MMK but sold at ${item?.priceMmk?.toLocaleString()} -- the counter and the appointment book disagree`,
+    )
+  }
+}
+
+for (const template of shopBusinessTemplates) {
+  for (const service of createShopServiceSchedule(template.industryPackId).services) {
+    const item = dedicatedItem(template.catalog, service)
+    check(
+      Boolean(item),
+      `${template.id} trade: "${service.name}" is bookable at ${service.priceMmk.toLocaleString()} MMK but the template catalog cannot sell it`,
+    )
+    check(
+      item?.priceMmk === service.priceMmk,
+      `${template.id} trade: "${service.name}" is booked at ${service.priceMmk.toLocaleString()} MMK but sold at ${item?.priceMmk?.toLocaleString()} -- the counter and the appointment book disagree`,
     )
   }
 }
