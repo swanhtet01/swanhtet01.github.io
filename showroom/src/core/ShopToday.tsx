@@ -35,6 +35,7 @@ const capabilityGroups = [
 
 export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDetail, nextLabel, nextTo }: ShopTodayProps) {
   const financeAttention = modules.find((module) => module.label === 'Finance controls' && module.tone === 'attention')
+  const distinctFinanceAttention = financeAttention?.to !== nextTo ? financeAttention : null
   return <div className="shop-today">
     <section className="shop-today-mission" aria-label="Next Shop action">
       <div>
@@ -44,7 +45,7 @@ export function ShopToday({ catalogReady, metrics, modules, nextAction, nextDeta
       </div>
       <div className="shop-today-actions">
         <Link className="core-button primary" to={nextTo}>{nextLabel}</Link>
-        {financeAttention ? <Link className="core-button" to={financeAttention.to}>{financeAttention.status}</Link> : catalogReady ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
+        {distinctFinanceAttention ? <Link className="core-button" to={distinctFinanceAttention.to}>{distinctFinanceAttention.status}</Link> : catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}
       </div>
     </section>
 

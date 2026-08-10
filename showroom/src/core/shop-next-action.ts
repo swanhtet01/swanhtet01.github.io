@@ -3,6 +3,7 @@ export type ShopNextActionInput = {
   activePurchaseOrderCount: number
   canWrite: boolean
   catalogItemCount: number
+  closeReadyOrderCount: number
   inventoryReady: boolean
   lowStockCount: number
   pendingAction: boolean
@@ -20,7 +21,7 @@ export type ShopNextActionDecision = {
 }
 
 export function decideShopNextAction(input: ShopNextActionInput): ShopNextActionDecision {
-  const counts = [input.actionOrderCount, input.activePurchaseOrderCount, input.catalogItemCount, input.lowStockCount, input.pendingOnlineRequestCount]
+  const counts = [input.actionOrderCount, input.activePurchaseOrderCount, input.catalogItemCount, input.closeReadyOrderCount, input.lowStockCount, input.pendingOnlineRequestCount]
   if (!counts.every((count) => Number.isSafeInteger(count) && count >= 0)) throw new Error('Shop next-action counts must be non-negative safe integers.')
 
   if (!input.canWrite) return {
@@ -67,6 +68,15 @@ export function decideShopNextAction(input: ShopNextActionInput): ShopNextAction
     reason: `${input.actionOrderCount} order${input.actionOrderCount === 1 ? '' : 's'} need fulfilment or payment review.`,
     stage: 'Finish order queue',
     track: 'Orders',
+  }
+  if (input.closeReadyOrderCount) return {
+    job: 'Review today\'s close',
+    nextAction: 'Review and save close',
+    ownerGate: 'Count each payment method, explain any variance, and confirm the daily snapshot.',
+    path: '/shop/?tab=orders#shop-close-controls',
+    reason: `${input.closeReadyOrderCount} completed, reconciled order${input.closeReadyOrderCount === 1 ? '' : 's'} ${input.closeReadyOrderCount === 1 ? 'is' : 'are'} ready for accountable daily close.`,
+    stage: 'Save daily close',
+    track: 'Review',
   }
   if (input.activePurchaseOrderCount) return {
     job: 'Receive purchase orders',

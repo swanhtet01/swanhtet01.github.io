@@ -3205,6 +3205,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     activePurchaseOrderCount: activePurchaseOrders.length,
     canWrite: commerceCanWrite,
     catalogItemCount: commerce.items.length,
+    closeReadyOrderCount: closableOrders.length,
     inventoryReady: Boolean(commerce.inventoryFoundation && managedInventoryProjection),
     lowStockCount: lowStock.length,
     pendingAction: Boolean(pendingAction),

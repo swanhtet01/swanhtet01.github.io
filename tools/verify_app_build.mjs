@@ -265,13 +265,14 @@ if (!shopOperatingFlowSource.includes("export type ShopOperatingStageId = 'intak
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopOperatingFlowSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_operating_flow_side_effect_added')
 if (!shopTodayUiSource.includes('aria-label="Next Shop action"')
   || !shopTodayUiSource.includes("const financeAttention = modules.find((module) => module.label === 'Finance controls' && module.tone === 'attention')")
-  || !shopTodayUiSource.includes('{financeAttention ? <Link className="core-button" to={financeAttention.to}>{financeAttention.status}</Link> : catalogReady ?')
+  || !shopTodayUiSource.includes('const distinctFinanceAttention = financeAttention?.to !== nextTo ? financeAttention : null')
+  || !shopTodayUiSource.includes('{distinctFinanceAttention ? <Link className="core-button" to={distinctFinanceAttention.to}>{distinctFinanceAttention.status}</Link>')
   || shopTodayUiSource.includes('const guidedJobs =')
   || shopTodayUiSource.includes('aria-label="Shop guided jobs"')
   || shopTodayUiSource.includes('Use Shop in 3 steps.')
   || !shopTodayUiSource.includes('catalogReady: boolean')
   || !shopTodayUiSource.includes('nextLabel: string')
-  || !shopTodayUiSource.includes(': catalogReady ? <Link className="core-button" to="/shop/?tab=counter">New sale</Link> : null}')
+  || !shopTodayUiSource.includes(": catalogReady && nextTo !== '/shop/?tab=counter' ? <Link className=\"core-button\" to=\"/shop/?tab=counter\">New sale</Link> : null}")
   || !shopTodayUiSource.includes('<details className="shop-today-workspaces">')
   || !shopTodayUiSource.includes('<strong>More Shop tools</strong>')
   || !shopTodayUiSource.includes('Customers, finance, channels, and purchasing')
@@ -2455,6 +2456,8 @@ if (!coreSource.includes('See today’s next job and key numbers.')
   || !shopNextActionSource.includes("'Prepare Shop catalog'")
   || !shopNextActionSource.includes("'Open catalog import'")
   || !coreSource.includes('<ShopToday catalogReady={commerce.items.length > 0}')
+  || !shopTodayUiSource.includes('const distinctFinanceAttention = financeAttention?.to !== nextTo ? financeAttention : null')
+  || !shopTodayUiSource.includes("catalogReady && nextTo !== '/shop/?tab=counter'")
   || !coreSource.includes('Your catalog is empty.')
   || !coreSource.includes('Add or import products')
   || !coreSource.includes('const shopCatalogOnboarding = <section')
@@ -2471,6 +2474,10 @@ if (!coreSource.includes('See today’s next job and key numbers.')
   || (coreSource.match(/id="shop-catalog-import"/g) || []).length !== 1
   || !shopNextActionSource.includes("'Review online order requests'")
   || !shopNextActionSource.includes("'Finish fulfilment queue'")
+  || !shopNextActionSource.includes("job: 'Review today\\'s close'")
+  || !shopNextActionSource.includes("path: '/shop/?tab=orders#shop-close-controls'")
+  || !shopNextActionSource.includes("stage: 'Save daily close'")
+  || !coreSource.includes('closeReadyOrderCount: closableOrders.length')
   || !shopNextActionSource.includes("'Receive purchase orders'")
   || !shopNextActionSource.includes("'Reorder low stock'")
   || !shopNextActionSource.includes("'Set up stock locations'")
@@ -21402,6 +21409,7 @@ async function verifyShopNextActionRuntime() {
     activePurchaseOrderCount: 0,
     canWrite: true,
     catalogItemCount: 1,
+    closeReadyOrderCount: 0,
     inventoryReady: true,
     lowStockCount: 0,
     pendingAction: false,
@@ -21420,6 +21428,8 @@ async function verifyShopNextActionRuntime() {
     assert(online.job === 'Review online order requests' && online.reason.startsWith('2 online requests'), 'shop_next_action_online_request_priority_wrong')
     const orders = model.decideShopNextAction(input({ actionOrderCount: 2, activePurchaseOrderCount: 3 }))
     assert(orders.job === 'Finish fulfilment queue' && orders.track === 'Orders', 'shop_next_action_fulfilment_priority_wrong')
+    const close = model.decideShopNextAction(input({ closeReadyOrderCount: 2, activePurchaseOrderCount: 3, lowStockCount: 4 }))
+    assert(close.job === "Review today's close" && close.nextAction === 'Review and save close' && close.path === '/shop/?tab=orders#shop-close-controls' && close.track === 'Review', 'shop_next_action_daily_close_priority_wrong')
     const receiving = model.decideShopNextAction(input({ activePurchaseOrderCount: 2, lowStockCount: 3 }))
     assert(receiving.job === 'Receive purchase orders' && receiving.nextAction === 'Open receiving queue', 'shop_next_action_receiving_priority_wrong')
     const reorder = model.decideShopNextAction(input({ lowStockCount: 2, inventoryReady: false }))
