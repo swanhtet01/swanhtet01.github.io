@@ -11,6 +11,7 @@ export type ShopBusinessTemplateId =
   | 'hardware'
   | 'tea-coffee'
   | 'auto-parts'
+  | 'restaurant'
 
 export type ShopBusinessTemplateUnit = CommerceProductionMaterialUnit
 
@@ -330,6 +331,44 @@ export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = [
       lines: [{ sku: 'PAD-BRAKE-FR', quantity: 2 }, { sku: 'OIL-ENG-4L', quantity: 2 }, { sku: 'FILTER-AIR', quantity: 2 }],
     },
   },
+  {
+    id: 'restaurant',
+    schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
+    name: { en: 'Restaurant', my: 'စားသောက်ဆိုင်' },
+    description: 'Full menu with table orders, kitchen prep counts, and booked group meals.',
+    industryPackId: 'restaurant',
+    workflowTemplateId: 'restaurant-ordering',
+    catalog: rows([
+      ['CURRY-CHICKEN', 'Chicken curry set with rice and soup', 'pcs', 4_200, 8_500, 40, 12],
+      ['CURRY-PORK', 'Pork curry set with rice and soup', 'pcs', 4_600, 9_000, 32, 10],
+      ['CURRY-FISH', 'Fish curry set with rice and soup', 'pcs', 4_900, 9_500, 28, 10],
+      ['CURRY-MUTTON', 'Mutton curry set with rice and soup', 'pcs', 6_800, 12_500, 18, 6],
+      ['RICE-STEAMED', 'Steamed rice plate', 'pcs', 300, 800, 120, 30],
+      ['RICE-FRIED-EGG', 'Egg fried rice plate', 'pcs', 2_400, 5_000, 45, 15],
+      ['NOODLE-KAUKSWE', 'Ohn no kauk swe bowl', 'pcs', 2_600, 5_500, 40, 12],
+      ['NOODLE-SHAN', 'Shan noodle bowl', 'pcs', 2_200, 4_800, 38, 12],
+      ['SALAD-LAHPET', 'Lahpet thoke tea leaf salad', 'pcs', 1_900, 4_500, 50, 15],
+      ['SALAD-GINGER', 'Gyin thoke ginger salad', 'pcs', 1_700, 4_000, 4, 12],
+      ['SOUP-CHINYAY', 'Chin yay hin sour soup bowl', 'pcs', 700, 2_000, 60, 20],
+      ['GRILL-TILAPIA', 'Grilled whole tilapia', 'pcs', 6_500, 12_500, 14, 5],
+      ['DRINK-LIME', 'Fresh lime juice', 'pcs', 900, 2_200, 60, 20],
+    ]),
+    counterSales: [
+      { id: 'restaurant-sale-1', recordedAt: '2026-08-03T05:15:00.000Z', payment: 'Cash', lines: [{ sku: 'CURRY-CHICKEN', quantity: 2 }, { sku: 'RICE-STEAMED', quantity: 2 }] },
+      { id: 'restaurant-sale-2', recordedAt: '2026-08-03T06:40:00.000Z', payment: 'KBZPay', lines: [{ sku: 'NOODLE-SHAN', quantity: 1 }, { sku: 'SALAD-LAHPET', quantity: 1 }, { sku: 'DRINK-LIME', quantity: 2 }] },
+      { id: 'restaurant-sale-3', recordedAt: '2026-08-03T11:20:00.000Z', payment: 'Cash', lines: [{ sku: 'GRILL-TILAPIA', quantity: 1 }, { sku: 'RICE-STEAMED', quantity: 3 }, { sku: 'SOUP-CHINYAY', quantity: 3 }] },
+    ],
+    pendingOrder: {
+      id: 'restaurant-order-1',
+      customerName: 'Daw Nwe Nwe Aye (family booking)',
+      contact: '09-317-555-666',
+      requestedAt: '2026-08-03T07:45:00.000Z',
+      promisedFor: '2026-08-04T11:00:00.000Z',
+      status: 'pending',
+      note: 'Family dinner for 12 people. Two tables held together from 17:30.',
+      lines: [{ sku: 'CURRY-CHICKEN', quantity: 4 }, { sku: 'CURRY-FISH', quantity: 3 }, { sku: 'RICE-STEAMED', quantity: 12 }, { sku: 'SALAD-LAHPET', quantity: 2 }],
+    },
+  },
 ] as const
 
 export function shopBusinessTemplate(id: ShopBusinessTemplateId) {
@@ -434,6 +473,6 @@ export function validateShopBusinessTemplates() {
       if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) throw new Error(`${order.id} needs whole positive quantities.`)
     }
   }
-  if (templateIds.size !== 7) throw new Error('The Shop business template registry must carry exactly 7 templates.')
+  if (templateIds.size !== 8) throw new Error('The Shop business template registry must carry exactly 8 templates.')
   return shopBusinessTemplates
 }

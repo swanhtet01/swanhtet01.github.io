@@ -269,7 +269,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           {product === 'commerce' ? (
             <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setBusinessTypeOpen(event.currentTarget.open)} open={businessTypeOpen}>
-              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : 'Standard retail sample'}</small></summary>
+              {/* Named after the pack actually selected. This said "Standard retail sample" for
+                  every pack, so a spa or school owner -- the ones with no trade template to pick,
+                  who are the whole reason this fallback exists -- was told their starter data was
+                  retail. Lowercasing keeps the retail wording identical to before. */}
+              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : `Standard ${selectedShopIndustryPack.name.toLowerCase()} sample`}</small></summary>
               <label className="demo-pack-select">Starter data
                 <select onChange={(event) => changeBusinessTemplate(event.target.value)} value={businessTemplateId ?? ''}>
                   <option value="">Standard sample (current industry pack)</option>

@@ -1322,6 +1322,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [orderDraftInitializedScope, setOrderDraftInitializedScope] = useState('')
   const orderDraftInitialized = orderDraftInitializedScope === orderDraftScope
   const orderComposerRef = useRef<HTMLDialogElement>(null)
+  const pendingOrderComposerReveal = useRef<'' | 'ecommerce-request' | 'ecommerce-inbox' | 'ecommerce-inbox-request'>('')
   const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
   const orderReviewRef = useRef<HTMLButtonElement>(null)
@@ -2145,11 +2146,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setResumedOrderDraft(null)
         setOrderDraftConflict(false)
         setNotice(`${recordDisplayReference(ecommerceNavigationDraft.sourceRequestId)} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
-        requestAnimationFrame(() => {
-          const dialog = orderComposerRef.current
-          if (dialog && !dialog.open) dialog.showModal()
-          orderPaymentRef.current?.focus({ preventScroll: true })
-        })
+        pendingOrderComposerReveal.current = 'ecommerce-request'
       })
       .catch(() => {
         if (current) setNotice('The Ecommerce request guard could not load. Nothing was prepared.')
@@ -2482,15 +2479,28 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       : pendingStorefrontRequests.length
         ? `${pendingStorefrontRequests.length} Ecommerce ${pendingStorefrontRequests.length === 1 ? 'request is' : 'requests are'} waiting for Shop review.`
         : 'The Ecommerce inbox is open. No request currently needs Shop review.')
-    const focusFrame = requestAnimationFrame(() => {
-      const dialog = orderComposerRef.current
-      if (dialog && !dialog.open) dialog.showModal()
-      if (requestedStorefrontRequestIsWaiting) ecommerceInboxTargetRef.current?.focus()
-      else orderComposerHeadingRef.current?.focus()
-      navigate('/shop/?tab=orders', { replace: true })
-    })
-    return () => cancelAnimationFrame(focusFrame)
+    pendingOrderComposerReveal.current = requestedStorefrontRequestIsWaiting ? 'ecommerce-inbox-request' : 'ecommerce-inbox'
   }, [managedIdentity, navigate, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, tab, workspaceMode])
+
+  // The composer only mounts on the orders tab, so reveal a queued Ecommerce handoff on whichever commit
+  // first has that dialog rather than on a single animation frame: requestAnimationFrame never runs while
+  // the Shop tab is hidden or backgrounded, which leaves a prepared request behind a closed composer.
+  useEffect(() => {
+    const reveal = pendingOrderComposerReveal.current
+    if (!reveal) return
+    if (tab !== 'orders') {
+      pendingOrderComposerReveal.current = ''
+      return
+    }
+    const dialog = orderComposerRef.current
+    if (!dialog) return
+    pendingOrderComposerReveal.current = ''
+    if (!dialog.open) dialog.showModal()
+    if (reveal === 'ecommerce-request') orderPaymentRef.current?.focus({ preventScroll: true })
+    else if (reveal === 'ecommerce-inbox-request') ecommerceInboxTargetRef.current?.focus()
+    else orderComposerHeadingRef.current?.focus()
+    if (reveal !== 'ecommerce-request') navigate('/shop/?tab=orders', { replace: true })
+  })
 
   async function initializeManagedCatalog(event: FormEvent) {
     event.preventDefault()
@@ -2573,6 +2583,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   </div>
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
+  // The appointment book is NOT a commerce control. ShopServiceSchedule has its own storage
+  // key and does not read commerce state at all, but it was gated on commerceCanWrite -- so a
+  // company account that had not provisioned a Shop catalog yet, or a local device before
+  // onboarding finished, found every control greyed out: hold, confirm, check in, complete,
+  // cancel, add service. For a spa, whose first action is taking a booking, that is the whole
+  // product frozen behind a catalog it does not need.
+  //
+  // The pending-action half IS legitimately app-wide: it is the two-person review gate, and
+  // nothing should move while a change is awaiting confirmation.
+  const shopScheduleControlsDisabled = Boolean(pendingAction)
   const activePurchaseOrders = purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
   const procurementArrivalRows = activePurchaseOrders.map((row) => ({
     ...row,
@@ -5996,7 +6016,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} /></Suspense>
+    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={shopScheduleControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)

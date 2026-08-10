@@ -103,11 +103,18 @@ const TRADE_COPY: Readonly<Record<ShopBusinessTemplateId, TradeCopy>> = {
     offer: 'Vehicle consumables and spares at the workshop counter, with the part your vehicle needs checked against stock before you travel.',
     proof: 'Every part is stocked against its own SKU rather than a description, so a part confirmed as available is the specific fit, not a near match.',
   },
+  restaurant: {
+    label: 'Restaurant',
+    templateId: 'lead-generation',
+    audience: 'diners nearby plus families booking a table for a group meal',
+    offer: 'A full menu served at the table, with group bookings agreed for a set time and party size before you arrive.',
+    proof: 'Table bookings are held against a named zone and party size, so a time confirmed for your group is reserved rather than promised twice.',
+  },
 }
 
 // Presentation order, matching the order Shop lists its trade templates in.
 const TRADE_ORDER: readonly ShopBusinessTemplateId[] = [
-  'mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts',
+  'mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant',
 ] as const
 
 /**

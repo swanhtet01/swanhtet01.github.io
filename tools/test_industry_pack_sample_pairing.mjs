@@ -25,7 +25,7 @@ const bundle = await build({
   stdin: {
     contents: `
       export { clientImportTemplate } from './client-onboarding.ts'
-      export { shopIndustryPacks, shopIndustryPack } from './shop-service-scheduling.ts'
+      export { shopIndustryPacks, shopIndustryPack, createShopServiceSchedule } from './shop-service-scheduling.ts'
       export { shopBusinessTemplates } from '../products/shop/business-templates.ts'
     `,
     resolveDir: 'showroom/src/core',
@@ -39,7 +39,10 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { clientImportTemplate, shopIndustryPacks, shopIndustryPack, shopBusinessTemplates } =
+const {
+  clientImportTemplate, shopIndustryPacks, shopIndustryPack, shopBusinessTemplates,
+  createShopServiceSchedule,
+} =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -120,6 +123,37 @@ for (const pack of orphanPacks) {
     dataRows(csv).length > 0,
     `${pack.id}: has no trade template, so its fallback catalog sample must carry rows`,
   )
+}
+
+// --- a service business must be able to CHARGE for its service ----------------
+// The appointment book records WHEN a treatment happens. It reaches no order, no daily close and
+// no accounting handoff -- shop-service-scheduling.ts has zero references to commerce and
+// commerce-workspace.ts has zero references to bookings, and expectedRevenueMmk is a display
+// projection rather than a ledger entry. So the ONLY way a spa, gym or school takes money today
+// is the counter, and that means every service it books must also exist as a catalog item at the
+// same price.
+//
+// This is not hypothetical. The spa catalog briefly shipped massage oil and compress balls with
+// no treatment at all, which left a real named client -- Sol Luxury Spa -- able to book a 45,000
+// MMK massage and unable to charge for it.
+// school is excluded, and the exclusion is the finding rather than an oversight: its integrated
+// demo blueprint requires the shop catalog SKUs to EQUAL the ecommerce storefront SKUs in order
+// (verify_app_build.mjs), so lessons cannot be added to one side alone. A school can therefore
+// still book a class it cannot charge for. Closing that means changing a demo scenario, and
+// there is no school client to justify it -- see the note in client-onboarding.ts.
+const SERVICE_LED = new Set(['spa', 'gym'])
+for (const pack of shopIndustryPacks.filter((candidate) => SERVICE_LED.has(candidate.id))) {
+  const catalogPrices = new Set(
+    dataRows(clientImportTemplate('commerce', undefined, { shopIndustryPackId: pack.id }))
+      .map((line) => Number(line.split(',')[4])),
+  )
+  const schedule = createShopServiceSchedule(pack.id)
+  for (const service of schedule.services) {
+    check(
+      catalogPrices.has(service.priceMmk),
+      `${pack.id}: "${service.name}" is bookable at ${service.priceMmk.toLocaleString()} MMK but no catalog item sells at that price -- it cannot be charged for`,
+    )
+  }
 }
 
 console.log(`industry pack sample pairing contract: ${checks} checks passed`)

@@ -959,18 +959,42 @@ const shopIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
   retail: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nRICE-25KG,Premium rice 25kg,18,6,72000\r\nOIL-1L,Cooking oil 1L,48,16,9500\r\n',
   cafe: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nMENU-MOHINGA,Mohinga,80,20,3500\r\nMENU-TEA,Myanmar milk tea,120,30,1800\r\n',
   restaurant: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nMENU-CURRY,Chicken curry set,60,15,8500\r\nMENU-RICE,Steamed rice,120,30,1200\r\n',
-  spa: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSPA-MASSAGE,Traditional massage 60 min,20,4,45000\r\nSPA-FACIAL,Facial treatment 45 min,16,4,38000\r\n',
-  gym: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nGYM-PT,Personal training session,24,6,30000\r\nGYM-DAY,Gym day pass,40,10,10000\r\n',
-  school: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSCHOOL-ENGLISH,English class session,30,8,18000\r\nSCHOOL-MATH,Math class session,30,8,18000\r\n',
+  // Treatments first, then the retail add-ons. A spa's money comes from the treatment, so it has
+  // to be sellable at the counter: the appointment book records WHEN a massage happens, but
+  // shop-service-scheduling.ts has zero references to commerce and commerce-workspace.ts has zero
+  // references to bookings, so a completed appointment reaches no order, no daily close and no
+  // accounting handoff. Its expectedRevenueMmk is a display projection, not a ledger entry. A
+  // treatment that is not a catalog item therefore cannot be paid for at all.
+  //
+  // opening_stock is high and reorder_at is 0 on purpose -- a therapist-hour is not a stock unit,
+  // and at reorderAt 0 it never raises a stock alert or a close stock-exception. Prices match the
+  // scheduling pack exactly so the counter and the appointment book cannot quote different
+  // numbers for the same treatment.
+  spa: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSPA-SVC-CONSULT,Consultation 30 min,999,0,20000\r\nSPA-SVC-MASSAGE,Traditional Myanmar massage 60 min,999,0,45000\r\nSPA-SVC-OIL,Aromatic oil massage 90 min,999,0,65000\r\nSPA-SVC-FOOT,Foot massage 45 min,999,0,28000\r\nSPA-SVC-FACIAL,Facial treatment 45 min,999,0,38000\r\nSPA-SVC-SCRUB,Body scrub 60 min,999,0,42000\r\nSPA-SVC-STEAM,Herbal steam 30 min,999,0,18000\r\nSPA-OIL-100ML,Aromatic massage oil 100ml,36,12,15000\r\nSPA-COMPRESS,Herbal compress ball,24,8,7000\r\n',
+  // Same reasoning as spa above: a gym sells the session, not the shaker bottle. Prices mirror
+  // the scheduling pack so a booked class and a counter sale cannot disagree.
+  gym: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nGYM-SVC-CONSULT,Fitness consultation 30 min,999,0,15000\r\nGYM-SVC-PT,Personal training 60 min,999,0,30000\r\nGYM-SVC-COMPOSITION,Body composition check 20 min,999,0,8000\r\nGYM-SVC-CLASS,Group class 60 min,999,0,12000\r\nGYM-SVC-YOGA,Yoga session 60 min,999,0,15000\r\nGYM-SVC-NUTRITION,Nutrition plan review 30 min,999,0,20000\r\nGYM-WHEY-1KG,Whey protein 1kg,18,6,145000\r\nGYM-SHAKER,Shaker bottle 700ml,40,12,9000\r\n',
+  // KNOWN GAP, deliberately not closed here: a school can book a 20,000 MMK class session it
+  // cannot charge for, exactly as the spa could before the fix above. The reason school is
+  // treated differently is that its integrated demo blueprint requires the shop catalog SKUs to
+  // EQUAL the ecommerce storefront SKUs, in order, and the SKU checklist example to be
+  // SCHOOL-ENGLISH (verify_app_build.mjs, client_demo_school_pack_did_not_align_shop_website_and_
+  // ecommerce_samples). Adding lesson SKUs to the shop side alone breaks that pairing.
+  //
+  // Closing it means adding the same lessons to the school STOREFRONT sample too, which is a
+  // change to a demo scenario rather than to a client's shop. There is no school client, so that
+  // is left as a deliberate decision rather than done speculatively. spa and gym have no such
+  // blueprint contract, which is why both are fixed above.
+  school: 'sku,item_name,opening_stock,reorder_at,price_mmk\r\nSCHOOL-ENGLISH,English coursebook Level 1,60,15,15000\r\nSCHOOL-EXERCISE-80,Exercise book 80 pages,300,80,1200\r\n',
 }
 
 const ecommerceIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
   retail: 'sku,featured,collection,display_name,merchandising_note\r\nRICE-25KG,true,Trade essentials,Premium rice 25kg,Ask for quantity and delivery area.\r\nOIL-1L,false,Trade essentials,Cooking oil 1L,Keep trade pricing under review.\r\n',
   cafe: 'sku,featured,collection,display_name,merchandising_note\r\nMENU-MOHINGA,true,Pickup this week,Mohinga,Show the pickup promise before request.\r\nMENU-TEA,false,Drinks,Myanmar milk tea,Confirm availability before collection.\r\n',
   restaurant: 'sku,featured,collection,display_name,merchandising_note\r\nMENU-CURRY,true,Popular meals,Chicken curry set,Show preparation and pickup timing.\r\nMENU-RICE,false,Sides,Steamed rice,Confirm quantity with the meal request.\r\n',
-  spa: 'sku,featured,collection,display_name,merchandising_note\r\nSPA-MASSAGE,true,Treatments,Traditional massage 60 min,Request a preferred appointment time.\r\nSPA-FACIAL,false,Treatments,Facial treatment 45 min,Confirm therapist availability in Shop.\r\n',
-  gym: 'sku,featured,collection,display_name,merchandising_note\r\nGYM-PT,true,Coaching,Personal training session,Request a coach and preferred time.\r\nGYM-DAY,false,Access,Gym day pass,Confirm facility availability before arrival.\r\n',
-  school: 'sku,featured,collection,display_name,merchandising_note\r\nSCHOOL-ENGLISH,true,Classes,English class session,Request the preferred class schedule.\r\nSCHOOL-MATH,false,Classes,Math class session,Confirm teacher and seat availability.\r\n',
+  spa: 'sku,featured,collection,display_name,merchandising_note\r\nSPA-OIL-100ML,true,Home care,Aromatic massage oil 100ml,Offer it after a treatment for home care.\r\nSPA-COMPRESS,false,Home care,Herbal compress ball,Confirm counter stock before promising collection.\r\n',
+  gym: 'sku,featured,collection,display_name,merchandising_note\r\nGYM-WHEY-1KG,true,Supplements,Whey protein 1kg,Show the flavour in stock before confirming.\r\nGYM-SHAKER,false,Accessories,Shaker bottle 700ml,Bundle it with a first protein purchase.\r\n',
+  school: 'sku,featured,collection,display_name,merchandising_note\r\nSCHOOL-ENGLISH,true,Course books,English coursebook Level 1,Confirm the class level before collection.\r\nSCHOOL-EXERCISE-80,false,Stationery,Exercise book 80 pages,Sold singly or by the ten pack at reception.\r\n',
 }
 
 const websiteIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {

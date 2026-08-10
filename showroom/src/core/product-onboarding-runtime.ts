@@ -105,13 +105,38 @@ export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage):
   }
 }
 
+/**
+ * Install the industry pack's empty schedule, PRESERVING any appointment already taken.
+ *
+ * provisionEmptyShopServiceSchedule refuses to overwrite a schedule that has bookings, and that
+ * refusal is correct -- it is protecting a real customer's appointment. What was wrong is that
+ * this function let the exception escape into ProductOnboardingPage's provisioning run, which
+ * aborts BEFORE the catalog installs. So the sequence a spa would naturally follow -- take a
+ * booking, then finish setting up -- left the shop with no catalog at all.
+ *
+ * It now returns the schedule that is actually in force -- the new one when installed, the
+ * EXISTING one when an appointment made it unsafe to replace -- instead of throwing. The return
+ * type is deliberately unchanged so callers that read .industryPackId keep working, and when a
+ * schedule is preserved that pack id is the correct answer anyway. The invariant stays where it
+ * belongs, in provisionEmptyShopServiceSchedule.
+ */
 export function provisionLocalShopIndustryPack(industryPackId: ShopIndustryPackId) {
   const stored = window.localStorage.getItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY)
-  const next = stored
-    ? provisionEmptyShopServiceSchedule(readShopServiceSchedule(stored), industryPackId)
-    : createShopServiceSchedule(industryPackId)
-  window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
-  return next
+  if (!stored) {
+    const created = createShopServiceSchedule(industryPackId)
+    window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(created))
+    return created
+  }
+  const current = readShopServiceSchedule(stored)
+  try {
+    const next = provisionEmptyShopServiceSchedule(current, industryPackId)
+    window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(next))
+    return next
+  } catch {
+    // An appointment already exists. Keep it, keep its pack, and let onboarding continue so the
+    // catalog still installs.
+    return current
+  }
 }
 
 export async function provisionLocalShopWorkingSample(industryPackId: ShopIndustryPackId, workflowTemplateId: string) {

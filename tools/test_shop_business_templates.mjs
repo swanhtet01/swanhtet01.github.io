@@ -1,5 +1,5 @@
 // Contract guard for the Shop business templates -- the "pick your shop type and start
-// selling" path. Seven bilingual Myanmar templates ship today, and a customer meets one
+// selling" path. Eight bilingual Myanmar templates ship today, and a customer meets one
 // of them in the first minute of using the product. A template with a duplicate SKU, a
 // zero price, or a sample sale referencing an item that is not in its own catalog would
 // break that first minute, and nothing checked them.
