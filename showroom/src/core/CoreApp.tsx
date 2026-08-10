@@ -1418,9 +1418,10 @@ function ShopCounter({ disabled, industryPack, items, locationLabel, lowStockCou
   }, [scope])
 
   useEffect(() => {
+    if (!counterRecoverySource) return
     const frame = window.requestAnimationFrame(() => searchInputRef.current?.focus())
     return () => window.cancelAnimationFrame(frame)
-  }, [])
+  }, [counterRecoverySource])
 
   function counterRecoveryIsCurrent(target: ShopCounterSaleRecoveryState) {
     try {
@@ -1777,6 +1778,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const navigate = useNavigate()
   const commerceLocation = useLocation()
   const returnToLocationSetup = commerceLocation.search.includes('return=location-setup')
+  const resumeOrderEntry = commerceLocation.hash === '#shop-business-location-order'
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync] = useCommerceWorkspace(managedIdentity)
@@ -2560,12 +2562,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (tab !== 'inventory' && tab !== 'orders' && tab !== 'counter') return
     const frame = window.requestAnimationFrame(() => {
-      if (tab === 'counter' && commerceLocation.hash === '#shop-counter-start' && !pendingAction) {
-        const target = document.querySelector<HTMLElement>('[data-shop-counter-primary-field="true"]')
-        target?.focus()
-        return
-      }
-      if (tab === 'orders' && commerceLocation.hash === '#shop-business-location') {
+      if (tab === 'orders' && commerceLocation.hash.startsWith('#shop-business-location')) {
         focusShopBusinessLocationReview()
         return
       }
@@ -3283,8 +3280,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const realOrderSetupRequired = Boolean((managedIdentity || localBusinessWorkspace) && (!commerce.inventoryFoundation || !currentAccountingScopeConfiguration?.inventoryLocationId))
   const realOrderSetupLabel = realOrderSetupRequired ? commerce.inventoryFoundation ? 'Review business location' : 'Set up stock locations' : null
   useLayoutEffect(() => {
-    if (tab === 'counter' && realOrderSetupRequired) navigate('/shop/?tab=orders#shop-business-location', { replace: true })
-  }, [navigate, realOrderSetupRequired, tab])
+    if (tab === 'counter' && realOrderSetupRequired) {
+      navigate('/shop/?tab=orders#shop-business-location', { replace: true })
+      return
+    }
+    if (tab !== 'orders' || !resumeOrderEntry || realOrderSetupRequired || pendingAction || !commerceCanWrite || !orderDraftInitialized || orderDraftRead.status !== 'empty') return
+    const trigger = orderComposerTriggerRef.current
+    if (!trigger || trigger.disabled) return
+    navigate('/shop/?tab=orders', { replace: true })
+    window.requestAnimationFrame(() => orderComposerTriggerRef.current?.click())
+  }, [commerceCanWrite, navigate, orderDraftInitialized, orderDraftRead.status, pendingAction, realOrderSetupRequired, resumeOrderEntry, tab])
   const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : localBusinessWorkspace ? 'Local workspace' : 'Sample data'}</span>
     <p>{commerceStorageError
@@ -3526,7 +3531,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     if (realOrderSetupRequired) {
       setNotice('Finish business and location setup before starting a real order.')
-      window.requestAnimationFrame(focusShopBusinessLocationReview)
+      if (mode === 'manual') navigate('/shop/?tab=orders#shop-business-location-order', { replace: true })
+      else window.requestAnimationFrame(focusShopBusinessLocationReview)
       return
     }
     if (!orderDraftInitialized) {
@@ -6368,7 +6374,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         )
         setAccountingScope(null)
         setAccountMapping(null)
-        navigate('/shop/?tab=counter#shop-counter-start', { replace: true })
+        if (!resumeOrderEntry) navigate('/shop/?tab=counter#shop-counter-start', { replace: true })
       },
     }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
   }
