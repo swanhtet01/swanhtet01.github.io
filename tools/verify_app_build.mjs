@@ -8329,6 +8329,23 @@ async function verifyClientOnboardingRuntime() {
     assert(plantPacks.plantIndustryPacks.map((pack) => pack.id).join(',') === manifestPlantPackIds.join(','), 'plant_industry_pack_manifest_drifted')
     const apparelSetup = plantPacks.plantIndustryPackSetup('apparel', { id: 'JOB-STYLE-01', line: 'Sewing A' })
     assert(apparelSetup.materialUnit === 'm' && apparelSetup.workCentreId === 'WC-SEW-SEWING-A' && apparelSetup.standardCostPerUnitMmk === '' && apparelSetup.standardCostPerMinuteMmk === '', 'plant_industry_pack_setup_not_review_safe')
+    // A sewing floor showing a mixer and a press, reporting temperature drift, is
+    // visibly not the client's factory. Every pack names its own floor, and the
+    // opening issue has to point at somewhere on that same floor.
+    const plantFloorSignatures = new Set()
+    for (const pack of plantPacks.plantIndustryPacks) {
+      const machines = pack.setup.machines ?? []
+      assert(machines.length >= 3, `plant_pack_${pack.id}_equipment_missing`)
+      assert(new Set(machines.map((machine) => machine.id)).size === machines.length, `plant_pack_${pack.id}_equipment_ids_not_unique`)
+      assert(machines.some((machine) => machine.state === 'attention'), `plant_pack_${pack.id}_equipment_has_nothing_to_act_on`)
+      const signature = JSON.stringify(machines)
+      assert(!plantFloorSignatures.has(signature), `plant_pack_${pack.id}_equipment_duplicates_another_pack`)
+      plantFloorSignatures.add(signature)
+      const floor = new Set([...machines.map((machine) => machine.name), pack.setup.workCentreName])
+      assert(floor.has(pack.setup.issue?.area), `plant_pack_${pack.id}_issue_area_off_its_own_floor`)
+      assert(typeof pack.setup.issue?.summary === 'string' && pack.setup.issue.summary.length >= 12, `plant_pack_${pack.id}_issue_summary_missing`)
+    }
+    assert(!plantPacks.plantIndustryPacks.some((pack) => pack.id !== 'batch-process' && (pack.setup.machines ?? []).some((machine) => /mixer/i.test(machine.name))), 'plant_pack_equipment_still_generic')
     const objectIds = new Set()
     for (const productProfile of solutionProducts) {
       const product = productProfile.runtimeId

@@ -3094,6 +3094,11 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
   sampleName: string
   jobs: ProductionJob[]
   capturedAt: string
+  // The seed floor carries a mixer, a press, and a temperature-drift issue. On a
+  // sewing line or an assembly cell that is somebody else's factory, so a caller
+  // may hand over the equipment and opening issue that belong to its own pack.
+  machines?: ProductionMachine[]
+  issue?: { area: string; summary: string }
 }) {
   let source: ProductionState
   try { source = validateProductionState(stateValue) } catch { return null }
@@ -3120,13 +3125,18 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
 
   const seed = createSeedProduction()
   const seedWithoutJobs = validateProductionState({ ...seed, jobs: [] })
+  // Installing a sample is the only path that writes these, and every other way
+  // to touch a machine appends an event this comparison still rejects. So a
+  // previously installed pack's floor normalises back to the seed's rather than
+  // reading as tampering and refusing the next pack.
+  const withSeedFloor = (state: ProductionState) => ({ ...state, machines: seed.machines, issues: seed.issues })
   let base = source
   if (sampleEvents.length || sampleJobIds.size) {
     const baseRevision = source.revision - sampleEvents.length
     if (baseRevision < 0) return null
     try {
       base = validateProductionState({
-        ...source,
+        ...withSeedFloor(source),
         revision: baseRevision,
         jobs: source.jobs.filter((job) => !sampleJobIds.has(job.id)),
         events: source.events.filter((event) => !event.actionId.startsWith(productionWorkingSampleActionPrefix)),
@@ -3136,12 +3146,23 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
     }
     if (JSON.stringify(base) !== JSON.stringify(seed) && JSON.stringify(base) !== JSON.stringify(seedWithoutJobs)) return null
     base = seed
-  } else if (JSON.stringify(base) !== JSON.stringify(seed)) {
+  } else if (JSON.stringify(withSeedFloor(base)) !== JSON.stringify(seed)) {
     return null
   }
   if (requestedJobs.some((job) => base.jobs.some((existing) => existing.id === job.id))) return null
 
-  let next = seedWithoutJobs
+  const requestedMachines = Array.isArray(input.machines) && input.machines.length
+    ? input.machines.map((machine) => ({ ...machine }))
+    : seed.machines
+  const requestedIssues = input.issue
+    ? seed.issues.map((issue) => ({ ...issue, area: input.issue!.area, summary: input.issue!.summary }))
+    : seed.issues
+  let next: ProductionState
+  try {
+    next = validateProductionState({ ...seedWithoutJobs, machines: requestedMachines, issues: requestedIssues })
+  } catch {
+    return null
+  }
   for (const [index, job] of requestedJobs.entries()) {
     const registered = registerProductionJob(next, job, {
       actionId: `${requestedPrefix}${String(index + 1).padStart(3, '0')}`,

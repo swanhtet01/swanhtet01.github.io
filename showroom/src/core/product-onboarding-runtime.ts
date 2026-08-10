@@ -182,6 +182,10 @@ export async function provisionLocalPlantWorkingSample(industryPackId: PlantIndu
       sampleName: pack.name,
       jobs,
       capturedAt: sampleInstalledAt,
+      // Otherwise an apparel floor opens on a mixer and a press reporting
+      // temperature drift, which is visibly not the client's factory.
+      machines: pack.setup.machines.map((machine) => ({ ...machine })),
+      issue: { ...pack.setup.issue },
     })
     if (!next) return current
     outcome.disposition = next === current ? 'current' : 'installed'

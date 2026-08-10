@@ -12,6 +12,7 @@ import {
   productionShiftOutput,
   openProductionIssue,
   resolveProductionIssue,
+  recordProductionMachineState,
   recordProductionOutput,
   validateProductionState,
 } from '../showroom/src/core/production-workspace.ts'
@@ -20,6 +21,13 @@ import { plantIndustryPacks } from '../showroom/src/core/plant-industry-packs.ts
 const PLANNING_DAY = '2026-08-07'
 const INSTALLED_AT = `${PLANNING_DAY}T01:00:00.000Z`
 const SHIFT_REF = `${PLANNING_DAY} Day`
+
+function packFloor(pack) {
+  return {
+    machines: pack.setup.machines.map((machine) => ({ ...machine })),
+    issue: { ...pack.setup.issue },
+  }
+}
 
 function installedSample(pack) {
   const jobs = [
@@ -49,6 +57,7 @@ function installedSample(pack) {
     sampleName: pack.name,
     jobs,
     capturedAt: INSTALLED_AT,
+    ...packFloor(pack),
   })
   assert.ok(installed, `${pack.id} working sample must install`)
   return installed
@@ -147,6 +156,91 @@ test('guided evidence never lands after the records it follows', () => {
     // guided window must stay tight instead of drifting into the future.
     assert.ok(newest - installedAt < 30 * 60_000, `${pack.id} guided evidence drifted too far forward`)
   }
+})
+
+// A sewing floor showing a mixer and a press, reporting temperature drift, is
+// visibly not the client's factory. The equipment travels with the pack.
+test('every pack installs its own equipment and opening issue', () => {
+  const seededNames = new Set()
+  for (const pack of plantIndustryPacks) {
+    const state = installedSample(pack)
+    assert.deepEqual(
+      state.machines.map((machine) => ({ id: machine.id, name: machine.name, state: machine.state })),
+      pack.setup.machines.map((machine) => ({ ...machine })),
+      `${pack.id} must install its own equipment`,
+    )
+    const issue = state.issues.find((candidate) => candidate.kind === 'quality')
+    assert.ok(issue, `${pack.id} must keep an opening quality issue`)
+    assert.equal(issue.area, pack.setup.issue.area)
+    assert.equal(issue.summary, pack.setup.issue.summary)
+    // The issue names a real place on that floor, so the area has to be one of
+    // the machines or lines the same pack just installed.
+    const floorNames = new Set([...pack.setup.machines.map((machine) => machine.name), pack.setup.workCentreName])
+    assert.ok(floorNames.has(issue.area), `${pack.id} issue area ${issue.area} is not on its own floor`)
+    const signature = JSON.stringify(pack.setup.machines)
+    assert.ok(!seededNames.has(signature), `${pack.id} reuses another pack's equipment`)
+    seededNames.add(signature)
+  }
+})
+
+test('switching packs replaces the previous floor instead of refusing', () => {
+  const [first, second] = plantIndustryPacks
+  const installed = installedSample(first)
+  const switched = installProductionWorkingSampleJobs(installed, {
+    sampleId: second.id,
+    sampleName: second.name,
+    jobs: [{
+      id: `${second.setup.outputPrefix}-101`,
+      line: `${second.setup.workCentrePrefix}-1`,
+      product: `${second.name} order A`,
+      target: 200,
+      output: 0,
+      owner: 'Demo owner',
+      priority: 'normal',
+      dueAt: '2026-08-21T10:00:00.000Z',
+    }],
+    capturedAt: INSTALLED_AT,
+    ...packFloor(second),
+  })
+  assert.ok(switched, 'a pure sample must accept a different pack')
+  validateProductionState(switched)
+  assert.deepEqual(
+    switched.machines.map((machine) => machine.name),
+    second.setup.machines.map((machine) => machine.name),
+  )
+  assert.equal(switched.issues.find((issue) => issue.kind === 'quality').area, second.setup.issue.area)
+})
+
+test('a recorded machine change still blocks a sample install', () => {
+  const pack = plantIndustryPacks[0]
+  const installed = installedSample(pack)
+  const target = installed.machines[0]
+  const changed = recordProductionMachineState(installed, target.id, target.state, 'stopped', {
+    actionId: 'ACT-OPERATOR-MACHINE-001',
+    capturedAt: `${PLANNING_DAY}T02:00:00.000Z`,
+    actor: 'Shift operator',
+    reason: 'Stopped for a real changeover.',
+    evidenceReference: 'SHIFT-LOG-002',
+  })
+  assert.ok(changed, 'the machine state change must be recorded')
+  // Normalising the floor must not swallow evidence: the operator event is still
+  // present, so a pack install has to refuse rather than overwrite it.
+  assert.equal(installProductionWorkingSampleJobs(changed, {
+    sampleId: pack.id,
+    sampleName: pack.name,
+    jobs: [{
+      id: `${pack.setup.outputPrefix}-901`,
+      line: `${pack.setup.workCentrePrefix}-9`,
+      product: 'Replacement order',
+      target: 10,
+      output: 0,
+      owner: 'Demo owner',
+      priority: 'normal',
+      dueAt: '2026-09-01T10:00:00.000Z',
+    }],
+    capturedAt: INSTALLED_AT,
+    ...packFloor(pack),
+  }), null)
 })
 
 test('CAPA is required only for a fully specified quality issue', () => {
