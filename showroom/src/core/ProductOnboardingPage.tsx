@@ -40,6 +40,7 @@ import {
 } from './plant-industry-packs'
 import {
   shopIndustryPack,
+  shopIndustryPacks,
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
 import {
@@ -90,7 +91,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
-  const [shopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
+  const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
   const [plantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
     () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
@@ -281,6 +282,19 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 </select>
                 <small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.` : 'Keep the standard sample, or pick a business type for a fuller starter catalog.'}</small>
               </label>
+              {/* The trade list above covers shops that sell goods. A spa, gym or school has no
+                  trade template, so without this select their only route to their own industry
+                  pack was the Settings demo panel -- which a real client never opens. That left a
+                  spa owner onboarding onto a retail catalog. Choosing a trade template still wins,
+                  because the template names its own pack. */}
+              {selectedBusinessTemplate ? null : (
+                <label className="demo-pack-select">Type of business
+                  <select onChange={(event) => setShopIndustryPackId(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>
+                    {shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} · {pack.nameMy}</option>)}
+                  </select>
+                  <small>{selectedShopIndustryPack.firstWorkflow} {selectedShopIndustryPack.description}</small>
+                </label>
+              )}
             </details>
           ) : null}
           <div className="product-onboarding-primary">
