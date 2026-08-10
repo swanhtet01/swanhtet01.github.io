@@ -51,6 +51,7 @@ type ShopInventoryFoundationProps = {
     proof: CommerceActionProof,
     transition: (state: CommerceState) => CommerceState | null,
   ) => Promise<void>
+  onSetupComplete: (location: { id: string; name: string }) => void
   scope: string
 }
 
@@ -126,7 +127,7 @@ function productionReceiptProof(actor: string, receipt: CommerceProductionBatchR
   }
 }
 
-export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onInventory, onIssue, production, scope }: ShopInventoryFoundationProps) {
+export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onInventory, onIssue, onSetupComplete, production, scope }: ShopInventoryFoundationProps) {
   const catalog = commerce.items
   const catalogSkus = useMemo(
     () => [...new Set(catalog.map((item) => item.sku))].sort(),
@@ -383,6 +384,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
 
   async function confirmSetup() {
     if (!setupReview) return
+    const primaryLocation = setupReview.package.locations.find((location) => location.id === 'LOC-MAIN') ?? setupReview.package.locations[0]
     setBusy(true)
     setError('')
     try {
@@ -407,6 +409,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       setNotice(identity
         ? 'Two-location stock is now confirmed in Company Shop.'
         : 'Two-location stock is now part of this Shop record. No supplier or accounting action was sent.')
+      onSetupComplete(primaryLocation)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Location setup was not confirmed.')
     } finally {

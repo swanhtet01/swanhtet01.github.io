@@ -2544,6 +2544,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   useEffect(() => {
     if (tab !== 'inventory' && tab !== 'orders') return
     const frame = window.requestAnimationFrame(() => {
+      if (tab === 'orders' && commerceLocation.hash === '#shop-business-location') {
+        const section = document.getElementById('shop-business-location')
+        const controls = section?.closest<HTMLDetailsElement>('#shop-close-controls')
+        if (controls) controls.open = true
+        if (section instanceof HTMLDetailsElement) section.open = true
+        const target = document.getElementById('shop-accounting-stock-location') ?? section?.querySelector<HTMLElement>('input')
+        target?.scrollIntoView({ block: 'center' })
+        target?.focus({ preventScroll: true })
+        return
+      }
       if (tab === 'orders' && commerceLocation.hash === '#shop-close-controls') {
         const controls = document.getElementById('shop-close-controls')
         if (controls instanceof HTMLDetailsElement) controls.open = true
@@ -6327,6 +6337,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
   }
 
+  function continueFromInventorySetup(location: { id: string; name: string }) {
+    setAccountingScope((current) => {
+      const draft = current ?? accountingScopeDraft(currentAccountingScopeConfiguration)
+      return {
+        ...draft,
+        inventoryLocationId: location.id,
+        locationCode: draft.locationCode || location.id.replace(/^LOC-/, ''),
+        locationName: location.name,
+      }
+    })
+    setNotice(`Stock is ready. Review ${location.name} / ${location.id}; nothing is saved yet.`)
+    navigate('/shop/?tab=orders#shop-business-location', { replace: true })
+  }
+
   function reviewAccountMapping(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!currentAccountingScopeConfiguration && (localBusinessWorkspace || managedIdentity)) {
@@ -7094,10 +7118,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <div className="exception-summary"><span><strong>{closePreview?.orderIds.length ?? 0}</strong><small>orders ready</small></span><span><strong>{closePreview?.paymentExceptionOrderIds.length ?? 0}</strong><small>payment review</small></span></div>
       {closeScopeOptions.length > 1 ? <label className="core-form compact-form">Location to close<select disabled={commerceControlsDisabled} onChange={(event) => { setCloseScopeKey(event.target.value); setCloseSettlementDraft([]) }} required value={effectiveCloseScopeKey}><option value="">Choose location</option>{closeScopeOptions.map((option) => <option key={option.key} value={option.key}>{accountingScopeName(option.accountingScope)} · {option.orderCount} order{option.orderCount === 1 ? '' : 's'} · {formatMoney(option.totalMmk)}</option>)}</select></label> : null}
       {selectedCloseScopeOption ? <p className="form-notice" data-close-accounting-scope={selectedCloseScopeOption.accountingScope ? 'reviewed' : 'legacy'}><strong>{accountingScopeName(selectedCloseScopeOption.accountingScope)}</strong> · {accountingScopeCode(selectedCloseScopeOption.accountingScope)}</p> : null}
-      <details className="compact-disclosure" data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'} open={!currentAccountingScopeConfiguration || undefined}>
+      <details className="compact-disclosure" data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'} id="shop-business-location" open={!currentAccountingScopeConfiguration || undefined}>
         <summary><span>Business and location</span><small>{currentAccountingScopeConfiguration ? accountingScopeName(currentAccountingScopeConfiguration) : 'Required before real orders'}</small></summary>
         <form className="core-form compact-form" onSubmit={reviewAccountingScope}>
-          {managedInventoryProjection ? <label>Stock location<select disabled={commerceControlsDisabled} onChange={(event) => { const location = managedInventoryProjection.locations.find((candidate) => candidate.id === event.target.value); setAccountingScope({ ...effectiveAccountingScope, inventoryLocationId: event.target.value, locationName: location?.name ?? effectiveAccountingScope.locationName }) }} required value={effectiveAccountingScope.inventoryLocationId || defaultReceiptLocationId}><option value="">Choose location</option>{managedInventoryProjection.locations.map((location) => <option key={location.id} value={location.id}>{location.name} / {location.id}</option>)}</select></label> : null}
+          {managedInventoryProjection ? <label>Stock location<select disabled={commerceControlsDisabled} id="shop-accounting-stock-location" onChange={(event) => { const location = managedInventoryProjection.locations.find((candidate) => candidate.id === event.target.value); setAccountingScope({ ...effectiveAccountingScope, inventoryLocationId: event.target.value, locationName: location?.name ?? effectiveAccountingScope.locationName }) }} required value={effectiveAccountingScope.inventoryLocationId || defaultReceiptLocationId}><option value="">Choose location</option>{managedInventoryProjection.locations.map((location) => <option key={location.id} value={location.id}>{location.name} / {location.id}</option>)}</select></label> : null}
           {accountingScopeFields.map((row, rowIndex) => <div className="form-row" key={rowIndex}>{row.map(([field, label, placeholder, maxLength, uppercase]) => <label key={field}>{label}<input autoCapitalize={uppercase ? 'characters' : undefined} disabled={commerceControlsDisabled} maxLength={maxLength} onChange={(event) => setAccountingScope({ ...effectiveAccountingScope, [field]: uppercase ? event.target.value.toUpperCase() : event.target.value })} placeholder={placeholder} required value={effectiveAccountingScope[field]} /></label>)}</div>)}
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review business and location</button></div>
           {currentAccountingScopeConfiguration ? <p className="form-notice">Revision {currentAccountingScopeConfiguration.revision} · saved by {currentAccountingScopeConfiguration.proof.actor} · evidence {currentAccountingScopeConfiguration.proof.evidenceReference}</p> : null}
@@ -7323,7 +7347,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
         <div className="inventory-tools-content">
           {supplierControl}
-          {commerce.items.length ? <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} production={relatedProduction} scope={orderDraftScope} /></Suspense> : <p className="empty-state">Add products before enabling locations, lots, available-to-promise, or supplier policies.</p>}
+          {commerce.items.length ? <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} onSetupComplete={continueFromInventorySetup} production={relatedProduction} scope={orderDraftScope} /></Suspense> : <p className="empty-state">Add products before enabling locations, lots, available-to-promise, or supplier policies.</p>}
         </div>
       </details>
       {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierSourcing}>
