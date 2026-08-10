@@ -599,7 +599,9 @@ export function EcommerceProduct() {
   function buildOrderImportReview(csvText: string): EcommerceOrderImportReview {
     const parsed = parseOrderImportCsv(csvText)
     if (parsed.length < 2) throw new Error('Paste or upload the order CSV header and at least one order row.')
-    if (parsed.length > 52) throw new Error('Review at most 50 order rows at a time.')
+    // 51 = one header row plus the 50 order rows the message promises. It was 52, which let a
+    // 51st order row through while telling the operator the limit was 50.
+    if (parsed.length > 51) throw new Error('Review at most 50 order rows at a time.')
     const [header, ...rows] = parsed
     const normalizedHeaders = header.map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''))
     const required = ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message']

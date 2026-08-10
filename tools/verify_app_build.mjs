@@ -494,6 +494,10 @@ if (!ecommerceSource.includes('function defaultStoreName()')
   || ecommerceSource.split('storeName: defaultStoreName(),').length - 1 !== 2
   || !ecommerceSource.includes('storeName: saved.storeName,')) fail('ecommerce_storefront_ignores_owner_business_name')
 
+// The order-import bound and the sentence that states it must agree. They did not: the check
+// allowed 52 parsed rows -- a header plus 51 orders -- while promising a limit of 50.
+if (!ecommerceSource.includes("if (parsed.length > 51) throw new Error('Review at most 50 order rows at a time.')")) fail('ecommerce_order_import_bound_disagrees_with_its_message')
+
 if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
   || !ecommerceSource.includes('const ecommerceTodayHeadline =')
   || !ecommerceSource.includes("order.sourceRecordId?.startsWith('ECR-')")
