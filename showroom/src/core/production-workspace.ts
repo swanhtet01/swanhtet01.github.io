@@ -3146,9 +3146,9 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
     const registered = registerProductionJob(next, job, {
       actionId: `${requestedPrefix}${String(index + 1).padStart(3, '0')}`,
       capturedAt: input.capturedAt,
-      actor: 'Demo setup',
+      actor: WORKING_SAMPLE_SETUP_ACTOR,
       reason: `Seed the ${sampleName} working sample.`,
-      evidenceReference: `DEMO-WORKING-SAMPLE-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
+      evidenceReference: `SETUP-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
     })
     if (!registered) return null
     next = registered
@@ -3787,8 +3787,9 @@ export function completeProductionMaintenance(
   })
 }
 
-export const GUIDED_SAMPLE_PRODUCTION_ACTOR = 'Guided sample'
-const WORKING_SAMPLE_SETUP_ACTOR = 'Demo setup'
+export const GUIDED_SAMPLE_PRODUCTION_ACTOR = 'Shift supervisor'
+const WORKING_SAMPLE_SETUP_ACTOR = 'Production planner'
+
 const guidedSampleActionPrefix = 'ACT-GUIDED-SAMPLE-'
 
 export function isGuidedSampleProduction(stateValue: ProductionState) {
@@ -3798,7 +3799,8 @@ export function isGuidedSampleProduction(stateValue: ProductionState) {
   // cannot prove this workspace is still a pure sample. A released batch is the
   // only Plant proof; treating such a workspace as replaceable would destroy it.
   if (state.orderExecution || state.orderPortfolio || state.equipmentMaster) return false
-  return state.events.every((event) => event.actor === WORKING_SAMPLE_SETUP_ACTOR || event.actor === GUIDED_SAMPLE_PRODUCTION_ACTOR)
+  return state.events.every((event) => event.actionId.startsWith(productionWorkingSampleActionPrefix)
+    || event.actionId.startsWith(guidedSampleActionPrefix))
 }
 
 export function hasGuidedSampleProductionActivity(stateValue: ProductionState) {
@@ -3833,14 +3835,14 @@ export function appendGuidedSampleProductionActivity(stateValue: ProductionState
     capturedAt: new Date(base + step * 90_000).toISOString(),
     actor: GUIDED_SAMPLE_PRODUCTION_ACTOR,
     reason,
-    evidenceReference: 'GUIDED-SAMPLE-DEMO',
+    evidenceReference: 'SHIFT-LOG-001',
   })
   const primary = activeJobs[0]
   const primaryOutput = Math.max(1, Math.floor(primary.target * 0.4))
   const primaryScrap = Math.max(1, Math.floor(primary.target * 0.02))
-  let next = recordProductionOutput(state, primary.id, primaryOutput, shiftRef, proof('Guided sample shift output for the demo workspace.'))
+  let next = recordProductionOutput(state, primary.id, primaryOutput, shiftRef, proof('Recorded good output for the running shift.'))
   if (!next) return null
-  next = recordProductionScrap(next, primary.id, primaryScrap, shiftRef, proof('Guided sample scrap entry for a realistic yield line.'))
+  next = recordProductionScrap(next, primary.id, primaryScrap, shiftRef, proof('Recorded scrap against the same shift.'))
   if (!next) return null
   next = recordProductionMaterialConsumption(
     next,
@@ -3850,12 +3852,12 @@ export function appendGuidedSampleProductionActivity(stateValue: ProductionState
     primaryOutput * 2,
     input.materialUnit,
     shiftRef,
-    proof('Guided sample material issue tied to the shift output.'),
+    proof('Issued material against the recorded output.'),
   )
   if (!next) return null
   const secondary = activeJobs[1]
   if (secondary) {
-    next = recordProductionOutput(next, secondary.id, Math.max(1, Math.floor(secondary.target * 0.25)), shiftRef, proof('Guided sample output on the second demo job.'))
+    next = recordProductionOutput(next, secondary.id, Math.max(1, Math.floor(secondary.target * 0.25)), shiftRef, proof('Recorded good output on the second active job.'))
     if (!next) return null
   }
   try { return validateProductionState(next) } catch { return null }
