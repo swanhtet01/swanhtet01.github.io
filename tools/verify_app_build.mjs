@@ -3041,7 +3041,7 @@ if (!localWorkspaceBackupSource.includes("LOCAL_WORKSPACE_BACKUP_CONTRACT = 'sup
   || !settingsPageSource.includes('Restore previous workspace')) fail('local_workspace_restore_contract_missing')
 const settingsAdvancedIndex = settingsPageSource.indexOf('<details className="settings-advanced"')
 const settingsRestorePointIndex = settingsPageSource.indexOf('aria-label="Local workspace restore point"')
-const productOnboardingHeadingIndex = productOnboardingPageSource.indexOf('title={`Make ${onboardingProduct.name} yours`}')
+const productOnboardingHeadingIndex = productOnboardingPageSource.indexOf("title={spaOnboardingSelected ? 'Set up your Spa' : `Make ${onboardingProduct.name} yours`}")
 const productOutcomeIndex = productOnboardingPageSource.indexOf('First useful result: {onboardingJourney.outcome}.', productOnboardingHeadingIndex)
 const productWorkspaceIndex = productOnboardingPageSource.indexOf('onboardingJourney.actionLabel', productOutcomeIndex)
 const productBoundaryIndex = productOnboardingPageSource.indexOf('This setup affects {onboardingProduct.name} only.', productWorkspaceIndex)
@@ -4653,7 +4653,7 @@ if (!coreSource.includes('aria-label="Shop attention"')
   || !coreSource.includes('<details className="core-panel today-more')
   || !settingsPageSource.includes("useState<'workflow' | 'success'>('workflow')")
   || !settingsPageSource.includes('<PageHeading eyebrow="Client setup" title="Set up a client demo"')
-  || !productOnboardingPageSource.includes('title={`Make ${onboardingProduct.name} yours`}')
+  || !productOnboardingPageSource.includes("title={spaOnboardingSelected ? 'Set up your Spa' : `Make ${onboardingProduct.name} yours`}")
   || !productOnboardingPageSource.includes('Name this ${onboardingProduct.name} workspace once. SuperMega prepares a working copy and opens one useful first task.')
   || !productOnboardingPageSource.includes('Name your workspace')
   || !productOnboardingPageSource.includes('Bring the production jobs you actually plan to run. Industry demo records stay optional.')
@@ -5967,7 +5967,7 @@ if (!settingsPageSource.includes("lazy(() => import('./ClientDataOnboarding')")
   || !clientOnboardingUiSource.includes('clientImportTemplate(product, workflowTemplateId, templateContext)')
   || ['fetch(', 'localStorage', 'sessionStorage', 'supabase'].some((marker) => clientOnboardingUiSource.includes(marker))) fail('four_product_client_onboarding_ui_missing_or_unsafe')
 const productOnboardingBranch = productOnboardingPageSource.indexOf('export function ProductOnboardingPage')
-const productOnboardingHeading = productOnboardingPageSource.indexOf('title={`Make ${onboardingProduct.name} yours`}')
+const productOnboardingHeading = productOnboardingPageSource.indexOf("title={spaOnboardingSelected ? 'Set up your Spa' : `Make ${onboardingProduct.name} yours`}")
 const productOnboardingOutcome = productOnboardingPageSource.indexOf('First useful result: {onboardingJourney.outcome}.', productOnboardingHeading)
 const productOnboardingBusinessFields = productOnboardingPageSource.indexOf('<label className="product-onboarding-business-name">Business name<input')
 const productOnboardingWorkspaceAction = productOnboardingPageSource.indexOf('onboardingJourney.actionLabel', productOnboardingBusinessFields)
@@ -5991,7 +5991,12 @@ if (!productSetupSource.includes('templateId: string')
   || !productOnboardingPageSource.includes("firstTaskPath: '/plant/?tab=production'")
   || !productOnboardingPageSource.includes("firstTaskPath: '/website/'")
   || !productOnboardingPageSource.includes("firstTaskPath: '/ecommerce/'")
-  || !productOnboardingPageSource.includes('const onboardingJourney = onboardingJourneys[product]')
+  || !productOnboardingPageSource.includes('const onboardingJourney = spaOnboardingSelected ? spaOnboardingJourney : onboardingJourneys[product]')
+  || !productOnboardingPageSource.includes("firstTaskPath: '/shop/?tab=orders#shop-service-schedule'")
+  || !productOnboardingPageSource.includes('aria-label="Spa role guide"')
+  || !productOnboardingPageSource.includes('data-spa-role={spaGuideRole}')
+  || !productOnboardingPageSource.includes('This choice changes the guide only; it does not grant access.')
+  || !productOnboardingPageSource.includes('do not enter diagnoses, medical history, IDs, or payment details')
   || !productOnboardingPageSource.includes('commerceBusinessCatalogItems(commerceWorkspace)')
   || !productOnboardingPageSource.includes('productionBusinessJobs(production)')
   || !productOnboardingPageSource.includes('<ClientDataOnboarding allowSample={false} managedIdentity=')
@@ -8750,12 +8755,12 @@ async function verifyShopServiceScheduleRuntime() {
     const proof = (minute, reason) => ({ actor: 'Shop owner', reason, happenedAt: `2026-07-29T03:${String(minute).padStart(2, '0')}:00.000Z` })
     let state = model.createShopServiceSchedule()
     assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
-    assert(state.services.length === 2 && state.resources.length === 2 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
+    assert(state.services.length === 5 && state.resources.length === 3 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
     assert(model.shopIndustryPacks.map((pack) => pack.id).join(',') === 'retail,cafe,restaurant,spa,gym,school' && new Set(model.shopIndustryPacks.map((pack) => pack.id)).size === 6, 'shop_industry_pack_catalog_wrong')
     assert(model.shopIndustryPacks.map((pack) => `${pack.id}:${pack.workflowTemplateId}:${pack.entryPoint}`).join(',') === 'retail:retail-wholesale:Walk-in,cafe:restaurant-ordering:Walk-in,restaurant:restaurant-ordering:Walk-in,spa:social-commerce:Phone,gym:social-commerce:Phone,school:social-commerce:Phone', 'shop_industry_pack_workflow_binding_wrong')
     for (const pack of model.shopIndustryPacks) {
       const packed = model.createShopServiceSchedule(pack.id)
-      assert(model.validateShopServiceSchedule(packed) === packed && packed.industryPackId === pack.id && packed.services.length === 2 && packed.resources.length === 2 && pack.capabilities.length >= 5, `shop_industry_pack_${pack.id}_not_operational`)
+      assert(model.validateShopServiceSchedule(packed) === packed && packed.industryPackId === pack.id && packed.services.length >= 2 && packed.resources.length >= 2 && pack.capabilities.length >= 5, `shop_industry_pack_${pack.id}_not_operational`)
     }
     const gymSchedule = model.provisionEmptyShopServiceSchedule(state, 'gym')
     assert(gymSchedule.industryPackId === 'gym' && gymSchedule.services.some((service) => service.name === 'Personal training') && gymSchedule.resources.some((resource) => resource.name === 'Trainer 1'), 'shop_industry_pack_provisioning_failed')
@@ -8819,9 +8824,13 @@ async function verifyShopBusinessTemplateRuntime() {
     || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))")
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
     || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
-    || !productOnboardingPageSource.includes('<summary><span>Just exploring?</span><small>Business demo is optional</small></summary>')
+    || !productOnboardingPageSource.includes("spaOnboardingSelected ? 'Start with a working Spa' : 'Just exploring?'")
+    || !productOnboardingPageSource.includes("spaOnboardingSelected ? 'Realistic sample · replace anytime' : 'Business demo is optional'")
     || !productOnboardingPageSource.includes('Demo business type')
     || !productOnboardingPageSource.includes('Standard Shop demo')
+    || !productOnboardingPageSource.includes("selectedBusinessTemplate?.id === 'spa-wellness' ? 'Create Spa starter and open appointments'")
+    || !coreCssSource.includes('.spa-onboarding-brief')
+    || !coreCssSource.includes('.spa-onboarding-route { grid-template-columns: 1fr; }')
     || !productOnboardingPageSource.includes('if (useDemo) {')
     || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)')
     || !coreCssSource.includes('.product-onboarding-business-type')) fail('shop_business_template_contract_missing')
@@ -8830,8 +8839,8 @@ async function verifyShopBusinessTemplateRuntime() {
     const onboardingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?shop-business-template-import-verify=${Date.now()}`)
     const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-business-template-commerce-verify=${Date.now()}`)
     assert(model.validateShopBusinessTemplates() === model.shopBusinessTemplates, 'shop_business_template_registry_invalid')
-    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts'
-      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 7, 'shop_business_template_catalog_wrong')
+    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts,spa-wellness'
+      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 8, 'shop_business_template_catalog_wrong')
     const commerceUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
     assert(model.shopBusinessTemplateUnits.length === commerceUnits.size && model.shopBusinessTemplateUnits.every((unit) => commerceUnits.has(unit)), 'shop_business_template_unit_set_drifted')
     for (const template of model.shopBusinessTemplates) {
@@ -8872,9 +8881,19 @@ async function verifyShopBusinessTemplateRuntime() {
     assert(JSON.stringify(reimported.shopBusinessTemplates) === JSON.stringify(model.shopBusinessTemplates), 'shop_business_template_output_not_deterministic')
     assert(model.shopBusinessTemplateFromQuery('pharmacy') === 'pharmacy'
       && model.shopBusinessTemplateFromQuery(' PHARMACY ') === 'pharmacy'
+      && model.shopBusinessTemplateFromQuery('spa-wellness') === 'spa-wellness'
       && model.shopBusinessTemplateFromQuery('unknown-type') === null
       && model.shopBusinessTemplateFromQuery(null) === null, 'shop_business_template_query_selection_wrong')
     assert(model.shopBusinessTemplateSetupPath('pharmacy') === '/settings/?product=shop&template=pharmacy', 'shop_business_template_setup_path_wrong')
+    const spaTemplate = model.shopBusinessTemplate('spa-wellness')
+    assert(spaTemplate.industryPackId === 'spa'
+      && spaTemplate.workflowTemplateId === 'social-commerce'
+      && spaTemplate.catalog.length === 13
+      && model.shopBusinessTemplateLowStockItems('spa-wellness').map((item) => item.sku).join(',') === 'SPA-HEADBAND'
+      && spaTemplate.counterSales.length === 3
+      && spaTemplate.pendingOrder.note.includes('No health details recorded.'),
+    'shop_spa_business_template_not_realistic')
+    assert(model.shopBusinessTemplateSetupPath('spa-wellness') === '/settings/?product=shop&template=spa-wellness', 'shop_spa_business_template_setup_path_wrong')
     assertThrows(() => model.shopBusinessTemplate('unknown'), 'shop_business_unknown_template_accepted')
   } catch (error) {
     fail(`shop_business_template_runtime:${error instanceof Error ? error.message : 'unknown'}`)
@@ -22209,8 +22228,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 113 KB allowance includes reviewed Plant-to-Shop supply enforcement, controlled-batch job progress, and release/close evidence alignment; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_915_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 121 KB allowance includes reviewed Plant evidence alignment plus the realistic Spa template and role guide; initial-load and core-app chunk budgets remain unchanged.
+if (bytes > 2_923_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

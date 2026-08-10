@@ -774,6 +774,16 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-help { margin: 0; color: var(--core-muted); font-size: 10px; }
 .product-onboarding-help a { color: var(--core-ink); font-weight: 780; text-underline-offset: 3px; }
 .product-onboarding-help a:hover { color: var(--core-green); }
+.spa-onboarding-brief { min-width: 0; display: grid; grid-template-columns: minmax(0,1fr) minmax(180px,.55fr); gap: 12px; border: 1px solid rgba(11,116,94,.24); border-radius: 12px; padding: 14px; background: linear-gradient(135deg,var(--core-green-soft),var(--core-panel-raised)); }
+.spa-onboarding-brief h3 { margin: 2px 0 4px; font-size: 17px; line-height: 1.2; }
+.spa-onboarding-role { min-width: 0; display: grid; align-content: start; gap: 6px; color: var(--core-muted); font-size: 10px; font-weight: 760; }
+.spa-onboarding-role select { min-height: 44px; }
+.spa-onboarding-route { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.spa-onboarding-route li { min-width: 0; display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 8px; align-items: start; border: 1px solid var(--core-line); border-radius: 9px; padding: 10px; background: var(--core-panel-raised); }
+.spa-onboarding-route li > span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: var(--core-green); color: #fff; font-family: var(--core-mono); font-size: 10px; font-weight: 800; }
+.spa-onboarding-route p { color: var(--core-ink) !important; font-size: 10px !important; line-height: 1.45 !important; }
+.spa-onboarding-result { grid-column: 1 / -1; border-left: 3px solid var(--core-green); padding-left: 10px; color: var(--core-muted) !important; font-size: 10px !important; }
+.spa-onboarding-result strong { color: var(--core-ink); }
 .ai-setup-guide { display: grid; grid-template-columns: minmax(220px,1fr) minmax(300px,.9fr) auto; align-items: center; gap: 18px; border-top: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 14px 18px; background: var(--core-green-soft); }
 .ai-setup-guide-copy { min-width: 0; display: grid; gap: 4px; }
 .ai-setup-guide-copy h2 { margin: 0; font-size: 16px; line-height: 1.25; }
@@ -1687,6 +1697,8 @@ textarea { min-height: 72px; resize: vertical; }
   .product-onboarding-card { min-height: 0; padding: 16px; }
   .product-onboarding-primary { align-items: stretch; flex-direction: column; }
   .product-onboarding-primary .core-button { width: 100%; }
+  .spa-onboarding-brief { grid-template-columns: 1fr; padding: 12px; }
+  .spa-onboarding-route { grid-template-columns: 1fr; }
   .product-onboarding-help a { min-height: 44px; display: inline-flex; align-items: center; }
   .page-heading { align-items: flex-start; }
   .page-heading p { white-space: normal; }

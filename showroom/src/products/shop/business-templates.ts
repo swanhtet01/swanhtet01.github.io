@@ -11,6 +11,7 @@ export type ShopBusinessTemplateId =
   | 'hardware'
   | 'tea-coffee'
   | 'auto-parts'
+  | 'spa-wellness'
 
 export type ShopBusinessTemplateUnit = CommerceProductionMaterialUnit
 
@@ -330,6 +331,44 @@ export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = [
       lines: [{ sku: 'PAD-BRAKE-FR', quantity: 2 }, { sku: 'OIL-ENG-4L', quantity: 2 }, { sku: 'FILTER-AIR', quantity: 2 }],
     },
   },
+  {
+    id: 'spa-wellness',
+    schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
+    name: { en: 'Spa & wellness', my: 'အလှအပနှင့် အပန်းဖြေစင်တာ' },
+    description: 'Appointments and checkout with therapist stations plus treatment consumables and aftercare stock.',
+    industryPackId: 'spa',
+    workflowTemplateId: 'social-commerce',
+    catalog: rows([
+      ['SPA-OIL-LAV500', 'Lavender massage oil 500ml', 'ml', 9_000, 14_500, 12, 4],
+      ['SPA-OIL-GING500', 'Ginger massage oil 500ml', 'ml', 9_500, 15_000, 9, 4],
+      ['SPA-CLEANSER250', 'Gentle facial cleanser 250ml', 'ml', 8_000, 14_000, 10, 4],
+      ['SPA-TONER-250', 'Hydrating facial toner 250ml', 'ml', 7_500, 13_000, 8, 3],
+      ['SPA-MASK-SHEET', 'Hydrating sheet mask', 'pcs', 1_400, 3_000, 30, 10],
+      ['SPA-MASK-CLAY500', 'Mineral clay mask 500g', 'g', 12_000, 21_000, 6, 2],
+      ['SPA-SCRUB-500', 'Botanical body scrub 500g', 'g', 11_000, 19_000, 7, 3],
+      ['SPA-LOTION-250', 'Aftercare body lotion 250ml', 'ml', 8_500, 15_000, 10, 4],
+      ['SPA-CANDLE-SM', 'Aromatherapy candle', 'pcs', 3_500, 7_000, 18, 6],
+      ['SPA-HERBAL-CMP', 'Herbal compress ball', 'pcs', 3_000, 6_000, 20, 8],
+      ['SPA-TOWEL-FACE', 'Reusable facial towel', 'pcs', 2_500, 4_500, 12, 4],
+      ['SPA-TEA-HERBAL', 'Herbal welcome tea pack', 'pack', 2_800, 5_000, 16, 5],
+      ['SPA-HEADBAND', 'Spa facial headband', 'pcs', 1_800, 3_500, 3, 5],
+    ]),
+    counterSales: [
+      { id: 'spa-wellness-sale-1', recordedAt: '2026-08-03T03:15:00.000Z', payment: 'Cash', lines: [{ sku: 'SPA-MASK-SHEET', quantity: 2 }, { sku: 'SPA-TEA-HERBAL', quantity: 1 }] },
+      { id: 'spa-wellness-sale-2', recordedAt: '2026-08-03T05:40:00.000Z', payment: 'KBZPay', lines: [{ sku: 'SPA-LOTION-250', quantity: 1 }, { sku: 'SPA-OIL-LAV500', quantity: 1 }] },
+      { id: 'spa-wellness-sale-3', recordedAt: '2026-08-03T08:20:00.000Z', payment: 'WavePay', lines: [{ sku: 'SPA-CANDLE-SM', quantity: 1 }, { sku: 'SPA-SCRUB-500', quantity: 1 }] },
+    ],
+    pendingOrder: {
+      id: 'spa-wellness-order-1',
+      customerName: 'Ma Thandar',
+      contact: '09-780-555-010',
+      requestedAt: '2026-08-03T04:20:00.000Z',
+      promisedFor: '2026-08-04T10:00:00.000Z',
+      status: 'pending',
+      note: 'Aftercare gift set for pickup after the Friday appointment. No health details recorded.',
+      lines: [{ sku: 'SPA-LOTION-250', quantity: 1 }, { sku: 'SPA-CANDLE-SM', quantity: 1 }, { sku: 'SPA-TEA-HERBAL', quantity: 1 }],
+    },
+  },
 ] as const
 
 export function shopBusinessTemplate(id: ShopBusinessTemplateId) {
@@ -427,6 +466,6 @@ export function validateShopBusinessTemplates() {
       if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) throw new Error(`${order.id} needs whole positive quantities.`)
     }
   }
-  if (templateIds.size !== 7) throw new Error('The Shop business template registry must carry exactly 7 templates.')
+  if (templateIds.size !== 8) throw new Error('The Shop business template registry must carry exactly 8 templates.')
   return shopBusinessTemplates
 }
