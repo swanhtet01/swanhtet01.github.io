@@ -23,7 +23,11 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 
 const bundle = await build({
   stdin: {
-    contents: `export * from './signup-trial.ts'`,
+    contents: `
+      export * from './signup-trial.ts'
+      export { shopIndustryPacks } from './shop-service-scheduling.ts'
+      export { shopBusinessTemplates } from '../products/shop/business-templates.ts'
+    `,
     resolveDir: 'showroom/src/core',
     sourcefile: 'showroom/src/core/signup-trial-entry.ts',
     loader: 'ts',
@@ -45,6 +49,9 @@ const {
   trialSignupContactUrl,
   trialSignupDoors,
   writeTrialSignup,
+  signupBusinessChoices,
+  shopIndustryPacks,
+  shopBusinessTemplates,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -176,6 +183,38 @@ const claim = JSON.parse(trialSignupClaimFile(consented))
 check(claim.claimCode === consented.claimCode, 'the claim file carries the code')
 check(claim.contactEmail === 'ko@yangontyre.com', 'and the email the owner consented to')
 check(JSON.parse(trialSignupClaimFile(minimal)).contactEmail === null, 'and null when no email was given')
+
+// --- every industry pack must be reachable from signup ----------------------------------
+// Offering only trade templates silently excluded spa, gym and school -- the three packs with no
+// trade -- so the owner of a spa picked "Standard starter catalog" and was handed a RETAIL shop.
+// Sol Luxury Spa is a real named client, and this is the same defect class as a bookable service
+// with no catalog item: N options exist, only the demoed ones work.
+const choices = signupBusinessChoices(shopBusinessTemplates, shopIndustryPacks)
+const reachablePacks = new Set(choices.map((choice) => choice.industryPackId))
+for (const pack of shopIndustryPacks) {
+  check(
+    reachablePacks.has(pack.id),
+    `${pack.id}: no signup option leads to this industry pack, so that owner silently gets a different business`,
+  )
+}
+for (const template of shopBusinessTemplates) {
+  check(
+    choices.some((choice) => choice.id === `trade:${template.id}`),
+    `${template.id}: trade template is not offered at signup`,
+  )
+}
+check(
+  new Set(choices.map((choice) => choice.id)).size === choices.length,
+  'signup offers no duplicate choices',
+)
+// A pack that already has trades must NOT also appear as its own option -- two doors to the same
+// room is a choice an owner cannot make correctly.
+for (const choice of choices.filter((candidate) => candidate.kind === 'pack')) {
+  check(
+    !shopBusinessTemplates.some((template) => template.industryPackId === choice.industryPackId),
+    `${choice.id}: listed as a service pack although trades already reach that pack`,
+  )
+}
 
 // --- no pricing, anywhere -------------------------------------------------------------
 // A deliberate product decision: what a shop pays is agreed with the founder, not published.

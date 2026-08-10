@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
 import { shopBusinessTemplates } from '../products/shop/business-templates'
+import { shopIndustryPacks } from './shop-service-scheduling'
 import { managedTrialAuthConfigured } from './managed-trial'
 import {
   provisionLocalShopBusinessTemplateSample,
@@ -13,6 +14,7 @@ import { rememberProductSetup, seedSetupForProduct } from './product-setup'
 import {
   createTrialSignupRecord,
   readTrialSignup,
+  signupBusinessChoices,
   trialSignupClaimFile,
   trialSignupContactUrl,
   trialSignupDoors,
@@ -37,8 +39,18 @@ export function SignupPage() {
   const [existing, setExisting] = useState<TrialSignupRecord | null>(() => readTrialSignup(window.localStorage))
   const [businessName, setBusinessName] = useState('')
   const [ownerName, setOwnerName] = useState('')
-  const [tradeId, setTradeId] = useState(() => (
-    shopBusinessTemplates.some((template) => template.id === requestedTrade) ? String(requestedTrade) : ''
+
+  // A spa, gym or school has no TRADE template -- those three are industry packs only. Offering
+  // trades alone made every service business unreachable from signup: the owner of a spa had to
+  // pick "Standard starter catalog" and silently received a retail shop. Both kinds are listed,
+  // tagged so the submit handler knows which provisioning path to take.
+  const choices = useMemo(() => signupBusinessChoices(shopBusinessTemplates, shopIndustryPacks), [])
+  const tradeChoices = choices.filter((choice) => choice.kind === 'trade')
+  const servicePackChoices = choices.filter((choice) => choice.kind === 'pack')
+  const [choiceId, setChoiceId] = useState(() => (
+    shopBusinessTemplates.some((template) => template.id === requestedTrade) ? `trade:${requestedTrade}`
+      : shopIndustryPacks.some((pack) => pack.id === requestedTrade) ? `pack:${requestedTrade}`
+        : ''
   ))
   const [email, setEmail] = useState('')
   const [emailConsent, setEmailConsent] = useState(false)
@@ -56,13 +68,19 @@ export function SignupPage() {
     setBusy(true)
     setNotice('Preparing your workspace...')
     try {
-      const trade = shopBusinessTemplates.find((template) => template.id === tradeId) ?? null
+      const trade = choiceId.startsWith('trade:')
+        ? shopBusinessTemplates.find((template) => template.id === choiceId.slice(6)) ?? null
+        : null
+      const chosenPack = choiceId.startsWith('pack:')
+        ? shopIndustryPacks.find((pack) => pack.id === choiceId.slice(5)) ?? null
+        : null
 
       // Read the pack ACTUALLY IN FORCE off the return value. provisionLocalShopIndustryPack keeps
       // an existing schedule when an appointment already exists, so the pack it returns is not
       // always the pack that was asked for -- and every downstream field has to follow the real one.
-      const schedule = provisionLocalShopIndustryPack(trade?.industryPackId ?? 'retail')
+      const schedule = provisionLocalShopIndustryPack(trade?.industryPackId ?? chosenPack?.id ?? 'retail')
       const industryPackId = schedule.industryPackId
+      const pack = shopIndustryPacks.find((candidate) => candidate.id === industryPackId) ?? null
 
       // Both provisioners RETURN what they did. 'preserved' means the catalog was NOT installed
       // because this device already carries real Shop data -- an order, a close, something worth
@@ -70,7 +88,7 @@ export function SignupPage() {
       // business's stock while claiming it set up theirs.
       const disposition = trade
         ? await provisionLocalShopBusinessTemplateSample(trade.id)
-        : await provisionLocalShopWorkingSample(industryPackId, 'retail-wholesale')
+        : await provisionLocalShopWorkingSample(industryPackId, pack?.workflowTemplateId ?? 'retail-wholesale')
 
       const record = createTrialSignupRecord({
         id: crypto.randomUUID(),
@@ -88,7 +106,7 @@ export function SignupPage() {
       // on this page with the real reason rather than landing in a product with no trial recorded.
       const saved = writeTrialSignup(window.localStorage, record)
 
-      const seeded = seedSetupForProduct('commerce', trade?.workflowTemplateId ?? 'retail-wholesale')
+      const seeded = seedSetupForProduct('commerce', trade?.workflowTemplateId ?? pack?.workflowTemplateId ?? 'retail-wholesale')
       const next = {
         ...seeded,
         workspace: saved.businessName,
@@ -174,9 +192,14 @@ export function SignupPage() {
           <p>Everything stays on this device until you ask us for a company account.</p>
         </div>
         <label>Business name<input autoComplete="organization" maxLength={120} onChange={(event) => setBusinessName(event.target.value)} required value={businessName} /></label>
-        <label>What do you sell?<select onChange={(event) => setTradeId(event.target.value)} value={tradeId}>
+        <label>What kind of business?<select onChange={(event) => setChoiceId(event.target.value)} value={choiceId}>
           <option value="">Standard starter catalog</option>
-          {shopBusinessTemplates.map((template) => <option key={template.id} value={template.id}>{template.name.en}</option>)}
+          <optgroup label="Shops and trades">
+            {tradeChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+          </optgroup>
+          <optgroup label="Service businesses">
+            {servicePackChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+          </optgroup>
         </select></label>
         <label>Your name (optional)<input autoComplete="name" maxLength={120} onChange={(event) => setOwnerName(event.target.value)} value={ownerName} /></label>
         <label className="signup-consent">

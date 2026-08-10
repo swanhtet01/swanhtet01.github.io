@@ -248,6 +248,41 @@ export function trialSignupDoors({ managedReady }: { managedReady: boolean }): r
   ]
 }
 
+/**
+ * What signup offers as "what kind of business".
+ *
+ * This is a pure function so a guard can assert the property that actually matters: EVERY industry
+ * pack must be reachable. Offering only trade templates silently excluded spa, gym and school --
+ * the three packs with no trade -- so the owner of a spa picked "Standard starter catalog" and was
+ * handed a retail shop. The same defect class as a bookable service with no catalog item: N options
+ * exist, only the demoed ones work.
+ */
+export type SignupBusinessChoice = {
+  id: string
+  label: string
+  kind: 'trade' | 'pack'
+  industryPackId: string
+}
+
+export function signupBusinessChoices(
+  templates: readonly { id: string; name: { en: string }; industryPackId: string }[],
+  packs: readonly { id: string; name: string }[],
+): readonly SignupBusinessChoice[] {
+  const trades = templates.map((template) => ({
+    id: `trade:${template.id}`,
+    label: template.name.en,
+    kind: 'trade' as const,
+    industryPackId: template.industryPackId,
+  }))
+  // Only packs with no trade template. A pack that HAS trades is already reachable through them,
+  // and listing it twice would make an owner choose between two doors to the same room.
+  const covered = new Set(templates.map((template) => template.industryPackId))
+  const servicePacks = packs
+    .filter((pack) => !covered.has(pack.id))
+    .map((pack) => ({ id: `pack:${pack.id}`, label: pack.name, kind: 'pack' as const, industryPackId: pack.id }))
+  return [...trades, ...servicePacks]
+}
+
 const CONTACT_PRODUCT_SLUGS: Readonly<Record<TrialSignupProduct, string>> = {
   commerce: 'shop',
   production: 'plant',
