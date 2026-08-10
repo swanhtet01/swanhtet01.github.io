@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-254 exposes validated browser-local Ecommerce requests in Shop and prepares the exact source-bound order without a managed account. Next: `shop-local-ecommerce-payment-selection`; pilots stay owner-gated.
+- OPS-255 lets a browser-local v1 Ecommerce request choose an approved Shop payment while governed v7 payment remains read-only. The source survives the separate accountable gate and cancellation without a write. Next: `shop-local-ecommerce-order-confirmation`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-254 at `9fdfa7f6` reuses the validated local Commerce inbox and Review reducer while preserving managed status and action gates with no bundle growth. CLAUDE-009 stays manual at `0fc5cf7d`; its one safe-mode CLI attempt stopped before inference with `Not logged in`, zero tokens, and $0.00 cost, without touching the founder's session.
+- Codex is sole integrator. OPS-255 at `87dee29b` gives only browser-local v1 requests an approved payment selector; governed v7 stays locked, source evidence stays attached, and the bundle remains unchanged. CLAUDE-009 stays manual at `0fc5cf7d`; its one safe-mode CLI attempt stopped before inference with `Not logged in`, zero tokens, and $0.00 cost, without touching the founder's session.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-local-ecommerce-payment-selection`: let a browser-local v1 request choose Shop payment without detaching source evidence; keep governed v7 payment read-only.
+1. Complete `shop-local-ecommerce-order-confirmation`: create one accountable order from the exact local request, prove stock reservation and inbox consumption across reload, and reject a duplicate without hidden mutation.
 2. Use CLAUDE-009 only as an optional owner-controlled review of checkpoint `0fc5cf7d`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
