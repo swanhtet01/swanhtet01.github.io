@@ -4003,7 +4003,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           ? localDateTimeInputValue(new Date(Date.parse(draft.confirmedAt) + draft.pricing.shipping.promiseMinutes * 60_000))
           : defaultOrderPromiseInput())
         setOrderEntryMode('manual')
-        setNotice(`${request.id} loaded from the authenticated inbox with ${draft.lines.length} ${draft.lines.length === 1 ? 'item' : 'items'}. Confirm the promise and payment, then use the separate Shop action gate.`)
+        setNotice(`${request.id} loaded from the Shop inbox with ${draft.lines.length} ${draft.lines.length === 1 ? 'item' : 'items'}. Confirm the promise and payment, then use the separate Shop action gate.`)
         return
       }
       const { recordEcommerceShopDraft } = await import('../products/ecommerce/ecommerce-shop-handoff')
@@ -4026,7 +4026,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setFulfilmentReference(draft.sourceRequestId)
       setPromisedAt(defaultOrderPromiseInput())
       setOrderEntryMode('manual')
-      setNotice(`${request.id} loaded from the authenticated inbox. Confirm the promise and payment, then use the separate Shop action gate.`)
+      setNotice(`${request.id} loaded from the Shop inbox. Confirm the promise and payment, then use the separate Shop action gate.`)
     } catch (error) {
       detachPreparedOrderSources({ channel: false })
       setNotice(error instanceof Error ? error.message : 'The Ecommerce inbox request failed closed.')
@@ -7013,8 +7013,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <Link className="text-link" to="/website/">Open Website</Link>
         </section>
         <section className="website-intake">
-          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingEcommerceReviewCount} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
-          {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => {
+          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingEcommerceReviewCount} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'ready'}`}>{managedIdentity ? 'Managed' : 'This device'}</span></div>
+          {pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => {
             const lines = commerceStorefrontRequestLines(request)
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
             const replacedRequest = request.schema === 'supermega.ecommerce.order_request.v2' && request.supersedesRequestId
@@ -7024,7 +7024,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small>{replacedRequest ? <small title={`Exact predecessor ${replacedRequest.id}`}>Replacement · replaces {replacedRequest.id} · {replacedRequest.totalMmk.toLocaleString()} MMK · prior quote is history only</small> : null}</div>
               <button className="core-button compact" data-ecommerce-request-id={request.id} disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
             </div>
-          }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
+          }) : <div className="website-intake-record"><strong>No Ecommerce request needs Shop review.</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Ecommerce</Link>
         </section>
       </div> : null}
