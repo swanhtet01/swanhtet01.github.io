@@ -3452,7 +3452,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <div>
       <span className="core-eyebrow">Shop setup guide</span>
       <strong>Import products once. Then run the daily queue.</strong>
-      <small>Use this only when you are adding real products, receiving stock, checking payment problems, or preparing end-of-day reports. Daily selling stays in the main order screen.</small>
+      <small>Import products and set stock once. Then follow the daily queue.</small>
     </div>
     <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
@@ -4075,8 +4075,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function reviewCounterSale(review: ShopCounterReview, returnFocus: HTMLElement) {
-    if ((managedIdentity || localBusinessWorkspace) && !currentAccountingScopeConfiguration) {
-      setNotice('Set the business and operating location in Daily close before creating a real sale.')
+    if ((managedIdentity || localBusinessWorkspace) && (!commerce.inventoryFoundation || !currentAccountingScopeConfiguration?.inventoryLocationId)) {
+      setNotice('Set up Stock and review the business location before creating a real sale.')
       return
     }
     if (!review.lines.length || !review.payment) {
@@ -4161,8 +4161,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function recordOrder(event: FormEvent) {
     event.preventDefault()
-    if ((managedIdentity || localBusinessWorkspace) && !currentAccountingScopeConfiguration) {
-      setNotice('Set the business and operating location in Daily close before creating a real order.')
+    if ((managedIdentity || localBusinessWorkspace) && (!commerce.inventoryFoundation || !currentAccountingScopeConfiguration?.inventoryLocationId)) {
+      setNotice('Set up Stock and review the business location before creating a real order.')
       return
     }
     if (orderDraftConflict || resumedOrderNeedsReview) {
@@ -6305,6 +6305,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function reviewAccountingScope(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!commerce.inventoryFoundation) {
+      setNotice('Set up Stock locations first.')
+      return
+    }
     const input = {
       entityCode: effectiveAccountingScope.entityCode.trim().toUpperCase(),
       entityName: effectiveAccountingScope.entityName.trim(),
@@ -7129,14 +7133,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <div className="exception-summary"><span><strong>{closePreview?.orderIds.length ?? 0}</strong><small>orders ready</small></span><span><strong>{closePreview?.paymentExceptionOrderIds.length ?? 0}</strong><small>payment review</small></span></div>
       {closeScopeOptions.length > 1 ? <label className="core-form compact-form">Location to close<select disabled={commerceControlsDisabled} onChange={(event) => { setCloseScopeKey(event.target.value); setCloseSettlementDraft([]) }} required value={effectiveCloseScopeKey}><option value="">Choose location</option>{closeScopeOptions.map((option) => <option key={option.key} value={option.key}>{accountingScopeName(option.accountingScope)} · {option.orderCount} order{option.orderCount === 1 ? '' : 's'} · {formatMoney(option.totalMmk)}</option>)}</select></label> : null}
       {selectedCloseScopeOption && (selectedCloseScopeOption.accountingScope || currentAccountingScopeConfiguration) ? <p className="form-notice" data-close-accounting-scope={selectedCloseScopeOption.accountingScope ? 'reviewed' : 'legacy'}><strong>{selectedCloseScopeOption.accountingScope ? accountingScopeName(selectedCloseScopeOption.accountingScope) : 'Historical unscoped orders'}</strong>{selectedCloseScopeOption.accountingScope ? ` · ${accountingScopeCode(selectedCloseScopeOption.accountingScope)}` : ''}</p> : null}
-      <details className="compact-disclosure" data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'} id="shop-business-location" open={!currentAccountingScopeConfiguration || undefined}>
-        <summary><span>Business and location</span><small>{currentAccountingScopeConfiguration ? accountingScopeName(currentAccountingScopeConfiguration) : 'Required before real orders'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewAccountingScope}>
+      <details className="compact-disclosure" data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'} id="shop-business-location" open={!commerce.inventoryFoundation || !currentAccountingScopeConfiguration || undefined}>
+        <summary><span>Business and location</span><small>{!commerce.inventoryFoundation ? 'Stock setup required' : currentAccountingScopeConfiguration ? accountingScopeName(currentAccountingScopeConfiguration) : 'Required before real orders'}</small></summary>
+        {!commerce.inventoryFoundation ? <div className="core-form compact-form" data-shop-location-foundation="required"><p className="form-notice">Set up Stock locations before real orders.</p><Link className="core-button primary compact" to="/shop/?tab=inventory#shop-location-foundation">Set up stock locations</Link></div> : <form className="core-form compact-form" onSubmit={reviewAccountingScope}>
           {managedInventoryProjection ? <label>Stock location<select disabled={commerceControlsDisabled} id="shop-accounting-stock-location" onChange={(event) => { const location = managedInventoryProjection.locations.find((candidate) => candidate.id === event.target.value); const derivedCode = accountingInventoryLocationCode(effectiveAccountingScope.inventoryLocationId); setAccountingScope({ ...effectiveAccountingScope, inventoryLocationId: event.target.value, locationCode: !effectiveAccountingScope.locationCode || effectiveAccountingScope.locationCode === derivedCode ? accountingInventoryLocationCode(event.target.value) : effectiveAccountingScope.locationCode, locationName: location?.name ?? effectiveAccountingScope.locationName }) }} required value={effectiveAccountingScope.inventoryLocationId || defaultReceiptLocationId}><option value="">Choose location</option>{managedInventoryProjection.locations.map((location) => <option key={location.id} value={location.id}>{location.name} / {location.id}</option>)}</select></label> : null}
           {accountingScopeFields.map((row, rowIndex) => <div className="form-row" key={rowIndex}>{row.map(([field, label, placeholder, maxLength, uppercase]) => <label key={field}>{label}<input autoCapitalize={uppercase ? 'characters' : undefined} disabled={commerceControlsDisabled} maxLength={maxLength} onChange={(event) => setAccountingScope({ ...effectiveAccountingScope, [field]: uppercase ? event.target.value.toUpperCase() : event.target.value })} placeholder={placeholder} required value={effectiveAccountingScope[field]} /></label>)}</div>)}
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review business and location</button></div>
           {currentAccountingScopeConfiguration ? <p className="form-notice">Revision {currentAccountingScopeConfiguration.revision} · saved by {currentAccountingScopeConfiguration.proof.actor} · evidence {currentAccountingScopeConfiguration.proof.evidenceReference}</p> : null}
-        </form>
+        </form>}
       </details>
       <details className="compact-disclosure" data-shop-policy-controls>
         <summary><span>Policies and accounting setup</span><small>6 reviewed controls</small></summary>
@@ -7354,7 +7358,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
       </form> : null}
-      <details className="inventory-tools-disclosure">
+      <details className="inventory-tools-disclosure" id="shop-location-foundation" open={!commerce.inventoryFoundation || undefined}>
         <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
         <div className="inventory-tools-content">
           {supplierControl}
