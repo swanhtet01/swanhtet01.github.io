@@ -22,6 +22,7 @@ const STOREFRONT = `${ROOT}/showroom/src/products/ecommerce/storefront-draft.ts`
 const SCHEDULING = `${ROOT}/showroom/src/core/shop-service-scheduling.ts`
 const INTAKE = `${ROOT}/showroom/src/core/channel-order-intake.ts`
 const TRADEBRIEF = `${ROOT}/showroom/src/products/website/website-trade-brief.ts`
+const ONBOARDRUN = `${ROOT}/showroom/src/core/product-onboarding-runtime.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
 const MUTATIONS = [
@@ -91,6 +92,14 @@ const MUTATIONS = [
   ['test_website_trade_brief.mjs', TRADEBRIEF,
     "  'tea-coffee': {", "  'tea-coffee-DISABLED': {",
     'a Shop trade loses its website copy and that owner falls back to blank boxes'],
+  ['test_website_trade_detection.mjs', ONBOARDRUN,
+    '    if (!installed) return null',
+    '    if (!installed) return shopBusinessTemplates[0].id',
+    'a device with no trade installed is guessed at rather than asked'],
+  ['test_website_trade_detection.mjs', ONBOARDRUN,
+    '    const match = shopBusinessTemplates.find((template) => template.id === installed)',
+    '    const match = { id: installed }',
+    'website wording is drafted from a stored id that is not a trade Shop offers'],
   ['test_order_to_close_journey.mjs', COMMERCE,
     "    .filter((order) => order.status === 'completed'", "    .filter((order) => order.status === 'nope'",
     'a completed sale silently never reaches the daily close'],

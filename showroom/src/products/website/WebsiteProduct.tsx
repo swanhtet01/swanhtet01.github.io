@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
+import { readLocalShopBusinessTemplateId } from '../../core/product-onboarding-runtime'
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
@@ -219,6 +220,9 @@ export function WebsiteProduct() {
     && workspace.workingSample.contentFingerprint === fingerprint)
   const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
   const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
+  // Read once for the life of this screen. The setup component is required to stay free of
+  // device reads, so the shell does it and hands the answer down as a prop.
+  const [shopTradeId] = useState(readLocalShopBusinessTemplateId)
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
@@ -1284,6 +1288,7 @@ export function WebsiteProduct() {
               {view === 'content' ? (
                 starterSetupActive ? (
                   <WebsiteStarterSetup
+                    initialTradeId={shopTradeId}
                     onCreate={startWithBusiness}
                     onViewSample={viewWebsiteSample}
                   />

@@ -11,6 +11,13 @@ import type { ShopBusinessTemplateId } from '../shop/business-templates'
 type WebsiteStarterSetupProps = {
   onCreate: (brief: WebsiteStarterBrief) => void
   onViewSample: () => void
+  // The trade this device's Shop was set up as, or null when it is not known.
+  //
+  // Passed in rather than read here on purpose. This component is required to be free of
+  // device reads -- verify_app_build.mjs fails the build if it so much as names a browser
+  // storage API -- so the shell does the reading and this stays a pure function of its
+  // props, which is also what makes every opening state reachable in a test.
+  initialTradeId?: ShopBusinessTemplateId | null
 }
 
 const SAMPLE_BRIEF: WebsiteStarterBrief = {
@@ -22,13 +29,34 @@ const SAMPLE_BRIEF: WebsiteStarterBrief = {
   contactHref: 'https://m.me/mingalarfreshmart',
 }
 
-export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSetupProps) {
-  const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...SAMPLE_BRIEF }))
+// Open on the wording for the trade the shop already declared, when it is known. The owner
+// answered this during Shop setup; asking again is the kind of small re-asking that makes
+// software feel like paperwork.
+//
+// Pure: same prop in, same opening state out. Held in useState so it is computed once at
+// mount, which also means a Shop change in another tab cannot rewrite wording the owner is
+// halfway through editing.
+function openingState(initialTradeId: ShopBusinessTemplateId | null | undefined) {
+  if (!initialTradeId) return { tradeId: '', brief: { ...SAMPLE_BRIEF }, detected: false }
+  const drafted = websiteTradeBrief({
+    tradeId: initialTradeId,
+    businessName: SAMPLE_BRIEF.businessName,
+    contactHref: SAMPLE_BRIEF.contactHref,
+  })
+  return drafted
+    ? { tradeId: initialTradeId as string, brief: drafted, detected: true }
+    : { tradeId: '', brief: { ...SAMPLE_BRIEF }, detected: false }
+}
+
+export function WebsiteStarterSetup({ onCreate, onViewSample, initialTradeId }: WebsiteStarterSetupProps) {
+  const [opening] = useState(() => openingState(initialTradeId))
+  const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
   const [attempted, setAttempted] = useState(false)
-  const [tradeId, setTradeId] = useState('')
-  // The wording currently on offer from us rather than from the owner. Starts as the sample,
-  // so the sample counts as "not yet edited" and picking a trade replaces it.
-  const [lastDrafted, setLastDrafted] = useState<WebsiteStarterBrief>(() => ({ ...SAMPLE_BRIEF }))
+  const [tradeId, setTradeId] = useState(opening.tradeId)
+  // The wording currently on offer from us rather than from the owner. Starts as whatever we
+  // opened with, so that opening draft counts as "not yet edited" and picking a trade
+  // replaces it.
+  const [lastDrafted, setLastDrafted] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
   const starterFormRef = useRef<HTMLFormElement>(null)
   const issues = websiteStarterBriefIssues(brief)
   const issueFor = (field: keyof WebsiteStarterBrief) => (
@@ -107,7 +135,11 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
               <option key={trade.id} value={trade.id}>{trade.label}</option>
             ))}
           </select>
-          <small>Fills the wording below for that trade. Anything you have already written is kept.</small>
+          <small>
+            {opening.detected
+              ? 'Taken from your Shop setup. Change it here if this website is for something else — anything you have already written is kept.'
+              : 'Fills the wording below for that trade. Anything you have already written is kept.'}
+          </small>
         </label>
 
         <div className="website-form-grid two-columns website-starter-identity-grid">

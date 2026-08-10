@@ -5,6 +5,7 @@ import {
 } from './client-onboarding'
 import {
   installCommerceWorkingSampleCatalog,
+  commerceWorkingSampleCatalogId,
   loadCommerceWorkspace,
   mutateCommerceWorkspace,
   type CommerceItem,
@@ -27,6 +28,7 @@ import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-pa
 import {
   shopBusinessTemplate,
   shopBusinessTemplateCatalogCsv,
+  shopBusinessTemplates,
   type ShopBusinessTemplateId,
 } from '../products/shop/business-templates'
 
@@ -37,6 +39,44 @@ export function readLocalShopIndustryPackId() {
     return stored ? readShopServiceSchedule(stored).industryPackId : clientDemoPresets[0].shopIndustryPackId
   } catch {
     return clientDemoPresets[0].shopIndustryPackId
+  }
+}
+
+// Structurally the same shape loadCommerceWorkspace takes. Declared here so the detection
+// below can be driven by a fake store in tools/test_website_trade_detection.mjs -- the
+// contract that matters is what it does with ODD data, which a browser cannot be made to
+// produce on demand.
+type OnboardingReadableStorage = {
+  getItem: (key: string) => string | null
+  setItem: (key: string, value: string) => void
+  removeItem: (key: string) => void
+}
+
+/**
+ * The trade this device's Shop was set up as, or null if it cannot be determined.
+ *
+ * Onboarding installs a business template's catalog and stamps every baseline with an action
+ * id derived from the template, so the trade is already recorded -- there is no need to ask
+ * the owner a second time on another product's setup screen.
+ *
+ * Returns null rather than a default whenever the answer is not certain: no Shop data yet, a
+ * catalog imported from the owner's own CSV, or a mix of samples. A wrong guess here would
+ * silently rewrite a website's wording for the wrong kind of business, which is worse than
+ * asking.
+ */
+export function readLocalShopBusinessTemplateId(
+  storage?: OnboardingReadableStorage,
+): ShopBusinessTemplateId | null {
+  if (!storage && typeof window === 'undefined') return null
+  try {
+    const snapshot = loadCommerceWorkspace(storage)
+    if (snapshot.error) return null
+    const installed = commerceWorkingSampleCatalogId(snapshot.state)
+    if (!installed) return null
+    const match = shopBusinessTemplates.find((template) => template.id === installed)
+    return match ? match.id : null
+  } catch {
+    return null
   }
 }
 

@@ -3520,7 +3520,19 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSetupSource.includes("templateId: 'catalog-showcase'")
   || !websiteStarterSetupSource.includes('websiteStarterTemplates.map')
   || !websiteStarterSetupSource.includes('Quick setup')
-  || !websiteStarterSetupSource.includes('useState<WebsiteStarterBrief>(() => ({ ...SAMPLE_BRIEF }))')
+  // The starter opens from SAMPLE_BRIEF unless the shell passes the trade the device's Shop
+  // was set up as, in which case it opens on that trade's wording. openingState() is a pure
+  // function of that prop -- the storage read lives in WebsiteProduct, which is why the
+  // localStorage ban further down still holds for this component.
+  || !websiteStarterSetupSource.includes('const [opening] = useState(() => openingState(initialTradeId))')
+  || !websiteStarterSetupSource.includes('useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))')
+  || !websiteStarterSetupSource.includes('initialTradeId?: ShopBusinessTemplateId | null')
+  || !websiteStarterSetupSource.includes("return { tradeId: '', brief: { ...SAMPLE_BRIEF }, detected: false }")
+  // Stronger than the localStorage ban alone: naming the detection helper here at all would
+  // mean this component had started reading device state for itself.
+  || websiteStarterSetupSource.includes('readLocalShopBusinessTemplateId')
+  || !websiteSource.includes('const [shopTradeId] = useState(readLocalShopBusinessTemplateId)')
+  || !websiteSource.includes('initialTradeId={shopTradeId}')
   || websiteStarterSetupSource.includes('Load sample brief')
   || !websiteStarterSetupSource.includes('Change the sample into your website')
   || !websiteStarterSetupSource.includes('Example ready')
