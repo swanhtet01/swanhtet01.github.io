@@ -23,6 +23,7 @@ const SCHEDULING = `${ROOT}/showroom/src/core/shop-service-scheduling.ts`
 const INTAKE = `${ROOT}/showroom/src/core/channel-order-intake.ts`
 const TRADEBRIEF = `${ROOT}/showroom/src/products/website/website-trade-brief.ts`
 const PLAYBOOK = `${ROOT}/docs/demo-playbooks/ecommerce.md`
+const PLANTPACKS = `${ROOT}/showroom/src/core/plant-industry-packs.ts`
 const PUBLICGEN = `${ROOT}/tools/create_public_vercel_output.mjs`
 const ONBOARDRUN = `${ROOT}/showroom/src/core/product-onboarding-runtime.ts`
 
@@ -152,6 +153,9 @@ const MUTATIONS = [
   ['test_public_landing_pages.mjs', PUBLICGEN,
     '<meta property="og:image" content="${escapeHtml(shareImageUrl)}" />', '<!-- og:image removed -->',
     'every public landing page ships without a share-card image'],
+  ['test_plant_pack_batch_planning.mjs', PLANTPACKS,
+    "setup: { outputPrefix: 'BATCH-STYLE',", "setup: { outputPrefix: 'STYLE',",
+    'a manufacturer in that industry cannot plan a batch at all'],
   ['test_order_to_close_journey.mjs', COMMERCE,
     "    .filter((order) => order.status === 'completed'", "    .filter((order) => order.status === 'nope'",
     'a completed sale silently never reaches the daily close'],
