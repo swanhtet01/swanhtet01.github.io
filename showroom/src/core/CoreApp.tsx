@@ -1870,6 +1870,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const consumedEcommerceInboxSource = useRef('')
   const consumedWebsiteInboxSource = useRef('')
   const orderDraftRevisionRef = useRef(orderDraftRead.draft?.revision ?? 0)
+  const [orderDraftDefaultPromise, setOrderDraftDefaultPromise] = useState('')
   const orderDraftSaveQueueRef = useRef(Promise.resolve())
   const orderDraftCatalogRef = useRef(commerce.items)
   const orderDraftScopeRef = useRef(orderDraftScope)
@@ -1979,7 +1980,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     || payment
     || fulfilment
     || fulfilmentReference.trim()
-    || promisedAt
+    || (promisedAt && promisedAt !== orderDraftDefaultPromise)
     || paymentTermsDays !== 0
     || extraOrderLines.length
     || quantity !== 1
@@ -2222,6 +2223,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setPayment('')
       setFulfilment('')
       setFulfilmentReference('')
+      setOrderDraftDefaultPromise('')
       setPromisedAt('')
       setPaymentTermsDays(0)
       setPreparedEcommerceDraft(null)
@@ -2624,6 +2626,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setPayment('')
         setFulfilment('')
         setFulfilmentReference('')
+        setOrderDraftDefaultPromise('')
         setPromisedAt('')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(null)
@@ -3503,6 +3506,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setPayment('')
     setFulfilment('')
     setFulfilmentReference('')
+    setOrderDraftDefaultPromise('')
     setPromisedAt('')
     setPaymentTermsDays(0)
     setPreparedChannelDraft(null)
@@ -3547,7 +3551,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(orderDraftRead.error || 'Order recovery is unavailable. Open Settings before starting a manual order.')
       return
     }
-    if (!promisedAt) setPromisedAt(defaultOrderPromiseInput())
+    if (!promisedAt) {
+      const defaultPromise = defaultOrderPromiseInput()
+      setOrderDraftDefaultPromise(defaultPromise)
+      setPromisedAt(defaultPromise)
+    }
     setOrderDraftActive(true)
     setResumedOrderDraft(null)
     setOrderDraftConflict(false)
@@ -3595,6 +3603,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setPayment(draft.payment)
     setFulfilment(draft.fulfilment)
     setFulfilmentReference(draft.fulfilmentReference)
+    setOrderDraftDefaultPromise('')
     setPromisedAt(draft.promisedAt ? localDateTimeInputValue(new Date(draft.promisedAt)) : '')
     setPaymentTermsDays(draft.paymentTermsDays)
     setSku(firstLine.sku)
