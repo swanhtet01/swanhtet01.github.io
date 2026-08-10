@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- Product outcome gates pass. OPS-249 initializes reviewed location stock for 9 through 1,000 stocked SKUs, including newest-first imported catalogs, without adding UI or weakening the one-write review gate. Next: `shop-required-scope-before-order-entry`; pilots stay owner-gated.
+- Product outcome gates pass. OPS-250 routes premature New order intent into the existing required business/location review, then restores the real order composer after valid scope. Next: `shop-required-scope-before-counter-entry`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-249 at `8adf6d37` removes the UI-only eight-item ceiling, keeps canonical four-digit opening IDs through item 1,000, and validates location inventory against canonically sorted SKUs without reordering the Commerce catalog. CLAUDE-009 stays manual at checkpoint `0fc5cf7d`; one safe-mode CLI attempt stopped before inference with `Not logged in`, zero tokens, and $0.00 cost, without touching the founder's session.
+- Codex is sole integrator. OPS-250 at `6d3208a9` gates manual and online order-composer entry on the existing required Shop scope without adding a page, draft, order, or bundle byte. CLAUDE-009 stays manual at checkpoint `0fc5cf7d`; one safe-mode CLI attempt stopped before inference with `Not logged in`, zero tokens, and $0.00 cost, without touching the founder's session.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-required-scope-before-order-entry`: while the required business/location review is open, New order must lead to that review instead of opening a draft that can only fail at submission.
+1. Complete `shop-required-scope-before-counter-entry`: while business/location scope is required, Sell must lead to that review before a user builds a cart that can only fail at final sale review.
 2. Use CLAUDE-009 only as an optional owner-controlled review of checkpoint `0fc5cf7d`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

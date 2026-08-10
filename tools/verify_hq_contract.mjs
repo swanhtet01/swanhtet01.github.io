@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-224'
   && completedAutomationArchive.entries?.length === 72
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 25
+  && portfolioSource.completedLocalAutomations.length === 26
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 97
+  && portfolio.completedLocalAutomations.length === 98
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -576,10 +576,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[96]?.productId === 'shop'
   && portfolio.completedLocalAutomations[96]?.workOrderId === 'shop-location-setup-scalable-catalog'
   && portfolio.completedLocalAutomations[96]?.checkpoint === 'OPS-249'
+  && portfolio.completedLocalAutomations[97]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[97]?.workOrderId === 'shop-required-scope-before-order-entry'
+  && portfolio.completedLocalAutomations[97]?.checkpoint === 'OPS-250'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-required-scope-before-order-entry'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-required-scope-before-counter-entry'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1873,6 +1876,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-249 | CEO + Shop Scalable-location Setup / Agent Operations Codex | done-local |')
   && workboard.includes('validates a 1,000-item package ending at `LOT-OPENING-1000`')
   && workboard.includes('The receipt advances `shop-required-scope-before-order-entry`')
+  && workboard.includes('| OPS-250 | CEO + Shop Required-scope Order Entry / Agent Operations Codex | done-local |')
+  && workboard.includes('created no saved draft or order, and kept the composer closed')
+  && workboard.includes('The receipt advances `shop-required-scope-before-counter-entry`')
   && workboard.includes('| CLAUDE-009 | Claude Code | ready-owner-login |')
   && workboard.includes('Shop setup-recovery checkpoint `0fc5cf7d`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -1938,7 +1944,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-setup-next-blocker-focus' && entry.checkpoint === 'OPS-247')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-setup-recovery-history-closure' && entry.checkpoint === 'OPS-248')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-location-setup-scalable-catalog' && entry.checkpoint === 'OPS-249')
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-required-scope-before-order-entry')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-required-scope-before-order-entry' && entry.checkpoint === 'OPS-250')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-required-scope-before-counter-entry')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
