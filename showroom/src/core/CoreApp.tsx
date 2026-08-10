@@ -913,6 +913,16 @@ function accountingInventoryLocationCode(locationId: string) {
   return locationId.slice(4)
 }
 
+function focusShopBusinessLocationReview() {
+  const section = document.getElementById('shop-business-location')
+  const controls = section?.closest<HTMLDetailsElement>('#shop-close-controls')
+  if (controls) controls.open = true
+  if (section instanceof HTMLDetailsElement) section.open = true
+  const target = document.getElementById('shop-accounting-stock-location') ?? section?.querySelector<HTMLElement>('a, input, summary')
+  target?.scrollIntoView({ block: 'center' })
+  target?.focus({ preventScroll: true })
+}
+
 function accountingScopeName(scope: { entityName: string; locationName: string } | null | undefined) {
   return scope ? `${scope.entityName} · ${scope.locationName}` : 'Legacy unscoped'
 }
@@ -2556,13 +2566,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         return
       }
       if (tab === 'orders' && commerceLocation.hash === '#shop-business-location') {
-        const section = document.getElementById('shop-business-location')
-        const controls = section?.closest<HTMLDetailsElement>('#shop-close-controls')
-        if (controls) controls.open = true
-        if (section instanceof HTMLDetailsElement) section.open = true
-        const target = document.getElementById('shop-accounting-stock-location') ?? section?.querySelector<HTMLElement>('input')
-        target?.scrollIntoView({ block: 'center' })
-        target?.focus({ preventScroll: true })
+        focusShopBusinessLocationReview()
         return
       }
       if (tab === 'orders' && commerceLocation.hash === '#shop-close-controls') {
@@ -3276,6 +3280,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   })() : null
 
   const localBusinessWorkspace = !managedIdentity && commerceBusinessCatalogItems(commerce).length > 0
+  const realOrderSetupRequired = Boolean((managedIdentity || localBusinessWorkspace) && (!commerce.inventoryFoundation || !currentAccountingScopeConfiguration?.inventoryLocationId))
+  const realOrderSetupLabel = realOrderSetupRequired ? commerce.inventoryFoundation ? 'Review business location' : 'Set up stock locations' : null
   const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : localBusinessWorkspace ? 'Local workspace' : 'Sample data'}</span>
     <p>{commerceStorageError
@@ -3513,6 +3519,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   function openOrderComposer(mode: 'manual' | 'online' = 'manual') {
     if (!commerceCanWrite) {
       setNotice('Shop changes are paused. Open Settings before adding an order.')
+      return
+    }
+    if (realOrderSetupRequired) {
+      setNotice('Finish business and location setup before starting a real order.')
+      window.requestAnimationFrame(focusShopBusinessLocationReview)
       return
     }
     if (!orderDraftInitialized) {
@@ -4076,7 +4087,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function reviewCounterSale(review: ShopCounterReview, returnFocus: HTMLElement) {
-    if ((managedIdentity || localBusinessWorkspace) && (!commerce.inventoryFoundation || !currentAccountingScopeConfiguration?.inventoryLocationId)) {
+    if (realOrderSetupRequired) {
       setNotice('Set up Stock and review the business location before creating a real sale.')
       return
     }
@@ -4162,7 +4173,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function recordOrder(event: FormEvent) {
     event.preventDefault()
-    if ((managedIdentity || localBusinessWorkspace) && (!commerce.inventoryFoundation || !currentAccountingScopeConfiguration?.inventoryLocationId)) {
+    if (realOrderSetupRequired) {
       setNotice('Set up Stock and review the business location before creating a real order.')
       return
     }
@@ -6699,7 +6710,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               ? 'Reconcile payment exceptions'
               : closableOrders.length
                 ? 'Save daily close'
-                : 'Ready for new orders'
+                : realOrderSetupLabel ?? 'Ready for new orders'
   const shopOrderControlRows = [
     ['Online inbox', pendingOnlineReviewCount ? `${pendingOnlineReviewCount} waiting` : 'Clear'],
     ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
@@ -6707,7 +6718,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Balance', correctionDraft ? 'Review needed' : 'Clear'],
     ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
     ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
-    ['Write status', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
+    ['Write status', realOrderSetupRequired ? 'Setup needed' : commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
   const shopOrderControlBoundary = 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.'
   const shopOrderLifecycleRows = [
@@ -6851,7 +6862,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={openNextSupportWork} type="button">{nextSupportActionLabel}</button>
               : correctionDraft && !actionOrders.length
                 ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={focusCurrentCorrectionReview} type="button">Review balance</button>
-                : <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button>
+                : <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{realOrderSetupLabel ?? (!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order')}</button>
             : null}
         </div>
       </div>
