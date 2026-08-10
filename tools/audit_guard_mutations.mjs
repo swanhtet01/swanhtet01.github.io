@@ -26,6 +26,29 @@ const PLAYBOOK = `${ROOT}/docs/demo-playbooks/ecommerce.md`
 const PUBLICGEN = `${ROOT}/tools/create_public_vercel_output.mjs`
 const ONBOARDRUN = `${ROOT}/showroom/src/core/product-onboarding-runtime.ts`
 
+// WHICH GUARDS ARE NOT LISTED HERE, AND WHY THAT IS NOT THE SAME AS UNVERIFIED.
+//
+// Counting entries in this file was used as a coverage number, and that number was wrong: it
+// equates 'verified' with 'verified HERE'. Several guards prove their own negatives and do not
+// belong in this file at all.
+//
+//   test_vercel_project_state / _domain_state / _environment_state -- verifier self-tests.
+//     They build deliberately broken states (wrong cron schedule, duplicate cron path, public
+//     project running crons, wrong project id, native git enabled, missing bypass) and assert
+//     the verifier REJECTS each with a named failure code. That is a mutation test inline.
+//
+//   test_connector_resilience / test_crew_resilience -- adversarial sweeps. They collect
+//     violations and process.exit(1). Verified by hand 2026-08-10: making one connector's
+//     configured() throw a TypeError produced 12 violations, the first naming
+//     'ai-anthropic: configured() THREW'. Not listed here because the mutation target is a
+//     kernel connector rather than product source.
+//
+//   test_public_contact_function / test_public_retired_api_function -- assert exact status
+//     codes and bodies, and fail the run if an unexpected external request is attempted.
+//
+//   test_every_trade_money_journey -- owns no rule of its own by design; it is breadth over
+//     seven real catalogs, and says so in its own header.
+//
 // [guard script, target file, find, replace, what defect this simulates]
 const MUTATIONS = [
   ['test_commerce_tax.mjs', COMMERCE,
