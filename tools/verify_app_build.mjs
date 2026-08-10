@@ -4733,7 +4733,7 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   // because building an issued-material execution fixture is a larger job than the fix;
   // the behaviour itself was verified in a browser.
   || !productionMaterialHandoffSource.includes("shopSupply: payload.kind === 'issue_material' && material.shopSupply")
-  || !shopProductionHandoffUiSource.includes('const mappedItem = request?.shopSupply')
+  || !shopProductionHandoffUiSource.includes('const mappedSku = request?.shopSupply?.sku')
   || shopProductionHandoffUiSource.split('mappedItem ??').length - 1 !== 2
   || !shopProductionHandoffUiSource.includes('locationPicks.join')
   || !shopProductionHandoffUiSource.includes('exactWholeUnits <= available')

@@ -337,9 +337,11 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
   // first in the catalog. Plant promises the conversion is explicit and that no name matching
   // is used; defaulting to an unrelated item is how wiper blades get issued against a request
   // for engine oil. Falls back to the first stocked item when the BOM row was left unmapped.
-  const mappedItem = request?.shopSupply
-    ? commerce.items.find((item) => item.sku === request.shopSupply.sku)
-    : undefined
+  // The sku is read into a local first: narrowing request.shopSupply does not survive into
+  // the callback below, and the production build rejects it even though a --noEmit check on
+  // the app tsconfig did not.
+  const mappedSku = request?.shopSupply?.sku
+  const mappedItem = mappedSku ? commerce.items.find((item) => item.sku === mappedSku) : undefined
   const defaultItem = mappedItem ?? commerce.items.find((item) => item.onHand > 0) ?? commerce.items[0]
   const [openRequestId, setOpenRequestId] = useState('')
   const [sku, setSku] = useState(defaultItem?.sku ?? '')
