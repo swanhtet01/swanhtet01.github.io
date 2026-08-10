@@ -71,7 +71,7 @@ const [readme, now, qaBrief, workboard, current, manifestText, portfolioText, wo
   readFile(resolve(root, 'supermega_runtime', 'agent_governance.py'), 'utf8'),
 ])
 const enterpriseRoadmap = await readFile(resolve(root, 'hq', 'research', 'enterprise-product-roadmap-2026-07-28.md'), 'utf8')
-const completedAutomationArchiveText = await readFile(resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-194.json'), 'utf8')
+const completedAutomationArchiveText = await readFile(resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-224.json'), 'utf8')
 const managedPilotReadiness = validateManagedPilotReadiness(JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8')))
 const managedPilotDecisionPreview = buildManagedPilotDecisionPreview(managedPilotReadiness)
 const supabaseSecurityAudit = JSON.parse(await readFile(resolve(root, 'hq', 'readiness', 'supabase-security-advisor-audit.json'), 'utf8'))
@@ -265,18 +265,18 @@ requireContract('one bounded agent operating model is authoritative',
     && entry.reason?.trim())
   && Object.keys(portfolioSource.completedLocalAutomationArchive || {}).sort().join(',') === 'contract,count,digest,path,throughCheckpoint'
   && portfolioSource.completedLocalAutomationArchive.contract === 'supermega.completed-local-automation-archive-ref.v1'
-  && portfolioSource.completedLocalAutomationArchive.path === 'archive/completed-local-automations-through-ops-194.json'
-  && portfolioSource.completedLocalAutomationArchive.count === 42
-  && portfolioSource.completedLocalAutomationArchive.throughCheckpoint === 'OPS-194'
+  && portfolioSource.completedLocalAutomationArchive.path === 'archive/completed-local-automations-through-ops-224.json'
+  && portfolioSource.completedLocalAutomationArchive.count === 72
+  && portfolioSource.completedLocalAutomationArchive.throughCheckpoint === 'OPS-224'
   && portfolioSource.completedLocalAutomationArchive.digest === completedAutomationArchiveDigest
   && Object.keys(completedAutomationArchive || {}).sort().join(',') === 'contract,entries,throughCheckpoint'
   && completedAutomationArchive.contract === 'supermega.completed-local-automation-archive.v1'
-  && completedAutomationArchive.throughCheckpoint === 'OPS-194'
-  && completedAutomationArchive.entries?.length === 42
+  && completedAutomationArchive.throughCheckpoint === 'OPS-224'
+  && completedAutomationArchive.entries?.length === 72
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 52
+  && portfolioSource.completedLocalAutomations.length === 23
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 94
+  && portfolio.completedLocalAutomations.length === 95
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -567,10 +567,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[93]?.productId === 'shop'
   && portfolio.completedLocalAutomations[93]?.workOrderId === 'shop-location-setup-blocker-recovery-client-acceptance'
   && portfolio.completedLocalAutomations[93]?.checkpoint === 'OPS-246'
+  && portfolio.completedLocalAutomations[94]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[94]?.workOrderId === 'shop-setup-next-blocker-focus'
+  && portfolio.completedLocalAutomations[94]?.checkpoint === 'OPS-247'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-setup-next-blocker-focus'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-setup-recovery-history-closure'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1855,8 +1858,11 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-246 | CEO + Shop Setup-blocker Recovery / Agent Operations Codex | done-local |')
   && workboard.includes('The Orders header hides New order while that intent is present')
   && workboard.includes('The receipt advances `shop-setup-next-blocker-focus`')
-  && workboard.includes('| CLAUDE-008 | Claude Code | ready |')
-  && workboard.includes('Ecommerce order-close checkpoint `969fae03`')
+  && workboard.includes('| OPS-247 | CEO + Shop Setup-next-blocker Focus / Agent Operations Codex | done-local |')
+  && workboard.includes('the first accountable cancellation moved URL, highlight, scroll, and keyboard focus to `ORD-1041`')
+  && workboard.includes('The receipt advances `shop-setup-recovery-history-closure`')
+  && workboard.includes('| CLAUDE-009 | Claude Code | ready-owner-login |')
+  && workboard.includes('Shop setup-recovery checkpoint `0fc5cf7d`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'website-inquiry-entry-tab-recovery' && entry.checkpoint === 'OPS-189')
@@ -1917,7 +1923,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-unscoped-close-guidance-client-acceptance' && entry.checkpoint === 'OPS-244')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-first-location-foundation-gate-client-acceptance' && entry.checkpoint === 'OPS-245')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-location-setup-blocker-recovery-client-acceptance' && entry.checkpoint === 'OPS-246')
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-setup-next-blocker-focus')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-setup-next-blocker-focus' && entry.checkpoint === 'OPS-247')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-setup-recovery-history-closure')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
@@ -1931,7 +1938,7 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   && allyCeoPlannerText.includes('completedLocalAutomations')
   && allyCeoPlannerText.includes("COMPLETED_AUTOMATION_ARCHIVE_CONTRACT = 'supermega.completed-local-automation-archive.v1'")
   && allyCeoPlannerText.includes("COMPLETED_AUTOMATION_ARCHIVE_REF_CONTRACT = 'supermega.completed-local-automation-archive-ref.v1'")
-  && allyCeoPlannerText.includes("COMPLETED_AUTOMATION_ARCHIVE_PATH = 'archive/completed-local-automations-through-ops-194.json'")
+  && allyCeoPlannerText.includes("COMPLETED_AUTOMATION_ARCHIVE_PATH = 'archive/completed-local-automations-through-ops-224.json'")
   && allyCeoPlannerText.includes('...archivedAutomations.entries')
   && allyCeoPlannerText.includes('ally_ceo_company_plan_completed_automation_archive_missing')
   && allyCeoPlannerText.includes('archiveDigest !== reference.digest')
@@ -1961,7 +1968,7 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
   && allyCeoPlannerText.includes('validateManagedPilotReadiness')
   && allyCeoPlannerText.includes('managedPilotReadiness')
   && allyCeoPlannerText.includes("hq/WORKBOARD.md#execution-order")
-  && allyCeoPlannerCliText.includes("resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-194.json')")
+  && allyCeoPlannerCliText.includes("resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-224.json')")
   && allyCeoPlannerCliText.includes('completedAutomationArchiveText, managedReadinessText')
   && allyCeoPlannerCliText.includes('supermega-ally-ceo-company-plan-${planHash.slice(0, 12)}.json')
   && allyCeoPlannerCliText.includes("resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json')")
@@ -1982,7 +1989,7 @@ requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect
 
 requireContract('Ally CEO execution uses one exact local-company run and no external action surface',
   allyCeoLocalCycleText.includes("ALLY_CEO_LOCAL_CYCLE_CONTRACT = 'supermega.ally-ceo-local-cycle.v1'")
-  && allyCeoLocalCycleText.includes("resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-194.json')")
+  && allyCeoLocalCycleText.includes("resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-224.json')")
   && allyCeoLocalCycleText.includes('completedAutomationArchiveText, managedReadinessText')
   && allyCeoLocalCycleText.includes("resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json')")
   && allyCeoLocalCycleText.includes("'operations-analyst': 'operations'")

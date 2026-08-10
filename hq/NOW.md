@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- Product outcome gates pass. OPS-246 routes blocked Stock setup through exact active Orders and offers one return to enabled setup only after all blockers resolve. Next: `shop-setup-next-blocker-focus`; pilots stay owner-gated.
+- Product outcome gates pass. OPS-247 moves setup recovery to the next exact active order only after a reviewed cancellation succeeds, then clears stale focus at zero blockers. Next: `shop-setup-recovery-history-closure`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-246 at `8f8badba` makes the blocked setup control actionable, retains `return=location-setup`, hides New order during recovery, and returns to Stock only after zero active orders. CLAUDE-008 stays manual at `969fae03`.
+- Codex is sole integrator. OPS-247 at `0fc5cf7d` replaces the cancelled order hash with the next sorted blocker, or no hash at zero, only after the existing accountable mutation succeeds. CLAUDE-009 stays manual at the same checkpoint; one safe-mode CLI attempt stopped before inference with `Not logged in`, zero tokens, and $0.00 cost, without touching the founder's session.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-setup-next-blocker-focus`: after one setup blocker resolves, focus the next active order instead of retaining the cancelled order hash.
-2. Use CLAUDE-008 only as an optional owner-controlled review of checkpoint `969fae03`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
+1. Complete `shop-setup-recovery-history-closure`: returning from a resolved setup recovery must replace the dead zero-blocker route so browser Back does not reopen it.
+2. Use CLAUDE-009 only as an optional owner-controlled review of checkpoint `0fc5cf7d`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

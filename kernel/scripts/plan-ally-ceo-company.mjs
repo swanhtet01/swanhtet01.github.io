@@ -41,7 +41,7 @@ async function currentPlan(now) {
     readFile(resolve(root, 'hq', 'NOW.md'), 'utf8'),
     readFile(resolve(root, 'hq', 'WORKBOARD.md'), 'utf8'),
     readFile(resolve(root, 'hq', 'portfolio.json'), 'utf8'),
-    readFile(resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-194.json'), 'utf8'),
+    readFile(resolve(root, 'hq', 'archive', 'completed-local-automations-through-ops-224.json'), 'utf8'),
     readFile(resolve(root, 'hq', 'readiness', 'managed-pilot-readiness.json'), 'utf8'),
   ])
   return buildAllyCeoCompanyPlan({ now, hqNow, workboard, portfolioText, completedAutomationArchiveText, managedReadinessText })
