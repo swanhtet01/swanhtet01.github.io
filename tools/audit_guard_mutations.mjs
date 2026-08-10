@@ -22,6 +22,7 @@ const STOREFRONT = `${ROOT}/showroom/src/products/ecommerce/storefront-draft.ts`
 const SCHEDULING = `${ROOT}/showroom/src/core/shop-service-scheduling.ts`
 const INTAKE = `${ROOT}/showroom/src/core/channel-order-intake.ts`
 const TRADEBRIEF = `${ROOT}/showroom/src/products/website/website-trade-brief.ts`
+const PLAYBOOK = `${ROOT}/docs/demo-playbooks/ecommerce.md`
 const ONBOARDRUN = `${ROOT}/showroom/src/core/product-onboarding-runtime.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
@@ -112,6 +113,11 @@ const MUTATIONS = [
     'projectShopInventory(value.inventoryFoundation as ShopInventoryState, [...itemSkus].sort())',
     'projectShopInventory(value.inventoryFoundation as ShopInventoryState, itemSkus)',
     'location stock cannot be switched on by any shop whose catalog is not alphabetical'],
+  // Not source: the playbook guard's whole job is that documentation cannot drift from the
+  // app, so the mutation belongs in the document.
+  ['test_demo_playbooks.mjs', PLAYBOOK,
+    '`/ecommerce/`', '`/not-a-real-route-ecommerce/`',
+    'a demo playbook cites a route the app does not have'],
   ['test_order_to_close_journey.mjs', COMMERCE,
     "    .filter((order) => order.status === 'completed'", "    .filter((order) => order.status === 'nope'",
     'a completed sale silently never reaches the daily close'],
