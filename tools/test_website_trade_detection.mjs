@@ -18,7 +18,9 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 const bundle = await build({
   stdin: {
     contents: `
-      export { readLocalShopBusinessTemplateId } from './product-onboarding-runtime.ts'
+      export {
+        readLocalShopBusinessTemplateId, readLocalSetupBusinessName,
+      } from './product-onboarding-runtime.ts'
       export {
         createSeedCommerce, installCommerceWorkingSampleCatalog, commerceWorkingSampleCatalogId,
       } from './commerce-workspace.ts'
@@ -38,7 +40,8 @@ const bundle = await build({
 })
 
 const {
-  readLocalShopBusinessTemplateId, createSeedCommerce, installCommerceWorkingSampleCatalog,
+  readLocalShopBusinessTemplateId, readLocalSetupBusinessName,
+  createSeedCommerce, installCommerceWorkingSampleCatalog,
   commerceWorkingSampleCatalogId, shopBusinessTemplates, shopBusinessTemplateCommerceItems,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
@@ -196,6 +199,57 @@ check(
 check(
   readLocalShopBusinessTemplateId(fakeStore({ [COMMERCE_KEY]: JSON.stringify(notATrade) })) === null,
   'but detection refuses it -- only a trade Shop actually offers is ever returned',
+)
+
+// --- the business name the owner already typed --------------------------------
+// Same failure, one field over: the owner types "Thiri Pharmacy" during Shop setup and the
+// website screen opens showing a sample shop called something else. Nothing breaks, but it
+// is the clearest possible signal that nothing they did was remembered.
+const SETUP_KEY = 'supermega.setup.v3'
+const setupRecord = (workspace) => JSON.stringify({
+  product: 'commerce', templateId: 'retail-wholesale', workspace,
+  owner: 'Business owner', entryPoint: 'Walk-in',
+})
+
+check(
+  readLocalSetupBusinessName(fakeStore({ [SETUP_KEY]: setupRecord('Thiri Pharmacy') })) === 'Thiri Pharmacy',
+  'the business name typed during onboarding is readable by another product',
+)
+check(readLocalSetupBusinessName(fakeStore()) === null, 'a device with no setup record yields no name')
+check(
+  readLocalSetupBusinessName(fakeStore({ [SETUP_KEY]: setupRecord('   ') })) === null,
+  'a blank name yields null rather than whitespace that would fail validation downstream',
+)
+check(
+  readLocalSetupBusinessName(fakeStore({ [SETUP_KEY]: '{not json' })) === null,
+  'malformed setup data yields no name rather than throwing into the setup screen',
+)
+check(readLocalSetupBusinessName(hostileStore) === null, 'a store that throws yields no name')
+
+// A record missing the field entirely, or holding a non-string, must not become a NAME. The
+// unnormalised version of this reader turns {} into the literal string "undefined" and shows
+// it to the owner as their business name -- found by deleting the normalisation step.
+for (const [record, label] of [
+  ['{}', 'a setup record with no business name at all'],
+  ['{"workspace":null}', 'a null business name'],
+  ['{"workspace":42}', 'a numeric business name'],
+  ['{"workspace":{"en":"Thiri"}}', 'an object where a name should be'],
+]) {
+  const read = readLocalSetupBusinessName(fakeStore({ [SETUP_KEY]: record }))
+  check(read === null, `${label} yields null, not a name -- got ${JSON.stringify(read)}`)
+}
+
+// Verbatim, not repaired. A stored name too long for a brief must stay too long so the owner
+// is shown the error, rather than being handed a silently shortened version of their name.
+const LONG = 'A'.repeat(200)
+check(
+  readLocalSetupBusinessName(fakeStore({ [SETUP_KEY]: setupRecord(LONG) })) === LONG,
+  'an over-long stored name is returned untouched, not truncated to fit',
+)
+const PADDED = '  Thiri Pharmacy  '
+check(
+  readLocalSetupBusinessName(fakeStore({ [SETUP_KEY]: setupRecord(PADDED) })) === PADDED,
+  "and surrounding spaces are preserved too -- trimming is the form's job, not this reader's",
 )
 
 // --- two guards that are redundant today, recorded rather than dressed up -----

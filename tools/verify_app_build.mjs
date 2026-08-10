@@ -3524,10 +3524,17 @@ if (!websiteSource.includes('starterSetupActive')
   // was set up as, in which case it opens on that trade's wording. openingState() is a pure
   // function of that prop -- the storage read lives in WebsiteProduct, which is why the
   // localStorage ban further down still holds for this component.
-  || !websiteStarterSetupSource.includes('const [opening] = useState(() => openingState(initialTradeId))')
+  || !websiteStarterSetupSource.includes('const [opening] = useState(() => openingState(initialTradeId, initialBusinessName))')
   || !websiteStarterSetupSource.includes('useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))')
   || !websiteStarterSetupSource.includes('initialTradeId?: ShopBusinessTemplateId | null')
-  || !websiteStarterSetupSource.includes("return { tradeId: '', brief: { ...SAMPLE_BRIEF }, detected: false }")
+  || !websiteStarterSetupSource.includes('initialBusinessName?: string | null')
+  // The owner's own business name must reach the brief verbatim. Repairing it here would
+  // hide a validation error behind a silently altered name.
+  || !websiteStarterSetupSource.includes('? initialBusinessName')
+  || websiteStarterSetupSource.includes('readLocalSetupBusinessName')
+  || !websiteSource.includes('const [shopBusinessName] = useState(readLocalSetupBusinessName)')
+  || !websiteSource.includes('initialBusinessName={shopBusinessName}')
+  || !websiteStarterSetupSource.includes("return { tradeId: '', brief: { ...SAMPLE_BRIEF, businessName }, detected: false }")
   // Stronger than the localStorage ban alone: naming the detection helper here at all would
   // mean this component had started reading device state for itself.
   || websiteStarterSetupSource.includes('readLocalShopBusinessTemplateId')

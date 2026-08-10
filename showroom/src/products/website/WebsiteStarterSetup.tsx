@@ -18,6 +18,9 @@ type WebsiteStarterSetupProps = {
   // storage API -- so the shell does the reading and this stays a pure function of its
   // props, which is also what makes every opening state reachable in a test.
   initialTradeId?: ShopBusinessTemplateId | null
+  // The business name the owner gave during onboarding, or null. Same rule: read by the
+  // shell, passed in here, and used verbatim rather than repaired.
+  initialBusinessName?: string | null
 }
 
 const SAMPLE_BRIEF: WebsiteStarterBrief = {
@@ -36,20 +39,29 @@ const SAMPLE_BRIEF: WebsiteStarterBrief = {
 // Pure: same prop in, same opening state out. Held in useState so it is computed once at
 // mount, which also means a Shop change in another tab cannot rewrite wording the owner is
 // halfway through editing.
-function openingState(initialTradeId: ShopBusinessTemplateId | null | undefined) {
-  if (!initialTradeId) return { tradeId: '', brief: { ...SAMPLE_BRIEF }, detected: false }
+function openingState(
+  initialTradeId: ShopBusinessTemplateId | null | undefined,
+  initialBusinessName: string | null | undefined,
+) {
+  // The owner's own name wins over the sample's whenever we have one.
+  const businessName = initialBusinessName && initialBusinessName.trim()
+    ? initialBusinessName
+    : SAMPLE_BRIEF.businessName
+  if (!initialTradeId) return { tradeId: '', brief: { ...SAMPLE_BRIEF, businessName }, detected: false }
   const drafted = websiteTradeBrief({
     tradeId: initialTradeId,
-    businessName: SAMPLE_BRIEF.businessName,
+    businessName,
     contactHref: SAMPLE_BRIEF.contactHref,
   })
   return drafted
     ? { tradeId: initialTradeId as string, brief: drafted, detected: true }
-    : { tradeId: '', brief: { ...SAMPLE_BRIEF }, detected: false }
+    : { tradeId: '', brief: { ...SAMPLE_BRIEF, businessName }, detected: false }
 }
 
-export function WebsiteStarterSetup({ onCreate, onViewSample, initialTradeId }: WebsiteStarterSetupProps) {
-  const [opening] = useState(() => openingState(initialTradeId))
+export function WebsiteStarterSetup({
+  onCreate, onViewSample, initialTradeId, initialBusinessName,
+}: WebsiteStarterSetupProps) {
+  const [opening] = useState(() => openingState(initialTradeId, initialBusinessName))
   const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))
   const [attempted, setAttempted] = useState(false)
   const [tradeId, setTradeId] = useState(opening.tradeId)

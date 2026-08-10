@@ -25,6 +25,7 @@ import {
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs'
+import { SETUP_KEY, normalizeSetup, type SetupState } from './product-setup'
 import {
   shopBusinessTemplate,
   shopBusinessTemplateCatalogCsv,
@@ -75,6 +76,30 @@ export function readLocalShopBusinessTemplateId(
     if (!installed) return null
     const match = shopBusinessTemplates.find((template) => template.id === installed)
     return match ? match.id : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The business name the owner typed during onboarding, or null if they have not given one.
+ *
+ * Same reasoning as readLocalShopBusinessTemplateId: they already answered this, so another
+ * product's setup screen should not open showing a sample business called something else.
+ * Seeing a stranger's shop name on your own setup screen is the clearest possible signal
+ * that nothing you did was remembered.
+ *
+ * Returned verbatim, NOT repaired. If a stored name is too long for a website brief the
+ * owner is shown that error rather than a silently shortened name.
+ */
+export function readLocalSetupBusinessName(storage?: OnboardingReadableStorage): string | null {
+  if (!storage && typeof window === 'undefined') return null
+  try {
+    const store = storage ?? window.localStorage
+    const raw = store.getItem(SETUP_KEY)
+    if (!raw) return null
+    const name = normalizeSetup(JSON.parse(raw) as SetupState).workspace
+    return name.trim().length > 0 ? name : null
   } catch {
     return null
   }
