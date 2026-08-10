@@ -333,7 +333,14 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
   )
   const pending = handoffs.filter((handoff) => !handoff.fulfilledBy)
   const request = pending[0]
-  const defaultItem = commerce.items.find((item) => item.onHand > 0) ?? commerce.items[0]
+  // Open on the SKU the reviewed BOM actually mapped this material to, not on whatever is
+  // first in the catalog. Plant promises the conversion is explicit and that no name matching
+  // is used; defaulting to an unrelated item is how wiper blades get issued against a request
+  // for engine oil. Falls back to the first stocked item when the BOM row was left unmapped.
+  const mappedItem = request?.shopSupply
+    ? commerce.items.find((item) => item.sku === request.shopSupply.sku)
+    : undefined
+  const defaultItem = mappedItem ?? commerce.items.find((item) => item.onHand > 0) ?? commerce.items[0]
   const [openRequestId, setOpenRequestId] = useState('')
   const [sku, setSku] = useState(defaultItem?.sku ?? '')
   const [stockQuantity, setStockQuantity] = useState(request && defaultItem ? defaultStockQuantity(request, defaultItem.onHand) : '1')
@@ -376,7 +383,7 @@ export function ShopProductionHandoff({ commerce, disabled, identity, onIssue }:
   const open = openRequestId === request.requestId
 
   function begin() {
-    const item = commerce.items.find((candidate) => candidate.onHand > 0) ?? commerce.items[0]
+    const item = mappedItem ?? commerce.items.find((candidate) => candidate.onHand > 0) ?? commerce.items[0]
     setOpenRequestId(request.requestId)
     setSku(item?.sku ?? '')
     setStockQuantity(item ? defaultStockQuantity(request, item.onHand) : '1')

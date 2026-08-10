@@ -4722,6 +4722,15 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !shopProductionHandoffUiSource.includes('Shop remains the only stock authority.')
   || !shopProductionHandoffUiSource.includes('Review the exact stock decrement. Nothing has been written yet.')
   || !shopProductionHandoffUiSource.includes('expectedInventoryHeadDigest')
+  // The Shop issue screen must open on the SKU the reviewed BOM mapped, not on whatever is
+  // first in the catalog. Plant states the conversion is explicit and that no name matching is
+  // used, but the handoff record used to DROP the mapping, so Shop defaulted to the first
+  // stocked item -- wiper blades offered against a request for engine oil. Pinned at source
+  // because building an issued-material execution fixture is a larger job than the fix;
+  // the behaviour itself was verified in a browser.
+  || !productionMaterialHandoffSource.includes("shopSupply: payload.kind === 'issue_material' && material.shopSupply")
+  || !shopProductionHandoffUiSource.includes('const mappedItem = request?.shopSupply')
+  || shopProductionHandoffUiSource.split('mappedItem ??').length - 1 !== 2
   || !shopProductionHandoffUiSource.includes('locationPicks.join')
   || !shopProductionHandoffUiSource.includes('exactWholeUnits <= available')
   || !shopProductionHandoffUiSource.includes('PLANT_ORDER_WORKSPACE_UPDATED_EVENT')
