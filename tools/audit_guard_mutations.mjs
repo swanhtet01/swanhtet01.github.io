@@ -23,6 +23,7 @@ const SCHEDULING = `${ROOT}/showroom/src/core/shop-service-scheduling.ts`
 const INTAKE = `${ROOT}/showroom/src/core/channel-order-intake.ts`
 const TRADEBRIEF = `${ROOT}/showroom/src/products/website/website-trade-brief.ts`
 const PLAYBOOK = `${ROOT}/docs/demo-playbooks/ecommerce.md`
+const PUBLICGEN = `${ROOT}/tools/create_public_vercel_output.mjs`
 const ONBOARDRUN = `${ROOT}/showroom/src/core/product-onboarding-runtime.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
@@ -122,6 +123,12 @@ const MUTATIONS = [
     "        ...mappedEntry('correction_payable'), ...base, amountMmk: correction.totalMmk,",
     "        ...mappedEntry('correction_payable'), ...base, amountMmk: correction.totalMmk + 1,",
     'a credit note leaves the accounting handoff unbalanced'],
+  ['test_public_landing_pages.mjs', PUBLICGEN,
+    '<link rel="canonical" href="${escapeHtml(url)}" />', '<!-- canonical removed -->',
+    'every public landing page ships without a canonical link'],
+  ['test_public_landing_pages.mjs', PUBLICGEN,
+    '<meta property="og:image" content="${escapeHtml(shareImageUrl)}" />', '<!-- og:image removed -->',
+    'every public landing page ships without a share-card image'],
   ['test_order_to_close_journey.mjs', COMMERCE,
     "    .filter((order) => order.status === 'completed'", "    .filter((order) => order.status === 'nope'",
     'a completed sale silently never reaches the daily close'],
@@ -192,6 +199,13 @@ const MUTATIONS = [
 ]
 
 const results = []
+// Some guards read GENERATED output (.vercel/output) rather than source, so a mutation to the
+// generator only reaches them after a rebuild. Without this step those entries would mutate,
+// run the guard against a stale artifact, and be reported NOT CAUGHT -- the audit would
+// quietly understate its own coverage.
+const REBUILD_BEFORE_GUARD = new Set(['test_public_landing_pages.mjs'])
+const rebuildPublicOutput = () => execFileSync('node', ['tools/create_public_vercel_output.mjs'], { cwd: ROOT, stdio: 'pipe', timeout: 240000 })
+
 for (const [guard, file, find, replace, defect] of MUTATIONS) {
   const backup = `${file}.mutation-backup`
   copyFileSync(file, backup)
@@ -202,6 +216,7 @@ for (const [guard, file, find, replace, defect] of MUTATIONS) {
       verdict = 'PATTERN-MISSING'
     } else {
       writeFileSync(file, source.replace(find, replace))
+      if (REBUILD_BEFORE_GUARD.has(guard)) rebuildPublicOutput()
       try {
         execFileSync('node', [`tools/${guard}`], { cwd: ROOT, stdio: 'pipe', timeout: 240000 })
         verdict = 'NOT CAUGHT'
@@ -212,6 +227,8 @@ for (const [guard, file, find, replace, defect] of MUTATIONS) {
   } finally {
     copyFileSync(backup, file)
     unlinkSync(backup)
+    // Regenerate too: otherwise a mutated artifact outlives the restored generator.
+    if (REBUILD_BEFORE_GUARD.has(guard)) rebuildPublicOutput()
   }
   results.push({ guard, defect, verdict })
   console.log(`${verdict === 'caught' ? 'OK  ' : '>>> '} ${verdict.padEnd(15)} ${guard.replace('test_', '').replace('.mjs', '').padEnd(34)} ${defect}`)
