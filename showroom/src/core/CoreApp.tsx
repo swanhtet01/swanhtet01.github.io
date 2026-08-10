@@ -279,7 +279,8 @@ import {
   type ShopProductionDemandSignal,
 } from './shop-production-demand'
 import { projectPlantOrder } from './plant-order-foundation'
-import { productionOrderPortfolioEntries } from './production-order-portfolio'
+import { productionOrderExecutionForJob, productionOrderPortfolioEntries } from './production-order-portfolio'
+import { projectProductionJobProgress, type ProductionJobProgress } from './production-job-progress'
 import { projectShopDemandIntelligence } from './shop-demand-intelligence'
 import { projectShopProcurementDecision, projectShopReplenishment } from './shop-replenishment'
 import {
@@ -8173,6 +8174,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const [shopDemandIssue, setShopDemandIssue] = useState('')
   const [selectedShopDemandDigest, setSelectedShopDemandDigest] = useState('')
   const jobDisclosureRef = useRef<HTMLDetailsElement>(null)
+  const plantBatchDisclosureRef = useRef<HTMLDetailsElement>(null)
   const plantJobIdInputRef = useRef<HTMLInputElement>(null)
   const [plantJobImportReview, setPlantJobImportReview] = useState<PlantJobImportReview | null>(null)
   const [plantJobImportSourceName, setPlantJobImportSourceName] = useState('')
@@ -8245,13 +8247,21 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const holdableJobs = production.jobs.filter((job) => !job.qualityHold && !job.closure)
   const selectedHoldJobId = holdableJobs.some((job) => job.id === holdJobId) ? holdJobId : holdableJobs[0]?.id ?? ''
   const selectedHoldJob = holdableJobs.find((job) => job.id === selectedHoldJobId)
+  const jobProgressById = useMemo(() => new Map(production.jobs.map((job) => [
+    job.id,
+    projectProductionJobProgress(job, productionOrderExecutionForJob(production, job.id), plantOrderScope),
+  ])), [plantOrderScope, production])
   const activeJobs = production.jobs
-    .filter((job) => !job.closure && job.output + (job.scrap ?? 0) < job.target)
+    .filter((job) => !jobProgressById.get(job.id)?.complete)
     .sort(compareProductionJobSchedule)
-  const completedJobs = production.jobs.filter((job) => Boolean(job.closure) || job.output + (job.scrap ?? 0) >= job.target)
-  const selectedJobId = activeJobs.some((job) => job.id === jobId) ? jobId : activeJobs[0]?.id ?? ''
-  const selectedJob = activeJobs.find((job) => job.id === selectedJobId)
-  const selectedRemaining = selectedJob ? selectedJob.target - selectedJob.output - (selectedJob.scrap ?? 0) : 0
+  const completedJobs = production.jobs.filter((job) => jobProgressById.get(job.id)?.complete)
+  const manualEntryJobs = activeJobs.filter((job) => jobProgressById.get(job.id)?.authority === 'workspace')
+  const selectedJobId = manualEntryJobs.some((job) => job.id === jobId) ? jobId : manualEntryJobs[0]?.id ?? ''
+  const selectedJob = manualEntryJobs.find((job) => job.id === selectedJobId)
+  const selectedRemaining = selectedJob ? jobProgressById.get(selectedJob.id)?.remainingQuantity ?? 0 : 0
+  const nextActiveJob = activeJobs[0]
+  const nextActiveJobProgress = nextActiveJob ? jobProgressById.get(nextActiveJob.id) : undefined
+  const nextActiveJobControlled = nextActiveJobProgress?.authority === 'controlled_order'
   const plantOutputDigestSource = useMemo(() => {
     try {
       return plantOutputEntryDigestSource(production)
@@ -8402,7 +8412,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       window.clearTimeout(transitionFallback)
     }
   }, [materialGuideOpen, outputOpen, selectedJobId])
-  const selectedMaterialJob = activeJobs.find((job) => job.id === materialDraft.jobId)
+  const selectedMaterialJob = manualEntryJobs.find((job) => job.id === materialDraft.jobId)
   const materialJobIsStale = Boolean(materialDraft.jobId && !selectedMaterialJob)
   const parsedMaterialQuantity = parseProductionMaterialQuantity(materialDraft.quantity)
   const materialQuantityError = parsedMaterialQuantity === null
@@ -8539,7 +8549,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : openDowntimeIntervals.length + openMaintenanceRecords.length
           ? 'Close maintenance records'
           : activeJobs.length
-            ? 'Record next job output'
+            ? nextActiveJobControlled ? 'Continue controlled batch' : 'Record next job output'
             : !plantHandoffReady
               ? 'Prepare shift close'
               : 'Add next Plant job'
@@ -8552,7 +8562,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : openDowntimeIntervals.length + openMaintenanceRecords.length
           ? 'Close maintenance work'
           : activeJobs.length
-            ? 'Record next output'
+            ? nextActiveJobControlled ? 'Continue controlled batch' : 'Record next output'
             : !plantHandoffReady
               ? 'Prepare shift close'
               : 'Plan next job'
@@ -8566,7 +8576,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   ] as const
   const plantLifecycleRows = [
     ['Plan', activeJobs.length ? `${activeJobs.length} active` : 'Add job'],
-    ['Execute', activeJobs[0] ? `${activeJobs[0].id} next` : 'No active job'],
+    ['Execute', nextActiveJob ? nextActiveJobControlled ? `${nextActiveJob.id} · ${nextActiveJobProgress?.controlledStatusLabel}` : `${nextActiveJob.id} next` : 'No active job'],
     ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
     ['Maintenance', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
     ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace'],
@@ -8574,13 +8584,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   ] as const
   const plantControlBoundary = 'Manager reviews production, quality, maintenance, material, and shift-close changes.'
   const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
-  const mesDispatchStation = activeJobs[0]?.line ?? selectedDowntimeMachine?.name ?? selectedMaintenanceMachine?.name ?? 'Plant floor'
+  const mesDispatchStation = nextActiveJob?.line ?? selectedDowntimeMachine?.name ?? selectedMaintenanceMachine?.name ?? 'Plant floor'
   const mesDispatchTarget = urgentIssueCount
     ? `${urgentIssueCount} urgent issue${urgentIssueCount === 1 ? '' : 's'}`
     : heldJobs[0]
       ? heldJobs[0].id
-      : activeJobs[0]
-        ? `${activeJobs[0].id} / ${(activeJobs[0].target - activeJobs[0].output - (activeJobs[0].scrap ?? 0)).toLocaleString()} left`
+      : nextActiveJob
+        ? `${nextActiveJob.id} / ${(nextActiveJobProgress?.remainingQuantity ?? 0).toLocaleString()} left`
         : plantHandoffReady
           ? 'Next plan'
           : 'Shift close'
@@ -8595,7 +8605,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           : openWcmCount
             ? 'Maintenance close'
             : activeJobs.length && !materialEntries.length
-              ? 'Trace start'
+              ? nextActiveJobControlled ? nextActiveJobProgress?.controlledStatusLabel ?? 'Controlled batch' : 'Trace start'
               : !plantHandoffReady
                 ? 'Shift close'
                 : 'None'
@@ -8747,7 +8757,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const currentShiftHasOutput = Boolean(canonicalShiftRef
     && currentShiftOutput.goodUnits > 0
     && currentShiftOutput.entryCount > 0)
-  const guidedPlantJobId = activeJobs[0]?.id ?? ''
+  const guidedPlantJobId = nextActiveJob?.id ?? ''
   const shiftCloseProblemCount = openIssues.filter((issue) => issue.kind === 'quality' || issue.severity === 'critical' || issue.severity === 'high').length
     + heldJobs.length
     + openWcmCount
@@ -8758,6 +8768,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ? 'approval'
       : immediatePlantBlockerCount
         ? 'problems'
+        : nextActiveJobControlled
+          ? 'batch'
         : activeJobs.length && !currentShiftHasOutput
           ? 'output'
           : currentShiftHasOutput && !currentShiftMaterialEntries.length
@@ -8782,6 +8794,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ? 'One Plant change needs approval'
       : plantTodayStep === 'problems'
         ? 'Clear shift blockers'
+        : plantTodayStep === 'batch'
+          ? 'Continue controlled batch'
         : plantTodayStep === 'material'
           ? 'Record materials used'
           : plantTodayStep === 'shift-close'
@@ -8797,6 +8811,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ? 'Review the change, owner, reason, and evidence.'
       : plantTodayStep === 'problems'
         ? `${shiftCloseProblemCount} quality or maintenance blocker${shiftCloseProblemCount === 1 ? '' : 's'} must be cleared before owner close.`
+        : plantTodayStep === 'batch'
+          ? `${nextActiveJob?.id} · ${nextActiveJobProgress?.controlledStatusLabel}. Continue with its reviewed BOM, routing, quality, and release evidence.`
         : plantTodayStep === 'material'
           ? `${canonicalShiftRef} has output. Record its materials before close.`
           : plantTodayStep === 'shift-close'
@@ -8807,8 +8823,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               ? 'Add an owned job with a due time.'
               : currentShiftClose
                 ? `${currentShiftClose.shiftRef} is closed. Record the next output.`
-                : activeJobs[0]
-                  ? `${activeJobs[0].id} is next by priority and due time.`
+                : nextActiveJob
+                  ? `${nextActiveJob.id} is next by priority and due time.`
                   : 'Choose a job and record first output.'
   const plantTodayAction = plantTodayStep === 'restore'
     ? 'Restore write access'
@@ -8816,6 +8832,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ? 'Finish approval'
       : plantTodayStep === 'problems'
         ? 'Review blockers'
+        : plantTodayStep === 'batch'
+          ? 'Open controlled batch'
         : plantTodayStep === 'material'
           ? 'Record materials used'
           : plantTodayStep === 'shift-close'
@@ -8955,6 +8973,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       disclosure.open = true
       navigate('/plant/?tab=production', { replace: true })
       window.setTimeout(focusPlantJobIdInput, 220)
+      return
+    }
+    if (focus === 'controlled-batch' && tab === 'production') {
+      setPlantBatchOpen(true)
+      navigate('/plant/?tab=production', { replace: true })
+      window.setTimeout(() => plantBatchDisclosureRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 220)
       return
     }
     if (focus === 'output' && tab === 'production') {
@@ -10391,12 +10415,21 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       navigate('/plant/?tab=control&focus=blocker')
       return
     }
-    if (plantTodayStep === 'material' && activeJobs[0]) {
+    if (plantTodayStep === 'batch' && nextActiveJob) {
+      if (tab !== 'production') {
+        navigate('/plant/?tab=production&focus=controlled-batch')
+        return
+      }
+      setPlantBatchOpen(true)
+      requestAnimationFrame(() => plantBatchDisclosureRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+      return
+    }
+    if (plantTodayStep === 'material' && manualEntryJobs[0]) {
       if (tab !== 'production') {
         navigate('/plant/?tab=production&focus=material-use')
         return
       }
-      openMaterialTrace(activeJobs[0], trigger)
+      openMaterialTrace(manualEntryJobs[0], trigger)
       return
     }
     if (plantTodayStep === 'shift-close') {
@@ -10411,12 +10444,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       openShiftCloseGuide()
       return
     }
-    if (plantTodayStep === 'output' && activeJobs[0]) {
+    if (plantTodayStep === 'output' && manualEntryJobs[0]) {
       if (tab !== 'production') {
         navigate('/plant/?tab=production&focus=output')
         return
       }
-      openJobOutput(activeJobs[0], trigger)
+      openJobOutput(manualEntryJobs[0], trigger)
       return
     }
     if (plantTodayStep === 'plan') {
@@ -10501,13 +10534,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
         <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
-        <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />
+        <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} progressById={jobProgressById} />
         {closedScheduleDraft ? <div className="order-draft-recovery plant-plan-recovery" data-plant-job-plan-recovery role="status">
           <div><strong>{closedScheduleDraft.draft.jobId} plan draft is still available</strong><small>{closedScheduleDraft.draft.owner.trim() || 'Owner blank'} · {productionJobPriorityLabels[closedScheduleDraft.draft.priority]} · due {closedScheduleDraft.draft.dueAt || 'blank'}. Restore once or discard; no schedule, dispatch, or production write occurred.</small></div>
           <div className="order-draft-recovery-actions"><button className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={undoClosedJobSchedule} ref={scheduleDraftRecoveryRef} type="button">Undo close</button><button className="text-link" onClick={discardClosedJobSchedule} type="button">Discard</button></div>
         </div> : null}
         {nextShopDemand ? <section aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'} className="stock-receipt-preview" data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'} data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>{nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'} · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} units</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} demand · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} gap · {nextShopDemand.sourceOrderIds.length} orders</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? nextShopDemand.sourceOrderIds.length ? 'Shop demand selected' : 'Replenishment selected' : nextShopDemand.sourceOrderIds.length ? 'Use Shop demand' : 'Plan replenishment'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
-        <CompletedJobHistory jobs={completedJobs} now={issueClock} />
+        <CompletedJobHistory jobs={completedJobs} now={issueClock} progressById={jobProgressById} />
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
           <section aria-label="Plant job CSV import" className="plant-job-import">
@@ -10534,7 +10567,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       <section aria-labelledby="plant-output-title" aria-modal={outputOpen} className={`core-panel output-panel${outputOpen ? ' is-open' : ''}`} id="plant-output-panel" onKeyDown={handleOutputDialogKeyDown} ref={outputPanelRef} role="dialog">
         <div className="plant-output-head"><div><span className="core-eyebrow">{materialGuideOpen ? 'Materials used' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Record materials used' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
         {outputOpen && !materialGuideOpen ? <form autoComplete="off" className="core-form compact-form" id="plant-output-form" noValidate onSubmit={recordOutput}>
-          <label>Job<select aria-invalid={outputValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => { setJobId(event.target.value); setPlantOutputRecoveryArmed(true); clearOutputValidation() }}>{activeJobs.length ? activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(job.target - job.output - (job.scrap ?? 0)).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No active jobs</option>}</select></label>
+          <label>Job<select aria-invalid={outputValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !manualEntryJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => { setJobId(event.target.value); setPlantOutputRecoveryArmed(true); clearOutputValidation() }}>{manualEntryJobs.length ? manualEntryJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(jobProgressById.get(job.id)?.remainingQuantity ?? 0).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No manual-entry jobs</option>}</select></label>
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => { setOutputKind(event.target.value as ProductionOutputKind); setPlantOutputRecoveryArmed(true) }}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
           <div className="form-row"><label>Shift reference<input aria-describedby="plant-output-validation" aria-invalid={outputValidationField === 'shift'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} ref={outputShiftInputRef} required value={shiftRef} onChange={(event) => { setShiftRef(event.target.value); setPlantOutputRecoveryArmed(true); if (outputValidationField === 'shift') clearOutputValidation() }} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input aria-describedby="plant-output-quantity-help plant-output-validation" aria-invalid={outputValidationField === 'quantity'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" ref={outputQuantityRef} step="1" type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPlantOutputRecoveryArmed(true); if (outputValidationField === 'quantity') clearOutputValidation() }} /><small className="plant-output-boundary" id="plant-output-quantity-help">{selectedJob ? `Enter 1 to ${selectedRemaining.toLocaleString()} whole units. Review does not record output.` : 'Choose an active job first.'}</small></label></div>
           <p aria-live="assertive" className="form-notice plant-output-validation" id="plant-output-validation">{outputValidationIssue}</p>
@@ -10549,10 +10582,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <details className="compact-disclosure production-history" onToggle={(event) => setMaterialGuideOpen(event.currentTarget.open)} open={materialGuideOpen} ref={materialDisclosureRef}>
           <summary>Materials used <span>{materialEntries.length}</span></summary>
           <form autoComplete="off" className="core-form compact-form" noValidate onSubmit={recordMaterialUse}>
-            <label>Job<select aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} onChange={(event) => { setMaterialDraft((current) => ({ ...current, jobId: event.target.value })); clearMaterialValidation('job') }} ref={materialJobSelectRef} value={materialDraft.jobId}>
+            <label>Job<select aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !manualEntryJobs.length} onChange={(event) => { setMaterialDraft((current) => ({ ...current, jobId: event.target.value })); clearMaterialValidation('job') }} ref={materialJobSelectRef} value={materialDraft.jobId}>
               {!materialDraft.jobId ? <option value="">Choose an active job</option> : null}
               {materialJobIsStale ? <option disabled value={materialDraft.jobId}>{materialDraft.jobId} · no longer active</option> : null}
-              {activeJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>)}
+              {manualEntryJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>)}
             </select></label>
             {materialJobIsStale ? <p className="form-notice" role="alert">The selected job {materialDraft.jobId} is no longer active. Your draft is preserved; choose another job before review.</p> : null}
             <label>Material used<input aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'material'} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={120} onChange={(event) => { setMaterialDraft((current) => ({ ...current, materialRef: event.target.value })); clearMaterialValidation('material') }} placeholder="e.g. Resin A or RM-001" ref={materialRefInputRef} required value={materialDraft.materialRef} /></label>
@@ -10571,7 +10604,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               setMaterialDraft((current) => ({ ...current, materialRef: 'RM-SAMPLE-01', materialLot: 'LOT-SAMPLE-01', quantity: '1', materialUnit: 'pcs' }))
               setNotice('Sample material details filled locally. Review and confirm them before any Plant record changes.')
             }} type="button">Use sample material</button> : null}
-            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} type="submit">Review material record</button>
+            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !manualEntryJobs.length} type="submit">Review material record</button>
             <p className="panel-copy">Records one material and quantity against this job. Stock, purchasing, costing, accounting, and equipment stay unchanged.</p>
           </form>
           {recentMaterialEntries.length ? <div className="issue-list">{recentMaterialEntries.map((entry) => <article key={entry.actionId}>
@@ -10582,7 +10615,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </details>
       </section>
     </div>
-    <details className="plant-batch-disclosure" onToggle={(event) => setPlantBatchOpen(event.currentTarget.open)} open={plantBatchOpen}>
+    <details className="plant-batch-disclosure" onToggle={(event) => setPlantBatchOpen(event.currentTarget.open)} open={plantBatchOpen} ref={plantBatchDisclosureRef}>
       <summary><span>Controlled batch execution</span><small>BOM, routing, material, quality, and release</small></summary>
       <div className="plant-batch-content">
         {plantBatchOpen ? <Suspense fallback={<p className="form-notice" role="status">Loading batch execution…</p>}><PlantOrderFoundation actor={managedIdentity?.userId ?? 'Local Plant supervisor'} commerceState={relatedCommerce} disabled={!productionCanWrite || Boolean(pendingAction)} industryPackId={plantIndustryPackId} jobs={production.jobs} key={`plant-order:${plantOrderScopeWorkspaceId}:${plantIndustryPackId}`} onProductionCommand={mutateProduction} productionState={production} scope={plantOrderScope} /></Suspense> : null}
@@ -10768,27 +10801,29 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   return null
 }
 
-function JobList({ disabled = false, jobs, now, onOutput, onSchedule }: { disabled?: boolean; jobs: ProductionJob[]; now: number; onOutput?: (job: ProductionJob, trigger: HTMLButtonElement) => void; onSchedule?: (job: ProductionJob, trigger: HTMLButtonElement) => void }) {
+function JobList({ disabled = false, jobs, now, onOutput, onSchedule, progressById }: { disabled?: boolean; jobs: ProductionJob[]; now: number; onOutput?: (job: ProductionJob, trigger: HTMLButtonElement) => void; onSchedule?: (job: ProductionJob, trigger: HTMLButtonElement) => void; progressById?: ReadonlyMap<string, ProductionJobProgress> }) {
   if (!jobs.length) return <Empty>No active jobs. Add one.</Empty>
   return <div className="job-list">{jobs.map((job) => {
-    const scrap = job.scrap ?? 0
-    const accounted = job.output + scrap
+    const projected = progressById?.get(job.id)
+    const scrap = projected?.scrapQuantity ?? job.scrap ?? 0
+    const accounted = projected?.progressedQuantity ?? job.output + scrap
     const progress = Math.min(100, Math.round((accounted / job.target) * 100))
+    const controlled = projected?.authority === 'controlled_order'
     const scheduled = Boolean(job.priority && job.dueAt)
     const overdue = Boolean(!job.closure && job.dueAt && Date.parse(job.dueAt) <= now)
     const scheduleLabel = scheduled
       ? `${productionJobPriorityLabels[job.priority ?? 'normal']} · ${overdue ? 'OVERDUE ' : job.closure ? 'Was due ' : 'Due '}${formatIssueDue(job.dueAt ?? '')}`
       : 'Legacy schedule missing'
     const ownerLabel = job.owner ? `Owner ${job.owner}` : 'Legacy owner missing'
-    return <article id={plantJobTargetId(job.id)} key={job.id} tabIndex={-1}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{ownerLabel} · {scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} remaining</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{!job.closure && accounted < job.target && (onOutput || onSchedule) ? <div className="job-row-actions">{onOutput ? <button aria-controls="plant-output-panel" className="text-link job-output-link" disabled={disabled} onClick={(event) => onOutput(job, event.currentTarget)} type="button">Record output</button> : null}{onSchedule ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}</div> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span><small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small></div></article>
+    return <article data-job-progress-authority={projected?.authority ?? 'workspace'} data-job-progress-complete={projected?.complete ? 'true' : 'false'} id={plantJobTargetId(job.id)} key={job.id} tabIndex={-1}><div><span>{job.id} · {job.line}{job.qualityHold ? ' · QUALITY HOLD' : ''}{job.closure ? ' · CLOSED SHORT' : ''}</span><strong>{job.product}</strong><small className={`job-schedule${overdue ? ' overdue' : ''}`} data-priority={job.priority ?? 'legacy'}>{ownerLabel} · {scheduleLabel}</small>{job.closure ? <small>Closed {formatIssueDue(job.closure.closedAt)} by {job.closure.closedBy} · {job.closure.shiftRef} · {job.closure.remainingUnits.toLocaleString()} remaining</small> : null}{job.qualityHold ? <small>Held by {job.qualityHold.heldBy} · Evidence: {job.qualityHold.evidenceReference}</small> : null}{!projected?.complete && (onOutput || onSchedule) ? <div className="job-row-actions">{onOutput && !controlled ? <button aria-controls="plant-output-panel" className="text-link job-output-link" disabled={disabled} onClick={(event) => onOutput(job, event.currentTarget)} type="button">Record output</button> : null}{controlled ? <small>Continue in controlled batch</small> : null}{onSchedule ? <button className="text-link" disabled={disabled} onClick={(event) => onSchedule(job, event.currentTarget)} type="button">Change plan</button> : null}</div> : null}</div><div className="job-progress"><span><i style={{ width: `${progress}%` }} /></span>{controlled && projected ? <small>{projected.acceptedQuantity.toLocaleString()} accepted · {projected.rejectedQuantity.toLocaleString()} rejected{projected.scrapQuantity ? ` · ${projected.scrapQuantity.toLocaleString()} scrap` : ''}{projected.awaitingInspectionQuantity ? ` · ${projected.awaitingInspectionQuantity.toLocaleString()} awaiting inspection` : ''} · {accounted.toLocaleString()} / {job.target.toLocaleString()} produced · {projected.controlledStatusLabel}</small> : <small>{job.output.toLocaleString()} good · {scrap.toLocaleString()} scrap · {accounted.toLocaleString()} / {job.target.toLocaleString()}{job.closure ? ` · ${job.closure.remainingUnits.toLocaleString()} closed short` : ''}</small>}</div></article>
   })}</div>
 }
 
-function CompletedJobHistory({ jobs, now }: { jobs: ProductionJob[]; now: number }) {
+function CompletedJobHistory({ jobs, now, progressById }: { jobs: ProductionJob[]; now: number; progressById?: ReadonlyMap<string, ProductionJobProgress> }) {
   if (!jobs.length) return null
   return <details className="compact-disclosure production-history">
     <summary>Finished jobs <span>{jobs.length}</span></summary>
-    <JobList jobs={jobs.slice(0, 8)} now={now} />
+    <JobList jobs={jobs.slice(0, 8)} now={now} progressById={progressById} />
     {jobs.length > 8 ? <p>Showing the latest 8 completed jobs.</p> : null}
   </details>
 }

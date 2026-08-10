@@ -160,6 +160,7 @@ const sharedMasterDataSource = await readFile(resolve(root, 'showroom', 'src', '
 const channelOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'ChannelOrderIntake.tsx'), 'utf8')
 const plantOrderSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts'), 'utf8')
 const plantOrderUiSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'PlantOrderFoundation.tsx'), 'utf8')
+const productionJobProgressSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-job-progress.ts'), 'utf8')
 const plantOrderPythonSource = await readFile(resolve(root, 'supermega_runtime', 'plant_order_foundation.py'), 'utf8')
 const plantIndustryPacksSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'plant-industry-packs.ts'), 'utf8')
 const productionMaterialHandoffSource = await readFile(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts'), 'utf8')
@@ -2148,7 +2149,7 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !plantShiftCloseFocusContract.includes('input.focus({ preventScroll: true })')
   || !plantShiftCloseFocusContract.includes("navigate('/plant/?tab=control', { replace: true })")
   || plantShiftCloseFocusContract.includes("querySelector<HTMLInputElement>('input')")
-  || !coreSource.includes('openMaterialTrace(activeJobs[0], trigger)')
+  || !coreSource.includes('openMaterialTrace(manualEntryJobs[0], trigger)')
   || !coreSource.includes("shiftCloseReady ? 'Review shift close' : 'Prepare shift close'")
   || !coreSource.includes('if (shiftCloseReady) {\n        reviewShiftClose(trigger)')
   || !coreSource.includes('openShiftCloseGuide()')
@@ -2288,7 +2289,8 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes("['Safety', 'Review first']")
   || (coreSource.match(/\{plantComplianceDossier\}/g) || []).length !== 1
   || !coreSource.includes("['Plan', activeJobs.length ? `${activeJobs.length} active` : 'Add job']")
-  || !coreSource.includes("['Execute', activeJobs[0] ? `${activeJobs[0].id} next` : 'No active job']")
+  || !coreSource.includes("['Execute', nextActiveJob ? nextActiveJobControlled ?")
+  || !coreSource.includes('nextActiveJobProgress?.controlledStatusLabel')
   || !coreSource.includes("['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace']")
   || !coreSource.includes('aria-label="Plant control"')
   || !coreSource.includes('Plant control')
@@ -2301,7 +2303,7 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes('detail: `Plant next step: ${plantTodayStep}`')
   || !coreSource.includes('Finish or cancel the pending Plant review before starting another step.')
   || !coreSource.includes("const workspace = document.querySelector('.control-workspace')")
-  || !coreSource.includes('openJobOutput(activeJobs[0], trigger)')
+  || !coreSource.includes('openJobOutput(manualEntryJobs[0], trigger)')
   || !coreSource.includes('jobDisclosureRef.current.open = true')
   || coreSource.includes('aria-label="Plant Autopilot"')
   || coreSource.includes('Plant Autopilot')
@@ -5439,6 +5441,16 @@ if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.orde
   || !plantOrderSource.includes("mode: 'exclusive'")
   || !plantOrderSource.includes('Plant order write verification failed.')) fail('plant_order_foundation_contract_missing')
 if (['fetch(', 'supabase', 'openai', 'anthropic'].some((marker) => plantOrderSource.toLowerCase().includes(marker))) fail('plant_order_foundation_external_side_effect_added')
+if (!productionJobProgressSource.includes('export function projectProductionJobProgress(')
+  || !productionJobProgressSource.includes("authority: 'workspace' | 'controlled_order'")
+  || !productionJobProgressSource.includes("projection.status === 'released_to_stock'")
+  || !productionJobProgressSource.includes('productionJobPlanSourceDigest(plantOrderScope, job) === plan.sourceDigest')
+  || ['fetch(', 'localstorage', 'sessionstorage', 'setitem(', 'removeitem('].some((marker) => productionJobProgressSource.toLowerCase().includes(marker))) fail('production_job_progress_projection_boundary_missing')
+if (!coreSource.includes('const manualEntryJobs = activeJobs.filter(')
+  || !coreSource.includes("jobProgressById.get(job.id)?.authority === 'workspace'")
+  || !coreSource.includes('data-job-progress-authority=')
+  || !coreSource.includes('Continue in controlled batch')
+  || !coreSource.includes("plantTodayStep === 'batch'")) fail('production_job_progress_ui_alignment_missing')
 if (!coreSource.includes('<PlantOrderFoundation')
   || !coreSource.includes("lazy(() => import('./PlantOrderFoundation')")
   || !coreSource.includes('className="plant-batch-disclosure"')
@@ -6946,7 +6958,7 @@ if (!productionSource.includes('recordProductionMaterialConsumption')
   || !coreSource.includes('{materialValidationIssue ? <p aria-live="assertive"')
   || !coreSource.includes('noValidate onSubmit={recordMaterialUse}')
   || !coreSource.includes("setMaterialDraft((current) => ({ ...current, jobId: job.id }))")
-  || !coreSource.includes('disabled={!productionCanWrite || Boolean(pendingAction) || !activeJobs.length} type="submit">Review material record</button>')
+  || !coreSource.includes('disabled={!productionCanWrite || Boolean(pendingAction) || !manualEntryJobs.length} type="submit">Review material record</button>')
   || !coreSource.includes('can be stored exactly (maximum 9,007,199,254,740.99)')
   || !coreSource.includes('{materialDraft.jobId} · no longer active')
   || !coreSource.includes('min="0.001"')
@@ -7397,8 +7409,8 @@ if (!productionJobsContract.includes('This shift:')
   || coreSource.includes('placeholder="2026-07-24 Day"')
   || !coreSource.includes("Unassigned (legacy)")) fail('production_shift_output_ui_missing')
 if (!productionJobsContract.includes('Jobs to finish')
-  || !productionJobsContract.includes('<JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} />')
-  || !productionJobsContract.includes('<CompletedJobHistory jobs={completedJobs} now={issueClock} />')
+  || !productionJobsContract.includes('<JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} progressById={jobProgressById} />')
+  || !productionJobsContract.includes('<CompletedJobHistory jobs={completedJobs} now={issueClock} progressById={jobProgressById} />')
   || !productionJobsContract.includes('Set owner, priority, and due time. Confirm reason and source in review.')
   || !productionJobsContract.includes('Results are append-only.')
   || !productionJobsContract.includes('{job.id} · {job.product} · {job.line}')
@@ -7460,7 +7472,8 @@ if (!productionPageContract.includes('const outputJobSelectRef = useRef<HTMLSele
   || !coreSource.includes('aria-controls="plant-output-panel"')
   || !coreSource.includes('className="text-link job-output-link"')
   || !coreSource.includes('>Record output</button>')
-  || !productionJobListContract.includes('<article id={plantJobTargetId(job.id)} key={job.id} tabIndex={-1}>')
+  || !productionJobListContract.includes('data-job-progress-authority={projected?.authority ?? \'workspace\'}')
+  || !productionJobListContract.includes('id={plantJobTargetId(job.id)} key={job.id} tabIndex={-1}>')
   || !coreCssSource.includes('.job-list .job-row-actions')
   || !coreCssSource.includes('.job-list .job-row-actions .job-output-link')
   || !coreCssSource.includes('.production-operation-module > .production-view { min-height: clamp(420px,62vh,620px); flex: 0 0 auto; grid-template-columns: minmax(0,1fr); }')
@@ -8998,6 +9011,7 @@ async function verifyPlantOrderRuntime() {
     const materialHandoff = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-material-handoff.ts')).href}?plant-mrp-verify=${Date.now()}`)
     const orderPortfolio = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-order-portfolio.ts')).href}?plant-portfolio-verify=${Date.now()}`)
     const productionWorkspace = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?shop-replenishment-production-verify=${Date.now()}`)
+    const productionJobProgress = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-job-progress.ts')).href}?plant-job-progress-verify=${Date.now()}`)
     const replenishment = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-replenishment.ts')).href}?shop-replenishment-verify=${Date.now()}`)
     const shopInventory = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-inventory-foundation.ts')).href}?shop-supplier-policy-verify=${Date.now()}`)
     const proof = (sequence, label) => ({
@@ -9673,6 +9687,71 @@ async function verifyPlantOrderRuntime() {
     result = model.releasePlantOrderBatch(result.state, { qualityReleaseId: 'QREL-20260726-001', outputBatchId: 'BATCH-20260726-401', inspectionId: 'INSP-20260726-001', proof: proof(8, 'authorized batch release to stock'), expectedHeadDigest: result.state.headDigest })
     const finalProjection = model.projectPlantOrder(result.state)
     assert(result.state.headDigest === 'sha256:471e2d9f9bfe735f78e22759fc604be26c2307a282b61a392923a2317d5f2743' && finalProjection.status === 'released_to_stock' && finalProjection.metrics.acceptedQuantity === 10, 'plant_order_batch_release_head_or_status_drifted')
+
+    const progressScope = 'plant:progress-verifier'
+    const progressJob = { id: 'JOB-PROGRESS-001', line: 'Pilot line', product: 'Progress pilot', target: 3, output: 1, scrap: 0, owner: 'Plant owner', priority: 'normal', dueAt: '2026-07-27T09:00:00+06:30' }
+    const legacyProgress = productionJobProgress.projectProductionJobProgress(progressJob, null, progressScope)
+    assert(legacyProgress.authority === 'workspace'
+      && legacyProgress.acceptedQuantity === 1
+      && legacyProgress.progressedQuantity === 1
+      && legacyProgress.remainingQuantity === 2
+      && legacyProgress.complete === false,
+    'production_job_legacy_progress_changed')
+    const progressPlan = model.buildPlantOrderPlan({
+      planId: 'PLN-PROGRESS-001',
+      sourceDigest: productionWorkspace.productionJobPlanSourceDigest(progressScope, progressJob),
+      job: { jobId: progressJob.id, product: progressJob.product, targetQuantity: 2, outputBatchId: 'BATCH-PROGRESS-001' },
+      materials: [{ materialId: 'MAT-PROGRESS-001', name: 'Progress material', unit: 'pcs', quantityPerUnitMilli: 1_000 }],
+      workCentres: [{ workCentreId: 'WC-PROGRESS-01', name: 'Progress centre' }],
+      routing: [{ operationId: 'OP-PROGRESS-10', sequence: 1, name: 'Progress operation', workCentreId: 'WC-PROGRESS-01', minutesPerUnitMilli: 1_000 }],
+    })
+    let progressState = model.applyPlantOrderPlan(model.createEmptyPlantOrderState(), progressPlan, proof(51, 'reviewed progress plan'), model.EMPTY_PLANT_ORDER_DIGEST).state
+    progressState = model.checkPlantOrderAvailability(progressState, {
+      checkId: 'CHK-PROGRESS-001', sourceDigest: model.plantOrderEvidenceDigest({ material: 2_000, centre: 2 }),
+      materials: [{ materialId: 'MAT-PROGRESS-001', inputLotId: 'LOT-PROGRESS-001', availableQuantityMilli: 2_000 }],
+      workCentres: [{ workCentreId: 'WC-PROGRESS-01', availableMinutes: 2 }],
+      proof: proof(52, 'checked progress availability'), expectedHeadDigest: progressState.headDigest,
+    }).state
+    progressState = model.releasePlantOrder(progressState, { releaseId: 'REL-PROGRESS-001', availabilityCheckId: 'CHK-PROGRESS-001', proof: proof(53, 'released progress order'), expectedHeadDigest: progressState.headDigest }).state
+    progressState = model.issuePlantOrderMaterial(progressState, { issueId: 'ISSUE-PROGRESS-001', materialId: 'MAT-PROGRESS-001', inputLotId: 'LOT-PROGRESS-001', quantityMilli: 2_000, proof: proof(54, 'issued progress material'), expectedHeadDigest: progressState.headDigest }).state
+    progressState = model.recordPlantOrderOutput(progressState, { outputId: 'OUT-PROGRESS-001', outputBatchId: 'BATCH-PROGRESS-001', quantity: 2, proof: proof(55, 'recorded progress output'), expectedHeadDigest: progressState.headDigest }).state
+    const progressStateBeforeProjection = JSON.stringify(progressState)
+    const awaitingProgress = productionJobProgress.projectProductionJobProgress(progressJob, progressState, progressScope)
+    assert(awaitingProgress.authority === 'controlled_order'
+      && awaitingProgress.bindingCurrent === true
+      && awaitingProgress.acceptedQuantity === 1
+      && awaitingProgress.awaitingInspectionQuantity === 2
+      && awaitingProgress.progressedQuantity === 3
+      && awaitingProgress.remainingQuantity === 0
+      && awaitingProgress.complete === false
+      && awaitingProgress.controlledStatus === 'inspection_due',
+    'production_job_uninspected_output_mislabeled_or_completed')
+    assert(JSON.stringify(progressState) === progressStateBeforeProjection, 'production_job_progress_projection_mutated_execution')
+    const unrelatedProgress = productionJobProgress.projectProductionJobProgress({ ...progressJob, id: 'JOB-PROGRESS-OTHER' }, progressState, progressScope)
+    assert(unrelatedProgress.authority === 'workspace' && unrelatedProgress.progressedQuantity === 1, 'production_job_progress_used_mismatched_job')
+    progressState = model.inspectPlantOrderOutput(progressState, { inspectionId: 'INSP-PROGRESS-001', outputBatchId: 'BATCH-PROGRESS-001', inspectedQuantity: 2, acceptedQuantity: 2, rejectedQuantity: 0, result: 'pass', proof: proof(56, 'accepted progress output'), expectedHeadDigest: progressState.headDigest }).state
+    const acceptedProgress = productionJobProgress.projectProductionJobProgress(progressJob, progressState, progressScope)
+    assert(acceptedProgress.acceptedQuantity === 3
+      && acceptedProgress.rejectedQuantity === 0
+      && acceptedProgress.awaitingInspectionQuantity === 0
+      && acceptedProgress.complete === false
+      && acceptedProgress.controlledStatus === 'ready_to_release',
+    'production_job_accepted_output_completed_before_release')
+    progressState = model.releasePlantOrderBatch(progressState, { qualityReleaseId: 'QREL-PROGRESS-001', outputBatchId: 'BATCH-PROGRESS-001', inspectionId: 'INSP-PROGRESS-001', proof: proof(57, 'released progress batch'), expectedHeadDigest: progressState.headDigest }).state
+    const releasedProgress = productionJobProgress.projectProductionJobProgress(progressJob, progressState, progressScope)
+    assert(releasedProgress.acceptedQuantity === 3
+      && releasedProgress.progressedQuantity === 3
+      && releasedProgress.remainingQuantity === 0
+      && releasedProgress.complete === true
+      && releasedProgress.controlledStatusLabel === 'Released to stock',
+    'production_job_released_batch_not_completed')
+    const staleProgress = productionJobProgress.projectProductionJobProgress({ ...progressJob, output: 2 }, progressState, progressScope)
+    assert(staleProgress.authority === 'controlled_order'
+      && staleProgress.bindingCurrent === false
+      && staleProgress.progressedQuantity === 2
+      && staleProgress.complete === false
+      && staleProgress.controlledStatusLabel === 'Batch plan needs reconciliation',
+    'production_job_stale_binding_was_merged')
     const tampered = JSON.parse(JSON.stringify(result.state)); tampered.commands[3].payload.quantityMilli = 1
     assertThrows(() => model.validatePlantOrderState(tampered), 'plant_order_tampered_chain_validated')
 
@@ -22059,8 +22138,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 108 KB allowance includes reviewed Plant-to-Shop SKU, conversion, and reserve enforcement; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_910_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 112 KB allowance includes reviewed Plant-to-Shop supply enforcement and controlled-batch job progress alignment; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_914_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
