@@ -24,6 +24,7 @@ const bundle = await build({
   stdin: {
     contents: `
       export { plantIndustryPacks, plantIndustryPackSetup } from './plant-industry-packs.ts'
+      export { clientImportTemplate } from './client-onboarding.ts'
       export { buildPlantOrderEffectivePlan } from './plant-order-foundation.ts'
     `,
     resolveDir: 'showroom/src/core',
@@ -37,7 +38,7 @@ const bundle = await build({
   logLevel: 'error',
 })
 
-const { plantIndustryPacks, plantIndustryPackSetup, buildPlantOrderEffectivePlan } =
+const { plantIndustryPacks, plantIndustryPackSetup, buildPlantOrderEffectivePlan, clientImportTemplate } =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -47,14 +48,25 @@ function check(condition, label) {
 }
 
 const SOURCE_DIGEST = `sha256:${'a'.repeat(64)}`
-const JOB = { id: 'JOB-001', line: 'Line A' }
+// This was a fixed { id: 'JOB-001' } fed to all five packs, so it proved only that ONE hand-written
+// job code plans. It hid that four of the five SHIPPED pack samples seed codes the plan contract
+// rejects outright -- BATCH-001, FOOD-001, STYLE-001, BUILD-001 -- because plant-order-foundation.ts
+// requires a JOB- prefix (identifier(..., 'JOB') at :551 and :713). A food or apparel plant could
+// import its own sample and then not plan the batch its pack's headline workflow promises.
+// Each pack is now planned with the job code IT actually ships.
+const seededJob = (packId) => {
+  const row = clientImportTemplate('production', undefined, { plantIndustryPackId: packId })
+    .split(/\r?\n/)[1].split(',')
+  return { id: row[0].trim(), line: row[4].trim() }
+}
+const seededJobCode = (packId) => seededJob(packId).id
 
 check(plantIndustryPacks.length >= 5, `Plant ships at least five industry packs, got ${plantIndustryPacks.length}`)
 
 const seenPrefixes = new Set()
 
 for (const pack of plantIndustryPacks) {
-  const setup = plantIndustryPackSetup(pack.id, JOB)
+  const setup = plantIndustryPackSetup(pack.id, seededJob(pack.id))
 
   // The screen pre-fills this exact value, so it is the one that has to validate.
   check(
@@ -73,7 +85,7 @@ for (const pack of plantIndustryPacks) {
       effectiveFrom: '2026-07-25T00:00:00.000+06:30',
       effectiveUntil: '2026-08-31T23:59:00.000+06:30',
       job: {
-        jobId: JOB.id,
+        jobId: seededJobCode(pack.id),
         product: 'Finished product A',
         targetQuantity: 300,
         outputBatchId: setup.outputBatchId,

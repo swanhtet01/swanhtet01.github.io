@@ -1013,10 +1013,10 @@ const websiteIndustrySampleCsv: Readonly<Record<ShopIndustryPackId, string>> = {
 
 const plantIndustrySampleCsv: Readonly<Record<PlantIndustryPackId, string>> = {
   'general-manufacturing': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-001,Finished product A,500,{{dueDate14}},Line A\r\nJOB-002,Finished product B,300,{{dueDate21}},Line B\r\n',
-  'batch-process': 'job_code,product_name,target_quantity,due_date,production_line\r\nBATCH-001,Process batch A,100,{{dueDate14}},Process Line 1\r\nBATCH-002,Process batch B,120,{{dueDate21}},Process Line 2\r\n',
-  'food-beverage': 'job_code,product_name,target_quantity,due_date,production_line\r\nFOOD-001,Chili sauce batch,200,{{dueDate14}},Batch Kitchen\r\nFOOD-002,Juice batch,300,{{dueDate21}},Filling Line\r\n',
-  apparel: 'job_code,product_name,target_quantity,due_date,production_line\r\nSTYLE-001,Cotton shirt style,400,{{dueDate14}},Sewing Line 1\r\nSTYLE-002,Work trouser style,250,{{dueDate21}},Sewing Line 2\r\n',
-  assembly: 'job_code,product_name,target_quantity,due_date,production_line\r\nBUILD-001,Assembly model A,120,{{dueDate14}},Assembly Cell 1\r\nBUILD-002,Assembly model B,80,{{dueDate21}},Assembly Cell 2\r\n',
+  'batch-process': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-BATCH-001,Process batch A,100,{{dueDate14}},Process Line 1\r\nJOB-BATCH-002,Process batch B,120,{{dueDate21}},Process Line 2\r\n',
+  'food-beverage': 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-FOOD-001,Chili sauce batch,200,{{dueDate14}},Batch Kitchen\r\nJOB-FOOD-002,Juice batch,300,{{dueDate21}},Filling Line\r\n',
+  apparel: 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-STYLE-001,Cotton shirt style,400,{{dueDate14}},Sewing Line 1\r\nJOB-STYLE-002,Work trouser style,250,{{dueDate21}},Sewing Line 2\r\n',
+  assembly: 'job_code,product_name,target_quantity,due_date,production_line\r\nJOB-BUILD-001,Assembly model A,120,{{dueDate14}},Assembly Cell 1\r\nJOB-BUILD-002,Assembly model B,80,{{dueDate21}},Assembly Cell 2\r\n',
 }
 
 function currentYangonDate() {
