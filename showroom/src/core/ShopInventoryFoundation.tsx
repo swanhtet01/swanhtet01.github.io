@@ -406,9 +406,6 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       )
       setSetupReview(null)
       setSetupOpen(false)
-      setNotice(identity
-        ? 'Two-location stock is now confirmed in Company Shop.'
-        : 'Two-location stock is now part of this Shop record. No supplier or accounting action was sent.')
       onSetupComplete(primaryLocation)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Location setup was not confirmed.')

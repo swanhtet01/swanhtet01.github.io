@@ -1236,10 +1236,11 @@ function ShopProductArtwork({ kind }: { kind: number }) {
   return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" />{artwork}</svg>
 }
 
-function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount, sampleCatalogActive, scope }: {
+function ShopCounter({ disabled, industryPack, items, locationLabel, lowStockCount, onReview, openOrderCount, sampleCatalogActive, scope }: {
   disabled: boolean
   industryPack: ShopIndustryPack | null
   items: CommerceItem[]
+  locationLabel: string
   lowStockCount: number
   onReview: (review: ShopCounterReview, returnFocus: HTMLElement) => void
   openOrderCount: number
@@ -1636,7 +1637,7 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
-          <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} ${sampleCatalogActive ? 'working sample' : 'workflow'}` : 'Counter open'}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
+          <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} ${sampleCatalogActive ? 'working sample' : 'workflow'}` : 'Counter open'}{locationLabel ? ` · ${locationLabel}` : ''}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
           <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input aria-describedby="shop-counter-search-help shop-counter-search-status" autoComplete="off" data-shop-counter-primary-field="true" disabled={!counterRecoverySource} onChange={(event) => { setQuery(event.target.value); setSearchStatus('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" ref={searchInputRef} type="search" value={query} /><small id="shop-counter-search-help">{counterCatalogDigestState.error || (counterRecoverySource ? 'Enter adds an exact SKU or the only match.' : 'Preparing safe sale recovery…')}</small></label>
         </header>
         <p aria-live="polite" className="sr-only" id="shop-counter-search-status">{searchStatus}</p>
@@ -2542,8 +2543,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }, [removedOrderLine])
 
   useEffect(() => {
-    if (tab !== 'inventory' && tab !== 'orders') return
+    if (tab !== 'inventory' && tab !== 'orders' && tab !== 'counter') return
     const frame = window.requestAnimationFrame(() => {
+      if (tab === 'counter' && commerceLocation.hash === '#shop-counter-start' && !pendingAction) {
+        const target = document.querySelector<HTMLElement>('[data-shop-counter-primary-field="true"]')
+        target?.scrollIntoView({ block: 'center' })
+        target?.focus({ preventScroll: true })
+        return
+      }
       if (tab === 'orders' && commerceLocation.hash === '#shop-business-location') {
         const section = document.getElementById('shop-business-location')
         const controls = section?.closest<HTMLDetailsElement>('#shop-close-controls')
@@ -2587,7 +2594,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       }
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [closeDeepLinkReady, commerce.orders.length, commerceLocation.hash, tab])
+  }, [closeDeepLinkReady, commerce.orders.length, commerceLocation.hash, pendingAction, tab])
 
   useEffect(() => {
     let current = true
@@ -6333,6 +6340,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         )
         setAccountingScope(null)
         setAccountMapping(null)
+        navigate('/shop/?tab=counter#shop-counter-start', { replace: true })
       },
     }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
   }
@@ -6805,7 +6813,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (tab === 'counter') return <div className="operation-module shop-counter-module">
     {commerceBoundary}
-    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} key={counterSaleScope} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} sampleCatalogActive={shopSampleCatalogActive} scope={counterSaleScope} />
+    <ShopCounter disabled={commerceControlsDisabled} industryPack={shopPack} items={commerce.items} key={counterSaleScope} locationLabel={currentAccountingScopeConfiguration ? `${currentAccountingScopeConfiguration.locationName} / ${currentAccountingScopeConfiguration.inventoryLocationId ?? currentAccountingScopeConfiguration.locationCode}` : ''} lowStockCount={lowStock.length} onReview={reviewCounterSale} openOrderCount={openOrders.length} sampleCatalogActive={shopSampleCatalogActive} scope={counterSaleScope} />
     {actionGate}
   </div>
 
