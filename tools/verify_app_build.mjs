@@ -17788,6 +17788,11 @@ async function verifyStorefrontRuntime() {
       && openSupportOutcome.caseId === supportCase.caseId
       && openSupportOutcome.owner === 'Support owner'
       && openSupportOutcome.priority === 'high'
+      && openSupportOutcome.cycle === 'initial'
+      && openSupportOutcome.dueAt === '2026-07-24T13:46:00.000Z'
+      && openSupportOutcome.acknowledgedAt === null
+      && openSupportOutcome.firstResponseReadyAt === null
+      && openSupportOutcome.responseTargetMet === null
       && openSupportOutcome.externalMessageSent === false
       && openSupportOutcome.refundStarted === false
       && openSupportOutcome.providerCalled === false,
@@ -17978,8 +17983,13 @@ async function verifyStorefrontRuntime() {
     )
     const acknowledgedCase = acknowledgedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
     const acknowledgedCheckpoints = acknowledgedCase && commerce.commerceSupportCheckpointState(acknowledgedCase)
+    const acknowledgedSupportOrder = acknowledgedSupportState?.orders.find((order) => order.id === completedOrder.id)
+    const acknowledgedSupportOutcome = acknowledgedSupportOrder && buyingModel.projectEcommerceSupportOutcome(supportIntent, acknowledgedSupportOrder)
     buyingAssert(acknowledgedCheckpoints?.acknowledged?.kind === 'acknowledged'
-      && acknowledgedCheckpoints.firstResponseReady === null,
+      && acknowledgedCheckpoints.firstResponseReady === null
+      && acknowledgedSupportOutcome?.acknowledgedAt === '2026-07-24T09:49:00.000Z'
+      && acknowledgedSupportOutcome.firstResponseReadyAt === null
+      && acknowledgedSupportOutcome.responseTargetMet === null,
     'ecommerce_support_acknowledgement_not_retained')
     const invalidFirstResponse = commerce.recordCommerceOrderSupportServiceEvent(
       escalatedSupportState,
@@ -18029,8 +18039,12 @@ async function verifyStorefrontRuntime() {
     )
     const firstResponseCase = firstResponseReadyState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
     const firstResponseCheckpoints = firstResponseCase && commerce.commerceSupportCheckpointState(firstResponseCase)
+    const firstResponseOrder = firstResponseReadyState?.orders.find((order) => order.id === completedOrder.id)
+    const firstResponseOutcome = firstResponseOrder && buyingModel.projectEcommerceSupportOutcome(supportIntent, firstResponseOrder)
     buyingAssert(firstResponseCheckpoints?.firstResponseReady?.kind === 'first_response_ready'
-      && firstResponseCase?.externalMessageSent === false,
+      && firstResponseCase?.externalMessageSent === false
+      && firstResponseOutcome?.firstResponseReadyAt === '2026-07-24T09:50:00.000Z'
+      && firstResponseOutcome.responseTargetMet === true,
     'ecommerce_support_first_response_readiness_claimed_message_send')
     const supportResolveExpectation = firstResponseCase && commerce.commerceOrderSupportResolveExpectation(
       firstResponseReadyState,
@@ -18060,6 +18074,10 @@ async function verifyStorefrontRuntime() {
     const resolvedSupportOrder = resolvedSupportState?.orders.find((order) => order.id === completedOrder.id)
     const resolvedSupportOutcome = resolvedSupportOrder && buyingModel.projectEcommerceSupportOutcome(supportIntent, resolvedSupportOrder)
     buyingAssert(resolvedSupportOutcome?.state === 'resolved'
+      && resolvedSupportOutcome.cycle === 'initial'
+      && resolvedSupportOutcome.acknowledgedAt === '2026-07-24T09:49:00.000Z'
+      && resolvedSupportOutcome.firstResponseReadyAt === '2026-07-24T09:50:00.000Z'
+      && resolvedSupportOutcome.responseTargetMet === true
       && resolvedSupportOutcome.resolutionOutcome === 'information_provided'
       && resolvedSupportOutcome.resolvedBy === 'OP-OWNER'
       && resolvedSupportOutcome.resolutionEvidenceReference === `SUPPORT-RESOLUTION:${resolvedSupportCase?.caseId}`,
@@ -18092,10 +18110,16 @@ async function verifyStorefrontRuntime() {
     const reopenedSupportCase = reopenedSupportState?.orders.find((order) => order.id === completedOrder.id)?.supportCases?.[0]
     const reopenedService = reopenedSupportCase && commerce.commerceSupportServiceState(reopenedSupportCase)
     const reopenedCheckpoints = reopenedSupportCase && commerce.commerceSupportCheckpointState(reopenedSupportCase)
+    const reopenedSupportOrder = reopenedSupportState?.orders.find((order) => order.id === completedOrder.id)
+    const reopenedSupportOutcome = reopenedSupportOrder && buyingModel.projectEcommerceSupportOutcome(supportIntent, reopenedSupportOrder)
     buyingAssert(reopenedSupportCase?.status === 'open'
       && reopenedSupportCase.resolution?.proof.actionId === 'ACT-ECOMMERCE-SUPPORT-RESOLVE-1'
       && reopenedService?.owner === 'Follow-up owner'
       && reopenedCheckpoints?.acknowledged === null
+      && reopenedSupportOutcome?.cycle === 'follow_up'
+      && reopenedSupportOutcome.acknowledgedAt === null
+      && reopenedSupportOutcome.firstResponseReadyAt === null
+      && reopenedSupportOutcome.responseTargetMet === null
       && reopenedSupportCase.externalMessageSent === false,
     'ecommerce_support_reopen_did_not_reset_retained_followup')
     const followUpAckExpectation = commerce.commerceOrderSupportServiceExpectation(
@@ -21539,6 +21563,7 @@ async function verifyShopNextActionRuntime() {
     closeReadyOrderCount: 0,
     inventoryReady: true,
     lowStockCount: 0,
+    openSupportCaseCount: 0,
     pendingAction: false,
     pendingOnlineRequestCount: 0,
     ...patch,
@@ -21555,6 +21580,8 @@ async function verifyShopNextActionRuntime() {
     assert(online.job === 'Review online order requests' && online.reason.startsWith('2 online requests'), 'shop_next_action_online_request_priority_wrong')
     const orders = model.decideShopNextAction(input({ actionOrderCount: 2, activePurchaseOrderCount: 3 }))
     assert(orders.job === 'Finish fulfilment queue' && orders.track === 'Orders', 'shop_next_action_fulfilment_priority_wrong')
+    const support = model.decideShopNextAction(input({ openSupportCaseCount: 1, closeReadyOrderCount: 2, activePurchaseOrderCount: 3 }))
+    assert(support.job === 'Handle customer help' && support.nextAction === 'Open support queue' && support.path === '/shop/?tab=orders#shop-order-history' && support.reason.startsWith('1 customer help case needs'), 'shop_next_action_support_priority_wrong')
     const close = model.decideShopNextAction(input({ closeReadyOrderCount: 2, activePurchaseOrderCount: 3, lowStockCount: 4 }))
     assert(close.job === "Review today's close" && close.nextAction === 'Review and save close' && close.path === '/shop/?tab=orders#shop-close-controls' && close.track === 'Review', 'shop_next_action_daily_close_priority_wrong')
     const receiving = model.decideShopNextAction(input({ activePurchaseOrderCount: 2, lowStockCount: 3 }))

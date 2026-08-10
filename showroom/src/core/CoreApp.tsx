@@ -1982,6 +1982,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
   const supplierPayablesAging = commerceSupplierPayablesAging(commerce, purchaseOrderClock)
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
+  const supportWorkQueue = commerceSupportQueue(commerce.orders, purchaseOrderClock)
+  const nextSupportWork = supportWorkQueue[0] ?? null
+  const nextSupportActionLabel = !nextSupportWork
+    ? null
+    : !nextSupportWork.checkpoints.acknowledged
+      ? 'Acknowledge help'
+      : !nextSupportWork.checkpoints.firstResponseReady
+        ? 'Record response ready'
+        : 'Resolve help'
   const actionOrderIds = new Set(actionOrders.map((order) => order.id))
   const closedOrders = commerce.orders.filter((order) => !actionOrderIds.has(order.id))
   const orderAcknowledgementDownloads = useMemo(() => {
@@ -3258,6 +3267,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     closeReadyOrderCount: closableOrders.length,
     inventoryReady: Boolean(commerce.inventoryFoundation && managedInventoryProjection),
     lowStockCount: lowStock.length,
+    openSupportCaseCount: supportWorkQueue.length,
     pendingAction: Boolean(pendingAction),
     pendingOnlineRequestCount: pendingOnlineReviewCount,
   })
@@ -4645,8 +4655,23 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           },
         )
         setSupportDraft(null)
+        navigate('/shop/?tab=orders#shop-order-history', { replace: true })
       },
     })
+  }
+
+  function openNextSupportWork() {
+    if (!nextSupportWork) return
+    navigate('/shop/?tab=orders#shop-order-history', { replace: true })
+    if (!nextSupportWork.checkpoints.acknowledged) {
+      openSupportService(nextSupportWork.orderId, nextSupportWork.supportCase.caseId, 'acknowledged')
+      return
+    }
+    if (!nextSupportWork.checkpoints.firstResponseReady) {
+      openSupportService(nextSupportWork.orderId, nextSupportWork.supportCase.caseId, 'first_response_ready')
+      return
+    }
+    openSupportResolution(nextSupportWork.orderId, nextSupportWork.supportCase.caseId)
   }
 
   function openSupportResolution(orderId: string, caseId: string) {
@@ -6484,14 +6509,17 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       ? 'Review online inbox'
       : actionOrders.length
         ? 'Finish fulfilment queue'
-        : paymentReview.length
-          ? 'Reconcile payment exceptions'
-          : closableOrders.length
-            ? 'Save daily close'
-            : 'Ready for new orders'
+        : supportWorkQueue.length
+          ? 'Handle customer help'
+          : paymentReview.length
+            ? 'Reconcile payment exceptions'
+            : closableOrders.length
+              ? 'Save daily close'
+              : 'Ready for new orders'
   const shopOrderControlRows = [
     ['Online inbox', pendingOnlineReviewCount ? `${pendingOnlineReviewCount} waiting` : 'Clear'],
     ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
+    ['Help', supportWorkQueue.length ? `${supportWorkQueue.length} needs action` : 'Clear'],
     ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
     ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
     ['Write status', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
@@ -6575,7 +6603,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     { label: 'Sell & POS', detail: 'Counter sales, payments, receipts', status: `${commerce.items.length} items`, to: '/shop/?tab=counter' },
     { label: 'Orders & fulfilment', detail: 'Orders, fulfilment, delivery, returns', status: actionOrders.length ? `${actionOrders.length} need action` : `${openOrders.length} open`, to: '/shop/?tab=orders', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Inventory & purchasing', detail: 'Stock, lots, purchasing, receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
-    { label: 'Customers & after-sales', detail: 'Customers, credit, service, support', status: afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history' },
+    { label: 'Customers & after-sales', detail: 'Customers, credit, service, support', status: supportWorkQueue.length ? `${supportWorkQueue.length} help open` : afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history', tone: supportWorkQueue.length ? 'attention' as const : 'ready' as const },
     { label: 'Finance controls', detail: 'Payments and close', status: paymentReview.length ? paymentReview[0].refundStatus === 'due' ? 'Record settled refund' : 'Reconcile payment' : closePreview ? 'Review and save close' : latestClose ? 'Close recorded' : 'Ready', to: paymentReview.length ? `/shop/?tab=orders#${commerceOrderTargetId(paymentReview[0].id)}` : '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length || closePreview ? 'attention' as const : 'ready' as const },
     { label: 'Online channels', detail: 'Website and Ecommerce requests', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
   ]
@@ -6621,7 +6649,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length} {actionOrders.length === 1 ? 'order needs' : 'orders need'} action</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment</span>{!orderDraftRecoveryVisible ? <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length
+        ? `${actionOrders.length} ${actionOrders.length === 1 ? 'order needs' : 'orders need'} action`
+        : supportWorkQueue.length
+          ? `${supportWorkQueue.length} help ${supportWorkQueue.length === 1 ? 'case needs' : 'cases need'} action`
+          : '0 orders need action'}</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment{supportWorkQueue.length ? ` · ${supportWorkQueue.length} help open` : ''}</span>{!orderDraftRecoveryVisible ? nextSupportWork && !actionOrders.length ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={openNextSupportWork} type="button">{nextSupportActionLabel}</button> : <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
@@ -6679,7 +6711,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
+      {!actionOrders.length && supportWorkQueue.length ? <Empty>Order fulfilment is clear. Continue the customer help case.</Empty> : <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />}
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
@@ -7510,7 +7542,7 @@ function ClosedOrderHistory({
   const visibleOrders = orders.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
   const supportWorkQueue = commerceSupportQueue(orders, supportClock)
   const supportSla = commerceSupportSlaSummary(orders, supportClock)
-  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || highlightedOrderIndex >= 0) || undefined}>
+  return <details className="order-archive" id="shop-order-history" open={Boolean(returnDraft || correctionDraft || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || highlightedOrderIndex >= 0 || highlightedTargetId === 'shop-order-history') || undefined}>
     <summary><span>Completed and cancelled orders</span><small>{supportWorkQueue.length ? `${supportSla.openCases} help open · ${supportSla.overdueCases} overdue · ` : ''}{orders.length} {orders.length === 1 ? 'record' : 'records'}</small></summary>
     {supportWorkloadDownload ? <section aria-label="Support workload export" className="order-return-records" data-support-workload="privacy-minimal">
       <div><strong>Support workload record</strong><small>{supportWorkloadDownload.artifact.summary.totalCases} cases · {supportWorkloadDownload.artifact.summary.reopenedCases} repeat contacts · {supportWorkloadDownload.artifact.summary.responseTargetMisses} target misses</small></div>

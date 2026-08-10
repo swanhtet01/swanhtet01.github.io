@@ -2210,8 +2210,8 @@ export function EcommerceBuyingWorkspace({
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenSupport(intent)} type="button">Continue in Shop</button>
           </article>)}
           {supportOutcomes.slice(0, 3).map((outcome) => <article className="ecommerce-return-status" key={outcome.caseId}>
-            <span><strong>{outcome.state === 'resolved' ? 'Help resolved' : 'Shop is reviewing'}</strong><small>{outcome.orderId} / {outcome.category.replaceAll('_', ' ')} / owner {outcome.owner}</small></span>
-            <b>{outcome.state === 'resolved' ? outcome.resolutionOutcome?.replaceAll('_', ' ') : `${outcome.priority} priority`}</b>
+            <span><strong>{outcome.state === 'resolved' ? 'Help resolved' : outcome.firstResponseReadyAt ? 'Response ready' : outcome.acknowledgedAt ? 'Shop acknowledged' : 'Shop is reviewing'}</strong><small>{outcome.orderId} / {outcome.category.replaceAll('_', ' ')} / owner {outcome.owner} / target {new Date(outcome.dueAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}{outcome.cycle === 'follow_up' ? ' / follow-up' : ''}</small></span>
+            <b>{outcome.state === 'resolved' ? outcome.resolutionOutcome?.replaceAll('_', ' ') : outcome.firstResponseReadyAt ? outcome.responseTargetMet ? 'On target' : 'Target missed' : outcome.acknowledgedAt ? 'Response pending' : `${outcome.priority} priority`}</b>
           </article>)}
           {pendingCorrectionIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>Balance review waiting</strong><small>{intent.orderId} / {intent.requestedKind} {formatMmk(intent.listedAmountMmk)} / {intent.reasonCode.replaceAll('_', ' ')}</small></span>

@@ -5,6 +5,7 @@ import {
   commerceOrderCalculationDigest,
   commerceOrderHasReleasableReservation,
   commercePromotionDecision,
+  commerceSupportCheckpointState,
   commerceSupportServiceState,
   commerceShippingDecision,
   commercePaymentDecision,
@@ -581,6 +582,7 @@ export type EcommerceSupportIntent = {
 export type EcommerceSupportOutcome = {
   schema: typeof ECOMMERCE_SUPPORT_OUTCOME_SCHEMA
   state: 'open' | 'resolved'
+  cycle: 'initial' | 'follow_up'
   scope: string
   intentId: string
   orderId: string
@@ -592,6 +594,9 @@ export type EcommerceSupportOutcome = {
   owner: string
   priority: CommerceSupportPriority
   dueAt: string
+  acknowledgedAt: string | null
+  firstResponseReadyAt: string | null
+  responseTargetMet: boolean | null
   resolutionOutcome: CommerceSupportResolutionOutcome | null
   resolvedAt: string | null
   resolvedBy: string | null
@@ -2122,6 +2127,7 @@ export function projectEcommerceSupportOutcome(
   if (matches.length !== 1) return null
   const supportCase = matches[0]
   const service = commerceSupportServiceState(supportCase)
+  const checkpoints = commerceSupportCheckpointState(supportCase)
   const expectedCaseId = `CASE-${intent.id.slice(4)}`
   if (!service
     || supportCase.caseId !== expectedCaseId
@@ -2135,11 +2141,24 @@ export function projectEcommerceSupportOutcome(
   let openedAt: string
   let openedBy: string
   let dueAt: string
+  let acknowledgedAt: string | null = null
+  let firstResponseReadyAt: string | null = null
+  let responseTargetMet: boolean | null = null
   try {
     openedAt = canonicalTimestamp(supportCase.opening.capturedAt, 'support outcome.openedAt')
     openedBy = canonicalText(supportCase.opening.actor, 'support outcome.openedBy', 180)
     dueAt = canonicalTimestamp(service.dueAt, 'support outcome.dueAt')
     if (taxTimestampMicros(openedAt, 'support outcome.openedAt') < taxTimestampMicros(intent.createdAt, 'support intent.createdAt')) return null
+    if (checkpoints.acknowledged) {
+      acknowledgedAt = canonicalTimestamp(checkpoints.acknowledged.proof.capturedAt, 'support outcome.acknowledgedAt')
+      if (taxTimestampMicros(acknowledgedAt, 'support outcome.acknowledgedAt') < taxTimestampMicros(openedAt, 'support outcome.openedAt')) return null
+    }
+    if (checkpoints.firstResponseReady) {
+      if (!acknowledgedAt) return null
+      firstResponseReadyAt = canonicalTimestamp(checkpoints.firstResponseReady.proof.capturedAt, 'support outcome.firstResponseReadyAt')
+      if (taxTimestampMicros(firstResponseReadyAt, 'support outcome.firstResponseReadyAt') < taxTimestampMicros(acknowledgedAt, 'support outcome.acknowledgedAt')) return null
+      responseTargetMet = taxTimestampMicros(firstResponseReadyAt, 'support outcome.firstResponseReadyAt') <= taxTimestampMicros(dueAt, 'support outcome.dueAt')
+    }
   } catch {
     return null
   }
@@ -2163,6 +2182,7 @@ export function projectEcommerceSupportOutcome(
   return {
     schema: ECOMMERCE_SUPPORT_OUTCOME_SCHEMA,
     state: supportCase.status,
+    cycle: supportCase.reopen ? 'follow_up' : 'initial',
     scope: intent.scope,
     intentId: intent.id,
     orderId: intent.orderId,
@@ -2174,6 +2194,9 @@ export function projectEcommerceSupportOutcome(
     owner: service.owner,
     priority: service.priority,
     dueAt,
+    acknowledgedAt,
+    firstResponseReadyAt,
+    responseTargetMet,
     resolutionOutcome,
     resolvedAt,
     resolvedBy,
