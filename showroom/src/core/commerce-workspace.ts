@@ -19,8 +19,8 @@ export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as co
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
-export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v5' as const
-export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v5' as const
+export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v6' as const
+export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v6' as const
 export const COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1' as const
 const COMMERCE_CLOSE_SETTLEMENT_V1_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v2' as const
@@ -732,6 +732,7 @@ export type CommerceDailyCloseExportCorrection = {
 export type CommerceDailyCloseExportOrder = {
   orderId: string
   orderCreatedAt: string
+  sourceRecordId: string | null
   accountingScope: CommerceAccountingScopeSnapshot | null
   paymentMethod: string
   paymentReconciledAt: string | null
@@ -795,6 +796,8 @@ export type CommerceAccountingHandoff = {
   businessDate: string
   closedAt: string
   sourceCloseDigest: string
+  sourceOrderIds: string[]
+  sourceRecordIds: string[]
   accountingScope: CommerceAccountingScopeSnapshot | null
   accountMappingRevision: number | null
   accountMappingEvidenceReference: string | null
@@ -9998,6 +10001,7 @@ function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExp
     artifact.orders.map((order) => [
       order.orderId,
       order.orderCreatedAt,
+      order.sourceRecordId,
       commerceAccountingScopeProjection(order.accountingScope),
       order.paymentMethod,
       order.paymentReconciledAt,
@@ -10076,6 +10080,7 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
     return {
       orderId: order.id,
       orderCreatedAt: order.createdAt,
+      sourceRecordId: order.sourceRecordId ?? null,
       accountingScope: order.accountingScope ? { ...order.accountingScope } : null,
       paymentMethod: order.payment,
       paymentReconciledAt: order.paymentReconciledAt ?? null,
@@ -10228,6 +10233,7 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     ...commerceAccountingScopeCsvHeaders,
     'order_id',
     'order_created_at',
+    'source_record_id',
     'payment_method',
     'payment_reconciled_at',
     'payment_evidence_reference',
@@ -10273,6 +10279,7 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     null,
     null,
     null,
+    null,
     'MMK',
     null,
     null,
@@ -10312,6 +10319,7 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     ...commerceAccountingScopeCsvValues(order.accountingScope),
     order.orderId,
     order.orderCreatedAt,
+    order.sourceRecordId,
     order.paymentMethod,
     order.paymentReconciledAt,
     order.paymentEvidenceReference,
@@ -10357,6 +10365,8 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
     artifact.businessDate,
     artifact.closedAt,
     artifact.sourceCloseDigest,
+    artifact.sourceOrderIds,
+    artifact.sourceRecordIds,
     commerceAccountingScopeProjection(artifact.accountingScope),
     artifact.accountMappingRevision,
     artifact.accountMappingEvidenceReference,
@@ -10531,6 +10541,9 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
   const expectedControlTotalMmk = originalOrderTotalMmk + creditCorrectionMmk + debitCorrectionMmk
   if (totalDebitMmk !== expectedControlTotalMmk || totalCreditMmk !== expectedControlTotalMmk) return null
   const settlement = closeExport.settlement
+  const sourceOrderIds = closeExport.orders.map((order) => order.orderId).sort(compareCanonicalText)
+  const sourceRecordIds = [...new Set(closeExport.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : []))]
+    .sort(compareCanonicalText)
   if (settlement?.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA
     && (settlement.totalExpectedMmk !== originalOrderTotalMmk
       || settlement.netOrderTotalMmk !== closeExport.totalMmk
@@ -10546,6 +10559,8 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
     businessDate: closeExport.businessDate,
     closedAt: closeExport.closedAt,
     sourceCloseDigest: closeExport.digest,
+    sourceOrderIds,
+    sourceRecordIds,
     accountingScope: closeExport.accountingScope ? { ...closeExport.accountingScope } : null,
     accountMappingRevision: accountMapping?.revision ?? null,
     accountMappingEvidenceReference: accountMapping?.proof.evidenceReference ?? null,
@@ -10588,6 +10603,8 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     'closed_at',
     'currency',
     'source_close_digest',
+    'source_order_ids',
+    'source_record_ids',
     ...commerceAccountingScopeCsvHeaders,
     'account_mapping_revision',
     'account_mapping_evidence_reference',
@@ -10631,6 +10648,8 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     artifact.closedAt,
     artifact.currency,
     artifact.sourceCloseDigest,
+    artifact.sourceOrderIds,
+    artifact.sourceRecordIds,
     ...commerceAccountingScopeCsvValues(artifact.accountingScope),
     artifact.accountMappingRevision,
     artifact.accountMappingEvidenceReference,

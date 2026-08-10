@@ -6814,7 +6814,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         export = commerce_daily_close_export(accepted_close, CLOSE_ID_2)
         self.assertIsNotNone(export)
         assert export is not None
-        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v5")
+        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v6")
         self.assertEqual(export["totalMmk"], 150)
         self.assertEqual(export["settlement"]["totalExpectedMmk"], 200)
         self.assertEqual(export["settlement"]["netOrderTotalMmk"], 150)
@@ -6825,7 +6825,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         handoff = commerce_accounting_handoff(accepted_close, CLOSE_ID_2)
         self.assertIsNotNone(handoff)
         assert handoff is not None
-        self.assertEqual(handoff["schema"], "supermega.commerce.accounting-handoff.v5")
+        self.assertEqual(handoff["schema"], "supermega.commerce.accounting-handoff.v6")
         self.assertEqual(handoff["settlementSchema"], "supermega.commerce.close-settlement.v2")
         self.assertEqual(handoff["settlementExpectedMmk"], 200)
         self.assertEqual(handoff["settlementCountedMmk"], 200)
@@ -8011,21 +8011,27 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(artifact)
         assert artifact is not None
         self.assertEqual(artifact, commerce_daily_close_export(closed, CLOSE_ID))
-        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v5")
+        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v6")
         self.assertEqual(artifact["orderCount"], 1)
         self.assertEqual(artifact["orders"][0]["calculationStatus"], "accepted")
+        self.assertEqual(
+            artifact["orders"][0]["sourceRecordId"],
+            closed["orders"][0]["sourceRecordId"],
+        )
         self.assertEqual(artifact["orders"][0]["subtotalMmk"], 200)
         self.assertEqual(artifact["orders"][0]["taxMode"], "not_configured")
         self.assertNotIn("customer", json.dumps(artifact))
         self.assertEqual(
             artifact["digest"],
-            "sha256:ad7c38a7d16e3bd701d22897c13971765b540912d53ed49cf661e6135425a3ae",
+            "sha256:c3bf3a6b3b1a86a5dcf6a1f71504e742f32f050058ee9ea6583c864e26f938a6",
         )
 
         csv_text = commerce_daily_close_csv(closed, CLOSE_ID)
         self.assertIsNotNone(csv_text)
         assert csv_text is not None
         self.assertIn('"record_type"', csv_text)
+        self.assertIn('"source_record_id"', csv_text)
+        self.assertIn(f'"{closed["orders"][0]["sourceRecordId"]}"', csv_text)
         self.assertIn('"accepted"', csv_text)
         self.assertNotIn("Customer ref", csv_text)
         self.assertEqual(csv_text.count("\r\n"), 3)
@@ -8033,7 +8039,12 @@ class CommerceRuntimeTests(unittest.TestCase):
         unmapped_handoff = commerce_accounting_handoff(closed, CLOSE_ID)
         self.assertIsNotNone(unmapped_handoff)
         assert unmapped_handoff is not None
-        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v5")
+        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v6")
+        self.assertEqual(unmapped_handoff["sourceOrderIds"], [closed["orders"][0]["id"]])
+        self.assertEqual(
+            unmapped_handoff["sourceRecordIds"],
+            [closed["orders"][0]["sourceRecordId"]],
+        )
         self.assertEqual(unmapped_handoff["originalOrderTotalMmk"], 200)
         self.assertEqual(unmapped_handoff["netOrderTotalMmk"], 200)
         self.assertEqual(unmapped_handoff["correctionCount"], 0)
@@ -8116,6 +8127,9 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(mapped_handoff, commerce_accounting_handoff(mapped_closed, CLOSE_ID))
         mapped_csv = commerce_accounting_handoff_csv(mapped_handoff)
         self.assertIn('"1100-CLEAR"', mapped_csv)
+        self.assertIn('"source_order_ids"', mapped_csv)
+        self.assertIn('"source_record_ids"', mapped_csv)
+        self.assertIn(f'"{mapped_closed["orders"][0]["sourceRecordId"]}"', mapped_csv)
         self.assertIn('"false"', mapped_csv)
         self.assertNotIn("Customer ref", mapped_csv)
 

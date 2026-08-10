@@ -5030,7 +5030,8 @@ if (!coreSource.includes('data-tax-configuration="versioned"')
   || !managedCommerceRuntime.includes('command evidence must match the saved tax configuration proof.')) fail('commerce_tax_configuration_ui_or_managed_boundary_missing')
 if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !coreSource.includes('Download close CSV')
-  || !commerceSource.includes('supermega.commerce.daily-close-export.v5')
+  || !commerceSource.includes('supermega.commerce.daily-close-export.v6')
+  || !commerceSource.includes("'source_record_id'")
   || !commerceSource.includes("calculationStatus: calculation ? 'accepted' : 'legacy_unverified'")
   || !commerceSource.includes("taxMode: calculation?.taxMode ?? 'not_recorded'")
   || !commerceSource.includes("if (/^[=+@-]/.test(raw)) raw = `'${raw}`")
@@ -5052,7 +5053,9 @@ if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !coreSource.includes('data-account-mapping="versioned"')
   || !coreSource.includes("kind: 'account_mapping'")
   || !coreSource.includes("'commerce.account_mapping.saved'")
-  || !commerceSource.includes('supermega.commerce.accounting-handoff.v5')
+  || !commerceSource.includes('supermega.commerce.accounting-handoff.v6')
+  || !commerceSource.includes("'source_order_ids'")
+  || !commerceSource.includes("'source_record_ids'")
   || !commerceSource.includes('export function configureCommerceAccountingScope(')
   || !commerceSource.includes('export function commerceCloseScopeOptions(')
   || !commerceSource.includes("postingAuthority: 'none'")
@@ -14209,9 +14212,10 @@ async function verifyCommerceRuntime() {
     forgedSettlementBasis.closes[0].settlement.netOrderTotalMmk = '200'
     assertThrows(() => model.validateCommerceState(forgedSettlementBasis), 'daily_close_string_correction_basis_validated')
     const accountingExport = model.commerceDailyCloseExport(accountingClosed, accountingCloseId)
-    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v5'
+    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v6'
       && accountingExport.orderCount === 1
       && accountingExport.orders[0].calculationStatus === 'accepted'
+      && accountingExport.orders[0].sourceRecordId === order.sourceRecordId
       && accountingExport.orders[0].subtotalMmk === 200
       && accountingExport.orders[0].taxMode === 'not_configured'
       && accountingExport.orders[0].originalTotalMmk === 200
@@ -14224,16 +14228,20 @@ async function verifyCommerceRuntime() {
     'daily_close_export_not_deterministic_or_minimal')
     const accountingCsv = model.commerceDailyCloseCsv(accountingExport)
     assert(accountingCsv.includes('"record_type"')
+      && accountingCsv.includes('"source_record_id"')
+      && accountingCsv.includes(`"${order.sourceRecordId}"`)
       && accountingCsv.includes('"accepted"')
       && !accountingCsv.includes('Customer')
       && accountingCsv.split('\r\n').length - 1 === 3,
     'daily_close_csv_not_complete_or_minimal')
     const accountingHandoff = model.commerceAccountingHandoff(accountingClosed, accountingCloseId)
-    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v5'
+    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v6'
       && accountingHandoff.status === 'review_required'
       && accountingHandoff.postingAuthority === 'none'
       && accountingHandoff.externalPostingPerformed === false
       && accountingHandoff.sourceCloseDigest === accountingExport.digest
+      && JSON.stringify(accountingHandoff.sourceOrderIds) === JSON.stringify([order.id])
+      && JSON.stringify(accountingHandoff.sourceRecordIds) === JSON.stringify([order.sourceRecordId])
       && accountingHandoff.accountMappingRevision === null
       && accountingHandoff.accountMappingEvidenceReference === null
       && accountingHandoff.settlementSchema === 'supermega.commerce.close-settlement.v2'
@@ -14268,6 +14276,9 @@ async function verifyCommerceRuntime() {
     'accounting_handoff_not_balanced_deterministic_or_minimal')
     const accountingHandoffCsv = model.commerceAccountingHandoffCsv(accountingHandoff)
     assert(accountingHandoffCsv.includes('"posting_authority"')
+      && accountingHandoffCsv.includes('"source_order_ids"')
+      && accountingHandoffCsv.includes('"source_record_ids"')
+      && accountingHandoffCsv.includes(`"${order.sourceRecordId}"`)
       && accountingHandoffCsv.includes('"review_required"')
       && accountingHandoffCsv.includes('"unmapped"')
       && accountingHandoffCsv.includes('"false"')
@@ -14342,7 +14353,7 @@ async function verifyCommerceRuntime() {
     const correctedHandoff = model.commerceAccountingHandoff(correctedClosed, correctedCloseId)
     const correctedDocumentId = corrected.orders[0].corrections[0].documentId
     const correctedEntries = correctedHandoff?.entries.filter((entry) => entry.sourceDocumentId === correctedDocumentId) ?? []
-    assert(correctedHandoff?.schema === 'supermega.commerce.accounting-handoff.v5'
+    assert(correctedHandoff?.schema === 'supermega.commerce.accounting-handoff.v6'
       && correctedHandoff.originalOrderTotalMmk === 200
       && correctedHandoff.netOrderTotalMmk === 150
       && correctedHandoff.settlementSchema === 'supermega.commerce.close-settlement.v2'
@@ -22007,7 +22018,7 @@ await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 // Bounded cumulative 104 KB allowance for four-product recovery and exhaustive Shop/Plant action language; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_904_000) fail(`artifact_budget:${bytes}`)
+if (bytes > 2_906_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

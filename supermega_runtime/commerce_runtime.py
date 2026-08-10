@@ -41,8 +41,8 @@ from supermega_runtime.trial_store import TrialValidationError
 
 
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
-COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v5"
-COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v5"
+COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v6"
+COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v6"
 COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"
 _COMMERCE_CLOSE_SETTLEMENT_V1_SCHEMA = "supermega.commerce.close-settlement.v1"
 COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v2"
@@ -7048,6 +7048,7 @@ def commerce_daily_close_export(
             {
                 "orderId": order["id"],
                 "orderCreatedAt": order["createdAt"],
+                "sourceRecordId": order.get("sourceRecordId"),
                 "accountingScope": deepcopy(order.get("accountingScope")),
                 "paymentMethod": order["payment"],
                 "paymentReconciledAt": order.get("paymentReconciledAt"),
@@ -7126,6 +7127,7 @@ def commerce_daily_close_export(
                 [
                     row["orderId"],
                     row["orderCreatedAt"],
+                    row["sourceRecordId"],
                     _accounting_scope_projection(row["accountingScope"]),
                     row["paymentMethod"],
                     row["paymentReconciledAt"],
@@ -7210,6 +7212,7 @@ def commerce_daily_close_csv(
         "inventory_location_id",
         "order_id",
         "order_created_at",
+        "source_record_id",
         "payment_method",
         "payment_reconciled_at",
         "payment_evidence_reference",
@@ -7251,6 +7254,7 @@ def commerce_daily_close_csv(
             artifact["operator"],
             artifact["evidenceReference"],
             *_accounting_scope_csv_values(artifact["accountingScope"]),
+            None,
             None,
             None,
             None,
@@ -7320,6 +7324,7 @@ def commerce_daily_close_csv(
             *_accounting_scope_csv_values(row["accountingScope"]),
             row["orderId"],
             row["orderCreatedAt"],
+            row["sourceRecordId"],
             row["paymentMethod"],
             row["paymentReconciledAt"],
             row["paymentEvidenceReference"],
@@ -7534,6 +7539,12 @@ def commerce_accounting_handoff(
         )
     ):
         return None
+    source_order_ids = sorted(order["orderId"] for order in close_export["orders"])
+    source_record_ids = sorted({
+        order["sourceRecordId"]
+        for order in close_export["orders"]
+        if order["sourceRecordId"] is not None
+    })
     artifact: dict[str, Any] = {
         "schema": COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
         "status": "review_required",
@@ -7544,6 +7555,8 @@ def commerce_accounting_handoff(
         "businessDate": close_export["businessDate"],
         "closedAt": close_export["closedAt"],
         "sourceCloseDigest": close_export["digest"],
+        "sourceOrderIds": source_order_ids,
+        "sourceRecordIds": source_record_ids,
         "accountingScope": deepcopy(close_export["accountingScope"]),
         "accountMappingRevision": account_mapping["revision"] if account_mapping else None,
         "accountMappingEvidenceReference": account_mapping["proof"]["evidenceReference"] if account_mapping else None,
@@ -7585,6 +7598,7 @@ def commerce_accounting_handoff(
         artifact["schema"], artifact["status"], artifact["postingAuthority"],
         artifact["externalPostingPerformed"], artifact["currency"], artifact["closeId"],
         artifact["businessDate"], artifact["closedAt"], artifact["sourceCloseDigest"],
+        artifact["sourceOrderIds"], artifact["sourceRecordIds"],
         _accounting_scope_projection(artifact["accountingScope"]),
         artifact["accountMappingRevision"], artifact["accountMappingEvidenceReference"],
         artifact["settlementSchema"], artifact["settlementStatus"],
@@ -7614,6 +7628,7 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
     header = [
         "schema", "status", "posting_authority", "external_posting_performed",
         "close_id", "business_date", "closed_at", "currency", "source_close_digest",
+        "source_order_ids", "source_record_ids",
         "accounting_scope_revision", "accounting_scope_action_id", "entity_code",
         "entity_name", "location_code", "location_name", "inventory_location_id",
         "account_mapping_revision", "account_mapping_evidence_reference",
@@ -7635,6 +7650,7 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
             str(artifact["externalPostingPerformed"]).lower(), artifact["closeId"],
             artifact["businessDate"], artifact["closedAt"], artifact["currency"],
             artifact["sourceCloseDigest"],
+            artifact["sourceOrderIds"], artifact["sourceRecordIds"],
             *_accounting_scope_csv_values(artifact["accountingScope"]),
             artifact["accountMappingRevision"],
             artifact["accountMappingEvidenceReference"], artifact["settlementSchema"],
