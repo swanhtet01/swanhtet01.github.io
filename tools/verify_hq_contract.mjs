@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-194'
   && completedAutomationArchive.entries?.length === 42
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 39
+  && portfolioSource.completedLocalAutomations.length === 40
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 81
+  && portfolio.completedLocalAutomations.length === 82
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -528,10 +528,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[80]?.productId === 'website'
   && portfolio.completedLocalAutomations[80]?.workOrderId === 'website-real-inquiry-client-acceptance'
   && portfolio.completedLocalAutomations[80]?.checkpoint === 'OPS-233'
+  && portfolio.completedLocalAutomations[81]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[81]?.workOrderId === 'ecommerce-real-order-close-client-acceptance'
+  && portfolio.completedLocalAutomations[81]?.checkpoint === 'OPS-234'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-real-order-close-client-acceptance'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'ecommerce-real-order-return-client-acceptance'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1766,8 +1769,11 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-233 | CEO + Website Inquiry Client Acceptance / Agent Operations Codex | done-local |')
   && workboard.includes('Shop reads the current qualified Website ledger')
   && workboard.includes('The receipt advances `ecommerce-real-order-close-client-acceptance`')
-  && workboard.includes('| CLAUDE-007 | Claude Code | ready |')
-  && workboard.includes('Shop Finance checkpoint `2744b28f`')
+  && workboard.includes('| OPS-234 | CEO + Ecommerce Order-close Client Acceptance / Agent Operations Codex | done-local |')
+  && workboard.includes('A versioned schema- and workspace-bound dismissal marker')
+  && workboard.includes('The receipt advances `ecommerce-real-order-return-client-acceptance`')
+  && workboard.includes('| CLAUDE-008 | Claude Code | ready |')
+  && workboard.includes('Ecommerce order-close checkpoint `969fae03`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
   && portfolio.localImprovementQueue.length === 1
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'website-inquiry-entry-tab-recovery' && entry.checkpoint === 'OPS-189')
@@ -1815,7 +1821,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-real-shift-close-client-acceptance' && entry.checkpoint === 'OPS-231')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-real-order-close-client-acceptance' && entry.checkpoint === 'OPS-232')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'website-real-inquiry-client-acceptance' && entry.checkpoint === 'OPS-233')
-  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-real-order-close-client-acceptance')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-real-order-close-client-acceptance' && entry.checkpoint === 'OPS-234')
+  && portfolio.localImprovementQueue[0].workOrderId === 'ecommerce-real-order-return-client-acceptance')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
