@@ -1766,6 +1766,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 }) {
   const navigate = useNavigate()
   const commerceLocation = useLocation()
+  const returnToLocationSetup = commerceLocation.search.includes('return=location-setup')
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync] = useCommerceWorkspace(managedIdentity)
@@ -6837,7 +6838,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               : '0 orders need action'}</h2></div>
         <div className="order-queue-actions">
           <span className="panel-note">{openOrders.length} in fulfilment{supportWorkQueue.length ? ` · ${supportWorkQueue.length} help open` : ''}{correctionDraft ? ' · 1 balance review' : ''}</span>
-          {!orderDraftRecoveryVisible
+          {returnToLocationSetup
+            ? !actionOrders.length ? <Link className="core-button primary compact" to="/shop/?tab=inventory#shop-location-foundation">Continue location setup</Link> : null
+            : !orderDraftRecoveryVisible
             ? nextSupportWork && !actionOrders.length
               ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={openNextSupportWork} type="button">{nextSupportActionLabel}</button>
               : correctionDraft && !actionOrders.length
@@ -7362,7 +7365,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
         <div className="inventory-tools-content">
           {supplierControl}
-          {commerce.items.length ? <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} onSetupComplete={continueFromInventorySetup} production={relatedProduction} scope={orderDraftScope} /></Suspense> : <p className="empty-state">Add products before enabling locations, lots, available-to-promise, or supplier policies.</p>}
+          {commerce.items.length ? <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} onSetupBlocked={(orderId) => navigate(`/shop/?tab=orders&return=location-setup#${commerceOrderTargetId(orderId)}`)} onSetupComplete={continueFromInventorySetup} production={relatedProduction} scope={orderDraftScope} /></Suspense> : <p className="empty-state">Add products before enabling locations, lots, available-to-promise, or supplier policies.</p>}
         </div>
       </details>
       {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierSourcing}>

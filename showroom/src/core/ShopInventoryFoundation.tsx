@@ -51,6 +51,7 @@ type ShopInventoryFoundationProps = {
     proof: CommerceActionProof,
     transition: (state: CommerceState) => CommerceState | null,
   ) => Promise<void>
+  onSetupBlocked: (orderId: string) => void
   onSetupComplete: (location: { id: string; name: string }) => void
   scope: string
 }
@@ -127,7 +128,7 @@ function productionReceiptProof(actor: string, receipt: CommerceProductionBatchR
   }
 }
 
-export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onInventory, onIssue, onSetupComplete, production, scope }: ShopInventoryFoundationProps) {
+export function ShopInventoryFoundation({ actor, commerce, disabled, identity, onInventory, onIssue, onSetupBlocked, onSetupComplete, production, scope }: ShopInventoryFoundationProps) {
   const catalog = commerce.items
   const catalogSkus = useMemo(
     () => [...new Set(catalog.map((item) => item.sku))].sort(),
@@ -168,7 +169,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
   const catalogBySku = useMemo(() => new Map(catalog.map((item) => [item.sku, item])), [catalog])
   const balanceOptions = projection.balances.filter((row) => row.availableToPromise > 0)
   const activeAggregateOrders = commerce.orders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
-  const setupBlockedByOrders = !state.revision && activeAggregateOrders.length > 0
+  const setupBlockingOrder = !state.revision ? activeAggregateOrders[0] : undefined
+  const setupBlockedByOrders = Boolean(setupBlockingOrder)
   const selectedBalance = balanceOptions.find((row) => `${row.stockUnitId}|${row.locationId}` === transferDraft.balanceKey)
   const destination = selectedBalance
     ? projection.locations.find((location) => location.id !== selectedBalance.locationId)
@@ -204,8 +206,8 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     : state.revision
       ? 'Use available stock, reservations, lots, and locations to choose the next count or stock move.'
       : setupBlockedByOrders
-        ? 'Finish or cancel open aggregate-stock orders before creating location history.'
-        : 'Set up locations once so orders, returns, production issues, counts, and transfers share the same stock truth.'
+        ? 'Resolve active orders before location setup.'
+        : 'Set locations once for one stock truth.'
 
   useEffect(() => {
     if (transferOpen) transferSelectRef.current?.focus()
@@ -660,7 +662,7 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
         ? `${projection.metrics.totalOnHand.toLocaleString()} on hand · ${projection.metrics.totalReserved.toLocaleString()} reserved · ${projection.stockUnits.length} traceable ${projection.stockUnits.length === 1 ? 'unit' : 'units'}`
         : 'Add accountable client, vendor, location, and opening-lot evidence inside the Shop record.'}</p>
     </div>
-    {!state.revision ? <button aria-controls="location-stock-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled || setupBlockedByOrders} onClick={() => { setSetupOpen((current) => !current); setSetupReview(null) }} type="button">{setupBlockedByOrders ? `Finish ${activeAggregateOrders.length} ${activeAggregateOrders.length === 1 ? 'order' : 'orders'} first` : setupOpen ? 'Close setup' : 'Set up locations'}</button>
+    {!state.revision ? <button aria-controls="location-stock-setup" aria-expanded={setupOpen} className="core-button primary" disabled={disabled} onClick={setupBlockingOrder ? () => onSetupBlocked(setupBlockingOrder.id) : () => { setSetupOpen((current) => !current); setSetupReview(null) }} type="button">{setupBlockedByOrders ? `Review ${activeAggregateOrders.length} ${activeAggregateOrders.length === 1 ? 'order' : 'orders'}` : setupOpen ? 'Close setup' : 'Set up locations'}</button>
       : <button aria-controls="location-stock-transfer" aria-expanded={transferOpen} className="core-button primary" data-shop-stock-move-action={transferOpen ? 'close' : stockMoveRecovery?.ok ? 'reopen' : 'open'} disabled={disabled || inventoryDrift || !balanceOptions.length} onClick={toggleTransfer} ref={transferToggleRef} type="button">{transferOpen ? 'Close move' : stockMoveRecovery?.ok ? 'Reopen move' : 'Move stock'}</button>}
     {!transferOpen && stockMoveRecovery?.ok ? <div className="shop-stock-move-recovery" data-shop-stock-move-recovery="ready" role="status"><strong>Move draft kept</strong><small>Selected stock · {stockMoveRecovery.draft.quantity || 'blank'} units. Reopen once; nothing moved.</small></div> : null}
     {setupOpen && !state.revision ? <form className="core-form compact-form" id="location-stock-setup" onSubmit={reviewSetup}>
@@ -694,6 +696,6 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
       <div className="form-actions">{transferReview ? <button className="core-button" disabled={busy} onClick={() => setTransferReview(null)} type="button">Edit</button> : null}<button className="core-button primary" disabled={disabled || busy || !transferQuantityValid} onClick={transferReview ? () => void confirmTransfer() : undefined} type={transferReview ? 'button' : 'submit'}>{transferReview ? busy ? 'Moving…' : 'Confirm move' : 'Review move'}</button></div>
     </form> : null}
     {inventoryDrift ? <p className="form-notice warning-text" role="alert">Shop available stock no longer matches location ATP. Reconcile before another move.</p> : null}
-    <p className="form-notice" aria-live="polite">{error || notice || (state.revision ? 'Transfers retain paired source and destination evidence. No supplier contact, payment, or accounting action occurs.' : setupBlockedByOrders ? 'Finish or cancel active aggregate-stock orders before starting location stock; no warehouse history will be invented.' : 'Setup previews the exact opening package before one Shop write.')}</p>
+    <p className="form-notice" aria-live="polite">{error || notice || (state.revision ? 'Transfers retain paired source and destination evidence. No supplier contact, payment, or accounting action occurs.' : setupBlockedByOrders ? 'Resolve active orders first; history stays unchanged.' : 'Setup previews the exact opening package before one Shop write.')}</p>
   </section></>
 }
