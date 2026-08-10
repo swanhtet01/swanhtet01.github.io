@@ -8433,7 +8433,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : plantTodayStep === 'material'
           ? 'Record materials used'
           : plantTodayStep === 'shift-close'
-            ? 'Close this shift'
+            ? shiftCloseReady ? 'Review shift close' : 'Prepare shift close'
             : plantTodayStep === 'plan'
               ? 'Plan the next job'
               : currentShiftClose
@@ -8448,7 +8448,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : plantTodayStep === 'material'
           ? `${canonicalShiftRef} has output. Record its materials before close.`
           : plantTodayStep === 'shift-close'
-            ? `${canonicalShiftRef} has output, materials, and clear controls. Prepare the close.`
+            ? shiftCloseReady
+              ? `${canonicalShiftRef} has a current close file. Review the owner and evidence.`
+              : `${canonicalShiftRef} has output, materials, and clear controls. Prepare the close.`
             : plantTodayStep === 'plan'
               ? 'Add an owned job with a due time.'
               : currentShiftClose
@@ -8465,7 +8467,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : plantTodayStep === 'material'
           ? 'Record materials used'
           : plantTodayStep === 'shift-close'
-            ? 'Close shift'
+            ? shiftCloseReady ? 'Review shift close' : 'Prepare shift close'
             : plantTodayStep === 'plan'
               ? 'Plan next job'
               : currentShiftClose
@@ -9808,13 +9810,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     if (!shiftCloseReady) return setNotice('Close blockers remain. Record good output and same-shift material trace, classify controlled work, then clear quality and WCM exceptions.')
     const reviewedHandoff = shiftHandoff
     const expectedRevision = production.revision
+    const reviewedShiftOwner = production.jobs.find((job) => reviewedHandoff.shiftEntries.some((entry) => entry.jobId === job.id))?.owner?.trim()
     queueAction({
       kind: 'production_shift_close',
       subjectId: reviewedHandoff.shiftRef,
       summary: `Close shift ${reviewedHandoff.shiftRef}`,
       before: `Revision ${reviewedHandoff.sourceRevision} | ${reviewedHandoff.shiftOutput.goodUnits} good | ${reviewedHandoff.materialEntries.length} material entries | ${reviewedHandoff.controlledOrders.length} controlled orders | quality clear | WCM clear`,
       after: 'Append one owner-attributed shift-close event bound to this exact Plant revision and evidence packet',
-      actorSuggestion: managedIdentity ? undefined : 'Shift supervisor',
+      actorSuggestion: managedIdentity ? undefined : plantBusinessWorkspace ? reviewedShiftOwner || 'Business owner' : 'Shift supervisor',
       reasonSuggestion: `Output, controlled orders, material trace, quality, and maintenance checks reviewed for ${reviewedHandoff.shiftRef}.`,
       evidenceReferenceSuggestion: `Shift close ${reviewedHandoff.shiftRef} · revision ${reviewedHandoff.sourceRevision}`,
       evidenceReferenceLocked: true,
@@ -10049,6 +10052,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         navigate('/plant/?tab=control&focus=shift-close')
         return
       }
+      if (shiftCloseReady) {
+        reviewShiftClose(trigger)
+        return
+      }
       openShiftCloseGuide()
       return
     }
@@ -10205,7 +10212,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             <label>Shift reference<input aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'shift'} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} maxLength={80} onChange={(event) => { setShiftRef(event.target.value); clearMaterialValidation('shift') }} placeholder={shiftReferencePlaceholder()} ref={materialShiftInputRef} required value={shiftRef} /></label>
             {materialValidationIssue ? <p aria-live="assertive" className="form-notice plant-material-validation" id="plant-material-validation">{materialValidationIssue}</p> : null}
             {selectedMaterialJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · This records observed material use only. It does not release the hold.</p> : null}
-            {!managedIdentity ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} onClick={() => {
+            {!managedIdentity && !plantBusinessWorkspace ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaterialJob} onClick={() => {
               const sampleShiftRef = shiftRef.trim() || shiftReferencePlaceholder()
               setShiftRef(sampleShiftRef)
               setHandoffShiftRef(sampleShiftRef)
