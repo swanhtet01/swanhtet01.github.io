@@ -2,6 +2,7 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
+import { readLocalSetupBusinessName } from '../../core/product-onboarding-runtime'
 import {
   COMMERCE_KEY,
   commerceCatalogDigest,
@@ -99,6 +100,16 @@ type ManagedStorefrontView = {
   availableSku: string
 }
 const DEFAULT_STORE_NAME = 'Mingalar Market'
+
+// The owner named their business during onboarding. Opening their storefront under a sample
+// shop's name is the same "nothing you did was remembered" signal the website starter had.
+//
+// Only used where there is no saved draft -- a saved storeName is always the owner's own and
+// is never overridden. The managed-identity branch keeps the sample default deliberately,
+// because a signed-in company's store name comes from its managed record, not this device.
+function defaultStoreName() {
+  return readLocalSetupBusinessName() ?? DEFAULT_STORE_NAME
+}
 const DEFAULT_STORE_SUMMARY = 'Everyday essentials for pickup or delivery, with clear local pricing.'
 
 function formatMmk(value: number) {
@@ -201,7 +212,7 @@ function savedLocalDraft(draft: StorefrontDraft | LegacyStorefrontDraft | null):
 function draftFieldsForCatalog(saved: SavedStorefrontState | null, items: CommerceItem[]) {
   if (!saved) {
     return {
-      storeName: DEFAULT_STORE_NAME,
+      storeName: defaultStoreName(),
       summary: DEFAULT_STORE_SUMMARY,
       selectedSkus: defaultSelection(items),
       merchandising: null,
@@ -247,7 +258,7 @@ function initialEcommerceState() {
   return {
     catalog,
     commerceState,
-    storeName: DEFAULT_STORE_NAME,
+    storeName: defaultStoreName(),
     summary: DEFAULT_STORE_SUMMARY,
     selectedSkus: defaultSelection(catalog.items),
     merchandising: null,

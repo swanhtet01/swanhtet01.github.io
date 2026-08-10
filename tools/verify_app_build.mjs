@@ -483,6 +483,17 @@ const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')
 for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Demo mode', 'Name your workspace', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
+// A storefront with no saved draft opens under the owner's own business name. Pinned because
+// the failure is invisible: nothing errors, the store is just named after a sample shop.
+// A SAVED storeName is the owner's and must never be overridden, which is why the default
+// only applies on the no-draft path.
+if (!ecommerceSource.includes('function defaultStoreName()')
+  || !ecommerceSource.includes('return readLocalSetupBusinessName() ?? DEFAULT_STORE_NAME')
+  // BOTH no-draft paths must use it -- draftFieldsForCatalog and initialEcommerceState. A
+  // plain includes() check passes while one of the two has regressed, so this counts them.
+  || ecommerceSource.split('storeName: defaultStoreName(),').length - 1 !== 2
+  || !ecommerceSource.includes('storeName: saved.storeName,')) fail('ecommerce_storefront_ignores_owner_business_name')
+
 if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
   || !ecommerceSource.includes('const ecommerceTodayHeadline =')
   || !ecommerceSource.includes("order.sourceRecordId?.startsWith('ECR-')")
