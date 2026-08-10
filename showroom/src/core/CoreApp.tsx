@@ -279,8 +279,8 @@ import {
   type ShopProductionDemandSignal,
 } from './shop-production-demand'
 import { projectPlantOrder } from './plant-order-foundation'
-import { productionOrderExecutionForJob, productionOrderPortfolioEntries } from './production-order-portfolio'
-import { projectProductionJobProgress, type ProductionJobProgress } from './production-job-progress'
+import { productionOrderPortfolioEntries } from './production-order-portfolio'
+import { projectControlledProductionEvidence, projectProductionJobProgress, type ProductionJobProgress } from './production-job-progress'
 import { projectShopDemandIntelligence } from './shop-demand-intelligence'
 import { projectShopProcurementDecision, projectShopReplenishment } from './shop-replenishment'
 import {
@@ -8247,10 +8247,19 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const holdableJobs = production.jobs.filter((job) => !job.qualityHold && !job.closure)
   const selectedHoldJobId = holdableJobs.some((job) => job.id === holdJobId) ? holdJobId : holdableJobs[0]?.id ?? ''
   const selectedHoldJob = holdableJobs.find((job) => job.id === selectedHoldJobId)
-  const jobProgressById = useMemo(() => new Map(production.jobs.map((job) => [
-    job.id,
-    projectProductionJobProgress(job, productionOrderExecutionForJob(production, job.id), plantOrderScope),
-  ])), [plantOrderScope, production])
+  const controlledOrderEntries = useMemo(() => productionOrderPortfolioEntries(production), [production])
+  const jobProgressById = useMemo(() => {
+    const executionByJobId = new Map(controlledOrderEntries.map((entry) => [entry.jobId, entry.execution]))
+    return new Map(production.jobs.map((job) => [
+      job.id,
+      projectProductionJobProgress(job, executionByJobId.get(job.id) ?? null, plantOrderScope),
+    ]))
+  }, [controlledOrderEntries, plantOrderScope, production.jobs])
+  const controlledProductionEvidence = useMemo(() => projectControlledProductionEvidence(
+    production.jobs,
+    controlledOrderEntries,
+    plantOrderScope,
+  ), [controlledOrderEntries, plantOrderScope, production.jobs])
   const activeJobs = production.jobs
     .filter((job) => !jobProgressById.get(job.id)?.complete)
     .sort(compareProductionJobSchedule)
@@ -8534,6 +8543,32 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedMaintenanceMachine = availableMaintenanceMachines.find((machine) => machine.id === selectedMaintenanceMachineId)
   const selectedMaintenanceStrategy = production.equipmentMaster?.assets.find((asset) => asset.id === selectedMaintenanceMachineId)?.maintenanceStrategy
   const selectedMaintenanceOwner = selectedMaintenanceStrategy?.maintenanceOwner ?? maintenanceOwner.trim()
+  const controlledOnlyProduction = controlledProductionEvidence.orderCount > 0
+    && production.jobs.every((job) => jobProgressById.get(job.id)?.authority === 'controlled_order')
+    && !production.events.some((event) => event.kind === 'output_recorded' || event.kind === 'material_consumed')
+  const controlledQualityBlockerCount = openIssues.filter((issue) => issue.kind === 'quality').length
+  const controlledCompletionReady = controlledOnlyProduction
+    && controlledProductionEvidence.readyForControlledCompletion
+    && controlledQualityBlockerCount === 0
+    && heldJobs.length === 0
+    && openDowntimeIntervals.length === 0
+    && openMaintenanceRecords.length === 0
+  const plantCompletionReady = plantHandoffReady || controlledCompletionReady
+  const plantMaterialEvidenceCount = materialEntries.length + controlledProductionEvidence.materialTraceCount
+  const plantMaterialEvidenceLabel = materialEntries.length
+    ? `${materialEntries.length} shift trace`
+    : controlledProductionEvidence.materialTraceCount
+      ? `${controlledProductionEvidence.materialTraceCount} batch ${controlledProductionEvidence.materialTraceCount === 1 ? 'lot' : 'lots'}`
+      : 'No trace'
+  const plantCompletionLabel = currentShiftClose
+    ? 'Shift closed'
+    : controlledCompletionReady
+      ? `${controlledProductionEvidence.releasedOrderCount} ${controlledProductionEvidence.releasedOrderCount === 1 ? 'batch' : 'batches'} released`
+      : controlledOnlyProduction
+        ? `${controlledProductionEvidence.activeOrderCount} ${controlledProductionEvidence.activeOrderCount === 1 ? 'batch' : 'batches'} active`
+        : shiftHandoffIsCurrent
+          ? 'Shift file ready'
+          : 'Build'
   const selectedShopDemand = plantShopDemandSourceReady
     ? shopDemandSignals.find((signal) => signal.sourceDigest === selectedShopDemandDigest)
     : undefined
@@ -8550,7 +8585,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           ? 'Close maintenance records'
           : activeJobs.length
             ? nextActiveJobControlled ? 'Continue controlled batch' : 'Record next job output'
-            : !plantHandoffReady
+            : !plantCompletionReady
               ? 'Prepare shift close'
               : 'Add next Plant job'
   const plantControlNext = !productionCanWrite
@@ -8563,15 +8598,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           ? 'Close maintenance work'
           : activeJobs.length
             ? nextActiveJobControlled ? 'Continue controlled batch' : 'Record next output'
-            : !plantHandoffReady
+            : !plantCompletionReady
               ? 'Prepare shift close'
               : 'Plan next job'
   const plantControlRows = [
     ['Jobs', activeJobs.length ? `${activeJobs.length} active` : 'Plan'],
     ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
     ['Maintenance', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
-    ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'No trace'],
-    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+    ['Materials', plantMaterialEvidenceLabel],
+    ['Release / close', plantCompletionLabel],
     ['Write status', productionCanWrite && !pendingAction ? 'Ready' : 'Locked'],
   ] as const
   const plantLifecycleRows = [
@@ -8579,8 +8614,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Execute', nextActiveJob ? nextActiveJobControlled ? `${nextActiveJob.id} · ${nextActiveJobProgress?.controlledStatusLabel}` : `${nextActiveJob.id} next` : 'No active job'],
     ['Quality', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
     ['Maintenance', openDowntimeIntervals.length + openMaintenanceRecords.length ? `${openDowntimeIntervals.length + openMaintenanceRecords.length} open` : 'Clear'],
-    ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace'],
-    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Build'],
+    ['Trace', plantMaterialEvidenceLabel],
+    ['Release / close', plantCompletionLabel],
   ] as const
   const plantControlBoundary = 'Manager reviews production, quality, maintenance, material, and shift-close changes.'
   const openWcmCount = openDowntimeIntervals.length + openMaintenanceRecords.length
@@ -8591,9 +8626,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       ? heldJobs[0].id
       : nextActiveJob
         ? `${nextActiveJob.id} / ${(nextActiveJobProgress?.remainingQuantity ?? 0).toLocaleString()} left`
-        : plantHandoffReady
+        : plantCompletionReady
           ? 'Next plan'
-          : 'Shift close'
+          : controlledOnlyProduction ? 'Batch release' : 'Shift close'
   const mesDispatchBlocker = !productionCanWrite
     ? 'Write readiness'
     : pendingAction
@@ -8604,15 +8639,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           ? 'Quality hold'
           : openWcmCount
             ? 'Maintenance close'
-            : activeJobs.length && !materialEntries.length
+            : activeJobs.length && !plantMaterialEvidenceCount
               ? nextActiveJobControlled ? nextActiveJobProgress?.controlledStatusLabel ?? 'Controlled batch' : 'Trace start'
-              : !plantHandoffReady
-                ? 'Shift close'
+              : !plantCompletionReady
+                ? controlledOnlyProduction ? 'Batch release' : 'Shift close'
                 : 'None'
-  const mesDispatchEvidence = materialEntries.length
-    ? `${materialEntries.length} material trace`
-    : plantHandoffReady
-      ? 'Shift close current'
+  const mesDispatchEvidence = plantMaterialEvidenceCount
+    ? plantMaterialEvidenceLabel
+    : plantCompletionReady
+      ? plantCompletionLabel
       : activeJobs.length
         ? 'Need trace'
         : 'Plan evidence'
@@ -8621,11 +8656,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Target', mesDispatchTarget],
     ['Blocker', mesDispatchBlocker],
     ['Evidence', mesDispatchEvidence],
-    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Build'],
+    ['Release / close', plantCompletionLabel],
     ['Safety', 'Review first'],
   ] as const
   const openMaterialIssues = openIssues.filter((issue) => issue.kind === 'materials')
-  const primaryOrderExecution = productionOrderPortfolioEntries(production)[0]?.execution ?? null
+  const primaryOrderExecution = controlledOrderEntries[0]?.execution ?? null
   const orderExecutionProjection = primaryOrderExecution ? projectPlantOrder(primaryOrderExecution) : null
   const materialRequirements = primaryOrderExecution ? projectProductionMaterialRequirements(primaryOrderExecution, relatedCommerce) : null
   const plantMrpNext = !productionCanWrite
@@ -8654,19 +8689,19 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['Issue gate', openMaterialIssues.length ? `${openMaterialIssues.length} open` : 'Clear'],
   ] as const
   const openQualityIssues = openIssues.filter((issue) => issue.kind === 'quality')
-  const productionGoodUnits = production.jobs.reduce((total, job) => total + job.output, 0)
-  const productionScrapUnits = production.jobs.reduce((total, job) => total + (job.scrap ?? 0), 0)
+  const productionGoodUnits = production.jobs.reduce((total, job) => total + (jobProgressById.get(job.id)?.acceptedQuantity ?? job.output), 0)
+  const productionScrapUnits = production.jobs.reduce((total, job) => total + (jobProgressById.get(job.id)?.scrapQuantity ?? job.scrap ?? 0), 0)
   const plantCostReadinessNext = !productionCanWrite
     ? 'Restore cost evidence readiness'
     : pendingAction
       ? 'Approve pending Plant action'
-      : !materialEntries.length
+      : !plantMaterialEvidenceCount
         ? 'Record material trace before cost'
         : heldJobs.length || openQualityIssues.length
           ? 'Resolve quality before cost'
           : openWcmCount
             ? 'Close maintenance before cost'
-            : !plantHandoffReady
+            : !plantCompletionReady
               ? 'Prepare cost review'
               : completedJobs.length
                 ? 'Cost package ready for review'
@@ -8674,18 +8709,18 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantCostReadinessRows = [
     ['Good', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} units` : 'No output'],
     ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} units` : 'None'],
-    ['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'Missing'],
+    ['Materials', plantMaterialEvidenceLabel],
     ['Quality', heldJobs.length || openQualityIssues.length ? 'Blocked' : 'Clear'],
     ['Maintenance', openWcmCount ? `${openWcmCount} open` : 'Closed'],
-    ['Cost gate', plantHandoffReady && materialEntries.length && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked'],
+    ['Cost gate', plantCompletionReady && plantMaterialEvidenceCount && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked'],
   ] as const
-  const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && materialEntries.length && plantHandoffReady && !heldJobs.length && !openQualityIssues.length && !openWcmCount)
+  const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && plantMaterialEvidenceCount && plantCompletionReady && !heldJobs.length && !openQualityIssues.length && !openWcmCount)
   const plantCostPacketRows = [
     ['Batch', completedJobs.length ? `${completedJobs.length} finished` : activeJobs.length ? 'Still running' : 'No job'],
     ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
     ['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} scrap` : 'None'],
-    ['Materials', materialEntries.length ? `${materialEntries.length} trace rows` : 'Need trace'],
-    ['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantHandoffReady ? 'Evidence ready' : 'Need shift close'],
+    ['Materials', plantMaterialEvidenceLabel],
+    ['Release / close', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantCompletionReady ? 'Evidence ready' : controlledOnlyProduction ? 'Need batch release' : 'Need shift close'],
     ['Cost file', plantCostPacketReady ? 'Review package' : 'Blocked'],
   ] as const
   const plantQualityReleaseNext = !productionCanWrite
@@ -8696,17 +8731,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         ? 'Resolve quality holds'
         : openWcmCount
           ? 'Close maintenance work'
-          : openMaterialIssues.length || !materialEntries.length
+          : openMaterialIssues.length || !plantMaterialEvidenceCount
             ? 'Complete trace evidence'
-            : !plantHandoffReady
+            : !plantCompletionReady
               ? 'Prepare release review'
               : 'Release package ready'
   const plantQualityReleaseRows = [
     ['Holds', heldJobs.length ? `${heldJobs.length} held` : 'Clear'],
     ['Quality', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
     ['Maintenance', openWcmCount ? `${openWcmCount} open` : 'Closed'],
-    ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
-    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Needed'],
+    ['Trace', plantMaterialEvidenceLabel],
+    ['Release / close', plantCompletionLabel],
     ['Gate', productionCanWrite && !pendingAction ? 'Owner release' : 'Locked'],
   ] as const
   const qualityIssuesWithContainment = openQualityIssues.filter((issue) => Boolean(issue.owner && issue.dueAt && issue.containment))
@@ -8720,7 +8755,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           ? 'Assign NCR containment'
           : openQualityIssues.length
             ? 'Close CAPA evidence'
-            : activeJobs.length && !materialEntries.length
+            : activeJobs.length && !plantMaterialEvidenceCount
               ? 'Sample first production run'
               : 'Inspection queue clear'
   const plantInspectionRows = [
@@ -8728,7 +8763,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     ['NCR', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
     ['Containment', qualityIssuesWithContainment.length === openQualityIssues.length ? 'Owned' : `${openQualityIssues.length - qualityIssuesWithContainment.length} missing`],
     ['CAPA', resolvedIssues.filter((issue) => issue.kind === 'quality').length ? `${resolvedIssues.filter((issue) => issue.kind === 'quality').length} closed` : 'None yet'],
-    ['Evidence', heldJobs.length || openQualityIssues.length || materialEntries.length ? 'Required' : 'Ready'],
+    ['Evidence', heldJobs.length || openQualityIssues.length || plantMaterialEvidenceCount ? 'Required' : 'Ready'],
     ['Release', productionCanWrite && !pendingAction && !heldJobs.length && !openQualityIssues.length ? 'Owner review' : 'Blocked'],
   ] as const
   const plantComplianceDossierNext = !productionCanWrite
@@ -8739,9 +8774,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         ? 'Resolve audit quality'
         : openWcmCount
           ? 'Close maintenance evidence'
-          : !materialEntries.length
+          : !plantMaterialEvidenceCount
             ? 'Record traceability'
-            : !plantHandoffReady
+            : !plantCompletionReady
               ? 'Build shift dossier'
               : plantCostPacketReady
                 ? 'Audit dossier ready'
@@ -8749,9 +8784,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantComplianceDossierRows = [
     ['Audit quality', openQualityIssues.length || heldJobs.length ? `${openQualityIssues.length + heldJobs.length} blocked` : 'Clear'],
     ['Maintenance', openWcmCount ? `${openWcmCount} open` : 'Closed'],
-    ['Trace', materialEntries.length ? `${materialEntries.length} material` : 'Missing'],
+    ['Trace', plantMaterialEvidenceLabel],
     ['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output'],
-    ['Handoff', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Current' : 'Build'],
+    ['Release / close', plantCompletionLabel],
     ['Safety', 'Review first'],
   ] as const
   const currentShiftHasOutput = Boolean(canonicalShiftRef
@@ -8761,7 +8796,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const shiftCloseProblemCount = openIssues.filter((issue) => issue.kind === 'quality' || issue.severity === 'critical' || issue.severity === 'high').length
     + heldJobs.length
     + openWcmCount
-  const immediatePlantBlockerCount = urgentIssueCount + heldJobs.length + openWcmCount
+  const immediatePlantBlockerCount = shiftCloseProblemCount
   const plantTodayStep = !productionCanWrite
     ? 'restore'
     : pendingAction
@@ -8820,7 +8855,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               ? `${canonicalShiftRef} has a current close file. Review the owner and evidence.`
               : `${canonicalShiftRef} has output, materials, and clear controls. Prepare the close.`
             : plantTodayStep === 'plan'
-              ? 'Add an owned job with a due time.'
+              ? controlledCompletionReady
+                ? `${plantCompletionLabel}. Output and material evidence are already linked; add the next owned job.`
+                : 'Add an owned job with a due time.'
               : currentShiftClose
                 ? `${currentShiftClose.shiftRef} is closed. Record the next output.`
                 : nextActiveJob
@@ -8843,13 +8880,39 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               : currentShiftClose
                 ? 'Record next output'
                 : 'Record output'
+  const controlledOutputLabel = controlledProductionEvidence.acceptedQuantity || controlledProductionEvidence.rejectedQuantity
+    ? `${controlledProductionEvidence.acceptedQuantity.toLocaleString()} accepted${controlledProductionEvidence.rejectedQuantity ? ` · ${controlledProductionEvidence.rejectedQuantity.toLocaleString()} rejected` : ''}`
+    : controlledProductionEvidence.awaitingInspectionQuantity
+      ? `${controlledProductionEvidence.awaitingInspectionQuantity.toLocaleString()} awaiting inspection`
+      : controlledProductionEvidence.outputQuantity
+        ? `${controlledProductionEvidence.outputQuantity.toLocaleString()} produced`
+        : 'Not started'
+  const plantTodayOutputLabel = currentShiftHasOutput
+    ? `${currentShiftOutput.goodUnits.toLocaleString()} good`
+    : currentShiftClose
+      ? `${(currentShiftClose.goodUnits ?? 0).toLocaleString()} closed`
+      : controlledOnlyProduction
+        ? controlledOutputLabel
+        : 'Not started'
+  const plantTodayMaterialLabel = currentShiftMaterialEntries.length
+    ? `${currentShiftMaterialEntries.length} records`
+    : currentShiftClose
+      ? `${currentShiftClose.materialEntryCount ?? 0} closed`
+      : controlledOnlyProduction && controlledProductionEvidence.materialTraceCount
+        ? `${controlledProductionEvidence.materialTraceCount} batch ${controlledProductionEvidence.materialTraceCount === 1 ? 'lot' : 'lots'}`
+        : currentShiftHasOutput
+          ? 'Next step'
+          : 'Not started'
+  const controlledCompletionReplacesShiftClose = controlledCompletionReady
+    && !currentShiftHasOutput
+    && currentShiftMaterialEntries.length === 0
   const plantTodayMetrics = [
     ['Active jobs', activeJobs.length ? `${activeJobs.length} running` : 'None'],
-    ['Shift output', currentShiftHasOutput ? `${currentShiftOutput.goodUnits.toLocaleString()} good` : currentShiftClose ? `${(currentShiftClose.goodUnits ?? 0).toLocaleString()} closed` : 'Not started'],
+    ['Output', plantTodayOutputLabel],
     ['Problems & quality', openIssues.length + heldJobs.length ? `${openIssues.length + heldJobs.length} open` : 'Clear'],
     ['Maintenance', openWcmCount ? `${openWcmCount} open` : overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : 'Clear'],
-    ['Materials used', currentShiftMaterialEntries.length ? `${currentShiftMaterialEntries.length} records` : currentShiftClose ? `${currentShiftClose.materialEntryCount ?? 0} closed` : currentShiftHasOutput ? 'Next step' : 'Not started'],
-    ['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Not closed'],
+    ['Materials', plantTodayMaterialLabel],
+    ['Release / close', plantCompletionLabel],
   ] as const
   const plantTodaySource = managedIdentity
     ? `Company Plant · revision ${managedVersion ?? production.revision}`
@@ -10680,12 +10743,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             </div> : <p className="panel-copy">Add a job before building a batch trace.</p>}
           </details>
           <details className="compact-disclosure production-history" onToggle={(event) => { if (!event.currentTarget.open && shiftCloseGuideOpen) setShiftCloseGuideOpen(false) }} open={shiftCloseGuideOpen || Boolean(shiftHandoff || currentShiftClose)} ref={shiftCloseDisclosureRef}>
-            <summary>Shift close <span>{currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? shiftCloseReady ? 'Ready' : 'Blocked' : 'Build'}</span></summary>
-            <form autoComplete="off" className="core-form compact-form" onSubmit={buildShiftHandoff}>
+            <summary>Release / shift close <span>{controlledCompletionReplacesShiftClose ? 'Batch released' : currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? shiftCloseReady ? 'Ready' : 'Blocked' : 'Build'}</span></summary>
+            {controlledCompletionReplacesShiftClose ? <div className="stock-receipt-preview" data-controlled-completion="current" role="status"><small>Controlled-only completion</small><strong>{controlledProductionEvidence.releasedOrderCount} {controlledProductionEvidence.releasedOrderCount === 1 ? 'batch' : 'batches'} released · {controlledProductionEvidence.acceptedQuantity.toLocaleString()} accepted</strong><span>{controlledProductionEvidence.materialTraceCount} linked material {controlledProductionEvidence.materialTraceCount === 1 ? 'lot' : 'lots'}. Human batch release is the completion gate; do not record duplicate shift output or material use. Shift close remains available when manual shift entries exist.</span></div> : <form autoComplete="off" className="core-form compact-form" onSubmit={buildShiftHandoff}>
               <label>Shift reference<input maxLength={80} onChange={(event) => setHandoffShiftRef(event.target.value)} placeholder={shiftReferencePlaceholder()} ref={shiftCloseInputRef} required value={handoffShiftRef} /></label>
               <button className="core-button" disabled={!handoffShiftRef.trim() && !shiftRef.trim()} type="submit">Prepare shift close file</button>
               <p className="panel-copy">No change yet. Close needs owner, reason, and evidence.</p>
-            </form>
+            </form>}
             {shiftCloseRows.length ? <div aria-label="Shift close checklist" className="plant-shift-close-grid">{shiftCloseRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div> : null}
             {currentShiftClose ? <div className="form-notice" role="status"><strong>Shift closed by {currentShiftClose.actor}</strong><br />{currentShiftClose.shiftRef} | revision {currentShiftClose.sourceRevision} | {currentShiftClose.goodUnits} good | {currentShiftClose.materialEntryCount} material entries | {currentShiftCloseEvidence?.handoff.controlledOrders.length ?? 0} controlled orders | quality clear | WCM clear<br />Evidence: {currentShiftClose.evidenceReference}</div> : null}
             {shiftHandoff && !shiftHandoffIsCurrent && !currentShiftClose ? <p className="form-notice" role="alert">Plant records or the shift reference changed after this close file was prepared. Prepare it again before use.</p> : null}

@@ -15,6 +15,19 @@ export type ProductionJobProgress = Readonly<{
   complete: boolean
 }>
 
+export type ControlledProductionEvidence = Readonly<{
+  orderCount: number
+  bindingCurrentCount: number
+  releasedOrderCount: number
+  activeOrderCount: number
+  outputQuantity: number
+  acceptedQuantity: number
+  rejectedQuantity: number
+  awaitingInspectionQuantity: number
+  materialTraceCount: number
+  readyForControlledCompletion: boolean
+}>
+
 const controlledStatusLabels: Record<PlantOrderProjection['status'], string> = {
   unplanned: 'Batch setup required',
   planned: 'Batch planned',
@@ -44,6 +57,12 @@ function workspaceProgress(job: ProductionJob): ProductionJobProgress {
     remainingQuantity: Math.max(0, job.target - progressedQuantity),
     complete: Boolean(job.closure) || progressedQuantity >= job.target,
   }
+}
+
+function safeTotal(current: number, next: number, label: string) {
+  const total = current + next
+  if (!Number.isSafeInteger(total) || total < 0) throw new Error(`Controlled production ${label} exceeds the safe total.`)
+  return total
 }
 
 export function projectProductionJobProgress(
@@ -81,5 +100,51 @@ export function projectProductionJobProgress(
     remainingQuantity: Math.max(0, job.target - progressedQuantity),
     complete: Boolean(job.closure)
       || (bindingCurrent && projection.status === 'released_to_stock' && progressedQuantity >= job.target),
+  }
+}
+
+export function projectControlledProductionEvidence(
+  jobs: readonly ProductionJob[],
+  controlledOrders: readonly Readonly<{ jobId: string; execution: PlantOrderState }>[],
+  plantOrderScope: string,
+): ControlledProductionEvidence {
+  const jobsById = new Map(jobs.map((job) => [job.id, job]))
+  let bindingCurrentCount = 0
+  let releasedOrderCount = 0
+  let outputQuantity = 0
+  let acceptedQuantity = 0
+  let rejectedQuantity = 0
+  let awaitingInspectionQuantity = 0
+  let materialTraceCount = 0
+
+  for (const order of controlledOrders) {
+    const job = jobsById.get(order.jobId)
+    if (!job) continue
+    const progress = projectProductionJobProgress(job, order.execution, plantOrderScope)
+    if (progress.authority !== 'controlled_order' || !progress.bindingCurrent) continue
+    const projection = projectPlantOrder(order.execution)
+    bindingCurrentCount += 1
+    outputQuantity = safeTotal(outputQuantity, projection.totalOutput, 'output')
+    acceptedQuantity = safeTotal(acceptedQuantity, projection.metrics.acceptedQuantity, 'accepted output')
+    rejectedQuantity = safeTotal(rejectedQuantity, progress.rejectedQuantity, 'rejected output')
+    awaitingInspectionQuantity = safeTotal(awaitingInspectionQuantity, progress.awaitingInspectionQuantity, 'awaiting-inspection output')
+    materialTraceCount = safeTotal(materialTraceCount, projection.genealogy.length, 'material trace')
+    if (projection.status === 'released_to_stock') releasedOrderCount += 1
+  }
+
+  const orderCount = controlledOrders.length
+  return {
+    orderCount,
+    bindingCurrentCount,
+    releasedOrderCount,
+    activeOrderCount: orderCount - releasedOrderCount,
+    outputQuantity,
+    acceptedQuantity,
+    rejectedQuantity,
+    awaitingInspectionQuantity,
+    materialTraceCount,
+    readyForControlledCompletion: orderCount > 0
+      && bindingCurrentCount === orderCount
+      && releasedOrderCount === orderCount,
   }
 }

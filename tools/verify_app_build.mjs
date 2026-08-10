@@ -2024,13 +2024,13 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes('const currentShiftMaterialEntries = canonicalShiftRef')
   || !coreSource.includes('const currentShiftHasOutput = Boolean(canonicalShiftRef')
   || !coreSource.includes('const shiftCloseProblemCount = openIssues.filter')
-  || !coreSource.includes('const immediatePlantBlockerCount = urgentIssueCount + heldJobs.length + openWcmCount')
+  || !coreSource.includes('const immediatePlantBlockerCount = shiftCloseProblemCount')
   || !coreSource.includes("['Active jobs', activeJobs.length ? `${activeJobs.length} running` : 'None']")
-  || !coreSource.includes("['Shift output', currentShiftHasOutput")
+  || !coreSource.includes("['Output', plantTodayOutputLabel]")
   || !coreSource.includes("['Problems & quality', openIssues.length + heldJobs.length")
   || !coreSource.includes("['Maintenance', openWcmCount")
-  || !coreSource.includes("['Materials used', currentShiftMaterialEntries.length")
-  || !coreSource.includes("['Shift close', currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? 'Ready' : 'Not closed']")
+  || !coreSource.includes("['Materials', plantTodayMaterialLabel]")
+  || !coreSource.includes("['Release / close', plantCompletionLabel]")
   || coreSource.includes("['Shift handoff', shiftHandoffIsCurrent")
   || !coreSource.includes('aria-labelledby="plant-today-title"')
   || !coreSource.includes('data-step={plantTodayStep}')
@@ -2171,7 +2171,7 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes("['Safety', 'Review first']")
   || !coreSource.includes('const plantControlNext =')
   || !coreSource.includes('const plantControlRows = [')
-  || !coreSource.includes("['Materials', materialEntries.length ? `${materialEntries.length} traced` : 'No trace']")
+  || !coreSource.includes("['Materials', plantMaterialEvidenceLabel]")
   || !coreSource.includes("['Write status', productionCanWrite && !pendingAction ? 'Ready' : 'Locked']")
   || coreSource.includes("['Write gate', productionCanWrite && !pendingAction ? 'Ready' : 'Locked']")
   || !coreSource.includes('const plantLifecycleRows = [')
@@ -2182,7 +2182,8 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || coreSource.includes('AI guides plan, execution, quality, WCM, trace, and handoff.')
   || !coreSource.includes('const plantMrpRows = [')
   || !coreSource.includes('const plantMrpNext =')
-  || !coreSource.includes('productionOrderPortfolioEntries(production)[0]?.execution')
+  || !coreSource.includes('const controlledOrderEntries = useMemo(() => productionOrderPortfolioEntries(production)')
+  || !coreSource.includes('const primaryOrderExecution = controlledOrderEntries[0]?.execution ?? null')
   || !coreSource.includes('projectProductionMaterialRequirements(primaryOrderExecution, relatedCommerce)')
   || !coreSource.includes("materialRequirements.status === 'mapping_required'")
   || !coreSource.includes("materialRequirements.status === 'supply_at_risk'")
@@ -2210,8 +2211,8 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes("'Cost package ready for review'")
   || !coreSource.includes("['Good', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} units` : 'No output']")
   || !coreSource.includes("['Scrap', productionScrapUnits ? `${productionScrapUnits.toLocaleString()} units` : 'None']")
-  || !coreSource.includes("['Cost gate', plantHandoffReady && materialEntries.length && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked']")
-  || !coreSource.includes('const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && materialEntries.length && plantHandoffReady && !heldJobs.length && !openQualityIssues.length && !openWcmCount)')
+  || !coreSource.includes("['Cost gate', plantCompletionReady && plantMaterialEvidenceCount && !heldJobs.length && !openQualityIssues.length && !openWcmCount ? 'Review only' : 'Blocked']")
+  || !coreSource.includes('const plantCostPacketReady = Boolean(completedJobs.length && productionGoodUnits && plantMaterialEvidenceCount && plantCompletionReady && !heldJobs.length && !openQualityIssues.length && !openWcmCount)')
   || !coreSource.includes('const plantCostPacketRows = [')
   || !coreSource.includes('aria-label="Plant cost review file"')
   || coreSource.includes('aria-label="Plant ERP cost package packet"')
@@ -2221,9 +2222,8 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes("'Ready for cost review'")
   || !coreSource.includes("['Batch', completedJobs.length ? `${completedJobs.length} finished` : activeJobs.length ? 'Still running' : 'No job']")
   || !coreSource.includes("['Output', productionGoodUnits ? `${productionGoodUnits.toLocaleString()} good` : 'No output']")
-  || !coreSource.includes("['Materials', materialEntries.length ? `${materialEntries.length} trace rows` : 'Need trace']")
-  || !coreSource.includes("['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantHandoffReady ? 'Evidence ready' : 'Need shift close']")
-  || coreSource.includes("['Release', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantHandoffReady ? 'Evidence ready' : 'Need handoff']")
+  || !coreSource.includes("['Materials', plantMaterialEvidenceLabel]")
+  || !coreSource.includes("['Release / close', heldJobs.length || openQualityIssues.length ? 'Quality blocked' : plantCompletionReady ? 'Evidence ready' : controlledOnlyProduction ? 'Need batch release' : 'Need shift close']")
   || !coreSource.includes("['Cost file', plantCostPacketReady ? 'Review package' : 'Blocked']")
   || coreSource.includes("['ERP handoff', plantCostPacketReady ? 'Review package' : 'Blocked']")
   || (coreSource.match(/\{plantCostPacket\}/g) || []).length !== 1
@@ -2291,7 +2291,7 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes("['Plan', activeJobs.length ? `${activeJobs.length} active` : 'Add job']")
   || !coreSource.includes("['Execute', nextActiveJob ? nextActiveJobControlled ?")
   || !coreSource.includes('nextActiveJobProgress?.controlledStatusLabel')
-  || !coreSource.includes("['Trace', materialEntries.length ? `${materialEntries.length} material` : 'No trace']")
+  || !coreSource.includes("['Trace', plantMaterialEvidenceLabel]")
   || !coreSource.includes('aria-label="Plant control"')
   || !coreSource.includes('Plant control')
   || !coreSource.includes("'Contain urgent problems'")
@@ -5442,6 +5442,9 @@ if (!plantOrderSource.includes("PLANT_ORDER_STATE_SCHEMA = 'supermega.plant.orde
   || !plantOrderSource.includes('Plant order write verification failed.')) fail('plant_order_foundation_contract_missing')
 if (['fetch(', 'supabase', 'openai', 'anthropic'].some((marker) => plantOrderSource.toLowerCase().includes(marker))) fail('plant_order_foundation_external_side_effect_added')
 if (!productionJobProgressSource.includes('export function projectProductionJobProgress(')
+  || !productionJobProgressSource.includes('export function projectControlledProductionEvidence(')
+  || !productionJobProgressSource.includes('readyForControlledCompletion: orderCount > 0')
+  || !productionJobProgressSource.includes('function safeTotal(')
   || !productionJobProgressSource.includes("authority: 'workspace' | 'controlled_order'")
   || !productionJobProgressSource.includes("projection.status === 'released_to_stock'")
   || !productionJobProgressSource.includes('productionJobPlanSourceDigest(plantOrderScope, job) === plan.sourceDigest')
@@ -5450,7 +5453,11 @@ if (!coreSource.includes('const manualEntryJobs = activeJobs.filter(')
   || !coreSource.includes("jobProgressById.get(job.id)?.authority === 'workspace'")
   || !coreSource.includes('data-job-progress-authority=')
   || !coreSource.includes('Continue in controlled batch')
-  || !coreSource.includes("plantTodayStep === 'batch'")) fail('production_job_progress_ui_alignment_missing')
+  || !coreSource.includes("plantTodayStep === 'batch'")
+  || !coreSource.includes('const controlledOnlyProduction =')
+  || !coreSource.includes('const controlledCompletionReady =')
+  || !coreSource.includes('data-controlled-completion="current"')
+  || !coreSource.includes('do not record duplicate shift output or material use')) fail('production_job_progress_ui_alignment_missing')
 if (!coreSource.includes('<PlantOrderFoundation')
   || !coreSource.includes("lazy(() => import('./PlantOrderFoundation')")
   || !coreSource.includes('className="plant-batch-disclosure"')
@@ -9726,6 +9733,22 @@ async function verifyPlantOrderRuntime() {
       && awaitingProgress.complete === false
       && awaitingProgress.controlledStatus === 'inspection_due',
     'production_job_uninspected_output_mislabeled_or_completed')
+    const awaitingEvidence = productionJobProgress.projectControlledProductionEvidence(
+      [progressJob],
+      [{ jobId: progressJob.id, execution: progressState }],
+      progressScope,
+    )
+    assert(awaitingEvidence.orderCount === 1
+      && awaitingEvidence.bindingCurrentCount === 1
+      && awaitingEvidence.releasedOrderCount === 0
+      && awaitingEvidence.activeOrderCount === 1
+      && awaitingEvidence.outputQuantity === 2
+      && awaitingEvidence.acceptedQuantity === 0
+      && awaitingEvidence.rejectedQuantity === 0
+      && awaitingEvidence.awaitingInspectionQuantity === 2
+      && awaitingEvidence.materialTraceCount === 1
+      && awaitingEvidence.readyForControlledCompletion === false,
+    'controlled_production_awaiting_evidence_drifted')
     assert(JSON.stringify(progressState) === progressStateBeforeProjection, 'production_job_progress_projection_mutated_execution')
     const unrelatedProgress = productionJobProgress.projectProductionJobProgress({ ...progressJob, id: 'JOB-PROGRESS-OTHER' }, progressState, progressScope)
     assert(unrelatedProgress.authority === 'workspace' && unrelatedProgress.progressedQuantity === 1, 'production_job_progress_used_mismatched_job')
@@ -9737,6 +9760,16 @@ async function verifyPlantOrderRuntime() {
       && acceptedProgress.complete === false
       && acceptedProgress.controlledStatus === 'ready_to_release',
     'production_job_accepted_output_completed_before_release')
+    const acceptedEvidence = productionJobProgress.projectControlledProductionEvidence(
+      [progressJob],
+      [{ jobId: progressJob.id, execution: progressState }],
+      progressScope,
+    )
+    assert(acceptedEvidence.acceptedQuantity === 2
+      && acceptedEvidence.releasedOrderCount === 0
+      && acceptedEvidence.activeOrderCount === 1
+      && acceptedEvidence.readyForControlledCompletion === false,
+    'controlled_production_accepted_output_completed_before_release')
     progressState = model.releasePlantOrderBatch(progressState, { qualityReleaseId: 'QREL-PROGRESS-001', outputBatchId: 'BATCH-PROGRESS-001', inspectionId: 'INSP-PROGRESS-001', proof: proof(57, 'released progress batch'), expectedHeadDigest: progressState.headDigest }).state
     const releasedProgress = productionJobProgress.projectProductionJobProgress(progressJob, progressState, progressScope)
     assert(releasedProgress.acceptedQuantity === 3
@@ -9745,6 +9778,21 @@ async function verifyPlantOrderRuntime() {
       && releasedProgress.complete === true
       && releasedProgress.controlledStatusLabel === 'Released to stock',
     'production_job_released_batch_not_completed')
+    const releasedStateBeforeEvidence = JSON.stringify(progressState)
+    const releasedEvidence = productionJobProgress.projectControlledProductionEvidence(
+      [progressJob],
+      [{ jobId: progressJob.id, execution: progressState }],
+      progressScope,
+    )
+    assert(releasedEvidence.orderCount === 1
+      && releasedEvidence.bindingCurrentCount === 1
+      && releasedEvidence.releasedOrderCount === 1
+      && releasedEvidence.activeOrderCount === 0
+      && releasedEvidence.outputQuantity === 2
+      && releasedEvidence.acceptedQuantity === 2
+      && releasedEvidence.materialTraceCount === 1
+      && releasedEvidence.readyForControlledCompletion === true,
+    'controlled_production_released_evidence_not_completion_ready')
     const staleProgress = productionJobProgress.projectProductionJobProgress({ ...progressJob, output: 2 }, progressState, progressScope)
     assert(staleProgress.authority === 'controlled_order'
       && staleProgress.bindingCurrent === false
@@ -9752,6 +9800,29 @@ async function verifyPlantOrderRuntime() {
       && staleProgress.complete === false
       && staleProgress.controlledStatusLabel === 'Batch plan needs reconciliation',
     'production_job_stale_binding_was_merged')
+    const staleEvidence = productionJobProgress.projectControlledProductionEvidence(
+      [{ ...progressJob, output: 2 }],
+      [{ jobId: progressJob.id, execution: progressState }],
+      progressScope,
+    )
+    assert(staleEvidence.orderCount === 1
+      && staleEvidence.bindingCurrentCount === 0
+      && staleEvidence.releasedOrderCount === 0
+      && staleEvidence.activeOrderCount === 1
+      && staleEvidence.outputQuantity === 0
+      && staleEvidence.materialTraceCount === 0
+      && staleEvidence.readyForControlledCompletion === false,
+    'controlled_production_stale_binding_was_counted')
+    const missingJobEvidence = productionJobProgress.projectControlledProductionEvidence(
+      [],
+      [{ jobId: progressJob.id, execution: progressState }],
+      progressScope,
+    )
+    assert(missingJobEvidence.orderCount === 1
+      && missingJobEvidence.bindingCurrentCount === 0
+      && missingJobEvidence.readyForControlledCompletion === false,
+    'controlled_production_missing_job_was_counted')
+    assert(JSON.stringify(progressState) === releasedStateBeforeEvidence, 'controlled_production_projection_mutated_execution')
     const tampered = JSON.parse(JSON.stringify(result.state)); tampered.commands[3].payload.quantityMilli = 1
     assertThrows(() => model.validatePlantOrderState(tampered), 'plant_order_tampered_chain_validated')
 
@@ -22138,8 +22209,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 112 KB allowance includes reviewed Plant-to-Shop supply enforcement and controlled-batch job progress alignment; initial-load and chunk budgets remain unchanged.
-if (bytes > 2_914_000) fail(`artifact_budget:${bytes}`)
+// Bounded cumulative 113 KB allowance includes reviewed Plant-to-Shop supply enforcement, controlled-batch job progress, and release/close evidence alignment; initial-load and chunk budgets remain unchanged.
+if (bytes > 2_915_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
