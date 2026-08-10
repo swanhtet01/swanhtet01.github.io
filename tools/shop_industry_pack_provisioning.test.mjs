@@ -10,6 +10,7 @@ import {
   isGuidedSampleShopSchedule,
   projectShopServiceSchedule,
   shopIndustryPacks,
+  shopScheduleVocabulary,
   validateShopServiceSchedule,
 } from '../showroom/src/core/shop-service-scheduling.ts'
 import { shopBusinessTemplates } from '../showroom/src/products/shop/business-templates.ts'
@@ -53,6 +54,40 @@ test('every shop industry pack seeds a schedule the day view can render', () => 
     // An empty day view is the shell complaint: the pack installs but the first
     // screen a client opens shows nothing to act on.
     assert.ok(projection.today.length >= 1, `${pack.id} needs bookings on the planning day`)
+  }
+})
+
+// A restaurant that is shown "Appointments" is being shown someone else's
+// product. The words are pack data so the schedule screen reads as theirs.
+test('every pack names its own schedule vocabulary', () => {
+  const seen = new Map()
+  for (const pack of shopIndustryPacks) {
+    const vocabulary = shopScheduleVocabulary(pack.id)
+    assert.deepEqual(vocabulary, pack.scheduleVocabulary, `${pack.id} lookup must return its own words`)
+    for (const [field, value] of Object.entries(vocabulary)) {
+      assert.equal(typeof value, 'string', `${pack.id} ${field} must be a string`)
+      assert.ok(value.trim().length >= 3, `${pack.id} ${field} must be readable`)
+    }
+    assert.equal(vocabulary.plural, vocabulary.plural.trim())
+    assert.equal(vocabulary.singular, vocabulary.singular.toLowerCase(), `${pack.id} singular is used mid-sentence`)
+    assert.ok(vocabulary.holdAction.startsWith('Hold'), `${pack.id} hold action labels a button`)
+    const previous = seen.get(vocabulary.plural)
+    if (previous) assert.fail(`${pack.id} reuses the schedule wording of ${previous}`)
+    seen.set(vocabulary.plural, pack.id)
+  }
+  assert.equal(shopScheduleVocabulary('restaurant').plural, 'Reservations')
+  assert.equal(shopScheduleVocabulary('school').plural, 'Classes')
+  assert.equal(shopScheduleVocabulary('spa').plural, 'Appointments')
+})
+
+// The schedule screen calls this during render, so an unrecognised pack has to
+// degrade to neutral wording instead of throwing and blanking the panel.
+test('an unrecognised pack falls back to neutral schedule wording', () => {
+  for (const value of ['', 'not-a-pack', 'RETAIL']) {
+    const vocabulary = shopScheduleVocabulary(value)
+    assert.equal(vocabulary.plural, 'Bookings')
+    assert.equal(vocabulary.singular, 'booking')
+    assert.ok(vocabulary.holdAction.startsWith('Hold'))
   }
 })
 

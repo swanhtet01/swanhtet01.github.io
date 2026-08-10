@@ -4,6 +4,15 @@ const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v1'
 
 export type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'
 
+// A restaurant books reservations and a school books classes. Calling both an
+// "appointment" is the fastest way to make a working schedule read as a generic
+// template, so the words belong to the pack rather than to the screen.
+export type ShopScheduleVocabulary = {
+  plural: string
+  singular: string
+  holdAction: string
+}
+
 export type ShopIndustryPack = {
   id: ShopIndustryPackId
   name: string
@@ -12,6 +21,7 @@ export type ShopIndustryPack = {
   workflowTemplateId: 'social-commerce' | 'retail-wholesale' | 'restaurant-ordering'
   entryPoint: 'Walk-in' | 'Phone'
   capabilities: readonly string[]
+  scheduleVocabulary: ShopScheduleVocabulary
   services: readonly Omit<ShopService, 'active'>[]
   resources: readonly Omit<ShopServiceResource, 'active'>[]
 }
@@ -98,6 +108,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'retail-wholesale',
     entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Purchasing', 'Returns', 'Pickup schedule'],
+    scheduleVocabulary: { plural: 'Pickups', singular: 'pickup', holdAction: 'Hold a pickup window' },
     services: [
       { id: 'service-personal-shopping', name: 'Personal shopping', durationMinutes: 30, priceMmk: 15_000 },
       { id: 'service-pickup-window', name: 'Pickup window', durationMinutes: 15, priceMmk: 5_000 },
@@ -115,6 +126,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'restaurant-ordering',
     entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Daily close', 'Collection schedule'],
+    scheduleVocabulary: { plural: 'Collections', singular: 'collection', holdAction: 'Hold a collection slot' },
     services: [
       { id: 'service-catering-consultation', name: 'Catering consultation', durationMinutes: 30, priceMmk: 20_000 },
       { id: 'service-preorder-collection', name: 'Preorder collection', durationMinutes: 15, priceMmk: 5_000 },
@@ -132,6 +144,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'restaurant-ordering',
     entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Reservations'],
+    scheduleVocabulary: { plural: 'Reservations', singular: 'reservation', holdAction: 'Hold a table' },
     services: [
       { id: 'service-table-reservation', name: 'Table reservation deposit', durationMinutes: 90, priceMmk: 10_000 },
       { id: 'service-event-consultation', name: 'Private event consultation', durationMinutes: 45, priceMmk: 25_000 },
@@ -149,6 +162,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'social-commerce',
     entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Appointments', 'Service resources'],
+    scheduleVocabulary: { plural: 'Appointments', singular: 'appointment', holdAction: 'Hold an appointment' },
     services: [
       { id: 'service-consultation', name: 'Consultation', durationMinutes: 30, priceMmk: 20_000 },
       { id: 'service-session', name: 'Standard treatment', durationMinutes: 60, priceMmk: 45_000 },
@@ -166,6 +180,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'social-commerce',
     entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Training schedule', 'Staff resources'],
+    scheduleVocabulary: { plural: 'Sessions', singular: 'session', holdAction: 'Hold a session' },
     services: [
       { id: 'service-fitness-consultation', name: 'Fitness consultation', durationMinutes: 30, priceMmk: 15_000 },
       { id: 'service-personal-training', name: 'Personal training', durationMinutes: 60, priceMmk: 30_000 },
@@ -183,6 +198,7 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
     workflowTemplateId: 'social-commerce',
     entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Class schedule', 'Teacher resources'],
+    scheduleVocabulary: { plural: 'Classes', singular: 'class', holdAction: 'Hold a class' },
     services: [
       { id: 'service-enrollment-consultation', name: 'Enrollment consultation', durationMinutes: 30, priceMmk: 10_000 },
       { id: 'service-class-session', name: 'Class session', durationMinutes: 60, priceMmk: 20_000 },
@@ -198,6 +214,14 @@ export function shopIndustryPack(id: ShopIndustryPackId) {
   const pack = shopIndustryPacks.find((candidate) => candidate.id === id)
   if (!pack) throw new Error('Choose a supported Shop industry pack.')
   return pack
+}
+
+const fallbackScheduleVocabulary: ShopScheduleVocabulary = { plural: 'Bookings', singular: 'booking', holdAction: 'Hold a booking' }
+
+// The schedule screen reads this while rendering, so an unrecognised pack has to
+// degrade to neutral wording rather than throw and blank the panel.
+export function shopScheduleVocabulary(id: string): ShopScheduleVocabulary {
+  return shopIndustryPacks.find((candidate) => candidate.id === id)?.scheduleVocabulary ?? fallbackScheduleVocabulary
 }
 
 function boundedText(value: string, label: string, maximum = 160) {

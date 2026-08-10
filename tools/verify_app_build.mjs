@@ -307,7 +307,12 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   || !shopServiceScheduleSource.includes('advanceShopServiceBooking')
   || !shopServiceScheduleSource.includes('registerShopServiceResource')
   || !shopServiceScheduleSource.includes('Bookings ${first.id} and ${second.id} overlap.')
-  || !shopServiceScheduleUiSource.includes('Hold appointment')
+  // The schedule words belong to the pack: a restaurant books reservations and a
+  // school books classes. A literal "appointment" in the UI is the regression.
+  || !shopServiceScheduleSource.includes('export function shopScheduleVocabulary(')
+  || !shopServiceScheduleUiSource.includes('shopScheduleVocabulary(schedule?.industryPackId ?? ')
+  || !shopServiceScheduleUiSource.includes('{vocabulary.holdAction}')
+  || shopServiceScheduleUiSource.split('\n').some((line) => !line.trimStart().startsWith('//') && /appointment/i.test(line))
   || !shopServiceScheduleUiSource.includes('Services and resources')
   || !shopServiceScheduleUiSource.includes('Nothing is sent to the customer or an external calendar.')
   || !shopServiceScheduleUiSource.includes('const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)')
