@@ -3904,6 +3904,17 @@
     var(--website-panel);
 }
 
+/* The trade question sits above the fields it fills, so it needs to read as a separate step
+   rather than as the first of those fields. Uses --website-line, which flips with the theme;
+   a hardcoded rule here would be a hairline nobody can see in dark mode.
+
+   The selector is qualified because `.website-starter-form > label` resets border and padding
+   at a higher specificity -- as a bare class this rule measured 0px wide in the browser. */
+.website-starter-form > label.website-starter-trade {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--website-line);
+}
+
 .website-starter-form {
   display: grid;
   align-content: start;

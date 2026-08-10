@@ -5,6 +5,8 @@ import {
   websiteStarterBriefIssues,
   type WebsiteStarterBrief,
 } from './website-starter'
+import { websiteTradeBrief, websiteTradeBriefOptions } from './website-trade-brief'
+import type { ShopBusinessTemplateId } from '../shop/business-templates'
 
 type WebsiteStarterSetupProps = {
   onCreate: (brief: WebsiteStarterBrief) => void
@@ -23,6 +25,10 @@ const SAMPLE_BRIEF: WebsiteStarterBrief = {
 export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSetupProps) {
   const [brief, setBrief] = useState<WebsiteStarterBrief>(() => ({ ...SAMPLE_BRIEF }))
   const [attempted, setAttempted] = useState(false)
+  const [tradeId, setTradeId] = useState('')
+  // The wording currently on offer from us rather than from the owner. Starts as the sample,
+  // so the sample counts as "not yet edited" and picking a trade replaces it.
+  const [lastDrafted, setLastDrafted] = useState<WebsiteStarterBrief>(() => ({ ...SAMPLE_BRIEF }))
   const starterFormRef = useRef<HTMLFormElement>(null)
   const issues = websiteStarterBriefIssues(brief)
   const issueFor = (field: keyof WebsiteStarterBrief) => (
@@ -36,6 +42,30 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
 
   function updateBrief<Field extends keyof WebsiteStarterBrief>(field: Field, value: WebsiteStarterBrief[Field]) {
     setBrief((current) => ({ ...current, [field]: value }))
+  }
+
+  // Choosing a trade rewrites the wording -- but only the wording nobody has changed.
+  //
+  // The rule is that this never destroys something the owner typed. We remember exactly what
+  // was last drafted, and a field is only replaced while it still holds that draft verbatim.
+  // Once the owner edits a line it stops matching and is theirs from then on, so switching
+  // trade to compare options cannot silently throw away their sentence.
+  function chooseTrade(nextTradeId: string) {
+    setTradeId(nextTradeId)
+    const drafted = websiteTradeBrief({
+      tradeId: nextTradeId as ShopBusinessTemplateId,
+      businessName: brief.businessName,
+      contactHref: brief.contactHref,
+    })
+    if (!drafted) return
+    setBrief((current) => ({
+      ...current,
+      templateId: current.templateId === lastDrafted.templateId ? drafted.templateId : current.templateId,
+      audience: current.audience === lastDrafted.audience ? drafted.audience : current.audience,
+      offer: current.offer === lastDrafted.offer ? drafted.offer : current.offer,
+      proof: current.proof === lastDrafted.proof ? drafted.proof : current.proof,
+    }))
+    setLastDrafted(drafted)
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -68,6 +98,17 @@ export function WebsiteStarterSetup({ onCreate, onViewSample }: WebsiteStarterSe
           <button className="website-button is-secondary" onClick={onViewSample} type="button">View sample</button>
           <button className="website-button is-primary" type="submit">Make preview</button>
         </footer>
+
+        <label className="website-starter-trade">
+          <span>What kind of business is this?</span>
+          <select onChange={(event) => chooseTrade(event.target.value)} value={tradeId}>
+            <option value="">Start from the sample</option>
+            {websiteTradeBriefOptions().map((trade) => (
+              <option key={trade.id} value={trade.id}>{trade.label}</option>
+            ))}
+          </select>
+          <small>Fills the wording below for that trade. Anything you have already written is kept.</small>
+        </label>
 
         <div className="website-form-grid two-columns website-starter-identity-grid">
           <label>

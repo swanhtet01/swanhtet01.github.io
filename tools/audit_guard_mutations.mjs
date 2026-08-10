@@ -21,6 +21,7 @@ const INVENTORY = `${ROOT}/showroom/src/core/shop-inventory-foundation.ts`
 const STOREFRONT = `${ROOT}/showroom/src/products/ecommerce/storefront-draft.ts`
 const SCHEDULING = `${ROOT}/showroom/src/core/shop-service-scheduling.ts`
 const INTAKE = `${ROOT}/showroom/src/core/channel-order-intake.ts`
+const TRADEBRIEF = `${ROOT}/showroom/src/products/website/website-trade-brief.ts`
 
 // [guard script, target file, find, replace, what defect this simulates]
 const MUTATIONS = [
@@ -83,6 +84,13 @@ const MUTATIONS = [
     '  const nextBalance = safeBalance(item.onHand, -stockQuantity)',
     '  const nextBalance = item.onHand - stockQuantity',
     'stock may be issued to the floor that the shop does not have'],
+  ['test_website_trade_brief.mjs', TRADEBRIEF,
+    '    businessName: request.businessName,',
+    '    businessName: request.businessName.slice(0, 60),',
+    "the website draft silently truncates the owner's business name instead of reporting it"],
+  ['test_website_trade_brief.mjs', TRADEBRIEF,
+    "  'tea-coffee': {", "  'tea-coffee-DISABLED': {",
+    'a Shop trade loses its website copy and that owner falls back to blank boxes'],
   ['test_order_to_close_journey.mjs', COMMERCE,
     "    .filter((order) => order.status === 'completed'", "    .filter((order) => order.status === 'nope'",
     'a completed sale silently never reaches the daily close'],
