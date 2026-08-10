@@ -3282,6 +3282,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const localBusinessWorkspace = !managedIdentity && commerceBusinessCatalogItems(commerce).length > 0
   const realOrderSetupRequired = Boolean((managedIdentity || localBusinessWorkspace) && (!commerce.inventoryFoundation || !currentAccountingScopeConfiguration?.inventoryLocationId))
   const realOrderSetupLabel = realOrderSetupRequired ? commerce.inventoryFoundation ? 'Review business location' : 'Set up stock locations' : null
+  useLayoutEffect(() => {
+    if (tab === 'counter' && realOrderSetupRequired) navigate('/shop/?tab=orders#shop-business-location', { replace: true })
+  }, [navigate, realOrderSetupRequired, tab])
   const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : localBusinessWorkspace ? 'Local workspace' : 'Sample data'}</span>
     <p>{commerceStorageError
@@ -4088,7 +4091,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function reviewCounterSale(review: ShopCounterReview, returnFocus: HTMLElement) {
     if (realOrderSetupRequired) {
-      setNotice('Set up Stock and review the business location before creating a real sale.')
+      setNotice('Review business and stock location before this sale.')
       return
     }
     if (!review.lines.length || !review.payment) {
@@ -4174,7 +4177,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   function recordOrder(event: FormEvent) {
     event.preventDefault()
     if (realOrderSetupRequired) {
-      setNotice('Set up Stock and review the business location before creating a real order.')
+      setNotice('Review business and stock location before this order.')
       return
     }
     if (orderDraftConflict || resumedOrderNeedsReview) {
