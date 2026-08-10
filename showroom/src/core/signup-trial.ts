@@ -183,7 +183,7 @@ export type TrialSignupStorage = {
 
 export function readTrialSignup(storage: TrialSignupStorage | undefined | null): TrialSignupRecord | null {
   if (!storage) return null
-  let raw: string | null = null
+  let raw: string | null
   try { raw = storage.getItem(TRIAL_SIGNUP_KEY) } catch { return null }
   if (raw === null) return null
   try { return restoreTrialSignup(JSON.parse(raw)) } catch { return null }
