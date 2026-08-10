@@ -5191,6 +5191,8 @@ if (['fetch(', 'supabase', 'openai', 'anthropic'].some((marker) => shopInventory
 if (!coreSource.includes('<ShopInventoryFoundation')
   || !shopInventoryUiSource.includes('Set up two locations')
   || !shopInventoryUiSource.includes('available to promise')
+  || shopInventoryUiSource.includes('stockItems.length > 8')
+  || shopInventoryUiSource.split("String(index + 1).padStart(4, '0')").length - 1 !== 2
   || !shopInventoryUiSource.includes('Review the exact source, destination, and quantity. Nothing has moved yet.')
   || !shopInventoryUiSource.includes('commerce.inventoryFoundation ?? createEmptyShopInventoryState()')
   || !shopInventoryUiSource.includes('Boolean(state.revision && catalog.some')
@@ -5251,6 +5253,7 @@ if (!shopSetupNextBlockerFocus.includes('const setupRecoveryNextOrder = returnTo
   || !shopSetupNextBlockerFocus.includes('actionOrders.find((candidate) => candidate.id !== orderId)')
   || !shopSetupNextBlockerFocus.includes('`/shop/?tab=orders&return=location-setup#${commerceOrderTargetId(setupRecoveryNextOrder.id)}`')
   || !shopSetupNextBlockerFocus.includes("'/shop/?tab=orders&return=location-setup', { replace: true }")) fail('shop_setup_next_blocker_focus_missing')
+if (!commerceSource.includes('projectShopInventory(value.inventoryFoundation as ShopInventoryState, [...itemSkus].sort(compareCanonicalText))')) fail('shop_location_inventory_catalog_order_not_canonical')
 const shopStockMoveActionsStart = shopInventoryUiSource.indexOf('function openFreshTransfer()')
 const shopStockMoveActionsEnd = shopInventoryUiSource.indexOf('function reviewTransfer(', shopStockMoveActionsStart)
 const shopStockMoveActions = shopInventoryUiSource.slice(shopStockMoveActionsStart, shopStockMoveActionsEnd)
@@ -7905,6 +7908,41 @@ async function verifyShopInventoryRuntime() {
     })
     assert(managedParityPackage.packageDigest === 'sha256:e185ea0640d14241898c33365d417362274df1d43f0778c3508bb4b4e0a7c7d6', 'shop_inventory_managed_cross_runtime_digest_drifted')
 
+    const openingPackageForCatalog = (count) => {
+      const scalableCatalogSkus = Array.from({ length: count }, (_, index) => `SKU-${String(index + 1).padStart(4, '0')}`)
+      const stockUnits = scalableCatalogSkus.map((sku, index) => ({
+        id: `LOT-OPENING-${String(index + 1).padStart(4, '0')}`,
+        sku,
+        tracking: 'lot',
+        trackingCode: `OPENING-${String(index + 1).padStart(4, '0')}`,
+      }))
+      return model.buildShopInventoryImportPackage({
+        importId: `IMP-SCALABLE-${String(count).padStart(4, '0')}`,
+        sourceDigest: model.shopInventoryEvidenceDigest({ source: 'scalable-opening', count }),
+        catalogSkus: scalableCatalogSkus,
+        clients: [{ id: 'CLI-DEFAULT-001', name: 'Walk-in customer' }],
+        vendors: [{ id: 'VEN-OPENING-001', name: 'Opening stock source' }],
+        locations: [{ id: 'LOC-BRANCH', name: 'Branch' }, { id: 'LOC-MAIN', name: 'Main store' }],
+        stockUnits,
+        openings: stockUnits.map((unit) => ({ stockUnitId: unit.id, locationId: 'LOC-MAIN', vendorId: 'VEN-OPENING-001', quantity: 1 })),
+      })
+    }
+    const nineItemPackage = openingPackageForCatalog(9)
+    const nineItemOpening = model.applyShopInventoryImport(
+      model.createEmptyShopInventoryState(), nineItemPackage, proof(1, 'scalable-opening'), nineItemPackage.stockUnits.map((unit) => unit.sku), model.EMPTY_SHOP_INVENTORY_DIGEST,
+    )
+    const nineItemProjection = model.projectShopInventory(nineItemOpening.state, nineItemPackage.stockUnits.map((unit) => unit.sku))
+    assert(nineItemPackage.stockUnits.length === 9
+      && nineItemPackage.stockUnits.at(-1)?.id === 'LOT-OPENING-0009'
+      && nineItemProjection.stockUnits.length === 9
+      && nineItemProjection.metrics.totalOnHand === 9,
+    'shop_inventory_nine_item_opening_failed')
+    const maximumItemPackage = openingPackageForCatalog(1_000)
+    assert(maximumItemPackage.stockUnits.length === 1_000
+      && maximumItemPackage.stockUnits.at(-1)?.id === 'LOT-OPENING-1000'
+      && maximumItemPackage.openings.at(-1)?.stockUnitId === 'LOT-OPENING-1000',
+    'shop_inventory_maximum_catalog_opening_failed')
+
     const opening = model.applyShopInventoryImport(
       model.createEmptyShopInventoryState(),
       importPackage,
@@ -8114,6 +8152,15 @@ async function verifyShopInventoryRuntime() {
     'shop_inventory_production_issue_did_not_use_fewest_deterministic_lots')
 
     const commerce = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-inventory-commerce-verify=${Date.now()}`)
+    const reversedScalableCommerce = commerce.validateCommerceState({
+      ...commerce.createEmptyCommerce(),
+      items: nineItemPackage.stockUnits.map((unit, index) => ({ sku: unit.sku, name: `Scalable item ${index + 1}`, onHand: 1, reorderAt: 1, price: 1_000 + index })).reverse(),
+      inventoryFoundation: nineItemOpening.state,
+    })
+    assert(reversedScalableCommerce.items.length === 9
+      && reversedScalableCommerce.items[0].sku === 'SKU-0009'
+      && reversedScalableCommerce.inventoryFoundation?.headDigest === nineItemOpening.state.headDigest,
+    'shop_inventory_reversed_catalog_order_failed_integrity_validation')
     const managedOpening = model.applyShopInventoryImport(
       model.createEmptyShopInventoryState(), managedParityPackage, proof(1, 'managed-opening'), ['SKU-1'], model.EMPTY_SHOP_INVENTORY_DIGEST,
     )

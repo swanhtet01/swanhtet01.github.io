@@ -4685,7 +4685,7 @@ export function validateCommerceState(value: unknown): CommerceState {
         value.inventoryFoundation as ShopInventoryState,
         value.items as CommerceItem[],
       )) throw new Error('available-to-promise stock does not match the Shop catalog')
-      const inventory = projectShopInventory(value.inventoryFoundation as ShopInventoryState, itemSkus)
+      const inventory = projectShopInventory(value.inventoryFoundation as ShopInventoryState, [...itemSkus].sort(compareCanonicalText))
       const inventoryLocationIds = new Set(inventory.locations.map((location) => location.id))
       for (const configuration of validatedAccountingScopeConfigurations) {
         if (configuration.inventoryLocationId && !inventoryLocationIds.has(configuration.inventoryLocationId)) {

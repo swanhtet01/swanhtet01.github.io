@@ -347,7 +347,6 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     try {
       const stockItems = catalog.filter((item) => Number.isSafeInteger(item.onHand) && item.onHand > 0)
       if (!stockItems.length) throw new Error('Receive or import positive stock before setting up locations.')
-      if (stockItems.length > 8) throw new Error('Location setup v1 supports eight stocked catalog items. Reduce the reviewed opening scope before setup.')
       const importId = commandId('IMP')
       const clients = [{ id: 'CLI-DEFAULT-001', name: setupDraft.client.trim() }]
       const vendors = [{ id: 'VEN-OPENING-001', name: setupDraft.vendor.trim() }]
@@ -356,10 +355,10 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
         { id: 'LOC-MAIN', name: setupDraft.main.trim() },
       ]
       const stockUnits = stockItems.map((item, index) => ({
-        id: `LOT-OPENING-${String(index + 1).padStart(3, '0')}`,
+        id: `LOT-OPENING-${String(index + 1).padStart(4, '0')}`,
         sku: item.sku,
         tracking: 'lot' as const,
-        trackingCode: `OPENING-${String(index + 1).padStart(3, '0')}`,
+        trackingCode: `OPENING-${String(index + 1).padStart(4, '0')}`,
       }))
       const openings = stockItems.map((item, index) => ({
         stockUnitId: stockUnits[index].id,
