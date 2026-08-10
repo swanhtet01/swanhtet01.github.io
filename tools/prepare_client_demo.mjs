@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-export const CLIENT_DEMO_PREPARATION_CONTRACT = 'supermega.client_demo_preparation.v3'
+export const CLIENT_DEMO_PREPARATION_CONTRACT = 'supermega.client_demo_preparation.v4'
 export const CLIENT_DEMO_PREPARATION_VALIDATION_CONTRACT = 'supermega.client_demo_preparation_validation.v1'
 export const CLIENT_DEMO_PREPARATION_MAX_BYTES = 5 * 1024 * 1024
 export const CLIENT_DEMO_REHEARSAL_PLAN_CONTRACT = 'supermega.client_demo_rehearsal_plan.v1'
@@ -44,6 +44,7 @@ const CLIENT_PROFILE_WORKSPACE_PLACEHOLDER = 'REPLACE WITH CLIENT WORKSPACE'
 const CLIENT_PROFILE_OWNER_PLACEHOLDER = 'REPLACE WITH IMPLEMENTATION OWNER'
 const CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1'
 const CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA = 'supermega.client_operational_topology.v1'
+const CLIENT_SHOP_ACCOUNTING_SCOPE_REVIEW_SCHEMA = 'supermega.client_shop_accounting_scope_review.v1'
 const OPERATING_UNIT_KIND = Object.freeze({
   'social-seller': 'digital-commerce',
   'retail-network': 'retail',
@@ -323,6 +324,33 @@ function operationalTopologyValid(value, client, products) {
   return Boolean(OPERATING_UNIT_KIND[client?.presetId]
     && products.every((product) => PRODUCT_ORDER.includes(product))
     && JSON.stringify(value) === JSON.stringify(canonicalOperationalTopology(client, products)))
+}
+
+function canonicalShopAccountingScopeReview(client, topology, products) {
+  if (!products.includes('commerce')) return null
+  return {
+    schema: CLIENT_SHOP_ACCOUNTING_SCOPE_REVIEW_SCHEMA,
+    status: 'review_required_not_applied',
+    entity: {
+      code: null,
+      name: client.workspace,
+      verification: 'client_review_required',
+    },
+    locations: topology.locations
+      .filter((location) => location.active)
+      .map((location) => ({
+        locationId: location.id,
+        code: location.code,
+        name: location.name,
+        verification: 'client_review_required',
+      })),
+    controls: {
+      reviewedConfigurationCreated: false,
+      orderWritePerformed: false,
+      closeWritePerformed: false,
+      accountingPosted: false,
+    },
+  }
 }
 
 function pythonExecutable() {
@@ -709,6 +737,11 @@ export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = n
     }
   })
   const customSourceCount = products.filter((product) => product.sourceMode === 'client_csv').length
+  const shopAccountingScopeReview = canonicalShopAccountingScopeReview(
+    kit.blueprint.client,
+    kit.blueprint.topology,
+    selectedProducts,
+  )
   const payload = {
     contract: CLIENT_DEMO_PREPARATION_CONTRACT,
     preparedAt: timestamp,
@@ -716,6 +749,7 @@ export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = n
     client: { ...kit.blueprint.client },
     foundation: structuredClone(kit.blueprint.foundation),
     topology: structuredClone(kit.blueprint.topology),
+    shopAccountingScopeReview,
     products,
     integrations: kit.blueprint.integrations,
     checks,
@@ -747,7 +781,7 @@ export async function prepareClientDemo({ kitPath, dataDirectory, preparedAt = n
 }
 
 export function verifyClientDemoPreparation(value) {
-  if (!hasExactKeys(value, ['contract', 'preparedAt', 'kit', 'client', 'foundation', 'topology', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
+  if (!hasExactKeys(value, ['contract', 'preparedAt', 'kit', 'client', 'foundation', 'topology', 'shopAccountingScopeReview', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
     || value.contract !== CLIENT_DEMO_PREPARATION_CONTRACT || !canonicalTimestamp(value.preparedAt)
     || !hasExactKeys(value.kit, ['schema', 'digest', 'exportedAt'])
     || value.kit.schema !== CLIENT_DEMO_KIT_SCHEMA
@@ -765,6 +799,9 @@ export function verifyClientDemoPreparation(value) {
     fail('client_demo_product_order_invalid')
   }
   if (!operationalTopologyValid(value.topology, value.client, selectedProducts)) fail('client_demo_topology_drift')
+  if (JSON.stringify(value.shopAccountingScopeReview) !== JSON.stringify(
+    canonicalShopAccountingScopeReview(value.client, value.topology, selectedProducts),
+  )) fail('client_demo_accounting_scope_review_drift')
   const packages = value.products.map((product) => {
     if (!hasExactKeys(product, ['product', 'label', 'templateId', 'sourceMode', 'sourceName', 'rowCount', 'previewDigest', 'packageDigest', 'demoPath', 'setupPath', 'stagingPackage'])
       || PRODUCT_LABEL[product.product] !== product.label || !['client_csv', 'kit_sample_fixture'].includes(product.sourceMode)
@@ -807,6 +844,7 @@ export function verifyClientDemoPreparation(value) {
     client: value.client,
     foundation: value.foundation,
     topology: value.topology,
+    shopAccountingScopeReview: value.shopAccountingScopeReview,
     products: value.products,
     integrations: value.integrations,
     checks: value.checks,

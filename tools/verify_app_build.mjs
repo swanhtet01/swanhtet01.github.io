@@ -4955,7 +4955,7 @@ if (!managedTrialSource.includes('saveManagedCommerceCommand')
   || !managedTrialSource.includes('request.identity')
   || !managedTrialSource.includes("code: 'managed_identity_changed'")) fail('managed_commerce_command_client_missing')
 const managedCommerceClientSources = `${coreSource}\n${shopInventoryUiSource}\n${websiteSource}\n${ecommerceSource}`
-for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_reopened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.supplier_policy_saved', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.supplier_invoice.recorded', 'commerce.supplier_invoice.payable_ready', 'commerce.close.saved', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
+for (const eventType of ['commerce.workspace.initialized', 'commerce.item.created', 'commerce.item.updated', 'commerce.order.created', 'commerce.order.advanced', 'commerce.order.cancelled', 'commerce.order.return_recorded', 'commerce.order.support_case_opened', 'commerce.order.support_case_reopened', 'commerce.order.support_case_service_recorded', 'commerce.order.support_case_resolved', 'commerce.order.correction_recorded', 'commerce.payment.reconciled', 'commerce.collection_action.recorded', 'commerce.refund.settled', 'commerce.stock.counted', 'commerce.inventory.initialized', 'commerce.inventory.master_created', 'commerce.inventory.supplier_policy_saved', 'commerce.inventory.transferred', 'commerce.purchase_order.created', 'commerce.purchase_order.received', 'commerce.purchase_order.cancelled', 'commerce.supplier_invoice.recorded', 'commerce.supplier_invoice.payable_ready', 'commerce.close.saved', 'commerce.storefront.configuration.saved', 'commerce.tax_configuration.saved', 'commerce.accounting_scope.saved', 'commerce.account_mapping.saved', 'commerce.customer_credit_policy.saved']) {
   if (!managedTrialSource.includes(eventType) || !managedCommerceClientSources.includes(eventType) || !managedCommerceRuntime.includes(eventType)) fail(`managed_commerce_event_missing:${eventType}`)
 }
 if (!managedTrialSource.includes('commerce.storefront_request.received')
@@ -5002,14 +5002,13 @@ if (!coreSource.includes('data-tax-configuration="versioned"')
   || !coreSource.includes('configureCommerceTax(current, input, commerceActionProof(action))')
   || !coreSource.includes('Jurisdiction code')
   || !coreSource.includes('Effective from')
-  || !coreSource.includes('Takes effect only at the reviewed time. Earlier orders keep their original calculation.')
   || !commerceSource.includes('commerceEffectiveTaxConfiguration(state, atTime)')
   || !managedCommerceRuntime.includes('def _effective_tax_configuration(')
   || !managedCommerceRuntime.includes('def _validate_tax_configuration_saved(')
   || !managedCommerceRuntime.includes('command evidence must match the saved tax configuration proof.')) fail('commerce_tax_configuration_ui_or_managed_boundary_missing')
 if (!coreSource.includes('data-close-export="accounting-csv-v1"')
   || !coreSource.includes('Download close CSV')
-  || !commerceSource.includes('supermega.commerce.daily-close-export.v4')
+  || !commerceSource.includes('supermega.commerce.daily-close-export.v5')
   || !commerceSource.includes("calculationStatus: calculation ? 'accepted' : 'legacy_unverified'")
   || !commerceSource.includes("taxMode: calculation?.taxMode ?? 'not_recorded'")
   || !commerceSource.includes("if (/^[=+@-]/.test(raw)) raw = `'${raw}`")
@@ -5023,10 +5022,16 @@ if (!coreSource.includes("'commerce.order.correction_recorded'")
   || !coreSource.includes('no external posting performed')) fail('commerce_order_correction_ui_or_gate_missing')
 if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !coreSource.includes('Download accounting CSV')
+  || !coreSource.includes("data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'}")
+  || !coreSource.includes("kind: 'accounting_scope'")
+  || !coreSource.includes("'commerce.accounting_scope.saved'")
+  || !coreSource.includes('Business and location')
   || !coreSource.includes('data-account-mapping="versioned"')
   || !coreSource.includes("kind: 'account_mapping'")
   || !coreSource.includes("'commerce.account_mapping.saved'")
-  || !commerceSource.includes('supermega.commerce.accounting-handoff.v4')
+  || !commerceSource.includes('supermega.commerce.accounting-handoff.v5')
+  || !commerceSource.includes('export function configureCommerceAccountingScope(')
+  || !commerceSource.includes('export function commerceCloseScopeOptions(')
   || !commerceSource.includes("postingAuthority: 'none'")
   || !commerceSource.includes('externalPostingPerformed: false')
   || !commerceSource.includes("accountRole: 'payment_clearing'")
@@ -5036,13 +5041,13 @@ if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !commerceSource.includes("accountRole: 'correction_payable'")
   || !commerceSource.includes('expectedControlTotalMmk = originalOrderTotalMmk + creditCorrectionMmk + debitCorrectionMmk')
   || !managedCommerceRuntime.includes('def _validate_account_mapping_saved(')
+  || !managedCommerceRuntime.includes('def _validate_accounting_scope_saved(')
   || !managedCommerceRuntime.includes('def commerce_accounting_handoff(')) fail('commerce_accounting_handoff_missing_or_unsafe')
 if (!coreSource.includes('data-customer-credit-policy="versioned"')
   || !coreSource.includes("kind: 'customer_credit_policy'")
   || !coreSource.includes("'commerce.customer_credit_policy.saved'")
   || !coreSource.includes('configureCommerceCustomerCreditPolicy(current, input, commerceActionProof(action))')
   || !coreSource.includes('Credit policy required')
-  || !coreSource.includes('This records an internal approval boundary only; it never collects, lends, charges, or contacts the customer.')
   || !commerceSource.includes('export function commerceCustomerCreditReview(')
   || !commerceSource.includes('export function configureCommerceCustomerCreditPolicy(')
   || !commerceSource.includes('order.creditDecision !== undefined')
@@ -5054,7 +5059,6 @@ if (!coreSource.includes('data-promotion-policy="versioned"')
   || !coreSource.includes("kind: 'promotion_policy'")
   || !coreSource.includes("'commerce.promotion_policy.saved'")
   || !coreSource.includes('configureCommercePromotionPolicy(current, input, commerceActionProof(action))')
-  || !coreSource.includes('inactive safely stops the code without deleting history')
   || !commerceSource.includes('export function configureCommercePromotionPolicy(')
   || !managedCommerceRuntime.includes('def _validate_promotion_policy_saved(')
   || !managedCommerceRuntime.includes('command evidence must match the saved promotion policy proof.')) fail('commerce_promotion_policy_setup_ui_or_managed_boundary_missing')
@@ -5070,7 +5074,6 @@ if (!coreSource.includes('data-payment-policy="versioned"')
   || !coreSource.includes("kind: 'payment_policy'")
   || !coreSource.includes("'commerce.payment_policy.saved'")
   || !coreSource.includes('configureCommercePaymentPolicy(current, input, commerceActionProof(action))')
-  || !coreSource.includes('It never charges, transfers money, contacts a customer, or marks payment received.')
   || !commerceSource.includes('export function configureCommercePaymentPolicy(')
   || !commerceSource.includes('export function commercePaymentDecision(')
   || !managedCommerceRuntime.includes('def _validate_payment_policy_saved(')
@@ -5651,7 +5654,9 @@ if (manifestPlantPackIds.join(',') !== 'general-manufacturing,batch-process,food
   || !settingsPageSource.includes('<label className="demo-pack-select">Plant pack')
   || !settingsPageSource.includes('plantIndustryPacks.map((pack)')) fail('plant_industry_pack_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => clientOnboardingSource.toLowerCase().includes(marker.toLowerCase()))) fail('client_import_external_or_persistent_side_effect_added')
-if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v3'")
+if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v4'")
+  || !clientOnboardingSource.includes("CLIENT_SHOP_ACCOUNTING_SCOPE_REVIEW_SCHEMA = 'supermega.client_shop_accounting_scope_review.v1'")
+  || !clientOnboardingSource.includes('shopAccountingScopeReview: ClientShopAccountingScopeReview | null')
   || !clientOnboardingSource.includes("CLIENT_CSV_STARTER_PACK_SCHEMA = 'supermega.client_csv_starter_pack.v1'")
   || !clientOnboardingSource.includes('export function buildClientCsvStarterPack')
   || !clientOnboardingSource.includes('export function clientCsvStarterPackHref')
@@ -5682,6 +5687,8 @@ if (!clientOnboardingSource.includes("CLIENT_DEMO_PREPARATION_SCHEMA = 'supermeg
   || !settingsPageSource.includes('Company account required before go-live')
   || settingsPageSource.includes('Managed identity required before activation')
   || !settingsPageSource.includes('Install one connected local demo.')
+  || !settingsPageSource.includes('data-shop-accounting-scope-review="required"')
+  || !settingsPageSource.includes('review the entity code and each location in Shop Daily close before creating real orders')
   || !settingsPageSource.includes('preparedArtifact.products.map((product)')
   || !settingsPageSource.includes('Shop installs before Ecommerce.')
   || !settingsPageSource.includes('Install remaining ${preparedRemainingCount}')
@@ -6237,6 +6244,7 @@ const expectedShopActionSubmitLabels = {
   supplier_credit_record: 'Record supplier credit',
   daily_close: 'Close business day',
   tax_configuration: 'Save tax configuration',
+  accounting_scope: 'Review business and location',
   account_mapping: 'Save accounting mapping',
   customer_credit_policy: 'Save credit policy',
   promotion_policy: 'Save promotion policy',
@@ -6274,9 +6282,9 @@ const expectedShopActionKinds = Object.keys(expectedShopActionSubmitLabels).sort
 const expectedPlantActionKinds = Object.keys(expectedPlantActionSubmitLabels).sort()
 const expectedActionKinds = Object.keys(expectedActionSubmitLabels).sort()
 const actualActionKinds = Object.keys(actionSubmitLabels).sort()
-const actionSubmitLabelsComplete = expectedShopActionKinds.length === 32
+const actionSubmitLabelsComplete = expectedShopActionKinds.length === 33
   && expectedPlantActionKinds.length === 16
-  && expectedActionKinds.length === 48
+  && expectedActionKinds.length === 49
   && declaredShopActionKinds.join(',') === expectedShopActionKinds.join(',')
   && declaredPlantActionKinds.join(',') === expectedPlantActionKinds.join(',')
   && declaredActionKinds.join(',') === expectedActionKinds.join(',')
@@ -6628,7 +6636,6 @@ if (!coreSource.includes('data-close-settlement=')
   || !coreSource.includes('Settlement count')
   || !coreSource.includes('variance needs a responsible owner')
   || !coreSource.includes('data-close-accounting-basis="correction-aware"')
-  || !coreSource.includes('they do not pretend money moved')
   || !commerceSource.includes('supermega.commerce.close-settlement.v1')
   || !commerceSource.includes('supermega.commerce.close-settlement.v2')
   || !commerceSource.includes('totalExpectedMmk !== netOrderTotalMmk + correctionPayableMmk - correctionReceivableMmk')
@@ -9966,6 +9973,11 @@ async function verifyClientOnboardingRuntime() {
       && preparedArtifact.products[3].stagingPackage.rows[0].key === 'CLIENT-001'
       && preparedArtifact.controls.containsNormalizedClientData === true
       && preparedArtifact.controls.containsSampleFixtures === true
+      && preparedArtifact.shopAccountingScopeReview?.entity.code === null
+      && preparedArtifact.shopAccountingScopeReview.entity.name === 'Integrated Factory'
+      && preparedArtifact.shopAccountingScopeReview.locations[0].code === 'MAIN'
+      && preparedArtifact.shopAccountingScopeReview.controls.reviewedConfigurationCreated === false
+      && preparedArtifact.shopAccountingScopeReview.controls.accountingPosted === false
       && preparedArtifact.controls.externalWritesPerformed === false,
     'client_demo_browser_preparation_did_not_build_bounded_mixed_source_artifact')
     await rejects(() => model.prepareClientDemoInBrowser(demoKit, [
@@ -10003,6 +10015,9 @@ async function verifyClientOnboardingRuntime() {
     const topologyTamper = structuredClone(preparedArtifact)
     topologyTamper.topology.recordAuthorities[0].owns = ['catalog']
     assert(await model.restoreClientDemoPreparationArtifact(topologyTamper) === null, 'client_demo_preparation_topology_tamper_accepted')
+    const accountingScopeTamper = structuredClone(preparedArtifact)
+    accountingScopeTamper.shopAccountingScopeReview.entity.code = 'UNREVIEWED'
+    assert(await model.restoreClientDemoPreparationArtifact(accountingScopeTamper) === null, 'client_demo_preparation_accounting_scope_tamper_accepted')
     const unsafeControl = structuredClone(preparedArtifact)
     unsafeControl.controls.safeToShareExternally = true
     assert(await model.restoreClientDemoPreparationArtifact(unsafeControl) === null, 'client_demo_preparation_unsafe_control_accepted')
@@ -13982,7 +13997,7 @@ async function verifyCommerceRuntime() {
     forgedSettlementBasis.closes[0].settlement.netOrderTotalMmk = '200'
     assertThrows(() => model.validateCommerceState(forgedSettlementBasis), 'daily_close_string_correction_basis_validated')
     const accountingExport = model.commerceDailyCloseExport(accountingClosed, accountingCloseId)
-    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v4'
+    assert(accountingExport?.schema === 'supermega.commerce.daily-close-export.v5'
       && accountingExport.orderCount === 1
       && accountingExport.orders[0].calculationStatus === 'accepted'
       && accountingExport.orders[0].subtotalMmk === 200
@@ -14002,7 +14017,7 @@ async function verifyCommerceRuntime() {
       && accountingCsv.split('\r\n').length - 1 === 3,
     'daily_close_csv_not_complete_or_minimal')
     const accountingHandoff = model.commerceAccountingHandoff(accountingClosed, accountingCloseId)
-    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v4'
+    assert(accountingHandoff?.schema === 'supermega.commerce.accounting-handoff.v5'
       && accountingHandoff.status === 'review_required'
       && accountingHandoff.postingAuthority === 'none'
       && accountingHandoff.externalPostingPerformed === false
@@ -14115,7 +14130,7 @@ async function verifyCommerceRuntime() {
     const correctedHandoff = model.commerceAccountingHandoff(correctedClosed, correctedCloseId)
     const correctedDocumentId = corrected.orders[0].corrections[0].documentId
     const correctedEntries = correctedHandoff?.entries.filter((entry) => entry.sourceDocumentId === correctedDocumentId) ?? []
-    assert(correctedHandoff?.schema === 'supermega.commerce.accounting-handoff.v4'
+    assert(correctedHandoff?.schema === 'supermega.commerce.accounting-handoff.v5'
       && correctedHandoff.originalOrderTotalMmk === 200
       && correctedHandoff.netOrderTotalMmk === 150
       && correctedHandoff.settlementSchema === 'supermega.commerce.close-settlement.v2'

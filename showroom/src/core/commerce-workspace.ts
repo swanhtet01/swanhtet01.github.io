@@ -19,13 +19,14 @@ export const COMMERCE_WORKSPACE_SCHEMA = 'supermega.commerce.workspace.v2' as co
 export const COMMERCE_STOREFRONT_SCHEMA = 'supermega.ecommerce.storefront.v1' as const
 export const COMMERCE_ORDER_CALCULATION_SCHEMA = 'supermega.commerce.order-calculation.v1' as const
 export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-calculation.v2' as const
-export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v4' as const
-export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v4' as const
+export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v5' as const
+export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v5' as const
 export const COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1' as const
 const COMMERCE_CLOSE_SETTLEMENT_V1_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v2' as const
 export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
 export const COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = 'supermega.commerce.order-acknowledgement.v1' as const
+export const COMMERCE_LEGACY_ACCOUNTING_SCOPE_KEY = 'legacy-unscoped' as const
 const COMMERCE_STOREFRONT_PREVIEW_SCHEMA = 'supermega.ecommerce.storefront_preview.v1' as const
 export const COMMERCE_KEY = 'supermega.commerce.workspace.v2'
 export const LEGACY_COMMERCE_KEYS = ['supermega.commerce.workspace.v1', 'supermega.shop.workspace.v2']
@@ -130,9 +131,30 @@ export type CommerceAccountMappingEntry = {
   externalAccountCode: string
 }
 
+export type CommerceAccountingScopeSnapshot = {
+  configurationRevision: number
+  configurationActionId: string
+  entityCode: string
+  entityName: string
+  locationCode: string
+  locationName: string
+}
+
+export type CommerceAccountingScopeConfiguration = {
+  revision: number
+  entityCode: string
+  entityName: string
+  locationCode: string
+  locationName: string
+  proof: CommerceActionProof
+}
+
+export type CommerceAccountingScopeInput = Omit<CommerceAccountingScopeConfiguration, 'revision' | 'proof'>
+
 export type CommerceAccountMappingConfiguration = {
   revision: number
   mappings: CommerceAccountMappingEntry[]
+  accountingScope?: CommerceAccountingScopeSnapshot
   proof: CommerceActionProof
 }
 
@@ -399,6 +421,7 @@ export type CommerceOrder = {
   shippingDecision?: CommerceShippingDecision
   paymentDecision?: CommercePaymentDecision
   taxDecision?: CommerceTaxDecision
+  accountingScope?: CommerceAccountingScopeSnapshot
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
@@ -631,6 +654,7 @@ export type CommerceClose = {
   operator?: string
   reason?: string
   evidenceReference?: string
+  accountingScope?: CommerceAccountingScopeSnapshot
   settlement?: CommerceCloseSettlement
 }
 
@@ -670,11 +694,19 @@ export type CommerceCloseSettlementInputLine = {
 
 export type CommerceCloseExpectation = {
   businessDate: string
+  accountingScope: CommerceAccountingScopeSnapshot | null
   orderIds: string[]
   total: number
   paymentExceptionOrderIds: string[]
   stockExceptionSkus: string[]
   stateSnapshot: string
+}
+
+export type CommerceCloseScopeOption = {
+  key: string
+  accountingScope: CommerceAccountingScopeSnapshot | null
+  orderCount: number
+  totalMmk: number
 }
 
 export type CommerceDailyCloseExportCorrection = {
@@ -698,6 +730,7 @@ export type CommerceDailyCloseExportCorrection = {
 export type CommerceDailyCloseExportOrder = {
   orderId: string
   orderCreatedAt: string
+  accountingScope: CommerceAccountingScopeSnapshot | null
   paymentMethod: string
   paymentReconciledAt: string | null
   paymentEvidenceReference: string | null
@@ -727,6 +760,7 @@ export type CommerceDailyCloseExport = {
   operator: string
   reason: string
   evidenceReference: string
+  accountingScope: CommerceAccountingScopeSnapshot | null
   totalMmk: number
   orderCount: number
   paymentExceptionOrderIds: string[]
@@ -759,6 +793,7 @@ export type CommerceAccountingHandoff = {
   businessDate: string
   closedAt: string
   sourceCloseDigest: string
+  accountingScope: CommerceAccountingScopeSnapshot | null
   accountMappingRevision: number | null
   accountMappingEvidenceReference: string | null
   settlementSchema: CommerceCloseSettlement['schema'] | null
@@ -1225,6 +1260,7 @@ export type CommerceState = {
   catalogBaselines?: CommerceCatalogBaseline[]
   catalogChanges?: CommerceCatalogChange[]
   taxConfigurations?: CommerceTaxConfiguration[]
+  accountingScopeConfigurations?: CommerceAccountingScopeConfiguration[]
   accountMappingConfigurations?: CommerceAccountMappingConfiguration[]
   customerCreditPolicies?: CommerceCustomerCreditPolicy[]
   promotionPolicies?: CommercePromotionPolicy[]
@@ -1529,6 +1565,7 @@ const maxPurchaseOrders = 100
 const maxCatalogBaselines = 500
 const maxCatalogChanges = 500
 const maxTaxConfigurations = 100
+const maxAccountingScopeConfigurations = 100
 const maxAccountMappingConfigurations = 100
 const maxCustomerCreditPolicies = 500
 const maxPromotionPolicies = 200
@@ -1558,6 +1595,7 @@ const supplierReturnIdPattern = /^SRET-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89A
 const supplierCreditIdPattern = /^SCN-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}$/
 const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
 const taxJurisdictionCodePattern = /^[A-Z0-9][A-Z0-9_-]{1,15}$/
+const accountingScopeCodePattern = /^[A-Z0-9][A-Z0-9_-]{1,39}$/
 const externalAccountCodePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/
 const legacyCommerceAccountRoles: CommerceAccountRole[] = ['payment_clearing', 'sales_revenue', 'sales_revenue_unverified', 'tax_payable']
 export const commerceAccountRoles: CommerceAccountRole[] = [...legacyCommerceAccountRoles, 'sales_adjustment', 'correction_receivable', 'correction_payable']
@@ -1911,6 +1949,68 @@ function validProof(proof: CommerceActionProof) {
       && proof.evidenceReference.trim()
       && validTimestamp(proof.capturedAt),
     )
+}
+
+export function commerceAccountingScopeSnapshot(configuration: CommerceAccountingScopeConfiguration): CommerceAccountingScopeSnapshot {
+  return {
+    configurationRevision: configuration.revision,
+    configurationActionId: configuration.proof.actionId,
+    entityCode: configuration.entityCode,
+    entityName: configuration.entityName,
+    locationCode: configuration.locationCode,
+    locationName: configuration.locationName,
+  }
+}
+
+export function commerceAccountingScopeKey(scope: Pick<CommerceAccountingScopeSnapshot, 'entityCode' | 'locationCode'>) {
+  return `${scope.entityCode}\u0000${scope.locationCode}`
+}
+
+function sameAccountingScopeSnapshot(left: CommerceAccountingScopeSnapshot | undefined, right: CommerceAccountingScopeSnapshot | undefined) {
+  if (!left || !right) return left === right
+  const rightProjection = commerceAccountingScopeProjection(right) as Array<string | number>
+  return (commerceAccountingScopeProjection(left) as Array<string | number>)
+    .every((value, index) => value === rightProjection[index])
+}
+
+function validateAccountingScopeFields(value: Record<string, unknown>, field: string) {
+  for (const key of ['entityCode', 'locationCode'] as const) {
+    if (!accountingScopeCodePattern.test(canonicalText(value[key], `${field}.${key}`, 40))) {
+      throw new Error(`${field}.${key} is invalid.`)
+    }
+  }
+  for (const key of ['entityName', 'locationName'] as const) canonicalText(value[key], `${field}.${key}`, 120)
+}
+
+function validatedAccountingScopeSnapshot(value: unknown, field: string): CommerceAccountingScopeSnapshot {
+  if (!isRecord(value) || !hasExactKeys(value, [
+    'configurationRevision', 'configurationActionId', 'entityCode', 'entityName', 'locationCode', 'locationName',
+  ])) throw new Error(`${field} is invalid.`)
+  assertSafeInteger(value.configurationRevision, `${field}.configurationRevision`, 1)
+  canonicalText(value.configurationActionId, `${field}.configurationActionId`, 160)
+  validateAccountingScopeFields(value, field)
+  return value as unknown as CommerceAccountingScopeSnapshot
+}
+
+function accountingScopeConfigurationForSnapshot(
+  configurations: CommerceAccountingScopeConfiguration[],
+  snapshot: CommerceAccountingScopeSnapshot,
+) {
+  return configurations.find((configuration) => (
+    configuration.revision === snapshot.configurationRevision
+    && sameAccountingScopeSnapshot(commerceAccountingScopeSnapshot(configuration), snapshot)
+  )) ?? null
+}
+
+function accountingScopeWasReviewedAt(
+  configurations: CommerceAccountingScopeConfiguration[],
+  snapshot: CommerceAccountingScopeSnapshot,
+  capturedAt: unknown,
+) {
+  const source = accountingScopeConfigurationForSnapshot(configurations, snapshot)
+  const capturedMicros = timestampMicros(capturedAt)
+  return Boolean(source && capturedMicros !== null
+    && (timestampMicros(source.proof.capturedAt) as bigint) <= capturedMicros)
 }
 
 const sha256RoundConstants = new Uint32Array([
@@ -2354,6 +2454,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (value.catalogBaselines !== undefined && !Array.isArray(value.catalogBaselines)) throw new Error('Commerce catalog baselines must be an array when present.')
   if (value.catalogChanges !== undefined && !Array.isArray(value.catalogChanges)) throw new Error('Commerce catalog changes must be an array when present.')
   if (value.taxConfigurations !== undefined && !Array.isArray(value.taxConfigurations)) throw new Error('Commerce tax configurations must be an array when present.')
+  if (value.accountingScopeConfigurations !== undefined && !Array.isArray(value.accountingScopeConfigurations)) throw new Error('Accounting scopes must be an array.')
   if (value.accountMappingConfigurations !== undefined && !Array.isArray(value.accountMappingConfigurations)) throw new Error('Commerce account mapping configurations must be an array when present.')
   if (value.customerCreditPolicies !== undefined && !Array.isArray(value.customerCreditPolicies)) throw new Error('Commerce customer credit policies must be an array when present.')
   if (value.promotionPolicies !== undefined && !Array.isArray(value.promotionPolicies)) throw new Error('Commerce promotion policies must be an array when present.')
@@ -2389,6 +2490,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const catalogBaselines = (value.catalogBaselines ?? []) as unknown[]
   const catalogChanges = (value.catalogChanges ?? []) as unknown[]
   const taxConfigurations = (value.taxConfigurations ?? []) as unknown[]
+  const accountingScopeConfigurations = (value.accountingScopeConfigurations ?? []) as unknown[]
   const accountMappingConfigurations = (value.accountMappingConfigurations ?? []) as unknown[]
   const customerCreditPolicies = (value.customerCreditPolicies ?? []) as unknown[]
   const promotionPolicies = (value.promotionPolicies ?? []) as unknown[]
@@ -2404,6 +2506,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   if (catalogBaselines.length > maxCatalogBaselines) throw new Error(`Commerce catalog baselines cannot exceed ${maxCatalogBaselines}.`)
   if (catalogChanges.length > maxCatalogChanges) throw new Error(`Commerce catalog changes cannot exceed ${maxCatalogChanges}.`)
   if (taxConfigurations.length > maxTaxConfigurations) throw new Error(`Commerce tax configurations cannot exceed ${maxTaxConfigurations}.`)
+  if (accountingScopeConfigurations.length > maxAccountingScopeConfigurations) throw new Error('Too many accounting scopes.')
   if (accountMappingConfigurations.length > maxAccountMappingConfigurations) throw new Error(`Commerce account mapping configurations cannot exceed ${maxAccountMappingConfigurations}.`)
   if (customerCreditPolicies.length > maxCustomerCreditPolicies) throw new Error(`Commerce customer credit policies cannot exceed ${maxCustomerCreditPolicies}.`)
   if (promotionPolicies.length > maxPromotionPolicies) throw new Error(`Commerce promotion policies cannot exceed ${maxPromotionPolicies}.`)
@@ -2432,13 +2535,15 @@ export function validateCommerceState(value: unknown): CommerceState {
   const collectionActionIds: string[] = []
   const orderReturns: Array<{ orderId: string; record: CommerceOrderReturn }> = []
   const closeActionIds: string[] = []
-  const closeBusinessDates: string[] = []
+  const closeBusinessScopeKeys: string[] = []
+  const closeBusinessDateScopes: Array<{ businessDate: string; scopeKey: string | null }> = []
   const closedOrderIds: string[] = []
   const websiteIntakeCreationActionIds: string[] = []
   const websiteIntakeConversionActionIds: string[] = []
   const catalogBaselineActionIds: string[] = []
   const catalogChangeActionIds: string[] = []
   const taxConfigurationActionIds: string[] = []
+  const accountingScopeConfigurationActionIds: string[] = []
   const accountMappingConfigurationActionIds: string[] = []
   const customerCreditPolicyActionIds: string[] = []
   const promotionPolicyActionIds: string[] = []
@@ -2630,9 +2735,36 @@ export function validateCommerceState(value: unknown): CommerceState {
     taxConfigurationActionIds.push(configuration.proof.actionId)
   }
 
+  let newerAccountingScopeConfiguration: CommerceAccountingScopeConfiguration | null = null
+  for (const [index, candidate] of accountingScopeConfigurations.entries()) {
+    const field = `accountingScopeConfigurations[${index}]`
+    if (!isRecord(candidate) || !hasExactKeys(candidate, [
+      'revision', 'entityCode', 'entityName', 'locationCode', 'locationName', 'proof',
+    ])) throw new Error(`${field} is invalid.`)
+    assertSafeInteger(candidate.revision, `${field}.revision`, 1)
+    if (candidate.revision !== accountingScopeConfigurations.length - index) {
+      throw new Error(`${field}.revision breaks the newest-first sequence.`)
+    }
+    validateAccountingScopeFields(candidate, field)
+    if (!isRecord(candidate.proof)
+      || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+      || !validProof(candidate.proof as CommerceActionProof)) throw new Error(`${field}.proof is invalid.`)
+    const configuration = candidate as unknown as CommerceAccountingScopeConfiguration
+    for (const proofField of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+      canonicalText(configuration.proof[proofField], `${field}.proof.${proofField}`, proofField === 'actionId' ? 160 : 180)
+    }
+    if (newerAccountingScopeConfiguration
+      && (timestampMicros(newerAccountingScopeConfiguration.proof.capturedAt) as bigint) < (timestampMicros(configuration.proof.capturedAt) as bigint)) {
+      throw new Error(`${field} breaks the newest-first chronology.`)
+    }
+    newerAccountingScopeConfiguration = configuration
+    accountingScopeConfigurationActionIds.push(configuration.proof.actionId)
+  }
+  const validatedAccountingScopeConfigurations = accountingScopeConfigurations as CommerceAccountingScopeConfiguration[]
+
   let newerAccountMappingConfiguration: CommerceAccountMappingConfiguration | null = null
   for (const [index, candidate] of accountMappingConfigurations.entries()) {
-    if (!isRecord(candidate) || !hasExactKeys(candidate, ['revision', 'mappings', 'proof'])) {
+    if (!isRecord(candidate) || !hasExactKeys(candidate, ['revision', 'mappings', 'proof'], ['accountingScope'])) {
       throw new Error(`accountMappingConfigurations[${index}] is invalid.`)
     }
     assertSafeInteger(candidate.revision, `accountMappingConfigurations[${index}].revision`, 1)
@@ -2662,6 +2794,12 @@ export function validateCommerceState(value: unknown): CommerceState {
       throw new Error(`accountMappingConfigurations[${index}].proof is invalid.`)
     }
     const configuration = candidate as unknown as CommerceAccountMappingConfiguration
+    if (candidate.accountingScope !== undefined) {
+      const scope = validatedAccountingScopeSnapshot(candidate.accountingScope, `accountMappingConfigurations[${index}].accountingScope`)
+      if (!accountingScopeWasReviewedAt(validatedAccountingScopeConfigurations, scope, configuration.proof.capturedAt)) {
+        throw new Error(`accountMappingConfigurations[${index}] scope was not reviewed first.`)
+      }
+    }
     for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
       canonicalText(configuration.proof[field], `accountMappingConfigurations[${index}].proof.${field}`, field === 'actionId' ? 160 : 180)
     }
@@ -3236,6 +3374,12 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!validTimestamp(candidate.createdAt)) throw new Error(`orders[${index}].createdAt is invalid.`)
     for (const field of ['customer', 'channel', 'item', 'payment'] as const) requiredText(candidate[field], `orders[${index}].${field}`)
     if (candidate.owner !== undefined) canonicalText(candidate.owner, `orders[${index}].owner`, 120)
+    if (candidate.accountingScope !== undefined) {
+      const scope = validatedAccountingScopeSnapshot(candidate.accountingScope, `orders[${index}].accountingScope`)
+      if (!accountingScopeWasReviewedAt(validatedAccountingScopeConfigurations, scope, candidate.createdAt)) {
+        throw new Error(`orders[${index}] scope was not reviewed first.`)
+      }
+    }
     if (candidate.itemSku !== undefined && !itemSkus.includes(requiredText(candidate.itemSku, `orders[${index}].itemSku`))) throw new Error(`orders[${index}].itemSku is unknown.`)
     assertSafeInteger(candidate.quantity, `orders[${index}].quantity`, 1)
     assertSafeInteger(candidate.total, `orders[${index}].total`)
@@ -4130,7 +4274,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     if (!isRecord(candidate) || !hasExactKeys(
       candidate,
       ['id', 'createdAt', 'total', 'orders'],
-      [...closeSnapshotFields, 'settlement'],
+      [...closeSnapshotFields, 'accountingScope', 'settlement'],
     )) throw new Error(`closes[${index}] is invalid.`)
     closeIds.push(requiredText(candidate.id, `closes[${index}].id`))
     if (!validTimestamp(candidate.createdAt)) throw new Error(`closes[${index}].createdAt is invalid.`)
@@ -4168,11 +4312,23 @@ export function validateCommerceState(value: unknown): CommerceState {
         || candidate.total !== memberAdjustedTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0)) {
         throw new Error(`closes[${index}] totals must match its completed, reconciled order membership.`)
       }
+      let closeScopeKey: string | null = null
+      if (candidate.accountingScope !== undefined) {
+        const scope = validatedAccountingScopeSnapshot(candidate.accountingScope, `closes[${index}].accountingScope`)
+        closeScopeKey = commerceAccountingScopeKey(scope)
+        if (!accountingScopeWasReviewedAt(validatedAccountingScopeConfigurations, scope, candidate.createdAt)
+          || memberOrders.some((order) => !order.accountingScope || commerceAccountingScopeKey(order.accountingScope) !== closeScopeKey)) {
+          throw new Error(`closes[${index}] scope is invalid.`)
+        }
+      } else if (memberOrders.some((order) => order.accountingScope !== undefined)) {
+        throw new Error(`closes[${index}] must include order scope.`)
+      }
       if (!closeIdPattern.test(String(candidate.id))) throw new Error(`closes[${index}].id must be a full close UUID.`)
       const actionId = canonicalText(candidate.actionId, `closes[${index}].actionId`, 160)
       if (!closeActionIdPattern.test(actionId)) throw new Error(`closes[${index}].actionId must be a full action UUID.`)
       closeActionIds.push(actionId)
-      closeBusinessDates.push(businessDate)
+      closeBusinessScopeKeys.push(`${businessDate}\u0000${closeScopeKey ?? 'LEGACY-UNSCOPED'}`)
+      closeBusinessDateScopes.push({ businessDate, scopeKey: closeScopeKey })
       closedOrderIds.push(...orderIdsForClose)
       canonicalText(candidate.operator, `closes[${index}].operator`)
       canonicalText(candidate.reason, `closes[${index}].reason`)
@@ -4254,7 +4410,13 @@ export function validateCommerceState(value: unknown): CommerceState {
     }
   }
   assertUnique(closeIds, 'Daily close ID')
-  assertUnique(closeBusinessDates, 'Daily close business date')
+  assertUnique(closeBusinessScopeKeys, 'Daily close business date and accounting scope')
+  for (const businessDate of new Set(closeBusinessDateScopes.map((entry) => entry.businessDate))) {
+    const sameDate = closeBusinessDateScopes.filter((entry) => entry.businessDate === businessDate)
+    if (sameDate.length > 1 && sameDate.some((entry) => entry.scopeKey === null)) {
+      throw new Error(`Daily close ${businessDate} mixes scoped and legacy books.`)
+    }
+  }
   assertUnique(closedOrderIds, 'Closed order ID')
 
   const intakeIds: string[] = []
@@ -4486,6 +4648,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...catalogChangeActionIds.filter((actionId) => !catalogBaselineActionSet.has(actionId)),
     ...catalogBaselineActionSet,
     ...taxConfigurationActionIds,
+    ...accountingScopeConfigurationActionIds,
     ...accountMappingConfigurationActionIds,
     ...customerCreditPolicyActionIds,
     ...promotionPolicyActionIds,
@@ -4731,6 +4894,7 @@ function actionIdIsUsed(state: CommerceState, actionId: string) {
     || commerceCatalogBaselines(state).some((baseline) => baseline.proof.actionId === actionId)
     || commerceCatalogChanges(state).some((change) => change.proof.actionId === actionId)
     || commerceTaxConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
+    || commerceAccountingScopeConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
     || commerceAccountMappingConfigurations(state).some((configuration) => configuration.proof.actionId === actionId)
     || commerceCustomerCreditPolicies(state).some((policy) => policy.proof.actionId === actionId)
     || commercePromotionPolicies(state).some((policy) => policy.proof.actionId === actionId)
@@ -4939,6 +5103,7 @@ function sameTaxConfiguration(left: CommerceTaxConfiguration, right: CommerceTax
 
 function sameAccountMappingConfiguration(left: CommerceAccountMappingConfiguration, right: CommerceAccountMappingConfiguration) {
   return left.revision === right.revision
+    && sameAccountingScopeSnapshot(left.accountingScope, right.accountingScope)
     && left.mappings.length === right.mappings.length
     && left.mappings.every((mapping, index) => mapping.accountRole === right.mappings[index]?.accountRole
       && mapping.externalAccountCode === right.mappings[index]?.externalAccountCode)
@@ -4967,6 +5132,27 @@ export function commerceTaxConfigurations(state: CommerceState) {
   return state.taxConfigurations ?? []
 }
 
+export function commerceAccountingScopeConfigurations(state: CommerceState) {
+  return state.accountingScopeConfigurations ?? []
+}
+
+export function commerceCurrentAccountingScopeConfiguration(state: CommerceState) {
+  return commerceAccountingScopeConfigurations(state)[0] ?? null
+}
+
+export function commerceAccountingScopeConfigurationForKey(
+  state: CommerceState,
+  scopeKey: string,
+  atTime?: string,
+) {
+  const atMicros = atTime === undefined ? null : timestampMicros(atTime)
+  if (atTime !== undefined && atMicros === null) return null
+  return commerceAccountingScopeConfigurations(state).find((configuration) => (
+    commerceAccountingScopeKey(commerceAccountingScopeSnapshot(configuration)) === scopeKey
+    && (atMicros === null || (timestampMicros(configuration.proof.capturedAt) as bigint) <= atMicros)
+  )) ?? null
+}
+
 export function commerceCurrentTaxConfiguration(state: CommerceState) {
   return commerceTaxConfigurations(state)[0] ?? null
 }
@@ -4986,6 +5172,22 @@ export function commerceAccountMappingConfigurations(state: CommerceState) {
 
 export function commerceCurrentAccountMappingConfiguration(state: CommerceState) {
   return commerceAccountMappingConfigurations(state)[0] ?? null
+}
+
+export function commerceAccountMappingConfigurationForScope(
+  state: CommerceState,
+  scope: CommerceAccountingScopeSnapshot | null,
+  atTime?: string,
+) {
+  const atMicros = atTime === undefined ? null : timestampMicros(atTime)
+  if (atTime !== undefined && atMicros === null) return null
+  const scopeKey = scope ? commerceAccountingScopeKey(scope) : null
+  return commerceAccountMappingConfigurations(state).find((configuration) => (
+    (atMicros === null || (timestampMicros(configuration.proof.capturedAt) as bigint) <= atMicros)
+    && (scopeKey === null
+      ? configuration.accountingScope === undefined
+      : Boolean(configuration.accountingScope && commerceAccountingScopeKey(configuration.accountingScope) === scopeKey))
+  )) ?? null
 }
 
 export function commerceCustomerCreditPolicies(state: CommerceState) {
@@ -6767,29 +6969,76 @@ export function configureCommerceAccountMapping(
     mappings.push({ accountRole, externalAccountCode: mapping.externalAccountCode })
   }
   const current = validateCommerceState(state)
+  const activeScope = commerceCurrentAccountingScopeConfiguration(current)
+  const accountingScope = activeScope ? commerceAccountingScopeSnapshot(activeScope) : undefined
+  if (activeScope && (timestampMicros(activeScope.proof.capturedAt) as bigint) > (timestampMicros(proof.capturedAt) as bigint)) return null
   const history = commerceAccountMappingConfigurations(current)
   const replay = history.find((configuration) => configuration.proof.actionId === proof.actionId)
   if (replay) {
     return sameAccountMappingConfiguration(replay, {
       revision: replay.revision,
       mappings,
+      ...(accountingScope ? { accountingScope } : {}),
       proof,
     }) ? current : null
   }
   const latest = history[0]
   if (history.length >= maxAccountMappingConfigurations
     || actionIdIsUsed(current, proof.actionId)
-    || (latest && latest.mappings.every((mapping, index) => mapping.accountRole === mappings[index].accountRole
-      && mapping.externalAccountCode === mappings[index].externalAccountCode))
+    || (latest && sameAccountingScopeSnapshot(latest.accountingScope, accountingScope)
+      && latest.mappings.every((mapping, index) => mapping.accountRole === mappings[index].accountRole
+        && mapping.externalAccountCode === mappings[index].externalAccountCode))
     || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))) return null
   const configuration: CommerceAccountMappingConfiguration = {
     revision: history.length + 1,
     mappings,
+    ...(accountingScope ? { accountingScope } : {}),
     proof: { ...proof },
   }
   return validateCommerceState({
     ...current,
     accountMappingConfigurations: [configuration, ...history],
+  })
+}
+
+export function configureCommerceAccountingScope(
+  state: CommerceState,
+  input: CommerceAccountingScopeInput,
+  proof: CommerceActionProof,
+) {
+  const entityCode = typeof input?.entityCode === 'string' ? input.entityCode.trim().toUpperCase() : ''
+  const locationCode = typeof input?.locationCode === 'string' ? input.locationCode.trim().toUpperCase() : ''
+  const entityName = typeof input?.entityName === 'string' ? input.entityName.trim() : ''
+  const locationName = typeof input?.locationName === 'string' ? input.locationName.trim() : ''
+  if (!validProof(proof)
+    || !accountingScopeCodePattern.test(entityCode)
+    || !accountingScopeCodePattern.test(locationCode)
+    || !entityName || entityName.length > 120
+    || !locationName || locationName.length > 120) return null
+  const current = validateCommerceState(state)
+  const history = commerceAccountingScopeConfigurations(current)
+  const replay = history.find((configuration) => configuration.proof.actionId === proof.actionId)
+  const proposed: CommerceAccountingScopeConfiguration = {
+    revision: replay?.revision ?? history.length + 1,
+    entityCode,
+    entityName,
+    locationCode,
+    locationName,
+    proof: { ...proof },
+  }
+  if (replay) return JSON.stringify(replay) === JSON.stringify(proposed) ? current : null
+  const latest = history[0]
+  if (history.length >= maxAccountingScopeConfigurations
+    || actionIdIsUsed(current, proof.actionId)
+    || (latest
+      && latest.entityCode === entityCode
+      && latest.entityName === entityName
+      && latest.locationCode === locationCode
+      && latest.locationName === locationName)
+    || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))) return null
+  return validateCommerceState({
+    ...current,
+    accountingScopeConfigurations: [proposed, ...history],
   })
 }
 
@@ -7032,6 +7281,8 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   const promisedAt = timestampMicros(order.promisedAt)
   const createdAt = timestampMicros(order.createdAt)
   const confirmedAt = timestampMicros(proof.capturedAt)
+  const activeScopeConfiguration = commerceCurrentAccountingScopeConfiguration(state)
+  const accountingScope = activeScopeConfiguration ? commerceAccountingScopeSnapshot(activeScopeConfiguration) : undefined
   if (!validProof(proof)
     || order.creditDecision !== undefined
     || order.status !== 'confirmed'
@@ -7052,6 +7303,10 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     || order.total < 1
     || order.paymentStatus !== 'pending'
     || order.refundStatus !== 'none') return null
+  if ((activeScopeConfiguration
+    && ((timestampMicros(activeScopeConfiguration.proof.capturedAt) as bigint) > (createdAt as bigint)
+      || (timestampMicros(activeScopeConfiguration.proof.capturedAt) as bigint) > (confirmedAt as bigint)))
+    || (order.accountingScope !== undefined && !sameAccountingScopeSnapshot(order.accountingScope, accountingScope))) return null
   if (Boolean(order.sourceRecordId) !== Boolean(order.evidenceReference)
     || (order.evidenceReference && order.evidenceReference !== proof.evidenceReference)) return null
   if (order.promotionDecision) {
@@ -7123,8 +7378,10 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     }
     delete storedBusinessOrder.calculation
     delete storedBusinessOrder.creditDecision
+    delete storedBusinessOrder.accountingScope
     const requestedBusinessOrder = { ...order }
     delete requestedBusinessOrder.calculation
+    delete requestedBusinessOrder.accountingScope
     if (requestedBusinessOrder.lines === undefined) delete storedBusinessOrder.lines
     return proofMovements.length === storedLines.length
       && storedLines.every((line) => proofMovements.some((movement) => movement.kind === 'reserve'
@@ -7209,6 +7466,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     lines,
     calculation,
     total: calculation.totalMmk,
+    ...(accountingScope ? { accountingScope } : {}),
     ...(creditDecision ? { creditDecision } : {}),
   }
   const movements = lines.map((line, index) => movementFor(
@@ -9388,6 +9646,7 @@ export function recordCommerceOrderCorrection(
 
 function sameCloseExpectation(left: CommerceCloseExpectation, right: CommerceCloseExpectation) {
   return left.businessDate === right.businessDate
+    && sameAccountingScopeSnapshot(left.accountingScope ?? undefined, right.accountingScope ?? undefined)
     && left.total === right.total
     && left.stateSnapshot === right.stateSnapshot
     && sameStringArray(left.orderIds, right.orderIds)
@@ -9405,31 +9664,86 @@ function commerceOrderCloseBasis(order: CommerceOrder) {
     .reduce((latest, timestamp) => timestamp > latest ? timestamp : latest, 0n)
 }
 
-export function commerceCloseExpectation(state: CommerceState, capturedAt: string): CommerceCloseExpectation | null {
+function commerceOrderAccountingScopeKey(order: CommerceOrder) {
+  return order.accountingScope ? commerceAccountingScopeKey(order.accountingScope) : COMMERCE_LEGACY_ACCOUNTING_SCOPE_KEY
+}
+
+function commerceUnclosedEligibleOrders(state: CommerceState) {
+  const previouslyClosedOrderIds = new Set(state.closes.flatMap((close) => close.orderIds ?? []))
+  return state.orders.filter((order) => order.status === 'completed'
+    && order.paymentStatus === 'reconciled'
+    && !previouslyClosedOrderIds.has(order.id))
+}
+
+export function commerceCloseScopeOptions(state: CommerceState, capturedAt: string): CommerceCloseScopeOption[] {
+  if (!validTimestamp(capturedAt)) return []
+  const current = validateCommerceState(state)
+  if (current.closes.some((close) => !close.orderIds || !close.businessDate)) return []
+  const capturedMicros = timestampMicros(capturedAt) as bigint
+  const grouped = new Map<string, CommerceOrder[]>()
+  for (const order of commerceUnclosedEligibleOrders(current).filter((candidate) => commerceOrderCloseBasis(candidate) <= capturedMicros)) {
+    const key = commerceOrderAccountingScopeKey(order)
+    grouped.set(key, [...(grouped.get(key) ?? []), order])
+  }
+  if (!grouped.size) {
+    const active = commerceCurrentAccountingScopeConfiguration(current)
+    if (active && (timestampMicros(active.proof.capturedAt) as bigint) <= capturedMicros) {
+      grouped.set(commerceAccountingScopeKey(commerceAccountingScopeSnapshot(active)), [])
+    } else if (!commerceAccountingScopeConfigurations(current).length) {
+      grouped.set(COMMERCE_LEGACY_ACCOUNTING_SCOPE_KEY, [])
+    }
+  }
+  return [...grouped.entries()].flatMap(([key, orders]): CommerceCloseScopeOption[] => {
+    const adjustedTotals = orders.map(commerceOrderAdjustedTotal)
+    if (adjustedTotals.some((total) => total === null)) return []
+    const totalMmk = adjustedTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0)
+    if (!Number.isSafeInteger(totalMmk)) return []
+    if (key === COMMERCE_LEGACY_ACCOUNTING_SCOPE_KEY) {
+      return [{ key, accountingScope: null, orderCount: orders.length, totalMmk }]
+    }
+    const configuration = commerceAccountingScopeConfigurationForKey(current, key, capturedAt)
+    return configuration ? [{
+      key,
+      accountingScope: commerceAccountingScopeSnapshot(configuration),
+      orderCount: orders.length,
+      totalMmk,
+    }] : []
+  }).sort((left, right) => left.key.localeCompare(right.key))
+}
+
+export function commerceCloseExpectation(state: CommerceState, capturedAt: string, requestedScopeKey?: string): CommerceCloseExpectation | null {
   if (!validTimestamp(capturedAt)) return null
   const current = validateCommerceState(state)
   if (current.closes.some((close) => !close.orderIds || !close.businessDate)) return null
   const businessDate = myanmarBusinessDate(capturedAt)
-  if (current.closes.some((close) => close.businessDate === businessDate)) return null
-  const previouslyClosedOrderIds = new Set(current.closes.flatMap((close) => close.orderIds ?? []))
-  const eligibleOrders = current.orders
-    .filter((order) => order.status === 'completed'
-      && order.paymentStatus === 'reconciled'
-      && !previouslyClosedOrderIds.has(order.id))
+  const options = commerceCloseScopeOptions(current, capturedAt)
+  const selected = requestedScopeKey === undefined
+    ? options.length === 1 ? options[0] : null
+    : options.find((option) => option.key === requestedScopeKey) ?? null
+  if (!selected) return null
+  const sameDateCloses = current.closes.filter((close) => close.businessDate === businessDate)
+  if (selected.accountingScope === null) {
+    if (sameDateCloses.length) return null
+  } else {
+    const selectedKey = commerceAccountingScopeKey(selected.accountingScope)
+    if (sameDateCloses.some((close) => !close.accountingScope || commerceAccountingScopeKey(close.accountingScope) === selectedKey)) return null
+  }
+  const eligibleOrders = commerceUnclosedEligibleOrders(current)
+    .filter((order) => commerceOrderAccountingScopeKey(order) === selected.key)
   if (eligibleOrders.some((order) => commerceOrderCloseBasis(order) > (timestampMicros(capturedAt) as bigint))) return null
-  const orderIds = eligibleOrders
-    .map((order) => order.id)
-    .sort()
+  const orderIds = eligibleOrders.map((order) => order.id).sort()
   const adjustedTotals = orderIds.map((orderId) => commerceOrderAdjustedTotal(current.orders.find((order) => order.id === orderId) as CommerceOrder))
   if (adjustedTotals.some((total) => total === null)) return null
   const total = adjustedTotals.reduce<number>((sum, value) => sum + (value ?? 0), 0)
   if (!Number.isSafeInteger(total)) return null
   return {
     businessDate,
+    accountingScope: selected.accountingScope,
     orderIds,
     total,
     paymentExceptionOrderIds: current.orders
-      .filter((order) => order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending'))
+      .filter((order) => commerceOrderAccountingScopeKey(order) === selected.key
+        && (order.refundStatus === 'due' || (order.status !== 'cancelled' && order.paymentStatus === 'pending')))
       .map((order) => order.id)
       .sort(),
     stockExceptionSkus: current.items
@@ -9552,6 +9866,7 @@ export function saveCommerceClose(
     operator: proof.actor,
     reason: proof.reason,
     evidenceReference: proof.evidenceReference,
+    ...(actual.accountingScope ? { accountingScope: actual.accountingScope } : {}),
     ...(settlement ? { settlement } : {}),
   }
   return validateCommerceState({ ...current, closes: [close, ...current.closes] })
@@ -9580,6 +9895,30 @@ function commerceCloseSettlementProjection(settlement: CommerceCloseSettlement |
   ]
 }
 
+function commerceAccountingScopeProjection(scope: CommerceAccountingScopeSnapshot | null) {
+  return scope ? [
+    scope.configurationRevision,
+    scope.configurationActionId,
+    scope.entityCode,
+    scope.entityName,
+    scope.locationCode,
+    scope.locationName,
+  ] : null
+}
+
+const commerceAccountingScopeCsvHeaders = [
+  'accounting_scope_revision',
+  'accounting_scope_action_id',
+  'entity_code',
+  'entity_name',
+  'location_code',
+  'location_name',
+]
+
+function commerceAccountingScopeCsvValues(scope: CommerceAccountingScopeSnapshot | null) {
+  return commerceAccountingScopeProjection(scope) ?? [null, null, null, null, null, null]
+}
+
 function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExport, 'digest'>) {
   return [
     artifact.schema,
@@ -9590,6 +9929,7 @@ function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExp
     artifact.operator,
     artifact.reason,
     artifact.evidenceReference,
+    commerceAccountingScopeProjection(artifact.accountingScope),
     artifact.totalMmk,
     artifact.orderCount,
     artifact.paymentExceptionOrderIds,
@@ -9598,6 +9938,7 @@ function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExp
     artifact.orders.map((order) => [
       order.orderId,
       order.orderCreatedAt,
+      commerceAccountingScopeProjection(order.accountingScope),
       order.paymentMethod,
       order.paymentReconciledAt,
       order.paymentEvidenceReference,
@@ -9675,6 +10016,7 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
     return {
       orderId: order.id,
       orderCreatedAt: order.createdAt,
+      accountingScope: order.accountingScope ? { ...order.accountingScope } : null,
       paymentMethod: order.payment,
       paymentReconciledAt: order.paymentReconciledAt ?? null,
       paymentEvidenceReference: order.paymentEvidenceReference ?? null,
@@ -9704,6 +10046,7 @@ export function commerceDailyCloseExport(state: CommerceState, closeId: string):
     operator: close.operator,
     reason: close.reason,
     evidenceReference: close.evidenceReference,
+    accountingScope: close.accountingScope ? { ...close.accountingScope } : null,
     totalMmk: close.total,
     orderCount: close.orders,
     paymentExceptionOrderIds: [...close.paymentExceptionOrderIds],
@@ -9822,6 +10165,7 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     'closed_at',
     'operator',
     'evidence_reference',
+    ...commerceAccountingScopeCsvHeaders,
     'order_id',
     'order_created_at',
     'payment_method',
@@ -9863,6 +10207,7 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     artifact.closedAt,
     artifact.operator,
     artifact.evidenceReference,
+    ...commerceAccountingScopeCsvValues(artifact.accountingScope),
     null,
     null,
     null,
@@ -9904,6 +10249,7 @@ export function commerceDailyCloseCsv(artifact: CommerceDailyCloseExport) {
     artifact.closedAt,
     null,
     null,
+    ...commerceAccountingScopeCsvValues(order.accountingScope),
     order.orderId,
     order.orderCreatedAt,
     order.paymentMethod,
@@ -9951,6 +10297,7 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
     artifact.businessDate,
     artifact.closedAt,
     artifact.sourceCloseDigest,
+    commerceAccountingScopeProjection(artifact.accountingScope),
     artifact.accountMappingRevision,
     artifact.accountMappingEvidenceReference,
     artifact.settlementSchema,
@@ -9991,10 +10338,11 @@ function commerceAccountingHandoffProjection(artifact: Omit<CommerceAccountingHa
 export function commerceAccountingHandoff(state: CommerceState, closeId: string): CommerceAccountingHandoff | null {
   const closeExport = commerceDailyCloseExport(state, closeId)
   if (!closeExport) return null
-  const closeAt = timestampMicros(closeExport.closedAt) as bigint
-  const accountMapping = commerceAccountMappingConfigurations(validateCommerceState(state)).find(
-    (configuration) => (timestampMicros(configuration.proof.capturedAt) as bigint) <= closeAt,
-  ) ?? null
+  const accountMapping = commerceAccountMappingConfigurationForScope(
+    validateCommerceState(state),
+    closeExport.accountingScope,
+    closeExport.closedAt,
+  )
   const externalAccountCodeByRole = new Map(
     accountMapping?.mappings.map((mapping) => [mapping.accountRole, mapping.externalAccountCode]) ?? [],
   )
@@ -10138,6 +10486,7 @@ export function commerceAccountingHandoff(state: CommerceState, closeId: string)
     businessDate: closeExport.businessDate,
     closedAt: closeExport.closedAt,
     sourceCloseDigest: closeExport.digest,
+    accountingScope: closeExport.accountingScope ? { ...closeExport.accountingScope } : null,
     accountMappingRevision: accountMapping?.revision ?? null,
     accountMappingEvidenceReference: accountMapping?.proof.evidenceReference ?? null,
     settlementSchema: settlement?.schema ?? null,
@@ -10179,6 +10528,7 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     'closed_at',
     'currency',
     'source_close_digest',
+    ...commerceAccountingScopeCsvHeaders,
     'account_mapping_revision',
     'account_mapping_evidence_reference',
     'settlement_schema',
@@ -10221,6 +10571,7 @@ export function commerceAccountingHandoffCsv(artifact: CommerceAccountingHandoff
     artifact.closedAt,
     artifact.currency,
     artifact.sourceCloseDigest,
+    ...commerceAccountingScopeCsvValues(artifact.accountingScope),
     artifact.accountMappingRevision,
     artifact.accountMappingEvidenceReference,
     artifact.settlementSchema,

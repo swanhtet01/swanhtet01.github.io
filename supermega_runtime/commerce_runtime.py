@@ -41,8 +41,8 @@ from supermega_runtime.trial_store import TrialValidationError
 
 
 COMMERCE_SCHEMA = "supermega.commerce.workspace.v2"
-COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v4"
-COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v4"
+COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = "supermega.commerce.daily-close-export.v5"
+COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = "supermega.commerce.accounting-handoff.v5"
 COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = "supermega.commerce.supplier-payables-handoff.v1"
 _COMMERCE_CLOSE_SETTLEMENT_V1_SCHEMA = "supermega.commerce.close-settlement.v1"
 COMMERCE_CLOSE_SETTLEMENT_SCHEMA = "supermega.commerce.close-settlement.v2"
@@ -53,6 +53,7 @@ COMMERCE_EVENTS = frozenset(
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
+        "commerce.accounting_scope.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
@@ -105,6 +106,7 @@ COMMERCE_HUMAN_EVENTS = frozenset(
         "commerce.item.created",
         "commerce.item.updated",
         "commerce.tax_configuration.saved",
+        "commerce.accounting_scope.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
@@ -210,6 +212,7 @@ _MAX_SUPPLIER_CREDITS_PER_RETURN = 50
 _MAX_CATALOG_BASELINES = 500
 _MAX_CATALOG_CHANGES = 500
 _MAX_TAX_CONFIGURATIONS = 100
+_MAX_ACCOUNTING_SCOPE_CONFIGURATIONS = 100
 _MAX_ACCOUNT_MAPPING_CONFIGURATIONS = 100
 _MAX_CUSTOMER_CREDIT_POLICIES = 500
 _MAX_PROMOTION_POLICIES = 200
@@ -260,6 +263,7 @@ _SUPPLIER_CREDIT_ID_PATTERN = re.compile(
 )
 _TAX_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,11}")
 _TAX_JURISDICTION_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{1,15}")
+_ACCOUNTING_SCOPE_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{1,39}")
 _EXTERNAL_ACCOUNT_CODE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,39}")
 _LEGACY_ACCOUNT_ROLES = (
     "payment_clearing",
@@ -300,6 +304,15 @@ _TAX_CONFIGURATION_FIELDS = frozenset(
     {"revision", "code", "label", "rateBasisPoints", "mode", "proof"}
 )
 _TAX_CONFIGURATION_SCHEDULE_FIELDS = frozenset({"jurisdictionCode", "effectiveFrom"})
+_ACCOUNTING_SCOPE_CONFIGURATION_FIELDS = frozenset(
+    {"revision", "entityCode", "entityName", "locationCode", "locationName", "proof"}
+)
+_ACCOUNTING_SCOPE_SNAPSHOT_FIELDS = frozenset(
+    {
+        "configurationRevision", "configurationActionId", "entityCode", "entityName",
+        "locationCode", "locationName",
+    }
+)
 _ACCOUNT_MAPPING_CONFIGURATION_FIELDS = frozenset({"revision", "mappings", "proof"})
 _ACCOUNT_MAPPING_FIELDS = frozenset({"accountRole", "externalAccountCode"})
 _CUSTOMER_CREDIT_POLICY_FIELDS = frozenset(
@@ -357,6 +370,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "shippingDecision",
         "paymentDecision",
         "taxDecision",
+        "accountingScope",
         "owner",
         "sourceRecordId",
         "evidenceReference",
@@ -658,7 +672,7 @@ _PRODUCTION_RETURN_EXCLUSIVE_FIELDS = frozenset(
         "productionReturnLocationId",
     }
 )
-_CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"settlement"}
+_CLOSE_OPTIONAL_FIELDS = _CLOSE_SNAPSHOT_FIELDS | {"accountingScope", "settlement"}
 _CLOSE_SETTLEMENT_V1_FIELDS = frozenset(
     {"schema", "status", "totalExpectedMmk", "totalCountedMmk", "totalVarianceMmk", "lines"}
 )
@@ -810,6 +824,53 @@ def _action_proof(value: object, field: str, *, with_order_id: bool = False) -> 
     if with_order_id:
         _text(proof["orderId"], f"{field}.orderId", maximum=160)
     return proof
+
+
+def _accounting_scope_snapshot(configuration: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "configurationRevision": configuration["revision"],
+        "configurationActionId": configuration["proof"]["actionId"],
+        "entityCode": configuration["entityCode"],
+        "entityName": configuration["entityName"],
+        "locationCode": configuration["locationCode"],
+        "locationName": configuration["locationName"],
+    }
+
+
+def _accounting_scope_key(scope: Mapping[str, Any]) -> str:
+    return f"{scope['entityCode']}\0{scope['locationCode']}"
+
+
+def _validated_accounting_scope_snapshot(value: object, field: str) -> dict[str, Any]:
+    scope = _object(value, field)
+    _exact_fields(scope, field, required=_ACCOUNTING_SCOPE_SNAPSHOT_FIELDS)
+    _integer(scope["configurationRevision"], f"{field}.configurationRevision", minimum=1)
+    _text(scope["configurationActionId"], f"{field}.configurationActionId", maximum=160)
+    entity_code = _text(scope["entityCode"], f"{field}.entityCode", maximum=40)
+    location_code = _text(scope["locationCode"], f"{field}.locationCode", maximum=40)
+    if (
+        _ACCOUNTING_SCOPE_CODE_PATTERN.fullmatch(entity_code) is None
+        or _ACCOUNTING_SCOPE_CODE_PATTERN.fullmatch(location_code) is None
+    ):
+        raise TrialValidationError(f"{field} codes are invalid.")
+    _text(scope["entityName"], f"{field}.entityName", maximum=120)
+    _text(scope["locationName"], f"{field}.locationName", maximum=120)
+    return scope
+
+
+def _accounting_scope_configuration_for_snapshot(
+    configurations: Sequence[Mapping[str, Any]],
+    snapshot: Mapping[str, Any],
+) -> Mapping[str, Any] | None:
+    return next(
+        (
+            configuration
+            for configuration in configurations
+            if configuration["revision"] == snapshot["configurationRevision"]
+            and _accounting_scope_snapshot(configuration) == snapshot
+        ),
+        None,
+    )
 
 
 def _same_accountable_actor(left: str, right: str) -> bool:
@@ -1152,6 +1213,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 "catalogBaselines",
                 "catalogChanges",
                 "taxConfigurations",
+                "accountingScopeConfigurations",
                 "accountMappingConfigurations",
                 "customerCreditPolicies",
                 "promotionPolicies",
@@ -1201,6 +1263,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     tax_configurations = _list(
         state.get("taxConfigurations", []),
         "commerce state.taxConfigurations",
+    )
+    accounting_scope_configurations = _list(
+        state.get("accountingScopeConfigurations", []),
+        "commerce state.accountingScopeConfigurations",
     )
     account_mapping_configurations = _list(
         state.get("accountMappingConfigurations", []),
@@ -1262,6 +1328,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     if len(tax_configurations) > _MAX_TAX_CONFIGURATIONS:
         raise TrialValidationError(
             f"commerce state.taxConfigurations cannot exceed {_MAX_TAX_CONFIGURATIONS}."
+        )
+    if len(accounting_scope_configurations) > _MAX_ACCOUNTING_SCOPE_CONFIGURATIONS:
+        raise TrialValidationError(
+            "commerce state.accountingScopeConfigurations cannot exceed "
+            f"{_MAX_ACCOUNTING_SCOPE_CONFIGURATIONS}."
         )
     if len(account_mapping_configurations) > _MAX_ACCOUNT_MAPPING_CONFIGURATIONS:
         raise TrialValidationError(
@@ -1526,6 +1597,41 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         newer_tax_configuration = configuration
         tax_configuration_action_ids.append(proof["actionId"])
 
+    accounting_scope_configuration_action_ids: list[str] = []
+    newer_accounting_scope_configuration: dict[str, Any] | None = None
+    validated_accounting_scope_configurations: list[dict[str, Any]] = []
+    for index, candidate in enumerate(accounting_scope_configurations):
+        field = f"accountingScopeConfigurations[{index}]"
+        configuration = _object(candidate, field)
+        _exact_fields(configuration, field, required=_ACCOUNTING_SCOPE_CONFIGURATION_FIELDS)
+        revision = _integer(configuration["revision"], f"{field}.revision", minimum=1)
+        if revision != len(accounting_scope_configurations) - index:
+            raise TrialValidationError(
+                f"{field}.revision breaks the newest-first sequence."
+            )
+        entity_code = _text(configuration["entityCode"], f"{field}.entityCode", maximum=40)
+        location_code = _text(configuration["locationCode"], f"{field}.locationCode", maximum=40)
+        if (
+            _ACCOUNTING_SCOPE_CODE_PATTERN.fullmatch(entity_code) is None
+            or _ACCOUNTING_SCOPE_CODE_PATTERN.fullmatch(location_code) is None
+        ):
+            raise TrialValidationError(f"{field} codes are invalid.")
+        _text(configuration["entityName"], f"{field}.entityName", maximum=120)
+        _text(configuration["locationName"], f"{field}.locationName", maximum=120)
+        proof = _action_proof(configuration["proof"], f"{field}.proof")
+        if newer_accounting_scope_configuration is not None:
+            newer_captured_at = datetime.fromisoformat(
+                str(newer_accounting_scope_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+            )
+            captured_at = datetime.fromisoformat(proof["capturedAt"].replace("Z", "+00:00"))
+            if captured_at > newer_captured_at:
+                raise TrialValidationError(
+                    f"{field} accounting scope configurations must be newest first."
+                )
+        newer_accounting_scope_configuration = configuration
+        validated_accounting_scope_configurations.append(configuration)
+        accounting_scope_configuration_action_ids.append(proof["actionId"])
+
     account_mapping_configuration_action_ids: list[str] = []
     newer_account_mapping_configuration: dict[str, Any] | None = None
     for index, candidate in enumerate(account_mapping_configurations):
@@ -1535,6 +1641,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             configuration,
             field,
             required=_ACCOUNT_MAPPING_CONFIGURATION_FIELDS,
+            optional=frozenset({"accountingScope"}),
         )
         revision = _integer(configuration["revision"], f"{field}.revision", minimum=1)
         if revision != len(account_mapping_configurations) - index:
@@ -1569,6 +1676,21 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"{mapping_field}.externalAccountCode is invalid."
                 )
         proof = _action_proof(configuration["proof"], f"{field}.proof")
+        if "accountingScope" in configuration:
+            scope = _validated_accounting_scope_snapshot(
+                configuration["accountingScope"],
+                f"{field}.accountingScope",
+            )
+            source = _accounting_scope_configuration_for_snapshot(
+                validated_accounting_scope_configurations,
+                scope,
+            )
+            if source is None or datetime.fromisoformat(
+                str(source["proof"]["capturedAt"]).replace("Z", "+00:00")
+            ) > datetime.fromisoformat(proof["capturedAt"].replace("Z", "+00:00")):
+                raise TrialValidationError(
+                    f"{field}.accountingScope is not a reviewed scope available at mapping time."
+                )
         if newer_account_mapping_configuration is not None:
             newer_captured_at = datetime.fromisoformat(
                 str(newer_account_mapping_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
@@ -2391,6 +2513,21 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             _text(order[field], f"orders[{index}].{field}")
         if "owner" in order:
             _text(order["owner"], f"orders[{index}].owner", maximum=120)
+        if "accountingScope" in order:
+            scope = _validated_accounting_scope_snapshot(
+                order["accountingScope"],
+                f"orders[{index}].accountingScope",
+            )
+            source = _accounting_scope_configuration_for_snapshot(
+                validated_accounting_scope_configurations,
+                scope,
+            )
+            if source is None or datetime.fromisoformat(
+                str(source["proof"]["capturedAt"]).replace("Z", "+00:00")
+            ) > order_created_at:
+                raise TrialValidationError(
+                    f"orders[{index}].accountingScope is not a reviewed scope available at order creation."
+                )
         item_sku = order.get("itemSku")
         if item_sku is not None:
             item_sku = _text(item_sku, f"orders[{index}].itemSku", maximum=80)
@@ -4075,7 +4212,8 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
 
     close_ids: list[str] = []
     close_action_ids: list[str] = []
-    close_business_dates: list[str] = []
+    close_business_scope_keys: list[str] = []
+    close_business_date_scopes: list[tuple[str, str | None]] = []
     closed_order_ids: list[str] = []
     for index, candidate in enumerate(closes):
         close = _object(candidate, f"closes[{index}]")
@@ -4161,6 +4299,38 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 raise TrialValidationError(
                     f"closes[{index}] totals must match its completed, reconciled order membership."
                 )
+            close_scope_key: str | None = None
+            if "accountingScope" in close:
+                scope = _validated_accounting_scope_snapshot(
+                    close["accountingScope"],
+                    f"closes[{index}].accountingScope",
+                )
+                source = _accounting_scope_configuration_for_snapshot(
+                    validated_accounting_scope_configurations,
+                    scope,
+                )
+                close_scope_key = _accounting_scope_key(scope)
+                close_at = datetime.fromisoformat(
+                    str(close["createdAt"]).replace("Z", "+00:00")
+                )
+                if (
+                    source is None
+                    or datetime.fromisoformat(
+                        str(source["proof"]["capturedAt"]).replace("Z", "+00:00")
+                    ) > close_at
+                    or any(
+                        not isinstance(order.get("accountingScope"), Mapping)
+                        or _accounting_scope_key(order["accountingScope"]) != close_scope_key
+                        for order in member_orders
+                    )
+                ):
+                    raise TrialValidationError(
+                        f"closes[{index}].accountingScope must match every member order and a reviewed scope available at close time."
+                    )
+            elif any("accountingScope" in order for order in member_orders):
+                raise TrialValidationError(
+                    f"closes[{index}] cannot omit accounting scope for scoped orders."
+                )
             if not _CLOSE_ID_PATTERN.fullmatch(str(close["id"])):
                 raise TrialValidationError(f"closes[{index}].id must be a full close UUID.")
             close_action_id = _text(
@@ -4171,7 +4341,10 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     f"closes[{index}].actionId must be a full action UUID."
                 )
             close_action_ids.append(close_action_id)
-            close_business_dates.append(business_date)
+            close_business_scope_keys.append(
+                f"{business_date}\0{close_scope_key or 'LEGACY-UNSCOPED'}"
+            )
+            close_business_date_scopes.append((business_date, close_scope_key))
             closed_order_ids.extend(order_ids_for_close)
             _text(close["operator"], f"closes[{index}].operator")
             _text(close["reason"], f"closes[{index}].reason")
@@ -4269,7 +4442,13 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                             f"closes[{index}].settlement correction basis is invalid."
                         )
     _unique(close_ids, "Daily close ID")
-    _unique(close_business_dates, "Daily close business date")
+    _unique(close_business_scope_keys, "Daily close business date and accounting scope")
+    for business_date in {entry[0] for entry in close_business_date_scopes}:
+        same_date = [entry for entry in close_business_date_scopes if entry[0] == business_date]
+        if len(same_date) > 1 and any(scope_key is None for _, scope_key in same_date):
+            raise TrialValidationError(
+                f"Daily close {business_date} cannot mix legacy unscoped and scoped books."
+            )
     _unique(closed_order_ids, "Closed order ID")
 
     intake_ids: list[str] = []
@@ -4506,6 +4685,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             ),
             *catalog_baseline_action_set,
             *tax_configuration_action_ids,
+            *accounting_scope_configuration_action_ids,
             *account_mapping_configuration_action_ids,
             *customer_credit_policy_action_ids,
             *promotion_policy_action_ids,
@@ -4736,6 +4916,12 @@ def _validate_event_evidence(
         if not _proof_matches_evidence(proof, evidence):
             raise TrialValidationError(
                 "command evidence must match the saved tax configuration proof."
+            )
+    elif event_type == "commerce.accounting_scope.saved":
+        proof = next_state["accountingScopeConfigurations"][0]["proof"]
+        if not _proof_matches_evidence(proof, evidence):
+            raise TrialValidationError(
+                "command evidence must match the saved accounting scope proof."
             )
     elif event_type == "commerce.account_mapping.saved":
         proof = next_state["accountMappingConfigurations"][0]["proof"]
@@ -5845,6 +6031,50 @@ def _account_mapping_configurations(state: Mapping[str, Any]) -> list[Any]:
     return state.get("accountMappingConfigurations", [])
 
 
+def _accounting_scope_configurations(state: Mapping[str, Any]) -> list[Any]:
+    return state.get("accountingScopeConfigurations", [])
+
+
+def _effective_accounting_scope_configuration(
+    state: Mapping[str, Any],
+    at_time: str,
+) -> Mapping[str, Any] | None:
+    at = datetime.fromisoformat(at_time.replace("Z", "+00:00"))
+    for candidate in _accounting_scope_configurations(state):
+        if not isinstance(candidate, Mapping):
+            continue
+        proof = candidate.get("proof")
+        if isinstance(proof, Mapping) and datetime.fromisoformat(
+            str(proof["capturedAt"]).replace("Z", "+00:00")
+        ) <= at:
+            return candidate
+    return None
+
+
+def _account_mapping_for_scope(
+    state: Mapping[str, Any],
+    scope: Mapping[str, Any] | None,
+    at_time: str,
+) -> Mapping[str, Any] | None:
+    at = datetime.fromisoformat(at_time.replace("Z", "+00:00"))
+    scope_key = _accounting_scope_key(scope) if scope is not None else None
+    for candidate in _account_mapping_configurations(state):
+        if not isinstance(candidate, Mapping):
+            continue
+        proof = candidate.get("proof")
+        if not isinstance(proof, Mapping) or datetime.fromisoformat(
+            str(proof["capturedAt"]).replace("Z", "+00:00")
+        ) > at:
+            continue
+        candidate_scope = candidate.get("accountingScope")
+        if scope_key is None:
+            if candidate_scope is None:
+                return candidate
+        elif isinstance(candidate_scope, Mapping) and _accounting_scope_key(candidate_scope) == scope_key:
+            return candidate
+    return None
+
+
 def _customer_credit_policies(state: Mapping[str, Any]) -> list[Any]:
     return state.get("customerCreditPolicies", [])
 
@@ -6091,6 +6321,17 @@ def create_commerce_order_from_intent(
             "paymentTermsDays": payment_terms_days,
             "status": "approved",
         }
+    active_scope_configuration = (
+        _accounting_scope_configurations(current)[0]
+        if _accounting_scope_configurations(current)
+        else None
+    )
+    if active_scope_configuration is not None and datetime.fromisoformat(
+        str(active_scope_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+    ) > datetime.fromisoformat(created_at.replace("Z", "+00:00")):
+        raise TrialValidationError(
+            "the active accounting scope changed after order review; review the order again."
+        )
     order = {
         "id": order_id,
         "createdAt": created_at,
@@ -6108,6 +6349,11 @@ def create_commerce_order_from_intent(
         "promisedAt": promised_at,
         **({"paymentDueAt": payment_due_at} if payment_due_at is not None else {}),
         **({"creditDecision": credit_decision} if credit_decision is not None else {}),
+        **(
+            {"accountingScope": _accounting_scope_snapshot(active_scope_configuration)}
+            if active_scope_configuration is not None
+            else {}
+        ),
         "lines": lines,
         "calculation": calculation,
         "total": total,
@@ -6575,6 +6821,19 @@ def _close_settlement_projection(settlement: Mapping[str, Any] | None) -> list[A
     ]
 
 
+def _accounting_scope_projection(scope: Mapping[str, Any] | None) -> list[Any] | None:
+    if scope is None:
+        return None
+    return [
+        scope["configurationRevision"],
+        scope["configurationActionId"],
+        scope["entityCode"],
+        scope["entityName"],
+        scope["locationCode"],
+        scope["locationName"],
+    ]
+
+
 def commerce_catalog_baseline_digest(baseline: Mapping[str, Any]) -> str:
     """Bind one opening price and reorder snapshot to its accountable proof."""
 
@@ -6687,6 +6946,7 @@ def commerce_daily_close_export(
             {
                 "orderId": order["id"],
                 "orderCreatedAt": order["createdAt"],
+                "accountingScope": deepcopy(order.get("accountingScope")),
                 "paymentMethod": order["payment"],
                 "paymentReconciledAt": order.get("paymentReconciledAt"),
                 "paymentEvidenceReference": order.get("paymentEvidenceReference"),
@@ -6736,6 +6996,7 @@ def commerce_daily_close_export(
         "operator": close["operator"],
         "reason": close["reason"],
         "evidenceReference": close["evidenceReference"],
+        "accountingScope": deepcopy(close.get("accountingScope")),
         "totalMmk": close["total"],
         "orderCount": close["orders"],
         "paymentExceptionOrderIds": list(close["paymentExceptionOrderIds"]),
@@ -6753,6 +7014,7 @@ def commerce_daily_close_export(
             artifact["operator"],
             artifact["reason"],
             artifact["evidenceReference"],
+            _accounting_scope_projection(artifact["accountingScope"]),
             artifact["totalMmk"],
             artifact["orderCount"],
             artifact["paymentExceptionOrderIds"],
@@ -6762,6 +7024,7 @@ def commerce_daily_close_export(
                 [
                     row["orderId"],
                     row["orderCreatedAt"],
+                    _accounting_scope_projection(row["accountingScope"]),
                     row["paymentMethod"],
                     row["paymentReconciledAt"],
                     row["paymentEvidenceReference"],
@@ -6836,6 +7099,12 @@ def commerce_daily_close_csv(
         "closed_at",
         "operator",
         "evidence_reference",
+        "accounting_scope_revision",
+        "accounting_scope_action_id",
+        "entity_code",
+        "entity_name",
+        "location_code",
+        "location_name",
         "order_id",
         "order_created_at",
         "payment_method",
@@ -6878,6 +7147,12 @@ def commerce_daily_close_csv(
             artifact["closedAt"],
             artifact["operator"],
             artifact["evidenceReference"],
+            artifact["accountingScope"]["configurationRevision"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["configurationActionId"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["entityCode"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["entityName"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["locationCode"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["locationName"] if artifact["accountingScope"] else None,
             None,
             None,
             None,
@@ -6944,6 +7219,12 @@ def commerce_daily_close_csv(
             artifact["closedAt"],
             None,
             None,
+            row["accountingScope"]["configurationRevision"] if row["accountingScope"] else None,
+            row["accountingScope"]["configurationActionId"] if row["accountingScope"] else None,
+            row["accountingScope"]["entityCode"] if row["accountingScope"] else None,
+            row["accountingScope"]["entityName"] if row["accountingScope"] else None,
+            row["accountingScope"]["locationCode"] if row["accountingScope"] else None,
+            row["accountingScope"]["locationName"] if row["accountingScope"] else None,
             row["orderId"],
             row["orderCreatedAt"],
             row["paymentMethod"],
@@ -6995,16 +7276,10 @@ def commerce_accounting_handoff(
     close_export = commerce_daily_close_export(current, close_id)
     if close_export is None:
         return None
-    closed_at = datetime.fromisoformat(close_export["closedAt"].replace("Z", "+00:00"))
-    account_mapping = next(
-        (
-            configuration
-            for configuration in _account_mapping_configurations(current)
-            if datetime.fromisoformat(
-                configuration["proof"]["capturedAt"].replace("Z", "+00:00")
-            ) <= closed_at
-        ),
-        None,
+    account_mapping = _account_mapping_for_scope(
+        current,
+        close_export["accountingScope"],
+        close_export["closedAt"],
     )
     account_code_by_role = {
         mapping["accountRole"]: mapping["externalAccountCode"]
@@ -7176,6 +7451,7 @@ def commerce_accounting_handoff(
         "businessDate": close_export["businessDate"],
         "closedAt": close_export["closedAt"],
         "sourceCloseDigest": close_export["digest"],
+        "accountingScope": deepcopy(close_export["accountingScope"]),
         "accountMappingRevision": account_mapping["revision"] if account_mapping else None,
         "accountMappingEvidenceReference": account_mapping["proof"]["evidenceReference"] if account_mapping else None,
         "settlementSchema": settlement["schema"] if settlement else None,
@@ -7216,6 +7492,7 @@ def commerce_accounting_handoff(
         artifact["schema"], artifact["status"], artifact["postingAuthority"],
         artifact["externalPostingPerformed"], artifact["currency"], artifact["closeId"],
         artifact["businessDate"], artifact["closedAt"], artifact["sourceCloseDigest"],
+        _accounting_scope_projection(artifact["accountingScope"]),
         artifact["accountMappingRevision"], artifact["accountMappingEvidenceReference"],
         artifact["settlementSchema"], artifact["settlementStatus"],
         artifact["settlementExpectedMmk"], artifact["settlementCountedMmk"],
@@ -7244,6 +7521,8 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
     header = [
         "schema", "status", "posting_authority", "external_posting_performed",
         "close_id", "business_date", "closed_at", "currency", "source_close_digest",
+        "accounting_scope_revision", "accounting_scope_action_id", "entity_code",
+        "entity_name", "location_code", "location_name",
         "account_mapping_revision", "account_mapping_evidence_reference",
         "settlement_schema", "settlement_status", "settlement_expected_mmk",
         "settlement_counted_mmk", "settlement_variance_mmk",
@@ -7262,7 +7541,14 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
             artifact["schema"], artifact["status"], artifact["postingAuthority"],
             str(artifact["externalPostingPerformed"]).lower(), artifact["closeId"],
             artifact["businessDate"], artifact["closedAt"], artifact["currency"],
-            artifact["sourceCloseDigest"], artifact["accountMappingRevision"],
+            artifact["sourceCloseDigest"],
+            artifact["accountingScope"]["configurationRevision"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["configurationActionId"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["entityCode"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["entityName"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["locationCode"] if artifact["accountingScope"] else None,
+            artifact["accountingScope"]["locationName"] if artifact["accountingScope"] else None,
+            artifact["accountMappingRevision"],
             artifact["accountMappingEvidenceReference"], artifact["settlementSchema"],
             artifact["settlementStatus"], artifact["settlementExpectedMmk"],
             artifact["settlementCountedMmk"], artifact["settlementVarianceMmk"],
@@ -7654,6 +7940,16 @@ def _require_account_mapping_configurations_unchanged(
     if _account_mapping_configurations(current) != _account_mapping_configurations(next_state):
         raise TrialValidationError(
             "event cannot change: accountMappingConfigurations."
+        )
+
+
+def _require_accounting_scope_configurations_unchanged(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    if _accounting_scope_configurations(current) != _accounting_scope_configurations(next_state):
+        raise TrialValidationError(
+            "event cannot change: accountingScopeConfigurations."
         )
 
 
@@ -8259,6 +8555,26 @@ def _validate_new_order_and_reservation(
     if source_was_superseded:
         raise TrialValidationError(
             "a superseded Ecommerce request cannot create a Shop order."
+        )
+    active_scope_configuration = (
+        _accounting_scope_configurations(current)[0]
+        if _accounting_scope_configurations(current)
+        else None
+    )
+    expected_scope = (
+        _accounting_scope_snapshot(active_scope_configuration)
+        if active_scope_configuration is not None
+        else None
+    )
+    if order.get("accountingScope") != expected_scope:
+        raise TrialValidationError(
+            "a new order must freeze the exact active reviewed accounting scope."
+        )
+    if active_scope_configuration is not None and datetime.fromisoformat(
+        str(active_scope_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+    ) > datetime.fromisoformat(str(order["createdAt"]).replace("Z", "+00:00")):
+        raise TrialValidationError(
+            "a new order cannot predate its active accounting scope review."
         )
     calculation = order.get("calculation")
     effective_tax_configuration = _effective_tax_configuration(
@@ -10132,7 +10448,7 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
         for prior_close in current["closes"]
         for order_id in prior_close.get("orderIds", [])
     }
-    eligible = sorted(
+    all_eligible = sorted(
         [
             order
             for order in current["orders"]
@@ -10145,9 +10461,61 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
     close = next_state["closes"][0]
     if not _CLOSE_SNAPSHOT_FIELDS.issubset(close):
         raise TrialValidationError("new daily closes require exception and operator evidence.")
-    if close["orderIds"] != [order["id"] for order in eligible]:
-        raise TrialValidationError("daily close order membership must match unclosed completed orders.")
     close_at = datetime.fromisoformat(str(close["createdAt"]).replace("Z", "+00:00"))
+    close_scope = close.get("accountingScope")
+    close_scope_key = (
+        _accounting_scope_key(close_scope)
+        if isinstance(close_scope, Mapping)
+        else None
+    )
+    if close_scope_key is not None:
+        expected_scope_configuration = next(
+            (
+                configuration
+                for configuration in _accounting_scope_configurations(current)
+                if isinstance(configuration, Mapping)
+                and _accounting_scope_key(_accounting_scope_snapshot(configuration)) == close_scope_key
+                and datetime.fromisoformat(
+                    str(configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
+                ) <= close_at
+            ),
+            None,
+        )
+        if expected_scope_configuration is None or close_scope != _accounting_scope_snapshot(
+            expected_scope_configuration
+        ):
+            raise TrialValidationError(
+                "daily close accounting scope must use the latest reviewed identity for that location."
+            )
+    eligible = [
+        order
+        for order in all_eligible
+        if (
+            _accounting_scope_key(order["accountingScope"])
+            if isinstance(order.get("accountingScope"), Mapping)
+            else None
+        ) == close_scope_key
+    ]
+    if all_eligible and not eligible:
+        raise TrialValidationError(
+            "daily close cannot create an empty scope while another scope has eligible orders."
+        )
+    if not all_eligible:
+        active_scope = _effective_accounting_scope_configuration(
+            current,
+            str(close["createdAt"]),
+        )
+        expected_empty_scope = (
+            _accounting_scope_snapshot(active_scope)
+            if active_scope is not None
+            else None
+        )
+        if close_scope != expected_empty_scope:
+            raise TrialValidationError(
+                "an empty daily close must use the active reviewed accounting scope."
+            )
+    if close["orderIds"] != [order["id"] for order in eligible]:
+        raise TrialValidationError("daily close order membership must match its unclosed accounting scope.")
     if any(_commerce_order_close_basis(order) > close_at for order in eligible):
         raise TrialValidationError("daily close cannot predate included order evidence.")
     adjusted_totals = [_order_adjusted_total(order) for order in eligible]
@@ -10157,16 +10525,34 @@ def _validate_close(current: Mapping[str, Any], next_state: Mapping[str, Any]) -
         or close["total"] != sum(total or 0 for total in adjusted_totals)
     ):
         raise TrialValidationError("daily close totals must match completed, reconciled orders.")
-    if close["businessDate"] != _myanmar_business_date(close["createdAt"]) or any(
-        prior_close.get("businessDate") == close["businessDate"]
+    same_date_closes = [
+        prior_close
         for prior_close in current["closes"]
+        if prior_close.get("businessDate") == close["businessDate"]
+    ]
+    if close["businessDate"] != _myanmar_business_date(close["createdAt"]):
+        raise TrialValidationError("daily close date must match its Myanmar business date.")
+    if close_scope_key is None:
+        if same_date_closes:
+            raise TrialValidationError("legacy unscoped daily close requires one unique business date.")
+    elif any(
+        not isinstance(prior_close.get("accountingScope"), Mapping)
+        or _accounting_scope_key(prior_close["accountingScope"]) == close_scope_key
+        for prior_close in same_date_closes
     ):
-        raise TrialValidationError("daily close requires one unique business date.")
+        raise TrialValidationError("daily close requires one unique business date per accounting scope.")
     expected_payment_exceptions = sorted(
         order["id"]
         for order in current["orders"]
-        if order["refundStatus"] == "due"
-        or (order["status"] != "cancelled" and order["paymentStatus"] == "pending")
+        if (
+            _accounting_scope_key(order["accountingScope"])
+            if isinstance(order.get("accountingScope"), Mapping)
+            else None
+        ) == close_scope_key
+        and (
+            order["refundStatus"] == "due"
+            or (order["status"] != "cancelled" and order["paymentStatus"] == "pending")
+        )
     )
     expected_stock_exceptions = sorted(
         item["sku"]
@@ -10528,6 +10914,38 @@ def _validate_tax_configuration_saved(
         raise TrialValidationError("an unchanged tax configuration cannot advance.")
 
 
+def _validate_accounting_scope_saved(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+) -> None:
+    current_without_scopes = dict(current)
+    current_without_scopes.pop("accountingScopeConfigurations", None)
+    next_without_scopes = dict(next_state)
+    next_without_scopes.pop("accountingScopeConfigurations", None)
+    if current_without_scopes != next_without_scopes:
+        raise TrialValidationError(
+            "commerce.accounting_scope.saved may change only accountingScopeConfigurations."
+        )
+    before = _accounting_scope_configurations(current)
+    after = _accounting_scope_configurations(next_state)
+    if len(after) != len(before) + 1 or after[1:] != before:
+        raise TrialValidationError(
+            "commerce.accounting_scope.saved must prepend exactly one accounting scope configuration."
+        )
+    configuration = after[0]
+    if configuration["revision"] != len(before) + 1:
+        raise TrialValidationError(
+            "accounting scope configuration revision must advance exactly once."
+        )
+    if before and all(
+        configuration[field] == before[0][field]
+        for field in ("entityCode", "entityName", "locationCode", "locationName")
+    ):
+        raise TrialValidationError(
+            "an unchanged accounting scope configuration cannot advance."
+        )
+
+
 def _validate_account_mapping_saved(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -10540,6 +10958,7 @@ def _validate_account_mapping_saved(
     _require_catalog_changes_unchanged(current, next_state)
     _require_catalog_baselines_unchanged(current, next_state)
     _require_tax_configurations_unchanged(current, next_state)
+    _require_accounting_scope_configurations_unchanged(current, next_state)
     _require_inventory_foundation_unchanged(current, next_state)
     before = _account_mapping_configurations(current)
     after = _account_mapping_configurations(next_state)
@@ -10552,7 +10971,19 @@ def _validate_account_mapping_saved(
         raise TrialValidationError(
             "account mapping configuration revision must advance exactly once."
         )
-    if before and configuration["mappings"] == before[0]["mappings"]:
+    active_scope = (
+        _accounting_scope_configurations(current)[0]
+        if _accounting_scope_configurations(current)
+        else None
+    )
+    expected_scope = _accounting_scope_snapshot(active_scope) if active_scope is not None else None
+    if configuration.get("accountingScope") != expected_scope:
+        raise TrialValidationError(
+            "a new account mapping must freeze the exact active reviewed accounting scope."
+        )
+    if before and configuration["mappings"] == before[0]["mappings"] and configuration.get(
+        "accountingScope"
+    ) == before[0].get("accountingScope"):
         raise TrialValidationError(
             "an unchanged account mapping configuration cannot advance."
         )
@@ -10880,6 +11311,7 @@ _TRANSITION_VALIDATORS = {
     "commerce.storefront.configuration.saved": _validate_storefront_configuration_saved,
     "commerce.storefront_request.received": _validate_storefront_request_received,
     "commerce.tax_configuration.saved": _validate_tax_configuration_saved,
+    "commerce.accounting_scope.saved": _validate_accounting_scope_saved,
     "commerce.account_mapping.saved": _validate_account_mapping_saved,
     "commerce.customer_credit_policy.saved": _validate_customer_credit_policy_saved,
     "commerce.promotion_policy.saved": _validate_promotion_policy_saved,
@@ -10945,6 +11377,7 @@ def reduce_commerce_state(
             or _purchase_orders(next_state)
             or _catalog_changes(next_state)
             or _tax_configurations(next_state)
+            or _accounting_scope_configurations(next_state)
             or _account_mapping_configurations(next_state)
             or _customer_credit_policies(next_state)
             or _promotion_policies(next_state)
@@ -10965,6 +11398,8 @@ def reduce_commerce_state(
         _require_storefront_configuration_unchanged(current_state, next_state)
     if event_type != "commerce.tax_configuration.saved":
         _require_tax_configurations_unchanged(current_state, next_state)
+    if event_type != "commerce.accounting_scope.saved":
+        _require_accounting_scope_configurations_unchanged(current_state, next_state)
     if event_type != "commerce.account_mapping.saved":
         _require_account_mapping_configurations_unchanged(current_state, next_state)
     if event_type != "commerce.customer_credit_policy.saved":

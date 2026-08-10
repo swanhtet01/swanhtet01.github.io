@@ -104,6 +104,7 @@ export type ManagedCommerceEvent =
   | 'commerce.website_intake.converted'
   | 'commerce.storefront.configuration.saved'
   | 'commerce.tax_configuration.saved'
+  | 'commerce.accounting_scope.saved'
   | 'commerce.account_mapping.saved'
   | 'commerce.customer_credit_policy.saved'
   | 'commerce.promotion_policy.saved'

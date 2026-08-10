@@ -406,6 +406,7 @@ def account_mapping_configuration(
     correction_receivable: str = "1200-CORR-AR",
     correction_payable: str = "2200-CORR-AP",
     legacy: bool = False,
+    accounting_scope: dict[str, object] | None = None,
 ) -> dict[str, object]:
     mappings = [
         {"accountRole": "payment_clearing", "externalAccountCode": payment_clearing},
@@ -416,7 +417,7 @@ def account_mapping_configuration(
         {"accountRole": "correction_receivable", "externalAccountCode": correction_receivable},
         {"accountRole": "correction_payable", "externalAccountCode": correction_payable},
     ]
-    return {
+    configuration: dict[str, object] = {
         "revision": revision,
         "mappings": mappings[:4] if legacy else mappings,
         "proof": action_evidence(
@@ -424,6 +425,46 @@ def account_mapping_configuration(
             captured_at=captured_at,
             reason="Reviewed the Shop account mapping for future closes.",
         ),
+    }
+    if accounting_scope is not None:
+        configuration["accountingScope"] = deepcopy(accounting_scope)
+    return configuration
+
+
+def accounting_scope_configuration(
+    revision: int,
+    *,
+    entity_code: str = "SM-DEMO",
+    entity_name: str = "SuperMega Demo Company",
+    location_code: str = "YGN-01",
+    location_name: str = "Yangon Flagship",
+    action_id: str | None = None,
+    captured_at: str = "2026-07-23T08:00:00.000Z",
+) -> dict[str, object]:
+    return {
+        "revision": revision,
+        "entityCode": entity_code,
+        "entityName": entity_name,
+        "locationCode": location_code,
+        "locationName": location_name,
+        "proof": action_evidence(
+            action_id or f"ACT-ACCOUNTING-SCOPE-R{revision}",
+            captured_at=captured_at,
+            reason="Reviewed the legal entity and operating location.",
+        ),
+    }
+
+
+def accounting_scope_snapshot(configuration: dict[str, object]) -> dict[str, object]:
+    proof = configuration["proof"]
+    assert isinstance(proof, dict)
+    return {
+        "configurationRevision": configuration["revision"],
+        "configurationActionId": proof["actionId"],
+        "entityCode": configuration["entityCode"],
+        "entityName": configuration["entityName"],
+        "locationCode": configuration["locationCode"],
+        "locationName": configuration["locationName"],
     }
 
 
@@ -1094,6 +1135,8 @@ def evidence_for(event_type: str, next_state: dict[str, object]) -> dict[str, st
         return dict(next_state["storefrontConfiguration"]["saved"])  # type: ignore[index,arg-type]
     if event_type == "commerce.tax_configuration.saved":
         return dict(next_state["taxConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
+    if event_type == "commerce.accounting_scope.saved":
+        return dict(next_state["accountingScopeConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.account_mapping.saved":
         return dict(next_state["accountMappingConfigurations"][0]["proof"])  # type: ignore[index,arg-type]
     if event_type == "commerce.customer_credit_policy.saved":
@@ -3198,6 +3241,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "commerce.storefront.configuration.saved",
                     "commerce.storefront.merchandising.imported",
                     "commerce.tax_configuration.saved",
+                    "commerce.accounting_scope.saved",
                     "commerce.account_mapping.saved",
                     "commerce.customer_credit_policy.saved",
                     "commerce.promotion_policy.saved",
@@ -3211,6 +3255,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIn("commerce.item.updated", COMMERCE_EVENTS)
         self.assertIn("commerce.storefront.merchandising.imported", COMMERCE_EVENTS)
         self.assertIn("commerce.tax_configuration.saved", COMMERCE_EVENTS)
+        self.assertIn("commerce.accounting_scope.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.account_mapping.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.customer_credit_policy.saved", COMMERCE_EVENTS)
         self.assertIn("commerce.promotion_policy.saved", COMMERCE_EVENTS)
@@ -6769,7 +6814,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         export = commerce_daily_close_export(accepted_close, CLOSE_ID_2)
         self.assertIsNotNone(export)
         assert export is not None
-        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v4")
+        self.assertEqual(export["schema"], "supermega.commerce.daily-close-export.v5")
         self.assertEqual(export["totalMmk"], 150)
         self.assertEqual(export["settlement"]["totalExpectedMmk"], 200)
         self.assertEqual(export["settlement"]["netOrderTotalMmk"], 150)
@@ -6780,7 +6825,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         handoff = commerce_accounting_handoff(accepted_close, CLOSE_ID_2)
         self.assertIsNotNone(handoff)
         assert handoff is not None
-        self.assertEqual(handoff["schema"], "supermega.commerce.accounting-handoff.v4")
+        self.assertEqual(handoff["schema"], "supermega.commerce.accounting-handoff.v5")
         self.assertEqual(handoff["settlementSchema"], "supermega.commerce.close-settlement.v2")
         self.assertEqual(handoff["settlementExpectedMmk"], 200)
         self.assertEqual(handoff["settlementCountedMmk"], 200)
@@ -7629,6 +7674,219 @@ class CommerceRuntimeTests(unittest.TestCase):
                 payload=payload,
             )
 
+    def test_accounting_scope_is_reviewed_human_only_and_frozen_on_new_orders(self) -> None:
+        current = catalog_state()
+        scope = accounting_scope_configuration(1)
+        next_state = deepcopy(current)
+        next_state["accountingScopeConfigurations"] = [scope]
+        configured = apply_event(current, "commerce.accounting_scope.saved", next_state)
+
+        unchanged = deepcopy(configured)
+        unchanged["accountingScopeConfigurations"] = [  # type: ignore[index]
+            accounting_scope_configuration(
+                2,
+                action_id="ACT-ACCOUNTING-SCOPE-UNCHANGED",
+                captured_at="2026-07-23T08:10:00.000Z",
+            ),
+            *configured["accountingScopeConfigurations"],  # type: ignore[index]
+        ]
+        with self.assertRaises(TrialValidationError):
+            apply_event(configured, "commerce.accounting_scope.saved", unchanged)
+
+        unbound_order = created_state("ORD-SCOPE-REQUIRED")
+        unbound_order["accountingScopeConfigurations"] = deepcopy(
+            configured["accountingScopeConfigurations"]
+        )
+        with self.assertRaises(TrialValidationError):
+            apply_event(configured, "commerce.order.created", unbound_order)
+
+        bound_order = deepcopy(unbound_order)
+        bound_order["orders"][0]["accountingScope"] = accounting_scope_snapshot(scope)  # type: ignore[index]
+        accepted = apply_event(configured, "commerce.order.created", bound_order)
+        self.assertEqual(
+            accepted["orders"][0]["accountingScope"],  # type: ignore[index]
+            accounting_scope_snapshot(scope),
+        )
+
+        store = InMemoryTrialStore(reducer=reduce_trial_state)
+        operator = TrialPrincipal("workspace-scope", "operator-scope", "human")
+        agent = TrialPrincipal("workspace-scope", "scope-agent", "agent")
+        for principal in (operator, agent):
+            store.provision_membership(
+                workspace_id=principal.workspace_id,
+                actor_id=principal.actor_id,
+                actor_kind=principal.actor_kind,
+                capabilities=("commerce.write",),
+            )
+        initialized = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.workspace.initialized",
+            expected_version=0,
+            payload={"state": current, "evidence": action_evidence("ACT-INIT-SCOPE")},
+        )
+        forged = deepcopy(initialized.state)
+        forged_scope = accounting_scope_configuration(
+            1,
+            action_id="ACT-ACCOUNTING-SCOPE-SERVER",
+            captured_at="2099-01-01T00:00:00.000Z",
+        )
+        forged_scope["proof"]["actor"] = "forged-actor"  # type: ignore[index]
+        forged["accountingScopeConfigurations"] = [forged_scope]
+        payload = {
+            "state": forged,
+            "evidence": dict(forged_scope["proof"]),  # type: ignore[arg-type]
+        }
+        saved = store.apply_command(
+            operator,
+            command_id=str(uuid4()),
+            surface="commerce",
+            event_type="commerce.accounting_scope.saved",
+            expected_version=initialized.version,
+            payload=payload,
+        )
+        proof = saved.state["accountingScopeConfigurations"][0]["proof"]  # type: ignore[index]
+        self.assertEqual(proof["actor"], operator.actor_id)
+        self.assertNotEqual(proof["capturedAt"], "2099-01-01T00:00:00.000Z")
+        with self.assertRaises(TrialHumanApprovalRequired):
+            store.apply_command(
+                agent,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.accounting_scope.saved",
+                expected_version=saved.version,
+                payload=payload,
+            )
+
+    def test_same_day_location_closes_and_accounting_exports_never_mix_books(self) -> None:
+        scope_ygn = accounting_scope_configuration(1)
+        scope_mdy = accounting_scope_configuration(
+            2,
+            location_code="MDY-01",
+            location_name="Mandalay Branch",
+            action_id="ACT-ACCOUNTING-SCOPE-R2",
+            captured_at="2026-07-23T08:30:00.000Z",
+        )
+        ygn_snapshot = accounting_scope_snapshot(scope_ygn)
+        mdy_snapshot = accounting_scope_snapshot(scope_mdy)
+        ygn = completed_state("ORD-SCOPE-YGN")
+        mdy = completed_state("ORD-SCOPE-MDY")
+        ygn["orders"][0]["accountingScope"] = deepcopy(ygn_snapshot)  # type: ignore[index]
+        mdy["orders"][0]["accountingScope"] = deepcopy(mdy_snapshot)  # type: ignore[index]
+
+        current = deepcopy(ygn)
+        current["items"][0]["onHand"] = 6  # type: ignore[index]
+        current["orders"] = [mdy["orders"][0], ygn["orders"][0]]  # type: ignore[index]
+        current["movements"] = [mdy["movements"][0], ygn["movements"][0]]  # type: ignore[index]
+        current["accountingScopeConfigurations"] = [scope_mdy, scope_ygn]
+        current["accountMappingConfigurations"] = [
+            account_mapping_configuration(
+                2,
+                action_id="ACT-ACCOUNT-MAPPING-MDY",
+                captured_at="2026-07-23T09:40:00.000Z",
+                payment_clearing="1100-MDY",
+                legacy_revenue="4190-MDY",
+                accounting_scope=mdy_snapshot,
+            ),
+            account_mapping_configuration(
+                1,
+                action_id="ACT-ACCOUNT-MAPPING-YGN",
+                captured_at="2026-07-23T08:15:00.000Z",
+                payment_clearing="1100-YGN",
+                legacy_revenue="4190-YGN",
+                accounting_scope=ygn_snapshot,
+            ),
+        ]
+        current = validate_commerce_state(current)
+
+        def scoped_close(
+            order_id: str,
+            scope: dict[str, object],
+            close_id: str,
+            action_id: str,
+            captured_at: str,
+        ) -> dict[str, object]:
+            evidence = action_evidence(action_id, captured_at=captured_at)
+            return {
+                "id": close_id,
+                "createdAt": captured_at,
+                "total": 200,
+                "orders": 1,
+                "businessDate": myanmar_business_date(captured_at),
+                "orderIds": [order_id],
+                "paymentExceptionOrderIds": [],
+                "stockExceptionSkus": [],
+                "actionId": action_id,
+                "operator": evidence["actor"],
+                "reason": evidence["reason"],
+                "evidenceReference": evidence["evidenceReference"],
+                "accountingScope": deepcopy(scope),
+            }
+
+        ygn_close = scoped_close(
+            "ORD-SCOPE-YGN",
+            ygn_snapshot,
+            CLOSE_ID,
+            CLOSE_ACTION_ID,
+            "2026-07-23T10:00:00.000Z",
+        )
+        ygn_next = deepcopy(current)
+        ygn_next["closes"] = [ygn_close]
+        ygn_closed = apply_event(current, "commerce.close.saved", ygn_next)
+
+        mdy_close = scoped_close(
+            "ORD-SCOPE-MDY",
+            mdy_snapshot,
+            CLOSE_ID_2,
+            CLOSE_ACTION_ID_2,
+            "2026-07-23T10:05:00.000Z",
+        )
+        mdy_next = deepcopy(ygn_closed)
+        mdy_next["closes"] = [mdy_close, ygn_close]
+        both_closed = apply_event(ygn_closed, "commerce.close.saved", mdy_next)
+
+        ygn_export = commerce_daily_close_export(both_closed, CLOSE_ID)
+        mdy_export = commerce_daily_close_export(both_closed, CLOSE_ID_2)
+        self.assertEqual(ygn_export["accountingScope"], ygn_snapshot)  # type: ignore[index]
+        self.assertEqual(mdy_export["accountingScope"], mdy_snapshot)  # type: ignore[index]
+        self.assertEqual([row["orderId"] for row in ygn_export["orders"]], ["ORD-SCOPE-YGN"])  # type: ignore[index]
+        self.assertEqual([row["orderId"] for row in mdy_export["orders"]], ["ORD-SCOPE-MDY"])  # type: ignore[index]
+
+        ygn_handoff = commerce_accounting_handoff(both_closed, CLOSE_ID)
+        mdy_handoff = commerce_accounting_handoff(both_closed, CLOSE_ID_2)
+        self.assertEqual(ygn_handoff["accountMappingRevision"], 1)  # type: ignore[index]
+        self.assertEqual(mdy_handoff["accountMappingRevision"], 2)  # type: ignore[index]
+        self.assertIn("1100-YGN", {entry["externalAccountCode"] for entry in ygn_handoff["entries"]})  # type: ignore[index]
+        self.assertNotIn("1100-MDY", {entry["externalAccountCode"] for entry in ygn_handoff["entries"]})  # type: ignore[index]
+        self.assertIn("1100-MDY", {entry["externalAccountCode"] for entry in mdy_handoff["entries"]})  # type: ignore[index]
+        self.assertNotIn("1100-YGN", {entry["externalAccountCode"] for entry in mdy_handoff["entries"]})  # type: ignore[index]
+
+        mixed = deepcopy(current)
+        mixed_close = deepcopy(ygn_close)
+        mixed_close.update({"orders": 2, "orderIds": ["ORD-SCOPE-MDY", "ORD-SCOPE-YGN"], "total": 400})
+        mixed["closes"] = [mixed_close]
+        with self.assertRaises(TrialValidationError):
+            apply_event(current, "commerce.close.saved", mixed)
+
+        legacy_mix = deepcopy(ygn_closed)
+        legacy_zero_close = {
+            **scoped_close(
+                "ORD-SCOPE-MDY",
+                mdy_snapshot,
+                CLOSE_ID_3,
+                CLOSE_ACTION_ID_3,
+                "2026-07-23T10:06:00.000Z",
+            ),
+            "orders": 0,
+            "orderIds": [],
+            "total": 0,
+        }
+        legacy_zero_close.pop("accountingScope")
+        legacy_mix["closes"] = [legacy_zero_close, ygn_close]
+        with self.assertRaises(TrialValidationError):
+            apply_event(ygn_closed, "commerce.close.saved", legacy_mix)
+
     def test_order_acknowledgement_is_deterministic_customer_safe_and_fail_closed(self) -> None:
         current = created_state()
         current["orders"][0]["lines"] = [  # type: ignore[index]
@@ -7753,7 +8011,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertIsNotNone(artifact)
         assert artifact is not None
         self.assertEqual(artifact, commerce_daily_close_export(closed, CLOSE_ID))
-        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v4")
+        self.assertEqual(artifact["schema"], "supermega.commerce.daily-close-export.v5")
         self.assertEqual(artifact["orderCount"], 1)
         self.assertEqual(artifact["orders"][0]["calculationStatus"], "accepted")
         self.assertEqual(artifact["orders"][0]["subtotalMmk"], 200)
@@ -7761,7 +8019,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertNotIn("customer", json.dumps(artifact))
         self.assertEqual(
             artifact["digest"],
-            "sha256:e247dbb123c57d91b126ed3438048ca8cfc0e86999c25f4be54059ef14bc2217",
+            "sha256:ad7c38a7d16e3bd701d22897c13971765b540912d53ed49cf661e6135425a3ae",
         )
 
         csv_text = commerce_daily_close_csv(closed, CLOSE_ID)
@@ -7775,7 +8033,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         unmapped_handoff = commerce_accounting_handoff(closed, CLOSE_ID)
         self.assertIsNotNone(unmapped_handoff)
         assert unmapped_handoff is not None
-        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v4")
+        self.assertEqual(unmapped_handoff["schema"], "supermega.commerce.accounting-handoff.v5")
         self.assertEqual(unmapped_handoff["originalOrderTotalMmk"], 200)
         self.assertEqual(unmapped_handoff["netOrderTotalMmk"], 200)
         self.assertEqual(unmapped_handoff["correctionCount"], 0)

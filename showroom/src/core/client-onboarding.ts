@@ -7,9 +7,10 @@ export const CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v3'
 export const CLIENT_DEMO_KIT_SCHEMA = 'supermega.client_demo_kit.v3' as const
 export const CLIENT_DEMO_WORKSPACE_SCHEMA = 'supermega.client_demo_workspace.v4' as const
 export const CLIENT_DEMO_RUNBOOK_SCHEMA = 'supermega.client_demo_runbook.v1' as const
-export const CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v3' as const
+export const CLIENT_DEMO_PREPARATION_SCHEMA = 'supermega.client_demo_preparation.v4' as const
 export const CLIENT_OPERATING_FOUNDATION_SCHEMA = 'supermega.client_operating_foundation.v1' as const
 export const CLIENT_OPERATIONAL_TOPOLOGY_SCHEMA = 'supermega.client_operational_topology.v1' as const
+export const CLIENT_SHOP_ACCOUNTING_SCOPE_REVIEW_SCHEMA = 'supermega.client_shop_accounting_scope_review.v1' as const
 export const CLIENT_CSV_STARTER_PACK_SCHEMA = 'supermega.client_csv_starter_pack.v1' as const
 const LEGACY_CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v1' as const
 const LEGACY_V2_CLIENT_DEMO_BLUEPRINT_SCHEMA = 'supermega.client_demo_blueprint.v2' as const
@@ -108,6 +109,28 @@ export type ClientOperationalTopology = {
     canonicalLocationRequired: true
     crossProductReferencesRequired: true
     unmanagedWritesAllowed: false
+  }
+}
+
+export type ClientShopAccountingScopeReview = {
+  schema: typeof CLIENT_SHOP_ACCOUNTING_SCOPE_REVIEW_SCHEMA
+  status: 'review_required_not_applied'
+  entity: {
+    code: null
+    name: string
+    verification: 'client_review_required'
+  }
+  locations: Array<{
+    locationId: string
+    code: string
+    name: string
+    verification: 'client_review_required'
+  }>
+  controls: {
+    reviewedConfigurationCreated: false
+    orderWritePerformed: false
+    closeWritePerformed: false
+    accountingPosted: false
   }
 }
 
@@ -543,6 +566,7 @@ export type ClientDemoPreparationArtifact = {
   client: ClientDemoBlueprint['client']
   foundation: ClientOperatingFoundation
   topology: ClientOperationalTopology
+  shopAccountingScopeReview: ClientShopAccountingScopeReview | null
   products: Array<{
     product: ClientSolutionId
     label: string
@@ -1236,6 +1260,35 @@ function canonicalClientOperationalTopology(value: unknown, presetId: ClientDemo
   return JSON.stringify(value) === JSON.stringify(expected) ? expected : null
 }
 
+function buildClientShopAccountingScopeReview(
+  client: ClientDemoBlueprint['client'],
+  topology: ClientOperationalTopology,
+  products: readonly ClientSolutionId[],
+): ClientShopAccountingScopeReview | null {
+  if (!products.includes('commerce')) return null
+  return {
+    schema: CLIENT_SHOP_ACCOUNTING_SCOPE_REVIEW_SCHEMA,
+    status: 'review_required_not_applied',
+    entity: {
+      code: null,
+      name: client.workspace,
+      verification: 'client_review_required',
+    },
+    locations: topology.locations.filter((location) => location.active).map((location) => ({
+      locationId: location.id,
+      code: location.code,
+      name: location.name,
+      verification: 'client_review_required',
+    })),
+    controls: {
+      reviewedConfigurationCreated: false,
+      orderWritePerformed: false,
+      closeWritePerformed: false,
+      accountingPosted: false,
+    },
+  }
+}
+
 export function buildClientDemoBlueprint(input: {
   workspace: string
   owner: string
@@ -1507,6 +1560,11 @@ export async function prepareClientDemoInBrowser(
     oneWorkspaceAndOwner: true,
   }
   const customSourceCount = products.filter((product) => product.sourceMode === 'client_csv').length
+  const shopAccountingScopeReview = buildClientShopAccountingScopeReview(
+    kit.blueprint.client,
+    kit.blueprint.topology,
+    [...selectedProducts],
+  )
   const payload = {
     contract: CLIENT_DEMO_PREPARATION_SCHEMA,
     preparedAt,
@@ -1514,6 +1572,7 @@ export async function prepareClientDemoInBrowser(
     client: kit.blueprint.client,
     foundation: kit.blueprint.foundation,
     topology: kit.blueprint.topology,
+    shopAccountingScopeReview,
     products,
     integrations: kit.blueprint.integrations,
     checks: verifiedChecks,
@@ -1575,7 +1634,7 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
     source = JSON.parse(serialized) as ClientDemoPreparationArtifact
   } catch { return null }
   if (!source || typeof source !== 'object' || Array.isArray(source)
-    || !hasExactKeys(source, ['contract', 'preparedAt', 'kit', 'client', 'foundation', 'topology', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
+    || !hasExactKeys(source, ['contract', 'preparedAt', 'kit', 'client', 'foundation', 'topology', 'shopAccountingScopeReview', 'products', 'integrations', 'checks', 'controls', 'bundleDigest', 'review'])
     || source.contract !== CLIENT_DEMO_PREPARATION_SCHEMA
     || !canonicalTimestamp(source.preparedAt)
     || !source.kit || typeof source.kit !== 'object' || Array.isArray(source.kit)
@@ -1604,6 +1663,9 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
   if (JSON.stringify(source.foundation) !== JSON.stringify(blueprint.foundation)) return null
   if (!canonicalClientOperationalTopology(source.topology, source.client.presetId, selectedProducts)
     || JSON.stringify(source.topology) !== JSON.stringify(blueprint.topology)) return null
+  if (JSON.stringify(source.shopAccountingScopeReview) !== JSON.stringify(
+    buildClientShopAccountingScopeReview(source.client, source.topology, selectedProducts),
+  )) return null
   const packages: ClientImportStagingPackage[] = []
   for (let index = 0; index < source.products.length; index += 1) {
     const product = source.products[index]
@@ -1705,6 +1767,7 @@ export async function restoreClientDemoPreparationArtifact(value: unknown): Prom
     client: source.client,
     foundation: source.foundation,
     topology: source.topology,
+    shopAccountingScopeReview: source.shopAccountingScopeReview,
     products: source.products,
     integrations: source.integrations,
     checks: source.checks,

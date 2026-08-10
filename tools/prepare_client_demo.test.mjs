@@ -140,6 +140,27 @@ test('client preparation compiles one validated four-product founder-review arti
       ],
       controls: { canonicalLocationRequired: true, crossProductReferencesRequired: true, unmanagedWritesAllowed: false },
     })
+    assert.deepEqual(artifact.shopAccountingScopeReview, {
+      schema: 'supermega.client_shop_accounting_scope_review.v1',
+      status: 'review_required_not_applied',
+      entity: {
+        code: null,
+        name: 'Confidential client workspace',
+        verification: 'client_review_required',
+      },
+      locations: [{
+        locationId: 'LOC-MAIN',
+        code: 'MAIN',
+        name: 'Main operating unit',
+        verification: 'client_review_required',
+      }],
+      controls: {
+        reviewedConfigurationCreated: false,
+        orderWritePerformed: false,
+        closeWritePerformed: false,
+        accountingPosted: false,
+      },
+    })
     assert.deepEqual(artifact.checks, {
       ecommerceCatalogAligned: true,
       websiteHomePresent: true,
@@ -180,6 +201,9 @@ test('client preparation compiles one validated four-product founder-review arti
     const topologyTamper = structuredClone(artifact)
     topologyTamper.topology.recordAuthorities[3].consumesFrom = []
     assert.throws(() => verifyClientDemoPreparation(topologyTamper), /client_demo_topology_drift/)
+    const accountingScopeTamper = structuredClone(artifact)
+    accountingScopeTamper.shopAccountingScopeReview.entity.code = 'UNREVIEWED'
+    assert.throws(() => verifyClientDemoPreparation(accountingScopeTamper), /client_demo_accounting_scope_review_drift/)
   } finally {
     await rm(source.directory, { recursive: true, force: true })
   }

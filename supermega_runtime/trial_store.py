@@ -67,6 +67,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "commerce.storefront.configuration.saved",
         "commerce.storefront.merchandising.imported",
         "commerce.tax_configuration.saved",
+        "commerce.accounting_scope.saved",
         "commerce.account_mapping.saved",
         "commerce.customer_credit_policy.saved",
         "commerce.promotion_policy.saved",
@@ -2398,6 +2399,34 @@ def _authoritative_command_payload(
             authoritative_orders[order_index] = authoritative_order
         authoritative_state = dict(state)
         authoritative_state["orders"] = authoritative_orders
+        authoritative["evidence"] = authoritative_evidence
+        authoritative["state"] = authoritative_state
+        return authoritative
+    if event_type == "commerce.accounting_scope.saved":
+        evidence = authoritative.get("evidence")
+        state = authoritative.get("state")
+        configurations = state.get("accountingScopeConfigurations") if isinstance(state, Mapping) else None
+        configuration = configurations[0] if isinstance(configurations, list) and configurations else None
+        if (
+            not isinstance(evidence, Mapping)
+            or not isinstance(state, Mapping)
+            or not isinstance(configuration, Mapping)
+        ):
+            return authoritative
+        authoritative_evidence = {
+            **dict(evidence),
+            "actor": principal.actor_id,
+            "capturedAt": captured_at,
+        }
+        authoritative_configuration = {
+            **dict(configuration),
+            "proof": deepcopy(authoritative_evidence),
+        }
+        authoritative_state = dict(state)
+        authoritative_state["accountingScopeConfigurations"] = [
+            authoritative_configuration,
+            *deepcopy(configurations[1:]),
+        ]
         authoritative["evidence"] = authoritative_evidence
         authoritative["state"] = authoritative_state
         return authoritative

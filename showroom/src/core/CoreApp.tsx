@@ -86,11 +86,14 @@ import {
   commerceBusinessCatalogItems,
   commerceDailyCloseCsv,
   commerceDailyCloseExport,
+  commerceAccountingScopeSnapshot,
+  commerceAccountMappingConfigurationForScope,
   commerceCloseExpectation,
+  commerceCloseScopeOptions,
   commerceCloseSettlementReview,
   commerceCorrectionCalculation,
   commerceCurrentTaxConfiguration,
-  commerceCurrentAccountMappingConfiguration,
+  commerceCurrentAccountingScopeConfiguration,
   commerceCurrentCustomerCreditPolicy,
   commerceCurrentPromotionPolicy,
   commerceCurrentShippingPolicy,
@@ -140,6 +143,7 @@ import {
   commerceStorefrontRequests,
   commerceWorkingSampleCatalogId,
   configureCommerceTax,
+  configureCommerceAccountingScope,
   configureCommerceAccountMapping,
   configureCommerceCustomerCreditPolicy,
   configureCommercePromotionPolicy,
@@ -375,6 +379,24 @@ type AccountMappingDraft = {
   correctionReceivable: string
   correctionPayable: string
 }
+
+type AccountingScopeDraft = {
+  entityCode: string
+  entityName: string
+  locationCode: string
+  locationName: string
+}
+
+const accountingScopeFields = [
+  [
+    ['entityName', 'Business name', 'Reviewed business name', 120, false],
+    ['entityCode', 'Business code', 'MY-BUSINESS', 40, true],
+  ],
+  [
+    ['locationName', 'Location name', 'Main shop', 120, false],
+    ['locationCode', 'Location code', 'YGN-MAIN', 40, true],
+  ],
+] as const
 
 type CustomerCreditPolicyDraft = {
   customer: string
@@ -859,7 +881,7 @@ function taxConfigurationDraft(configuration: CommerceTaxConfiguration | null): 
   }
 }
 
-function accountMappingDraft(configuration: ReturnType<typeof commerceCurrentAccountMappingConfiguration>): AccountMappingDraft {
+function accountMappingDraft(configuration: ReturnType<typeof commerceAccountMappingConfigurationForScope>): AccountMappingDraft {
   const mappings = new Map(configuration?.mappings.map((mapping) => [mapping.accountRole, mapping.externalAccountCode]) ?? [])
   return {
     paymentClearing: mappings.get('payment_clearing') ?? '',
@@ -870,6 +892,23 @@ function accountMappingDraft(configuration: ReturnType<typeof commerceCurrentAcc
     correctionReceivable: mappings.get('correction_receivable') ?? '',
     correctionPayable: mappings.get('correction_payable') ?? '',
   }
+}
+
+function accountingScopeDraft(configuration: ReturnType<typeof commerceCurrentAccountingScopeConfiguration>): AccountingScopeDraft {
+  return {
+    entityCode: configuration?.entityCode ?? '',
+    entityName: configuration?.entityName ?? '',
+    locationCode: configuration?.locationCode ?? '',
+    locationName: configuration?.locationName ?? '',
+  }
+}
+
+function accountingScopeCode(scope: { entityCode: string; locationCode: string } | null | undefined) {
+  return scope ? `${scope.entityCode}/${scope.locationCode}` : 'legacy unscoped'
+}
+
+function accountingScopeName(scope: { entityName: string; locationName: string } | null | undefined) {
+  return scope ? `${scope.entityName} · ${scope.locationName}` : 'Legacy unscoped'
 }
 
 function parseTaxRateBasisPoints(value: string) {
@@ -941,6 +980,7 @@ const accountableActionSubmitLabels: Record<ShopActionKind | PlantActionKind, st
   supplier_credit_record: 'Record supplier credit',
   daily_close: 'Close business day',
   tax_configuration: 'Save tax configuration',
+  accounting_scope: 'Review business and location',
   account_mapping: 'Save accounting mapping',
   customer_credit_policy: 'Save credit policy',
   promotion_policy: 'Save promotion policy',
@@ -1720,7 +1760,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const shopSampleCatalogActive = Boolean(shopPack && commerceWorkingSampleCatalogId(commerce))
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
-  const currentAccountMappingConfiguration = commerceCurrentAccountMappingConfiguration(commerce)
+  const currentAccountingScopeConfiguration = commerceCurrentAccountingScopeConfiguration(commerce)
+  const currentAccountingScope = currentAccountingScopeConfiguration
+    ? commerceAccountingScopeSnapshot(currentAccountingScopeConfiguration)
+    : null
+  const currentAccountMappingConfiguration = commerceAccountMappingConfigurationForScope(commerce, currentAccountingScope)
   const orderDraftScope = localCommerceOrderDraftScope(managedIdentity?.workspaceId)
   const counterSaleScope = managedIdentity
     ? `managed:${managedIdentity.workspaceId}:${managedIdentity.userId}`
@@ -1829,6 +1873,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [supportResolutionDraft, setSupportResolutionDraft] = useState<CommerceSupportResolutionDraft | null>(null)
   const [correctionDraft, setCorrectionDraft] = useState<CommerceCorrectionDraft | null>(null)
   const [taxDraft, setTaxDraft] = useState<TaxConfigurationDraft | null>(null)
+  const [accountingScope, setAccountingScope] = useState<AccountingScopeDraft | null>(null)
   const [accountMapping, setAccountMapping] = useState<AccountMappingDraft | null>(null)
   const [creditPolicyDraft, setCreditPolicyDraft] = useState<CustomerCreditPolicyDraft>({
     customer: '',
@@ -1864,9 +1909,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     effectiveUntil: '',
   })
   const [closeSettlementDraft, setCloseSettlementDraft] = useState<CloseSettlementDraftLine[]>([])
+  const [closeScopeKey, setCloseScopeKey] = useState('')
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogError, setCatalogError] = useState('')
   const effectiveTaxDraft = taxDraft ?? taxConfigurationDraft(currentTaxConfiguration)
+  const effectiveAccountingScope = accountingScope ?? accountingScopeDraft(currentAccountingScopeConfiguration)
   const effectiveAccountMapping = accountMapping ?? accountMappingDraft(currentAccountMappingConfiguration)
   const selectedSku = commerce.items.some((item) => item.sku === sku) || (resumedOrderDraft && sku)
     ? sku
@@ -1940,7 +1987,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const resumedOrderCanRebind = Boolean(currentOrderRecoveryInput
     && currentOrderRecoveryInput.lines.every((line) => line.availableAtSave >= line.quantity))
   const legacyCloseNeedsMigration = commerce.closes.some((close) => !close.orderIds || !close.businessDate)
-  const closePreview = commerceCloseExpectation(commerce, new Date().toISOString())
+  const closeReviewAt = new Date().toISOString()
+  const closeScopeOptions = commerceCloseScopeOptions(commerce, closeReviewAt)
+  const effectiveCloseScopeKey = closeScopeOptions.some((option) => option.key === closeScopeKey)
+    ? closeScopeKey
+    : closeScopeOptions.length === 1 ? closeScopeOptions[0].key : ''
+  const selectedCloseScopeOption = closeScopeOptions.find((option) => option.key === effectiveCloseScopeKey) ?? null
+  const closePreview = effectiveCloseScopeKey
+    ? commerceCloseExpectation(commerce, closeReviewAt, effectiveCloseScopeKey)
+    : null
   const closePreviewOrderIds = new Set(closePreview?.orderIds ?? [])
   const closableOrders = commerce.orders.filter((order) => closePreviewOrderIds.has(order.id))
   const netCloseValue = closePreview?.total ?? 0
@@ -2028,6 +2083,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       artifact,
     }
   }, [commerce, latestClose])
+  const latestAccountingArtifact = latestAccountingDownload?.artifact ?? null
   const supplierPayablesDownload = useMemo(() => {
     const artifact = commerceSupplierPayablesHandoff(commerce)
     if (!artifact) return null
@@ -3992,6 +4048,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function reviewCounterSale(review: ShopCounterReview, returnFocus: HTMLElement) {
+    if ((managedIdentity || localBusinessWorkspace) && !currentAccountingScopeConfiguration) {
+      setNotice('Set the business and operating location in Daily close before creating a real sale.')
+      return
+    }
     if (!review.lines.length || !review.payment) {
       setNotice('Add at least one item and choose payment before reviewing the sale.')
       return
@@ -4074,6 +4134,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function recordOrder(event: FormEvent) {
     event.preventDefault()
+    if ((managedIdentity || localBusinessWorkspace) && !currentAccountingScopeConfiguration) {
+      setNotice('Set the business and operating location in Daily close before creating a real order.')
+      return
+    }
     if (orderDraftConflict || resumedOrderNeedsReview) {
       setOrderDraftIssue(orderDraftConflict
         ? 'Close this form and resume the latest saved order before review.'
@@ -6212,8 +6276,54 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
   }
 
+  function reviewAccountingScope(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const input = {
+      entityCode: effectiveAccountingScope.entityCode.trim().toUpperCase(),
+      entityName: effectiveAccountingScope.entityName.trim(),
+      locationCode: effectiveAccountingScope.locationCode.trim().toUpperCase(),
+      locationName: effectiveAccountingScope.locationName.trim(),
+    }
+    if (!/^[A-Z0-9][A-Z0-9_-]{1,39}$/.test(input.entityCode)
+      || !/^[A-Z0-9][A-Z0-9_-]{1,39}$/.test(input.locationCode)
+      || !input.entityName || input.entityName.length > 120
+      || !input.locationName || input.locationName.length > 120) {
+      setNotice('Enter short uppercase entity and location codes plus clear business and location names.')
+      return
+    }
+    const expectedRevision = commerce.accountingScopeConfigurations?.length ?? 0
+    const previous = currentAccountingScopeConfiguration
+      ? `${accountingScopeName(currentAccountingScopeConfiguration)} · revision ${currentAccountingScopeConfiguration.revision}`
+      : 'No reviewed business or operating location'
+    queueAction({
+      kind: 'accounting_scope',
+      subjectId: `SHOP-SCOPE-${input.entityCode}-${input.locationCode}-R${expectedRevision + 1}`,
+      summary: 'Set Shop business and operating location',
+      before: previous,
+      after: `${accountingScopeName(input)} · ${accountingScopeCode(input)} · future orders only`,
+      reasonSuggestion: 'Reviewed the Shop business and location.',
+      apply: async (action) => {
+        await mutateCommerce(
+          'commerce.accounting_scope.saved',
+          action.commandId,
+          commerceActionProof(action),
+          (current) => {
+            if ((current.accountingScopeConfigurations?.length ?? 0) !== expectedRevision) return null
+            return configureCommerceAccountingScope(current, input, commerceActionProof(action))
+          },
+        )
+        setAccountingScope(null)
+        setAccountMapping(null)
+      },
+    }, event.currentTarget.querySelector<HTMLButtonElement>('button[type="submit"]'))
+  }
+
   function reviewAccountMapping(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!currentAccountingScopeConfiguration && (localBusinessWorkspace || managedIdentity)) {
+      setNotice('Review the business and location before mapping accounts.')
+      return
+    }
     const values = {
       paymentClearing: effectiveAccountMapping.paymentClearing.trim(),
       salesRevenue: effectiveAccountMapping.salesRevenue.trim(),
@@ -6227,7 +6337,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice('Enter all seven reviewed account codes using letters, numbers, dot, underscore, slash, or hyphen.')
       return
     }
-    const expectedRevision = currentAccountMappingConfiguration?.revision ?? 0
+    const expectedRevision = commerce.accountMappingConfigurations?.length ?? 0
     const mappings = [
       { accountRole: 'payment_clearing' as const, externalAccountCode: values.paymentClearing },
       { accountRole: 'sales_revenue' as const, externalAccountCode: values.salesRevenue },
@@ -6253,7 +6363,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           action.commandId,
           commerceActionProof(action),
           (current) => {
-            if ((commerceCurrentAccountMappingConfiguration(current)?.revision ?? 0) !== expectedRevision) return null
+            if ((current.accountMappingConfigurations?.length ?? 0) !== expectedRevision) return null
             return configureCommerceAccountMapping(current, { mappings }, commerceActionProof(action))
           },
         )
@@ -6451,11 +6561,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function closeDay() {
     const queuedAt = new Date().toISOString()
-    const expected = commerceCloseExpectation(commerce, queuedAt)
+    const expected = effectiveCloseScopeKey
+      ? commerceCloseExpectation(commerce, queuedAt, effectiveCloseScopeKey)
+      : null
     if (!expected) {
       setNotice(legacyCloseNeedsMigration
         ? 'Legacy close history must be migrated before another daily close can be saved.'
-        : 'This business date already has a close. Review the latest snapshot instead of closing it again.')
+        : closeScopeOptions.length > 1
+          ? 'Choose one location; a close never mixes locations.'
+          : 'This date and location are already closed.')
       return
     }
     const settlementInput = closeSettlementInput.every((line) => line !== null)
@@ -6472,9 +6586,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     queueAction({
       kind: 'daily_close',
       subjectId: closeId,
-      summary: `Close ${expected.businessDate}`,
+      summary: `Close ${expected.businessDate}${expected.accountingScope ? ` · ${expected.accountingScope.locationName}` : ''}`,
       before: `${commerce.closes.length} snapshots`,
-      after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · reconciled payments ${formatMoney(settlement.totalExpectedMmk)} · counted ${formatMoney(settlement.totalCountedMmk)} · net sales ${formatMoney(expected.total)} · settlement ${settlement.status.replace('_', ' ')} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
+      after: `${accountingScopeCode(expected.accountingScope)} · ${expected.orderIds.length} orders (${expected.orderIds.join(', ') || 'none'}) · expected ${formatMoney(settlement.totalExpectedMmk)} · counted ${formatMoney(settlement.totalCountedMmk)} · sales ${formatMoney(expected.total)} · ${settlement.status.replace('_', ' ')} · payment exceptions ${paymentExceptions} · stock exceptions ${stockExceptions}`,
       apply: (action) => mutateCommerce(
         'commerce.close.saved',
         action.commandId,
@@ -6966,10 +7080,19 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     supportWorkloadDownload={supportWorkloadDownload}
   />
   <details className="core-panel today-more order-daily-controls" id="shop-close-controls" open={commerceLocation.hash === '#shop-close-controls' || undefined}>
-    <summary><span>Daily close</span><small>{closePreview ? `${closePreview.orderIds.length} order${closePreview.orderIds.length === 1 ? '' : 's'} ready` : latestClose ? 'Today is closed' : 'Nothing to close'}</small></summary>
+    <summary><span>Daily close</span><small>{closeScopeOptions.length > 1 && !closePreview ? 'Choose one location' : closePreview ? `${closePreview.orderIds.length} order${closePreview.orderIds.length === 1 ? '' : 's'} ready` : latestClose ? 'Today is closed' : 'Nothing to close'}</small></summary>
     <div className="today-more-content">
-      <div className="exception-summary"><span><strong>{closePreview?.orderIds.length ?? 0}</strong><small>orders ready</small></span><span><strong>{paymentReview.length}</strong><small>payment review</small></span></div>
-      <p className="form-notice">Orders ready: {closePreview?.orderIds.length ? closePreview.orderIds.join(', ') : 'none'} · Payment exceptions: {paymentReview.length ? paymentReview.map((order) => order.id).join(', ') : 'none'} · Stock exceptions: {lowStock.length ? lowStock.map((item) => item.sku).join(', ') : 'none'}</p>
+      <div className="exception-summary"><span><strong>{closePreview?.orderIds.length ?? 0}</strong><small>orders ready</small></span><span><strong>{closePreview?.paymentExceptionOrderIds.length ?? 0}</strong><small>payment review</small></span></div>
+      {closeScopeOptions.length > 1 ? <label className="core-form compact-form">Location to close<select disabled={commerceControlsDisabled} onChange={(event) => { setCloseScopeKey(event.target.value); setCloseSettlementDraft([]) }} required value={effectiveCloseScopeKey}><option value="">Choose location</option>{closeScopeOptions.map((option) => <option key={option.key} value={option.key}>{accountingScopeName(option.accountingScope)} · {option.orderCount} order{option.orderCount === 1 ? '' : 's'} · {formatMoney(option.totalMmk)}</option>)}</select></label> : null}
+      {selectedCloseScopeOption ? <p className="form-notice" data-close-accounting-scope={selectedCloseScopeOption.accountingScope ? 'reviewed' : 'legacy'}><strong>{accountingScopeName(selectedCloseScopeOption.accountingScope)}</strong> · {accountingScopeCode(selectedCloseScopeOption.accountingScope)}</p> : null}
+      <details className="compact-disclosure" data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'} open={!currentAccountingScopeConfiguration || undefined}>
+        <summary><span>Business and location</span><small>{currentAccountingScopeConfiguration ? accountingScopeName(currentAccountingScopeConfiguration) : 'Required before real orders'}</small></summary>
+        <form className="core-form compact-form" onSubmit={reviewAccountingScope}>
+          {accountingScopeFields.map((row, rowIndex) => <div className="form-row" key={rowIndex}>{row.map(([field, label, placeholder, maxLength, uppercase]) => <label key={field}>{label}<input autoCapitalize={uppercase ? 'characters' : undefined} disabled={commerceControlsDisabled} maxLength={maxLength} onChange={(event) => setAccountingScope({ ...effectiveAccountingScope, [field]: uppercase ? event.target.value.toUpperCase() : event.target.value })} placeholder={placeholder} required value={effectiveAccountingScope[field]} /></label>)}</div>)}
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review business and location</button></div>
+          {currentAccountingScopeConfiguration ? <p className="form-notice">Revision {currentAccountingScopeConfiguration.revision} · saved by {currentAccountingScopeConfiguration.proof.actor} · evidence {currentAccountingScopeConfiguration.proof.evidenceReference}</p> : null}
+        </form>
+      </details>
       <details className="compact-disclosure" data-shop-policy-controls>
         <summary><span>Policies and accounting setup</span><small>6 reviewed controls</small></summary>
         <div className="today-more-content">
@@ -6990,7 +7113,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           </div>
           <label>Policy status<select disabled={commerceControlsDisabled} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, status: event.target.value as 'active' | 'inactive' }))} value={promotionPolicyDraft.status}><option value="active">Active · approve when limits match</option><option value="inactive">Inactive · reject this code safely</option></select></label>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review promotion</button></div>
-          <p className="panel-copy">Shop remains the only price authority. Saving creates a new reviewed revision; inactive safely stops the code without deleting history. Quotes, orders, payments, and customer messages do not run from this setup.</p>
           {currentPromotionPolicy ? <p className="form-notice">Revision {currentPromotionPolicy.revision} · effective {formatTime(currentPromotionPolicy.effectiveFrom)}{currentPromotionPolicy.effectiveUntil ? ` to ${formatTime(currentPromotionPolicy.effectiveUntil)}` : ''} · saved by {currentPromotionPolicy.proof.actor} · evidence {currentPromotionPolicy.proof.evidenceReference}</p> : null}
         </form>
       </details>
@@ -7011,7 +7133,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={shippingPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={shippingPolicyDraft.effectiveUntil} /></label>
           </div>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review delivery zone</button></div>
-          <p className="panel-copy">Shop owns delivery eligibility, fee, and promise. Saving creates a reviewed revision for future Ecommerce handoffs; it never books a courier or contacts a customer.</p>
         </form>
       </details>
       <details className="compact-disclosure" data-payment-policy="versioned">
@@ -7031,7 +7152,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={paymentPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={paymentPolicyDraft.effectiveUntil} /></label>
           </div>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review payment method</button></div>
-          <p className="panel-copy">Shop approves only the method, fulfilment fit, order limit, and staff instructions for future Ecommerce handoffs. It never charges, transfers money, contacts a customer, or marks payment received.</p>
           {currentPaymentPolicy ? <p className="form-notice">Revision {currentPaymentPolicy.revision} · {currentPaymentPolicy.status} · effective {formatTime(currentPaymentPolicy.effectiveFrom)}{currentPaymentPolicy.effectiveUntil ? ` to ${formatTime(currentPaymentPolicy.effectiveUntil)}` : ''} · {currentPaymentPolicy.instructions} · evidence {currentPaymentPolicy.proof.evidenceReference}</p> : null}
         </form>
       </details>
@@ -7046,7 +7166,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <label>Account status<select disabled={commerceControlsDisabled} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, status: event.target.value as CommerceCustomerCreditPolicyStatus }))} value={creditPolicyDraft.status}><option value="active">Active · allow within boundary</option><option value="hold">Hold · block new credit</option></select></label>
           {currentCreditPolicy ? <p className="form-notice"><strong>Current revision {currentCreditPolicy.revision}</strong> · {formatMoney(currentCreditPolicy.creditLimitMmk)} limit · {currentCreditPolicy.maxPaymentTermsDays}-day maximum · {currentCreditPolicy.status} · evidence {currentCreditPolicy.proof.evidenceReference}</p> : creditPolicyCustomer ? <p className="form-notice">No policy exists for this exact customer. New 7/30-day orders remain blocked.</p> : null}
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review credit policy</button></div>
-          <p className="panel-copy">Future credit orders must fit the active limit and terms. A hold stops new credit. This records an internal approval boundary only; it never collects, lends, charges, or contacts the customer.</p>
         </form>
       </details>
       <details className="compact-disclosure" data-tax-configuration="versioned">
@@ -7063,12 +7182,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           </div>
           <label>Price treatment<select disabled={commerceControlsDisabled} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, mode: event.target.value as CommerceTaxMode })} value={effectiveTaxDraft.mode}><option value="exclusive">Add tax to listed price</option><option value="inclusive">Tax included in listed price</option></select></label>
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review tax setup</button></div>
-          <p className="panel-copy">Takes effect only at the reviewed time. Earlier orders keep their original calculation. This does not choose a legal rate, determine branch tax, file, or post externally.</p>
           {currentTaxConfiguration ? <p className="form-notice">Revision {currentTaxConfiguration.revision} · {currentTaxConfiguration.effectiveFrom ? `effective ${formatTime(currentTaxConfiguration.effectiveFrom)} · ` : ''}saved by {currentTaxConfiguration.proof.actor} · evidence {currentTaxConfiguration.proof.evidenceReference}</p> : null}
         </form>
       </details>
       <details className="compact-disclosure" data-account-mapping="versioned">
-        <summary><span>Account mapping</span><small>{currentAccountMappingConfiguration ? `Revision ${currentAccountMappingConfiguration.revision} · ${currentAccountMappingConfiguration.mappings.length}/7 roles mapped` : 'Required for mapped exports'}</small></summary>
+        <summary><span>Account mapping</span><small>{currentAccountMappingConfiguration ? `${currentAccountingScopeConfiguration?.locationCode ?? 'legacy'} · revision ${currentAccountMappingConfiguration.revision}` : currentAccountingScopeConfiguration ? `${currentAccountingScopeConfiguration.locationCode} · required` : 'Set location first'}</small></summary>
         <form className="core-form compact-form" onSubmit={reviewAccountMapping}>
           <div className="form-row">
             <label>Payment clearing<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, paymentClearing: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.paymentClearing} /></label>
@@ -7083,9 +7201,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>Correction receivable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, correctionReceivable: event.target.value })} placeholder="Customer amount due" required value={effectiveAccountMapping.correctionReceivable} /></label>
           </div>
           <label>Correction payable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, correctionPayable: event.target.value })} placeholder="Customer refund or credit due" required value={effectiveAccountMapping.correctionPayable} /></label>
-          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review account mapping</button></div>
-          <p className="panel-copy">Applies only to closes saved after this mapping. Corrections retain their source order and document, and split reviewed receivable, payable, tax, and sales adjustment lines. Historical exports do not change. Every accounting CSV remains review-only and never posts externally.</p>
-          {currentAccountMappingConfiguration ? <p className="form-notice">Revision {currentAccountMappingConfiguration.revision} · saved by {currentAccountMappingConfiguration.proof.actor} · evidence {currentAccountMappingConfiguration.proof.evidenceReference}</p> : null}
+          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled || Boolean((localBusinessWorkspace || managedIdentity) && !currentAccountingScopeConfiguration)} type="submit">Review account mapping</button></div>
+          {currentAccountMappingConfiguration ? <p className="form-notice">Revision {currentAccountMappingConfiguration.revision} · {accountingScopeCode(currentAccountMappingConfiguration.accountingScope)} · saved by {currentAccountMappingConfiguration.proof.actor} · evidence {currentAccountMappingConfiguration.proof.evidenceReference}</p> : null}
         </form>
       </details>
         </div>
@@ -7115,19 +7232,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             </div>
           }) : <p className="form-notice">No reconciled payments are waiting. Save a zero-value close only if the business date still needs an accountable snapshot.</p>}
           <p className="form-notice" data-close-accounting-basis="correction-aware"><strong>{formatMoney(closeExpectedPaymentValue)} reconciled payments</strong> · {formatMoney(netCloseValue)} net sales{closeCorrectionPayableMmk ? ` · ${formatMoney(closeCorrectionPayableMmk)} correction payable` : ''}{closeCorrectionReceivableMmk ? ` · ${formatMoney(closeCorrectionReceivableMmk)} correction receivable` : ''}</p>
-          <p className="panel-copy">Expected amounts preserve the payment already reconciled at sale. Credit and debit corrections change net sales and create a payable or receivable; they do not pretend money moved. Counted amounts come from the cashier. A variance keeps its owner and reason, and SuperMega never posts externally.</p>
         </section>
       </details>
       <button className="core-button" data-close-primary disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
       <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(closeExpectedPaymentValue)} payments · ${formatMoney(netCloseValue)} net sales ready to close.`}</p>
       {latestClose?.operator ? <details className="compact-disclosure">
-        <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
-        <p className="form-notice">{latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
+        <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.accountingScope ? `${latestClose.accountingScope.locationCode} · ` : ''}{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
+        <p className="form-notice">{accountingScopeName(latestClose.accountingScope)} · {latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
         <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
-        {latestClose.settlement ? <p className="form-notice" data-close-settlement-status={latestClose.settlement.status}><strong>Settlement {latestClose.settlement.status === 'matched' ? 'matched' : 'variance under review'}</strong> · expected {formatMoney(latestClose.settlement.totalExpectedMmk)} · counted {formatMoney(latestClose.settlement.totalCountedMmk)} · variance {latestClose.settlement.totalVarianceMmk > 0 ? '+' : ''}{formatMoney(latestClose.settlement.totalVarianceMmk)}{latestClose.settlement.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? ` · net sales ${formatMoney(latestClose.settlement.netOrderTotalMmk)}${latestClose.settlement.correctionPayableMmk ? ` · correction payable ${formatMoney(latestClose.settlement.correctionPayableMmk)}` : ''}${latestClose.settlement.correctionReceivableMmk ? ` · correction receivable ${formatMoney(latestClose.settlement.correctionReceivableMmk)}` : ''}` : ' · legacy correction basis'}</p> : <p className="form-notice">Legacy close · settlement count not recorded</p>}
+        {latestClose.settlement ? <p className="form-notice" data-close-settlement-status={latestClose.settlement.status}><strong>Settlement {latestClose.settlement.status === 'matched' ? 'matched' : 'variance under review'}</strong> · expected {formatMoney(latestClose.settlement.totalExpectedMmk)} · counted {formatMoney(latestClose.settlement.totalCountedMmk)} · variance {formatMoney(latestClose.settlement.totalVarianceMmk)}{latestClose.settlement.schema === COMMERCE_CLOSE_SETTLEMENT_SCHEMA ? ` · sales ${formatMoney(latestClose.settlement.netOrderTotalMmk)}` : ''}</p> : <p className="form-notice">Settlement not recorded</p>}
         {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
-        {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
-          <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · {latestAccountingDownload.artifact.settlementExpectedMmk === null ? 'settlement not recorded' : `payments expected ${formatMoney(latestAccountingDownload.artifact.settlementExpectedMmk)} / counted ${formatMoney(latestAccountingDownload.artifact.settlementCountedMmk ?? 0)}`} · net sales {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)}{latestAccountingDownload.artifact.settlementCorrectionPayableMmk ? ` · correction payable ${formatMoney(latestAccountingDownload.artifact.settlementCorrectionPayableMmk)}` : ''}{latestAccountingDownload.artifact.settlementCorrectionReceivableMmk ? ` · correction receivable ${formatMoney(latestAccountingDownload.artifact.settlementCorrectionReceivableMmk)}` : ''} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
+        {latestAccountingDownload && latestAccountingArtifact ? <div className="form-notice" data-accounting-handoff="review-required">
+          <strong>Accounting review</strong> · {accountingScopeCode(latestAccountingArtifact.accountingScope)} · balanced {formatMoney(latestAccountingArtifact.totalDebitMmk)} · {latestAccountingArtifact.settlementExpectedMmk === null ? 'settlement missing' : `${formatMoney(latestAccountingArtifact.settlementExpectedMmk)} expected / ${formatMoney(latestAccountingArtifact.settlementCountedMmk ?? 0)} counted`} · sales {formatMoney(latestAccountingArtifact.netOrderTotalMmk)} · {latestAccountingArtifact.accountMappingRevision ? `mapping R${latestAccountingArtifact.accountMappingRevision}` : 'mapping required'} · not posted
           <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href}>Download accounting CSV</a>
         </div> : null}
       </details> : null}
@@ -7425,6 +7541,7 @@ function OrderList({
           {promiseUrgency === 'late' ? <span className="status-pill pending">late</span> : null}
           {promiseUrgency === 'due_soon' ? <span className="status-pill bounded">due soon</span> : null}
           {promiseUrgency === 'unrecorded' ? <span className="status-pill pending">promise missing</span> : null}
+          {order.accountingScope ? <span className="status-pill bounded">{order.accountingScope.locationCode}</span> : null}
         </div>
         <strong>{order.customer} · {order.lines
           ? order.lines.length === 1
@@ -7436,7 +7553,7 @@ function OrderList({
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
-            <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+            <small>{order.id} · {accountingScopeCode(order.accountingScope)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
           </div>
         </details>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}

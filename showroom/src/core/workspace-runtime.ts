@@ -147,6 +147,7 @@ export type ActionKind =
   | 'supplier_credit_record'
   | 'daily_close'
   | 'tax_configuration'
+  | 'accounting_scope'
   | 'account_mapping'
   | 'customer_credit_policy'
   | 'promotion_policy'
