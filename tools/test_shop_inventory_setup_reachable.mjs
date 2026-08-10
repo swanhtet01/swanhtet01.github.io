@@ -33,6 +33,7 @@ const bundle = await build({
       export {
         createSeedCommerce, validateCommerceState, installCommerceWorkingSampleCatalog,
       } from './commerce-workspace.ts'
+      export { buildSharedMasterDataRegistry } from './shared-master-data.ts'
       export {
         SHOP_INVENTORY_MAX_STOCK_UNITS, applyShopInventoryImport, buildShopInventoryImportPackage,
         createEmptyShopInventoryState, shopInventoryEvidenceDigest,
@@ -54,6 +55,7 @@ const bundle = await build({
 
 const {
   createSeedCommerce, validateCommerceState, installCommerceWorkingSampleCatalog,
+  buildSharedMasterDataRegistry,
   SHOP_INVENTORY_MAX_STOCK_UNITS, applyShopInventoryImport, buildShopInventoryImportPackage,
   createEmptyShopInventoryState, shopInventoryEvidenceDigest,
   shopBusinessTemplates, shopBusinessTemplateCommerceItems,
@@ -183,6 +185,31 @@ check(
 check(
   validated.items.length === installed.items.length,
   'with the catalog intact',
+)
+
+// --- every OTHER caller that hands a catalog to the projection ----------------
+// One unsorted call site is a bug; two is a class. After fixing the first, every caller was
+// audited and shared-master-data.ts had the same defect -- it built the catalog straight from
+// item order and handed it to projectShopInventory on the next line. It threw for exactly the
+// same reason on exactly the same real catalog.
+//
+// Asserted here rather than in its own file because this is the same defect, and the fixture
+// that exposes it -- a real catalog with a foundation, in its own order -- is already built
+// above.
+let registry = null
+let registryFailure = ''
+try {
+  registry = buildSharedMasterDataRegistry({ allowedProducts: ['commerce'], commerce: withFoundation })
+} catch (error) {
+  registryFailure = error instanceof Error ? error.message : String(error)
+}
+check(
+  registry !== null,
+  `the shared master-data registry builds from the same unsorted catalog -- ${registryFailure}`,
+)
+check(
+  registry.records.length > 0,
+  `and produces records rather than an empty registry, got ${registry?.records.length}`,
 )
 
 // Sorting the catalog first must ALSO work -- otherwise the fix would just have moved the

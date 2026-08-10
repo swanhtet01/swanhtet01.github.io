@@ -245,7 +245,11 @@ export function buildSharedMasterDataRegistry(input: SharedMasterDataInput): Sha
   const records: SharedMasterDataRecord[] = []
   const duplicateSeeds: Array<{ kind: SharedMasterDataDuplicateCandidate['kind']; identity: string; recordId: string }> = []
   if (allowedProducts.includes('commerce') && input.commerce) {
-    const catalog = input.commerce.items.map((item) => item.sku)
+    // Sorted, because projectShopInventory requires canonical SKU order. The second instance
+    // of this bug: catalog order is whatever the shop imported, so any real catalog threw
+    // 'catalog_skus must use canonical identifier order' once an inventory foundation
+    // existed. Found by auditing every caller after fixing the first one.
+    const catalog = input.commerce.items.map((item) => item.sku).sort()
     const inventory = projectShopInventory(input.commerce.inventoryFoundation ?? createEmptyShopInventoryState(), catalog)
     inventory.clients.forEach((master) => duplicateSeeds.push({ kind: 'business_partner', identity: normalizedIdentity(master.name), recordId: addRecord(records, allowedProducts, 'commerce', 'customer', master.id, 'shop_inventory_command_chain', inventory.revision).id }))
     inventory.vendors.forEach((master) => duplicateSeeds.push({ kind: 'business_partner', identity: normalizedIdentity(master.name), recordId: addRecord(records, allowedProducts, 'commerce', 'supplier', master.id, 'shop_inventory_command_chain', inventory.revision).id }))
