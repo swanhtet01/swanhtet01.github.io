@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-224'
   && completedAutomationArchive.entries?.length === 72
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 35
+  && portfolioSource.completedLocalAutomations.length === 36
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 107
+  && portfolio.completedLocalAutomations.length === 108
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -606,10 +606,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[106]?.productId === 'ecommerce'
   && portfolio.completedLocalAutomations[106]?.workOrderId === 'ecommerce-local-multiline-order-lifecycle-acceptance'
   && portfolio.completedLocalAutomations[106]?.checkpoint === 'OPS-259'
+  && portfolio.completedLocalAutomations[107]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[107]?.workOrderId === 'plant-local-multimaterial-batch-to-shop-stock-acceptance'
+  && portfolio.completedLocalAutomations[107]?.checkpoint === 'OPS-260'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-local-multimaterial-batch-to-shop-stock-acceptance'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-controlled-batch-job-progress-alignment'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1933,6 +1936,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-259 | CEO + Ecommerce Multi-line Lifecycle / Agent Operations Codex | done-local |')
   && workboard.includes('distinct `L1` and `L2` reservation evidence')
   && workboard.includes('The receipt advances `plant-local-multimaterial-batch-to-shop-stock-acceptance`')
+  && workboard.includes('| OPS-260 | CEO + Plant-to-Shop Supply Integrity / Agent Operations Codex | done-local |')
+  && workboard.includes('locks ordinary issue UI and local transition to the exact reviewed SKU and ceiling conversion')
+  && workboard.includes('The receipt advances `plant-controlled-batch-job-progress-alignment`')
   && workboard.includes('| CLAUDE-009 | Claude Code | ready-owner-login |')
   && workboard.includes('Shop setup-recovery checkpoint `0fc5cf7d`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -2008,7 +2014,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-local-ecommerce-fulfilment-timeline-acceptance' && entry.checkpoint === 'OPS-257')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-local-ecommerce-daily-close-lineage-acceptance' && entry.checkpoint === 'OPS-258')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-local-multiline-order-lifecycle-acceptance' && entry.checkpoint === 'OPS-259')
-  && portfolio.localImprovementQueue[0].workOrderId === 'plant-local-multimaterial-batch-to-shop-stock-acceptance')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-local-multimaterial-batch-to-shop-stock-acceptance' && entry.checkpoint === 'OPS-260')
+  && portfolio.localImprovementQueue[0].workOrderId === 'plant-controlled-batch-job-progress-alignment')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
