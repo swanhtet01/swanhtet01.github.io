@@ -307,6 +307,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 </select>
                 <small>{selectedShopIndustryPack.firstWorkflow} {selectedShopIndustryPack.description}</small>
               </label>
+              <ul className="product-onboarding-capabilities">{selectedShopIndustryPack.capabilities.map((capability) => <li key={capability}>{capability}</li>)}</ul>
               {availableBusinessTemplates.length ? (
                 <label className="demo-pack-select">Starter data
                   <select onChange={(event) => changeBusinessTemplate(event.target.value)} value={businessTemplateId ?? ''}>
@@ -327,6 +328,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                 </select>
                 <small>{selectedPlantIndustryPack.firstWorkflow} {selectedPlantIndustryPack.description}</small>
               </label>
+              <ul className="product-onboarding-capabilities">{selectedPlantIndustryPack.capabilities.map((capability) => <li key={capability}>{capability}</li>)}</ul>
             </details>
           ) : null}
           <div className="product-onboarding-primary">

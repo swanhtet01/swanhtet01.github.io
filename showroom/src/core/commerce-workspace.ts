@@ -6328,6 +6328,11 @@ export type CommerceCatalogImportResult = {
 }
 
 const commerceWorkingSampleActionPrefix = 'ACT-DEMO-WORKING-SAMPLE-'
+// The catalog rows this writes are read by the client during a demo, so the
+// actor and evidence read as store setup rather than as scaffolding. The action
+// prefix above stays as it is: it identifies a replaceable sample and is never
+// displayed.
+const WORKING_SAMPLE_SETUP_ACTOR = 'Store manager'
 
 export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, input: {
   sampleId: string
@@ -6383,9 +6388,9 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
     const registered = registerCommerceItem(next, item, {
       actionId: `${requestedPrefix}${String(index + 1).padStart(3, '0')}`,
       capturedAt: input.capturedAt,
-      actor: 'Demo setup',
+      actor: WORKING_SAMPLE_SETUP_ACTOR,
       reason: `Seed the ${sampleName} working sample.`,
-      evidenceReference: `DEMO-WORKING-SAMPLE-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
+      evidenceReference: `SETUP-${sampleId.toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
     })
     if (!registered) return null
     next = registered

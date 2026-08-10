@@ -786,6 +786,8 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-business-name input { min-height: 50px; font-size: 15px; }
 .product-onboarding-business-type > summary small { color: var(--core-quiet); font-size: 9px; font-weight: 600; }
 .product-onboarding-business-type > .demo-pack-select { margin-top: 8px; }
+.product-onboarding-capabilities { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
+.product-onboarding-capabilities li { border: 1px solid var(--core-line); border-radius: 999px; padding: 2px 8px; color: var(--core-quiet); font-size: 9px; font-weight: 600; }
 .product-onboarding-primary { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--core-line); padding-top: 13px; }
 .product-onboarding-primary .core-button { flex: 0 0 auto; }
 .product-onboarding-primary small { color: var(--core-quiet); font-size: 10px; line-height: 1.4; }
