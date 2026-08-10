@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-224'
   && completedAutomationArchive.entries?.length === 72
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 32
+  && portfolioSource.completedLocalAutomations.length === 33
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 104
+  && portfolio.completedLocalAutomations.length === 105
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -597,10 +597,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[103]?.productId === 'shop'
   && portfolio.completedLocalAutomations[103]?.workOrderId === 'shop-local-ecommerce-order-confirmation'
   && portfolio.completedLocalAutomations[103]?.checkpoint === 'OPS-256'
+  && portfolio.completedLocalAutomations[104]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[104]?.workOrderId === 'shop-local-ecommerce-fulfilment-timeline-acceptance'
+  && portfolio.completedLocalAutomations[104]?.checkpoint === 'OPS-257'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-local-ecommerce-fulfilment-timeline-acceptance'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-local-ecommerce-daily-close-lineage-acceptance'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1915,6 +1918,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-256 | CEO + Shop Local Ecommerce Order / Agent Operations Codex | done-local |')
   && workboard.includes('created exactly one source-bound order')
   && workboard.includes('The receipt advances `shop-local-ecommerce-fulfilment-timeline-acceptance`')
+  && workboard.includes('| OPS-257 | CEO + Shop Local Ecommerce Fulfilment / Agent Operations Codex | done-local |')
+  && workboard.includes('The immutable request timeline reported `completed`, `nextAction: none`')
+  && workboard.includes('The receipt advances `shop-local-ecommerce-daily-close-lineage-acceptance`')
   && workboard.includes('| CLAUDE-009 | Claude Code | ready-owner-login |')
   && workboard.includes('Shop setup-recovery checkpoint `0fc5cf7d`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -1987,7 +1993,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-local-ecommerce-inbox-review' && entry.checkpoint === 'OPS-254')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-local-ecommerce-payment-selection' && entry.checkpoint === 'OPS-255')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-local-ecommerce-order-confirmation' && entry.checkpoint === 'OPS-256')
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-local-ecommerce-fulfilment-timeline-acceptance')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-local-ecommerce-fulfilment-timeline-acceptance' && entry.checkpoint === 'OPS-257')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-local-ecommerce-daily-close-lineage-acceptance')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
