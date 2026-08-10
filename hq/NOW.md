@@ -50,10 +50,10 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - The deterministic 12-profile rehearsal passes 24 rows. All desktop missions are overflow-free. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh setup is `0 proven`; a counter sale alone remains unproven; completed/reconciled Shop is `1 proven` across reload; reset returns to zero.
 - Both domains serve deployed `4ce500c29b1cca9617eeba83528293bc1af6c83e`; paired brand, context, and catalog identities match; scheduler ceiling is one job, and exact live verification passes.
-- Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
+- Current-branch build and Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- All 39 recoveries/audits and 32 Shop/16 Plant final actions pass. Shop, Plant, and Website have accountable local outcomes. Ecommerce reaches close, return/refund, customer help, and reviewed balance correction while preserving the invoice. Next: `shop-real-order-accounting-close-client-acceptance`; pilots stay owner-gated.
+- Product outcome gates pass. OPS-238 carries a reviewed correction through payment count, daily close, and accounting handoff. Next: `shop-real-order-accounting-location-client-acceptance`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-237 proves one source-bound correction from 9,500 to 9,000 MMK across Shop and Ecommerce reload; invoice unchanged, no money moved. CLAUDE-008 stays manual at `969fae03`.
+- Codex is sole integrator. OPS-238 fixes the false cash match: 9,500 MMK expected/count, 9,000 MMK net sales, 500 MMK payable, balanced review entries, and no posting across reload. CLAUDE-008 stays manual at `969fae03`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-real-order-accounting-close-client-acceptance`: carry one reviewed correction through its adjusted settlement count, accountable daily close, correction-bound accounting export, and reload without posting externally.
+1. Complete `shop-real-order-accounting-location-client-acceptance`: bind one reviewed entity/location to the order, close, and accounting artifact; reject mixed books.
 2. Use CLAUDE-008 only as an optional owner-controlled review of checkpoint `969fae03`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
