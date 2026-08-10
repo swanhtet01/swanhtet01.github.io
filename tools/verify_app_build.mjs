@@ -2834,6 +2834,23 @@ if (settingsAdvancedIndex < 0
   || productBoundaryIndex < productWorkspaceIndex
   || productRepeatEntryIndex < 0
   || productProvisioningIndex < productRepeatEntryIndex) fail('product_setup_primary_action_hierarchy_wrong')
+// Every industry pack the manifest offers has to be selectable from the setup
+// page a client actually reaches. The pack pickers used to live only in the
+// dev-only client builder, so a production build could install exactly one Shop
+// pack and one Plant pack and the rest of the packs were unreachable claims.
+if (!appSource.includes('<Route element={<SettingsEntry />} path="settings/*" />')
+  || !appSource.includes('{import.meta.env.DEV ? <Route element={<Suspense fallback={<ProductLoading name="client builder" />}><SettingsPage /></Suspense>} path="internal/client-builder/*" /> : null}')
+  || !productOnboardingPageSource.includes('{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}')
+  || !productOnboardingPageSource.includes('{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}')
+  || !productOnboardingPageSource.includes('onChange={(event) => changeShopIndustryPack(event.target.value)}')
+  || !productOnboardingPageSource.includes('onChange={(event) => changePlantIndustryPack(event.target.value)}')
+  || !productOnboardingPageSource.includes('savePlantIndustryPackId(plantIndustryPackId, window.localStorage)')
+  || !productOnboardingPageSource.includes('provisionLocalShopIndustryPack(selectedShopIndustryPack.id)')
+  || !productOnboardingPageSource.includes('provisionLocalShopWorkingSample(selectedShopIndustryPack.id, onboardingTemplate.id)')
+  // A starter catalog is written for one shop type; offering all seven against
+  // any pack would install a pharmacy catalog into a spa workspace.
+  || !productOnboardingPageSource.includes('shopBusinessTemplates.filter((template) => template.industryPackId === selectedShopIndustryPack.id)')
+  || !productOnboardingPageSource.includes('{availableBusinessTemplates.map((template)')) fail('product_setup_industry_pack_pickers_unreachable')
 if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
   || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
   || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_MAX_BYTES')
@@ -7155,9 +7172,9 @@ async function verifyShopBusinessTemplateRuntime() {
     || !productOnboardingPageSource.includes('provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)')
     || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))")
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
-    || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
-    || !productOnboardingPageSource.includes('Standard sample (current industry pack)')
-    || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)')
+    || !productOnboardingPageSource.includes('availableBusinessTemplates.map((template)')
+    || !productOnboardingPageSource.includes('Standard {selectedShopIndustryPack.name.toLowerCase()} sample')
+    || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(selectedShopIndustryPack.id, onboardingTemplate.id)')
     || !coreCssSource.includes('.product-onboarding-business-type')) fail('shop_business_template_contract_missing')
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')).href}?shop-business-template-verify=${Date.now()}`)

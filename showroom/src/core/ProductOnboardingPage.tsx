@@ -34,12 +34,15 @@ import {
   type ShopBusinessTemplateId,
 } from '../products/shop/business-templates'
 import {
+  plantIndustryPack,
+  plantIndustryPacks,
   readPlantIndustryPackId,
   savePlantIndustryPackId,
   type PlantIndustryPackId,
 } from './plant-industry-packs'
 import {
   shopIndustryPack,
+  shopIndustryPacks,
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
 import {
@@ -90,8 +93,8 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [managedIdentity] = useManagedIdentity(runtime.status === 'enterprise')
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
-  const [shopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
-  const [plantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+  const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
+  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
     () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
   )
@@ -101,6 +104,10 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const onboardingJourney = onboardingJourneys[product]
   const selectedBusinessTemplate = product === 'commerce' && businessTemplateId ? shopBusinessTemplate(businessTemplateId) : null
   const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
+  const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
+  // Starter catalogs are written for one shop type, so offering the others here
+  // would install a catalog that contradicts the schedule and capabilities.
+  const availableBusinessTemplates = shopBusinessTemplates.filter((template) => template.industryPackId === selectedShopIndustryPack.id)
   const onboardingTemplate = setup.product === product
     ? templateFor(product, setup.templateId)
     : product === 'commerce'
@@ -156,6 +163,23 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     setSetup((current) => (current.product === 'commerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
   }
 
+  function changeShopIndustryPack(value: string) {
+    const next = shopIndustryPacks.find((pack) => pack.id === value)
+    if (!next) return
+    setShopIndustryPackId(next.id)
+    // A starter catalog belongs to one shop type, so keep the pair coherent
+    // rather than letting a pharmacy catalog ride along into a spa workspace.
+    if (selectedBusinessTemplate && selectedBusinessTemplate.industryPackId !== next.id) setBusinessTemplateId(null)
+    setSetup((current) => (current.product === 'commerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
+  }
+
+  function changePlantIndustryPack(value: string) {
+    const next = plantIndustryPacks.find((pack) => pack.id === value)
+    if (!next) return
+    setPlantIndustryPackId(next.id)
+    setSetup((current) => (current.product === 'production' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
+  }
+
   function updateSetup(patch: Partial<SetupState>) {
     setSetup((current) => {
       const template = current.product === product
@@ -195,7 +219,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         // here or setup falsely reports success on any second run.
         const disposition = selectedBusinessTemplate
           ? await provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)
-          : await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)
+          : await provisionLocalShopWorkingSample(selectedShopIndustryPack.id, onboardingTemplate.id)
         if (disposition === 'preserved') {
           throw new Error('Your existing Shop catalog and orders were kept. Reset the local Shop data first to install this sample.')
         }
@@ -276,13 +300,32 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           {product === 'commerce' ? (
             <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setBusinessTypeOpen(event.currentTarget.open)} open={businessTypeOpen}>
-              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : 'Standard retail sample'}</small></summary>
-              <label className="demo-pack-select">Starter data
-                <select onChange={(event) => changeBusinessTemplate(event.target.value)} value={businessTemplateId ?? ''}>
-                  <option value="">Standard sample (current industry pack)</option>
-                  {shopBusinessTemplates.map((template) => <option key={template.id} value={template.id}>{template.name.en} · {template.name.my}</option>)}
+              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : `${selectedShopIndustryPack.name} sample`}</small></summary>
+              <label className="demo-pack-select">Shop type
+                <select onChange={(event) => changeShopIndustryPack(event.target.value)} value={selectedShopIndustryPack.id}>
+                  {shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
                 </select>
-                <small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.` : 'Keep the standard sample, or pick a business type for a fuller starter catalog.'}</small>
+                <small>{selectedShopIndustryPack.firstWorkflow} {selectedShopIndustryPack.description}</small>
+              </label>
+              {availableBusinessTemplates.length ? (
+                <label className="demo-pack-select">Starter data
+                  <select onChange={(event) => changeBusinessTemplate(event.target.value)} value={businessTemplateId ?? ''}>
+                    <option value="">Standard {selectedShopIndustryPack.name.toLowerCase()} sample</option>
+                    {availableBusinessTemplates.map((template) => <option key={template.id} value={template.id}>{template.name.en} · {template.name.my}</option>)}
+                  </select>
+                  <small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.` : 'Keep the standard sample, or pick a business type for a fuller starter catalog.'}</small>
+                </label>
+              ) : null}
+            </details>
+          ) : null}
+          {product === 'production' ? (
+            <details className="compact-disclosure product-onboarding-business-type" open>
+              <summary><span>Production type</span><small>{selectedPlantIndustryPack.name} sample</small></summary>
+              <label className="demo-pack-select">Production type
+                <select onChange={(event) => changePlantIndustryPack(event.target.value)} value={selectedPlantIndustryPack.id}>
+                  {plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
+                </select>
+                <small>{selectedPlantIndustryPack.firstWorkflow} {selectedPlantIndustryPack.description}</small>
               </label>
             </details>
           ) : null}
