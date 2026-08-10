@@ -264,6 +264,7 @@ _SUPPLIER_CREDIT_ID_PATTERN = re.compile(
 _TAX_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{0,11}")
 _TAX_JURISDICTION_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{1,15}")
 _ACCOUNTING_SCOPE_CODE_PATTERN = re.compile(r"[A-Z0-9][A-Z0-9_-]{1,39}")
+_INVENTORY_LOCATION_ID_PATTERN = re.compile(r"LOC-[A-Z0-9]+(?:-[A-Z0-9]+)*")
 _EXTERNAL_ACCOUNT_CODE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,39}")
 _LEGACY_ACCOUNT_ROLES = (
     "payment_clearing",
@@ -307,12 +308,14 @@ _TAX_CONFIGURATION_SCHEDULE_FIELDS = frozenset({"jurisdictionCode", "effectiveFr
 _ACCOUNTING_SCOPE_CONFIGURATION_FIELDS = frozenset(
     {"revision", "entityCode", "entityName", "locationCode", "locationName", "proof"}
 )
+_ACCOUNTING_SCOPE_CONFIGURATION_OPTIONAL_FIELDS = frozenset({"inventoryLocationId"})
 _ACCOUNTING_SCOPE_SNAPSHOT_FIELDS = frozenset(
     {
         "configurationRevision", "configurationActionId", "entityCode", "entityName",
         "locationCode", "locationName",
     }
 )
+_ACCOUNTING_SCOPE_SNAPSHOT_OPTIONAL_FIELDS = frozenset({"inventoryLocationId"})
 _ACCOUNT_MAPPING_CONFIGURATION_FIELDS = frozenset({"revision", "mappings", "proof"})
 _ACCOUNT_MAPPING_FIELDS = frozenset({"accountRole", "externalAccountCode"})
 _CUSTOMER_CREDIT_POLICY_FIELDS = frozenset(
@@ -834,6 +837,11 @@ def _accounting_scope_snapshot(configuration: Mapping[str, Any]) -> dict[str, An
         "entityName": configuration["entityName"],
         "locationCode": configuration["locationCode"],
         "locationName": configuration["locationName"],
+        **(
+            {"inventoryLocationId": configuration["inventoryLocationId"]}
+            if configuration.get("inventoryLocationId")
+            else {}
+        ),
     }
 
 
@@ -843,7 +851,12 @@ def _accounting_scope_key(scope: Mapping[str, Any]) -> str:
 
 def _validated_accounting_scope_snapshot(value: object, field: str) -> dict[str, Any]:
     scope = _object(value, field)
-    _exact_fields(scope, field, required=_ACCOUNTING_SCOPE_SNAPSHOT_FIELDS)
+    _exact_fields(
+        scope,
+        field,
+        required=_ACCOUNTING_SCOPE_SNAPSHOT_FIELDS,
+        optional=_ACCOUNTING_SCOPE_SNAPSHOT_OPTIONAL_FIELDS,
+    )
     _integer(scope["configurationRevision"], f"{field}.configurationRevision", minimum=1)
     _text(scope["configurationActionId"], f"{field}.configurationActionId", maximum=160)
     entity_code = _text(scope["entityCode"], f"{field}.entityCode", maximum=40)
@@ -855,6 +868,14 @@ def _validated_accounting_scope_snapshot(value: object, field: str) -> dict[str,
         raise TrialValidationError(f"{field} codes are invalid.")
     _text(scope["entityName"], f"{field}.entityName", maximum=120)
     _text(scope["locationName"], f"{field}.locationName", maximum=120)
+    if "inventoryLocationId" in scope:
+        inventory_location_id = _text(
+            scope["inventoryLocationId"],
+            f"{field}.inventoryLocationId",
+            maximum=80,
+        )
+        if _INVENTORY_LOCATION_ID_PATTERN.fullmatch(inventory_location_id) is None:
+            raise TrialValidationError(f"{field}.inventoryLocationId is invalid.")
     return scope
 
 
@@ -1375,9 +1396,18 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         item_skus.append(sku)
         item_by_sku[sku] = item
     _unique(item_skus, "Item SKU")
+    validated_inventory_foundation: dict[str, Any] | None = None
+    inventory_location_ids: set[str] = set()
     if "inventoryFoundation" in state:
         try:
-            validate_shop_inventory_state(state["inventoryFoundation"], item_skus)
+            validated_inventory_foundation = validate_shop_inventory_state(
+                state["inventoryFoundation"], item_skus
+            )
+            if validated_inventory_foundation["commands"]:
+                inventory_location_ids = {
+                    location["id"]
+                    for location in validated_inventory_foundation["commands"][0]["payload"]["package"]["locations"]
+                }
         except ShopInventoryValidationError as exc:
             raise TrialValidationError(
                 f"commerce state.inventoryFoundation is invalid: {exc}"
@@ -1603,7 +1633,12 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     for index, candidate in enumerate(accounting_scope_configurations):
         field = f"accountingScopeConfigurations[{index}]"
         configuration = _object(candidate, field)
-        _exact_fields(configuration, field, required=_ACCOUNTING_SCOPE_CONFIGURATION_FIELDS)
+        _exact_fields(
+            configuration,
+            field,
+            required=_ACCOUNTING_SCOPE_CONFIGURATION_FIELDS,
+            optional=_ACCOUNTING_SCOPE_CONFIGURATION_OPTIONAL_FIELDS,
+        )
         revision = _integer(configuration["revision"], f"{field}.revision", minimum=1)
         if revision != len(accounting_scope_configurations) - index:
             raise TrialValidationError(
@@ -1618,6 +1653,19 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             raise TrialValidationError(f"{field} codes are invalid.")
         _text(configuration["entityName"], f"{field}.entityName", maximum=120)
         _text(configuration["locationName"], f"{field}.locationName", maximum=120)
+        if "inventoryLocationId" in configuration:
+            inventory_location_id = _text(
+                configuration["inventoryLocationId"],
+                f"{field}.inventoryLocationId",
+                maximum=80,
+            )
+            if (
+                _INVENTORY_LOCATION_ID_PATTERN.fullmatch(inventory_location_id) is None
+                or inventory_location_id not in inventory_location_ids
+            ):
+                raise TrialValidationError(
+                    f"{field}.inventoryLocationId is not a canonical inventory location."
+                )
         proof = _action_proof(configuration["proof"], f"{field}.proof")
         if newer_accounting_scope_configuration is not None:
             newer_captured_at = datetime.fromisoformat(
@@ -4700,6 +4748,33 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         ],
         "Commerce action ID",
     )
+    if validated_inventory_foundation is not None:
+        commands = validated_inventory_foundation["commands"]
+        for order in order_by_id.values():
+            scope = order.get("accountingScope")
+            location_id = (
+                scope.get("inventoryLocationId")
+                if isinstance(scope, Mapping)
+                else None
+            )
+            if location_id is None:
+                continue
+            reservations = [
+                command["payload"]
+                for command in commands
+                if command["payload"].get("kind") == "order_reserve"
+                and command["payload"].get("orderId") == order["id"]
+            ]
+            if (
+                len(reservations) != 1
+                or any(
+                    allocation["locationId"] != location_id
+                    for allocation in reservations[0]["allocations"]
+                )
+            ):
+                raise TrialValidationError(
+                    f"order {order['id']} inventory is not bound to reviewed location {location_id}."
+                )
     return deepcopy(state)
 
 
@@ -6326,6 +6401,13 @@ def create_commerce_order_from_intent(
         if _accounting_scope_configurations(current)
         else None
     )
+    if current.get("inventoryFoundation") is not None and (
+        active_scope_configuration is None
+        or not active_scope_configuration.get("inventoryLocationId")
+    ):
+        raise TrialValidationError(
+            "review the Shop accounting location against inventory before creating an order."
+        )
     if active_scope_configuration is not None and datetime.fromisoformat(
         str(active_scope_configuration["proof"]["capturedAt"]).replace("Z", "+00:00")
     ) > datetime.fromisoformat(created_at.replace("Z", "+00:00")):
@@ -6398,6 +6480,11 @@ def create_commerce_order_from_intent(
                 lines=[{"sku": line["sku"], "quantity": line["quantity"]} for line in lines],
                 proof=evidence,
                 catalog_skus=[item["sku"] for item in current["items"]],
+                location_id=(
+                    str(active_scope_configuration["inventoryLocationId"])
+                    if active_scope_configuration is not None
+                    else None
+                ),
             )
         except ShopInventoryValidationError as exc:
             raise TrialValidationError(str(exc)) from exc
@@ -6831,6 +6918,21 @@ def _accounting_scope_projection(scope: Mapping[str, Any] | None) -> list[Any] |
         scope["entityName"],
         scope["locationCode"],
         scope["locationName"],
+        *([scope["inventoryLocationId"]] if scope.get("inventoryLocationId") else []),
+    ]
+
+
+def _accounting_scope_csv_values(scope: Mapping[str, Any] | None) -> list[Any]:
+    if scope is None:
+        return [None] * 7
+    return [
+        scope["configurationRevision"],
+        scope["configurationActionId"],
+        scope["entityCode"],
+        scope["entityName"],
+        scope["locationCode"],
+        scope["locationName"],
+        scope.get("inventoryLocationId"),
     ]
 
 
@@ -7105,6 +7207,7 @@ def commerce_daily_close_csv(
         "entity_name",
         "location_code",
         "location_name",
+        "inventory_location_id",
         "order_id",
         "order_created_at",
         "payment_method",
@@ -7147,12 +7250,7 @@ def commerce_daily_close_csv(
             artifact["closedAt"],
             artifact["operator"],
             artifact["evidenceReference"],
-            artifact["accountingScope"]["configurationRevision"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["configurationActionId"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["entityCode"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["entityName"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["locationCode"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["locationName"] if artifact["accountingScope"] else None,
+            *_accounting_scope_csv_values(artifact["accountingScope"]),
             None,
             None,
             None,
@@ -7219,12 +7317,7 @@ def commerce_daily_close_csv(
             artifact["closedAt"],
             None,
             None,
-            row["accountingScope"]["configurationRevision"] if row["accountingScope"] else None,
-            row["accountingScope"]["configurationActionId"] if row["accountingScope"] else None,
-            row["accountingScope"]["entityCode"] if row["accountingScope"] else None,
-            row["accountingScope"]["entityName"] if row["accountingScope"] else None,
-            row["accountingScope"]["locationCode"] if row["accountingScope"] else None,
-            row["accountingScope"]["locationName"] if row["accountingScope"] else None,
+            *_accounting_scope_csv_values(row["accountingScope"]),
             row["orderId"],
             row["orderCreatedAt"],
             row["paymentMethod"],
@@ -7522,7 +7615,7 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
         "schema", "status", "posting_authority", "external_posting_performed",
         "close_id", "business_date", "closed_at", "currency", "source_close_digest",
         "accounting_scope_revision", "accounting_scope_action_id", "entity_code",
-        "entity_name", "location_code", "location_name",
+        "entity_name", "location_code", "location_name", "inventory_location_id",
         "account_mapping_revision", "account_mapping_evidence_reference",
         "settlement_schema", "settlement_status", "settlement_expected_mmk",
         "settlement_counted_mmk", "settlement_variance_mmk",
@@ -7542,12 +7635,7 @@ def commerce_accounting_handoff_csv(artifact: Mapping[str, Any]) -> str:
             str(artifact["externalPostingPerformed"]).lower(), artifact["closeId"],
             artifact["businessDate"], artifact["closedAt"], artifact["currency"],
             artifact["sourceCloseDigest"],
-            artifact["accountingScope"]["configurationRevision"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["configurationActionId"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["entityCode"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["entityName"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["locationCode"] if artifact["accountingScope"] else None,
-            artifact["accountingScope"]["locationName"] if artifact["accountingScope"] else None,
+            *_accounting_scope_csv_values(artifact["accountingScope"]),
             artifact["accountMappingRevision"],
             artifact["accountMappingEvidenceReference"], artifact["settlementSchema"],
             artifact["settlementStatus"], artifact["settlementExpectedMmk"],
@@ -8119,6 +8207,18 @@ def _order_inventory_transition(
     allocations = reserve.get("allocations")
     if not isinstance(allocations, list):
         raise TrialValidationError("the order location allocations are missing.")
+    reviewed_location_id = (
+        order.get("accountingScope", {}).get("inventoryLocationId")
+        if isinstance(order.get("accountingScope"), Mapping)
+        else None
+    )
+    if reviewed_location_id is not None and any(
+        allocation.get("locationId") != reviewed_location_id
+        for allocation in allocations
+    ):
+        raise TrialValidationError(
+            "the order allocation must stay inside its reviewed inventory location."
+        )
     allocated: dict[str, int] = {}
     for allocation in allocations:
         allocation_identity = _order_inventory_digest(
@@ -8154,6 +8254,10 @@ def _order_inventory_transition(
                     for balance in available_balances
                     if balance["sku"] == sku
                     and balance["availableToPromise"] > 0
+                    and (
+                        reviewed_location_id is None
+                        or balance["locationId"] == reviewed_location_id
+                    )
                 ),
                 key=lambda balance: (
                     -int(balance["availableToPromise"]),
@@ -8566,6 +8670,12 @@ def _validate_new_order_and_reservation(
         if active_scope_configuration is not None
         else None
     )
+    if _inventory_foundation(current) is not None and (
+        expected_scope is None or not expected_scope.get("inventoryLocationId")
+    ):
+        raise TrialValidationError(
+            "a new location-managed order requires a reviewed inventory location."
+        )
     if order.get("accountingScope") != expected_scope:
         raise TrialValidationError(
             "a new order must freeze the exact active reviewed accounting scope."
@@ -10937,9 +11047,17 @@ def _validate_accounting_scope_saved(
         raise TrialValidationError(
             "accounting scope configuration revision must advance exactly once."
         )
+    if _inventory_foundation(current) is not None and not configuration.get(
+        "inventoryLocationId"
+    ):
+        raise TrialValidationError(
+            "a location-managed Shop accounting scope requires an inventory location."
+        )
     if before and all(
         configuration[field] == before[0][field]
         for field in ("entityCode", "entityName", "locationCode", "locationName")
+    ) and configuration.get("inventoryLocationId") == before[0].get(
+        "inventoryLocationId"
     ):
         raise TrialValidationError(
             "an unchanged accounting scope configuration cannot advance."

@@ -385,6 +385,7 @@ type AccountingScopeDraft = {
   entityName: string
   locationCode: string
   locationName: string
+  inventoryLocationId: string
 }
 
 const accountingScopeFields = [
@@ -900,6 +901,7 @@ function accountingScopeDraft(configuration: ReturnType<typeof commerceCurrentAc
     entityName: configuration?.entityName ?? '',
     locationCode: configuration?.locationCode ?? '',
     locationName: configuration?.locationName ?? '',
+    inventoryLocationId: configuration?.inventoryLocationId ?? '',
   }
 }
 
@@ -1103,7 +1105,7 @@ function AccountableActionGate({ action, authenticatedActor, localBusinessWorksp
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">{localBusinessWorkspace ? 'Browser-local business workspace. Confirming creates an accountable local order and reserves this workspace stock. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, and no server or company account is written.' : 'Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.'}</p> : null}
       <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : accountableActionSubmitLabel(action)}</button></div>
-      {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Any retry reuses the same command and evidence; reload can reconcile managed state.'}</p> : null}
+      {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Retry reuses it; reload can reconcile.'}</p> : null}
     </form>
   </dialog>
 }
@@ -1222,11 +1224,16 @@ function readLocalShopIndustryPack() {
 }
 
 function ShopProductArtwork({ kind }: { kind: number }) {
-  if (kind === 1) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="7" width="18" x="20" y="34" /><rect className="art-main" height="58" rx="7" width="18" x="41" y="24" /><rect className="art-main" height="44" rx="7" width="18" x="62" y="38" /><path className="art-highlight" d="M24 42h10M45 33h10M66 46h10" /></svg>
-  if (kind === 2) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-main" d="M27 23h46l7 58H20z" /><path className="art-highlight" d="M32 39h36M39 57h22" /><circle className="art-detail" cx="50" cy="69" r="6" /></svg>
-  if (kind === 3) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="48" rx="9" width="28" x="22" y="35" /><rect className="art-main" height="55" rx="9" width="26" x="55" y="28" /><path className="art-highlight" d="M29 28h15v8M62 20h13v9M30 54h12M62 49h12" /></svg>
-  if (kind === 4) return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><rect className="art-main" height="58" rx="10" width="62" x="19" y="23" /><path className="art-detail" d="M50 67 34 53c-9-9 4-21 16-8 12-13 25-1 16 8z" /><path className="art-highlight" d="M27 32h46" /></svg>
-  return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" /><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></svg>
+  const artwork = kind === 1
+    ? <><rect className="art-main" height="48" rx="7" width="18" x="20" y="34" /><rect className="art-main" height="58" rx="7" width="18" x="41" y="24" /><rect className="art-main" height="44" rx="7" width="18" x="62" y="38" /><path className="art-highlight" d="M24 42h10M45 33h10M66 46h10" /></>
+    : kind === 2
+      ? <><path className="art-main" d="M27 23h46l7 58H20z" /><path className="art-highlight" d="M32 39h36M39 57h22" /><circle className="art-detail" cx="50" cy="69" r="6" /></>
+      : kind === 3
+        ? <><rect className="art-main" height="48" rx="9" width="28" x="22" y="35" /><rect className="art-main" height="55" rx="9" width="26" x="55" y="28" /><path className="art-highlight" d="M29 28h15v8M62 20h13v9M30 54h12M62 49h12" /></>
+        : kind === 4
+          ? <><rect className="art-main" height="58" rx="10" width="62" x="19" y="23" /><path className="art-detail" d="M50 67 34 53c-9-9 4-21 16-8 12-13 25-1 16 8z" /><path className="art-highlight" d="M27 32h46" /></>
+          : <><path className="art-highlight" d="M30 41c2-18 38-18 40 0" /><path className="art-main" d="M18 42h64l-8 39H26z" /><rect className="art-detail" height="21" rx="4" width="15" x="31" y="50" /><circle className="art-detail" cx="59" cy="60" r="10" /></>
+  return <svg aria-hidden="true" className="shop-product-art" focusable="false" viewBox="0 0 100 100"><rect className="art-soft" height="88" rx="18" width="88" x="6" y="6" />{artwork}</svg>
 }
 
 function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, openOrderCount, sampleCatalogActive, scope }: {
@@ -1607,8 +1614,8 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
           <span className="core-eyebrow">Unfinished sale found</span>
           <h2 id="shop-counter-tab-recovery-title">{counterRecoveryReview?.ok ? 'Continue this sale?' : 'This sale needs a fresh start'}</h2>
           <p>{counterRecoveryReview?.ok
-            ? 'Resume the exact items, customer, payment choice, and mobile drawer. Nothing creates an order automatically.'
-            : 'The Shop catalogue or stock changed after this sale began. Discard the older recovery to protect the current record.'}</p>
+            ? 'Resume the saved sale. No order is created automatically.'
+            : 'Shop stock changed. Discard this older sale.'}</p>
         </div>
         <div aria-label="Recovered sale summary" className="tab-recovery-summary" role="group">
           <span><small>Items</small><strong>{recoveredUnits} across {recoveredDraft.lines.length} {recoveredDraft.lines.length === 1 ? 'line' : 'lines'}</strong></span>
@@ -2612,7 +2619,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       })
       .catch(() => {
         if (!current || orderDraftScopeRef.current !== orderDraftScope) return
-        const recoveryError = 'Order recovery could not load. Shop records remain available, but new unfinished orders cannot be saved safely.'
+        const recoveryError = 'Order recovery failed. Existing Shop records remain available.'
         setOrderDraftRead({
           status: 'unavailable',
           draft: null,
@@ -2643,7 +2650,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setOrderDraftRead(latest)
         if (orderDraftActive) {
           setOrderDraftConflict(true)
-          setOrderDraftIssue('The unfinished order changed in another tab. Current fields were kept; close this form to review the latest saved draft.')
+          setOrderDraftIssue('This order changed in another tab. Close it to review the saved draft.')
           return
         }
         setOrderDraftIssue(latest.error)
@@ -2897,7 +2904,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
         if (!ecommerceCancellationMatchesCurrentShop(commerce, intent)) {
           setCancellationDraft(null)
-          setNotice('The cancellation request no longer matches the current Shop order, payment, refund, or reserved stock. Nothing was prepared.')
+          setNotice('The cancellation no longer matches Shop. Reopen it; nothing changed.')
           return
         }
         setReturnDraft(null)
@@ -3108,7 +3115,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           || expectation.correctionCount !== intent.sourceCorrectionCount
           || expectation.currentBalanceMmk !== intent.originalBalanceMmk) {
           setCorrectionDraft(null)
-          setNotice('The Ecommerce balance request no longer matches the current Shop calculation, payment, refund, or correction history. Nothing was prepared.')
+          setNotice('The Ecommerce balance no longer matches Shop. Reopen it; nothing changed.')
           return
         }
         setReturnDraft(null)
@@ -3559,7 +3566,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const catalogState = localCommerceOrderDraftCatalogState(draft, commerce.items)
     setOrderDraftIssue(catalogState.current
       ? 'Unfinished order restored. Source-message and Ecommerce links are never recovered.'
-      : 'Shop price or availability changed. Review current Shop values before this order can continue.')
+      : 'Shop price or stock changed. Review this order again.')
     showOrderComposer()
   }
 
@@ -3581,7 +3588,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       await orderDraftSaveQueueRef.current
       if (orderDraftScopeRef.current !== scopeAtDiscard
         || orderDraftOperationEpochRef.current !== operationEpochAtDiscard) {
-        throw new Error('The unfinished order changed while discard was waiting. Review the latest saved draft.')
+        throw new Error('The order changed. Review the latest saved draft.')
       }
       const expectedRevision = discardInvalidDraft ? undefined : orderDraftRevisionRef.current
       const { discardCommerceOrderDraft } = await import('./commerce-order-draft')
@@ -3593,7 +3600,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       }
       if (orderDraftScopeRef.current !== scopeAtDiscard
         || orderDraftOperationEpochRef.current !== operationEpochAtDiscard) {
-        throw new Error('The unfinished order changed while discard was being confirmed. Review the latest saved draft.')
+        throw new Error('The order changed during confirmation. Review the saved draft.')
       }
       orderDraftOperationEpochRef.current += 1
       orderDraftRevisionRef.current = 0
@@ -3623,7 +3630,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       await orderDraftSaveQueueRef.current
       if (orderDraftScopeRef.current !== scopeAtRebind
         || orderDraftOperationEpochRef.current !== operationEpochAtRebind) {
-        throw new Error('The unfinished order changed while Shop values were being reviewed. Reload the saved draft.')
+        throw new Error('Shop values changed. Reload the saved draft.')
       }
       const expectedRevision = orderDraftRevisionRef.current
       const { saveCommerceOrderDraft } = await import('./commerce-order-draft')
@@ -3635,7 +3642,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       )
       if (orderDraftScopeRef.current !== scopeAtRebind
         || orderDraftOperationEpochRef.current !== operationEpochAtRebind) {
-        throw new Error('The unfinished order changed while Shop values were being recorded. Reload the saved draft.')
+        throw new Error('Shop changed while saving. Reload the draft.')
       }
       orderDraftRevisionRef.current = saved.revision
       setOrderDraftRead({ status: 'ready', draft: saved, error: '' })
@@ -3654,7 +3661,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     returnFocus?: HTMLElement | null,
   ): boolean {
     if (!commerceCanWrite) {
-      setNotice('Shop changes are paused because this workspace cannot confirm writes. Reload or open Settings before retrying.')
+      setNotice('Shop cannot confirm writes. Reload or open Settings.')
       return false
     }
     if (pendingAction) {
@@ -3715,12 +3722,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (stockCountDraft) {
       const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
-      setNotice('Finish or cancel the stock count before editing catalog values. Your count draft was preserved.')
+      setNotice('Finish the stock count before editing the catalog.')
       return
     }
     if (purchaseOrderDraft) {
       requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish, close, or discard the stock order before editing catalog values. Your stock-order draft was preserved.')
+      setNotice('Finish the stock order before editing the catalog.')
       return
     }
     if (closedPurchaseOrderDraft) {
@@ -3811,7 +3818,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (!pendingAction) return
     if (pendingAction.evidenceReferenceLocked
       && details.evidenceReference.trim() !== pendingAction.evidenceReferenceSuggestion) {
-      throw new Error('Source-backed evidence is fixed to the reviewed message mapping. Cancel and review the source again to change it.')
+      throw new Error('Source evidence is fixed. Review the message again to change it.')
     }
     const record = confirmAccountableAction(
       pendingAction,
@@ -4211,7 +4218,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     if (sourceDraft && orderLines.length !== 1) {
       detachPreparedOrderSources({ ecommerce: false })
-      setNotice('This channel source contains one reviewed item. Its source link was removed; review the multi-item order manually.')
+      setNotice('This source has one item. Review the multi-item order manually.')
       return
     }
     if (sourceDraft && (customer.trim() !== sourceDraft.customer
@@ -4220,7 +4227,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       || selectedLine.quantity !== sourceDraft.quantity
       || payment !== sourceDraft.payment)) {
       detachPreparedOrderSources({ ecommerce: false })
-      setNotice('The structured order changed after source review. Review the channel mapping again or continue as a manual order.')
+      setNotice('The source order changed. Review it again or continue manually.')
       return
     }
     const ecommerceLines = ecommerceDraft
@@ -4314,7 +4321,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     if (websiteLead && (!websiteLeadCurrent || customer.trim() !== websiteLead.name || channel !== 'Website')) {
       detachPreparedOrderSources({ website: true })
-      setNotice('The Website inquiry changed or its customer source was edited. Reopen it from the Website inbox or continue as a manual order.')
+      setNotice('The Website inquiry changed. Reopen it or continue as a manual order.')
       return
     }
     const sourceRecordId = sourceDraft?.sourceRecordId ?? ecommerceDraft?.sourceRequestId ?? websiteLead?.id
@@ -4374,7 +4381,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     const calculationReview = commerceOrderCalculation(commerce, listedOrderTotal, reviewedAt.toISOString())
     if (!calculationReview) {
-      setNotice('The order total cannot be calculated safely. Review item prices and tax setup before continuing.')
+      setNotice('Order total failed. Review prices and tax setup.')
       return
     }
     if (taxDecision && (calculationReview.totalMmk !== taxDecision.totalMmk
@@ -4386,7 +4393,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? calculationReview.taxConfigurationRevision !== taxDecision.taxConfigurationRevision
         : taxDecision.taxConfigurationRevision !== null))) {
       detachPreparedOrderSources({ channel: false })
-      setNotice('The governed Ecommerce tax total no longer matches Shop. Reopen the request; no order was queued.')
+      setNotice('Ecommerce tax no longer matches Shop. Reopen the request.')
       return
     }
     const creditReview = commerceCustomerCreditReview(
@@ -5269,7 +5276,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       subjectId: intent.orderId,
       summary: `Cancel ${intent.orderId} and prepare replacement ${intent.replacementRequestId}`,
       before: `${intent.orderStatus} · ${formatMoney(intent.originalTotalMmk)} · ${ecommerceOrderAmendmentSummary(intent)}`,
-      after: `original cancelled · exact stock released · replacement repriced for separate confirmation · no message or provider call`,
+      after: `original cancelled · stock released · replacement needs confirmation`,
       reasonSuggestion: intent.reason.slice(0, 180),
       evidenceReferenceSuggestion: intent.evidenceReference,
       evidenceReferenceLocked: true,
@@ -5324,7 +5331,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       subjectId: intent.orderId,
       summary: `Cancel ${intent.orderId} and prepare rescheduled replacement ${intent.replacementRequestId}`,
       before: `${intent.orderStatus} · ${formatMoney(intent.originalTotalMmk)} · promised ${formatTime(intent.originalPromisedAt)}`,
-      after: `original cancelled · exact stock released · replacement repriced for ${formatTime(intent.requestedPromisedAt)} · separate confirmation · no rider, message, or provider call`,
+      after: `original cancelled · stock released · replacement for ${formatTime(intent.requestedPromisedAt)} needs confirmation · no rider, message, or provider call`,
       reasonSuggestion: intent.reason.slice(0, 180),
       evidenceReferenceSuggestion: intent.evidenceReference,
       evidenceReferenceLocked: true,
@@ -5411,7 +5418,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   function beginPurchaseOrderEditor(draft: PurchaseOrderDraft, message: string) {
     const opening = createShopPurchaseOrderOpening(draft, commerce)
     if (!opening) {
-      setNotice('Shop could not bind the stock-order draft to the current item, supplier authority, or receipt balance. Nothing was opened or changed.')
+      setNotice('The stock-order evidence changed. Reopen it from current Shop data.')
       return false
     }
     purchaseOrderOpeningRef.current = opening
@@ -5438,13 +5445,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (!item) return
     if (catalogEditDraft) {
       requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish or cancel the catalog edit before opening a stock order. Your catalog draft was preserved.')
+      setNotice('Finish the catalog edit before opening a stock order.')
       return
     }
     if (stockCountDraft) {
       const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
-      setNotice('Finish or discard the stock count before opening a stock order. Your count draft was preserved.')
+      setNotice('Finish the stock count. Your count draft was preserved.')
       return
     }
     if (closedPurchaseOrderDraft) {
@@ -5464,7 +5471,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     if (purchaseOrderDraft) {
       requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish, close, or discard the current stock-order draft before opening another one.')
+      setNotice('Finish the current stock order before opening another.')
       return
     }
     const receiptDate = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Yangon' }).format(new Date()).replaceAll('-', '')
@@ -5493,7 +5500,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       ceilingMmk: '5000000',
       perRequisitionLimitMmk: '1000000',
     })
-    setNotice('Set the maximum approved buying commitment. This creates internal authority only; it does not order or pay for anything.')
+    setNotice('Set the buying limit. This does not order or pay.')
   }
 
   function reviewPurchaseBudget(event: FormEvent) {
@@ -5588,7 +5595,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       }
     })
     if (quotes.some((quote) => quote === null)) {
-      setNotice('Each entered quote needs supplier, quote reference, approved-vendor reference, whole-MMK cost, and future delivery.')
+      setNotice('Each quote needs supplier, references, MMK cost, and delivery date.')
       return
     }
     const selectedQuoteReference = supplierSourcingDraft.quotes[supplierSourcingDraft.selectedIndex].quoteReference.trim()
@@ -5618,7 +5625,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   function startSupplierRequest() {
     if (purchaseOrderDraft) {
       requestAnimationFrame(() => purchaseOrderEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish, close, or discard the current stock-order draft before starting another supplier request.')
+      setNotice('Finish the current stock order before a new supplier request.')
       return
     }
     if (closedPurchaseOrderDraft) {
@@ -5639,13 +5646,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     if (catalogEditDraft) {
       requestAnimationFrame(() => catalogEditEditorRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus())
-      setNotice('Finish or cancel the catalog edit before starting a supplier request. Your catalog draft was preserved.')
+      setNotice('Finish the catalog edit before a supplier request.')
       return
     }
     if (stockCountDraft) {
       const selector = stockCountTargetSelected ? '#stock-count-quantity' : '#stock-count-sku'
       requestAnimationFrame(() => stockCountEditorRef.current?.querySelector<HTMLElement>(selector)?.focus())
-      setNotice('Finish or cancel the stock count before starting a supplier request. Your count draft was preserved.')
+      setNotice('Finish the stock count before a supplier request.')
       return
     }
     const recommendedOption = decision?.supplierOptions.find((option) => option.supplier === decision.recommendedSupplier)
@@ -5715,7 +5722,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (!closedPurchaseOrderDraft) return
     const recovery = recoverShopPurchaseOrderDraft(null, closedPurchaseOrderDraft, commerce)
     if (!recovery.ok) {
-      setNotice('The Shop item, supplier authority, purchase order, receipt balance, or location evidence changed after close. The draft was not restored and no record changed.')
+      setNotice('The purchasing evidence changed. Reopen the draft from current Shop data.')
       requestAnimationFrame(() => purchaseOrderRecoveryRef.current?.focus())
       return
     }
@@ -5920,8 +5927,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setStockCountDraft(suggestedDraft)
     setNotice(commerce.inventoryFoundation
       ? suggestedBalance
-        ? 'Enter the physical count for the suggested location and lot. Choose another target if needed; nothing changes until confirmation.'
-        : 'Choose one location and lot, then count every physical unit there. Nothing changes until confirmation.'
+        ? 'Count every unit in the suggested lot, or choose another. Confirm to save.'
+        : 'Choose a location and lot, count every unit, then confirm.'
       : suggestedItem
         ? `Enter counted sellable units for ${suggestedItem.name}. Choose another item if needed; nothing changes until confirmation.`
         : 'Choose one item, then enter counted sellable units. Nothing changes until confirmation.')
@@ -6245,7 +6252,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       || rateBasisPoints === null
       || Number.isNaN(effectiveFromDate.getTime())
       || effectiveFromDate.getTime() < purchaseOrderClock + 60_000) {
-      setNotice('Enter reviewed tax and jurisdiction codes, a short label, a valid rate, and an effective time at least one minute ahead.')
+      setNotice('Enter tax and jurisdiction codes, label, rate, and future start.')
       return
     }
     const expectedRevision = currentTaxConfiguration?.revision ?? 0
@@ -6283,12 +6290,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       entityName: effectiveAccountingScope.entityName.trim(),
       locationCode: effectiveAccountingScope.locationCode.trim().toUpperCase(),
       locationName: effectiveAccountingScope.locationName.trim(),
+      ...(commerce.inventoryFoundation ? { inventoryLocationId: effectiveAccountingScope.inventoryLocationId || defaultReceiptLocationId } : {}),
     }
     if (!/^[A-Z0-9][A-Z0-9_-]{1,39}$/.test(input.entityCode)
       || !/^[A-Z0-9][A-Z0-9_-]{1,39}$/.test(input.locationCode)
       || !input.entityName || input.entityName.length > 120
-      || !input.locationName || input.locationName.length > 120) {
-      setNotice('Enter short uppercase entity and location codes plus clear business and location names.')
+      || !input.locationName || input.locationName.length > 120
+      || (commerce.inventoryFoundation && !input.inventoryLocationId)) {
+      setNotice('Choose the stock location, then enter short business and location codes and names.')
       return
     }
     const expectedRevision = commerce.accountingScopeConfigurations?.length ?? 0
@@ -6300,7 +6309,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       subjectId: `SHOP-SCOPE-${input.entityCode}-${input.locationCode}-R${expectedRevision + 1}`,
       summary: 'Set Shop business and operating location',
       before: previous,
-      after: `${accountingScopeName(input)} · ${accountingScopeCode(input)} · future orders only`,
+      after: `${accountingScopeName(input)} · ${accountingScopeCode(input)}${input.inventoryLocationId ? ` · stock ${input.inventoryLocationId}` : ''} · future orders only`,
       reasonSuggestion: 'Reviewed the Shop business and location.',
       apply: async (action) => {
         await mutateCommerce(
@@ -6435,7 +6444,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       || Number.isNaN(effectiveFromDate.getTime())
       || effectiveFromDate.getTime() < purchaseOrderClock + 60_000
       || (effectiveUntilDate && (Number.isNaN(effectiveUntilDate.getTime()) || effectiveUntilDate <= effectiveFromDate))) {
-      setNotice('Enter an uppercase code, discount from 0.01% to 100%, whole-MMK limits, and an effective start at least one minute ahead. End time must be later or blank.')
+      setNotice('Enter a code, valid discount and MMK limits, start time, and optional later end.')
       return
     }
     const expectedRevision = commerce.promotionPolicies?.length ?? 0
@@ -6487,7 +6496,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       || !Number.isSafeInteger(promiseMinutes) || promiseMinutes < 15 || promiseMinutes > 10_080
       || Number.isNaN(effectiveFromDate.getTime()) || effectiveFromDate.getTime() < purchaseOrderClock + 60_000
       || (effectiveUntilDate && (Number.isNaN(effectiveUntilDate.getTime()) || effectiveUntilDate <= effectiveFromDate))) {
-      setNotice('Enter a zone, 1 to 50 comma-separated townships, a whole-MMK fee, a 15-minute to 7-day promise, and a valid future effective window.')
+      setNotice('Enter a zone, townships, MMK fee, delivery promise, and future start.')
       return
     }
     const expectedRevision = commerce.shippingPolicies?.length ?? 0
@@ -6528,7 +6537,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       || !instructions || instructions.length > 240
       || Number.isNaN(effectiveFromDate.getTime()) || effectiveFromDate.getTime() < purchaseOrderClock + 60_000
       || (effectiveUntilDate && (Number.isNaN(effectiveUntilDate.getTime()) || effectiveUntilDate <= effectiveFromDate))) {
-      setNotice('Enter concise staff instructions, an optional positive whole-MMK limit, and an effective start at least one minute ahead. End time must be later or blank.')
+      setNotice('Enter staff instructions, optional MMK limit, start time, and optional later end.')
       return
     }
     const expectedRevision = commerce.paymentPolicies?.length ?? 0
@@ -6577,7 +6586,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       : null
     const settlement = settlementInput ? commerceCloseSettlementReview(commerce, expected, settlementInput) : null
     if (!settlement) {
-      setNotice('Count every payment method. Any variance needs a responsible owner and a clear review reason before close.')
+      setNotice('Count each payment method. Every variance needs a responsible owner and reason before close.')
       return
     }
     const closeId = uid('CLOSE')
@@ -6824,7 +6833,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <strong>Customer asks to change the promise for {orderRescheduleReview.intent.orderId}</strong>
           <small>{formatTime(orderRescheduleReview.intent.originalPromisedAt)} → {formatTime(orderRescheduleReview.intent.requestedPromisedAt)} · {orderRescheduleReview.intent.reason}</small>
           <small>{formatMoney(orderRescheduleReview.intent.originalTotalMmk)} original → {formatMoney(orderRescheduleReview.draft.totalMmk)} currently repriced · replacement {orderRescheduleReview.intent.replacementRequestId}</small>
-          <small>{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'The original is already cancelled with this exact evidence. Resume the recovered replacement at the requested promise.' : 'Step 1 rechecks current promise policy, cancels, and releases the original. Step 2 separately confirms the repriced replacement and requested time.'}</small>
+          <small>{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'Original cancelled. Resume the recovered replacement.' : 'First cancel and release; then confirm the repriced replacement.'}</small>
         </div>
         <div className="order-draft-recovery-actions">
           <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => void prepareOrderRescheduleReplacement()} type="button">{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'Resume reschedule' : 'Review reschedule'}</button>
@@ -6930,7 +6939,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           {websiteLeadInbox.error ? <div className="website-intake-record"><strong>Website inquiry recovery needed</strong><small>{websiteLeadInbox.error} Open Settings before creating an order from this source.</small></div> : websiteLeadInbox.leads.length ? websiteLeadInbox.leads.slice(0, 20).map((lead) => <div className="website-intake-ready" key={lead.id}>
             <div><strong>{lead.name} · {lead.contact}</strong><small>{lead.id} · {lead.siteName} {lead.sourcePage} · owner {lead.owner}</small><small>{lead.request}</small></div>
             <button className="core-button compact" data-website-lead-id={lead.id} disabled={commerceControlsDisabled || !commerce.items.length} onClick={() => reviewWebsiteInquiryInShop(lead.id)} ref={lead.id === requestedRequestId ? websiteInboxTargetRef : undefined} type="button">Review</button>
-          </div>) : <div className="website-intake-record"><strong>{managedIdentity ? 'Managed Website routing is not active.' : 'No qualified Website inquiry needs Shop review.'}</strong><small>{managedIdentity ? 'Website inquiries stay in Website until the owner activates a shared managed routing contract.' : 'Qualify an inquiry in Website first. Shop then binds it to one reviewed order without copying or sending customer data.'}</small></div>}
+          </div>) : <div className="website-intake-record"><strong>{managedIdentity ? 'Managed Website routing is not active.' : 'No qualified Website inquiry needs Shop review.'}</strong><small>{managedIdentity ? 'Website inquiries stay in Website until shared routing is active.' : 'Qualify it in Website, then review one bound Shop order.'}</small></div>}
           <Link className="text-link" to="/website/">Open Website</Link>
         </section>
         <section className="website-intake">
@@ -7088,6 +7097,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       <details className="compact-disclosure" data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'} open={!currentAccountingScopeConfiguration || undefined}>
         <summary><span>Business and location</span><small>{currentAccountingScopeConfiguration ? accountingScopeName(currentAccountingScopeConfiguration) : 'Required before real orders'}</small></summary>
         <form className="core-form compact-form" onSubmit={reviewAccountingScope}>
+          {managedInventoryProjection ? <label>Stock location<select disabled={commerceControlsDisabled} onChange={(event) => { const location = managedInventoryProjection.locations.find((candidate) => candidate.id === event.target.value); setAccountingScope({ ...effectiveAccountingScope, inventoryLocationId: event.target.value, locationName: location?.name ?? effectiveAccountingScope.locationName }) }} required value={effectiveAccountingScope.inventoryLocationId || defaultReceiptLocationId}><option value="">Choose location</option>{managedInventoryProjection.locations.map((location) => <option key={location.id} value={location.id}>{location.name} / {location.id}</option>)}</select></label> : null}
           {accountingScopeFields.map((row, rowIndex) => <div className="form-row" key={rowIndex}>{row.map(([field, label, placeholder, maxLength, uppercase]) => <label key={field}>{label}<input autoCapitalize={uppercase ? 'characters' : undefined} disabled={commerceControlsDisabled} maxLength={maxLength} onChange={(event) => setAccountingScope({ ...effectiveAccountingScope, [field]: uppercase ? event.target.value.toUpperCase() : event.target.value })} placeholder={placeholder} required value={effectiveAccountingScope[field]} /></label>)}</div>)}
           <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review business and location</button></div>
           {currentAccountingScopeConfiguration ? <p className="form-notice">Revision {currentAccountingScopeConfiguration.revision} · saved by {currentAccountingScopeConfiguration.proof.actor} · evidence {currentAccountingScopeConfiguration.proof.evidenceReference}</p> : null}
@@ -7262,7 +7272,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <span className="core-eyebrow">Stock check</span>
           <h3 id="stock-count-title">{commerce.inventoryFoundation ? 'Count one location' : 'Count available units'}</h3>
           <small id="stock-count-help">{commerce.inventoryFoundation
-            ? 'Count every physical unit in the selected lot, including reserved units. This records count evidence only.'
+            ? 'Count every unit in this lot, including reserved stock.'
             : 'Exclude units already set aside for open orders. This records count evidence only.'}</small>
           <strong aria-live="polite" id="stock-count-preview">{commerce.inventoryFoundation
             ? !stockCountBalance || !stockCountItem
@@ -7331,7 +7341,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setPurchaseBudgetDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review buying limits</button></div>
       </form> : null}
       {closedPurchaseOrderDraft ? <div className={`order-draft-recovery purchase-order-draft-recovery ${purchaseOrderRecovery?.ok ? '' : 'is-blocked'}`} data-shop-purchase-order-recovery={purchaseOrderRecovery?.ok ? 'ready' : 'expired'} role={purchaseOrderRecovery?.ok ? 'status' : 'alert'}>
-        <div><strong>{closedPurchaseOrderItem?.name ?? (closedPurchaseOrderDraft.draft.mode === 'create' ? closedPurchaseOrderDraft.draft.sku : closedPurchaseOrderDraft.draft.purchaseOrderId)} {closedPurchaseOrderDraft.draft.mode === 'create' ? 'supplier-order' : 'receipt'} draft is still available</strong><small>{purchaseOrderRecovery?.ok ? `${closedPurchaseOrderSummary}. Restore once or discard; no requisition, purchase order, receipt, stock, payable, supplier message, or payment was created.` : 'The source item, supplier authority, purchase order, receipt balance, or location evidence changed. Review the expiry, then discard and reopen from current Shop data.'}</small></div>
+        <div><strong>{closedPurchaseOrderItem?.name ?? (closedPurchaseOrderDraft.draft.mode === 'create' ? closedPurchaseOrderDraft.draft.sku : closedPurchaseOrderDraft.draft.purchaseOrderId)} {closedPurchaseOrderDraft.draft.mode === 'create' ? 'supplier-order' : 'receipt'} draft is still available</strong><small>{purchaseOrderRecovery?.ok ? `${closedPurchaseOrderSummary}. Restore once or discard; no requisition, purchase order, receipt, stock, payable, supplier message, or payment was created.` : 'Purchasing evidence changed. Discard and reopen from current Shop data.'}</small></div>
         <div className="order-draft-recovery-actions"><button className="core-button primary compact" disabled={Boolean(pendingAction)} onClick={restoreClosedPurchaseOrderEditor} ref={purchaseOrderRecoveryRef} type="button">{purchaseOrderRecovery?.ok ? 'Undo close' : 'Review expiry'}</button><button className="text-link danger-text" disabled={Boolean(pendingAction)} onClick={discardPurchaseOrderEditor} type="button">Discard</button></div>
       </div> : null}
       {purchaseOrderDraft && purchaseOrderDraftItem ? <form aria-labelledby="purchase-order-title" className="stock-receipt-editor purchase-order-editor" data-mode={purchaseOrderDraft.mode} id="purchase-order-editor" onSubmit={reviewPurchaseOrder} ref={purchaseOrderEditorRef}>
@@ -7432,7 +7442,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
         </form>
       </details>
-      <p className="form-notice" aria-live="polite">{commerceStorageError || 'Catalog values, counts, stock orders, receipts, and cancellations require attributable confirmation. Supplier contact, payment, and accounting remain outside this workflow.'}</p>
+      <p className="form-notice" aria-live="polite">{commerceStorageError || 'Shop writes require confirmation. Messages, payments, and accounting stay outside.'}</p>
     </section>
     <StockMovementHistory actionHistory={actionHistory} movements={commerce.movements} />
     {actionGate}
@@ -9477,7 +9487,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     if (selectedShopDemand && (product !== selectedShopDemand.productName
       || jobTarget !== selectedShopDemand.recommendedBatchUnits
       || selectedShopDemand.existingActiveJobIds.length)) {
-      setNotice('The Shop-bound product, quantity, or existing Plant coverage changed. Reopen the current demand signal.')
+      setNotice('Shop or Plant demand changed. Reopen the current signal.')
       return
     }
     if (!id || !line || !product || !owner || owner.length > 120 || !Number.isSafeInteger(jobTarget) || jobTarget < 1 || Number.isNaN(dueAt.getTime()) || dueAt.getTime() <= issueClock) {

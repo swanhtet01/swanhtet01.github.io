@@ -1642,17 +1642,20 @@ export function planShopInventoryOrderAllocation(state: unknown, input: {
   customerReference: unknown
   lines: unknown
   catalogSkus: unknown
+  locationId?: unknown
 }) {
   const catalog = catalogSkus(input.catalogSkus)
   const orderId = text(input.orderId, 'order allocation.orderId', 160)
   text(input.customerReference, 'order allocation.customerReference', 180)
   const lines = inventoryOrderLines(input.lines, 'order allocation.lines', catalog)
   const projection = projectShopInventory(state, catalog)
+  const locationId = input.locationId === undefined ? null : identifier(input.locationId, 'order allocation.locationId', 'LOC')
+  if (locationId && !projection.locations.some((location) => location.id === locationId)) throw new Error('Order allocation location is unknown.')
   const provisional: Omit<ShopInventoryOrderAllocation, 'reservationId'>[] = []
   for (const line of lines) {
     let remaining = line.quantity
     const candidates = projection.balances
-      .filter((balance) => balance.sku === line.sku && balance.availableToPromise > 0)
+      .filter((balance) => balance.sku === line.sku && balance.availableToPromise > 0 && (!locationId || balance.locationId === locationId))
       .sort((left, right) => right.availableToPromise - left.availableToPromise
         || compareCanonicalText(`${left.locationId}|${left.stockUnitId}`, `${right.locationId}|${right.stockUnitId}`))
     for (const candidate of candidates) {
@@ -1681,24 +1684,27 @@ export function reserveShopInventoryOrder(state: unknown, input: {
   proof: unknown
   catalogSkus: unknown
   expectedHeadDigest: unknown
+  locationId?: unknown
 }) {
   const catalog = catalogSkus(input.catalogSkus)
   const current = validateShopInventoryState(state, catalog)
   const orderId = text(input.orderId, 'order reservation.orderId', 160)
   const customerReference = text(input.customerReference, 'order reservation.customerReference', 180)
   const lines = inventoryOrderLines(input.lines, 'order reservation.lines', catalog)
+  const locationId = input.locationId === undefined ? null : identifier(input.locationId, 'order reservation.locationId', 'LOC')
   const commandId = inventoryOrderCommandId('ORS', orderId)
   const retained = current.commands.find((command) => command.payload.id === commandId)?.payload
   if (retained) {
     if (retained.kind !== 'order_reserve'
       || retained.orderId !== orderId
       || retained.customerReference !== customerReference
+      || (locationId !== null && retained.allocations.some((allocation) => allocation.locationId !== locationId))
       || canonicalJson(allocationLineTotals(retained.allocations)) !== canonicalJson(lines)) {
       throw new Error('The order inventory command was already used with different allocation evidence.')
     }
     return appendCommand(current, { ...retained, proof: proof(input.proof, 'proof') }, catalog, input.expectedHeadDigest)
   }
-  const allocations = planShopInventoryOrderAllocation(current, { orderId, customerReference, lines, catalogSkus: catalog })
+  const allocations = planShopInventoryOrderAllocation(current, { orderId, customerReference, lines, catalogSkus: catalog, ...(locationId ? { locationId } : {}) })
   return appendCommand(current, {
     kind: 'order_reserve', id: commandId, orderId, customerReference, allocations, proof: proof(input.proof, 'proof'),
   }, catalog, input.expectedHeadDigest)

@@ -1684,6 +1684,7 @@ def reserve_shop_inventory_order(
     lines: Sequence[Mapping[str, Any]],
     proof: Mapping[str, Any],
     catalog_skus: Sequence[str],
+    location_id: str | None = None,
 ) -> dict[str, Any]:
     """Append one deterministic location reservation from server-owned order intent."""
 
@@ -1696,6 +1697,11 @@ def reserve_shop_inventory_order(
         customer_reference,
         "order reservation.customerReference",
         180,
+    )
+    canonical_location = (
+        _identifier(location_id, "order reservation.locationId", "LOC")
+        if location_id is not None
+        else None
     )
     canonical_lines: list[dict[str, Any]] = []
     for index, candidate in enumerate(_list(list(lines), "order reservation.lines", 1, 20)):
@@ -1726,18 +1732,32 @@ def reserve_shop_inventory_order(
         )
 
     projection = _project([command["payload"] for command in current["commands"]])
+    if canonical_location is not None:
+        known_locations = {
+            location["id"]
+            for location in current["commands"][0]["payload"]["package"]["locations"]
+        } if current["commands"] else set()
+        if canonical_location not in known_locations:
+            raise ShopInventoryValidationError("order reservation.locationId is unknown.")
     allocations: list[dict[str, Any]] = []
     for line in canonical_lines:
         remaining = line["quantity"]
         candidates: list[dict[str, Any]] = []
-        for (stock_unit_id, location_id), balance in projection["balances"].items():
+        for (stock_unit_id, candidate_location_id), balance in projection["balances"].items():
             unit = projection["units"][stock_unit_id]
             available = balance["onHand"] - balance["reserved"]
-            if unit["sku"] == line["sku"] and available > 0:
+            if (
+                unit["sku"] == line["sku"]
+                and available > 0
+                and (
+                    canonical_location is None
+                    or candidate_location_id == canonical_location
+                )
+            ):
                 candidates.append(
                     {
                         "stockUnitId": stock_unit_id,
-                        "locationId": location_id,
+                        "locationId": candidate_location_id,
                         "available": available,
                     }
                 )

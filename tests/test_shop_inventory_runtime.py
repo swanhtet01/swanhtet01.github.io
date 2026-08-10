@@ -7,7 +7,14 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
-from supermega_runtime.commerce_runtime import reduce_commerce_state
+from supermega_runtime.commerce_runtime import (
+    commerce_accounting_handoff,
+    commerce_accounting_handoff_csv,
+    commerce_daily_close_csv,
+    commerce_daily_close_export,
+    create_commerce_order_from_intent,
+    reduce_commerce_state,
+)
 from supermega_runtime.runtime import reduce_trial_state
 from supermega_runtime.shop_inventory_runtime import (
     EMPTY_SHOP_INVENTORY_DIGEST,
@@ -401,6 +408,46 @@ def production_issue_movement(
     }
 
 
+def accounting_scope_configuration(
+    proof: dict[str, str], *, location_id: str = "LOC-MAIN"
+) -> dict[str, object]:
+    return {
+        "revision": 1,
+        "entityCode": "TEST-CO",
+        "entityName": "Test company",
+        "locationCode": "MAIN",
+        "locationName": "Main store",
+        "inventoryLocationId": location_id,
+        "proof": proof,
+    }
+
+
+def accounting_scope_snapshot(configuration: dict[str, object]) -> dict[str, object]:
+    proof = configuration["proof"]
+    assert isinstance(proof, dict)
+    return {
+        "configurationRevision": configuration["revision"],
+        "configurationActionId": proof["actionId"],
+        "entityCode": configuration["entityCode"],
+        "entityName": configuration["entityName"],
+        "locationCode": configuration["locationCode"],
+        "locationName": configuration["locationName"],
+        "inventoryLocationId": configuration["inventoryLocationId"],
+    }
+
+
+def reviewed_location_state(
+    state: dict[str, object], proof: dict[str, str]
+) -> dict[str, object]:
+    configuration = accounting_scope_configuration(proof)
+    next_state = {**deepcopy(state), "accountingScopeConfigurations": [configuration]}
+    return reduce_commerce_state(
+        "commerce.accounting_scope.saved",
+        state,
+        {"state": next_state, "evidence": proof},
+    )
+
+
 def production_receipt_command_id(release_id: str) -> str:
     identity = canonical_digest(
         {
@@ -622,6 +669,7 @@ def sales_order(
     *,
     order_id: str = "ORD-LOCATION-001",
     quantity: int = 3,
+    accounting_scope: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return {
         "id": order_id,
@@ -638,6 +686,7 @@ def sales_order(
         "fulfilment": "pickup",
         "fulfilmentReference": "COUNTER-A",
         "promisedAt": "2026-07-28T08:00:00.000Z",
+        **({"accountingScope": accounting_scope} if accounting_scope else {}),
         "calculation": {
             "schema": "supermega.commerce.order-calculation.v1",
             "currency": "MMK",
@@ -871,10 +920,20 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                 "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
             },
         )
+        initialized = reviewed_location_state(
+            initialized,
+            action_proof("ACT-SCOPE-COUNT", "2026-07-27T05:30:00.000Z"),
+        )
         reserve_proof = action_proof(
             "ACT-ORDER-RESERVE-COUNT", "2026-07-27T06:00:00.000Z"
         )
-        order = sales_order(reserve_proof, order_id="ORD-LOCATION-COUNT")
+        order = sales_order(
+            reserve_proof,
+            order_id="ORD-LOCATION-COUNT",
+            accounting_scope=accounting_scope_snapshot(
+                initialized["accountingScopeConfigurations"][0]  # type: ignore[index,arg-type]
+            ),
+        )
         reserved_state = deepcopy(initialized)
         reserved_state["items"][0]["onHand"] = 7  # type: ignore[index]
         reserved_state["orders"] = [order]
@@ -1496,10 +1555,19 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                 "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
             },
         )
+        initialized = reviewed_location_state(
+            initialized,
+            action_proof("ACT-SCOPE-ORDER", "2026-07-27T05:30:00.000Z"),
+        )
         reserve_proof = action_proof(
             "ACT-ORDER-RESERVE-001", "2026-07-27T06:00:00.000Z"
         )
-        order = sales_order(reserve_proof)
+        order = sales_order(
+            reserve_proof,
+            accounting_scope=accounting_scope_snapshot(
+                initialized["accountingScopeConfigurations"][0]  # type: ignore[index,arg-type]
+            ),
+        )
         reserved_state = deepcopy(initialized)
         reserved_state["items"][0]["onHand"] = 7  # type: ignore[index]
         reserved_state["orders"] = [order]
@@ -1545,7 +1613,7 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
             reserve_proof,
             location_id="LOC-BRANCH",
         )
-        with self.assertRaisesRegex(TrialValidationError, "fewest-lot"):
+        with self.assertRaisesRegex(TrialValidationError, "not bound to reviewed location"):
             reduce_commerce_state(
                 "commerce.order.created",
                 non_deterministic_current,
@@ -1737,6 +1805,174 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
         ):
             validate_shop_inventory_state(over_return, ["SKU-1"])
 
+    def test_managed_order_creator_requires_and_honors_reviewed_location(self) -> None:
+        current = commerce_state()
+        opening = opening_inventory()
+        initialized = reduce_commerce_state(
+            "commerce.inventory.initialized",
+            current,
+            {
+                "state": {**current, "inventoryFoundation": opening},
+                "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
+            },
+        )
+        order_proof = action_proof(
+            "ACT-MANAGED-ORDER-001", "2026-07-27T06:00:00.000Z"
+        )
+        order_intent = {
+            "orderId": "ORD-MANAGED-LOCATION-001",
+            "customer": "Customer A",
+            "channel": "Phone",
+            "payment": "Cash",
+            "fulfilment": "pickup",
+            "fulfilmentReference": "COUNTER-A",
+            "promisedAt": "2026-07-28T08:00:00.000Z",
+            "paymentTermsDays": 0,
+            "lines": [{"sku": "SKU-1", "quantity": 3}],
+        }
+        with self.assertRaisesRegex(
+            TrialValidationError, "review the Shop accounting location"
+        ):
+            create_commerce_order_from_intent(
+                initialized, order_intent, order_proof
+            )
+
+        reviewed = reviewed_location_state(
+            initialized,
+            action_proof("ACT-SCOPE-MANAGED-ORDER", "2026-07-27T05:30:00.000Z"),
+        )
+        created = create_commerce_order_from_intent(
+            reviewed, order_intent, order_proof
+        )
+        reserve = created["inventoryFoundation"]["commands"][-1]["payload"]  # type: ignore[index]
+        self.assertEqual(
+            created["orders"][0]["accountingScope"]["inventoryLocationId"],  # type: ignore[index]
+            "LOC-MAIN",
+        )
+        self.assertEqual(created["items"][0]["onHand"], 7)  # type: ignore[index]
+        self.assertEqual(reserve["kind"], "order_reserve")
+        self.assertEqual(
+            {allocation["locationId"] for allocation in reserve["allocations"]},
+            {"LOC-MAIN"},
+        )
+
+        completion_proof = action_proof(
+            "ACT-MANAGED-COMPLETE-001", "2026-07-27T08:00:00.000Z"
+        )
+        ready = deepcopy(created)
+        ready["orders"][0].update(  # type: ignore[index]
+            {
+                "status": "ready",
+                "paymentStatus": "reconciled",
+                "paymentReconciledAt": "2026-07-27T07:00:00.000Z",
+                "paymentReconciliationActionId": "ACT-MANAGED-PAYMENT-001",
+                "paymentReconciledBy": "operator-a",
+                "paymentReconciliationReason": "Payment reviewed.",
+                "paymentEvidenceReference": "PAYMENT:MANAGED-001",
+                "advancementActionIds": [
+                    "ACT-MANAGED-PREPARING-001",
+                    "ACT-MANAGED-READY-001",
+                ],
+            }
+        )
+        completed_state = deepcopy(ready)
+        completed_state["orders"][0].update(  # type: ignore[index]
+            {"status": "completed", "completion": completion_proof}
+        )
+        completed_state["inventoryFoundation"] = closed_order_inventory(
+            ready["inventoryFoundation"],  # type: ignore[arg-type]
+            completion_proof,
+            kind="order_fulfil",
+            order_id="ORD-MANAGED-LOCATION-001",
+        )
+        completed = reduce_commerce_state(
+            "commerce.order.advanced",
+            ready,
+            {"state": completed_state, "evidence": completion_proof},
+        )
+        close_proof = action_proof(
+            "ACT-00000000-0000-4000-8000-000000000091",
+            "2026-07-27T09:00:00.000Z",
+        )
+        close_id = "CLOSE-00000000-0000-4000-8000-000000000091"
+        close = {
+            "id": close_id,
+            "createdAt": close_proof["capturedAt"],
+            "total": 300,
+            "orders": 1,
+            "businessDate": "2026-07-27",
+            "orderIds": ["ORD-MANAGED-LOCATION-001"],
+            "paymentExceptionOrderIds": [],
+            "stockExceptionSkus": [],
+            "actionId": close_proof["actionId"],
+            "operator": close_proof["actor"],
+            "reason": close_proof["reason"],
+            "evidenceReference": close_proof["evidenceReference"],
+            "accountingScope": created["orders"][0]["accountingScope"],  # type: ignore[index]
+        }
+        closed = reduce_commerce_state(
+            "commerce.close.saved",
+            completed,
+            {"state": {**completed, "closes": [close]}, "evidence": close_proof},
+        )
+        close_export = commerce_daily_close_export(closed, close_id)
+        self.assertIsNotNone(close_export)
+        assert close_export is not None
+        self.assertEqual(
+            close_export["accountingScope"]["inventoryLocationId"],
+            "LOC-MAIN",
+        )
+        self.assertEqual(
+            close_export["orders"][0]["accountingScope"]["inventoryLocationId"],
+            "LOC-MAIN",
+        )
+        close_csv = commerce_daily_close_csv(closed, close_id)
+        self.assertIsNotNone(close_csv)
+        assert close_csv is not None
+        self.assertIn('"inventory_location_id"', close_csv)
+        self.assertIn('"LOC-MAIN"', close_csv)
+        handoff = commerce_accounting_handoff(closed, close_id)
+        self.assertIsNotNone(handoff)
+        assert handoff is not None
+        self.assertEqual(
+            handoff["accountingScope"]["inventoryLocationId"],
+            "LOC-MAIN",
+        )
+        handoff_csv = commerce_accounting_handoff_csv(handoff)
+        self.assertIn('"inventory_location_id"', handoff_csv)
+        self.assertIn('"LOC-MAIN"', handoff_csv)
+
+        transfer_proof = action_proof(
+            "ACT-TRANSFER-BOUNDARY-001", "2026-07-27T05:00:00.000Z"
+        )
+        cross_location_foundation = append_inventory_command(
+            opening,
+            {
+                "kind": "transfer",
+                "id": "TRF-MAIN-BRANCH-BOUNDARY-001",
+                "stockUnitId": "LOT-SKU1-OPENING-001",
+                "fromLocationId": "LOC-MAIN",
+                "toLocationId": "LOC-BRANCH",
+                "quantity": 8,
+                "proof": transfer_proof,
+            },
+        )
+        cross_location = reviewed_location_state(
+            {**commerce_state(), "inventoryFoundation": cross_location_foundation},
+            action_proof("ACT-SCOPE-BOUNDARY-001", "2026-07-27T05:30:00.000Z"),
+        )
+        with self.assertRaisesRegex(
+            TrialValidationError, "location stock cannot allocate 3 units"
+        ):
+            create_commerce_order_from_intent(
+                cross_location,
+                {**order_intent, "orderId": "ORD-MANAGED-BOUNDARY-001"},
+                action_proof(
+                    "ACT-MANAGED-ORDER-BOUNDARY-001",
+                    "2026-07-27T06:30:00.000Z",
+                ),
+            )
+
     def test_store_stamps_order_location_reserve_and_release(self) -> None:
         store = InMemoryTrialStore(reducer=reduce_trial_state)
         operator = TrialPrincipal("workspace-order", "operator-order", "human")
@@ -1779,13 +2015,41 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                     "evidence": opening["commands"][-1]["payload"]["proof"],  # type: ignore[index]
                 },
             )
+        forged_scope = action_proof(
+            "ACT-SCOPE-STORE-001", "2099-01-01T00:00:00.000Z", "forged-scope-actor"
+        )
+        with patch(
+            "supermega_runtime.trial_store._utc_now",
+            return_value="2026-07-27T05:45:00+00:00",
+        ):
+            located = store.apply_command(
+                operator,
+                command_id=str(uuid4()),
+                surface="commerce",
+                event_type="commerce.accounting_scope.saved",
+                expected_version=located.version,
+                payload={
+                    "state": {
+                        **located.state,
+                        "accountingScopeConfigurations": [
+                            accounting_scope_configuration(forged_scope)
+                        ],
+                    },
+                    "evidence": forged_scope,
+                },
+            )
 
         forged_reserve = action_proof(
             "ACT-ORDER-STORE-RESERVE-001",
             "2099-01-01T00:00:00.000Z",
             "forged-order-actor",
         )
-        order = sales_order(forged_reserve)
+        order = sales_order(
+            forged_reserve,
+            accounting_scope=accounting_scope_snapshot(
+                located.state["accountingScopeConfigurations"][0]  # type: ignore[index,arg-type]
+            ),
+        )
         reserve_state = deepcopy(located.state)
         reserve_state["items"][0]["onHand"] = 7  # type: ignore[index]
         reserve_state["orders"] = [order]

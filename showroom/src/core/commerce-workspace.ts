@@ -138,6 +138,7 @@ export type CommerceAccountingScopeSnapshot = {
   entityName: string
   locationCode: string
   locationName: string
+  inventoryLocationId?: string
 }
 
 export type CommerceAccountingScopeConfiguration = {
@@ -146,6 +147,7 @@ export type CommerceAccountingScopeConfiguration = {
   entityName: string
   locationCode: string
   locationName: string
+  inventoryLocationId?: string
   proof: CommerceActionProof
 }
 
@@ -1596,6 +1598,7 @@ const supplierCreditIdPattern = /^SCN-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB
 const taxCodePattern = /^[A-Z0-9][A-Z0-9_-]{0,11}$/
 const taxJurisdictionCodePattern = /^[A-Z0-9][A-Z0-9_-]{1,15}$/
 const accountingScopeCodePattern = /^[A-Z0-9][A-Z0-9_-]{1,39}$/
+const inventoryLocationIdPattern = /^LOC-[A-Z0-9]+(?:-[A-Z0-9]+)*$/
 const externalAccountCodePattern = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,39}$/
 const legacyCommerceAccountRoles: CommerceAccountRole[] = ['payment_clearing', 'sales_revenue', 'sales_revenue_unverified', 'tax_payable']
 export const commerceAccountRoles: CommerceAccountRole[] = [...legacyCommerceAccountRoles, 'sales_adjustment', 'correction_receivable', 'correction_payable']
@@ -1959,6 +1962,7 @@ export function commerceAccountingScopeSnapshot(configuration: CommerceAccountin
     entityName: configuration.entityName,
     locationCode: configuration.locationCode,
     locationName: configuration.locationName,
+    ...(configuration.inventoryLocationId ? { inventoryLocationId: configuration.inventoryLocationId } : {}),
   }
 }
 
@@ -1969,8 +1973,9 @@ export function commerceAccountingScopeKey(scope: Pick<CommerceAccountingScopeSn
 function sameAccountingScopeSnapshot(left: CommerceAccountingScopeSnapshot | undefined, right: CommerceAccountingScopeSnapshot | undefined) {
   if (!left || !right) return left === right
   const rightProjection = commerceAccountingScopeProjection(right) as Array<string | number>
-  return (commerceAccountingScopeProjection(left) as Array<string | number>)
-    .every((value, index) => value === rightProjection[index])
+  const leftProjection = commerceAccountingScopeProjection(left) as Array<string | number>
+  return leftProjection.length === rightProjection.length
+    && leftProjection.every((value, index) => value === rightProjection[index])
 }
 
 function validateAccountingScopeFields(value: Record<string, unknown>, field: string) {
@@ -1985,10 +1990,14 @@ function validateAccountingScopeFields(value: Record<string, unknown>, field: st
 function validatedAccountingScopeSnapshot(value: unknown, field: string): CommerceAccountingScopeSnapshot {
   if (!isRecord(value) || !hasExactKeys(value, [
     'configurationRevision', 'configurationActionId', 'entityCode', 'entityName', 'locationCode', 'locationName',
-  ])) throw new Error(`${field} is invalid.`)
+  ], ['inventoryLocationId'])) throw new Error(`${field} is invalid.`)
   assertSafeInteger(value.configurationRevision, `${field}.configurationRevision`, 1)
   canonicalText(value.configurationActionId, `${field}.configurationActionId`, 160)
   validateAccountingScopeFields(value, field)
+  if (value.inventoryLocationId !== undefined
+    && !inventoryLocationIdPattern.test(canonicalText(value.inventoryLocationId, `${field}.inventoryLocationId`, 80))) {
+    throw new Error(`${field}.inventoryLocationId is invalid.`)
+  }
   return value as unknown as CommerceAccountingScopeSnapshot
 }
 
@@ -2216,6 +2225,8 @@ function shopInventoryProductionActionMatches(
 
 export function commerceOrderLocationAllocationPreview(state: CommerceState, order: CommerceOrder) {
   if (!state.inventoryFoundation) return []
+  const locationId = commerceCurrentAccountingScopeConfiguration(state)?.inventoryLocationId
+  if (!locationId) throw new Error('Review the Shop business location against location inventory first.')
   if (!shopInventoryMatchesItems(state.inventoryFoundation, state.items)) {
     throw new Error('Location stock has drifted from aggregate Shop stock.')
   }
@@ -2224,6 +2235,7 @@ export function commerceOrderLocationAllocationPreview(state: CommerceState, ord
     customerReference: order.customer,
     lines: reservationLinesForOrder(order),
     catalogSkus: state.items.map((item) => item.sku).sort(),
+    locationId,
   })
 }
 
@@ -2740,12 +2752,16 @@ export function validateCommerceState(value: unknown): CommerceState {
     const field = `accountingScopeConfigurations[${index}]`
     if (!isRecord(candidate) || !hasExactKeys(candidate, [
       'revision', 'entityCode', 'entityName', 'locationCode', 'locationName', 'proof',
-    ])) throw new Error(`${field} is invalid.`)
+    ], ['inventoryLocationId'])) throw new Error(`${field} is invalid.`)
     assertSafeInteger(candidate.revision, `${field}.revision`, 1)
     if (candidate.revision !== accountingScopeConfigurations.length - index) {
       throw new Error(`${field}.revision breaks the newest-first sequence.`)
     }
     validateAccountingScopeFields(candidate, field)
+    if (candidate.inventoryLocationId !== undefined
+      && !inventoryLocationIdPattern.test(canonicalText(candidate.inventoryLocationId, `${field}.inventoryLocationId`, 80))) {
+      throw new Error(`${field}.inventoryLocationId is invalid.`)
+    }
     if (!isRecord(candidate.proof)
       || !hasExactKeys(candidate.proof, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
       || !validProof(candidate.proof as CommerceActionProof)) throw new Error(`${field}.proof is invalid.`)
@@ -4670,6 +4686,23 @@ export function validateCommerceState(value: unknown): CommerceState {
         value.items as CommerceItem[],
       )) throw new Error('available-to-promise stock does not match the Shop catalog')
       const inventory = projectShopInventory(value.inventoryFoundation as ShopInventoryState, itemSkus)
+      const inventoryLocationIds = new Set(inventory.locations.map((location) => location.id))
+      for (const configuration of validatedAccountingScopeConfigurations) {
+        if (configuration.inventoryLocationId && !inventoryLocationIds.has(configuration.inventoryLocationId)) {
+          throw new Error(`accounting scope revision ${configuration.revision} references an unknown inventory location`)
+        }
+      }
+      for (const order of value.orders as CommerceOrder[]) {
+        const locationId = order.accountingScope?.inventoryLocationId
+        if (!locationId) continue
+        const reservations = (value.inventoryFoundation as ShopInventoryState).commands.filter((command) => (
+          command.payload.kind === 'order_reserve' && command.payload.orderId === order.id
+        ))
+        if (reservations.length !== 1 || reservations[0].payload.kind !== 'order_reserve'
+          || reservations[0].payload.allocations.some((allocation) => allocation.locationId !== locationId)) {
+          throw new Error(`order ${order.id} inventory is not bound to reviewed location ${locationId}`)
+        }
+      }
       for (const decision of supplierSourcingDecisionById.values()) {
         for (const quote of decision.quotes) {
           const vendor = inventory.vendors.find((candidate) => candidate.name === quote.supplier)
@@ -4685,6 +4718,8 @@ export function validateCommerceState(value: unknown): CommerceState {
         { cause: error },
       )
     }
+  } else if (validatedAccountingScopeConfigurations.some((configuration) => configuration.inventoryLocationId)) {
+    throw new Error('Commerce accounting scope cannot bind inventory without a location inventory foundation.')
   }
   return value as CommerceState
 }
@@ -6558,6 +6593,9 @@ export function convertCommerceWebsiteIntake(
     || timestampMicros(input.promisedAt) === null
     || (timestampMicros(input.promisedAt) as bigint) <= (timestampMicros(proof.capturedAt) as bigint)) return null
   const current = validateCommerceState(state)
+  const activeScopeConfiguration = commerceCurrentAccountingScopeConfiguration(current)
+  const accountingScope = activeScopeConfiguration ? commerceAccountingScopeSnapshot(activeScopeConfiguration) : undefined
+  if (current.inventoryFoundation && !accountingScope?.inventoryLocationId) return null
   const intakes = commerceWebsiteIntakes(current)
   const intake = intakes.find((candidate) => candidate.id === intakeId)
   if (!intake) return null
@@ -6617,6 +6655,7 @@ export function convertCommerceWebsiteIntake(
     paymentDueAt: proof.capturedAt,
     sourceRecordId: intake.id,
     evidenceReference: proof.evidenceReference,
+    ...(accountingScope ? { accountingScope } : {}),
     calculation,
     total: intake.total,
     status: 'confirmed',
@@ -6641,6 +6680,7 @@ export function convertCommerceWebsiteIntake(
         proof,
         catalogSkus,
         expectedHeadDigest: inventoryFoundation.headDigest,
+        locationId: accountingScope?.inventoryLocationId,
       })
       if (locationResult.replayed || !shopInventoryMatchesItems(locationResult.state, nextItems)) return null
       inventoryFoundation = locationResult.state
@@ -7010,12 +7050,18 @@ export function configureCommerceAccountingScope(
   const locationCode = typeof input?.locationCode === 'string' ? input.locationCode.trim().toUpperCase() : ''
   const entityName = typeof input?.entityName === 'string' ? input.entityName.trim() : ''
   const locationName = typeof input?.locationName === 'string' ? input.locationName.trim() : ''
+  const inventoryLocationId = typeof input?.inventoryLocationId === 'string' ? input.inventoryLocationId.trim().toUpperCase() : ''
   if (!validProof(proof)
     || !accountingScopeCodePattern.test(entityCode)
     || !accountingScopeCodePattern.test(locationCode)
     || !entityName || entityName.length > 120
     || !locationName || locationName.length > 120) return null
   const current = validateCommerceState(state)
+  if (current.inventoryFoundation) {
+    const locations = projectShopInventory(current.inventoryFoundation, current.items.map((item) => item.sku).sort()).locations
+    if (!inventoryLocationIdPattern.test(inventoryLocationId)
+      || !locations.some((location) => location.id === inventoryLocationId)) return null
+  } else if (inventoryLocationId) return null
   const history = commerceAccountingScopeConfigurations(current)
   const replay = history.find((configuration) => configuration.proof.actionId === proof.actionId)
   const proposed: CommerceAccountingScopeConfiguration = {
@@ -7024,6 +7070,7 @@ export function configureCommerceAccountingScope(
     entityName,
     locationCode,
     locationName,
+    ...(inventoryLocationId ? { inventoryLocationId } : {}),
     proof: { ...proof },
   }
   if (replay) return JSON.stringify(replay) === JSON.stringify(proposed) ? current : null
@@ -7034,7 +7081,8 @@ export function configureCommerceAccountingScope(
       && latest.entityCode === entityCode
       && latest.entityName === entityName
       && latest.locationCode === locationCode
-      && latest.locationName === locationName)
+      && latest.locationName === locationName
+      && latest.inventoryLocationId === (inventoryLocationId || undefined))
     || (latest && (timestampMicros(proof.capturedAt) as bigint) < (timestampMicros(latest.proof.capturedAt) as bigint))) return null
   return validateCommerceState({
     ...current,
@@ -7283,6 +7331,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   const confirmedAt = timestampMicros(proof.capturedAt)
   const activeScopeConfiguration = commerceCurrentAccountingScopeConfiguration(state)
   const accountingScope = activeScopeConfiguration ? commerceAccountingScopeSnapshot(activeScopeConfiguration) : undefined
+  if (state.inventoryFoundation && !accountingScope?.inventoryLocationId) return null
   if (!validProof(proof)
     || order.creditDecision !== undefined
     || order.status !== 'confirmed'
@@ -7487,6 +7536,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
         proof,
         catalogSkus,
         expectedHeadDigest: inventoryFoundation.headDigest,
+        locationId: accountingScope?.inventoryLocationId,
       })
       if (locationResult.replayed || !shopInventoryMatchesItems(locationResult.state, nextItems)) return null
       inventoryFoundation = locationResult.state
@@ -9903,6 +9953,7 @@ function commerceAccountingScopeProjection(scope: CommerceAccountingScopeSnapsho
     scope.entityName,
     scope.locationCode,
     scope.locationName,
+    ...(scope.inventoryLocationId ? [scope.inventoryLocationId] : []),
   ] : null
 }
 
@@ -9913,10 +9964,19 @@ const commerceAccountingScopeCsvHeaders = [
   'entity_name',
   'location_code',
   'location_name',
+  'inventory_location_id',
 ]
 
 function commerceAccountingScopeCsvValues(scope: CommerceAccountingScopeSnapshot | null) {
-  return commerceAccountingScopeProjection(scope) ?? [null, null, null, null, null, null]
+  return scope ? [
+    scope.configurationRevision,
+    scope.configurationActionId,
+    scope.entityCode,
+    scope.entityName,
+    scope.locationCode,
+    scope.locationName,
+    scope.inventoryLocationId ?? null,
+  ] : [null, null, null, null, null, null, null]
 }
 
 function commerceDailyCloseExportProjection(artifact: Omit<CommerceDailyCloseExport, 'digest'>) {

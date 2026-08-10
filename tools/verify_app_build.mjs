@@ -5026,6 +5026,7 @@ if (!coreSource.includes('data-accounting-handoff="review-required"')
   || !coreSource.includes("kind: 'accounting_scope'")
   || !coreSource.includes("'commerce.accounting_scope.saved'")
   || !coreSource.includes('Business and location')
+  || !coreSource.includes('stock ${input.inventoryLocationId}')
   || !coreSource.includes('data-account-mapping="versioned"')
   || !coreSource.includes("kind: 'account_mapping'")
   || !coreSource.includes("'commerce.account_mapping.saved'")
@@ -8069,11 +8070,49 @@ async function verifyShopInventoryRuntime() {
     const managedOpening = model.applyShopInventoryImport(
       model.createEmptyShopInventoryState(), managedParityPackage, proof(1, 'managed-opening'), ['SKU-1'], model.EMPTY_SHOP_INVENTORY_DIGEST,
     )
-    const managedBase = commerce.validateCommerceState({
+    const managedUnscopedBase = commerce.validateCommerceState({
       ...commerce.createEmptyCommerce(),
       items: [{ sku: 'SKU-1', name: 'Managed item', onHand: 10, reorderAt: 2, price: 100 }],
       inventoryFoundation: managedOpening.state,
     })
+    const managedBase = commerce.configureCommerceAccountingScope(managedUnscopedBase, {
+      entityCode: 'TEST-CO', entityName: 'Test company', locationCode: 'MAIN', locationName: 'Main store', inventoryLocationId: 'LOC-MAIN',
+    }, proof(2, 'managed-scope'))
+    assert(managedBase?.accountingScopeConfigurations?.[0]?.inventoryLocationId === 'LOC-MAIN',
+      'managed_location_accounting_scope_not_bound_to_inventory_master')
+    const crossLocationTransferred = model.transferShopInventory(managedOpening.state, {
+      transferId: 'TRF-MAIN-BRANCH-BOUNDARY-001',
+      stockUnitId: 'LOT-SKU1-OPENING-001',
+      fromLocationId: 'LOC-MAIN',
+      toLocationId: 'LOC-BRANCH',
+      quantity: 8,
+      proof: proof(2, 'cross-location-transfer'),
+      catalogSkus: ['SKU-1'],
+      expectedHeadDigest: managedOpening.state.headDigest,
+    })
+    const crossLocationProjection = model.projectShopInventory(crossLocationTransferred.state, ['SKU-1'])
+    const crossLocationUnscoped = commerce.validateCommerceState({
+      ...commerce.createEmptyCommerce(),
+      items: [{ sku: 'SKU-1', name: 'Managed item', onHand: 10, reorderAt: 2, price: 100 }],
+      inventoryFoundation: crossLocationTransferred.state,
+    })
+    const crossLocationBound = commerce.configureCommerceAccountingScope(crossLocationUnscoped, {
+      entityCode: 'TEST-CO', entityName: 'Test company', locationCode: 'MAIN', locationName: 'Main store', inventoryLocationId: 'LOC-MAIN',
+    }, proof(3, 'cross-location-scope'))
+    const crossLocationOrderProof = proof(4, 'cross-location-order')
+    const crossLocationOrder = {
+      id: 'ORD-LOCATION-BOUNDARY-001', createdAt: crossLocationOrderProof.capturedAt, customer: 'Customer B', owner: crossLocationOrderProof.actor,
+      channel: 'Phone', item: 'Managed item', itemSku: 'SKU-1', quantity: 3, payment: 'Cash', paymentStatus: 'pending', refundStatus: 'none',
+      fulfilment: 'pickup', fulfilmentReference: 'COUNTER-B', promisedAt: '2026-07-28T08:00:00.000Z', total: 300, status: 'confirmed',
+    }
+    assert(crossLocationProjection.metrics.totalAvailableToPromise === 10
+      && crossLocationProjection.balances.find((row) => row.locationId === 'LOC-MAIN')?.availableToPromise === 2
+      && crossLocationProjection.balances.find((row) => row.locationId === 'LOC-BRANCH')?.availableToPromise === 8,
+    'managed_cross_location_boundary_fixture_not_adversarial')
+    assertThrows(() => commerce.commerceOrderLocationAllocationPreview(crossLocationBound, crossLocationOrder),
+      'managed_location_preview_silently_allocated_other_branch_stock')
+    assert(commerce.reserveCommerceOrder(crossLocationBound, crossLocationOrder, crossLocationOrderProof) === null,
+      'managed_location_order_silently_allocated_other_branch_stock')
     const historicalOpeningProof = proof(0, 'catalog-opening')
     const historicalOpeningItem = { sku: 'SKU-1', name: 'Managed item', onHand: 10, reorderAt: 2, price: 100 }
     const historicalOpening = commerce.registerCommerceItem(commerce.createEmptyCommerce(), historicalOpeningItem, historicalOpeningProof)
@@ -8108,6 +8147,8 @@ async function verifyShopInventoryRuntime() {
       channel: 'Phone', item: 'Managed item', itemSku: 'SKU-1', quantity: 3, payment: 'Cash', paymentStatus: 'pending', refundStatus: 'none',
       fulfilment: 'pickup', fulfilmentReference: 'COUNTER-A', promisedAt: '2026-07-28T08:00:00.000Z', total: 300, status: 'confirmed',
     }
+    assert(commerce.reserveCommerceOrder(managedUnscopedBase, locationOrder, locationOrderProof) === null,
+      'managed_location_order_succeeded_without_reviewed_inventory_location')
     const locationPreview = commerce.commerceOrderLocationAllocationPreview(managedBase, locationOrder)
     const locationReserved = commerce.reserveCommerceOrder(managedBase, locationOrder, locationOrderProof)
     const locationReservedProjection = locationReserved && model.projectShopInventory(locationReserved.inventoryFoundation, ['SKU-1'])
@@ -8379,6 +8420,32 @@ async function verifyShopInventoryRuntime() {
       && fulfilProjection.metrics.totalReserved === 0
       && fulfilProjection.metrics.totalAvailableToPromise === 7,
     'managed_order_completion_did_not_fulfil_location_stock')
+    const locationCloseAt = '2026-07-26T09:00:00+06:30'
+    const locationCloseId = 'CLOSE-00000000-0000-4000-8000-000000000091'
+    const locationCloseProof = {
+      ...proof(9, 'location-close'),
+      actionId: 'ACT-00000000-0000-4000-8000-000000000091',
+      capturedAt: locationCloseAt,
+    }
+    const locationCloseExpectation = commerce.commerceCloseExpectation(fulfilCompleted, locationCloseAt)
+    const locationSettlementInput = [{ paymentMethod: 'Cash', countedMmk: 300, varianceOwner: '', varianceReason: '' }]
+    const locationClosed = commerce.saveCommerceClose(
+      fulfilCompleted, locationCloseId, locationCloseProof, locationCloseExpectation, locationSettlementInput,
+    )
+    const locationCloseExport = commerce.commerceDailyCloseExport(locationClosed, locationCloseId)
+    const locationCloseCsv = commerce.commerceDailyCloseCsv(locationCloseExport)
+    const locationAccountingHandoff = commerce.commerceAccountingHandoff(locationClosed, locationCloseId)
+    const locationAccountingCsv = commerce.commerceAccountingHandoffCsv(locationAccountingHandoff)
+    assert(locationCloseExpectation?.accountingScope?.inventoryLocationId === 'LOC-MAIN'
+      && locationClosed?.closes[0].accountingScope?.inventoryLocationId === 'LOC-MAIN'
+      && locationCloseExport?.accountingScope?.inventoryLocationId === 'LOC-MAIN'
+      && locationCloseExport.orders[0].accountingScope?.inventoryLocationId === 'LOC-MAIN'
+      && locationAccountingHandoff?.accountingScope?.inventoryLocationId === 'LOC-MAIN'
+      && locationCloseCsv.includes('"inventory_location_id"')
+      && locationCloseCsv.includes('"LOC-MAIN"')
+      && locationAccountingCsv.includes('"inventory_location_id"')
+      && locationAccountingCsv.includes('"LOC-MAIN"'),
+    'managed_location_identity_did_not_survive_close_and_accounting_export')
     const managedReturnProof = proof(9, 'order-return')
     const managedReturnInput = { orderId: fulfilOrder.id, sku: 'SKU-1', quantity: 1, disposition: 'restock' }
     const managedReturnExpectation = commerce.commerceOrderReturnExpectation(
