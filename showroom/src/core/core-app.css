@@ -786,6 +786,10 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-business-name input { min-height: 50px; font-size: 15px; }
 .product-onboarding-business-type > summary small { color: var(--core-quiet); font-size: 9px; font-weight: 600; }
 .product-onboarding-business-type > .demo-pack-select { margin-top: 8px; }
+.workspace-activity-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+.workspace-activity-grid article { display: grid; gap: 5px; justify-items: start; border: 1px solid var(--core-line); border-radius: 8px; padding: 9px 10px; }
+.workspace-activity-grid article strong { font-size: 12px; }
+.workspace-activity-grid article small { color: var(--core-quiet); font-size: 9px; line-height: 1.4; }
 .product-onboarding-capabilities { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
 .product-onboarding-capabilities li { border: 1px solid var(--core-line); border-radius: 999px; padding: 2px 8px; color: var(--core-quiet); font-size: 9px; font-weight: 600; }
 .product-onboarding-primary { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--core-line); padding-top: 13px; }

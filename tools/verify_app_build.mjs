@@ -2598,6 +2598,22 @@ if (!appSource.includes("lazy(() => import('./core/SettingsPage')")
   || !appSource.includes('<Navigate replace to="/" />} path="setup/*"')
   || appSource.includes('SettingsPage,\n} from \'./core/CoreApp\'')
   || coreSource.includes('export function SettingsPage()')) fail('settings_route_not_lazy_loaded')
+// Every product records behavior signals, and for a long time only the dev-only
+// client builder read them back, so a shipped build collected activity from a
+// client and showed them none of it. This panel is the only production reader.
+if (!workspaceControlsPageSource.includes('summarizeProductActivationFunnel(entries, product)')
+  || !workspaceControlsPageSource.includes('summarizeProductFirstValue(entries, product)')
+  || !workspaceControlsPageSource.includes('summarizeBehaviorPreferences(entries)')
+  || !workspaceControlsPageSource.includes('readBehaviorTrail(window.localStorage)')
+  || !workspaceControlsPageSource.includes('aria-label="Workspace activity"')
+  || !workspaceControlsPageSource.includes('className="workspace-activity-grid"')
+  // Opening this page records a signal against no product, so emptiness is
+  // judged on product-scoped signals. Counting raw entries would make the empty
+  // state unreachable and show a first-time owner four products of zeros as
+  // though they were measurements.
+  || !workspaceControlsPageSource.includes('if (!productSignals.length) return null')
+  || !workspaceControlsPageSource.includes('No activity recorded yet')
+  || !coreCssSource.includes('.workspace-activity-grid')) fail('workspace_activity_report_missing')
 if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage()')
   || !workspaceControlsPageSource.includes('title="Status and recovery"')
   || !workspaceControlsPageSource.includes('Product setup and internal client tools stay separate.')
