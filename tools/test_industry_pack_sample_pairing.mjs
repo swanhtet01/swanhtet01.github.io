@@ -24,7 +24,7 @@ const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuil
 const bundle = await build({
   stdin: {
     contents: `
-      export { clientImportTemplate } from './client-onboarding.ts'
+      export { clientImportTemplate, createClientImportPreview } from './client-onboarding.ts'
       export { shopIndustryPacks, shopIndustryPack, createShopServiceSchedule } from './shop-service-scheduling.ts'
       export { shopBusinessTemplates } from '../products/shop/business-templates.ts'
     `,
@@ -40,8 +40,8 @@ const bundle = await build({
 })
 
 const {
-  clientImportTemplate, shopIndustryPacks, shopIndustryPack, shopBusinessTemplates,
-  createShopServiceSchedule,
+  clientImportTemplate, createClientImportPreview, shopIndustryPacks, shopIndustryPack,
+  shopBusinessTemplates, createShopServiceSchedule,
 } =
   await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
@@ -176,6 +176,28 @@ for (const template of shopBusinessTemplates) {
     check(
       item?.priceMmk === service.priceMmk,
       `${template.id} trade: "${service.name}" is booked at ${service.priceMmk.toLocaleString()} MMK but sold at ${item?.priceMmk?.toLocaleString()} -- the counter and the appointment book disagree`,
+    )
+  }
+}
+
+// --- the samples must survive the real import gate -----------------------------
+// Everything above reads the sample CSVs as text. That would still pass if a row were malformed
+// in a way the importer rejects -- a stray comma in a name, a column count that drifted -- and
+// the owner would be stopped at the very first step with a file the product itself shipped.
+// readyForStaging is precisely what buildClientImportStagingPackage demands before it will build
+// anything, so it is the honest gate to assert.
+for (const pack of shopIndustryPacks) {
+  for (const [product, kind] of [['commerce', 'catalog'], ['ecommerce', 'storefront']]) {
+    const csv = clientImportTemplate(product, undefined, { shopIndustryPackId: pack.id })
+    let preview = null
+    let failure = ''
+    try { preview = await createClientImportPreview(csv, product, undefined, `${pack.id}-${kind}.csv`) }
+    catch (error) { failure = error instanceof Error ? error.message : String(error) }
+    check(Boolean(preview), `${pack.id}: its ${kind} sample previews without throwing${failure ? ` -- ${failure}` : ''}`)
+    const unready = (preview?.rows ?? []).filter((row) => row.status !== 'ready')
+    check(
+      Boolean(preview?.readyForStaging) && unready.length === 0,
+      `${pack.id}: its ${kind} sample is importable as shipped -- ${unready.map((row) => `${row.key}:${row.status}`).join(', ') || 'readyForStaging=false'}`,
     )
   }
 }
