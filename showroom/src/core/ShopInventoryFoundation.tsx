@@ -5,6 +5,7 @@ import {
   buildShopInventoryImportPackage,
   createShopInventoryMaster,
   createEmptyShopInventoryState,
+  MAX_SHOP_INVENTORY_STOCK_UNITS,
   projectShopInventory,
   setShopSupplierPolicy,
   shopInventoryEvidenceDigest,
@@ -320,7 +321,9 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     try {
       const stockItems = catalog.filter((item) => Number.isSafeInteger(item.onHand) && item.onHand > 0)
       if (!stockItems.length) throw new Error('Receive or import positive stock before setting up locations.')
-      if (stockItems.length > 8) throw new Error('Location setup v1 supports eight stocked catalog items. Reduce the reviewed opening scope before setup.')
+      if (stockItems.length > MAX_SHOP_INVENTORY_STOCK_UNITS) {
+        throw new Error(`Location setup covers up to ${MAX_SHOP_INVENTORY_STOCK_UNITS.toLocaleString()} stocked items. Reduce the reviewed opening scope before setup.`)
+      }
       const importId = commandId('IMP')
       const clients = [{ id: 'CLI-DEFAULT-001', name: setupDraft.client.trim() }]
       const vendors = [{ id: 'VEN-OPENING-001', name: setupDraft.vendor.trim() }]

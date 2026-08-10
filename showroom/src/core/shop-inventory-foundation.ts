@@ -174,6 +174,10 @@ function exact(value: unknown, field: string, fields: string[]) {
   return value
 }
 
+// The opening import's real capacity, shared with the setup form so the UI cannot
+// refuse a catalog the engine would accept.
+export const MAX_SHOP_INVENTORY_STOCK_UNITS = 1_000
+
 function array(value: unknown, field: string, minimum: number, maximum: number) {
   if (!Array.isArray(value) || value.length < minimum || value.length > maximum) {
     throw new Error(`${field} must contain between ${minimum} and ${maximum} items.`)
@@ -352,7 +356,7 @@ function validateImportPackage(value: unknown, catalog: string[], requireCurrent
   const vendors = masterRows(source.vendors, 'import package.vendors', 'VEN', 200)
   const locations = masterRows(source.locations, 'import package.locations', 'LOC', 8)
   if (locations.length < 2) throw new Error('The v1 inventory foundation requires at least two locations.')
-  const stockUnits = array(source.stockUnits, 'import package.stockUnits', 1, 1_000).map((candidate, index): ShopInventoryStockUnit => {
+  const stockUnits = array(source.stockUnits, 'import package.stockUnits', 1, MAX_SHOP_INVENTORY_STOCK_UNITS).map((candidate, index): ShopInventoryStockUnit => {
     const field = `import package.stockUnits[${index}]`
     const row = exact(candidate, field, ['id', 'sku', 'tracking', 'trackingCode'])
     const tracking = text(row.tracking, `${field}.tracking`, 10)
