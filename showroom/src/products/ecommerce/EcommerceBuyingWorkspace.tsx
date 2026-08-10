@@ -1229,6 +1229,10 @@ export function EcommerceBuyingWorkspace({
 
   function openReturnRequest(entry: CommerceStorefrontOrderTimelineEntry) {
     const order = entry.order
+    if (order?.refundStatus === 'settled') {
+      setNotice('This order already has settled refund evidence. Use Get help for a later issue.')
+      return
+    }
     const lines = order?.lines?.map((line) => {
       const returned = (order.returns ?? [])
         .filter((record) => record.sku === line.sku)
@@ -2239,7 +2243,7 @@ export function EcommerceBuyingWorkspace({
           {showOrderHelpActions ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{entry.order?.lines?.map((line) => `${line.name} x ${line.quantity}`).join(' / ') ?? entry.order?.item}</small></span>
             <div className="ecommerce-return-actions">
-              {!pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Return</button> : null}
+              {entry.order?.refundStatus !== 'settled' && !pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Return</button> : null}
               {!pendingSupportIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openSupportRequest(entry)} type="button">Get help</button> : null}
               {!pendingCorrectionIntents.some((intent) => intent.orderId === entry.order?.id) && entry.order && commerceOrderCorrectionExpectation(commerceState, entry.order.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCorrectionRequest(entry)} type="button">Fix balance</button> : null}
             </div>

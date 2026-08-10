@@ -1635,6 +1635,7 @@ class ShopInventoryRuntimeTests(unittest.TestCase):
                 "disposition": "restock",
             }
         ]
+        returned_state["orders"][0]["refundStatus"] = "due"  # type: ignore[index]
         returned_state["movements"] = [
             order_movement("return", return_proof, 1),
             *completed["movements"],  # type: ignore[misc]

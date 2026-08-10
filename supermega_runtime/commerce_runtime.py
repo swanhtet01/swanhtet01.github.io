@@ -2915,8 +2915,15 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 f"orders[{index}] cannot carry settlement evidence while refund is {order['refundStatus']}."
             )
 
+        has_completed_return_refund = (
+            order["status"] == "completed"
+            and order["paymentStatus"] == "reconciled"
+            and isinstance(order.get("returns"), list)
+            and bool(order["returns"])
+        )
         if order["refundStatus"] in {"due", "settled"} and not (
-            order["status"] == "cancelled" and order["paymentStatus"] == "reconciled"
+            (order["status"] == "cancelled" and order["paymentStatus"] == "reconciled")
+            or has_completed_return_refund
         ):
             raise TrialValidationError(f"orders[{index}] has an invalid refund exception.")
         if (
@@ -3023,6 +3030,18 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 returned_by_sku[sku] = returned
                 return_action_ids.append(action_id)
                 order_returns.append((order_id, return_record))
+            if (
+                order["refundStatus"] == "settled"
+                and datetime.fromisoformat(
+                    str(order["refundSettledAt"]).replace("Z", "+00:00")
+                )
+                < datetime.fromisoformat(
+                    str(records[0]["createdAt"]).replace("Z", "+00:00")
+                )
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}].refundSettledAt predates its latest accepted return."
+                )
         if "supportCases" in order:
             cases = _list(order["supportCases"], f"orders[{index}].supportCases")
             if (
@@ -8472,17 +8491,31 @@ def _validate_return_recorded(
         raise TrialValidationError(
             "returns require an order with attributable completion proof."
         )
+    if before_order["refundStatus"] == "settled":
+        raise TrialValidationError(
+            "a settled refund closes this return batch; a later issue requires a new reviewed case."
+        )
     before_returns = before_order.get("returns", [])
     after_returns = after_order.get("returns")
+    expected_refund_status = (
+        "due"
+        if before_order["paymentStatus"] == "reconciled"
+        else before_order["refundStatus"]
+    )
+    return_mutable_fields = (
+        frozenset({"returns", "refundStatus"}) | _REFUND_SETTLEMENT_FIELDS
+    )
     if (
         not isinstance(after_returns, list)
         or len(after_returns) != len(before_returns) + 1
         or after_returns[1:] != before_returns
-        or _without(before_order, frozenset({"returns"}))
-        != _without(after_order, frozenset({"returns"}))
+        or after_order["refundStatus"] != expected_refund_status
+        or _REFUND_SETTLEMENT_FIELDS & set(after_order)
+        or _without(before_order, return_mutable_fields)
+        != _without(after_order, return_mutable_fields)
     ):
         raise TrialValidationError(
-            "commerce.order.return_recorded must prepend exactly one immutable return."
+            "commerce.order.return_recorded must prepend one immutable return and preserve its exact refund boundary."
         )
     record = after_returns[0]
     if record["disposition"] == "restock":

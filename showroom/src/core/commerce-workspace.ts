@@ -3449,7 +3449,14 @@ export function validateCommerceState(value: unknown): CommerceState {
     } else if (presentRefundSettlementFields.length) {
       throw new Error(`orders[${index}] has settlement evidence while refund is ${candidate.refundStatus}.`)
     }
-    if ((candidate.refundStatus === 'due' || candidate.refundStatus === 'settled') && (candidate.status !== 'cancelled' || candidate.paymentStatus !== 'reconciled')) throw new Error(`orders[${index}] has an invalid refund exception.`)
+    const hasCompletedReturnRefund = candidate.status === 'completed'
+      && candidate.paymentStatus === 'reconciled'
+      && Array.isArray(candidate.returns)
+      && candidate.returns.length > 0
+    if ((candidate.refundStatus === 'due' || candidate.refundStatus === 'settled')
+      && !((candidate.status === 'cancelled' && candidate.paymentStatus === 'reconciled') || hasCompletedReturnRefund)) {
+      throw new Error(`orders[${index}] has an invalid refund exception.`)
+    }
     if (candidate.status === 'cancelled' && candidate.paymentStatus === 'reconciled' && candidate.refundStatus !== 'due' && candidate.refundStatus !== 'settled') throw new Error(`orders[${index}] must preserve a due or settled refund.`)
     if (candidate.completion !== undefined) {
       if (candidate.status !== 'completed'
@@ -3596,6 +3603,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       const soldBySku = new Map(reservationLinesForOrder(candidate as unknown as CommerceOrder).map((line) => [line.sku, line.quantity]))
       const returnedBySku = new Map<string, number>()
       let newerReturnAt: bigint | null = null
+      let latestReturnAt: bigint | null = null
       for (const [returnIndex, returnCandidate] of candidate.returns.entries()) {
         if (!isRecord(returnCandidate) || !hasExactKeys(
           returnCandidate,
@@ -3611,6 +3619,7 @@ export function validateCommerceState(value: unknown): CommerceState {
           || (newerReturnAt !== null && createdAt > newerReturnAt)) {
           throw new Error(`orders[${index}].returns[${returnIndex}].createdAt is outside the order chronology.`)
         }
+        if (returnIndex === 0) latestReturnAt = createdAt
         newerReturnAt = createdAt
         for (const field of ['actor', 'reason', 'evidenceReference'] as const) {
           canonicalText(returnRecord[field], `orders[${index}].returns[${returnIndex}].${field}`)
@@ -3628,6 +3637,11 @@ export function validateCommerceState(value: unknown): CommerceState {
         returnedBySku.set(returnSku, returnedQuantity)
         returnActionIds.push(actionId)
         orderReturns.push({ orderId: candidate.id as string, record: returnRecord })
+      }
+      if (candidate.refundStatus === 'settled'
+        && latestReturnAt !== null
+        && (timestampMicros(candidate.refundSettledAt) as bigint) < latestReturnAt) {
+        throw new Error(`orders[${index}].refundSettledAt predates its latest accepted return.`)
       }
     }
     if (candidate.supportCases !== undefined) {
@@ -8227,13 +8241,28 @@ export function recordCommerceCollectionAction(state: CommerceState, orderId: st
   })
 }
 
+function commerceOrderHasRefundBasis(order: CommerceOrder) {
+  return order.paymentStatus === 'reconciled'
+    && (order.status === 'cancelled'
+      || (order.status === 'completed' && Boolean(order.completion) && Boolean(order.returns?.length)))
+}
+
+function markCommerceRefundDue(order: CommerceOrder): CommerceOrder {
+  const next = { ...order, refundStatus: 'due' as const }
+  delete next.refundSettledAt
+  delete next.refundSettlementActionId
+  delete next.refundSettledBy
+  delete next.refundSettlementReason
+  delete next.refundEvidenceReference
+  return next
+}
+
 export function settleCommerceRefund(state: CommerceState, orderId: string, proof: CommerceActionProof) {
   if (!validProof(proof)) return null
   const order = state.orders.find((candidate) => candidate.id === orderId)
   if (!order) return null
   if (order.refundStatus === 'settled') {
-    return order.status === 'cancelled'
-      && order.paymentStatus === 'reconciled'
+    return commerceOrderHasRefundBasis(order)
       && order.refundSettlementActionId === proof.actionId
       && order.refundSettledAt === proof.capturedAt
       && order.refundSettledBy === proof.actor
@@ -8241,9 +8270,11 @@ export function settleCommerceRefund(state: CommerceState, orderId: string, proo
       && order.refundEvidenceReference === proof.evidenceReference ? state : null
   }
   if (order.refundStatus !== 'due'
-    || order.status !== 'cancelled'
-    || order.paymentStatus !== 'reconciled'
+    || !commerceOrderHasRefundBasis(order)
     || actionIdIsUsed(state, proof.actionId)) return null
+  const latestReturnAt = order.returns?.length ? timestampMicros(order.returns[0].createdAt) : null
+  const settlementAt = timestampMicros(proof.capturedAt)
+  if (latestReturnAt !== null && (settlementAt === null || settlementAt < latestReturnAt)) return null
   return validateCommerceState({
     ...state,
     orders: state.orders.map((candidate) => candidate.id === orderId ? {
@@ -8283,7 +8314,7 @@ export function commerceOrderReturnExpectation(
   const current = validateCommerceState(state)
   const matchingOrders = current.orders.filter((order) => order.id === orderId)
   const order = matchingOrders.length === 1 ? matchingOrders[0] : undefined
-  if (!order || order.status !== 'completed' || !order.completion) return null
+  if (!order || order.status !== 'completed' || !order.completion || order.refundStatus === 'settled') return null
   const matchingLines = reservationLinesForOrder(order).filter((line) => line.sku === sku)
   if (matchingLines.length !== 1) return null
   const lines = reservationLinesForOrder(order)
@@ -8453,9 +8484,11 @@ export function recordCommerceOrderReturn(
   return validateCommerceState({
     ...current,
     items: nextItems,
-    orders: current.orders.map((candidate) => candidate.id === input.orderId
-      ? { ...candidate, returns: [record, ...(candidate.returns ?? [])] }
-      : candidate),
+    orders: current.orders.map((candidate) => {
+      if (candidate.id !== input.orderId) return candidate
+      const returnedOrder = { ...candidate, returns: [record, ...(candidate.returns ?? [])] }
+      return candidate.paymentStatus === 'reconciled' ? markCommerceRefundDue(returnedOrder) : returnedOrder
+    }),
     movements: movement ? [movement, ...current.movements] : current.movements,
     ...(inventoryFoundation ? { inventoryFoundation } : {}),
   })

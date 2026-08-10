@@ -8376,6 +8376,7 @@ async function verifyShopInventoryRuntime() {
       && managedReturnExpectation.locationAllocations[0].stockUnitId === 'LOT-SKU1-OPENING-001'
       && managedReturned?.items[0].onHand === 8
       && managedReturned.orders[0].returns?.[0]?.disposition === 'restock'
+      && managedReturned.orders[0].refundStatus === 'due'
       && managedReturnCommand?.kind === 'order_return'
       && managedReturnCommand.orderId === fulfilOrder.id
       && managedReturnCommand.sku === 'SKU-1'
@@ -14186,6 +14187,8 @@ async function verifyCommerceRuntime() {
       && returned?.items[0].onHand === 9
       && returned.orders[0].total === completed.orders[0].total
       && returned.orders[0].paymentStatus === completed.orders[0].paymentStatus
+      && returned.orders[0].refundStatus === 'due'
+      && model.commerceOrderNeedsAction(returned.orders[0])
       && returned.orders[0].returns[0].disposition === 'restock'
       && returned.movements[0].kind === 'return'
       && returned.movements[0].orderId === order.id,
@@ -14202,11 +14205,25 @@ async function verifyCommerceRuntime() {
       && secondReturnExpectation.stockOnHand === null
       && secondReturned?.items[0].onHand === 9
       && secondReturned.movements === returned.movements
+      && secondReturned.orders[0].refundStatus === 'due'
       && secondReturned.orders[0].returns.length === 2
       && secondReturned.orders[0].returns[0].disposition === 'not_restocked',
     'non_sellable_return_changed_stock_or_lost_history')
     assert(model.commerceOrderReturnExpectation(secondReturned, order.id, 'SKU-1', 'restock') === null, 'fully_returned_line_remained_returnable')
     assert(model.recordCommerceOrderReturn(returned, { ...returnInput, quantity: 2 }, proof('ACT-RETURN-OVER', 4_000), secondReturnExpectation) === null, 'cumulative_over_return_succeeded')
+    const returnedRefundProof = proof('ACT-RETURN-REFUND-SETTLED', 5_000)
+    const returnedRefundSettled = model.settleCommerceRefund(secondReturned, order.id, returnedRefundProof)
+    assert(returnedRefundSettled?.orders[0].refundStatus === 'settled'
+      && returnedRefundSettled.orders[0].refundSettlementActionId === returnedRefundProof.actionId
+      && returnedRefundSettled.orders[0].refundEvidenceReference === returnedRefundProof.evidenceReference
+      && !model.commerceOrderNeedsAction(returnedRefundSettled.orders[0]),
+    'returned_order_refund_settlement_lost_attribution_or_queue_state')
+    assert(model.settleCommerceRefund(returnedRefundSettled, order.id, returnedRefundProof) === returnedRefundSettled,
+      'returned_order_refund_settlement_retry_not_idempotent')
+    assert(model.settleCommerceRefund(secondReturned, order.id, proof('ACT-RETURN-REFUND-EARLY', 3_500)) === null,
+      'returned_order_refund_settlement_predated_latest_return')
+    assert(model.commerceOrderReturnExpectation(returnedRefundSettled, order.id, 'SKU-1', 'not_restocked') === null,
+      'settled_return_batch_remained_open')
     const legacyCompleted = model.validateCommerceState({
       ...completed,
       orders: completed.orders.map(({ completion: _completion, ...candidate }) => candidate),
@@ -17644,7 +17661,7 @@ async function verifyStorefrontRuntime() {
       && returnOutcome.state === 'accepted'
       && returnOutcome.intentId === returnIntent.id
       && returnOutcome.stockOutcome === 'not_restocked'
-      && returnOutcome.refundStatus === 'none'
+      && returnOutcome.refundStatus === 'due'
       && returnOutcome.automaticRefundPerformed === false
       && returnOutcome.customerMessageSent === false
       && returnOutcome.providerCalled === false,
@@ -17656,13 +17673,14 @@ async function verifyStorefrontRuntime() {
     const duplicateReturnOrder = returnedOrder && { ...structuredClone(returnedOrder), returns: [...(returnedOrder.returns ?? []), ...(returnedOrder.returns?.[0] ? [structuredClone(returnedOrder.returns[0])] : [])] }
     buyingAssert(Boolean(duplicateReturnOrder) && buyingModel.projectEcommerceReturnOutcome(returnIntent, duplicateReturnOrder) === null,
       'ecommerce_duplicate_return_outcome_was_accepted')
-    const settledReturnOrder = returnedOrder && {
-      ...structuredClone(returnedOrder),
-      refundStatus: 'settled',
-      refundSettledAt: '2026-07-24T10:00:00.000Z',
-      refundSettledBy: 'FINANCE-OWNER',
-      refundEvidenceReference: 'REFUND-EXTERNAL-RETURN-1',
-    }
+    const settledReturnShopState = returnedShopState && commerce.settleCommerceRefund(returnedShopState, completedOrder.id, {
+      actionId: 'ACT-ECOMMERCE-RETURN-REFUND-1',
+      capturedAt: '2026-07-24T10:00:00.000Z',
+      actor: 'FINANCE-OWNER',
+      reason: 'External customer refund confirmed.',
+      evidenceReference: 'REFUND-EXTERNAL-RETURN-1',
+    })
+    const settledReturnOrder = settledReturnShopState?.orders.find((order) => order.id === completedOrder.id)
     const settledReturnOutcome = settledReturnOrder && buyingModel.projectEcommerceReturnOutcome(returnIntent, settledReturnOrder)
     buyingAssert(settledReturnOutcome?.refundStatus === 'settled'
       && settledReturnOutcome.refundEvidenceReference === 'REFUND-EXTERNAL-RETURN-1',

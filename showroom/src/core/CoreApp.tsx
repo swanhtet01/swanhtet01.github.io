@@ -4474,12 +4474,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice('Only a refund currently marked due can be recorded as settled.')
       return
     }
+    const refundSource = order.status === 'completed' && order.returns?.length
+      ? 'accepted return'
+      : 'cancelled order'
     queueAction({
       kind: 'refund_settle',
       subjectId: orderId,
-      summary: `Record ${order.id} refund settlement`,
-      before: 'refund due',
-      after: 'refund settled · external provider evidence recorded · no money sent',
+      summary: `Record ${order.id} ${refundSource} refund settlement`,
+      before: `${refundSource} · refund due`,
+      after: `${refundSource} · refund settled · external provider evidence recorded · no money sent`,
       apply: (action) => mutateCommerce(
         'commerce.refund.settled',
         action.commandId,
@@ -4562,7 +4565,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       subjectId: `${input.orderId}:${input.sku}`,
       summary: `Record ${input.quantity} ${input.sku} returned from ${input.orderId}`,
       before: `${expected.returnedQuantity} of ${expected.soldQuantity} returned · ${item.onHand} sellable units`,
-      after: `${nextReturned} of ${expected.soldQuantity} returned · ${dispositionAfter} · payment and order total unchanged`,
+      after: `${nextReturned} of ${expected.soldQuantity} returned · ${dispositionAfter} · ${returnDraftOrder.paymentStatus === 'reconciled' ? 'refund due for external settlement' : 'refund not started while payment is pending'} · payment and order total unchanged`,
       reasonSuggestion: returnDraft.sourceIntent
         ? `Customer requested return review: ${returnDraft.sourceIntent.reason}`
         : 'Reviewed the received return and its stock condition.',
@@ -7565,7 +7568,9 @@ function ClosedOrderHistory({
         {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
         {order.status === 'completed' && order.completion ? <small role="note">Completed by {order.completion.actor} · {formatTime(order.completion.capturedAt)} · evidence {order.completion.evidenceReference}</small> : null}
         {order.status === 'completed' && !order.completion ? <small role="note">Return unavailable: this older order has no attributable completion proof.</small> : null}
-        {order.status === 'completed' && order.completion && availableLines.length > 0 && !returnable ? <small role="note">Return unavailable: the sold quantity cannot be matched to an attributable stock reservation.</small> : null}
+        {order.status === 'completed' && order.completion && availableLines.length > 0 && !returnable ? <small role="note">{order.refundStatus === 'settled'
+          ? 'Further returns require a new reviewed help case because this order refund is already settled.'
+          : 'Return unavailable: the sold quantity cannot be matched to an attributable stock reservation.'}</small> : null}
       </div>
       <div className="order-archive-actions">
         <b>{formatMoney(adjustedTotal)}</b>

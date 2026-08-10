@@ -1880,6 +1880,9 @@ export function buildEcommerceReturnIntent(input: {
     || order.lines.length > maxLines) {
     throw new Error('Returns require a completed Shop order with completion proof and exact sold lines.')
   }
+  if (order.refundStatus === 'settled') {
+    throw new Error('This order already has settled refund evidence. A later issue needs a new Shop help case.')
+  }
   const orderId = canonicalToken(order.id, 'orderSnapshot.id')
   const sourceRequestId = canonicalText(order.sourceRecordId, 'orderSnapshot.sourceRecordId', 40)
   if (!requestIdPattern.test(sourceRequestId)) throw new Error('Return order is not attributable to an Ecommerce request.')

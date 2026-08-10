@@ -889,6 +889,16 @@ def returned_state(
         "disposition": disposition,
     }
     order["returns"] = [record, *order.get("returns", [])]
+    if order["paymentStatus"] == "reconciled":
+        order["refundStatus"] = "due"
+        for field in (
+            "refundSettledAt",
+            "refundSettlementActionId",
+            "refundSettledBy",
+            "refundSettlementReason",
+            "refundEvidenceReference",
+        ):
+            order.pop(field, None)
     if disposition == "restock":
         state["items"][0]["onHand"] += quantity  # type: ignore[index]
         state["movements"] = [
@@ -6556,6 +6566,30 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(restocked["movements"][0]["kind"], "return")
         self.assertEqual(restocked["movements"][0]["orderId"], "ORD-1")
         self.assertEqual(restocked["orders"][0]["returns"][0]["disposition"], "restock")
+        self.assertEqual(restocked["orders"][0]["refundStatus"], "due")
+
+        settled_partial_candidate = settled_refund_state(
+            restocked,
+            action_id="ACT-RETURN-REFUND-SETTLED",
+            captured_at="2026-07-23T09:35:00.000Z",
+        )
+        settled_partial = apply_event(
+            restocked,
+            "commerce.refund.settled",
+            settled_partial_candidate,
+        )
+        self.assertEqual(settled_partial["orders"][0]["refundStatus"], "settled")
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                settled_partial,
+                "commerce.order.return_recorded",
+                returned_state(
+                    settled_partial,
+                    disposition="not_restocked",
+                    action_id="ACT-RETURN-AFTER-SETTLEMENT",
+                    captured_at=RETURN_AT_2,
+                ),
+            )
 
         not_restocked_state = returned_state(
             restocked,
@@ -6580,7 +6614,6 @@ class CommerceRuntimeTests(unittest.TestCase):
         for field in (
             "total",
             "paymentStatus",
-            "refundStatus",
             "paymentReconciliationActionId",
             "completion",
         ):
@@ -6588,6 +6621,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 not_restocked["orders"][0][field],
                 original_order[field],
             )
+        self.assertEqual(not_restocked["orders"][0]["refundStatus"], "due")
 
         over_return = returned_state(
             not_restocked,
