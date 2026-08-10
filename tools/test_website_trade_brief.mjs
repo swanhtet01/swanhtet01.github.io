@@ -158,6 +158,72 @@ check(
   'the applied site is about the owner\'s business by name',
 )
 
+// --- what the trade copy READS LIKE once the site is rendered -----------------
+// Wording is only half of it. `audience` is composed into sentences by the templates --
+// "For {audience}", "{business} helps {audience}.", "This page is for {audience}." -- so it
+// has to be a lowercase noun phrase with no trailing stop. Written as sentences first, and
+// the pharmacy homepage published:
+//
+//   "Thiri Pharmacy helps Nearby households and clinics buying medicine and daily supplies.."
+//
+// A double stop and a stray capital, on a real customer's front page. Nothing failed; it just
+// looked broken. So these assertions render each trade's actual site and read it, rather than
+// inspecting the source strings and hoping the templates agree.
+//
+// The long name matters: SEO descriptions are cut to 160 characters, and three of seven
+// trades cut mid-word once the business name was realistic.
+const REALISTIC_LONG_NAME = 'Shwe Yangon Family Pharmacy and Clinic Supplies Company'
+const tokensOf = (value) => value.split(/\s+/u).map((token) => token.replace(/[^\p{L}\p{N}]+$/u, ''))
+
+for (const tradeId of shopTradeIds) {
+  const draft = websiteTradeBrief({ tradeId, businessName: NAME, contactHref: CONTACT })
+  check(
+    draft.audience === draft.audience.toLowerCase().slice(0, 1) + draft.audience.slice(1),
+    `${tradeId}: the audience starts lowercase, so "{business} helps {audience}" reads as one sentence`,
+  )
+  check(
+    !draft.audience.endsWith('.'),
+    `${tradeId}: the audience carries no trailing stop, so "helps {audience}." is not a double stop`,
+  )
+  // offer and proof DO stand alone, so they keep their sentence shape. Asserted so a later
+  // edit that strips their full stops is caught too.
+  check(draft.offer.endsWith('.'), `${tradeId}: the offer is a full sentence`)
+  check(draft.proof.endsWith('.'), `${tradeId}: the proof is a full sentence`)
+
+  for (const businessName of [NAME, REALISTIC_LONG_NAME]) {
+    const brief = websiteTradeBrief({ tradeId, businessName, contactHref: CONTACT })
+    const site = applyWebsiteStarterBrief(createInitialWorkspace(), brief, '2026-07-25T08:00:00.000Z')
+    check(
+      workspaceFingerprint(site) !== workspaceFingerprint(createInitialWorkspace()),
+      `${tradeId}/${businessName.length}: the brief applied, so the strings below are the real page`,
+    )
+
+    const rendered = []
+    for (const page of site.pages) {
+      rendered.push(page.hero.eyebrow, page.hero.headline, page.hero.summary, page.seo.title, page.seo.description)
+      for (const section of page.sections) rendered.push(section.eyebrow, section.title, section.body)
+    }
+    for (const line of rendered) {
+      check(!line.includes('..'), `${tradeId}/${businessName.length}: no double full stop in "${line}"`)
+      check(!line.includes(' .'), `${tradeId}/${businessName.length}: no space before a full stop in "${line}"`)
+      check(!line.includes('  '), `${tradeId}/${businessName.length}: no doubled space in "${line}"`)
+      check(line === line.trim(), `${tradeId}/${businessName.length}: no stray edge whitespace in "${line}"`)
+    }
+
+    // The SEO description is what a search engine prints under the link, so a cut mid-word is
+    // read by everyone who has not clicked yet.
+    const description = site.pages.find((page) => page.slug === '/contact').seo.description
+    const full = `Contact ${businessName} about ${brief.offer}`.replace(/\s+/gu, ' ').trim()
+    check(description.length <= 160, `${tradeId}/${businessName.length}: the contact description fits in 160 characters`)
+    check(full.startsWith(description.slice(0, 20)), `${tradeId}/${businessName.length}: and is built from the intended sentence`)
+    const lastToken = tokensOf(description).at(-1)
+    check(
+      tokensOf(full).includes(lastToken),
+      `${tradeId}/${businessName.length}: it ends on a whole word, not "${lastToken}"`,
+    )
+  }
+}
+
 // --- the generator does not repair its caller's input -------------------------
 // The failure this prevents: an over-long name silently truncated into something valid, so
 // the owner never sees the error and the site ships with a clipped business name.

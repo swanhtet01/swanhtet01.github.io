@@ -40,6 +40,16 @@ type TradeCopy = {
   proof: string
 }
 
+// SHAPE MATTERS, not just wording. `audience` is composed into sentences by the website
+// templates -- "For {audience}", "{business} helps {audience}.", "This page is for
+// {audience}." -- so it must be a lowercase noun phrase with NO trailing full stop, exactly
+// like the sample brief's "families and office buyers in Yangon".
+//
+// Written as sentences first, which published "Thiri Pharmacy helps Nearby households and
+// clinics buying medicine and daily supplies.." -- a double stop and a stray capital on a
+// real customer's homepage. `offer` and `proof` DO stand alone as sentences, so they keep
+// their capital and full stop. tools/test_website_trade_brief.mjs asserts all of this by
+// rendering each trade's site rather than by inspecting the strings.
 // Layout is chosen by what the website is FOR in that trade, not by what is easiest to fill:
 // a mini-mart needs to be findable, a fashion shop needs to be browsed, and a hardware
 // supplier needs an inquiry path because its orders start as a conversation about quantity.
@@ -47,49 +57,49 @@ const TRADE_COPY: Readonly<Record<ShopBusinessTemplateId, TradeCopy>> = {
   'mini-mart': {
     label: 'Mini-mart & grocery',
     templateId: 'business-presence',
-    audience: 'Households nearby who shop for daily groceries and basics.',
+    audience: 'households nearby who shop for daily groceries and basics',
     offer: 'Everyday groceries and household basics at the counter, with the items families buy most kept in stock and priced clearly.',
     proof: 'Reorder levels are set on every line we carry, so the basics customers come in for are on the shelf rather than sold out.',
   },
   pharmacy: {
     label: 'Pharmacy',
     templateId: 'business-presence',
-    audience: 'Nearby households and clinics buying medicine and daily supplies.',
+    audience: 'nearby households and clinics buying medicine and daily supplies',
     offer: 'Over-the-counter medicine and clinic supplies, with strict reorder levels so regular items and first-aid stock stay available.',
     proof: 'Every medicine we stock carries a reorder level, so repeat items are reordered before they run out and stock is counted rather than estimated.',
   },
   'phone-electronics': {
     label: 'Phone & electronics',
     templateId: 'catalog-showcase',
-    audience: 'Customers shopping for phone accessories and small electronics.',
+    audience: 'customers shopping for phone accessories and small electronics',
     offer: 'Phone accessories, chargers and small electronics kept at the counter, with prices listed before you make the trip.',
     proof: 'Fast-moving lines are counted daily, so the accessories listed here are the ones actually on the counter today.',
   },
   fashion: {
     label: 'Fashion & clothing',
     templateId: 'catalog-showcase',
-    audience: 'Shoppers looking for clothing and accessories in their own size.',
+    audience: 'shoppers looking for clothing and accessories in their own size',
     offer: 'Clothing and accessories stocked down to the size, so what is listed is what we can actually hand over today.',
     proof: 'Stock is tracked per size rather than per style, so an item shown as available is available in the size listed, not just in the design.',
   },
   hardware: {
     label: 'Hardware & construction supply',
     templateId: 'lead-generation',
-    audience: 'Builders and contractors ordering site materials in bulk.',
+    audience: 'builders and contractors ordering site materials in bulk',
     offer: 'Building materials, tools and site consumables, with bulk orders quoted and set aside for collection or delivery.',
     proof: 'Bulk orders are recorded against stock on hand, so a quantity confirmed for your site is reserved rather than promised twice.',
   },
   'tea-coffee': {
     label: 'Tea & coffee shop',
     templateId: 'lead-generation',
-    audience: 'Counter regulars, plus offices ordering tea for events.',
+    audience: 'counter regulars, plus offices ordering tea for events',
     offer: 'Tea shop menu at the counter, plus large preorders for offices and events prepared for an agreed collection time.',
     proof: 'Daily prep counts are recorded against every menu item, so a preorder is checked against what the kitchen can actually make that day.',
   },
   'auto-parts': {
     label: 'Auto parts',
     templateId: 'lead-generation',
-    audience: 'Drivers and workshops looking for vehicle spares and consumables.',
+    audience: 'drivers and workshops looking for vehicle spares and consumables',
     offer: 'Vehicle consumables and spares at the workshop counter, with the part your vehicle needs checked against stock before you travel.',
     proof: 'Every part is stocked against its own SKU rather than a description, so a part confirmed as available is the specific fit, not a near match.',
   },

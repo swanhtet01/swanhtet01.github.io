@@ -110,6 +110,23 @@ export function isUntouchedWebsiteStarter(workspace: WebsiteWorkspace) {
     && workspaceFingerprint(workspace) === workspaceFingerprint(starter)
 }
 
+// A search engine shows this text verbatim under the link, so a cut mid-word is read by every
+// visitor who has not clicked yet. Cutting at 160 with slice() alone produced descriptions
+// ending "...items families buy most k" for three of the seven trade drafts once the business
+// name was long -- measured by rendering the site, not guessed at.
+//
+// Cuts at the last word boundary and drops any punctuation left dangling at the end. Falls
+// back to a hard cut only when there is no space to break on, which means a single 160+
+// character word.
+function boundedSeoDescription(value: string, maximum = 160) {
+  const normalized = normalizedLine(value)
+  if (normalized.length <= maximum) return normalized
+  const clipped = normalized.slice(0, maximum)
+  const lastSpace = clipped.lastIndexOf(' ')
+  const trimmed = lastSpace > 0 ? clipped.slice(0, lastSpace) : clipped
+  return trimmed.replace(/[\s,;:.–—-]+$/u, '')
+}
+
 export function applyWebsiteStarterBrief(
   workspace: WebsiteWorkspace,
   brief: WebsiteStarterBrief,
@@ -135,7 +152,7 @@ export function applyWebsiteStarterBrief(
       ? { name: 'Services', slug: '/services', eyebrow: 'Services', headline: `How ${businessName} can help`, sectionEyebrow: 'What to expect', sectionTitle: 'A simple path from inquiry to answer.' }
       : { name: 'Catalog', slug: '/catalog', eyebrow: 'Catalog', headline: `Explore ${businessName}`, sectionEyebrow: 'Products and packages', sectionTitle: 'Start with the right option.' }
   const contactDestination = contactHref || '/contact'
-  const contactDescription = `Contact ${businessName} about ${offer}`.slice(0, 160).trim()
+  const contactDescription = boundedSeoDescription(`Contact ${businessName} about ${offer}`)
 
   return {
     ...workspace,
