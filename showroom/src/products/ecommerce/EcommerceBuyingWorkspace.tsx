@@ -2218,8 +2218,8 @@ export function EcommerceBuyingWorkspace({
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenCorrection(intent)} type="button">Continue in Shop</button>
           </article>)}
           {correctionOutcomes.slice(0, 3).map((outcome) => <article className="ecommerce-return-status" key={`correction-outcome:${outcome.intentId}`}>
-            <span><strong>Correction reviewed</strong><small>{outcome.orderId} / {outcome.kind} {formatMmk(outcome.adjustmentTotalMmk)} / reviewed by {outcome.reviewedBy}</small></span>
-            <b>Posting review required</b>
+            <span><strong>Balance reviewed</strong><small>{outcome.orderId} / {outcome.kind} note {formatMmk(outcome.adjustmentTotalMmk)} / balance {formatMmk(outcome.balanceBeforeMmk)} → {formatMmk(outcome.balanceAfterMmk)} / reviewed by {outcome.reviewedBy}</small></span>
+            <b>Invoice unchanged · no money moved</b>
           </article>)}
           {orderChangeRecovery?.ok && showOrderHelpActions ? <div className="ecommerce-order-change-recovery" data-ecommerce-order-change-recovery={orderChangeRecovery.draft.orderId} role="status">
             <span><strong>Resume unsent change?</strong><small>{orderChangeRecovery.draft.orderId} can reopen once. Nothing is sent or changed.</small></span>

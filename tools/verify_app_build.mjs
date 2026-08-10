@@ -3643,6 +3643,9 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('buildEcommerceCorrectionIntent')
   || !ecommerceBuyingUiSource.includes('saveEcommerceCorrectionIntent')
   || !ecommerceBuyingUiSource.includes('Fix balance')
+  || !ecommerceBuyingUiSource.includes('Balance reviewed')
+  || !ecommerceBuyingUiSource.includes('outcome.balanceBeforeMmk')
+  || !ecommerceBuyingUiSource.includes('Invoice unchanged · no money moved')
   || !ecommerceBuyingUiSource.includes('{entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}')
   || !ecommerceBuyingUiSource.includes('buildEcommercePimProjection')
   || !ecommerceBuyingUiSource.includes('buildEcommerceCheckoutQuote')
@@ -3794,6 +3797,7 @@ if (addToCartStart < 0
   || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_support_outcome(')
   || !managedEcommerceBuyingLifecycleSource.includes('def build_ecommerce_correction_intent(')
   || !managedEcommerceBuyingLifecycleSource.includes('def project_ecommerce_correction_outcome(')
+  || !managedEcommerceBuyingLifecycleSource.includes('"balanceBeforeMmk": intent["originalBalanceMmk"]')
   || !coreSource.includes('ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent}')
   || !coreSource.includes('validateEcommerceCancellationIntent(ecommerceCancellationNavigationIntent)')
   || !coreSource.includes('function ecommerceCancellationMatchesCurrentShop(')
@@ -3809,6 +3813,9 @@ if (addToCartStart < 0
   || !coreSource.includes('validateEcommerceSupportIntent(ecommerceSupportNavigationIntent)')
   || !coreSource.includes('validateEcommerceCorrectionIntent(ecommerceCorrectionNavigationIntent)')
   || !coreSource.includes('sourceIntent: intent')
+  || !coreSource.includes("hash: '#shop-order-history'")
+  || !coreSource.includes('id="shop-correction-review"')
+  || !coreSource.includes('1 balance review needs action')
   || !coreSource.includes('Customer requested return review: ${returnDraft.sourceIntent.reason}')
   || !commerceSource.includes("quote.payment.adapter !== 'kbzpay_manual'")
   || ['fetch(', 'XMLHttpRequest', 'navigator.sendBeacon', 'chargePayment', 'authorizePayment'].some((marker) => ecommerceBuyingUiSource.includes(marker))
@@ -17719,6 +17726,8 @@ async function verifyStorefrontRuntime() {
       && correctionOutcome.state === 'review_required'
       && correctionOutcome.intentId === correctionIntent.id
       && correctionOutcome.kind === 'credit'
+      && correctionOutcome.balanceBeforeMmk === correctionIntent.originalBalanceMmk
+      && correctionOutcome.balanceAfterMmk === correctionIntent.originalBalanceMmk - correctionOutcome.adjustmentTotalMmk
       && correctionOutcome.postingAuthority === 'none'
       && correctionOutcome.externalPostingPerformed === false
       && correctionOutcome.automaticPaymentPerformed === false
@@ -21565,6 +21574,7 @@ async function verifyShopNextActionRuntime() {
     lowStockCount: 0,
     openSupportCaseCount: 0,
     pendingAction: false,
+    pendingCorrectionReviewCount: 0,
     pendingOnlineRequestCount: 0,
     ...patch,
   })
@@ -21582,6 +21592,8 @@ async function verifyShopNextActionRuntime() {
     assert(orders.job === 'Finish fulfilment queue' && orders.track === 'Orders', 'shop_next_action_fulfilment_priority_wrong')
     const support = model.decideShopNextAction(input({ openSupportCaseCount: 1, closeReadyOrderCount: 2, activePurchaseOrderCount: 3 }))
     assert(support.job === 'Handle customer help' && support.nextAction === 'Open support queue' && support.path === '/shop/?tab=orders#shop-order-history' && support.reason.startsWith('1 customer help case needs'), 'shop_next_action_support_priority_wrong')
+    const correction = model.decideShopNextAction(input({ pendingCorrectionReviewCount: 1, closeReadyOrderCount: 2, activePurchaseOrderCount: 3 }))
+    assert(correction.job === 'Review customer balance' && correction.nextAction === 'Review balance request' && correction.path === '/shop/?tab=orders#shop-order-history' && correction.reason.startsWith('1 customer balance request needs'), 'shop_next_action_correction_priority_wrong')
     const close = model.decideShopNextAction(input({ closeReadyOrderCount: 2, activePurchaseOrderCount: 3, lowStockCount: 4 }))
     assert(close.job === "Review today's close" && close.nextAction === 'Review and save close' && close.path === '/shop/?tab=orders#shop-close-controls' && close.track === 'Review', 'shop_next_action_daily_close_priority_wrong')
     const receiving = model.decideShopNextAction(input({ activePurchaseOrderCount: 2, lowStockCount: 3 }))

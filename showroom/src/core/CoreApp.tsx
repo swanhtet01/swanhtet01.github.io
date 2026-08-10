@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import './core-app.css'
@@ -3020,7 +3020,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const recovered = await lifecycle.readEcommerceBuyingState(ecommerceBuyingScope)
         if (!current) return
         consumedEcommerceCorrectionIntentId.current = intent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        navigate({ pathname: '/shop/', search: '?tab=orders', hash: '#shop-order-history' }, { replace: true, state: null })
         const storedIntent = recovered.state?.correctionIntents.find((candidate) => candidate.id === intent.id)
         if (recovered.status !== 'ready' || !storedIntent || JSON.stringify(storedIntent) !== JSON.stringify(intent)) {
           throw new Error('The balance request no longer matches its recovered Ecommerce evidence. Nothing was prepared.')
@@ -3059,12 +3059,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           sourceIntent: intent,
         })
         setNotice(`${intent.id} is ready for Shop review. Recheck the calculated adjustment before recording a review-only correction note.`)
-        requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
       })
       .catch((error) => {
         if (!current) return
         consumedEcommerceCorrectionIntentId.current = ecommerceCorrectionNavigationIntent.id
-        navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
+        navigate({ pathname: '/shop/', search: '?tab=orders', hash: '#shop-order-history' }, { replace: true, state: null })
         setCorrectionDraft(null)
         setNotice(error instanceof Error ? error.message : 'The Ecommerce balance request could not be verified. Nothing was prepared.')
       })
@@ -3269,6 +3268,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     lowStockCount: lowStock.length,
     openSupportCaseCount: supportWorkQueue.length,
     pendingAction: Boolean(pendingAction),
+    pendingCorrectionReviewCount: correctionDraft ? 1 : 0,
     pendingOnlineRequestCount: pendingOnlineReviewCount,
   })
   const shopAgentJob = shopNextAction.job
@@ -4961,7 +4961,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setCorrectionDraft((current) => current?.orderId === orderId
       ? current
       : { orderId, kind: 'credit', reasonCode: 'pricing_error', listedAmountMmk: '' })
-    requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
+    navigate('/shop/?tab=orders#shop-order-history', { replace: true })
+  }
+
+  function focusCurrentCorrectionReview() {
+    if (!correctionDraft) return
+    navigate('/shop/?tab=orders#shop-order-history', { replace: true })
+    requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>(correctionDraft.sourceIntent ? '#shop-correction-review' : '#order-correction-amount')?.focus())
   }
 
   function cancelCorrectionEditor() {
@@ -6511,15 +6517,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         ? 'Finish fulfilment queue'
         : supportWorkQueue.length
           ? 'Handle customer help'
-          : paymentReview.length
-            ? 'Reconcile payment exceptions'
-            : closableOrders.length
-              ? 'Save daily close'
-              : 'Ready for new orders'
+          : correctionDraft
+            ? 'Review customer balance'
+            : paymentReview.length
+              ? 'Reconcile payment exceptions'
+              : closableOrders.length
+                ? 'Save daily close'
+                : 'Ready for new orders'
   const shopOrderControlRows = [
     ['Online inbox', pendingOnlineReviewCount ? `${pendingOnlineReviewCount} waiting` : 'Clear'],
     ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
     ['Help', supportWorkQueue.length ? `${supportWorkQueue.length} needs action` : 'Clear'],
+    ['Balance', correctionDraft ? 'Review needed' : 'Clear'],
     ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
     ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
     ['Write status', commerceCanWrite && !pendingAction ? 'Ready' : 'Locked'],
@@ -6603,7 +6612,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     { label: 'Sell & POS', detail: 'Counter sales, payments, receipts', status: `${commerce.items.length} items`, to: '/shop/?tab=counter' },
     { label: 'Orders & fulfilment', detail: 'Orders, fulfilment, delivery, returns', status: actionOrders.length ? `${actionOrders.length} need action` : `${openOrders.length} open`, to: '/shop/?tab=orders', tone: actionOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Inventory & purchasing', detail: 'Stock, lots, purchasing, receiving', status: lowStock.length ? `${lowStock.length} low` : activePurchaseOrders.length ? `${activePurchaseOrders.length} PO` : 'Ready', to: '/shop/?tab=inventory', tone: lowStock.length || overduePurchaseOrders.length ? 'attention' as const : 'ready' as const },
-    { label: 'Customers & after-sales', detail: 'Customers, credit, service, support', status: supportWorkQueue.length ? `${supportWorkQueue.length} help open` : afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history', tone: supportWorkQueue.length ? 'attention' as const : 'ready' as const },
+    { label: 'Customers & after-sales', detail: 'Customers, credit, service, support', status: supportWorkQueue.length ? `${supportWorkQueue.length} help open` : correctionDraft ? '1 balance review' : afterSalesCount ? `${afterSalesCount} records` : 'Ready', to: '/shop/?tab=orders#shop-order-history', tone: supportWorkQueue.length || correctionDraft ? 'attention' as const : 'ready' as const },
     { label: 'Finance controls', detail: 'Payments and close', status: paymentReview.length ? paymentReview[0].refundStatus === 'due' ? 'Record settled refund' : 'Reconcile payment' : closePreview ? 'Review and save close' : latestClose ? 'Close recorded' : 'Ready', to: paymentReview.length ? `/shop/?tab=orders#${commerceOrderTargetId(paymentReview[0].id)}` : '/shop/?tab=orders#shop-close-controls', tone: paymentReview.length || closePreview ? 'attention' as const : 'ready' as const },
     { label: 'Online channels', detail: 'Website and Ecommerce requests', status: incomingRequestCount ? `${incomingRequestCount} waiting` : 'Inbox clear', to: '/shop/?tab=orders', tone: incomingRequestCount ? 'attention' as const : 'ready' as const },
   ]
@@ -6649,11 +6658,25 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   if (tab === 'orders') return <div className={`operation-module orders-module${returnDraft && selectedReturnLine || supportDraft || supportReopenDraft || supportServiceDraft || supportResolutionDraft || correctionDraft ? ' has-return-draft' : ''}`}>
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length
-        ? `${actionOrders.length} ${actionOrders.length === 1 ? 'order needs' : 'orders need'} action`
-        : supportWorkQueue.length
-          ? `${supportWorkQueue.length} help ${supportWorkQueue.length === 1 ? 'case needs' : 'cases need'} action`
-          : '0 orders need action'}</h2></div><div className="order-queue-actions"><span className="panel-note">{openOrders.length} in fulfilment{supportWorkQueue.length ? ` · ${supportWorkQueue.length} help open` : ''}</span>{!orderDraftRecoveryVisible ? nextSupportWork && !actionOrders.length ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={openNextSupportWork} type="button">{nextSupportActionLabel}</button> : <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button> : null}</div></div>
+      <div className="panel-head">
+        <div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length
+          ? `${actionOrders.length} ${actionOrders.length === 1 ? 'order needs' : 'orders need'} action`
+          : supportWorkQueue.length
+            ? `${supportWorkQueue.length} help ${supportWorkQueue.length === 1 ? 'case needs' : 'cases need'} action`
+            : correctionDraft
+              ? '1 balance review needs action'
+              : '0 orders need action'}</h2></div>
+        <div className="order-queue-actions">
+          <span className="panel-note">{openOrders.length} in fulfilment{supportWorkQueue.length ? ` · ${supportWorkQueue.length} help open` : ''}{correctionDraft ? ' · 1 balance review' : ''}</span>
+          {!orderDraftRecoveryVisible
+            ? nextSupportWork && !actionOrders.length
+              ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={openNextSupportWork} type="button">{nextSupportActionLabel}</button>
+              : correctionDraft && !actionOrders.length
+                ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={focusCurrentCorrectionReview} type="button">Review balance</button>
+                : <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order'}</button>
+            : null}
+        </div>
+      </div>
       {orderDraftRecoveryVisible ? <div className={`order-draft-recovery ${orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'is-blocked' : ''}`} role={orderDraftRecoveryBlocked || orderDraftRecoveryWarning ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftRecoveryWarning
@@ -6711,7 +6734,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      {!actionOrders.length && supportWorkQueue.length ? <Empty>Order fulfilment is clear. Continue the customer help case.</Empty> : <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />}
+      {!actionOrders.length && (supportWorkQueue.length || correctionDraft) ? <Empty>{supportWorkQueue.length ? 'Order fulfilment is clear. Continue the customer help case.' : 'Order fulfilment is clear. Continue the customer balance review.'}</Empty> : <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />}
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
@@ -7521,6 +7544,17 @@ function ClosedOrderHistory({
 }) {
   const [page, setPage] = useState(0)
   const supportClock = useMinuteClock()
+  const correctionSourceIntentId = correctionDraft?.sourceIntent?.id ?? ''
+  const correctionFocusKey = correctionDraft ? `${correctionDraft.orderId}:${correctionSourceIntentId || 'manual'}` : ''
+  const correctionReviewReady = Boolean(correctionCalculation) && !disabled
+
+  useLayoutEffect(() => {
+    if (!correctionFocusKey || (correctionSourceIntentId ? !correctionReviewReady : disabled)) return
+    const target = document.getElementById(correctionSourceIntentId ? 'shop-correction-review' : 'order-correction-amount')
+    target?.scrollIntoView({ block: 'center' })
+    target?.focus({ preventScroll: true })
+  }, [correctionFocusKey, correctionReviewReady, correctionSourceIntentId, disabled])
+
   const pageSize = 8
   if (!orders.length) return null
   const pageCount = Math.ceil(orders.length / pageSize)
@@ -7700,7 +7734,7 @@ function ClosedOrderHistory({
         <label>Reason<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ reasonCode: event.target.value as CommerceCorrectionReasonCode })} value={activeCorrectionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
         <label>Amount before tax<input disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} id="order-correction-amount" inputMode="numeric" min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
         {correctionCalculation ? <small role="note">Tax {formatMoney(correctionCalculation.taxMmk)} · note total {formatMoney(correctionCalculation.totalMmk)} · same tax snapshot as the original invoice</small> : null}
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled || !correctionCalculation} type="submit">Review correction</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
+        <div className="form-actions"><button className="core-button primary compact" disabled={disabled || !correctionCalculation} id="shop-correction-review" type="submit">Review correction</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
       </form> : null}
     </article>})}</div>
     {pageCount > 1 ? <nav aria-label="Closed order pages" className="order-archive-pagination">

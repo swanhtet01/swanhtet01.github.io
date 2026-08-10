@@ -648,6 +648,7 @@ export type EcommerceCorrectionOutcome = {
   reasonCode: CommerceCorrectionReasonCode
   listedAmountMmk: number
   adjustmentTotalMmk: number
+  balanceBeforeMmk: number
   balanceAfterMmk: number
   financialStatus: 'review_required'
   postingAuthority: 'none'
@@ -2386,6 +2387,7 @@ export function projectEcommerceCorrectionOutcome(
     reasonCode: intent.reasonCode,
     listedAmountMmk: intent.listedAmountMmk,
     adjustmentTotalMmk,
+    balanceBeforeMmk: intent.originalBalanceMmk,
     balanceAfterMmk: record.balanceAfterMmk,
     financialStatus: 'review_required',
     postingAuthority: 'none',

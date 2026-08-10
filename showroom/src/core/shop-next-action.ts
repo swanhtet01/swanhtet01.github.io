@@ -8,6 +8,7 @@ export type ShopNextActionInput = {
   lowStockCount: number
   openSupportCaseCount: number
   pendingAction: boolean
+  pendingCorrectionReviewCount: number
   pendingOnlineRequestCount: number
 }
 
@@ -22,7 +23,7 @@ export type ShopNextActionDecision = {
 }
 
 export function decideShopNextAction(input: ShopNextActionInput): ShopNextActionDecision {
-  const counts = [input.actionOrderCount, input.activePurchaseOrderCount, input.catalogItemCount, input.closeReadyOrderCount, input.lowStockCount, input.openSupportCaseCount, input.pendingOnlineRequestCount]
+  const counts = [input.actionOrderCount, input.activePurchaseOrderCount, input.catalogItemCount, input.closeReadyOrderCount, input.lowStockCount, input.openSupportCaseCount, input.pendingCorrectionReviewCount, input.pendingOnlineRequestCount]
   if (!counts.every((count) => Number.isSafeInteger(count) && count >= 0)) throw new Error('Shop next-action counts must be non-negative safe integers.')
 
   if (!input.canWrite) return {
@@ -78,6 +79,15 @@ export function decideShopNextAction(input: ShopNextActionInput): ShopNextAction
     reason: `${input.openSupportCaseCount} customer help case${input.openSupportCaseCount === 1 ? '' : 's'} ${input.openSupportCaseCount === 1 ? 'needs' : 'need'} an accountable Shop response before routine close or supply work.`,
     stage: 'Handle customer help',
     track: 'Orders',
+  }
+  if (input.pendingCorrectionReviewCount) return {
+    job: 'Review customer balance',
+    nextAction: 'Review balance request',
+    ownerGate: 'Recheck the tax-bound adjustment and record one immutable review note under a named human.',
+    path: '/shop/?tab=orders#shop-order-history',
+    reason: `${input.pendingCorrectionReviewCount} customer balance request${input.pendingCorrectionReviewCount === 1 ? '' : 's'} ${input.pendingCorrectionReviewCount === 1 ? 'needs' : 'need'} review before daily close or supply work.`,
+    stage: 'Review customer balance',
+    track: 'Review',
   }
   if (input.closeReadyOrderCount) return {
     job: 'Review today\'s close',

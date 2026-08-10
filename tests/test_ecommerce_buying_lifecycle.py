@@ -1135,6 +1135,7 @@ class EcommerceBuyingLifecycleTests(unittest.TestCase):
         reviewed["corrections"] = [correction]
         outcome = project_ecommerce_correction_outcome(intent, reviewed)
         self.assertEqual(outcome["schema"], ECOMMERCE_CORRECTION_OUTCOME_SCHEMA)  # type: ignore[index]
+        self.assertEqual(outcome["balanceBeforeMmk"], 48_000)  # type: ignore[index]
         self.assertEqual(outcome["balanceAfterMmk"], 47_000)  # type: ignore[index]
         for field in (
             "externalPostingPerformed", "automaticPaymentPerformed", "automaticRefundPerformed",

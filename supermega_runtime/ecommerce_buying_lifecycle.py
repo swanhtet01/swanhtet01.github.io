@@ -2189,6 +2189,7 @@ def project_ecommerce_correction_outcome(
             "reasonCode": intent["reasonCode"],
             "listedAmountMmk": intent["listedAmountMmk"],
             "adjustmentTotalMmk": adjustment,
+            "balanceBeforeMmk": intent["originalBalanceMmk"],
             "balanceAfterMmk": expected_balance,
             "financialStatus": "review_required",
             "postingAuthority": "none",
