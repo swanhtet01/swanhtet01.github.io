@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- Product outcome gates pass. OPS-244 removes the redundant unscoped close identity before setup and labels historical unscoped orders only after a reviewed scope exists. Next: `shop-first-location-foundation-gate-client-acceptance`; pilots stay owner-gated.
+- Product outcome gates pass. OPS-245 requires canonical Stock plus a reviewed `LOC-*` binding before new real Shop orders while preserving historical reads. Next: `shop-location-setup-blocker-recovery-client-acceptance`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-244 at `4e4b8381` keeps the existing required business/location control as the only fresh close setup action while retaining a distinct historical-unscoped label after setup. CLAUDE-008 stays manual at `969fae03`.
+- Codex is sole integrator. OPS-245 at `6a0a78c1` routes first business/location setup through the existing Stock foundation, returns to human scope review, and blocks local/managed real orders until both records are bound. CLAUDE-008 stays manual at `969fae03`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-first-location-foundation-gate-client-acceptance`: require canonical Stock setup before the first business/location confirmation while preserving legacy workspace reads.
+1. Complete `shop-location-setup-blocker-recovery-client-acceptance`: when active aggregate-stock orders block location setup, open the exact Orders queue and retain a safe route back.
 2. Use CLAUDE-008 only as an optional owner-controlled review of checkpoint `969fae03`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
