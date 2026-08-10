@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-main local verification passes the complete app, security, client setup, recovery, storage-privacy, migration, Vercel-contract, and HQ gates. A corrected Ecommerce-to-Shop handoff now reports the prepared local request in every Shop intake summary instead of showing zero.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- All 39 recoveries/audits and 32 Shop/16 Plant final actions pass. Shop and Plant close accountably; Website reaches a source-bound Shop order; Ecommerce reaches completed/reconciled close and a reload-safe next-customer reset. Next: `ecommerce-real-order-return-client-acceptance`; pilots stay owner-gated.
+- All 39 recoveries/audits and 32 Shop/16 Plant final actions pass. Shop and Plant close accountably; Website reaches a source-bound Shop order; Ecommerce now reaches completed/reconciled close, accepted return, exact stock recovery, evidence-bound refund settlement, and reload-safe customer status. Next: `ecommerce-real-order-support-client-acceptance`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-234 proves real Ecommerce checkout-to-close and a durable next-customer reset without changing Shop history. CLAUDE-008 stays manual at `969fae03`.
+- Codex is sole integrator. OPS-235 proves the real Ecommerce return-to-Shop lifecycle through exact stock recovery and a separately confirmed refund-settlement record; no money is sent. CLAUDE-008 stays manual at `969fae03`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `ecommerce-real-order-return-client-acceptance`: prove one completed real-catalog order through customer return recovery, accountable Shop disposition, stock outcome, refund settlement, and reload without sample records.
+1. Complete `ecommerce-real-order-support-client-acceptance`: prove one completed real-catalog order through customer help recovery, accountable Shop triage, owner and SLA checkpoints, resolution, and reload without sample records.
 2. Use CLAUDE-008 only as an optional owner-controlled review of checkpoint `969fae03`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
