@@ -51,6 +51,15 @@ const workspaceKeyPrefixes = [
 
 type WorkspaceStorageReader = Pick<Storage, 'key' | 'length'>
 
+/**
+ * Exported so a guard can compare the RESET scope against the BACKUP scope. Restore deletes every
+ * resettable key the backup did not capture (company-backup.ts), so any key that is in one list and
+ * not deliberately excluded from the other is silent data loss. Without this export the two lists
+ * can only be compared by scraping source text, which is exactly the check that rots.
+ */
+export const localWorkspaceExactKeys: readonly string[] = [...exactWorkspaceKeys]
+export const localWorkspaceKeyPrefixes: readonly string[] = [...workspaceKeyPrefixes]
+
 export function isLocalWorkspaceKey(key: string) {
   return exactWorkspaceKeys.has(key) || workspaceKeyPrefixes.some((prefix) => key.startsWith(prefix))
 }
