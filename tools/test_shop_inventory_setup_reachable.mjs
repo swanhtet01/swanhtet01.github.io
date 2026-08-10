@@ -187,6 +187,63 @@ check(
   'with the catalog intact',
 )
 
+// --- the raised bound is real, not aspirational -------------------------------
+// The screen's limit went from 8 to SHOP_INVENTORY_MAX_STOCK_UNITS. Raising a number is easy;
+// what matters is whether setup still works up there, or whether the wall just moved.
+//
+// Measured across sizes with a deliberately non-alphabetical catalog: 18 items -> 5KB state in
+// 14ms, 200 -> 39KB in 31ms, 500 -> 95KB in 62ms, 1000 -> 190KB in 164ms. No cliff, and 190KB
+// sits far inside a browser storage budget. One over the bound is refused cleanly with
+// "catalog_skus must contain between 1 and 1000 items." rather than crashing.
+//
+// 200 is asserted here rather than 1000: it is already an order of magnitude past any shop the
+// product ships, and keeps this file cheap enough to sit in app:verify.
+const BULK = 200
+const bulkItems = Array.from({ length: BULK }, (_, index) => ({
+  sku: `BULK-${String(BULK - index).padStart(5, '0')}`,
+  onHand: 10 + (index % 5),
+}))
+const bulkSkus = bulkItems.map((item) => item.sku).sort()
+check(
+  bulkItems.map((item) => item.sku).some((sku, index) => sku !== bulkSkus[index]),
+  'the bulk fixture is NOT alphabetical either, so it exercises the ordering path too',
+)
+const bulkUnits = bulkItems.map((item, index) => ({
+  id: `LOT-BULK-${String(index + 1).padStart(5, '0')}`,
+  sku: item.sku,
+  tracking: 'lot',
+  trackingCode: `BULK-${String(index + 1).padStart(5, '0')}`,
+})).sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+const bulkOpenings = bulkUnits.map((unit) => ({
+  stockUnitId: unit.id,
+  locationId: 'LOC-MAIN',
+  vendorId: 'VEN-OPENING-001',
+  quantity: bulkItems.find((item) => item.sku === unit.sku).onHand,
+}))
+let bulkPackage = null
+let bulkFailure = ''
+try {
+  bulkPackage = buildShopInventoryImportPackage({
+    importId: 'IMP-7E9F1A3B-4C5D-4E6F-8A9B-0C1D2E3F4A5B',
+    sourceDigest: shopInventoryEvidenceDigest({ scope: SCOPE, catalog: bulkItems, clients, vendors, locations }),
+    catalogSkus: bulkSkus,
+    clients, vendors, locations,
+    stockUnits: bulkUnits,
+    openings: bulkOpenings,
+  })
+} catch (error) {
+  bulkFailure = error instanceof Error ? error.message : String(error)
+}
+check(bulkPackage !== null, `a ${BULK}-item opening import builds -- ${bulkFailure}`)
+check(
+  bulkPackage.stockUnits.length === BULK,
+  `covering all ${BULK} items, got ${bulkPackage?.stockUnits.length}`,
+)
+check(
+  BULK <= SHOP_INVENTORY_MAX_STOCK_UNITS,
+  `and ${BULK} is inside the declared bound of ${SHOP_INVENTORY_MAX_STOCK_UNITS}`,
+)
+
 // --- every OTHER caller that hands a catalog to the projection ----------------
 // One unsorted call site is a bug; two is a class. After fixing the first, every caller was
 // audited and shared-master-data.ts had the same defect -- it built the catalog straight from
