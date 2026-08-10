@@ -10,6 +10,8 @@ import {
   installProductionWorkingSampleJobs,
   isGuidedSampleProduction,
   productionShiftOutput,
+  openProductionIssue,
+  resolveProductionIssue,
   recordProductionOutput,
   validateProductionState,
 } from '../showroom/src/core/production-workspace.ts'
@@ -145,4 +147,44 @@ test('guided evidence never lands after the records it follows', () => {
     // guided window must stay tight instead of drifting into the future.
     assert.ok(newest - installedAt < 30 * 60_000, `${pack.id} guided evidence drifted too far forward`)
   }
+})
+
+test('CAPA is required only for a fully specified quality issue', () => {
+  const pack = plantIndustryPacks[0]
+  const state = demoActivity(pack)
+  const proof = (actionId, at) => ({
+    actionId,
+    capturedAt: at,
+    actor: 'Quality lead',
+    reason: 'Recorded during the shift.',
+    evidenceReference: 'QA-LOG-001',
+  })
+  // The seed ships an incomplete legacy quality issue: no severity, owner, due
+  // time, or containment. The engine lets it close without CAPA, so the UI must
+  // not demand six CAPA fields to dismiss it.
+  const legacy = state.issues.find((issue) => issue.kind === 'quality' && !issue.severity)
+  assert.ok(legacy, 'the seed must still carry an incomplete quality issue')
+  const closedLegacy = resolveProductionIssue(state, legacy.id, proof('ACT-QA-LEGACY-001', `${PLANNING_DAY}T09:00:00.000Z`))
+  assert.ok(closedLegacy, 'an incomplete quality issue must close without CAPA')
+
+  // A fully specified quality issue still requires CAPA.
+  const withFullIssue = openProductionIssue(state, {
+    id: 'ISS-QA-001',
+    status: 'open',
+    createdAt: `${PLANNING_DAY}T09:15:00.000Z`,
+    area: 'Line A',
+    summary: 'Seal strength below specification',
+    kind: 'quality',
+    severity: 'high',
+    owner: 'Quality lead',
+    dueAt: '2026-09-01T10:00:00.000Z',
+    containment: 'Batch held pending review.',
+  }, proof('ACT-QA-FULL-001', `${PLANNING_DAY}T09:30:00.000Z`))
+  assert.ok(withFullIssue, 'a complete quality issue must open')
+  const opened = withFullIssue.issues.find((issue) => issue.summary === 'Seal strength below specification')
+  assert.equal(
+    resolveProductionIssue(withFullIssue, opened.id, proof('ACT-QA-FULL-002', `${PLANNING_DAY}T10:00:00.000Z`)),
+    null,
+    'a complete quality issue must not close without CAPA',
+  )
 })

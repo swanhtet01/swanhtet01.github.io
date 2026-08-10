@@ -8255,7 +8255,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   function resolveIssue(issueId: string) {
     const issue = production.issues.find((candidate) => candidate.id === issueId)
     if (!issue || issue.status === 'resolved') return
-    if (issue.kind === 'quality') {
+    // Mirror the engine, which requires CAPA only for a fully specified quality
+    // issue. Demanding it for an incomplete legacy record forces six fields to
+    // dismiss a problem whose own owner, due time, and containment were never set.
+    if (issue.kind === 'quality' && Boolean(issue.severity && issue.owner && issue.dueAt && issue.containment)) {
       setQualityCorrectiveDraft({
         issueId,
         failureMode: issue.summary,
