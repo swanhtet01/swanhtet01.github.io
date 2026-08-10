@@ -2559,6 +2559,7 @@
 .website-lead-list article small { overflow-wrap: anywhere; color: var(--website-quiet); font-size: 9px; }
 .website-lead-list article p { overflow-wrap: anywhere; color: var(--website-muted); }
 .website-lead-list article > div:last-child { display: flex; gap: 6px; }
+.website-lead-route-note { align-self: center; max-width: 150px; color: var(--website-quiet); font-size: 9px; line-height: 1.35; }
 .website-lead-empty { border: 1px dashed var(--website-line-strong); border-radius: 9px; padding: 14px; text-align: center; }
 .website-lead-export { width: max-content; }
 

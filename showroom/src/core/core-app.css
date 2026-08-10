@@ -1358,14 +1358,11 @@ textarea { min-height: 72px; resize: vertical; }
 .website-intake-record, .website-intake-ready > div { min-width: 0; display: grid; gap: 4px; }
 .website-intake-record strong, .website-intake-ready strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .website-intake-record small, .website-intake-ready small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.website-lead-intake .website-intake-ready small,
+.website-lead-source small { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+.website-lead-intake .website-intake-ready { align-items: flex-start; }
 .order-entry-panel[data-mode="online"] { display: grid; align-content: start; gap: 10px; }
 .order-entry-panel[data-mode="online"] .website-intake-record small { overflow: visible; line-height: 1.5; text-overflow: clip; white-space: normal; }
-.legacy-website-intake { overflow: hidden; border: 1px solid var(--core-line); border-radius: 10px; background: var(--core-panel-raised); }
-.legacy-website-intake > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; color: var(--core-ink); font-size: 12px; font-weight: 760; cursor: pointer; list-style: none; }
-.legacy-website-intake > summary::-webkit-details-marker { display: none; }
-.legacy-website-intake > summary::after { color: var(--core-green); font-size: 18px; content: "+"; }
-.legacy-website-intake[open] > summary::after { content: "−"; }
-.legacy-website-intake > .website-intake { border: 0; border-top: 1px solid var(--core-line); border-radius: 0; box-shadow: none; }
 .website-intake-confirm { min-height: 44px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 9px; padding: 7px 9px; background: #fff; font-size: 9px; line-height: 1.35; }
 .website-intake-confirm input { width: 16px; min-height: 16px; margin: 0; }
 .website-intake-completion { display: grid; gap: 8px; }

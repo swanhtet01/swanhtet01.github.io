@@ -23,7 +23,7 @@ The pitch, verbatim from approved copy (eyebrow `Website maker`):
 2. Fill the client's real business details in front of them — this is the brief-to-site moment. `View example` is optional; `Make preview` applies their answers without saving.
 3. Review the preview at desktop, tablet, and mobile widths. On a saved draft page the copy explains itself: `Go back, then Preview to check desktop, tablet, or mobile.`
 4. Press `Edit page` to change one headline live, then `Save` — or `Discard` to show that a preview never overwrites anything silently.
-5. Open the `Inquiries` disclosure: `Capture customer inquiries`. Add a test inquiry with `Add inquiry`, then `Qualify` it with a responsible person, and show `Export inquiries`. Note the on-screen line: nothing is sent to customers, CRM, or Shop from this screen.
+5. Open the `Inquiries` disclosure: `Capture customer inquiries`. Add one client-approved inquiry with `Add inquiry`, then `Qualify` it with a responsible person. `Open in Shop` opens the qualified inquiry in Shop's online inbox on the same device. Choose `Review` to bind the exact inquiry, owner, and consented contact to a Shop order draft; the operator still chooses real catalog items, promise, fulfilment, and payment and must pass Shop's separate accountable confirmation before stock changes.
 6. Finish on the download: the ready panel says `Download your website` — `One file works on any phone or computer.` Press `Download website` (in a session-only workspace the button is `Download preview`) and open the file in a new tab.
 7. Point at the boundary card while the file opens: `Not online yet` — this is the honest close, not a fake launch.
 
@@ -33,7 +33,7 @@ The pitch, verbatim from approved copy (eyebrow `Website maker`):
 
 "Where is my content saved?" — the app says `Saved on this device` and `Nothing has been deployed.` Setup adds `Stays on this device. Nothing is sent or published.`
 
-"Can it spam my customers?" — the inquiry inbox captures and assigns; it never sends. Approved boundaries for Website are explicit: `No CMS`, `No domain write`, `No analytics connection`, `No deployment`, `No customer send`, `No payment action`.
+"Can it spam my customers?" — the inquiry inbox captures and assigns; it never sends. The browser-local Shop handoff reads the same qualified record and creates no message, order, payment, delivery request, or stock write by itself. Approved boundaries for Website are explicit: `No CMS`, `No domain write`, `No analytics connection`, `No deployment`, `No customer send`, `No payment action`.
 
 "What do I get free, and what is paid?" — approved framing only: `Free product. Managed intelligence.`, free lane `Operate without a stripped-down plan.` with `No account or model call required`, managed gate `Managed activation proceeds only after identity, tenant isolation, recovery, and write controls pass for the company.` No prices — the public site carries none.
 

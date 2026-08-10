@@ -2,10 +2,15 @@ import { lazy, Suspense, type ChangeEvent, type FormEvent, type KeyboardEvent, t
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router'
 
 import './core-app.css'
-import { WebsiteCommerceIntake } from '../products/WebsiteCommerceIntake'
 import type { EcommerceShopDraft } from '../products/ecommerce/ecommerce-shop-handoff'
 import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceOrderAmendmentIntent, EcommerceOrderRequestV2, EcommerceOrderRescheduleIntent, EcommerceReturnIntent, EcommerceShopDraftV2, EcommerceSupportIntent } from '../products/ecommerce/ecommerce-buying-lifecycle'
-import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
+import {
+  readWebsiteLeadLedger,
+  websiteLeadMatchesQualifiedRecord,
+  websiteLeadShopEvidenceReference,
+  websiteShopLeadInbox,
+  type WebsiteLead,
+} from '../products/website/website-leads'
 import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
 import {
@@ -132,9 +137,7 @@ import {
   commerceStorefrontOrderTimeline,
   commerceStorefrontRequestLines,
   commerceStorefrontRequests,
-  commerceWebsiteIntakes,
   commerceWorkingSampleCatalogId,
-  convertCommerceWebsiteIntake,
   configureCommerceTax,
   configureCommerceAccountMapping,
   configureCommerceCustomerCreditPolicy,
@@ -182,7 +185,6 @@ import {
   type CommerceTaxConfiguration,
   type CommerceTaxMode,
   type CommerceCustomerCreditPolicyStatus,
-  type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import { projectShopInventory } from './shop-inventory-foundation'
 import { projectProductionMaterialRequirements } from './production-material-handoff'
@@ -1742,6 +1744,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [paymentTermsDays, setPaymentTermsDays] = useState<0 | 7 | 30>(0)
   const [preparedChannelDraft, setPreparedChannelDraft] = useState<ChannelOrderDraft | null>(null)
   const [preparedEcommerceDraft, setPreparedEcommerceDraft] = useState<EcommerceShopDraft | null>(null)
+  const [preparedWebsiteLead, setPreparedWebsiteLead] = useState<WebsiteLead | null>(null)
   const [preparedEcommerceLocalCurrentness, setPreparedEcommerceLocalCurrentness] = useState<{
     sourceRequestId: string
     successorRequestId: string | null
@@ -1784,6 +1787,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const correctionTriggerRefs = useRef(new Map<string, HTMLButtonElement>())
   const correctionEditorRef = useRef<HTMLFormElement>(null)
   const ecommerceInboxTargetRef = useRef<HTMLButtonElement>(null)
+  const websiteInboxTargetRef = useRef<HTMLButtonElement>(null)
   const preparedChannelRef = useRef<HTMLDivElement>(null)
   const consumedEcommerceDraftId = useRef('')
   const consumedEcommerceReturnIntentId = useRef('')
@@ -1793,6 +1797,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const consumedEcommerceOrderAmendmentIntentId = useRef('')
   const consumedEcommerceOrderRescheduleIntentId = useRef('')
   const consumedEcommerceInboxSource = useRef('')
+  const consumedWebsiteInboxSource = useRef('')
   const orderDraftRevisionRef = useRef(orderDraftRead.draft?.revision ?? 0)
   const orderDraftSaveQueueRef = useRef(Promise.resolve())
   const orderDraftCatalogRef = useRef(commerce.items)
@@ -2029,12 +2034,23 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return null
     }
   }, [commerce, purchaseOrderClock])
-  const importedWebsiteOrderIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
-  const websiteIntakes = commerceWebsiteIntakes(commerce)
-  const localWebsiteIntake = managedIdentity ? null : readWebsiteEcommerceHandoff()
-  const legacyWebsiteWorkWaiting = managedIdentity
-    ? websiteIntakes.some((intake) => intake.status === 'pending_confirmation')
-    : Boolean(localWebsiteIntake && (!localWebsiteIntake.order || !importedWebsiteOrderIds.includes(localWebsiteIntake.order.id)))
+  const websiteLeadInbox = useMemo(() => {
+    if (managedIdentity || typeof window === 'undefined') return { leads: [] as WebsiteLead[], error: '' }
+    try {
+      const usedSourceIds = commerce.orders.flatMap((order) => order.sourceRecordId ? [order.sourceRecordId] : [])
+      return { leads: websiteShopLeadInbox(readWebsiteLeadLedger(window.localStorage), usedSourceIds), error: '' }
+    } catch (error) {
+      return {
+        leads: [] as WebsiteLead[],
+        error: error instanceof Error ? error.message : 'Website inquiries could not be read.',
+      }
+    }
+  }, [commerce.orders, commerceLocation.key, managedIdentity])
+  const pendingWebsiteLeadCount = websiteLeadInbox.leads.length
+  const requestedWebsiteLeadIsWaiting = Boolean(
+    requestedRequestId
+    && websiteLeadInbox.leads.some((lead) => lead.id === requestedRequestId),
+  )
   const storefrontRequests = commerceStorefrontRequests(commerce)
   const storefrontOrderTimeline = commerceStorefrontOrderTimeline(commerce, storefrontRequests)
   const pendingStorefrontRequests = storefrontOrderTimeline
@@ -2063,6 +2079,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     && !commerce.orders.some((order) => order.sourceRecordId === preparedEcommerceDraft.sourceRequestId),
   )
   const pendingEcommerceReviewCount = pendingStorefrontRequests.length + Number(preparedEcommerceRequestIsWaiting)
+  const pendingOnlineReviewCount = pendingEcommerceReviewCount + pendingWebsiteLeadCount
   useEffect(() => {
     if (preparedEcommerceDraft?.schema !== 'supermega.ecommerce.shop_draft.v7') return
     const sourceRequestId = preparedEcommerceDraft.sourceRequestId
@@ -2505,6 +2522,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setPromisedAt('')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(null)
+        setPreparedWebsiteLead(null)
         setOrderEntryMode('manual')
       })
     }
@@ -2569,6 +2587,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       || orderEntryMode !== 'manual'
       || preparedChannelDraft
       || preparedEcommerceDraft
+      || preparedWebsiteLead
       || pendingAction
       || !commerceCanWrite
       || orderDraftConflict
@@ -2659,6 +2678,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     pendingAction,
     preparedChannelDraft,
     preparedEcommerceDraft,
+    preparedWebsiteLead,
     resumedOrderDraft,
   ])
 
@@ -2700,6 +2720,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           : null
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(ecommerceNavigationDraft)
+        setPreparedWebsiteLead(null)
         setLocalEcommerceReplacement(null)
         setCustomer(navigationCustomer)
         setChannel('Ecommerce')
@@ -3066,6 +3087,33 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     return () => cancelAnimationFrame(focusFrame)
   }, [managedIdentity, navigate, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, tab, workspaceMode])
 
+  useEffect(() => {
+    const sourceKey = requestedRequestId || 'website-inbox'
+    if (requestedSource !== 'website-inbox'
+      || consumedWebsiteInboxSource.current === sourceKey
+      || tab !== 'orders'
+      || managedIdentity
+      || !orderDraftInitialized) return
+    consumedWebsiteInboxSource.current = sourceKey
+    setOrderEntryMode('online')
+    setOrderDraftActive(true)
+    setResumedOrderDraft(null)
+    setOrderDraftConflict(false)
+    setNotice(requestedWebsiteLeadIsWaiting
+      ? `${requestedRequestId} is ready for Shop review. Choose Review to prepare an accountable order.`
+      : pendingWebsiteLeadCount
+        ? `${pendingWebsiteLeadCount} qualified Website ${pendingWebsiteLeadCount === 1 ? 'inquiry is' : 'inquiries are'} waiting for Shop review.`
+        : websiteLeadInbox.error || 'The Website inquiry inbox is clear.')
+    const focusFrame = requestAnimationFrame(() => {
+      const dialog = orderComposerRef.current
+      if (dialog && !dialog.open) dialog.showModal()
+      if (requestedWebsiteLeadIsWaiting) websiteInboxTargetRef.current?.focus()
+      else orderComposerHeadingRef.current?.focus()
+      navigate('/shop/?tab=orders', { replace: true })
+    })
+    return () => cancelAnimationFrame(focusFrame)
+  }, [managedIdentity, navigate, orderDraftInitialized, pendingWebsiteLeadCount, requestedRequestId, requestedSource, requestedWebsiteLeadIsWaiting, tab, websiteLeadInbox.error])
+
   async function initializeManagedCatalog(event: FormEvent) {
     event.preventDefault()
     if (!managedIdentity) return
@@ -3090,7 +3138,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setCatalogBusy(true)
     setCatalogError('')
     try {
-      await mutateCommerce('commerce.workspace.initialized', commandUuid(), proof, (current) => current.items.length || current.orders.length || current.movements.length || current.closes.length || commerceWebsiteIntakes(current).length ? null : validateCommerceState({
+      await mutateCommerce('commerce.workspace.initialized', commandUuid(), proof, (current) => current.items.length || current.orders.length || current.movements.length || current.closes.length || current.websiteIntakes?.length ? null : validateCommerceState({
         ...current,
         items: [{ sku: skuValue, name, onHand, reorderAt, price }],
         catalogBaselines: [createCommerceCatalogBaseline({ sku: skuValue, price, reorderAt }, proof)],
@@ -3209,7 +3257,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     inventoryReady: Boolean(commerce.inventoryFoundation && managedInventoryProjection),
     lowStockCount: lowStock.length,
     pendingAction: Boolean(pendingAction),
-    pendingOnlineRequestCount: pendingEcommerceReviewCount + (legacyWebsiteWorkWaiting ? 1 : 0),
+    pendingOnlineRequestCount: pendingOnlineReviewCount,
   })
   const shopAgentJob = shopNextAction.job
   const shopAgentReason = shopNextAction.reason
@@ -3235,7 +3283,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const shopSetupGuideRows = [
     ['Products', commerce.items.length ? `${commerce.items.length} current SKU` : 'Import catalog'],
     ['Stock', commerce.inventoryFoundation && managedInventoryProjection ? 'Location + ATP' : 'Simple count first'],
-    ['Orders', pendingEcommerceReviewCount || legacyWebsiteWorkWaiting ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
+    ['Orders', pendingOnlineReviewCount ? 'Online review' : actionOrders.length ? 'Queue active' : 'Counter ready'],
     ['Payments', paymentReview.length ? `${paymentReview.length} exception` : 'Review only'],
     ['Accounting', latestCloseDownload ? 'Export ready' : 'Close later'],
     ['Boundary', 'Review before writes'],
@@ -3337,20 +3385,24 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setPaymentTermsDays(0)
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
+    setPreparedWebsiteLead(null)
     setOrderEntryMode('manual')
   }
 
-  function detachPreparedOrderSources(options: { channel?: boolean; ecommerce?: boolean } = {}) {
+  function detachPreparedOrderSources(options: { channel?: boolean; ecommerce?: boolean; website?: boolean } = {}) {
     const removeChannel = options.channel ?? true
     const removeEcommerce = options.ecommerce ?? true
+    const removeWebsite = options.website ?? false
     const removed = (removeChannel && Boolean(preparedChannelDraft))
       || (removeEcommerce && Boolean(preparedEcommerceDraft))
+      || (removeWebsite && Boolean(preparedWebsiteLead))
     if (removeEcommerce && preparedEcommerceDraft) {
       consumedEcommerceDraftId.current = preparedEcommerceDraft.id
       navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
     }
     if (removeChannel) setPreparedChannelDraft(null)
     if (removeEcommerce) setPreparedEcommerceDraft(null)
+    if (removeWebsite) setPreparedWebsiteLead(null)
     if (removed) setFulfilmentReference('')
     return removed
   }
@@ -3424,6 +3476,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setRemovedOrderLine(null)
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(null)
+    setPreparedWebsiteLead(null)
     setOrderEntryMode('manual')
     setResumedOrderDraft(draft)
     setOrderDraftActive(true)
@@ -3536,7 +3589,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const trigger = returnFocus?.isConnected
       ? returnFocus
       : action.kind === 'order_create'
-        ? preparedEcommerceDraft && orderReviewRef.current?.isConnected
+        ? (preparedEcommerceDraft || preparedWebsiteLead) && orderReviewRef.current?.isConnected
           ? orderReviewRef.current
           : orderComposerTriggerRef.current
         : document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -3717,6 +3770,43 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (pendingAction.presentation === 'counter') navigate(`/shop/?tab=orders#${commerceOrderTargetId(pendingAction.subjectId)}`)
   }
 
+  function reviewWebsiteInquiryInShop(leadId: string) {
+    if (!commerceCanWrite || pendingAction) {
+      setNotice('Finish the current Shop action before reviewing a Website inquiry.')
+      return
+    }
+    const lead = websiteLeadInbox.leads.find((candidate) => candidate.id === leadId)
+    if (!lead) {
+      setNotice('The Website inquiry is no longer qualified or is already linked to a Shop order.')
+      return
+    }
+    if (!commerce.items.length) {
+      setNotice('Add real Shop products before turning this Website inquiry into an order.')
+      return
+    }
+    setPreparedChannelDraft(null)
+    setPreparedEcommerceDraft(null)
+    setPreparedWebsiteLead(lead)
+    setCustomer(lead.name)
+    setChannel('Website')
+    setSku(commerce.items[0].sku)
+    setQuantity(1)
+    setExtraOrderLines([])
+    setRemovedOrderLine(null)
+    setPayment('')
+    setFulfilment('')
+    setFulfilmentReference(lead.id)
+    setPromisedAt(defaultOrderPromiseInput())
+    setPaymentTermsDays(0)
+    setOrderEntryMode('manual')
+    setOrderDraftActive(true)
+    setResumedOrderDraft(null)
+    setOrderDraftConflict(false)
+    setOrderDraftIssue('')
+    setNotice(`${lead.id} is source-bound to ${lead.owner}. Choose the real items, promise, fulfilment, and payment before the accountable Shop gate.`)
+    requestAnimationFrame(() => orderComposerHeadingRef.current?.focus())
+  }
+
   function useChannelDraft(draft: ChannelOrderDraft) {
     if (!commerceCanWrite) {
       setNotice('Shop changes are paused because this workspace cannot confirm writes.')
@@ -3738,6 +3828,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setPromisedAt(defaultOrderPromiseInput())
     setPreparedChannelDraft(draft)
     setPreparedEcommerceDraft(null)
+    setPreparedWebsiteLead(null)
     setOrderEntryMode('manual')
     setNotice(`${draft.sourceRecordId} mapped locally. Review the structured order before any stock changes.`)
   }
@@ -3769,6 +3860,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         if (!firstLine) throw new Error('The managed Ecommerce request has no reviewed item.')
         setPreparedChannelDraft(null)
         setPreparedEcommerceDraft(draft)
+        setPreparedWebsiteLead(null)
         setCustomer(draft.customerProfile?.name ?? draft.customerReference)
         setChannel('Ecommerce')
         setSku(firstLine.sku)
@@ -3797,6 +3889,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       })
       setPreparedChannelDraft(null)
       setPreparedEcommerceDraft(draft)
+      setPreparedWebsiteLead(null)
       setCustomer(draft.customerReference)
       setChannel('Ecommerce')
       setSku(draft.line.sku)
@@ -3989,8 +4082,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       : new Date(reviewedAt.getTime() + paymentTermsDays * 24 * 60 * 60 * 1000).toISOString()
     const sourceDraft = preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? preparedChannelDraft : null
     const ecommerceDraft = preparedEcommerceDraft
-    if (sourceDraft && ecommerceDraft) {
+    const websiteLead = preparedWebsiteLead
+    if ([sourceDraft, ecommerceDraft, websiteLead].filter(Boolean).length > 1) {
       detachPreparedOrderSources()
+      setPreparedWebsiteLead(null)
       setNotice('Two source drafts were present. Both links were removed and nothing was queued.')
       return
     }
@@ -4126,8 +4221,21 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice('The Ecommerce request changed after confirmation. Return to Ecommerce or continue as a manual order.')
       return
     }
-    const sourceRecordId = sourceDraft?.sourceRecordId ?? ecommerceDraft?.sourceRequestId
-    const sourceEvidence = sourceDraft?.evidenceReference ?? ecommerceDraft?.evidenceReference
+    let websiteLeadCurrent = !websiteLead
+    if (websiteLead && !managedIdentity) {
+      try {
+        websiteLeadCurrent = websiteLeadMatchesQualifiedRecord(readWebsiteLeadLedger(window.localStorage), websiteLead)
+      } catch {
+        websiteLeadCurrent = false
+      }
+    }
+    if (websiteLead && (!websiteLeadCurrent || customer.trim() !== websiteLead.name || channel !== 'Website')) {
+      detachPreparedOrderSources({ website: true })
+      setNotice('The Website inquiry changed or its customer source was edited. Reopen it from the Website inbox or continue as a manual order.')
+      return
+    }
+    const sourceRecordId = sourceDraft?.sourceRecordId ?? ecommerceDraft?.sourceRequestId ?? websiteLead?.id
+    const sourceEvidence = sourceDraft?.evidenceReference ?? ecommerceDraft?.evidenceReference ?? (websiteLead ? websiteLeadShopEvidenceReference(websiteLead) : undefined)
     const confirmationEvidence = sourceEvidence ?? handoffReference
     if (sourceRecordId && commerce.orders.some((candidate) => candidate.sourceRecordId === sourceRecordId)) {
       setNotice(`${sourceRecordId} is already linked to an order. No duplicate was queued.`)
@@ -4218,7 +4326,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     queueAction({
       kind: 'order_create',
       subjectId: order.id,
-      summary: ecommerceDraft ? 'Confirm Ecommerce request as order' : `Confirm order for ${order.customer}`,
+      summary: ecommerceDraft ? 'Confirm Ecommerce request as order' : websiteLead ? 'Confirm Website inquiry as order' : `Confirm order for ${order.customer}`,
       before: `${sourceRecordId ? `Request ${sourceRecordId} · ` : ''}Customer ${order.customer} · ${lineReview}`,
       after: `Order ${order.id} · ${formatCommerceCalculation(calculationReview)}${promotionDecision?.status === 'approved' ? ` · promotion ${promotionDecision.code} -${formatMoney(promotionDecision.discountMmk)} under policy R${promotionDecision.policyRevision}` : promotionDecision?.status === 'rejected' ? ` · promotion ${promotionDecision.code} rejected (${promotionDecision.reason.replaceAll('_', ' ')})` : ''} · Payment ${payment} · due ${paymentDueAt ? formatIssueDue(paymentDueAt) : 'at handoff'}${paymentTermsDays ? ` · credit ${formatMoney(creditReview.exposureBeforeMmk)} → ${formatMoney(creditReview.exposureAfterMmk)} under policy R${creditReview.policy?.revision}` : ''} · Owner confirming operator · Promise ${formatIssueDue(canonicalPromisedAt)} · ${fulfilmentLabel(order.fulfilment)} · Stock ${reservationReview}${locationReview}`,
       actorSuggestion: managedIdentity ? undefined : 'Shop reviewer',
@@ -4226,8 +4334,19 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       evidenceReferenceLocked: Boolean(sourceRecordId),
       reasonSuggestion: ecommerceDraft
         ? 'Customer request reviewed against the current Shop catalog.'
+        : websiteLead
+          ? 'Qualified Website inquiry reviewed against the current Shop catalog.'
         : 'Order and handoff reviewed.',
       apply: async (action) => {
+        if (websiteLead) {
+          let current: boolean
+          try {
+            current = websiteLeadMatchesQualifiedRecord(readWebsiteLeadLedger(window.localStorage), websiteLead)
+          } catch {
+            current = false
+          }
+          if (!current) throw new ShopReviewRequiredError(`${websiteLead.id} changed after review. Nothing was applied; reopen the current Website inquiry.`)
+        }
         const ownedOrder = { ...order, owner: action.actor }
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => {
@@ -4299,92 +4418,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setOrderDraftConflict(false)
         resetOrderDraftFields()
       },
-    })
-  }
-
-  function queueWebsiteOrder(record: WebsiteOrderRecord, promisedAtInput: string) {
-    if (commerce.orders.some((order) => order.id === record.id || order.sourceRecordId === record.id)) {
-      setNotice(`${record.id} is already in the Shop order queue.`)
-      return
-    }
-    if (pendingAction?.kind === 'order_create' && pendingAction.subjectId === record.id) {
-      setNotice(`${record.id} is already waiting for accountable confirmation.`)
-      return
-    }
-
-    const line = record.lines.length === 1 ? record.lines[0] : null
-    const matchingItems = line ? commerce.items.filter((item) => item.sku === line.sku) : []
-    const item = matchingItems.length === 1 ? matchingItems[0] : null
-    if (!line || !item || line.quantity < 1 || item.onHand < line.quantity || item.price !== line.unitPriceMmk || record.totalMmk !== line.quantity * line.unitPriceMmk) {
-      setNotice('Website order confirmation failed closed. Recheck the item, immutable price, quantity, and available stock.')
-      return
-    }
-    const promisedTime = new Date(promisedAtInput)
-    const reviewedAt = new Date()
-    if (!promisedAtInput || Number.isNaN(promisedTime.getTime()) || promisedTime.getTime() <= reviewedAt.getTime()) {
-      setNotice('Choose a promised pickup or delivery time that is still in the future.')
-      return
-    }
-    const canonicalPromisedAt = promisedTime.toISOString()
-
-    const paymentLabel = record.paymentMethod === 'cash_on_delivery' ? 'Cash on delivery' : record.paymentMethod === 'manual_qr' ? 'Manual QR review' : 'Manual bank transfer'
-    const orderFulfilment = record.fulfilmentMethod === 'pickup' ? 'pickup' : 'delivery'
-    const order: CommerceOrder = {
-      id: record.id,
-      createdAt: record.createdAt,
-      customer: record.customerReference,
-      channel: 'Website',
-      item: line.itemName,
-      itemSku: line.sku,
-      quantity: line.quantity,
-      payment: paymentLabel,
-      paymentStatus: 'pending',
-      refundStatus: 'none',
-      fulfilment: orderFulfilment,
-      fulfilmentReference: record.id,
-      promisedAt: canonicalPromisedAt,
-      paymentDueAt: record.createdAt,
-      sourceRecordId: record.id,
-      evidenceReference: record.completion.evidenceReference,
-      total: record.totalMmk,
-      status: 'confirmed',
-    }
-    const beforeStock = item.onHand
-    queueAction({
-      kind: 'order_create',
-      subjectId: record.id,
-      summary: `Confirm ${record.id} from Website`,
-      before: `ready for confirmation · ${item.sku} · ${beforeStock} on hand`,
-      after: `confirmed · owner: confirming operator · promised ${formatTime(canonicalPromisedAt)} · ${fulfilmentLabel(orderFulfilment)} · ${record.id} · ${beforeStock - line.quantity} on hand`,
-      apply: (action) => mutateCommerce('commerce.order.created', action.commandId, commerceActionProof(action), (current) => reserveCommerceOrder(current, { ...order, owner: action.actor }, commerceActionProof(action))),
-    })
-  }
-
-  function queueManagedWebsiteIntake(intakeId: string, input: CommerceWebsiteOrderInput): boolean {
-    const intake = websiteIntakes.find((candidate) => candidate.id === intakeId && candidate.status === 'pending_confirmation')
-    const item = intake ? commerce.items.find((candidate) => candidate.sku === intake.sku) : null
-    if (!intake || !item || item.onHand < intake.quantity || item.price !== intake.unitPrice) {
-      setNotice('Managed Website intake failed closed. Recheck the retained intake, catalog price, and available stock.')
-      return false
-    }
-    const orderId = `ORD-WEB-${intake.id.slice(5)}`
-    if (pendingAction?.kind === 'order_create' && pendingAction.subjectId === orderId) {
-      setNotice(`${orderId} is already waiting for authenticated confirmation.`)
-      return true
-    }
-    const fulfilment = input.fulfilmentMethod === 'pickup' ? 'Customer pickup' : 'Local delivery'
-    return queueAction({
-      kind: 'order_create',
-      subjectId: orderId,
-      summary: `Confirm ${orderId} from Website`,
-      before: `${intake.id} waiting · ${item.onHand} on hand`,
-      after: `${fulfilment} · owner: confirming operator · promised ${formatTime(input.promisedAt)} · ${item.onHand - intake.quantity} on hand`,
-      apply: (action) => mutateCommerce(
-        'commerce.website_intake.converted',
-        action.commandId,
-        commerceActionProof(action),
-        (current) => convertCommerceWebsiteIntake(current, intake.id, input, commerceActionProof(action)),
-      ),
     })
   }
 
@@ -5078,6 +5111,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     if (!firstLine) throw new ShopReviewRequiredError('The replacement request has no reviewed item. Nothing was prepared.')
     setPreparedChannelDraft(null)
     setPreparedEcommerceDraft(draft)
+    setPreparedWebsiteLead(null)
     setCustomer(draft.customerProfile?.name ?? draft.customerReference)
     setChannel('Ecommerce')
     setSku(firstLine.sku)
@@ -6409,16 +6443,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   function cancelCommerceActionReview() {
     const restorePreparedEcommerce = pendingAction?.kind === 'order_create' && Boolean(preparedEcommerceDraft)
-    if (pendingAction?.kind === 'order_create' && !restorePreparedEcommerce) {
+    const restorePreparedWebsite = pendingAction?.kind === 'order_create' && Boolean(preparedWebsiteLead)
+    const restorePreparedOrderSource = restorePreparedEcommerce || restorePreparedWebsite
+    if (pendingAction?.kind === 'order_create' && !restorePreparedOrderSource) {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
     }
     setPendingAction(null)
-    if (!restorePreparedEcommerce) {
+    if (!restorePreparedOrderSource) {
       setNotice('Change cancelled. Shop data was not modified.')
       return
     }
-    setNotice('Review cancelled. The prepared Ecommerce request and Payment are unchanged; Shop data was not modified.')
+    setNotice(restorePreparedWebsite
+      ? 'Review cancelled. The qualified Website inquiry is still prepared; Shop data was not modified.'
+      : 'Review cancelled. The prepared Ecommerce request and Payment are unchanged; Shop data was not modified.')
     requestAnimationFrame(() => {
       const dialog = orderComposerRef.current
       if (dialog && !dialog.open) dialog.showModal()
@@ -6437,8 +6475,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     && (orderDraftRead.status === 'ready' || orderDraftRecoveryBlocked)
   const shopOrderControlNext = orderDraftRecoveryBlocked
     ? 'Repair saved order draft'
-    : pendingEcommerceReviewCount
-      ? 'Review Ecommerce inbox'
+    : pendingOnlineReviewCount
+      ? 'Review online inbox'
       : actionOrders.length
         ? 'Finish fulfilment queue'
         : paymentReview.length
@@ -6447,7 +6485,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             ? 'Save daily close'
             : 'Ready for new orders'
   const shopOrderControlRows = [
-    ['Online inbox', pendingEcommerceReviewCount ? `${pendingEcommerceReviewCount} waiting` : 'Clear'],
+    ['Online inbox', pendingOnlineReviewCount ? `${pendingOnlineReviewCount} waiting` : 'Clear'],
     ['Fulfilment', actionOrders.length ? `${actionOrders.length} needs action` : 'Clear'],
     ['Payment', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
     ['Recovery', orderDraftRecoveryBlocked ? 'Blocked' : orderDraftRecoveryVisible ? 'Resume available' : 'Ready'],
@@ -6455,7 +6493,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   ] as const
   const shopOrderControlBoundary = 'Owner confirms orders, payments, refunds, deliveries, cancellations, and stock changes.'
   const shopOrderLifecycleRows = [
-    ['Capture', pendingEcommerceReviewCount || legacyWebsiteWorkWaiting ? `${pendingEcommerceReviewCount + (legacyWebsiteWorkWaiting ? 1 : 0)} online` : openOrders.length ? `${openOrders.length} open` : 'Ready'],
+    ['Capture', pendingOnlineReviewCount ? `${pendingOnlineReviewCount} online` : openOrders.length ? `${openOrders.length} open` : 'Ready'],
     ['Reserve', managedInventoryProjection ? 'ATP active' : 'Catalog stock'],
     ['Fulfil', actionOrders.length ? `${actionOrders.length} action` : openOrders.length ? 'In progress' : 'Ready'],
     ['Collect', paymentReview.length ? `${paymentReview.length} review` : 'Clear'],
@@ -6521,7 +6559,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const afterSalesCount = commerce.orders.reduce((total, order) => (
     total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
   ), 0)
-  const incomingRequestCount = pendingEcommerceReviewCount + (legacyWebsiteWorkWaiting ? 1 : 0)
+  const incomingRequestCount = pendingOnlineReviewCount
   const shopTodayMetrics = [
     { label: 'Open orders', value: String(openOrders.length), tone: actionOrders.length ? 'attention' as const : 'ready' as const },
     { label: 'Catalog items', value: String(commerce.items.length) },
@@ -6663,7 +6701,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           confirmed={commerce.orders.filter((order) => order.status === 'confirmed').length}
           disabled={commerceControlsDisabled || !orderDraftInitialized || orderDraftRecoveryBlocked}
           incomingOnline={pendingEcommerceReviewCount}
-          incomingWebsite={managedIdentity ? websiteIntakes.filter((intake) => intake.status === 'pending_confirmation').length : Number(legacyWebsiteWorkWaiting)}
+          incomingWebsite={pendingWebsiteLeadCount}
           onOpenOrder={openOrderComposer}
           overdue={actionOrders.filter((order) => commerceOrderPromiseUrgency(order, purchaseOrderClock) === 'late').length}
           paymentPending={commerce.orders.filter((order) => order.status !== 'cancelled' && order.paymentStatus === 'pending').length}
@@ -6680,8 +6718,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setResumedOrderDraft(null)
       setOrderDraftConflict(false)
     }} ref={orderComposerRef}>
-      <div className="order-composer-head"><div><span className="core-eyebrow">Shop review</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review online request' : 'Add an order'}</h2><p>Check the source and details. Nothing changes until separate confirmation.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close Shop review" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
-      {orderDraftActive && orderEntryMode === 'manual' && !preparedChannelDraft && !preparedEcommerceDraft && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
+      <div className="order-composer-head"><div><span className="core-eyebrow">Shop review</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review Ecommerce request' : preparedWebsiteLead ? 'Review Website inquiry' : 'Add an order'}</h2><p>Check the source and details. Nothing changes until separate confirmation.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft && !preparedWebsiteLead ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close Shop review" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
+      {orderDraftActive && orderEntryMode === 'manual' && !preparedChannelDraft && !preparedEcommerceDraft && !preparedWebsiteLead && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftConflict
             ? 'Saved draft changed in another tab'
@@ -6698,7 +6736,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         </div>
         {resumedOrderNeedsReview ? <button className="core-button compact" disabled={!resumedOrderCanRebind || orderDraftSaving || orderDraftConflict} onClick={() => void acceptCurrentOrderDraftCatalog()} type="button">Use current Shop values</button> : null}
       </div> : null}
-      {!preparedEcommerceDraft && !preparedChannelDraft ? <div aria-label="Order source" className="order-entry-methods" role="group">
+      {!preparedEcommerceDraft && !preparedChannelDraft && !preparedWebsiteLead ? <div aria-label="Order source" className="order-entry-methods" role="group">
         <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter order</button>
         <button aria-pressed={orderEntryMode === 'message'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('message')} type="button">From message</button>
         <button aria-pressed={orderEntryMode === 'online'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('online')} type="button">Online request</button>
@@ -6706,6 +6744,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {orderNotice ? <p className="form-notice order-entry-notice" aria-live="polite">{orderNotice}</p> : null}
       {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><Suspense fallback={<p className="form-notice" role="status">Loading message intake…</p>}><ChannelOrderIntake disabled={commerceControlsDisabled} identity={managedIdentity ?? undefined} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></Suspense></div> : null}
       {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
+        <section className="website-intake website-lead-intake">
+          <div className="website-intake-head"><div><span className="core-eyebrow">Website inquiry inbox</span><strong>{pendingWebsiteLeadCount} qualified {pendingWebsiteLeadCount === 1 ? 'inquiry' : 'inquiries'} waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'ready'}`}>{managedIdentity ? 'Activation needed' : 'This device'}</span></div>
+          {websiteLeadInbox.error ? <div className="website-intake-record"><strong>Website inquiry recovery needed</strong><small>{websiteLeadInbox.error} Open Settings before creating an order from this source.</small></div> : websiteLeadInbox.leads.length ? websiteLeadInbox.leads.slice(0, 20).map((lead) => <div className="website-intake-ready" key={lead.id}>
+            <div><strong>{lead.name} · {lead.contact}</strong><small>{lead.id} · {lead.siteName} {lead.sourcePage} · owner {lead.owner}</small><small>{lead.request}</small></div>
+            <button className="core-button compact" data-website-lead-id={lead.id} disabled={commerceControlsDisabled || !commerce.items.length} onClick={() => reviewWebsiteInquiryInShop(lead.id)} ref={lead.id === requestedRequestId ? websiteInboxTargetRef : undefined} type="button">Review</button>
+          </div>) : <div className="website-intake-record"><strong>{managedIdentity ? 'Managed Website routing is not active.' : 'No qualified Website inquiry needs Shop review.'}</strong><small>{managedIdentity ? 'Website inquiries stay in Website until the owner activates a shared managed routing contract.' : 'Qualify an inquiry in Website first. Shop then binds it to one reviewed order without copying or sending customer data.'}</small></div>}
+          <Link className="text-link" to="/website/">Open Website</Link>
+        </section>
         <section className="website-intake">
           <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingEcommerceReviewCount} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed' : 'Not connected'}</span></div>
           {managedIdentity && pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => {
@@ -6721,7 +6767,6 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           }) : <div className="website-intake-record"><strong>{managedIdentity ? 'No Ecommerce request needs Shop review.' : 'Open a company account to use the shared inbox.'}</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Ecommerce</Link>
         </section>
-        {legacyWebsiteWorkWaiting ? <details className="legacy-website-intake"><summary>Older Website order needs review</summary><WebsiteCommerceIntake catalog={commerce.items} disabled={commerceControlsDisabled} importedSourceIds={importedWebsiteOrderIds} key={`${managedIdentity ? 'managed' : 'local'}:${websiteIntakes.find((intake) => intake.status === 'pending_confirmation')?.id ?? 'none'}`} managedIntakes={websiteIntakes} mode={managedIdentity ? 'managed' : 'local'} onQueueManagedIntake={queueManagedWebsiteIntake} onQueueReadyOrder={queueWebsiteOrder} /></details> : null}
       </div> : null}
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual">
@@ -6733,9 +6778,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <div><span className="core-eyebrow">Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>Exact excerpts reviewed; the full message was discarded.</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ ecommerce: false }); setNotice('Source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
+        {preparedWebsiteLead ? <div className="channel-source-ready website-lead-source" tabIndex={-1}>
+          <div><span className="core-eyebrow">Qualified Website inquiry</span><strong>{preparedWebsiteLead.name} · {preparedWebsiteLead.id}</strong><small>{preparedWebsiteLead.contact} · owner {preparedWebsiteLead.owner} · {preparedWebsiteLead.request}</small></div>
+          <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ website: true }); setNotice('Website source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
+        </div> : null}
         <form className="core-form compact-form commerce-order-form" id="commerce-manual-order-form" onSubmit={recordOrder}>
           <div className="order-essential-fields">
-            <label>Customer<input disabled={commerceControlsDisabled} list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); detachPreparedOrderSources() }} placeholder="Name or reference" /></label>
+            <label>Customer<input disabled={commerceControlsDisabled} list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); detachPreparedOrderSources({ website: true }) }} placeholder="Name or reference" /></label>
             {managedInventoryProjection?.clients.length ? <datalist id="shop-client-master-options">{managedInventoryProjection.clients.map((client) => <option key={client.id} value={client.name} />)}</datalist> : null}
             <label>Fulfilment<select disabled={commerceControlsDisabled} required value={fulfilment} onChange={(event) => {
               setFulfilment(event.target.value as '' | 'pickup' | 'delivery')
@@ -6779,7 +6828,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           {!preparedEcommerceDraft ? <details className="order-options" id="commerce-order-options" ref={orderOptionsRef}>
             <summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
-              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources() }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
+              <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources({ website: true }) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
               <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
             </div>
           </details> : null}

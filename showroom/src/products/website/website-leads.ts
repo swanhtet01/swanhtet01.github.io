@@ -194,3 +194,28 @@ export function websiteLeadCounts(ledger: WebsiteLeadLedger, siteName: string) {
     closed: siteLeads.filter((lead) => lead.status === 'closed').length,
   }
 }
+
+export function websiteShopLeadInbox(ledgerValue: unknown, usedSourceIds: readonly string[] = []) {
+  const ledger = restoreWebsiteLeadLedger(ledgerValue)
+  if (!ledger) throw new Error('The Website inquiry ledger is invalid.')
+  const used = new Set(usedSourceIds)
+  return ledger.leads.filter((lead) => lead.status === 'qualified' && !used.has(lead.id))
+}
+
+export function websiteLeadMatchesQualifiedRecord(ledgerValue: unknown, expectedValue: unknown) {
+  try {
+    const ledger = restoreWebsiteLeadLedger(ledgerValue)
+    const expected = canonicalLead(expectedValue)
+    if (!ledger || expected.status !== 'qualified') return false
+    const current = ledger.leads.find((lead) => lead.id === expected.id)
+    return Boolean(current && JSON.stringify(current) === JSON.stringify(expected))
+  } catch {
+    return false
+  }
+}
+
+export function websiteLeadShopEvidenceReference(leadValue: unknown) {
+  const lead = canonicalLead(leadValue)
+  if (lead.status !== 'qualified') throw new Error('Qualify the Website inquiry before Shop review.')
+  return `website:inquiry:${lead.id}:reviewed`
+}
