@@ -6845,7 +6845,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <div className="order-queue-actions">
           <span className="panel-note">{openOrders.length} in fulfilment{supportWorkQueue.length ? ` · ${supportWorkQueue.length} help open` : ''}{correctionDraft ? ' · 1 balance review' : ''}</span>
           {returnToLocationSetup
-            ? !actionOrders.length ? <Link className="core-button primary compact" to="/shop/?tab=inventory#shop-location-foundation">Continue location setup</Link> : null
+            ? !actionOrders.length ? <Link className="core-button primary compact" replace to="/shop/?tab=inventory#shop-location-foundation">Continue location setup</Link> : null
             : !orderDraftRecoveryVisible
             ? nextSupportWork && !actionOrders.length
               ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={openNextSupportWork} type="button">{nextSupportActionLabel}</button>
