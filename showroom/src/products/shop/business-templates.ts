@@ -424,6 +424,19 @@ const packServiceRows: Readonly<Record<ShopIndustryPackId, readonly ItemRow[]>> 
   ],
 }
 
+/**
+ * openingStock 999 on a service row means "always bookable", NOT deep stock on a shelf. Anything
+ * that ranks a catalog by onHand has to demote these or they win every slot: the Ecommerce working
+ * sample sorts by onHand and duly put "Catering consultation" and "Preorder collection" on a tea
+ * shop's storefront ahead of the tea. Services became catalog items so they could be CHARGED for at
+ * the counter; that is not the same as being the thing a shop merchandises online.
+ */
+const shopServiceSkus = new Set(Object.values(packServiceRows).flatMap((serviceRows) => serviceRows.map(([sku]) => sku)))
+
+export function isShopServiceSku(sku: string) {
+  return shopServiceSkus.has(sku)
+}
+
 export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = shopBusinessTemplateSeeds.map(
   (template) => ({ ...template, catalog: [...template.catalog, ...rows(packServiceRows[template.industryPackId])] }),
 )

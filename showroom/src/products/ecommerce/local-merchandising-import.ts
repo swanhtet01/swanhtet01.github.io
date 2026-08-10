@@ -1,3 +1,4 @@
+import { isShopServiceSku } from '../shop/business-templates'
 import {
   COMMERCE_KEY,
   validateCommerceState,
@@ -48,7 +49,13 @@ type EcommerceWorkingSampleInput = {
 
 function workingSamplePlan(catalog: CommerceItem[], input: Pick<EcommerceWorkingSampleInput, 'templateId' | 'businessName'>) {
   if (!workingSampleTemplateIds.includes(input.templateId)) throw new Error('Choose a supported Ecommerce working sample.')
+  // Bookable services carry onHand 999 to mean "always available", not deep stock, so every
+  // onHand-based sort put them first: a tea shop's storefront led with "Catering consultation"
+  // ahead of the tea. Demote them behind real goods rather than excluding them, because a spa has
+  // nothing BUT services and must still get a storefront.
   const ranked = catalog.filter((item) => item.onHand > 0).sort((left, right) => (
+    Number(isShopServiceSku(left.sku)) - Number(isShopServiceSku(right.sku))
+  ) || (
     input.templateId === 'pickup-preorder'
       ? left.price - right.price || right.onHand - left.onHand
       : right.onHand - left.onHand || right.price - left.price
