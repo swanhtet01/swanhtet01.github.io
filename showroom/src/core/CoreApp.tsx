@@ -195,6 +195,7 @@ import { projectShopInventory } from './shop-inventory-foundation'
 import { projectProductionMaterialRequirements } from './production-material-handoff'
 import { channelOrderDraftIsReady, type ChannelOrderDraft } from './channel-order-intake'
 import {
+  commerceOrderDraftPayments,
   recoverCommerceOrderDraftLine,
   type CommerceOrderDraft,
   type CommerceOrderDraftInput,
@@ -1954,6 +1955,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const manualOrderPricedTotal = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
     ? preparedEcommerceDraft.totalMmk
     : manualOrderTotal
+  const preparedEcommercePaymentLocked = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
   const orderCreditCalculation = commerceOrderCalculation(commerce, manualOrderPricedTotal, new Date(purchaseOrderClock).toISOString())
   const orderCreditReview = orderCreditCalculation
     ? commerceCustomerCreditReview(
@@ -7089,13 +7091,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
               <label>Channel<select disabled={commerceControlsDisabled} value={channel} onChange={(event) => { setChannel(event.target.value); detachPreparedOrderSources({ website: true }) }}><option>Messenger</option><option>Viber</option><option>Phone</option><option>Website</option><option>Ecommerce</option><option>Walk-in</option></select></label>
-              <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option><option>KBZPay</option><option>WavePay</option><option>Cash on delivery</option><option>Cash</option><option>Card</option></select></label>
+              <label>Payment<select disabled={commerceControlsDisabled} ref={orderPaymentRef} value={payment} onChange={(event) => { setPayment(event.target.value); detachPreparedOrderSources({ ecommerce: false }) }}><option value="">Choose payment</option>{commerceOrderDraftPayments.map((option) => <option key={option}>{option}</option>)}</select></label>
             </div>
           </details> : null}
         </form>
         </div>
         <div className="order-submit-bar" data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}>
-          {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>Payment policy</span><select aria-readonly="true" disabled form="commerce-manual-order-form" ref={orderPaymentRef} value={payment}><option>{payment}</option></select></label> : null}
+          {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>{preparedEcommercePaymentLocked ? 'Payment policy' : 'Payment'}</span><select aria-readonly={preparedEcommercePaymentLocked || undefined} disabled={commerceControlsDisabled || preparedEcommercePaymentLocked} form="commerce-manual-order-form" onChange={(event) => setPayment(event.target.value)} ref={orderPaymentRef} value={payment}>{preparedEcommercePaymentLocked ? <option>{payment}</option> : <><option value="">Choose payment</option>{commerceOrderDraftPayments.map((option) => <option key={option}>{option}</option>)}</>}</select></label> : null}
           <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : preparedEcommerceDraft ? 'Review request' : 'Review order'}</button>
         </div>
       </> : null}
