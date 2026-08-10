@@ -7,6 +7,10 @@ const exactWorkspaceKeys = new Set([
   'supermega.accountable.actions.v1',
   'supermega.behavior-trail.v1',
   'supermega.shop.order_draft_reset.v1',
+  // The trial signup record, which can hold a consented email address. Registered so
+  // "Reset this device" actually erases it and a workspace backup carries it -- an unregistered
+  // key would leave a person's contact details behind after they asked for a clean device.
+  'supermega.trial_signup.v1',
   // The in-progress counter sale and the remembered operator name. Registered so
   // "Confirm local reset", restore points and backup restore all reach them. The reset UI
   // promises to clear drafts; without these it reseeds the catalog while the previous

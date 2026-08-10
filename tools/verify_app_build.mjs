@@ -2629,7 +2629,12 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => workspaceControlsPageSource.includes(marker))) fail('customer_workspace_controls_not_isolated_or_safe')
 if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !appSource.includes('<ManagedLoginPage /></Suspense>} path="login"')
-  || !appSource.includes('<Navigate replace to="/login" />} path="signup"')
+  // /signup used to redirect here, which was a dead end: /login is gated on
+  // runtime.status === 'enterprise' AND managedTrialAuthConfigured(), and there is no self-serve
+  // account creation anywhere, so a stranger had no way to start. It now renders a real trial.
+  || !appSource.includes("lazy(() => import('./core/SignupPage')")
+  || !appSource.includes('<SignupPage /></Suspense>} path="signup"')
+  || appSource.includes('<Navigate replace to="/login" />} path="signup"')
   || !managedLoginPageSource.includes('title="Open your company."')
   || !managedLoginPageSource.includes('No workspace code or technical setup is required.')
   || !managedLoginPageSource.includes('Only active companies assigned to this account are shown.')
