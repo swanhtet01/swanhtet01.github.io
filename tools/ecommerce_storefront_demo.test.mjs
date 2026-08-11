@@ -5,10 +5,13 @@ import {
   COMMERCE_KEY,
   COMMERCE_ORDER_CALCULATION_SCHEMA,
   commerceCustomerCreditExposure,
+  commerceOrderAdjustedTotal,
   commerceOrderCalculation,
   commerceOrderItemSummary,
+  commerceOrderNeedsAction,
   commerceOrderPaymentTermsDays,
   commerceOrderPromiseUrgency,
+  commercePaymentAdapterLabel,
   commercePaymentDecision,
   commercePaymentPolicies,
   commercePromotionDecision,
@@ -506,4 +509,54 @@ test('commerceOrderCalculation, commerceOrderPaymentTermsDays, and commerceCusto
   assert.equal(commerceCustomerCreditExposure(state, 'Ko Aung'), 12000)
   assert.equal(commerceCustomerCreditExposure(state, 'Daw Mya'), 0)
   assert.equal(commerceCustomerCreditExposure(state, 'Unknown customer'), 0)
+})
+
+test('commerceOrderAdjustedTotal, commerceOrderNeedsAction, and commercePaymentAdapterLabel behave correctly', () => {
+  const baseCalc = { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: 18500, taxMode: 'not_configured', taxMmk: 0, totalMmk: 18500 }
+  const baseOrder = { id: 'ORD-T001', total: 18500, status: 'preparing', paymentStatus: 'pending', refundStatus: 'none', calculation: baseCalc, lines: [] }
+
+  // No corrections → returns the original total.
+  assert.equal(commerceOrderAdjustedTotal(baseOrder), 18500)
+  assert.equal(commerceOrderAdjustedTotal({ ...baseOrder, corrections: [] }), 18500)
+
+  // Debit correction increases the total.
+  const debitOrder = {
+    ...baseOrder,
+    corrections: [{ kind: 'debit', calculation: { totalMmk: 2000 } }],
+  }
+  assert.equal(commerceOrderAdjustedTotal(debitOrder), 20500)
+
+  // Credit correction decreases the total.
+  const creditOrder = {
+    ...baseOrder,
+    corrections: [{ kind: 'credit', calculation: { totalMmk: 3000 } }],
+  }
+  assert.equal(commerceOrderAdjustedTotal(creditOrder), 15500)
+
+  // A correction that would drive the total negative returns null.
+  const wipeOrder = {
+    ...baseOrder,
+    corrections: [{ kind: 'credit', calculation: { totalMmk: 20000 } }],
+  }
+  assert.equal(commerceOrderAdjustedTotal(wipeOrder), null)
+
+  // commerceOrderNeedsAction: active orders need action.
+  assert.equal(commerceOrderNeedsAction({ ...baseOrder, status: 'preparing' }), true)
+  assert.equal(commerceOrderNeedsAction({ ...baseOrder, status: 'ready' }), true)
+  assert.equal(commerceOrderNeedsAction({ ...baseOrder, status: 'confirmed' }), true)
+
+  // Completed + pending payment still needs action.
+  assert.equal(commerceOrderNeedsAction({ ...baseOrder, status: 'completed', paymentStatus: 'pending', refundStatus: 'none' }), true)
+
+  // Completed + reconciled → no action needed.
+  assert.equal(commerceOrderNeedsAction({ ...baseOrder, status: 'completed', paymentStatus: 'reconciled', refundStatus: 'none' }), false)
+
+  // Cancelled → no action needed (unless refund is due).
+  assert.equal(commerceOrderNeedsAction({ ...baseOrder, status: 'cancelled', refundStatus: 'none' }), false)
+  assert.equal(commerceOrderNeedsAction({ ...baseOrder, status: 'cancelled', refundStatus: 'due' }), true)
+
+  // commercePaymentAdapterLabel: maps each adapter to its display name.
+  assert.equal(commercePaymentAdapterLabel('cash_on_delivery'), 'Cash on delivery')
+  assert.equal(commercePaymentAdapterLabel('kbzpay_manual'), 'KBZPay')
+  assert.equal(commercePaymentAdapterLabel('pay_on_pickup'), 'Cash')
 })
