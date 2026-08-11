@@ -120,6 +120,9 @@ import {
   configureCommerceCustomerCreditPolicy,
   receiveCommerceStock,
   countCommerceStock,
+  settleCommerceRefund,
+  commerceDailyCloseCsv,
+  commerceAccountingHandoffCsv,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1495,4 +1498,52 @@ test('configureCommerceAccountMapping, configureCommerceCustomerCreditPolicy, re
   assert.ok(withCount.movements.some((m) => m.kind === 'count' && m.sku === 'SM-1003' && m.countedQuantity === 25 && m.quantityDelta === 25 - sm1003Before))
   // Non-existent SKU → null.
   assert.equal(countCommerceStock(seed, 'SM-NONEXISTENT', 10, countProof), null)
+})
+
+test('settleCommerceRefund, commerceDailyCloseCsv, and commerceAccountingHandoffCsv settle refunds and produce CSV exports', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+
+  // settleCommerceRefund: build a chain to create a cancelled+reconciled order with refundStatus='due'.
+  // Step 1: reconcile payment on ORD-1041 (ready, pending).
+  const payProof = { actionId: 'ACT-TEST-T030-PAY', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'Payment collected.', evidenceReference: 'T030-PAY-REF' }
+  const withPay = reconcileCommercePayment(seed, 'ORD-1041', payProof)
+  assert.ok(withPay !== null)
+  // Step 2: cancel ORD-1041 while it has a reconciled payment → refundStatus='due'.
+  const cancelProof = { actionId: 'ACT-TEST-T030-CANCEL', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'Customer cancelled.', evidenceReference: 'T030-CANCEL-REF' }
+  const withCancelled = cancelCommerceOrder(withPay, 'ORD-1041', cancelProof)
+  assert.ok(withCancelled !== null)
+  assert.equal(withCancelled.orders.find((o) => o.id === 'ORD-1041')?.refundStatus, 'due')
+  // Step 3: settle the refund.
+  const refundProof = { actionId: 'ACT-TEST-T030-REFUND', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'Refund settled in cash.', evidenceReference: 'T030-REFUND-REF' }
+  const withRefund = settleCommerceRefund(withCancelled, 'ORD-1041', refundProof)
+  assert.ok(withRefund !== null, 'valid refund settlement must succeed')
+  assert.equal(withRefund.orders.find((o) => o.id === 'ORD-1041')?.refundStatus, 'settled')
+  // Order with refundStatus='none' (ORD-1042, not cancelled or reconciled) → null.
+  assert.equal(settleCommerceRefund(seed, 'ORD-1042', refundProof), null)
+  // Non-existent order → null.
+  assert.equal(settleCommerceRefund(seed, 'ORD-NONEXISTENT', refundProof), null)
+
+  // commerceDailyCloseCsv: produce a CSV from a saved daily close artifact.
+  const closeExp = commerceCloseExpectation(seed, seedNowIso)
+  assert.ok(closeExp !== null)
+  const closeId = 'CLOSE-22222222-2222-4222-8222-222222222222'
+  const closeProof = { actionId: 'ACT-22222222-2222-4222-8222-222222222222', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'End-of-day close.', evidenceReference: 'T030-CLOSE-REF' }
+  const withClose = saveCommerceClose(seed, closeId, closeProof, closeExp)
+  assert.ok(withClose !== null)
+  const dailyExport = commerceDailyCloseExport(withClose, closeId)
+  assert.ok(dailyExport !== null)
+  const csv = commerceDailyCloseCsv(dailyExport)
+  assert.ok(typeof csv === 'string' && csv.length > 0, 'CSV output must be non-empty')
+  assert.ok(csv.includes(COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA), 'CSV must include the schema identifier')
+  assert.ok(csv.includes('ORD-1039'), 'CSV must include the closed order ID')
+  assert.ok(csv.includes('\r\n'), 'CSV must use CRLF line endings')
+
+  // commerceAccountingHandoffCsv: produce a CSV from an accounting handoff artifact.
+  const handoff = commerceAccountingHandoff(withClose, closeId)
+  assert.ok(handoff !== null)
+  const handoffCsv = commerceAccountingHandoffCsv(handoff)
+  assert.ok(typeof handoffCsv === 'string' && handoffCsv.length > 0, 'accounting handoff CSV must be non-empty')
+  assert.ok(handoffCsv.includes(COMMERCE_ACCOUNTING_HANDOFF_SCHEMA), 'handoff CSV must include the schema identifier')
+  assert.ok(handoffCsv.includes('\r\n'), 'handoff CSV must use CRLF line endings')
 })
