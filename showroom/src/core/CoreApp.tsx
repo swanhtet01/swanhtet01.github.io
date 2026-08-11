@@ -641,6 +641,10 @@ function defaultJobDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 8 * 60 * 60 * 1000))
 }
 
+function defaultCapaEffectivenessDueInput() {
+  return localDateTimeInputValue(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+}
+
 type PlantJobImportReview = {
   status: 'ready' | 'blocked'
   totalRows: number
@@ -7137,6 +7141,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     correctiveAction: string
     verificationResult: string
     effectivenessOwner: string
+    effectivenessDue: string
   } | null>(null)
   const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
   const [downtimeDialogOpen, setDowntimeDialogOpen] = useState(false)
@@ -8477,6 +8482,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         correctiveAction: '',
         verificationResult: '',
         effectivenessOwner: issue.owner ?? managedIdentity?.userId ?? 'Quality owner',
+        effectivenessDue: defaultCapaEffectivenessDueInput(),
       })
       return
     }
@@ -8528,6 +8534,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       correctiveAction: qualityCorrectiveDraft.correctiveAction.trim(),
       verificationResult: qualityCorrectiveDraft.verificationResult.trim(),
       effectivenessOwner: qualityCorrectiveDraft.effectivenessOwner.trim(),
+      effectivenessDue: new Date(qualityCorrectiveDraft.effectivenessDue).toISOString(),
     })
     if (!result) {
       setNotice('Record a stable failure mode, cause, corrective action, effectiveness evidence, and owner before review.')
@@ -9214,6 +9221,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <form autoComplete="off" className="core-form" onSubmit={reviewQualityCorrectiveResolution}>
           <label>Failure mode<input autoFocus maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, failureMode: event.target.value } : current)} placeholder="Stable name used to find repeats" required value={qualityCorrectiveDraft.failureMode} /><small>Use the same short name when the same defect happens again.</small></label>
           <div className="form-row"><label>Cause category<select onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, causeCategory: event.target.value as ProductionQualityCauseCategory } : current)} value={qualityCorrectiveDraft.causeCategory}>{productionQualityCauseCategories.map((category) => <option key={category} value={category}>{productionQualityCauseLabels[category]}</option>)}</select></label><label>Effectiveness owner<input autoComplete="off" maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessOwner: event.target.value } : current)} placeholder="Named person or role" required value={qualityCorrectiveDraft.effectivenessOwner} /></label></div>
+          <label>Effectiveness review by<input min={localDateTimeInputValue(new Date())} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessDue: event.target.value } : current)} required type="datetime-local" value={qualityCorrectiveDraft.effectivenessDue} /></label>
           <label>Verified root cause<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, rootCause: event.target.value } : current)} placeholder="What evidence identifies the cause?" required value={qualityCorrectiveDraft.rootCause} /></label>
           <label>Corrective action<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, correctiveAction: event.target.value } : current)} placeholder="What changed to prevent recurrence?" required value={qualityCorrectiveDraft.correctiveAction} /></label>
           <label>Effectiveness evidence<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What result proves the action worked?" required value={qualityCorrectiveDraft.verificationResult} /></label>

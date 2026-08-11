@@ -17420,6 +17420,7 @@ async function verifyProductionRuntime() {
       correctiveAction: 'Recalibrated the feedback loop and added a first-piece check.',
       verificationResult: 'Three consecutive samples remained inside the approved range.',
       effectivenessOwner: 'Quality supervisor',
+      effectivenessDue: '2026-09-10T08:00:00.000Z',
     })
     assert(qualityCorrectiveAction?.contract === 'supermega.production.quality-capa.v1'
       && qualityCorrectiveAction.recurrenceKey === 'machine:temperature-drift'
@@ -17432,6 +17433,7 @@ async function verifyProductionRuntime() {
       correctiveAction: 'Recalibrated the feedback loop and added a first-piece check.',
       verificationResult: 'Three consecutive samples remained inside the approved range.',
       effectivenessOwner: 'Quality supervisor',
+      effectivenessDue: '2026-09-10T08:00:00.000Z',
     })
     assert(myanmarQualityCorrectiveAction?.recurrenceKey === 'machine:အပူချိန်-လွဲ', 'production_myanmar_quality_capa_token_lost_marks')
     const resolved = model.resolveProductionIssue(opened, issue.id, resolutionProof, undefined, qualityCorrectiveAction)
@@ -17488,6 +17490,7 @@ async function verifyProductionRuntime() {
       correctiveAction: 'Added the controlled fixture to the station release checklist.',
       verificationResult: 'The next three controlled batches passed the same sample check.',
       effectivenessOwner: 'Quality supervisor',
+      effectivenessDue: '2026-09-10T08:00:00.000Z',
     })
     assert(recurringCapa?.priorIssueIds.join(',') === issue.id, 'production_recurrence_did_not_link_prior_capa')
     const recurringResolutionProof = proof('ACT-ISSUE-RECURRING-RESOLVE', 4_000)

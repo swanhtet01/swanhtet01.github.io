@@ -93,6 +93,7 @@ export type ProductionQualityCorrectiveAction = {
   correctiveAction: string
   verificationResult: string
   effectivenessOwner: string
+  effectivenessDue: string
   recurrenceKey: string
   priorIssueIds: string[]
 }
@@ -558,7 +559,7 @@ const productionShopDemandSnapshotFields = ['schema', 'operatingUnitLocationId',
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'maintenanceFindingSource', 'resolution']
 const productionMaintenanceFindingSourceFields = ['contract', 'equipmentId', 'equipmentName', 'maintenanceOwner', 'completionActionId', 'completedAt', 'strategyActionId', 'strategyRevision', 'returnToService', 'findings', 'evidenceReference']
 const productionMaintenanceCorrectiveActionFields = ['contract', 'correctiveAction', 'verificationResult', 'finalDisposition']
-const productionQualityCorrectiveActionFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'recurrenceKey', 'priorIssueIds']
+const productionQualityCorrectiveActionFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'effectivenessDue', 'recurrenceKey', 'priorIssueIds']
 const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference', 'maintenanceCorrectiveAction', 'qualityCorrectiveAction']
 const productionMachineFields = ['id', 'name', 'state']
 const productionEquipmentMasterFields = ['contract', 'assets']
@@ -775,6 +776,7 @@ function validateProductionQualityCorrectiveAction(value: unknown, field: string
   canonicalText(value.correctiveAction, `${field}.correctiveAction`, 360)
   canonicalText(value.verificationResult, `${field}.verificationResult`, 360)
   canonicalText(value.effectivenessOwner, `${field}.effectivenessOwner`, 120)
+  if (!validTimestamp(value.effectivenessDue)) throw new Error(`${field}.effectivenessDue is invalid.`)
   const recurrenceKey = canonicalText(value.recurrenceKey, `${field}.recurrenceKey`, 160)
   if (!productionQualityRecurrenceToken(failureMode) || recurrenceKey !== productionQualityRecurrenceKey(failureMode, value.causeCategory as ProductionQualityCauseCategory)) throw new Error(`${field}.recurrenceKey is invalid.`)
   if (!Array.isArray(value.priorIssueIds) || value.priorIssueIds.length > 500) throw new Error(`${field}.priorIssueIds is invalid.`)
@@ -802,6 +804,7 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
   correctiveAction: string
   verificationResult: string
   effectivenessOwner: string
+  effectivenessDue: string
 }) {
   const issue = state.issues.find((candidate) => candidate.id === issueId)
   if (!issue || issue.kind !== 'quality' || issue.status !== 'open'
@@ -810,7 +813,8 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
     || !validCanonicalText(input.rootCause, 360)
     || !validCanonicalText(input.correctiveAction, 360)
     || !validCanonicalText(input.verificationResult, 360)
-    || !validCanonicalText(input.effectivenessOwner, 120)) return null
+    || !validCanonicalText(input.effectivenessOwner, 120)
+    || !validTimestamp(input.effectivenessDue)) return null
   const recurrenceToken = productionQualityRecurrenceToken(input.failureMode)
   if (!recurrenceToken) return null
   const recurrenceKey = `${input.causeCategory}:${recurrenceToken}`
@@ -822,6 +826,10 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
     priorIssueIds: productionQualityPriorIssueIds(state.issues, issueId, recurrenceKey),
   }
   try { return validateProductionQualityCorrectiveAction(result, 'qualityCorrectiveAction') } catch { return null }
+}
+
+export function isCapaEffectivenessOverdue(capa: ProductionQualityCorrectiveAction, asOf: string): boolean {
+  return timestampBefore(capa.effectivenessDue, asOf)
 }
 
 function validateProductionShopDemandSource(value: unknown, field: string): ProductionShopDemandSource {

@@ -15,6 +15,7 @@ const bundle = await build({
       openProductionIssue,
       resolveProductionIssue,
       buildProductionQualityCorrectiveAction,
+      isCapaEffectivenessOverdue,
       productionQualityCauseCategories,
       PRODUCTION_QUALITY_CAPA_SCHEMA,
     } from './production-workspace.ts'`,
@@ -34,6 +35,7 @@ const {
   openProductionIssue,
   resolveProductionIssue,
   buildProductionQualityCorrectiveAction,
+  isCapaEffectivenessOverdue,
   productionQualityCauseCategories,
   PRODUCTION_QUALITY_CAPA_SCHEMA,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
@@ -84,6 +86,7 @@ function capInput(overrides = {}) {
     correctiveAction: 'Recalibrate welding machine; verify with calibrated gauge',
     verificationResult: 'Post-calibration check passes; 10 units inspected clean',
     effectivenessOwner: 'Maintenance Lead',
+    effectivenessDue: '2026-09-10T08:00:00.000Z',
     ...overrides,
   }
 }
@@ -162,6 +165,7 @@ check(capa1.causeCategory === 'machine', 'causeCategory stored')
 check(typeof capa1.rootCause === 'string' && capa1.rootCause.length > 0, 'rootCause stored')
 check(typeof capa1.correctiveAction === 'string' && capa1.correctiveAction.length > 0, 'correctiveAction stored')
 check(typeof capa1.effectivenessOwner === 'string' && capa1.effectivenessOwner.length > 0, 'effectivenessOwner stored')
+check(capa1.effectivenessDue === '2026-09-10T08:00:00.000Z', 'effectivenessDue stored')
 
 // 14. resolveProductionIssue with CAPA advances revision once
 check(resolvedQ1.revision === stateQ1.revision + 1, 'resolve with CAPA advances revision once')
@@ -275,5 +279,37 @@ const capaMut = buildProductionQualityCorrectiveAction(stMut, 'Q-MUT', capInput(
 const revisionBefore = stMut.revision
 resolveProductionIssue(stMut, 'Q-MUT', proof(), undefined, capaMut)
 check(stMut.revision === revisionBefore, 'original state is not mutated by resolveProductionIssue')
+
+// 31. Missing effectivenessDue returns null
+{
+  const qEd = makeQualityIssue('Q-ED-MISSING')
+  const stEd = withIssue(seed, qEd)
+  check(buildProductionQualityCorrectiveAction(stEd, 'Q-ED-MISSING', capInput({ effectivenessDue: undefined })) === null, 'null when effectivenessDue is missing')
+}
+
+// 32. Date-only effectivenessDue (not a full ISO timestamp) returns null
+{
+  const qEdDate = makeQualityIssue('Q-ED-DATE')
+  const stEdDate = withIssue(seed, qEdDate)
+  check(buildProductionQualityCorrectiveAction(stEdDate, 'Q-ED-DATE', capInput({ effectivenessDue: '2026-09-10' })) === null, 'null for date-only effectivenessDue')
+}
+
+// 33. isCapaEffectivenessOverdue: returns true when asOf is after effectivenessDue
+{
+  const qOd = makeQualityIssue('Q-OD')
+  const stOd = withIssue(seed, qOd)
+  const capaOd = buildProductionQualityCorrectiveAction(stOd, 'Q-OD', capInput({ effectivenessDue: '2026-09-10T08:00:00.000Z' }))
+  check(capaOd !== null, 'CAPA built for overdue test')
+  check(isCapaEffectivenessOverdue(capaOd, '2026-09-11T00:00:00.000Z') === true, 'overdue when asOf is after effectivenessDue')
+}
+
+// 34. isCapaEffectivenessOverdue: returns false when asOf is before effectivenessDue
+{
+  const qOdNot = makeQualityIssue('Q-OD-NOT')
+  const stOdNot = withIssue(seed, qOdNot)
+  const capaOdNot = buildProductionQualityCorrectiveAction(stOdNot, 'Q-OD-NOT', capInput({ effectivenessDue: '2026-09-10T08:00:00.000Z' }))
+  check(capaOdNot !== null, 'CAPA built for not-overdue test')
+  check(isCapaEffectivenessOverdue(capaOdNot, '2026-08-11T08:00:00.000Z') === false, 'not overdue when asOf is before effectivenessDue')
+}
 
 console.log(`\ntest_plant_quality_capa: ${checks} checks passed\n`)
