@@ -127,6 +127,9 @@ import {
   receiveCommercePurchaseOrder,
   cancelCommercePurchaseOrder,
   recordCommerceOrderCorrection,
+  recordCommerceSupplierInvoice,
+  markCommerceSupplierInvoicePayableReady,
+  commerceSupplierPayablesHandoffCsv,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1635,4 +1638,70 @@ test('recordCommerceOrderCorrection records a post-completion order correction',
   assert.equal(recordCommerceOrderCorrection(seed, { ...corrInput, listedAmountMmk: 0 }, proof, correctionExp), null)
   // Order not completed (ORD-1042 is 'preparing') → commerceOrderCorrectionExpectation returns null → mismatch → null.
   assert.equal(recordCommerceOrderCorrection(seed, { ...corrInput, orderId: 'ORD-1042' }, proof, correctionExp), null)
+})
+
+test('recordCommerceSupplierInvoice, markCommerceSupplierInvoicePayableReady, commerceSupplierPayablesHandoff, and commerceSupplierPayablesHandoffCsv process a supplier invoice to payables', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+  const seedPoId = 'PO-11111111-1111-4111-8111-111111111111'
+
+  // No invoiced POs with payableReview in seed → commerceSupplierPayablesHandoff returns null.
+  assert.equal(commerceSupplierPayablesHandoff(seed), null)
+
+  // Receive all 40 units so the invoice can match (quantity_ordered=40, unit_cost=4200).
+  const receiveProof = { actionId: 'ACT-TEST-T033-RECV', capturedAt: seedNowIso, actor: 'Warehouse staff', reason: 'Full delivery received.', evidenceReference: 'T033-RECV-REF' }
+  const withReceipt = receiveCommercePurchaseOrder(seed, seedPoId, 40, receiveProof)
+  assert.ok(withReceipt !== null, 'receiving 40 units on PO-11111111 must succeed')
+
+  // Record a supplier invoice for the full delivery.
+  const invoiceId = 'PINV-55555555-5555-4555-8555-555555555555'
+  const invoiceInput = {
+    id: invoiceId,
+    supplierReference: 'MBS-INV-2026-0723',
+    issuedAt: seedNowIso,
+    dueAt: '2026-08-06T08:00:00.000Z',
+    quantityInvoiced: 40,
+    unitCostMmk: 4200,
+  }
+  const invoiceProof = { actionId: 'ACT-TEST-T033-INV', capturedAt: seedNowIso, actor: 'Finance officer', reason: 'Supplier invoice received.', evidenceReference: 'T033-INV-REF' }
+  const withInvoice = recordCommerceSupplierInvoice(withReceipt, seedPoId, invoiceInput, invoiceProof)
+  assert.ok(withInvoice !== null, 'recording a matching supplier invoice must succeed')
+  const po = commercePurchaseOrders(withInvoice).find((p) => p.id === seedPoId)
+  assert.ok(po?.supplierInvoice?.id === invoiceId)
+  assert.equal(po?.supplierInvoice?.quantityInvoiced, 40)
+  assert.equal(po?.supplierInvoice?.totalMmk, 40 * 4200)
+  // Replay (same actionId) → unchanged state.
+  assert.ok(recordCommerceSupplierInvoice(withInvoice, seedPoId, invoiceInput, invoiceProof) !== null)
+  // Invalid invoice ID format → null.
+  assert.equal(recordCommerceSupplierInvoice(withReceipt, seedPoId, { ...invoiceInput, id: 'PINV-BADINPUT' }, invoiceProof), null)
+  // Price variance: different unitCostMmk → invoice records but match status is 'price_variance'.
+  // Still records successfully; only payable-ready step would fail.
+  const priceVarianceInvoice = recordCommerceSupplierInvoice(withReceipt, seedPoId, { ...invoiceInput, id: 'PINV-66666666-6666-4666-8666-666666666666', unitCostMmk: 3900 }, invoiceProof)
+  assert.ok(priceVarianceInvoice !== null, 'invoice with price variance still records')
+
+  // markCommerceSupplierInvoicePayableReady — invoice matches (qty=40, cost=4200); status → 'matched'.
+  const payableProof = { actionId: 'ACT-TEST-T033-PAYABLE', capturedAt: seedNowIso, actor: 'Finance officer', reason: 'Invoice verified against delivery.', evidenceReference: 'T033-PAYABLE-REF' }
+  const withPayable = markCommerceSupplierInvoicePayableReady(withInvoice, seedPoId, payableProof)
+  assert.ok(withPayable !== null, 'marking matched invoice as payable-ready must succeed')
+  assert.ok(commercePurchaseOrders(withPayable).find((p) => p.id === seedPoId)?.supplierInvoice?.payableReview)
+  // Replay payable-ready → unchanged state.
+  assert.ok(markCommerceSupplierInvoicePayableReady(withPayable, seedPoId, payableProof) !== null)
+  // Price-variance invoice is not matched → marking payable-ready fails.
+  assert.equal(markCommerceSupplierInvoicePayableReady(priceVarianceInvoice, seedPoId, payableProof), null)
+
+  // commerceSupplierPayablesHandoff — now has one payable-ready row.
+  const handoff = commerceSupplierPayablesHandoff(withPayable)
+  assert.ok(handoff !== null, 'payables handoff must be generated after payable-ready')
+  assert.equal(handoff.schema, COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA)
+  assert.equal(handoff.readyInvoiceCount, 1)
+  assert.equal(handoff.rows[0].purchaseOrderId, seedPoId)
+  assert.equal(handoff.rows[0].grossInvoiceMmk, 40 * 4200)
+  assert.equal(handoff.netPayableTotalMmk, 40 * 4200)
+
+  // commerceSupplierPayablesHandoffCsv — produces CRLF-terminated CSV.
+  const csv = commerceSupplierPayablesHandoffCsv(handoff)
+  assert.ok(typeof csv === 'string' && csv.length > 0, 'payables handoff CSV must be non-empty')
+  assert.ok(csv.includes(COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA), 'CSV must include the schema identifier')
+  assert.ok(csv.includes(seedPoId), 'CSV must include the PO ID')
+  assert.ok(csv.includes('\r\n'), 'CSV must use CRLF line endings')
 })
