@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   COMMERCE_KEY,
   COMMERCE_ORDER_CALCULATION_SCHEMA,
+  commerceCatalogDigestSource,
   commerceCustomerCreditExposure,
   commerceOrderAdjustedTotal,
   commerceOrderCalculation,
@@ -13,6 +14,7 @@ import {
   commerceOrderNeedsAction,
   commerceOrderPaymentTermsDays,
   commerceOrderPromiseUrgency,
+  commerceOrderReturnExpectation,
   commercePaymentAdapterLabel,
   commercePaymentDecision,
   commercePaymentPolicies,
@@ -26,10 +28,12 @@ import {
   commerceShippingPolicies,
   commerceStorefrontConfiguration,
   commerceStorefrontRequests,
+  commerceSupplierPayablesAging,
   commerceSupplierReturnClaimBalance,
   commerceSupplierReturnClaimStatus,
   commerceSupplierSourcingSelectedQuote,
   commerceWorkingSampleSkus,
+  compareCommercePurchaseOrderAttention,
   createEmptyCommerce,
   createSeedCommerce,
   installCommerceWorkingSampleCatalog,
@@ -657,4 +661,56 @@ test('commerceSupplierSourcingSelectedQuote, commercePurchaseBudgetCommitment, c
   // expectedAt more than 24 h away → 'scheduled'.
   const scheduledPo = { id: 'PO-T', quantityOrdered: 10, expectedAt: new Date(seedNow + 48 * 60 * 60 * 1000).toISOString() }
   assert.equal(commercePurchaseOrderArrivalUrgency(scheduledPo, openProgress, seedNow), 'scheduled')
+})
+
+test('commerceCatalogDigestSource, compareCommercePurchaseOrderAttention, commerceOrderReturnExpectation, and commerceSupplierPayablesAging behave correctly', () => {
+  const seed = createSeedCommerce()
+  const seedNow = Date.parse('2026-07-23T08:00:00.000Z')
+
+  // commerceCatalogDigestSource: deterministic JSON string from sorted seed items.
+  const digestSource = commerceCatalogDigestSource(seed)
+  assert.equal(typeof digestSource, 'string')
+  const parsed = JSON.parse(digestSource)
+  assert.ok(Array.isArray(parsed))
+  assert.equal(parsed.length, seed.items.length)
+  // Items are sorted by SKU ascending.
+  const skus = parsed.map((entry) => entry[0])
+  assert.deepEqual(skus, [...skus].sort())
+  // Calling again gives the same result.
+  assert.equal(commerceCatalogDigestSource(seed), digestSource)
+
+  // compareCommercePurchaseOrderAttention: active orders sort before inactive.
+  const createdAt = '2026-07-01T00:00:00.000Z'
+  const activePo = { id: 'PO-A', createdAt, quantityOrdered: 10, expectedAt: '2026-07-15T00:00:00.000Z' }
+  const laterPo = { id: 'PO-B', createdAt: '2026-07-02T00:00:00.000Z', quantityOrdered: 10, expectedAt: '2026-07-20T00:00:00.000Z' }
+  const noExpectedPo = { id: 'PO-C', createdAt, quantityOrdered: 10 }
+  const openProgress = { status: 'open', received: 0, rejected: 0, delivered: 0, remaining: 10 }
+  const cancelledProgress = { status: 'cancelled', received: 0, rejected: 0, delivered: 0, remaining: 0 }
+  // Active before inactive.
+  assert.ok(compareCommercePurchaseOrderAttention({ purchaseOrder: activePo, progress: openProgress }, { purchaseOrder: laterPo, progress: cancelledProgress }) < 0)
+  assert.ok(compareCommercePurchaseOrderAttention({ purchaseOrder: laterPo, progress: cancelledProgress }, { purchaseOrder: activePo, progress: openProgress }) > 0)
+  // Among active: earlier expectedAt first.
+  assert.ok(compareCommercePurchaseOrderAttention({ purchaseOrder: activePo, progress: openProgress }, { purchaseOrder: laterPo, progress: openProgress }) < 0)
+  // Among active: no expectedAt sorts after has expectedAt.
+  assert.ok(compareCommercePurchaseOrderAttention({ purchaseOrder: noExpectedPo, progress: openProgress }, { purchaseOrder: activePo, progress: openProgress }) > 0)
+
+  // commerceOrderReturnExpectation: completed ORD-1039 (SM-1004) is returnable.
+  const returnExpectation = commerceOrderReturnExpectation(seed, 'ORD-1039', 'SM-1004', 'not_restocked')
+  assert.ok(returnExpectation !== null)
+  assert.equal(returnExpectation.orderId, 'ORD-1039')
+  assert.equal(returnExpectation.sku, 'SM-1004')
+  assert.equal(returnExpectation.soldQuantity, 1)
+  assert.equal(returnExpectation.returnedQuantity, 0)
+  // Invalid disposition returns null.
+  assert.equal(commerceOrderReturnExpectation(seed, 'ORD-1039', 'SM-1004', 'write_off'), null)
+  // Pending order (not completed) returns null.
+  assert.equal(commerceOrderReturnExpectation(seed, 'ORD-1042', 'SM-1001', 'not_restocked'), null)
+
+  // commerceSupplierPayablesAging: seed PO has no invoice → no rows, zero totals.
+  const aging = commerceSupplierPayablesAging(seed, seedNow)
+  assert.deepEqual(aging.rows, [])
+  assert.equal(aging.totalNetPayableMmk, 0)
+  assert.equal(aging.blockedInvoiceCount, 0)
+  assert.equal(aging.paymentAuthority, 'none')
+  assert.equal(aging.paymentInitiated, false)
 })
