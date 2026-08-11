@@ -3,7 +3,11 @@ import test from 'node:test'
 
 import {
   COMMERCE_KEY,
+  COMMERCE_ORDER_CALCULATION_SCHEMA,
+  commerceCustomerCreditExposure,
+  commerceOrderCalculation,
   commerceOrderItemSummary,
+  commerceOrderPaymentTermsDays,
   commerceOrderPromiseUrgency,
   commercePaymentDecision,
   commercePaymentPolicies,
@@ -456,4 +460,50 @@ test('commerceOrderPromiseUrgency and commerceOrderItemSummary return correct va
     { sku: 'SM-1003', name: 'Household refill', quantity: 1, unitPriceMmk: 12000 },
   ]
   assert.equal(commerceOrderItemSummary(twoLines), '2 items')
+})
+
+test('commerceOrderCalculation, commerceOrderPaymentTermsDays, and commerceCustomerCreditExposure behave correctly', () => {
+  const state = createSeedCommerce()
+
+  // Seed state has no tax configuration → returns not-configured v1 result.
+  const calc = commerceOrderCalculation(state, 50000)
+  assert.ok(calc)
+  assert.equal(calc.schema, COMMERCE_ORDER_CALCULATION_SCHEMA)
+  assert.equal(calc.subtotalMmk, 50000)
+  assert.equal(calc.taxMmk, 0)
+  assert.equal(calc.totalMmk, 50000)
+  assert.equal(calc.taxMode, 'not_configured')
+
+  // Invalid subtotals (zero, negative) return null.
+  assert.equal(commerceOrderCalculation(state, 0), null)
+  assert.equal(commerceOrderCalculation(state, -1), null)
+
+  // commerceOrderPaymentTermsDays: no paymentDueAt → 0 (cash terms).
+  assert.equal(commerceOrderPaymentTermsDays({ createdAt: '2026-08-07T00:00:00.000Z' }), 0)
+
+  // Exactly 7 days later → 7.
+  assert.equal(commerceOrderPaymentTermsDays({
+    createdAt: '2026-08-07T00:00:00.000Z',
+    paymentDueAt: '2026-08-14T00:00:00.000Z',
+  }), 7)
+
+  // Exactly 30 days later → 30.
+  assert.equal(commerceOrderPaymentTermsDays({
+    createdAt: '2026-08-07T00:00:00.000Z',
+    paymentDueAt: '2026-09-06T00:00:00.000Z',
+  }), 30)
+
+  // 14 days — not a recognised term → null.
+  assert.equal(commerceOrderPaymentTermsDays({
+    createdAt: '2026-08-07T00:00:00.000Z',
+    paymentDueAt: '2026-08-21T00:00:00.000Z',
+  }), null)
+
+  // commerceCustomerCreditExposure: sums pending non-cancelled order totals per customer.
+  // ORD-1042 (May, 37 000 MMK, pending) and ORD-1041 (Ko Aung, 12 000 MMK, pending)
+  // ORD-1039 (Daw Mya, 22 500 MMK, reconciled) is excluded.
+  assert.equal(commerceCustomerCreditExposure(state, 'May'), 37000)
+  assert.equal(commerceCustomerCreditExposure(state, 'Ko Aung'), 12000)
+  assert.equal(commerceCustomerCreditExposure(state, 'Daw Mya'), 0)
+  assert.equal(commerceCustomerCreditExposure(state, 'Unknown customer'), 0)
 })

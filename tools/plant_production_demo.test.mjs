@@ -10,6 +10,7 @@ import {
   buildProductionRecallTrace,
   buildProductionShiftHandoff,
   closeProductionJob,
+  compareProductionJobSchedule,
   completeProductionMaintenance,
   createEmptyProduction,
   createSeedProduction,
@@ -18,6 +19,7 @@ import {
   importProductionJobs,
   installProductionWorkingSampleJobs,
   isGuidedSampleProduction,
+  parseProductionMaterialQuantity,
   placeProductionQualityHold,
   productionDowntimeIntervals,
   productionMaintenanceRecords,
@@ -842,4 +844,44 @@ test('importProductionJobs creates new jobs, detects already-present ids, and re
     importProductionJobs(state, { jobs: [], sourceDigest: SOURCE_DIGEST, capturedAt: `${PLANNING_DAY}T08:00:00.000Z`, actor: 'Planner' }),
     null,
   )
+})
+
+test('parseProductionMaterialQuantity and compareProductionJobSchedule behave correctly', () => {
+  // parseProductionMaterialQuantity: valid integer and decimal strings.
+  assert.equal(parseProductionMaterialQuantity('50'), 50)
+  assert.equal(parseProductionMaterialQuantity('2.5'), 2.5)
+  assert.equal(parseProductionMaterialQuantity('0.001'), 0.001)
+  assert.equal(parseProductionMaterialQuantity('100.000'), 100)
+
+  // Invalid inputs return null.
+  assert.equal(parseProductionMaterialQuantity('0'), null)        // below minimum (scaled = 0)
+  assert.equal(parseProductionMaterialQuantity('abc'), null)      // non-numeric
+  assert.equal(parseProductionMaterialQuantity(''), null)         // empty
+  assert.equal(parseProductionMaterialQuantity('2.5000'), null)   // four decimal places — pattern only allows 1-3
+
+  // compareProductionJobSchedule: urgent before normal before low, undefined priority last.
+  const urgentJob = { id: 'JOB-A', priority: 'urgent', product: 'A', target: 1, output: 0, scrap: 0, line: 'L1' }
+  const normalJob = { id: 'JOB-B', priority: 'normal', product: 'B', target: 1, output: 0, scrap: 0, line: 'L1' }
+  const lowJob    = { id: 'JOB-C', priority: 'low',    product: 'C', target: 1, output: 0, scrap: 0, line: 'L1' }
+  const noPrioJob = { id: 'JOB-D',                     product: 'D', target: 1, output: 0, scrap: 0, line: 'L1' }
+
+  assert.ok(compareProductionJobSchedule(urgentJob, normalJob) < 0, 'urgent < normal')
+  assert.ok(compareProductionJobSchedule(normalJob, lowJob) < 0, 'normal < low')
+  assert.ok(compareProductionJobSchedule(lowJob, noPrioJob) < 0, 'low < undefined')
+  assert.ok(compareProductionJobSchedule(noPrioJob, urgentJob) > 0, 'undefined > urgent')
+
+  // Same priority: earlier dueAt sorts first.
+  const earlyDue = { ...normalJob, id: 'JOB-E', dueAt: '2026-08-10T08:00:00.000Z' }
+  const lateDue  = { ...normalJob, id: 'JOB-F', dueAt: '2026-08-20T08:00:00.000Z' }
+  assert.ok(compareProductionJobSchedule(earlyDue, lateDue) < 0, 'earlier dueAt sorts first')
+
+  // Same priority: job with dueAt sorts before job without.
+  const noDueJob = { ...normalJob, id: 'JOB-G' }
+  assert.ok(compareProductionJobSchedule(earlyDue, noDueJob) < 0, 'dueAt before no-dueAt')
+
+  // Identical priority and dueAt: lexicographic id order.
+  const sameDueA = { ...normalJob, id: 'JOB-H', dueAt: '2026-08-15T08:00:00.000Z' }
+  const sameDueB = { ...normalJob, id: 'JOB-I', dueAt: '2026-08-15T08:00:00.000Z' }
+  assert.ok(compareProductionJobSchedule(sameDueA, sameDueB) < 0, 'JOB-H < JOB-I by id')
+  assert.equal(compareProductionJobSchedule(sameDueA, sameDueA), 0, 'same job compares to 0')
 })
