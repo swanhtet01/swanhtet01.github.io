@@ -4,6 +4,7 @@ import {
   createClientImportPreview,
 } from './client-onboarding'
 import {
+  installCommerceWorkingSampleActivity,
   installCommerceWorkingSampleCatalog,
   loadCommerceWorkspace,
   mutateCommerceWorkspace,
@@ -123,13 +124,19 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
   if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
   let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
   const result = await mutateCommerceWorkspace((current) => {
-    const next = installCommerceWorkingSampleCatalog(current, {
+    const withCatalog = installCommerceWorkingSampleCatalog(current, {
       sampleId: template.id,
       sampleName: template.name.en,
       items,
       capturedAt: new Date().toISOString(),
     })
-    if (!next) return current
+    if (!withCatalog) return current
+    const next = installCommerceWorkingSampleActivity(withCatalog, {
+      sampleId: template.id,
+      sampleName: template.name.en,
+      counterSales: template.counterSales,
+      pendingOrder: template.pendingOrder,
+    }) ?? withCatalog
     disposition = next === current ? 'current' : 'installed'
     return next
   })

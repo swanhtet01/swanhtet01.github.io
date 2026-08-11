@@ -4389,6 +4389,7 @@ if (!managedCommerceRuntime.includes('commerce.workspace.initialized') || manage
 if (!commerceSource.includes('registerCommerceItem')
   || !commerceSource.includes('export function importCommerceCatalog')
   || !commerceSource.includes('export function installCommerceWorkingSampleCatalog')
+  || !commerceSource.includes('export function installCommerceWorkingSampleActivity')
   || !commerceSource.includes('export function commerceWorkingSampleCatalogId')
   || !commerceSource.includes('ACT-CLIENT-IMPORT-')
   || !commerceSource.includes('ACT-DEMO-WORKING-SAMPLE-')
@@ -4399,6 +4400,7 @@ if (!commerceSource.includes('registerCommerceItem')
   || !productOnboardingRuntimeSource.includes('if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)')
   || !settingsPageSource.includes('demoWorkspace?.blueprint.client.shopIndustryPackId ?? readLocalShopIndustryPackId()')
   || !productOnboardingRuntimeSource.includes("clientImportTemplate('commerce', workflowTemplateId, { shopIndustryPackId: industryPackId })")
+  || !productOnboardingRuntimeSource.includes('installCommerceWorkingSampleActivity')
   || !coreSource.includes('Add catalog item')
   || !coreSource.includes('Review catalog item')
   || !coreSource.includes('The opening balance may be zero.')
@@ -7239,6 +7241,13 @@ async function verifyShopBusinessTemplateRuntime() {
         capturedAt: '2026-08-03T09:00:00.000Z',
       })
       assert(installed && commerceModel.commerceWorkingSampleCatalogId(installed) === template.id, `shop_business_template_${template.id}_install_failed`)
+      const withActivity = commerceModel.installCommerceWorkingSampleActivity(installed, {
+        sampleId: template.id,
+        sampleName: template.name.en,
+        counterSales: template.counterSales,
+        pendingOrder: template.pendingOrder,
+      })
+      assert(withActivity && withActivity.orders.filter((order) => order.id.startsWith('SETUP-SAMPLE-')).length === template.counterSales.length + 1, `shop_business_template_${template.id}_activity_install_failed`)
     }
     const reimported = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')).href}?shop-business-template-determinism=${Date.now()}`)
     assert(JSON.stringify(reimported.shopBusinessTemplates) === JSON.stringify(model.shopBusinessTemplates), 'shop_business_template_output_not_deterministic')

@@ -6333,6 +6333,7 @@ const commerceWorkingSampleActionPrefix = 'ACT-DEMO-WORKING-SAMPLE-'
 // prefix above stays as it is: it identifies a replaceable sample and is never
 // displayed.
 const WORKING_SAMPLE_SETUP_ACTOR = 'Store manager'
+const commerceWorkingSampleOrderIdPrefix = 'SETUP-SAMPLE-'
 
 export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, input: {
   sampleId: string
@@ -6353,6 +6354,7 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
 
   const sampleBaselines = commerceCatalogBaselines(source).filter((baseline) => baseline.proof.actionId.startsWith(commerceWorkingSampleActionPrefix))
   const sampleMovements = source.movements.filter((movement) => movement.actionId.startsWith(commerceWorkingSampleActionPrefix))
+  const sampleOrders = source.orders.filter((order) => order.id.startsWith(commerceWorkingSampleOrderIdPrefix))
   const sampleSkus = new Set([
     ...sampleBaselines.map((baseline) => baseline.sku),
     ...sampleMovements.map((movement) => movement.sku),
@@ -6363,15 +6365,17 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
   if (sampleSkus.size === requestedItems.length
     && sampleBaselines.length === requestedItems.length
     && sampleMovements.length === requestedItems.length
+    && !sampleOrders.length
     && sampleBaselines.every((baseline) => baseline.proof.actionId.startsWith(requestedPrefix))
     && sampleMovements.every((movement) => movement.actionId.startsWith(requestedPrefix))
     && JSON.stringify(currentSampleItems) === JSON.stringify(requestedItems)) return source
 
   let base = source
-  if (sampleSkus.size || sampleBaselines.length || sampleMovements.length) {
+  if (sampleSkus.size || sampleBaselines.length || sampleMovements.length || sampleOrders.length) {
     try {
       base = validateCommerceState({
         ...source,
+        orders: source.orders.filter((order) => !order.id.startsWith(commerceWorkingSampleOrderIdPrefix)),
         items: source.items.filter((item) => !sampleSkus.has(item.sku)),
         movements: source.movements.filter((movement) => !movement.actionId.startsWith(commerceWorkingSampleActionPrefix)),
         catalogBaselines: commerceCatalogBaselines(source).filter((baseline) => !baseline.proof.actionId.startsWith(commerceWorkingSampleActionPrefix)),
@@ -6396,6 +6400,162 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
     next = registered
   }
   return next
+}
+
+export function installCommerceWorkingSampleActivity(stateValue: CommerceState, input: {
+  sampleId: string
+  sampleName: string
+  counterSales: readonly {
+    recordedAt: string
+    payment: string
+    lines: readonly { sku: string; quantity: number }[]
+  }[]
+  pendingOrder: {
+    customerName: string
+    requestedAt: string
+    promisedFor: string
+    lines: readonly { sku: string; quantity: number }[]
+  }
+}) {
+  let source: CommerceState
+  try { source = validateCommerceState(stateValue) } catch { return null }
+  const sampleId = optionalText(input?.sampleId)?.toLowerCase()
+  const sampleName = optionalText(input?.sampleName)
+  if (!sampleId || !sampleName
+    || !Array.isArray(input?.counterSales) || !input.counterSales.length
+    || !isRecord(input?.pendingOrder)) return null
+  if (commerceWorkingSampleCatalogId(source) !== sampleId) return null
+
+  const sampleIdUpper = sampleId.toUpperCase()
+  const activityPrefix = `${commerceWorkingSampleActionPrefix}${sampleIdUpper}-`
+  const saleOrderIds = input.counterSales.map((_, n) => `${commerceWorkingSampleOrderIdPrefix}${sampleIdUpper}-SALE-${n + 1}`)
+  const pendingOrderId = `${commerceWorkingSampleOrderIdPrefix}${sampleIdUpper}-ORDER`
+  const allExpectedIds = new Set([...saleOrderIds, pendingOrderId])
+
+  if (source.orders.filter((order) => allExpectedIds.has(order.id)).length === allExpectedIds.size) return source
+
+  const existingSampleOrderIds = new Set(
+    source.orders.filter((order) => order.id.startsWith(commerceWorkingSampleOrderIdPrefix)).map((order) => order.id),
+  )
+  let base = source
+  if (existingSampleOrderIds.size) {
+    try {
+      base = validateCommerceState({
+        ...source,
+        orders: source.orders.filter((order) => !existingSampleOrderIds.has(order.id)),
+        movements: source.movements.filter((movement) => !movement.orderId || !existingSampleOrderIds.has(movement.orderId)),
+      })
+    } catch { return null }
+  }
+
+  const itemBySku = new Map(base.items.map((item) => [item.sku, item]))
+  const newOrders: CommerceOrder[] = []
+  const newMovements: CommerceStockMovement[] = []
+
+  for (const [n, sale] of input.counterSales.entries()) {
+    const saleNumber = n + 1
+    const orderId = saleOrderIds[n]
+    const reserveActionId = `${activityPrefix}SALE-${saleNumber}-RESERVE`
+    const completeActionId = `${activityPrefix}SALE-${saleNumber}-COMPLETE`
+    if (!validTimestamp(sale?.recordedAt) || !Array.isArray(sale?.lines) || !sale.lines.length) return null
+    const salePayment = optionalText(sale.payment)
+    if (!salePayment) return null
+    const orderLines: CommerceOrderLine[] = []
+    let orderQuantity = 0
+    let orderTotal = 0
+    for (const line of sale.lines) {
+      const item = itemBySku.get(line?.sku)
+      if (!item || !Number.isSafeInteger(line?.quantity) || line.quantity < 1) return null
+      const lineTotal = item.price * line.quantity
+      const nextQty = orderQuantity + line.quantity
+      const nextTotal = orderTotal + lineTotal
+      if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQty) || !Number.isSafeInteger(nextTotal)) return null
+      orderQuantity = nextQty
+      orderTotal = nextTotal
+      orderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+    }
+    const completedAt = new Date(Date.parse(sale.recordedAt) + 15 * 60 * 1000).toISOString()
+    const reserveProof: CommerceActionProof = { actionId: reserveActionId, capturedAt: sale.recordedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Seed the ${sampleName} working sample sale ${saleNumber}.`, evidenceReference: `SETUP-${sampleIdUpper}-SALE-${saleNumber}-RESERVE` }
+    newOrders.push({
+      id: orderId,
+      createdAt: sale.recordedAt,
+      customer: 'Walk-in customer',
+      owner: WORKING_SAMPLE_SETUP_ACTOR,
+      channel: 'Walk-in',
+      item: commerceOrderItemSummary(orderLines),
+      ...(orderLines.length === 1 ? { itemSku: orderLines[0].sku } : {}),
+      quantity: orderQuantity,
+      payment: salePayment,
+      paymentStatus: 'pending',
+      refundStatus: 'none',
+      fulfilment: 'pickup',
+      fulfilmentReference: `Counter ${orderId}`,
+      promisedAt: new Date(Date.parse(sale.recordedAt) + 30 * 60 * 1000).toISOString(),
+      lines: orderLines,
+      calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: orderTotal, taxMode: 'not_configured', taxMmk: 0, totalMmk: orderTotal },
+      total: orderTotal,
+      status: 'completed',
+      completion: { actionId: completeActionId, capturedAt: completedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Counter handoff for the ${sampleName} working sample.`, evidenceReference: `SETUP-${sampleIdUpper}-SALE-${saleNumber}-COMPLETE` },
+    })
+    for (const [lineIndex, line] of orderLines.entries()) {
+      newMovements.push(movementFor(reserveProof, { kind: 'reserve', sku: line.sku, quantityDelta: -line.quantity, orderId }, `line-${lineIndex + 1}`))
+    }
+  }
+
+  const { pendingOrder } = input
+  const pendingCustomer = optionalText(pendingOrder?.customerName)
+  if (!pendingCustomer
+    || !validTimestamp(pendingOrder?.requestedAt)
+    || !validTimestamp(pendingOrder?.promisedFor)
+    || !Array.isArray(pendingOrder?.lines)
+    || !pendingOrder.lines.length) return null
+  const pendingReserveActionId = `${activityPrefix}ORDER-RESERVE`
+  const pendingOrderLines: CommerceOrderLine[] = []
+  let pendingQuantity = 0
+  let pendingTotal = 0
+  for (const line of pendingOrder.lines) {
+    const item = itemBySku.get(line?.sku)
+    if (!item || !Number.isSafeInteger(line?.quantity) || line.quantity < 1) return null
+    const lineTotal = item.price * line.quantity
+    const nextQty = pendingQuantity + line.quantity
+    const nextTotal = pendingTotal + lineTotal
+    if (!Number.isSafeInteger(lineTotal) || !Number.isSafeInteger(nextQty) || !Number.isSafeInteger(nextTotal)) return null
+    pendingQuantity = nextQty
+    pendingTotal = nextTotal
+    pendingOrderLines.push({ sku: item.sku, name: item.name, ...(item.variant ? { variant: item.variant } : {}), quantity: line.quantity, unitPriceMmk: item.price })
+  }
+  const pendingReserveProof: CommerceActionProof = { actionId: pendingReserveActionId, capturedAt: pendingOrder.requestedAt, actor: WORKING_SAMPLE_SETUP_ACTOR, reason: `Seed the ${sampleName} working sample pending order.`, evidenceReference: `SETUP-${sampleIdUpper}-ORDER-RESERVE` }
+  newOrders.push({
+    id: pendingOrderId,
+    createdAt: pendingOrder.requestedAt,
+    customer: pendingCustomer,
+    owner: WORKING_SAMPLE_SETUP_ACTOR,
+    channel: 'Phone',
+    item: commerceOrderItemSummary(pendingOrderLines),
+    ...(pendingOrderLines.length === 1 ? { itemSku: pendingOrderLines[0].sku } : {}),
+    quantity: pendingQuantity,
+    payment: 'Cash',
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    fulfilment: 'pickup',
+    fulfilmentReference: `Order ${pendingOrderId}`,
+    promisedAt: pendingOrder.promisedFor,
+    lines: pendingOrderLines,
+    calculation: { schema: COMMERCE_ORDER_CALCULATION_SCHEMA, currency: 'MMK', catalogRevision: 0, subtotalMmk: pendingTotal, taxMode: 'not_configured', taxMmk: 0, totalMmk: pendingTotal },
+    total: pendingTotal,
+    status: 'confirmed',
+  })
+  for (const [lineIndex, line] of pendingOrderLines.entries()) {
+    newMovements.push(movementFor(pendingReserveProof, { kind: 'reserve', sku: line.sku, quantityDelta: -line.quantity, orderId: pendingOrderId }, `line-${lineIndex + 1}`))
+  }
+
+  try {
+    return validateCommerceState({
+      ...base,
+      orders: [...base.orders, ...newOrders],
+      movements: [...base.movements, ...newMovements],
+    })
+  } catch { return null }
 }
 
 export function commerceWorkingSampleCatalogId(stateValue: CommerceState) {
