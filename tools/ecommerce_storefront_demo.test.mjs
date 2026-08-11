@@ -3,10 +3,13 @@ import test from 'node:test'
 
 import {
   COMMERCE_KEY,
+  commerceOrderItemSummary,
+  commerceOrderPromiseUrgency,
   commercePaymentDecision,
   commercePaymentPolicies,
   commercePromotionDecision,
   commercePromotionPolicies,
+  commerceReceivablesAging,
   commerceShippingDecision,
   commerceShippingPolicies,
   commerceWorkingSampleSkus,
@@ -396,4 +399,61 @@ test('promotion decision applies a percentage discount, enforces minimum subtota
 
   // Empty string → null.
   assert.equal(commercePromotionDecision(policies, '', 50000, REVIEWED_AT), null)
+})
+
+// The seed orders were created relative to deterministicSeedNow = 2026-07-23T08:00:00.000Z.
+// ORD-1042 promisedAt = seedNow + 1h; ORD-1041 promisedAt = seedNow + 1.5h.
+const SEED_NOW_MS = Date.parse('2026-07-23T08:00:00.000Z')
+
+test('receivables aging buckets pending orders and excludes reconciled orders', () => {
+  const state = createSeedCommerce()
+
+  // At seed time, both pending orders are current (promisedAt is in the future).
+  const atSeedTime = commerceReceivablesAging(state, SEED_NOW_MS)
+  assert.equal(atSeedTime.rows.length, 2, 'aging must include both pending orders')
+  assert.equal(atSeedTime.overdueOrders, 0, 'no orders are overdue at seed time')
+  assert.equal(atSeedTime.overdueMmk, 0)
+  assert.equal(atSeedTime.totalOutstandingMmk, 37000 + 12000)
+  assert.ok(atSeedTime.rows.every((row) => row.bucket === 'current'), 'all rows must be current at seed time')
+
+  // Ten days later both orders are overdue (~10 days past due → '8_30' bucket).
+  const tenDaysLaterMs = SEED_NOW_MS + 10 * 24 * 60 * 60 * 1000
+  const at10Days = commerceReceivablesAging(state, tenDaysLaterMs)
+  assert.equal(at10Days.overdueOrders, 2)
+  assert.equal(at10Days.overdueMmk, 37000 + 12000)
+  assert.ok(at10Days.rows.every((row) => row.bucket === '8_30'), 'rows must be in 8_30 bucket at 10 days past due')
+
+  // The reconciled order (ORD-1039) must never appear in aging.
+  assert.ok(at10Days.rows.every((row) => row.orderId !== 'ORD-1039'), 'reconciled order must be excluded')
+
+  // totalsMmk sums must add up.
+  const bucketsTotal = Object.values(at10Days.totalsMmk).reduce((sum, v) => sum + v, 0)
+  assert.equal(bucketsTotal, at10Days.totalOutstandingMmk)
+})
+
+test('commerceOrderPromiseUrgency and commerceOrderItemSummary return correct values', () => {
+  const baseOrder = { promisedAt: new Date(SEED_NOW_MS + 90 * 60 * 1000).toISOString() }
+
+  // Due in 90 minutes — beyond the 60-minute threshold → scheduled.
+  assert.equal(commerceOrderPromiseUrgency(baseOrder, SEED_NOW_MS), 'scheduled')
+
+  // Due in 30 minutes — within the 60-minute window → due_soon.
+  const dueSoonOrder = { promisedAt: new Date(SEED_NOW_MS + 30 * 60 * 1000).toISOString() }
+  assert.equal(commerceOrderPromiseUrgency(dueSoonOrder, SEED_NOW_MS), 'due_soon')
+
+  // Past promised time → late.
+  const lateOrder = { promisedAt: new Date(SEED_NOW_MS - 1).toISOString() }
+  assert.equal(commerceOrderPromiseUrgency(lateOrder, SEED_NOW_MS), 'late')
+
+  // No promisedAt → unrecorded.
+  assert.equal(commerceOrderPromiseUrgency({}, SEED_NOW_MS), 'unrecorded')
+
+  // Item summary: a single line uses the line name; multiple lines → "N items".
+  const oneLine = [{ sku: 'SM-1001', name: 'Daily essentials basket', quantity: 2, unitPriceMmk: 18500 }]
+  assert.equal(commerceOrderItemSummary(oneLine), 'Daily essentials basket')
+  const twoLines = [
+    { sku: 'SM-1001', name: 'Daily essentials basket', quantity: 2, unitPriceMmk: 18500 },
+    { sku: 'SM-1003', name: 'Household refill', quantity: 1, unitPriceMmk: 12000 },
+  ]
+  assert.equal(commerceOrderItemSummary(twoLines), '2 items')
 })
