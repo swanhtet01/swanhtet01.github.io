@@ -5,6 +5,8 @@ import {
   COMMERCE_KEY,
   commercePaymentDecision,
   commercePaymentPolicies,
+  commercePromotionDecision,
+  commercePromotionPolicies,
   commerceShippingDecision,
   commerceShippingPolicies,
   commerceWorkingSampleSkus,
@@ -353,4 +355,45 @@ test('shipping decision resolves a known township, returns pickup for pickup ful
 
   // Empty township for delivery → null.
   assert.equal(commerceShippingDecision(policies, 'delivery', '', REVIEWED_AT), null)
+})
+
+test('promotion decision applies a percentage discount, enforces minimum subtotal, and rejects unknown codes', () => {
+  const state = createSeedCommerce()
+  const policies = commercePromotionPolicies(state)
+  assert.ok(policies.length >= 1, 'seed must carry at least one promotion policy')
+  const REVIEWED_AT = '2026-08-08T02:00:00.000Z'
+
+  // null code → not_requested, full amount returned.
+  const noCode = commercePromotionDecision(policies, null, 50000, REVIEWED_AT)
+  assert.ok(noCode)
+  assert.equal(noCode.status, 'not_requested')
+  assert.equal(noCode.netSubtotalMmk, 50000)
+  assert.equal(noCode.discountMmk, 0)
+
+  // WELCOME code with sufficient subtotal → approved, 10% off (capped at 10,000 MMK).
+  const approved = commercePromotionDecision(policies, 'WELCOME', 50000, REVIEWED_AT)
+  assert.ok(approved)
+  assert.equal(approved.status, 'approved')
+  assert.equal(approved.discountMmk, 5000)
+  assert.equal(approved.netSubtotalMmk, 45000)
+
+  // Case-insensitive code entry.
+  const approvedLower = commercePromotionDecision(policies, 'welcome', 50000, REVIEWED_AT)
+  assert.ok(approvedLower)
+  assert.equal(approvedLower.status, 'approved')
+
+  // Subtotal below minimum → minimum_not_met.
+  const tooSmall = commercePromotionDecision(policies, 'WELCOME', 5000, REVIEWED_AT)
+  assert.ok(tooSmall)
+  assert.equal(tooSmall.status, 'rejected')
+  assert.equal(tooSmall.reason, 'minimum_not_met')
+
+  // Unknown code → not_found.
+  const notFound = commercePromotionDecision(policies, 'DOESNOTEXIST', 50000, REVIEWED_AT)
+  assert.ok(notFound)
+  assert.equal(notFound.status, 'rejected')
+  assert.equal(notFound.reason, 'not_found')
+
+  // Empty string → null.
+  assert.equal(commercePromotionDecision(policies, '', 50000, REVIEWED_AT), null)
 })
