@@ -2,6 +2,7 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
+import { emitMetric } from '../../analytics/metrics-collector'
 import { readLocalSetupBusinessName } from '../../core/product-onboarding-runtime'
 import {
   COMMERCE_KEY,
@@ -924,6 +925,7 @@ export function EcommerceProduct() {
 
   function addToCart(sku: string) {
     if (catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)) return
+    if (!buyingCart.some((line) => line.sku === sku)) emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'cart.built', ts: Date.now() })
     setBuyingCart((current) => current.some((line) => line.sku === sku)
       ? current
       : [...current, { sku, quantity: 1 }])

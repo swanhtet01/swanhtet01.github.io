@@ -2,7 +2,7 @@
 
 Updated: 2026-08-11
 Owner: founder / CEO
-Branch: fix/demo-seed-clock (28 commits ahead of origin)
+Branch: fix/demo-seed-clock (29 commits ahead of origin)
 
 ---
 
@@ -44,10 +44,11 @@ _No founder decision required. Zero bundle cost._
 - [x] OPS-161 complete — Analytics Step 1+2: MetricsCollector + hash-based page visits, live in bundle (2026-08-11)
 - [x] OPS-162 complete — verified-statements: OwnerVerification type + SHA-256 tamper detection (29 checks) (2026-08-11)
 - [x] OPS-163 complete — staff-roles: 9-role taxonomy + write-authority matrix (67 checks) (2026-08-11)
+- [x] OPS-165 complete — Analytics Step 3: Shop emit sites (4 events: sale.completed, shift.close.confirmed, order.created, accounting.export.downloaded) (2026-08-11)
 
 ### Aug 15–25
 
-- [ ] Analytics Step 3-4: Shop + Plant + Website + Ecommerce emit sites (14 action events)
+- [ ] Analytics Step 4: Plant + Website + Ecommerce emit sites (remaining action events)
 - [ ] Analytics Step 5: Metrics page at `/work/?view=local-metrics`
 - [ ] Test coverage: backup checks from 11 → 25+ (incremental, restore-in-place, corrupt-header)
 - [ ] Plant CAPA: effectiveness-due field (time-gated closure check)

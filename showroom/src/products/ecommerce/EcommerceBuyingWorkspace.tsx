@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
+import { emitMetric } from '../../analytics/metrics-collector'
 
 import {
   buildEcommerceCheckoutQuote,
@@ -1118,10 +1119,12 @@ export function EcommerceBuyingWorkspace({
         quotedAt: quotedAt.toISOString(),
         expiresAt: new Date(quotedAt.getTime() + 15 * 60 * 1000).toISOString(),
       })
+      emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'quote.captured', ts: Date.now() })
       const request = await buildEcommerceOrderRequestV2(quote, sourceStorefront)
       const saved = await saveEcommerceOrderRequestV2(scope, request, activeBuyingState.headDigest)
       setBuyingState(saved)
       setRecoveryRead({ scope, status: 'ready', issue: '' })
+      emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'order.request.submitted', ts: Date.now() })
       setFreshQuoteId('')
       if (onRecordManagedRequest) await onRecordManagedRequest(request)
       recordBehaviorSignal(window.localStorage, {
@@ -1171,6 +1174,7 @@ export function EcommerceBuyingWorkspace({
         onOpenManagedRequest(latestRequest.id)
       } else {
         setNotice(`${draft.id} is ready for Shop review at ${formatMmk(draft.totalMmk)}. ${draft.pricing.promotion.status === 'approved' ? `${formatMmk(draft.pricing.promotion.discountMmk)} promotion approved.` : draft.pricing.promotion.status === 'rejected' ? 'The promotion code was rejected by Shop policy.' : 'No promotion requested.'} ${draft.pricing.tax.status === 'configured' ? `${formatMmk(draft.pricing.tax.taxMmk)} tax uses ${draft.pricing.tax.taxCode} revision ${draft.pricing.tax.taxConfigurationRevision}.` : 'No Shop tax schedule is configured.'} Payment remains unauthorized.`)
+        emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'shop.handoff.reached', ts: Date.now() })
         onDraft(draft)
       }
     } catch (error) {

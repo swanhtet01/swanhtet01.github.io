@@ -7921,6 +7921,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         await mutateProduction('production.output.recorded', record.commandId, productionActionProof(record), (current) => recordedOutputKind === 'scrap'
           ? recordProductionScrap(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record))
           : recordProductionOutput(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record)))
+        emitMetric({ product: 'plant', capability: 'plant-production', action: 'output.recorded', ts: Date.now() })
         if (recordedOutputKind === 'good' && recordedShiftMaterialCount === 0) {
           setMaterialGuideOpen(true)
           focusMaterialDisclosure()
@@ -8407,6 +8408,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       after: `${issue.id} · ${issue.owner} · due ${formatIssueDue(issue.dueAt ?? issue.createdAt)} · containment recorded`,
       apply: async (record) => {
         await mutateProduction('production.issue.opened', record.commandId, productionActionProof(record), (current) => openProductionIssue(current, issue, productionActionProof(record)))
+        if (issue.kind === 'quality') emitMetric({ product: 'plant', capability: 'plant-production', action: 'capa.opened', ts: Date.now() })
         setSummary('')
         setIssueOwner('')
         setContainment('')
@@ -8557,6 +8559,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : `Plant issue ${issueId}`).slice(0, 180),
       apply: async (record) => {
         await mutateProduction('production.issue.resolved', record.commandId, productionActionProof(record), (current) => resolveProductionIssue(current, issueId, productionActionProof(record), maintenanceCorrectiveAction, qualityCorrectiveAction))
+        if (qualityCorrectiveAction) emitMetric({ product: 'plant', capability: 'plant-production', action: 'capa.resolved', ts: Date.now() })
       },
     })
   }
@@ -8590,6 +8593,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       after: `${job.product} · released by a named human with new evidence`,
       apply: async (record) => {
         await mutateProduction('production.quality_hold.released', record.commandId, productionActionProof(record), (current) => releaseProductionQualityHold(current, jobId, productionActionProof(record)))
+        emitMetric({ product: 'plant', capability: 'plant-production', action: 'job.released', ts: Date.now() })
       },
     }, trigger)
   }
@@ -8635,6 +8639,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         await mutateProduction('production.shift.closed', record.commandId, productionActionProof(record), (current) => current.revision === expectedRevision
           ? recordProductionShiftClose(current, reviewedHandoff, productionActionProof(record))
           : null)
+        emitMetric({ product: 'plant', capability: 'plant-production', action: 'shift.close.confirmed', ts: Date.now() })
       },
     }, trigger)
   }

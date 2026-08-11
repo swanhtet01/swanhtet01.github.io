@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
+import { emitMetric } from '../../analytics/metrics-collector'
 import {
   readLocalSetupBusinessName,
   readLocalShopBusinessTemplateId,
@@ -358,6 +359,7 @@ export function WebsiteProduct() {
 
   function openContentSurface(nextSurface: 'work' | 'preview') {
     setSurface(nextSurface)
+    if (nextSurface === 'preview') emitMetric({ product: 'website', capability: 'website-builder', action: 'preview.opened', ts: Date.now() })
     setSiteSettingsOpen(false)
     requestHeadingFocus()
   }
@@ -461,6 +463,7 @@ export function WebsiteProduct() {
     )
     setSavingDraft(false)
     if (!result.ok) return
+    emitMetric({ product: 'website', capability: 'website-builder', action: 'edit.saved', ts: Date.now() })
     if (editSessionRef.current === retained) clearEditSession(retained)
     setNotice(result.changed
       ? `Website saved once as content revision ${result.workspace.contentRevision}. Nothing was deployed.`
@@ -778,6 +781,7 @@ export function WebsiteProduct() {
         route: location.pathname + location.search,
         detail: 'Produced a reviewable Website preview file from saved content.',
       })
+      emitMetric({ product: 'website', capability: 'website-builder', action: 'file.downloaded', ts: Date.now() })
       setNotice(`${download.filename} downloaded. It is a standalone preview; no site or domain was deployed.`)
     } catch (error) {
       setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
