@@ -18850,8 +18850,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), and Website lead view (OPS-182).
-if (bytes > 2_840_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), and Ecommerce pipeline view (OPS-185).
+if (bytes > 2_844_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

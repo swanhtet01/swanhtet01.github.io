@@ -24,6 +24,23 @@ import { projectWebsiteLeadSummary } from './website-lead-summary'
 import { readWebsiteLeadLedger } from '../products/website/website-leads'
 import { projectCustomerJourneySummary } from './customer-journey-summary'
 
+function EcommercePipelineView() {
+  const stats = useMemo(() => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return p ? { requests: p.requests?.length ?? 0, returns: p.returnIntents?.length ?? 0, cancels: p.cancellationIntents?.length ?? 0 } : null } catch { return null } }, [])
+  return (
+    <div className="workspace-screen settings-screen">
+      <PageHeading copy="Order requests from Ecommerce. Read-only." eyebrow="Ecommerce" title="Pipeline" />
+      <div className="settings-control-stack"><section className="core-panel">
+        <div><span className="core-eyebrow">Pipeline</span></div>
+        {stats ? <div className="readiness-list">
+          <span><small>Requests</small><strong>{stats.requests}</strong></span>
+          <span><small>Returns</small><strong>{stats.returns}</strong></span>
+          <span><small>Cancels</small><strong>{stats.cancels}</strong></span>
+        </div> : <p className="form-notice">No order requests yet.</p>}
+      </section></div>
+    </div>
+  )
+}
+
 function CustomerJourneyView() {
   const commerce = useMemo(() => loadCommerceWorkspace().state, [])
   const summary = useMemo(() => projectCustomerJourneySummary(commerce), [commerce])
@@ -285,6 +302,7 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'plant-oee') return <PlantOeeView />
   if (searchParams.get('view') === 'website-leads') return <WebsiteLeadsView />
   if (searchParams.get('view') === 'customer-journey') return <CustomerJourneyView />
+  if (searchParams.get('view') === 'ecommerce-pipeline') return <EcommercePipelineView />
 
   function saveRestorePoint() {
     const backup = collectCurrentBackup()

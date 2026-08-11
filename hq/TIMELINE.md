@@ -16,7 +16,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Products**: Shop, Plant, Website, Ecommerce — all `release-candidate-local`. All four pass their full acceptance matrix (mobile, recovery, overflow, security, onboarding). No managed tenant. No live operators.
 
-**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles + 41 cross-product shop-production + 36 cross-product reconciliation + 28 cross-product aggregate report + 45 shop revenue summary + 45 Plant OEE summary + 33 Website lead funnel summary + 28 Ecommerce pipeline summary + 39 customer journey summary checks. Cross-product Phase A complete (105 checks in app:verify chain). Six analytics view surfaces: Shop revenue, Cross-product, Plant OEE, Website leads, Customer journey, Local metrics.
+**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles + 41 cross-product shop-production + 36 cross-product reconciliation + 28 cross-product aggregate report + 45 shop revenue summary + 45 Plant OEE summary + 33 Website lead funnel summary + 28 Ecommerce pipeline summary + 39 customer journey summary checks. Cross-product Phase A complete (105 checks in app:verify chain). Seven analytics view surfaces: Shop revenue, Cross-product, Plant OEE, Website leads, Customer journey, Ecommerce pipeline, Local metrics.
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
@@ -71,7 +71,8 @@ _No founder decision required. Zero bundle cost._
 - [x] Plant OEE view: /settings/?view=plant-oee#controls (production summary + byLine table); +2,588 bytes; ceiling → 2,836,000 — DONE (OPS-181)
 - [x] Website lead view: /settings/?view=website-leads#controls (funnel summary + bySourcePage table); +3,072 bytes; ceiling → 2,840,000 — DONE (OPS-182)
 - [x] Customer journey summary: projectCustomerJourneySummary (unique/repeat/new customers, top 5 by revenue, avgOrdersPerCustomer); 39 checks; zero bundle cost — DONE (OPS-183)
-- [x] Customer journey view: /settings/?view=customer-journey#controls (summary panel + top-customers table); +2,751 bytes; ceiling unchanged (1,018 bytes headroom) — DONE (OPS-184)
+- [x] Customer journey view: /settings/?view=customer-journey#controls (summary panel + top-customers table); +2,751 bytes; ceiling unchanged; WCP chunk 23,353 bytes — DONE (OPS-184)
+- [x] Ecommerce pipeline view: /settings/?view=ecommerce-pipeline#controls (request/return/cancel counts from local storage, no lifecycle import); +1,193 bytes; ceiling → 2,844,000; WCP chunk 24,546 bytes — DONE (OPS-185)
 
 ### Aug 25–31
 
@@ -228,10 +229,11 @@ All seven gates collapse to two: (1) approve one isolated tenant + (2) name one 
 
 | Metric | Value | Gate |
 |--------|-------|------|
-| Total bytes | 2,838,982 | < 2,840,000 |
-| Headroom | 1,018 bytes | |
+| Total bytes | 2,840,175 | < 2,844,000 |
+| Headroom | 3,825 bytes | |
+| WCP chunk | 24,546 bytes | < 25,000 bytes (454 bytes to chunk limit) |
 | Largest JS chunk | 394,820 bytes | < 500,000 |
 | Largest JS headroom | 105,180 bytes | |
-| Status | tight | any slice adding more than 1,018 bytes must raise the ceiling first; next planned: Analytics Step 6 (~200 bytes), Ecommerce pipeline view (async blocker) |
+| Status | tight | WCP chunk near its 25,000 byte limit (454 bytes); any new view surface in WCP needs both ceiling raise AND chunk budget check |
 
 Every new product slice must pass `npm run app:verify` before commit. Any slice that brings headroom below 2,000 bytes requires an offsetting removal.
