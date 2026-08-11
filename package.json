@@ -53,7 +53,7 @@
     "plant:packs:verify": "node tools/test_plant_industry_packs.mjs",
     "plant:packs:batch:verify": "node tools/test_plant_pack_batch_planning.mjs",
     "plant:state:verify": "node tools/test_production_state_validator.mjs",
-    "plant:quality:verify": "node tools/test_production_quality_hold.mjs",
+    "plant:quality:verify": "node tools/test_production_quality_hold.mjs && node tools/test_plant_quality_capa.mjs",
     "onboarding:samples:verify": "node tools/test_onboarding_samples.mjs",
     "onboarding:pairing:verify": "node tools/test_industry_pack_sample_pairing.mjs",
     "signup:trial:verify": "node tools/test_signup_trial.mjs",
