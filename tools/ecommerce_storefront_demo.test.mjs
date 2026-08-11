@@ -5,6 +5,8 @@ import {
   COMMERCE_KEY,
   commercePaymentDecision,
   commercePaymentPolicies,
+  commerceShippingDecision,
+  commerceShippingPolicies,
   commerceWorkingSampleSkus,
   createSeedCommerce,
   installCommerceWorkingSampleCatalog,
@@ -317,4 +319,38 @@ test('payment decision approves matching adapter+fulfilment pairs and rejects mi
   assert.ok(notFound)
   assert.equal(notFound.status, 'rejected')
   assert.equal(notFound.reason, 'not_found')
+})
+
+test('shipping decision resolves a known township, returns pickup for pickup fulfilment, and rejects unknown townships', () => {
+  const state = createSeedCommerce()
+  const policies = commerceShippingPolicies(state)
+  assert.ok(policies.length >= 1, 'seed must carry at least one shipping policy')
+  const REVIEWED_AT = '2026-08-08T02:00:00.000Z'
+
+  // Pickup fulfilment is always status: pickup, fee 0.
+  const pickup = commerceShippingDecision(policies, 'pickup', null, REVIEWED_AT)
+  assert.ok(pickup)
+  assert.equal(pickup.status, 'pickup')
+  assert.equal(pickup.feeMmk, 0)
+  assert.equal(pickup.zoneCode, null)
+
+  // Known township (case-insensitive) → approved with the zone fee.
+  const known = commerceShippingDecision(policies, 'delivery', 'Bahan', REVIEWED_AT)
+  assert.ok(known)
+  assert.equal(known.status, 'approved')
+  assert.equal(known.feeMmk, 3000)
+  assert.equal(known.zoneCode, 'YGN-CENTRAL')
+
+  const knownLower = commerceShippingDecision(policies, 'delivery', 'bahan', REVIEWED_AT)
+  assert.ok(knownLower)
+  assert.equal(knownLower.status, 'approved', 'township lookup must be case-insensitive')
+
+  // Unknown township → not_found.
+  const unknown = commerceShippingDecision(policies, 'delivery', 'Mandalay', REVIEWED_AT)
+  assert.ok(unknown)
+  assert.equal(unknown.status, 'rejected')
+  assert.equal(unknown.reason, 'not_found')
+
+  // Empty township for delivery → null.
+  assert.equal(commerceShippingDecision(policies, 'delivery', '', REVIEWED_AT), null)
 })
