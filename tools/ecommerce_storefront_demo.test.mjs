@@ -139,6 +139,8 @@ import {
   reserveCommerceOrder,
   recordCommerceOrderSupportCase,
   recordCommerceOrderSupportServiceEvent,
+  resolveCommerceOrderSupportCase,
+  reopenCommerceOrderSupportCase,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -2207,4 +2209,104 @@ test('recordCommerceOrderSupportCase and recordCommerceOrderSupportServiceEvent 
   // Wrong proof.evidenceReference → null.
   const badServiceProof = { ...serviceProof, actionId: 'ACT-TEST-T039-SVC-BAD', evidenceReference: 'WRONG-REF' }
   assert.equal(recordCommerceOrderSupportServiceEvent(withCase, serviceInput, badServiceProof, serviceExpectation), null)
+})
+
+test('resolveCommerceOrderSupportCase and reopenCommerceOrderSupportCase close and reopen a support case', () => {
+  const seed = createSeedCommerce()
+  const ORDER_ID = 'ORD-T040-001'
+  const ECR_ID = 'ECR-22222222-2222-4222-8222-222222222222'
+  const INTENT_ID = 'ESR-22222222-2222-4222-8222-222222222222'
+  const CASE_ID = `CASE-${INTENT_ID.slice(4)}`
+  const CASE_DUE_AT = '2026-08-08T06:00:00.000Z'
+
+  // Build the completed ECR-sourced order (same pattern as test 39, different IDs).
+  const reserveProof = { actionId: 'ACT-TEST-T040-RESERVE', capturedAt: CAPTURED_AT, actor: 'Store operator', reason: 'Reserved', evidenceReference: 'EVT-T040-RESERVE' }
+  const ecrOrder = { id: ORDER_ID, createdAt: CAPTURED_AT, customer: 'Ko Test', owner: 'Store operator', channel: 'Website', item: 'Daily essentials basket', itemSku: 'SM-1001', quantity: 1, total: 18500, payment: 'Cash', paymentStatus: 'pending', refundStatus: 'none', fulfilment: 'pickup', fulfilmentReference: 'Store counter T040', promisedAt: CASE_DUE_AT, status: 'confirmed', sourceRecordId: ECR_ID, evidenceReference: 'EVT-T040-RESERVE' }
+  const s1 = reserveCommerceOrder(seed, ecrOrder, reserveProof)
+  assert.ok(s1 !== null)
+  const s2 = advanceCommerceOrder(s1, ORDER_ID, 'confirmed', { actionId: 'ACT-TEST-T040-ADV1', capturedAt: CAPTURED_AT, actor: 'Op', reason: 'r', evidenceReference: 'EVT-T040-A1' })
+  assert.ok(s2 !== null)
+  const s3 = advanceCommerceOrder(s2, ORDER_ID, 'preparing', { actionId: 'ACT-TEST-T040-ADV2', capturedAt: CAPTURED_AT, actor: 'Op', reason: 'r', evidenceReference: 'EVT-T040-A2' })
+  assert.ok(s3 !== null)
+  const s4 = reconcileCommercePayment(s3, ORDER_ID, { actionId: 'ACT-TEST-T040-PAY', capturedAt: CAPTURED_AT, actor: 'Op', reason: 'r', evidenceReference: 'EVT-T040-PAY' })
+  assert.ok(s4 !== null)
+  const withCompleted = advanceCommerceOrder(s4, ORDER_ID, 'ready', { actionId: 'ACT-TEST-T040-ADV3', capturedAt: CAPTURED_AT, actor: 'Op', reason: 'r', evidenceReference: 'EVT-T040-A3' })
+  assert.ok(withCompleted !== null)
+
+  // Open the support case.
+  const caseEvidenceRef = `ECOMMERCE-SUPPORT:${INTENT_ID.slice(4)}:${ORDER_ID}:${ECR_ID}`
+  const caseProof = { actionId: 'ACT-TEST-T040-CASE', capturedAt: CAPTURED_AT, actor: 'Support agent', reason: 'Issue filed', evidenceReference: caseEvidenceRef }
+  const caseInput = { orderId: ORDER_ID, sourceIntentId: INTENT_ID, sourceRequestId: ECR_ID, category: 'delivery_issue', priority: 'normal', owner: 'Support agent', dueAt: CASE_DUE_AT, externalMessageSent: false, refundStarted: false, customerRequestedAt: CAPTURED_AT, customerDescription: 'Customer asks about order status' }
+  const openExpect = commerceOrderSupportOpenExpectation(withCompleted, ORDER_ID, INTENT_ID)
+  assert.ok(openExpect !== null)
+  const withCase = recordCommerceOrderSupportCase(withCompleted, caseInput, caseProof, openExpect)
+  assert.ok(withCase !== null)
+
+  // Resolve expectation requires firstResponseReady when service state is set.
+  assert.equal(commerceOrderSupportResolveExpectation(withCase, ORDER_ID, CASE_ID), null)
+
+  // Add acknowledged service event.
+  const svcEvidenceRef = `SUPPORT-SERVICE:${CASE_ID}`
+  const ackProof = { actionId: 'ACT-TEST-T040-ACK', capturedAt: CAPTURED_AT, actor: 'Support agent', reason: 'Acknowledged', evidenceReference: svcEvidenceRef }
+  const ackInput = { orderId: ORDER_ID, caseId: CASE_ID, kind: 'acknowledged', owner: 'Support agent', priority: 'normal', dueAt: CASE_DUE_AT, note: 'Reviewing case' }
+  const svcExpect1 = commerceOrderSupportServiceExpectation(withCase, ORDER_ID, CASE_ID)
+  assert.ok(svcExpect1 !== null)
+  const withAck = recordCommerceOrderSupportServiceEvent(withCase, ackInput, ackProof, svcExpect1)
+  assert.ok(withAck !== null)
+
+  // Add first_response_ready service event.
+  const frrProof = { actionId: 'ACT-TEST-T040-FRR', capturedAt: CAPTURED_AT, actor: 'Support agent', reason: 'Response ready', evidenceReference: svcEvidenceRef }
+  const frrInput = { orderId: ORDER_ID, caseId: CASE_ID, kind: 'first_response_ready', owner: 'Support agent', priority: 'normal', dueAt: CASE_DUE_AT, note: 'First response sent' }
+  const svcExpect2 = commerceOrderSupportServiceExpectation(withAck, ORDER_ID, CASE_ID)
+  assert.ok(svcExpect2 !== null)
+  const withFrr = recordCommerceOrderSupportServiceEvent(withAck, frrInput, frrProof, svcExpect2)
+  assert.ok(withFrr !== null)
+
+  // Resolve expectation now succeeds.
+  const resolveExpect = commerceOrderSupportResolveExpectation(withFrr, ORDER_ID, CASE_ID)
+  assert.ok(resolveExpect !== null)
+
+  // Resolve the support case.
+  const resolveProof = { actionId: 'ACT-TEST-T040-RESOLVE', capturedAt: CAPTURED_AT, actor: 'Support agent', reason: 'Resolved', evidenceReference: svcEvidenceRef }
+  const resolveInput = { orderId: ORDER_ID, caseId: CASE_ID, outcome: 'information_provided', note: 'Customer confirmed satisfied' }
+  const withResolved = resolveCommerceOrderSupportCase(withFrr, resolveInput, resolveProof, resolveExpect)
+  assert.ok(withResolved !== null, 'resolveCommerceOrderSupportCase must succeed')
+  const resolvedCase = withResolved.orders.find((o) => o.id === ORDER_ID).supportCases.find((c) => c.caseId === CASE_ID)
+  assert.equal(resolvedCase.status, 'resolved')
+  assert.equal(resolvedCase.resolution.outcome, 'information_provided')
+
+  // Idempotent: same resolve proof → returns current (not null).
+  assert.ok(resolveCommerceOrderSupportCase(withResolved, resolveInput, resolveProof, resolveExpect) !== null)
+
+  // Invalid outcome → null.
+  const badResolveProof = { ...resolveProof, actionId: 'ACT-TEST-T040-RES-BAD' }
+  assert.equal(resolveCommerceOrderSupportCase(withFrr, { ...resolveInput, outcome: 'invalid_outcome' }, badResolveProof, resolveExpect), null)
+
+  // Reopen expectation.
+  const reopenExpect = commerceOrderSupportReopenExpectation(withResolved, ORDER_ID, CASE_ID)
+  assert.ok(reopenExpect !== null, 'commerceOrderSupportReopenExpectation must succeed after resolution')
+
+  // Reopen the case (proof.capturedAt must be strictly after resolution.proof.capturedAt = CAPTURED_AT).
+  const REOPEN_AT = '2026-08-08T04:00:00.000Z'
+  const REOPEN_DUE_AT = '2026-08-08T10:00:00.000Z'
+  const reopenEvidenceRef = `SUPPORT-REOPEN:${CASE_ID}:ACT-TEST-T040-RESOLVE`
+  const reopenProof = { actionId: 'ACT-TEST-T040-REOPEN', capturedAt: REOPEN_AT, actor: 'Support agent', reason: 'Customer followed up', evidenceReference: reopenEvidenceRef }
+  const reopenInput = { orderId: ORDER_ID, caseId: CASE_ID, sourceResolutionActionId: 'ACT-TEST-T040-RESOLVE', owner: 'Support agent', priority: 'normal', dueAt: REOPEN_DUE_AT, note: 'Customer reports issue persists' }
+  const withReopened = reopenCommerceOrderSupportCase(withResolved, reopenInput, reopenProof, reopenExpect)
+  assert.ok(withReopened !== null, 'reopenCommerceOrderSupportCase must succeed')
+  const reopenedCase = withReopened.orders.find((o) => o.id === ORDER_ID).supportCases.find((c) => c.caseId === CASE_ID)
+  assert.equal(reopenedCase.status, 'open')
+  assert.ok(reopenedCase.reopen, 'reopen record must exist')
+  assert.equal(reopenedCase.reopen.sourceResolutionActionId, 'ACT-TEST-T040-RESOLVE')
+
+  // Idempotent: same reopen proof → returns current (not null).
+  assert.ok(reopenCommerceOrderSupportCase(withReopened, reopenInput, reopenProof, reopenExpect) !== null)
+
+  // Wrong evidence reference for reopen → null.
+  const badReopenProof = { ...reopenProof, actionId: 'ACT-TEST-T040-RO-BAD', evidenceReference: 'WRONG-REF' }
+  assert.equal(reopenCommerceOrderSupportCase(withResolved, reopenInput, badReopenProof, reopenExpect), null)
+
+  // capturedAt not strictly after resolution proof → null.
+  const staleCapturedAt = { ...reopenProof, actionId: 'ACT-TEST-T040-STALE', capturedAt: CAPTURED_AT }
+  assert.equal(reopenCommerceOrderSupportCase(withResolved, reopenInput, staleCapturedAt, reopenExpect), null)
 })
