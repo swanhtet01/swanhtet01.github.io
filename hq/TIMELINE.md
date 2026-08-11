@@ -2,7 +2,7 @@
 
 Updated: 2026-08-12
 Owner: founder / CEO
-Branch: fix/demo-seed-clock (653 commits ahead of origin)
+Branch: fix/demo-seed-clock (660 commits ahead of origin)
 
 ---
 
@@ -145,6 +145,12 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-cancellation-intent-payment-status-brief (EcommerceCancellationIntent.paymentStatus pending vs reconciled); 22 checks; zero bundle cost — DONE (OPS-432)
 - [x] Analytics Codex: ecommerce-support-intent-description-brief (EcommerceSupportIntent.description length bands + min/max/avg); 31 checks; zero bundle cost — DONE (OPS-433)
 - [x] Analytics Codex: ecommerce-delivery-address-city-brief (EcommerceDeliveryAddressSnapshot.city top-5 distribution); 23 checks; zero bundle cost — DONE (OPS-434)
+- [x] Analytics Codex: ecommerce-support-intent-category-brief (EcommerceSupportIntent.category 5-value enum distribution); 32 checks; zero bundle cost — DONE (OPS-435)
+- [x] Analytics Codex: ecommerce-cancellation-intent-reason-order-status-brief (EcommerceCancellationIntent.reasonCode 5-value + orderStatus 3-value enum); 30 checks; zero bundle cost — DONE (OPS-436)
+- [x] Analytics Codex: ecommerce-cancellation-intent-value-brief (EcommerceCancellationIntent.totalMmk numeric + reason length bands); 25 checks; zero bundle cost — DONE (OPS-437)
+- [x] Analytics Codex: ecommerce-amendment-intent-fulfilment-value-brief (EcommerceOrderAmendmentIntent fulfilment pair distribution + originalTotalMmk); 28 checks; zero bundle cost — DONE (OPS-438)
+- [x] Analytics Codex: ecommerce-buying-event-action-brief (EcommerceBuyingEvent.action 8-value enum + exception rate); 29 checks; zero bundle cost — DONE (OPS-439)
+- [x] Analytics Codex: ecommerce-quote-line-sku-quantity-value-brief (EcommerceQuoteLine SKU top-5 + qty bands + lineTotalMmk stats); 38 checks; zero bundle cost — DONE (OPS-440)
 
 ### Aug 25–31
 
