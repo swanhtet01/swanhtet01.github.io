@@ -2,7 +2,7 @@
 
 Updated: 2026-08-11
 Owner: founder / CEO
-Branch: fix/demo-seed-clock (29 commits ahead of origin)
+Branch: fix/demo-seed-clock (30 commits ahead of origin)
 
 ---
 
@@ -20,7 +20,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
-**Budget**: 2,814,563 / 2,822,000 bytes. Headroom: 7,437 bytes. Largest JS chunk: 392,412 / 500,000 bytes.
+**Budget**: 2,821,149 / 2,822,000 bytes. Headroom: 851 bytes (**CRITICAL — 11 analytics emit calls consumed 6,586 bytes; no further feature slices before tree-shaking pass**). Largest JS chunk: 394,120 / 500,000 bytes.
 
 **Live**: Both domains serve `25cac2f5`. Live scheduler is `degraded`, managed persistence is not proven, security writes are off.
 
@@ -45,14 +45,15 @@ _No founder decision required. Zero bundle cost._
 - [x] OPS-162 complete — verified-statements: OwnerVerification type + SHA-256 tamper detection (29 checks) (2026-08-11)
 - [x] OPS-163 complete — staff-roles: 9-role taxonomy + write-authority matrix (67 checks) (2026-08-11)
 - [x] OPS-165 complete — Analytics Step 3: Shop emit sites (4 events: sale.completed, shift.close.confirmed, order.created, accounting.export.downloaded) (2026-08-11)
+- [x] OPS-166 complete — Analytics Step 4: Plant + Website + Ecommerce emit sites (11 events across 4 files: Plant output.recorded, capa.opened, capa.resolved, job.released, shift.close.confirmed; Website preview.opened, edit.saved, file.downloaded; Ecommerce cart.built, quote.captured, order.request.submitted, shop.handoff.reached) (2026-08-11)
 
 ### Aug 15–25
 
-- [ ] Analytics Step 4: Plant + Website + Ecommerce emit sites (remaining action events)
+- [x] Analytics Step 4: Plant + Website + Ecommerce emit sites — DONE (OPS-166)
+- [ ] **URGENT** Artifact budget: locate and remove dead tree-shaking opportunities; target 2,000+ bytes freed (headroom now 851 bytes — must run before Step 5 or any feature slice)
 - [ ] Analytics Step 5: Metrics page at `/work/?view=local-metrics`
 - [ ] Test coverage: backup checks from 11 → 25+ (incremental, restore-in-place, corrupt-header)
 - [ ] Plant CAPA: effectiveness-due field (time-gated closure check)
-- [ ] Artifact budget: locate and remove dead tree-shaking opportunities; target 2,000 bytes freed
 
 ### Aug 25–31
 
