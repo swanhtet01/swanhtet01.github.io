@@ -9,19 +9,24 @@ import {
   buildProductionQualityCorrectiveAction,
   buildProductionRecallTrace,
   buildProductionShiftHandoff,
+  closeProductionJob,
   createEmptyProduction,
   createSeedProduction,
+  endProductionDowntime,
   hasGuidedSampleProductionActivity,
   installProductionWorkingSampleJobs,
   isGuidedSampleProduction,
   placeProductionQualityHold,
+  productionDowntimeIntervals,
   productionShiftOutput,
   openProductionIssue,
   recordProductionMaterialConsumption,
   recordProductionOutput,
+  recordProductionScrap,
   releaseProductionQualityHold,
   resolveProductionIssue,
   recordProductionMachineState,
+  startProductionDowntime,
   validateProductionState,
 } from '../showroom/src/core/production-workspace.ts'
 import { plantIndustryPacks } from '../showroom/src/core/plant-industry-packs.ts'
@@ -560,4 +565,102 @@ test('shift handoff collects output and material entries for the planning day sh
 
   // An invalid shift reference returns null.
   assert.equal(buildProductionShiftHandoff(state, ''), null)
+})
+
+test('scrap recording accumulates on the job and a short-close captures the remaining units', () => {
+  const pack = plantIndustryPacks[0]
+  const state = installedSample(pack)
+  const jobId = state.jobs[0].id
+  const job0 = state.jobs.find((j) => j.id === jobId)
+  const proofAt = (actionId, at) => ({
+    actionId,
+    capturedAt: at,
+    actor: 'Shift operator',
+    reason: 'Recorded during shift.',
+    evidenceReference: 'SHIFT-LOG-SC-001',
+  })
+
+  const withOutput = recordProductionOutput(state, jobId, 100, SHIFT_REF, proofAt('ACT-SC-OUT-001', `${PLANNING_DAY}T02:00:00.000Z`))
+  assert.ok(withOutput, 'output must record')
+  assert.equal(withOutput.jobs.find((j) => j.id === jobId).output, 100)
+
+  const withScrap = recordProductionScrap(withOutput, jobId, 10, SHIFT_REF, proofAt('ACT-SC-SCRAP-001', `${PLANNING_DAY}T02:30:00.000Z`))
+  assert.ok(withScrap, 'scrap must record')
+  const jobAfterScrap = withScrap.jobs.find((j) => j.id === jobId)
+  assert.equal(jobAfterScrap.scrap, 10, 'scrap must accumulate on the job')
+
+  // Idempotent replay returns unchanged state.
+  const replay = recordProductionScrap(withScrap, jobId, 10, SHIFT_REF, proofAt('ACT-SC-SCRAP-001', `${PLANNING_DAY}T02:30:00.000Z`))
+  assert.equal(replay, withScrap, 'idempotent scrap replay must return the same state')
+
+  // Short-close the job before it reaches its target.
+  const closeProof = proofAt('ACT-SC-CLOSE-001', `${PLANNING_DAY}T03:00:00.000Z`)
+  const closed = closeProductionJob(withScrap, jobId, SHIFT_REF, closeProof)
+  assert.ok(closed, 'short-close must succeed when remaining units > 0')
+  const closedJob = closed.jobs.find((j) => j.id === jobId)
+  assert.ok(closedJob.closure, 'closed job must carry closure metadata')
+  assert.equal(closedJob.closure.remainingUnits, job0.target - 100 - 10)
+
+  // Closing an already-closed job must return null.
+  const secondClose = closeProductionJob(closed, jobId, SHIFT_REF, proofAt('ACT-SC-CLOSE-002', `${PLANNING_DAY}T03:01:00.000Z`))
+  assert.equal(secondClose, null, 'closing an already-closed job must return null')
+
+  // Recording scrap after a close must also return null.
+  const scrapAfterClose = recordProductionScrap(closed, jobId, 5, SHIFT_REF, proofAt('ACT-SC-SCRAP-002', `${PLANNING_DAY}T03:01:00.000Z`))
+  assert.equal(scrapAfterClose, null, 'recording scrap on a closed job must return null')
+})
+
+test('downtime can be started and ended on a machine and double-start is blocked', () => {
+  const pack = plantIndustryPacks[0]
+  const state = installedSample(pack)
+  const machineId = state.machines[0].id
+
+  const startProof = {
+    actionId: 'ACT-DT-START-001',
+    capturedAt: `${PLANNING_DAY}T04:00:00.000Z`,
+    actor: 'Operator',
+    reason: 'Machine overheating.',
+    evidenceReference: 'DT-LOG-001',
+  }
+  const withDowntime = startProductionDowntime(state, machineId, startProof)
+  assert.ok(withDowntime, 'downtime must start')
+  const intervals = productionDowntimeIntervals(withDowntime)
+  assert.equal(intervals.length, 1)
+  assert.equal(intervals[0].machineId, machineId)
+  assert.ok(!intervals[0].end, 'interval must be open after start')
+
+  // Double-start must return null.
+  const doubleStart = startProductionDowntime(withDowntime, machineId, {
+    actionId: 'ACT-DT-START-002',
+    capturedAt: `${PLANNING_DAY}T04:01:00.000Z`,
+    actor: 'Operator',
+    reason: 'Second attempt.',
+    evidenceReference: 'DT-LOG-002',
+  })
+  assert.equal(doubleStart, null, 'starting downtime on a machine already in downtime must return null')
+
+  // End the downtime.
+  const endProof = {
+    actionId: 'ACT-DT-END-001',
+    capturedAt: `${PLANNING_DAY}T05:00:00.000Z`,
+    actor: 'Operator',
+    reason: 'Machine cooled down.',
+    evidenceReference: 'DT-LOG-001',
+  }
+  const withEnd = endProductionDowntime(withDowntime, machineId, startProof.actionId, endProof)
+  assert.ok(withEnd, 'downtime must end')
+  const closedIntervals = productionDowntimeIntervals(withEnd)
+  assert.equal(closedIntervals.length, 1)
+  assert.ok(closedIntervals[0].end, 'interval must be closed after end')
+  assert.ok(closedIntervals[0].durationMs > 0, 'duration must be positive')
+
+  // Ending again must return null (no open interval).
+  const doubleEnd = endProductionDowntime(withEnd, machineId, startProof.actionId, {
+    actionId: 'ACT-DT-END-002',
+    capturedAt: `${PLANNING_DAY}T05:01:00.000Z`,
+    actor: 'Operator',
+    reason: 'Second end attempt.',
+    evidenceReference: 'DT-LOG-003',
+  })
+  assert.equal(doubleEnd, null, 'ending downtime when no interval is open must return null')
 })
