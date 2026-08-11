@@ -36,6 +36,9 @@ import {
   websiteEditSessionMatches,
   websiteSource,
   workspaceFingerprint,
+  LEGACY_WEBSITE_STORAGE_KEY,
+  applyWebsiteWorkspaceUpdate,
+  importWebsitePageDrafts,
 } from '../showroom/src/products/website/website-model.ts'
 import {
   applyWebsiteStarterBrief,
@@ -530,4 +533,35 @@ test('restoreWorkspace and recordWebsiteSnapshot behave correctly', () => {
     actionId: 'ACT-SNAP-001',
     capturedAt: CAPTURED_AT,
   }))
+})
+
+test('applyWebsiteWorkspaceUpdate and importWebsitePageDrafts behave correctly', () => {
+  const workspace = createInitialWorkspace()
+
+  // Legacy and secondary storage key constants are defined strings.
+  assert.equal(typeof LEGACY_WEBSITE_STORAGE_KEY, 'string')
+  assert.ok(LEGACY_WEBSITE_STORAGE_KEY.length > 0)
+
+  // A no-op update returns ok: true with changed: false.
+  const noOp = applyWebsiteWorkspaceUpdate(workspace, (w) => w)
+  assert.ok(noOp.ok)
+  if (noOp.ok) assert.equal(noOp.changed, false)
+
+  // An update that sets revision directly is rejected.
+  const badRevision = applyWebsiteWorkspaceUpdate(workspace, (w) => ({ ...w, revision: 9999 }))
+  assert.equal(badRevision.ok, false)
+
+  // importWebsitePageDrafts returns null for null input.
+  assert.equal(importWebsitePageDrafts(workspace, null), null)
+
+  // importWebsitePageDrafts returns null when pages array is empty.
+  assert.equal(
+    importWebsitePageDrafts(workspace, {
+      siteName: 'Test Site',
+      pages: [],
+      sourceDigest: 'sha256:' + 'a'.repeat(64),
+      capturedAt: '2026-07-23T08:00:00.000Z',
+    }),
+    null,
+  )
 })

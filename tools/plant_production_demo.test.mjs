@@ -52,6 +52,14 @@ import {
   productionWorkspaceCanWrite,
   currentProductionShiftClose,
   currentProductionShiftCloseEvidence,
+  PRODUCTION_WORKSPACE_SCHEMA,
+  PRODUCTION_KEY,
+  LEGACY_PRODUCTION_KEYS,
+  PRODUCTION_LOCK,
+  PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT,
+  PRODUCTION_BATCH_GENEALOGY_SCHEMA,
+  PRODUCTION_RECALL_TRACE_SCHEMA,
+  normalizeProduction,
 } from '../showroom/src/core/production-workspace.ts'
 import { plantIndustryPacks } from '../showroom/src/core/plant-industry-packs.ts'
 
@@ -1055,4 +1063,29 @@ test('currentProductionShiftClose and currentProductionShiftCloseEvidence return
   const seed = createSeedProduction()
   assert.equal(currentProductionShiftClose(seed), null)
   assert.equal(currentProductionShiftCloseEvidence(seed), null)
+})
+
+test('production workspace schema constants have the correct values', () => {
+  assert.equal(PRODUCTION_WORKSPACE_SCHEMA, 'supermega.production.workspace.v2')
+  assert.equal(PRODUCTION_KEY, 'supermega.production.workspace.v2')
+  assert.ok(Array.isArray(LEGACY_PRODUCTION_KEYS))
+  assert.ok(LEGACY_PRODUCTION_KEYS.length >= 2)
+  assert.ok(LEGACY_PRODUCTION_KEYS.includes('supermega.production.workspace.v1'))
+  assert.equal(PRODUCTION_LOCK, 'supermega-production-workspace-v2')
+  assert.equal(PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT, 'supermega.production.shop-demand-source.v1')
+  assert.equal(PRODUCTION_BATCH_GENEALOGY_SCHEMA, 'supermega.production.batch-genealogy.v1')
+  assert.equal(PRODUCTION_RECALL_TRACE_SCHEMA, 'supermega.production.recall-trace.v1')
+})
+
+test('normalizeProduction accepts a v2 workspace and rejects invalid input', () => {
+  // Valid v2 workspace is returned as a validated ProductionState.
+  const empty = createEmptyProduction()
+  const normalized = normalizeProduction(empty)
+  assert.equal(normalized.schema, PRODUCTION_WORKSPACE_SCHEMA)
+  assert.deepEqual(normalized.jobs, [])
+
+  // null is not a record → migrateLegacyProduction throws.
+  assert.throws(() => normalizeProduction(null))
+  // {} has no jobs/issues/machines arrays → migrateLegacyProduction throws.
+  assert.throws(() => normalizeProduction({}))
 })
