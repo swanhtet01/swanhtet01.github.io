@@ -37,6 +37,9 @@ const exactWorkspaceKeys = new Set([
   'supermega.plant.workspace.v2',
   'supermega.approvals.v2',
   'supermega.setup.v2',
+  // Analytics Step 6 persistence target. Device-local usage data — not a business record, not portable.
+  // Registered here so "Reset this device" actually erases it instead of leaving stale counters behind.
+  'supermega.hq.local-metrics.v1',
 ])
 
 const workspaceKeyPrefixes = [

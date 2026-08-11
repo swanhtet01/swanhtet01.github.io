@@ -67,6 +67,9 @@ export const deliberatelyNotPortableKeys: readonly string[] = [
   'supermega.shop.order_draft_reset.v1',
   'supermega.ecommerce.storefront_draft_reset.v1',
   'supermega.client-demo-workspace.v1',
+  // Analytics persistence (Step 6). Device-local usage counters; restoring them onto another device
+  // would re-assert stale activity metrics from a different session, which is misleading.
+  'supermega.hq.local-metrics.v1',
 ]
 
 const portablePrefixes = [
