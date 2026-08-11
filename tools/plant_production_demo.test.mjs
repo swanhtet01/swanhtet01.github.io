@@ -15,6 +15,9 @@ import {
   createEmptyProduction,
   createSeedProduction,
   endProductionDowntime,
+  formatProductionBatchGenealogy,
+  formatProductionRecallTrace,
+  formatProductionShiftHandoff,
   hasGuidedSampleProductionActivity,
   importProductionJobs,
   installProductionWorkingSampleJobs,
@@ -24,6 +27,7 @@ import {
   productionDowntimeIntervals,
   productionMaintenanceDueQueue,
   productionMaintenanceRecords,
+  productionShiftCloseSourceDigest,
   productionShiftOutput,
   productionWorkingSamplePackId,
   openProductionIssue,
@@ -913,4 +917,56 @@ test('productionMaintenanceDueQueue and productionWorkingSamplePackId behave cor
   // After appending guided activity the pack id is still readable.
   const withActivity = demoActivity(pack)
   assert.equal(productionWorkingSamplePackId(withActivity), pack.id)
+})
+
+test('format functions produce structured text from shift handoff, genealogy, and recall trace', () => {
+  const pack = plantIndustryPacks[0]
+  const state = demoActivity(pack)
+  const jobId = state.jobs[0].id
+  const proof = (actionId, at) => ({
+    actionId,
+    capturedAt: at,
+    actor: 'Shift operator',
+    reason: 'Format test.',
+    evidenceReference: 'FMT-LOG-001',
+  })
+
+  // Build supporting state for genealogy and recall.
+  const withMaterial = recordProductionMaterialConsumption(
+    state, jobId, pack.setup.materialId, 'LOT-FMT-001', 10, pack.setup.materialUnit,
+    SHIFT_REF, proof('ACT-FMT-MAT-001', `${PLANNING_DAY}T09:00:00.000Z`),
+  )
+  assert.ok(withMaterial)
+  const withOutput = recordProductionOutput(withMaterial, jobId, 8, SHIFT_REF, proof('ACT-FMT-OUT-001', `${PLANNING_DAY}T09:30:00.000Z`))
+  assert.ok(withOutput)
+
+  // formatProductionShiftHandoff: produces the expected section headers.
+  const handoff = buildProductionShiftHandoff(state, SHIFT_REF)
+  assert.ok(handoff)
+  const handoffText = formatProductionShiftHandoff(handoff)
+  assert.ok(typeof handoffText === 'string' && handoffText.length > 0)
+  assert.ok(handoffText.startsWith('Plant shift handoff —'), 'must open with the expected header')
+  assert.ok(handoffText.includes(SHIFT_REF), 'must include the shift reference')
+  assert.ok(handoffText.includes('Shift entries'), 'must include shift entries section')
+
+  // productionShiftCloseSourceDigest: starts with sha256:, stable for the same handoff.
+  const digest = productionShiftCloseSourceDigest(handoff)
+  assert.ok(digest.startsWith('sha256:'))
+  assert.equal(productionShiftCloseSourceDigest(handoff), digest, 'digest must be deterministic')
+
+  // formatProductionBatchGenealogy: valid JSON that contains the job id.
+  const genealogy = buildProductionBatchGenealogy(withOutput, jobId)
+  assert.ok(genealogy)
+  const genealogyText = formatProductionBatchGenealogy(genealogy)
+  assert.ok(typeof genealogyText === 'string' && genealogyText.trim().length > 0)
+  const genealogyParsed = JSON.parse(genealogyText)
+  assert.equal(genealogyParsed.job.id, jobId)
+
+  // formatProductionRecallTrace: valid JSON that includes the queried lot id.
+  const trace = buildProductionRecallTrace(withMaterial, 'LOT-FMT-001')
+  assert.ok(trace)
+  const traceText = formatProductionRecallTrace(trace)
+  assert.ok(typeof traceText === 'string' && traceText.trim().length > 0)
+  const traceParsed = JSON.parse(traceText)
+  assert.ok(traceParsed.query)
 })
