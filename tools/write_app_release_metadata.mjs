@@ -32,11 +32,68 @@ const webmanifest = {
   icons: [{ src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
 }
 
+const cacheKey = `supermega-app-${manifest.brand.version}`
+const serviceWorker = `const CACHE = '${cacheKey}'
+
+async function precacheAll() {
+  const cache = await caches.open(CACHE)
+  await cache.addAll(['/', '/favicon.svg', '/site.webmanifest'])
+  const indexResp = await caches.match('/')
+  if (!indexResp) return
+  const html = await indexResp.text()
+  const assets = [
+    ...[...html.matchAll(/src="(\\/assets\\/[^"]+)"/g)].map((m) => m[1]),
+    ...[...html.matchAll(/href="(\\/assets\\/[^"]+)"/g)].map((m) => m[1]),
+  ]
+  if (assets.length) await cache.addAll(assets)
+}
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(precacheAll())
+  self.skipWaiting()
+})
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  )
+})
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event
+  if (request.method !== 'GET') return
+  const { pathname } = new URL(request.url)
+  if (pathname.startsWith('/api/')) return
+  if (pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then((cached) => cached ?? fetch(request).then((resp) => {
+        const clone = resp.clone()
+        caches.open(CACHE).then((cache) => cache.put(request, clone))
+        return resp
+      }))
+    )
+    return
+  }
+  event.respondWith(
+    fetch(request)
+      .then((resp) => {
+        const clone = resp.clone()
+        caches.open(CACHE).then((cache) => cache.put(request, clone))
+        return resp
+      })
+      .catch(() => caches.match(request))
+  )
+})
+`
+
 const publicDir = resolve(root, 'showroom', 'public-app')
 await mkdir(publicDir, { recursive: true })
 await Promise.all([
   writeFile(resolve(publicDir, '__release.json'), `${JSON.stringify(release, null, 2)}\n`, 'utf8'),
   writeFile(resolve(publicDir, 'favicon.svg'), favicon, 'utf8'),
   writeFile(resolve(publicDir, 'site.webmanifest'), `${JSON.stringify(webmanifest, null, 2)}\n`, 'utf8'),
+  writeFile(resolve(publicDir, 'sw.js'), serviceWorker, 'utf8'),
 ])
 console.log(JSON.stringify({ ok: true, contract: 'supermega_app_release', commit: release.commit }))

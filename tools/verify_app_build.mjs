@@ -476,6 +476,13 @@ if (!indexSource.includes('<title>SuperMega</title>')
   || !indexSource.includes(manifest.company.supporting)
   || indexSource.includes('SuperMega Company OS')
   || indexSource.includes('Run Product, Commerce, and Production')) fail('stale_app_metadata')
+const swPath = resolve(dist, 'sw.js')
+if (!await exists(swPath)) fail('missing_service_worker')
+else {
+  const swSource = await readFile(swPath, 'utf8')
+  if (!swSource.includes('supermega-app-') || !swSource.includes('/assets/')) fail('service_worker_contract_invalid')
+  if (!indexSource.includes("serviceWorker.register('/sw.js')")) fail('service_worker_not_registered')
+}
 
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
@@ -18839,7 +18846,7 @@ await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 // Bounded allowance for supplier return claims, credit evidence, and credit-adjusted invoice matching.
-if (bytes > 2_810_000) fail(`artifact_budget:${bytes}`)
+if (bytes > 2_815_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
