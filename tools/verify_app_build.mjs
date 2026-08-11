@@ -18850,8 +18850,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), and Ecommerce pipeline view (OPS-185).
-if (bytes > 2_844_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), and CEO operating brief view (OPS-187).
+if (bytes > 2_848_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -18944,7 +18944,7 @@ if (!workspaceControlsArtifactPath) fail('workspace_controls_chunk_artifact_miss
 else {
   const workspaceControlsArtifact = await readFile(workspaceControlsArtifactPath, 'utf8')
   const workspaceControlsBytes = (await stat(workspaceControlsArtifactPath)).size
-  if (workspaceControlsBytes > 25_000
+  if (workspaceControlsBytes > 31_000
     || !workspaceControlsArtifact.includes('Status and recovery')
     || !workspaceControlsArtifact.includes('Download workspace backup')
     || !workspaceControlsArtifact.includes('Restore previous workspace')

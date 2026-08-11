@@ -23,6 +23,49 @@ import { projectPlantOeeSummary } from './plant-oee-summary'
 import { projectWebsiteLeadSummary } from './website-lead-summary'
 import { readWebsiteLeadLedger } from '../products/website/website-leads'
 import { projectCustomerJourneySummary } from './customer-journey-summary'
+import { projectCeoOperatingBrief } from './ceo-operating-brief'
+import type { EcommercePipelineSummary } from './ecommerce-pipeline-summary'
+
+function CeoOperatingBriefView() {
+  const commerce = useMemo(() => loadCommerceWorkspace().state, [])
+  const production = useMemo(() => loadProductionWorkspace().state, [])
+  const ledger = useMemo(() => (typeof window !== 'undefined' ? readWebsiteLeadLedger(window.localStorage) : { schema: 'supermega.website.lead-ledger.v1' as const, revision: 0, leads: [] }), [])
+  const shopRevenue = useMemo(() => projectShopRevenueSummary(commerce), [commerce])
+  const plantOee = useMemo(() => projectPlantOeeSummary(production, new Date().toISOString()), [production])
+  const websiteLeads = useMemo(() => projectWebsiteLeadSummary(ledger), [ledger])
+  const crmJourney = useMemo(() => projectCustomerJourneySummary(commerce), [commerce])
+  const ecommerce = useMemo((): EcommercePipelineSummary => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return { totalRequests: p?.requests?.length ?? 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: p?.returnIntents?.length ?? 0, pendingCancellationIntents: p?.cancellationIntents?.length ?? 0 } } catch { return { totalRequests: 0, totalRequestValueMmk: 0, averageRequestValueMmk: 0, byFulfilment: {}, pendingReturnIntents: 0, pendingCancellationIntents: 0 } } }, [])
+  const brief = useMemo(() => projectCeoOperatingBrief(shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney, new Date().toISOString()), [shopRevenue, plantOee, websiteLeads, ecommerce, crmJourney])
+  return (
+    <div className="workspace-screen settings-screen">
+      <PageHeading copy="Cross-product operating summary. Read-only." eyebrow="CEO brief" title="Operating brief" />
+      <div className="settings-control-stack">
+        {brief.alerts.length > 0 && <section className="core-panel">
+          <div><span className="core-eyebrow">Alerts</span></div>
+          <div className="readiness-list">{brief.alerts.map((a, i) => <span key={i}><small>{a.product}</small><strong>{a.message}</strong></span>)}</div>
+        </section>}
+        <section className="core-panel"><div><span className="core-eyebrow">Shop</span></div>
+          <div className="readiness-list">
+            <span><small>Revenue</small><strong>{brief.shopRevenue.totalRevenue.toLocaleString()}</strong></span>
+            <span><small>Orders</small><strong>{brief.shopRevenue.orderCount}</strong></span>
+            <span><small>Avg order</small><strong>{brief.shopRevenue.averageOrderValue.toLocaleString()}</strong></span>
+          </div></section>
+        <section className="core-panel"><div><span className="core-eyebrow">Plant</span></div>
+          <div className="readiness-list">
+            <span><small>Jobs</small><strong>{brief.plantOee.totalJobs}</strong></span>
+            <span><small>Quality</small><strong>{brief.plantOee.totalJobs > 0 ? `${brief.plantOee.qualityRate}%` : '—'}</strong></span>
+            <span><small>Overdue</small><strong>{brief.plantOee.overdueJobs}</strong></span>
+          </div></section>
+        <section className="core-panel"><div><span className="core-eyebrow">CRM</span></div>
+          <div className="readiness-list">
+            <span><small>Customers</small><strong>{brief.crmJourney.uniqueCustomers}</strong></span>
+            <span><small>Repeat</small><strong>{brief.crmJourney.repeatCustomers}</strong></span>
+            <span><small>Website leads</small><strong>{brief.websiteLeads.totalLeads}</strong></span>
+          </div></section>
+      </div>
+    </div>
+  )
+}
 
 function EcommercePipelineView() {
   const stats = useMemo(() => { try { const r = typeof window !== 'undefined' && window.localStorage.getItem('supermega.ecommerce.buying_lifecycle.v1.ecommerce%3Alocal'); const p = r ? JSON.parse(r) as Record<string, unknown[]> : null; return p ? { requests: p.requests?.length ?? 0, returns: p.returnIntents?.length ?? 0, cancels: p.cancellationIntents?.length ?? 0 } : null } catch { return null } }, [])
@@ -303,6 +346,7 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'website-leads') return <WebsiteLeadsView />
   if (searchParams.get('view') === 'customer-journey') return <CustomerJourneyView />
   if (searchParams.get('view') === 'ecommerce-pipeline') return <EcommercePipelineView />
+  if (searchParams.get('view') === 'ceo-brief') return <CeoOperatingBriefView />
 
   function saveRestorePoint() {
     const backup = collectCurrentBackup()
