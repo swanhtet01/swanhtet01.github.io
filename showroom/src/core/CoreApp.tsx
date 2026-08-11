@@ -5867,9 +5867,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
   ), 0)
   const incomingRequestCount = pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
+  const yangonDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' })
+  const todayInYangon = yangonDateFmt.format(new Date(purchaseOrderClock))
+  const todayOrders = commerce.orders.filter((order) => (
+    order.status !== 'cancelled' && yangonDateFmt.format(new Date(order.createdAt)) === todayInYangon
+  ))
+  const todayRevenue = todayOrders.reduce((sum, order) => sum + order.total, 0)
   const shopTodayMetrics = [
     { label: 'Open orders', value: String(openOrders.length), tone: actionOrders.length ? 'attention' as const : 'ready' as const },
-    { label: 'Catalog items', value: String(commerce.items.length) },
+    { label: "Today's sales", value: todayOrders.length ? formatMoney(todayRevenue) : '—' },
     { label: 'Stock alerts', value: String(lowStock.length), tone: lowStock.length ? 'attention' as const : 'ready' as const },
     { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
   ]
