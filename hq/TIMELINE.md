@@ -16,7 +16,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Products**: Shop, Plant, Website, Ecommerce — all `release-candidate-local`. All four pass their full acceptance matrix (mobile, recovery, overflow, security, onboarding). No managed tenant. No live operators.
 
-**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles + 41 cross-product shop-production + 36 cross-product reconciliation + 28 cross-product aggregate report + 45 shop revenue summary checks. Cross-product Phase A complete (105 checks in app:verify chain).
+**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles + 41 cross-product shop-production + 36 cross-product reconciliation + 28 cross-product aggregate report + 45 shop revenue summary + 45 Plant OEE summary checks. Cross-product Phase A complete (105 checks in app:verify chain).
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
@@ -65,6 +65,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Cross-product Phase A: /settings/?view=cross-product#controls UI surface; all 5 adoption conditions met; bundle unchanged — DONE (OPS-175)
 - [x] Shop revenue summary: projectShopRevenueSummary (total/completed revenue, channel breakdown, SKU ranking, closes); 45 checks — DONE (OPS-176)
 - [x] Shop revenue summary view: /settings/?view=shop-revenue#controls (revenue panel, by-channel, top SKUs, shift closes); +8,612 bytes; ceiling → 2,833,000 — DONE (OPS-177)
+- [x] Plant OEE summary: projectPlantOeeSummary (quality rate, progress, overdue, byLine); 45 checks; zero bundle cost — DONE (OPS-178)
 
 ### Aug 25–31
 
