@@ -146,4 +146,64 @@ for (const key of ['supermega.shop.service-schedule.v1', 'supermega.website.lead
   check(storage.getItem(key) !== null, `${key}: survived an end-to-end backup and restore`)
 }
 
+// --- Inspection property checks -----------------------------------------------
+check(inspection.recordCount === inspection.snapshot.records.length,
+  'inspect: recordCount matches snapshot.records.length')
+check(typeof inspection.snapshotDigest === 'string' && inspection.snapshotDigest.startsWith('sha256:'),
+  'inspect: snapshotDigest has sha256: prefix')
+check(inspection.categories.reduce((total, c) => total + c.count, 0) === inspection.recordCount,
+  'inspect: categories sum equals recordCount')
+check(inspection.authRecordsIncluded === false,
+  'inspect: authRecordsIncluded is explicitly false')
+
+// --- Error-path checks (corrupt-header / wrong-passphrase) -------------------
+let threw
+
+threw = false
+try { await inspectEncryptedCompanyBackup(json, 'wrong-passphrase-is-obvious') } catch { threw = true }
+check(threw, 'corrupt: wrong passphrase throws on inspect')
+
+threw = false
+try { await inspectEncryptedCompanyBackup('not valid json at all', 'guard-passphrase-0123456789') } catch { threw = true }
+check(threw, 'corrupt: non-JSON input throws on inspect')
+
+threw = false
+try {
+  const tampered = JSON.parse(json)
+  tampered.contract = 'supermega.not-a-backup.v1'
+  await inspectEncryptedCompanyBackup(JSON.stringify(tampered), 'guard-passphrase-0123456789')
+} catch { threw = true }
+check(threw, 'corrupt: wrong contract field throws on inspect')
+
+threw = false
+try {
+  const tampered = JSON.parse(json)
+  const digest = tampered.snapshotDigest
+  tampered.snapshotDigest = digest.slice(0, -2) + (digest.endsWith('00') ? 'ff' : '00')
+  await inspectEncryptedCompanyBackup(JSON.stringify(tampered), 'guard-passphrase-0123456789')
+} catch { threw = true }
+check(threw, 'corrupt: tampered snapshotDigest fails integrity check')
+
+threw = false
+try { await createEncryptedCompanyBackup(storage, 'short', new Date('2026-08-11T03:00:00.000Z')) } catch { threw = true }
+check(threw, 'short passphrase: createEncryptedCompanyBackup throws')
+
+threw = false
+try { await createEncryptedCompanyBackup(makeStorage({}), 'guard-passphrase-0123456789', new Date('2026-08-11T03:00:00.000Z')) } catch { threw = true }
+check(threw, 'empty storage: createEncryptedCompanyBackup throws')
+
+// --- Restore-in-place checks --------------------------------------------------
+// Back up a device with one record, add a second resettable record after the backup is taken,
+// then restore the backup. The post-backup record must be removed; the backup record must survive.
+const rip = makeStorage({ 'supermega.commerce.workspace.v2': JSON.stringify({ order: 'rip-test' }) })
+const { json: ripJson } = await createEncryptedCompanyBackup(rip, 'guard-passphrase-0123456789', new Date('2026-08-11T03:00:00.000Z'))
+rip.setItem('supermega.production.workspace.v2', JSON.stringify({ plant: 'added-after-backup' }))
+check(rip.getItem('supermega.production.workspace.v2') !== null, 'restore-in-place setup: resettable key added after backup is present')
+const ripInspection = await inspectEncryptedCompanyBackup(ripJson, 'guard-passphrase-0123456789')
+const ripResult = await restoreCompanyBackup(rip, ripInspection)
+check(rip.getItem('supermega.production.workspace.v2') === null, 'restore-in-place: key added after backup is removed by restore')
+check(rip.getItem('supermega.commerce.workspace.v2') === JSON.stringify({ order: 'rip-test' }), 'restore-in-place: key present in backup is restored correctly')
+check(ripResult.restoredCount === 1, 'restore-in-place result: restoredCount equals backup record count')
+check(ripResult.removedCount === 1, 'restore-in-place result: removedCount equals keys removed by restore')
+
 console.log(`backup covers business data contract: ${checks} checks passed`)
