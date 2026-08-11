@@ -20,6 +20,8 @@ import { projectShopOrderProductionStatus } from './shop-production-status'
 import { projectCrossProductOperatingSummary } from './cross-product-report'
 import { projectShopRevenueSummary } from './shop-revenue-summary'
 import { projectPlantOeeSummary } from './plant-oee-summary'
+import { projectWebsiteLeadSummary } from './website-lead-summary'
+import { readWebsiteLeadLedger } from '../products/website/website-leads'
 
 function CrossProductView() {
   const commerce = useMemo(() => loadCommerceWorkspace().state, [])
@@ -55,6 +57,41 @@ function CrossProductView() {
                 )))}</tbody>
               </table></div></section>
           : <p className="form-notice">No Shop orders have linked Plant jobs yet. Create a production job from Shop demand first.</p>}
+      </div>
+    </div>
+  )
+}
+
+function WebsiteLeadsView() {
+  const ledger = useMemo(() => (typeof window !== 'undefined' ? readWebsiteLeadLedger(window.localStorage) : { schema: 'supermega.website.lead-ledger.v1' as const, revision: 0, leads: [] }), [])
+  const summary = useMemo(() => projectWebsiteLeadSummary(ledger), [ledger])
+  const summaryRows: Array<readonly [string, string]> = [
+    ['Total leads', String(summary.totalLeads)],
+    ['New', String(summary.newLeads)],
+    ['Qualified', String(summary.qualifiedLeads)],
+    ['Closed', String(summary.closedLeads)],
+    ['Qualification rate', summary.totalLeads > 0 ? `${summary.qualificationRate}%` : '—'],
+    ['Closure rate', summary.totalLeads > 0 ? `${summary.closureRate}%` : '—'],
+  ]
+  return (
+    <div className="workspace-screen settings-screen">
+      <PageHeading copy="Lead funnel from Website contact forms. Read-only." eyebrow="Website" title="Lead summary" />
+      <div className="settings-control-stack">
+        <section className="core-panel">
+          <div><span className="core-eyebrow">Funnel summary</span></div>
+          <div aria-label="Website lead summary" className="readiness-list">
+            {summaryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+        </section>
+        {Object.keys(summary.bySourcePage).length > 0
+          ? <section className="core-panel"><div><span className="core-eyebrow">By source page</span></div>
+              <div style={{ overflowX: 'auto' }}><table>
+                <thead><tr><th>Page</th><th>Total</th><th>Qualified</th><th>Closed</th></tr></thead>
+                <tbody>{Object.entries(summary.bySourcePage).map(([page, m]) => (
+                  <tr key={page}><td>{page}</td><td>{m.total}</td><td>{m.qualified}</td><td>{m.closed}</td></tr>
+                ))}</tbody>
+              </table></div></section>
+          : <p className="form-notice">No leads recorded yet. Contacts submitted through your Website will appear here.</p>}
       </div>
     </div>
   )
@@ -209,6 +246,7 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'cross-product') return <CrossProductView />
   if (searchParams.get('view') === 'shop-revenue') return <ShopRevenueView />
   if (searchParams.get('view') === 'plant-oee') return <PlantOeeView />
+  if (searchParams.get('view') === 'website-leads') return <WebsiteLeadsView />
 
   function saveRestorePoint() {
     const backup = collectCurrentBackup()

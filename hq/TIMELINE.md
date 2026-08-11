@@ -20,7 +20,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
-**Budget**: 2,833,159 / 2,836,000 bytes. Headroom: 2,841 bytes (ceiling raised OPS-181 after Plant OEE view surface consumed 2,588 bytes; next planned slices are Website lead view, Ecommerce pipeline view, Analytics Step 6). Largest JS chunk: 394,790 / 500,000 bytes.
+**Budget**: 2,836,231 / 2,840,000 bytes. Headroom: 3,769 bytes (ceiling raised OPS-182 after Website lead view consumed 3,072 bytes; next planned slices are Ecommerce pipeline view, Analytics Step 6). Largest JS chunk: 394,820 / 500,000 bytes.
 
 **Live**: Both domains serve `25cac2f5`. Live scheduler is `degraded`, managed persistence is not proven, security writes are off.
 
@@ -69,6 +69,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Website lead funnel summary: projectWebsiteLeadSummary (new/qualified/closed, rates, bySourcePage); 33 checks; zero bundle cost — DONE (OPS-179)
 - [x] Ecommerce pipeline summary: projectEcommercePipelineSummary (pending requests, fulfilment, return/cancel intents); 28 checks; zero bundle cost — DONE (OPS-180)
 - [x] Plant OEE view: /settings/?view=plant-oee#controls (production summary + byLine table); +2,588 bytes; ceiling → 2,836,000 — DONE (OPS-181)
+- [x] Website lead view: /settings/?view=website-leads#controls (funnel summary + bySourcePage table); +3,072 bytes; ceiling → 2,840,000 — DONE (OPS-182)
 
 ### Aug 25–31
 
