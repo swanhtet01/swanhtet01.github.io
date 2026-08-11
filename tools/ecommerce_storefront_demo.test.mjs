@@ -136,6 +136,9 @@ import {
   importCommerceCatalog,
   authorizeCommerceSupplierReturn,
   recordCommerceSupplierCreditNote,
+  reserveCommerceOrder,
+  recordCommerceOrderSupportCase,
+  recordCommerceOrderSupportServiceEvent,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -2057,4 +2060,151 @@ test('authorizeCommerceSupplierReturn and recordCommerceSupplierCreditNote proce
     ...creditInput,
     id: 'INVALID-CREDIT-ID',
   }, creditProof), null)
+})
+
+test('recordCommerceOrderSupportCase and recordCommerceOrderSupportServiceEvent open and service a support case on an ECR-sourced order', () => {
+  const seed = createSeedCommerce()
+  const ORDER_ID = 'ORD-T039-001'
+  const ECR_ID = 'ECR-11111111-1111-4111-8111-111111111111'
+  const INTENT_ID = 'ESR-11111111-1111-4111-8111-111111111111'
+  const CASE_ID = `CASE-${INTENT_ID.slice(4)}`
+  const CASE_DUE_AT = '2026-08-08T06:00:00.000Z'
+
+  // Step 1: Reserve a confirmed ECR-sourced order.
+  const reserveProof = {
+    actionId: 'ACT-TEST-T039-RESERVE',
+    capturedAt: CAPTURED_AT,
+    actor: 'Store operator',
+    reason: 'Web order reserved',
+    evidenceReference: 'EVT-T039-RESERVE',
+  }
+  const ecrOrder = {
+    id: ORDER_ID,
+    createdAt: CAPTURED_AT,
+    customer: 'Ko Test',
+    owner: 'Store operator',
+    channel: 'Website',
+    item: 'Daily essentials basket',
+    itemSku: 'SM-1001',
+    quantity: 1,
+    total: 18500,
+    payment: 'Cash',
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    fulfilment: 'pickup',
+    fulfilmentReference: 'Store counter T039',
+    promisedAt: CASE_DUE_AT,
+    status: 'confirmed',
+    sourceRecordId: ECR_ID,
+    evidenceReference: 'EVT-T039-RESERVE',
+  }
+  const withReserve = reserveCommerceOrder(seed, ecrOrder, reserveProof)
+  assert.ok(withReserve !== null, 'reserveCommerceOrder must succeed')
+
+  // Step 2: confirmed → preparing.
+  const advProof1 = { actionId: 'ACT-TEST-T039-ADV1', capturedAt: CAPTURED_AT, actor: 'Counter operator', reason: 'Preparing', evidenceReference: 'EVT-T039-ADV1' }
+  const withPreparing = advanceCommerceOrder(withReserve, ORDER_ID, 'confirmed', advProof1)
+  assert.ok(withPreparing !== null, 'advancing confirmed→preparing must succeed')
+
+  // Step 3: preparing → ready.
+  const advProof2 = { actionId: 'ACT-TEST-T039-ADV2', capturedAt: CAPTURED_AT, actor: 'Counter operator', reason: 'Ready', evidenceReference: 'EVT-T039-ADV2' }
+  const withReady = advanceCommerceOrder(withPreparing, ORDER_ID, 'preparing', advProof2)
+  assert.ok(withReady !== null, 'advancing preparing→ready must succeed')
+
+  // Step 4: Reconcile payment before completing.
+  const payProof = { actionId: 'ACT-TEST-T039-PAY', capturedAt: CAPTURED_AT, actor: 'Counter operator', reason: 'Cash received', evidenceReference: 'EVT-T039-PAY' }
+  const withPaid = reconcileCommercePayment(withReady, ORDER_ID, payProof)
+  assert.ok(withPaid !== null, 'reconcileCommercePayment must succeed')
+
+  // Step 5: ready → completed.
+  const advProof3 = { actionId: 'ACT-TEST-T039-ADV3', capturedAt: CAPTURED_AT, actor: 'Counter operator', reason: 'Picked up', evidenceReference: 'EVT-T039-ADV3' }
+  const withCompleted = advanceCommerceOrder(withPaid, ORDER_ID, 'ready', advProof3)
+  assert.ok(withCompleted !== null, 'advancing ready→completed must succeed')
+  const completedOrder = withCompleted.orders.find((o) => o.id === ORDER_ID)
+  assert.equal(completedOrder.status, 'completed')
+  assert.ok(completedOrder.completion, 'completion record must exist')
+  assert.equal(completedOrder.sourceRecordId, ECR_ID)
+
+  // Invalid intent ID pattern → null.
+  assert.equal(commerceOrderSupportOpenExpectation(withCompleted, ORDER_ID, 'INVALID-INTENT'), null)
+
+  // Step 6: Get open expectation.
+  const openExpectation = commerceOrderSupportOpenExpectation(withCompleted, ORDER_ID, INTENT_ID)
+  assert.ok(openExpectation !== null, 'commerceOrderSupportOpenExpectation must succeed')
+  assert.equal(openExpectation.orderId, ORDER_ID)
+  assert.equal(openExpectation.supportCaseCount, 0)
+
+  // Step 7: Open the support case.
+  const caseEvidenceRef = `ECOMMERCE-SUPPORT:${INTENT_ID.slice(4)}:${ORDER_ID}:${ECR_ID}`
+  const caseProof = {
+    actionId: 'ACT-TEST-T039-CASE',
+    capturedAt: CAPTURED_AT,
+    actor: 'Support agent',
+    reason: 'Customer reported issue',
+    evidenceReference: caseEvidenceRef,
+  }
+  const caseInput = {
+    orderId: ORDER_ID,
+    sourceIntentId: INTENT_ID,
+    sourceRequestId: ECR_ID,
+    category: 'delivery_issue',
+    priority: 'normal',
+    owner: 'Support agent',
+    dueAt: CASE_DUE_AT,
+    externalMessageSent: false,
+    refundStarted: false,
+    customerRequestedAt: CAPTURED_AT,
+    customerDescription: 'Customer reports delayed pickup notification',
+  }
+  const withCase = recordCommerceOrderSupportCase(withCompleted, caseInput, caseProof, openExpectation)
+  assert.ok(withCase !== null, 'recordCommerceOrderSupportCase must succeed')
+  const caseOrder = withCase.orders.find((o) => o.id === ORDER_ID)
+  assert.equal(caseOrder.supportCases.length, 1)
+  assert.equal(caseOrder.supportCases[0].caseId, CASE_ID)
+  assert.equal(caseOrder.supportCases[0].status, 'open')
+
+  // Idempotent: same proof → returns current (not null).
+  assert.ok(recordCommerceOrderSupportCase(withCase, caseInput, caseProof, openExpectation) !== null)
+
+  // Wrong evidenceReference → null.
+  const badCaseProof = { ...caseProof, actionId: 'ACT-TEST-T039-CASE-BAD', evidenceReference: 'WRONG-REF' }
+  assert.equal(recordCommerceOrderSupportCase(withCompleted, caseInput, badCaseProof, openExpectation), null)
+
+  // externalMessageSent: true → null.
+  assert.equal(recordCommerceOrderSupportCase(withCompleted, { ...caseInput, externalMessageSent: true }, caseProof, openExpectation), null)
+
+  // Step 8: Get service expectation.
+  const serviceExpectation = commerceOrderSupportServiceExpectation(withCase, ORDER_ID, CASE_ID)
+  assert.ok(serviceExpectation !== null, 'commerceOrderSupportServiceExpectation must succeed')
+
+  // Step 9: Record acknowledged service event.
+  const serviceEvidenceRef = `SUPPORT-SERVICE:${CASE_ID}`
+  const serviceProof = {
+    actionId: 'ACT-TEST-T039-SERVICE',
+    capturedAt: CAPTURED_AT,
+    actor: 'Support agent',
+    reason: 'Case acknowledged',
+    evidenceReference: serviceEvidenceRef,
+  }
+  const serviceInput = {
+    orderId: ORDER_ID,
+    caseId: CASE_ID,
+    kind: 'acknowledged',
+    owner: 'Support agent',
+    priority: 'normal',
+    dueAt: CASE_DUE_AT,
+    note: 'Acknowledged and reviewing case details',
+  }
+  const withService = recordCommerceOrderSupportServiceEvent(withCase, serviceInput, serviceProof, serviceExpectation)
+  assert.ok(withService !== null, 'recordCommerceOrderSupportServiceEvent must succeed')
+  const servicedCase = withService.orders.find((o) => o.id === ORDER_ID).supportCases.find((c) => c.caseId === CASE_ID)
+  assert.equal(servicedCase.serviceEvents.length, 1)
+  assert.equal(servicedCase.serviceEvents[0].kind, 'acknowledged')
+
+  // Idempotent: same service event → returns current (not null).
+  assert.ok(recordCommerceOrderSupportServiceEvent(withService, serviceInput, serviceProof, serviceExpectation) !== null)
+
+  // Wrong proof.evidenceReference → null.
+  const badServiceProof = { ...serviceProof, actionId: 'ACT-TEST-T039-SVC-BAD', evidenceReference: 'WRONG-REF' }
+  assert.equal(recordCommerceOrderSupportServiceEvent(withCase, serviceInput, badServiceProof, serviceExpectation), null)
 })
