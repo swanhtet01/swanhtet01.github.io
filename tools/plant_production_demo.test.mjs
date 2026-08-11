@@ -7,6 +7,7 @@ import {
   appendGuidedSampleProductionActivity,
   buildProductionBatchGenealogy,
   buildProductionQualityCorrectiveAction,
+  buildProductionRecallTrace,
   createEmptyProduction,
   createSeedProduction,
   hasGuidedSampleProductionActivity,
@@ -495,4 +496,44 @@ test('batch genealogy captures material, output, and quality-hold events for a j
 
   // Unknown job returns null.
   assert.equal(buildProductionBatchGenealogy(withHold, 'UNKNOWN-JOB'), null)
+})
+
+test('recall trace finds a job by input lot and returns null for an unrecognised lot', () => {
+  const pack = plantIndustryPacks[0]
+  const state = installedSample(pack)
+  const jobId = state.jobs[0].id
+  const proofAt = (actionId, at) => ({
+    actionId,
+    capturedAt: at,
+    actor: 'Shift operator',
+    reason: 'Recorded during shift.',
+    evidenceReference: 'SHIFT-LOG-RECALL-001',
+  })
+
+  const withMaterial = recordProductionMaterialConsumption(
+    state, jobId,
+    pack.setup.materialId,
+    'LOT-RECALL-001',
+    50,
+    pack.setup.materialUnit,
+    SHIFT_REF,
+    proofAt('ACT-RECALL-MAT-001', `${PLANNING_DAY}T02:00:00.000Z`),
+  )
+  assert.ok(withMaterial, 'material consumption must record')
+
+  const trace = buildProductionRecallTrace(withMaterial, 'LOT-RECALL-001')
+  assert.ok(trace, 'recall trace must resolve for a known input lot')
+  assert.ok(trace.match.matchedAsInputLot, 'the trace must report a match as an input lot')
+  assert.ok(trace.match.directJobIds.includes(jobId), 'the matched job must appear in directJobIds')
+  assert.ok(trace.digest, 'recall trace must carry a digest')
+
+  // Case-insensitive: the lot was stored as-is but identity is uppercased.
+  const traceLower = buildProductionRecallTrace(withMaterial, 'lot-recall-001')
+  assert.ok(traceLower, 'recall trace must resolve regardless of case')
+
+  // An unrecognised lot must return null.
+  assert.equal(buildProductionRecallTrace(withMaterial, 'LOT-UNKNOWN-999'), null)
+
+  // An empty string or blank query must return null.
+  assert.equal(buildProductionRecallTrace(withMaterial, ''), null)
 })
