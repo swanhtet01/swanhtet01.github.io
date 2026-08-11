@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Link, useOutletContext } from 'react-router'
+import { Link, useOutletContext, useSearchParams } from 'react-router'
+
+import { getSessionEvents } from '../analytics/metrics-collector'
 
 import {
   LOCAL_WORKSPACE_BACKUP_MAX_BYTES,
@@ -12,6 +14,22 @@ import {
   type LocalWorkspaceBackup,
 } from './local-workspace-backup'
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
+
+function LocalMetricsView() {
+  const events = getSessionEvents()
+  return (
+    <div className="workspace-screen settings-screen">
+      <PageHeading copy="Session activity. Nothing leaves this device." eyebrow="Analytics" title="Session metrics" />
+      <div className="settings-control-stack">
+        {events.length === 0
+          ? <p className="form-notice">No events yet. Open a product to begin.</p>
+          : <table><thead><tr><th>Product</th><th>Action</th></tr></thead><tbody>
+              {events.map((e, i) => <tr key={i}><td>{e.product}</td><td>{e.action}</td></tr>)}
+            </tbody></table>}
+      </div>
+    </div>
+  )
+}
 
 function loadRestorePoint() {
   if (typeof window === 'undefined') return null
@@ -37,6 +55,7 @@ function backupFilename(backup: LocalWorkspaceBackup | null) {
 
 export function WorkspaceControlsPage() {
   const runtime = useOutletContext<RuntimeHealth>()
+  const [searchParams] = useSearchParams()
   const [currentBackup, setCurrentBackup] = useState<LocalWorkspaceBackup | null>(collectCurrentBackup)
   const [restorePoint, setRestorePoint] = useState<LocalWorkspaceBackup | null>(loadRestorePoint)
   const [restorePointLabel, setRestorePointLabel] = useState(restorePoint ? 'Saved on this device' : '')
@@ -52,6 +71,7 @@ export function WorkspaceControlsPage() {
     ['Local records', currentBackup ? String(recordCount) : 'Backup unavailable'],
     ['Next action', runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Open a product and continue working.'],
   ]
+  if (searchParams.get('view') === 'local-metrics') return <LocalMetricsView />
 
   function saveRestorePoint() {
     const backup = collectCurrentBackup()
