@@ -3,10 +3,16 @@ import test from 'node:test'
 
 import {
   commitWebsiteEditSession,
+  createBlankPage,
   createInitialWorkspace,
   createWebsiteEditSession,
+  duplicatePage,
+  evidenceRequirements,
+  normalizeSlug,
   pageIssues,
   readinessChecks,
+  recordWebsiteEvidence,
+  approveWebsiteRevision,
   updateWebsiteEditSession,
   websiteEditSessionMatches,
 } from '../showroom/src/products/website/website-model.ts'
@@ -246,4 +252,100 @@ test('pageIssues surfaces missing fields and passes on a complete seeded page', 
   // A page with no sections must report the issue.
   const noSections = { ...workspace.pages[0], sections: [] }
   assert.ok(pageIssues(noSections).some((issue) => /section/i.test(issue)), 'missing sections must be reported')
+})
+
+test('normalizeSlug, createBlankPage, and duplicatePage behave correctly', () => {
+  // normalizeSlug: root is preserved, trailing slash is stripped, whitespace is trimmed.
+  assert.equal(normalizeSlug('/'), '/')
+  assert.equal(normalizeSlug('/about'), '/about')
+  assert.equal(normalizeSlug('/services/'), '/services')
+  assert.equal(normalizeSlug('  /contact  '), '/contact')
+
+  // createBlankPage: produces a draft page at the expected slug.
+  const blank = createBlankPage(3)
+  assert.ok(blank.id.startsWith('page-'), 'blank page id must start with page-')
+  assert.equal(blank.slug, '/untitled-3')
+  assert.equal(blank.stage, 'draft')
+  assert.equal(blank.navigation.visible, false)
+  assert.deepEqual(blank.sections, [])
+
+  // duplicatePage: copies content but assigns a new id and slug, resets to draft.
+  const source = createInitialWorkspace().pages[0]
+  const dupe = duplicatePage(source, 7)
+  assert.notEqual(dupe.id, source.id, 'duplicated page must have a fresh id')
+  assert.equal(dupe.slug, '/copy-7')
+  assert.equal(dupe.stage, 'draft')
+  assert.equal(dupe.navigation.visible, false)
+  assert.ok(dupe.internalName.includes('copy'), 'duplicated page name must include copy')
+  assert.equal(dupe.sections.length, source.sections.length, 'all sections must be carried over')
+  assert.ok(
+    dupe.sections.every((s, i) => s.id !== source.sections[i].id),
+    'duplicated sections must have fresh ids',
+  )
+})
+
+test('evidence and approval workflow requires all checks to pass before approval is accepted', () => {
+  const workspace = createInitialWorkspace()
+  const capturedAt = CAPTURED_AT
+
+  // Approval must be blocked before any evidence is recorded.
+  assert.throws(
+    () => approveWebsiteRevision(workspace, {
+      actionId: 'ACT-APPROVE-001',
+      capturedAt,
+      reviewer: 'Founder',
+      note: 'Approved for launch.',
+    }),
+    /readiness check/i,
+  )
+
+  // Record all required evidence kinds.
+  let ws = workspace
+  for (const req of evidenceRequirements) {
+    ws = recordWebsiteEvidence(ws, {
+      actionId: `ACT-EVIDENCE-${req.id.toUpperCase()}`,
+      capturedAt,
+      kind: req.id,
+      finding: `Reviewed ${req.id} — passed.`,
+      reference: `REVIEW-${req.id.toUpperCase()}-001`,
+      verifiedBy: 'Founder',
+    })
+    assert.ok(ws, `evidence for ${req.id} must record`)
+  }
+
+  // Idempotent replay returns the same workspace.
+  const replay = recordWebsiteEvidence(ws, {
+    actionId: `ACT-EVIDENCE-${evidenceRequirements[0].id.toUpperCase()}`,
+    capturedAt,
+    kind: evidenceRequirements[0].id,
+    finding: `Reviewed ${evidenceRequirements[0].id} — passed.`,
+    reference: `REVIEW-${evidenceRequirements[0].id.toUpperCase()}-001`,
+    verifiedBy: 'Founder',
+  })
+  assert.equal(replay, ws, 'idempotent evidence replay must return the same workspace')
+
+  // All evidence readiness checks must now pass.
+  const checks = readinessChecks(ws)
+  const evidenceChecks = checks.filter((check) => check.id.startsWith('evidence-'))
+  assert.ok(evidenceChecks.every((check) => check.passed), 'all evidence checks must pass after recording evidence')
+
+  // Approval must now succeed.
+  const approved = approveWebsiteRevision(ws, {
+    actionId: 'ACT-APPROVE-001',
+    capturedAt,
+    reviewer: 'Founder',
+    note: 'Approved for launch.',
+  })
+  assert.ok(approved !== ws, 'approval must produce a new workspace')
+  assert.equal(approved.approvals.length, 1)
+  assert.equal(approved.approvals[0].reviewer, 'Founder')
+
+  // Approving again returns the same workspace (current approval already present).
+  const reApproved = approveWebsiteRevision(approved, {
+    actionId: 'ACT-APPROVE-002',
+    capturedAt,
+    reviewer: 'Founder',
+    note: 'Second approval attempt.',
+  })
+  assert.equal(reApproved, approved, 'approval when one is already current must return unchanged workspace')
 })
