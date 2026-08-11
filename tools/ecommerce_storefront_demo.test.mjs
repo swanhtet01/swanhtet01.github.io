@@ -97,6 +97,12 @@ import {
   createEmptyCommerce,
   createSeedCommerce,
   installCommerceWorkingSampleCatalog,
+  createCommerceCatalogBaseline,
+  upgradeCommerceSeedPolicies,
+  commerceSupportWorkloadCsv,
+  commerceWebsiteIntakeSnapshotDigest,
+  createCommerceWebsiteIntake,
+  commerceCloseSettlementReview,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1139,4 +1145,108 @@ test('commerceOrderCorrectionExpectation, commerceSupplierPayablesHandoff, comme
 
   // Seed has no account mapping configurations.
   assert.equal(commerceCurrentAccountMappingConfiguration(seed), null)
+})
+
+test('createCommerceCatalogBaseline, upgradeCommerceSeedPolicies, commerceSupportWorkloadCsv, commerceWebsiteIntakeSnapshotDigest, createCommerceWebsiteIntake, and commerceCloseSettlementReview', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+  const proof = {
+    actionId: 'ACT-TEST-T025-001',
+    capturedAt: seedNowIso,
+    actor: 'Test operator',
+    reason: 'Test baseline creation.',
+    evidenceReference: 'TEST-REF-001',
+  }
+
+  // createCommerceCatalogBaseline: creates a baseline with an anchorDigest.
+  const baseline = createCommerceCatalogBaseline({ sku: 'SM-1001', price: 18500, reorderAt: 10 }, proof)
+  assert.equal(baseline.sku, 'SM-1001')
+  assert.equal(baseline.price, 18500)
+  assert.equal(baseline.reorderAt, 10)
+  assert.ok(baseline.anchorDigest.startsWith('sha256:'))
+  // The anchorDigest matches commerceCatalogBaselineDigest computed on the same object.
+  assert.equal(baseline.anchorDigest, commerceCatalogBaselineDigest(baseline))
+
+  // upgradeCommerceSeedPolicies: seed already has all policies — returns unchanged.
+  const upgraded = upgradeCommerceSeedPolicies(seed)
+  assert.equal(upgraded.schema, seed.schema)
+  assert.equal(upgraded.promotionPolicies?.length, seed.promotionPolicies?.length)
+  assert.equal(upgraded.shippingPolicies?.length, seed.shippingPolicies?.length)
+
+  // A state with empty policy arrays but the catalog baseline — policies are added.
+  const noPolicies = validateCommerceState({ ...seed, promotionPolicies: [], shippingPolicies: [], paymentPolicies: [], purchaseBudgetEnvelopes: [] })
+  const upgradedNoPolicies = upgradeCommerceSeedPolicies(noPolicies)
+  assert.ok((upgradedNoPolicies.promotionPolicies?.length ?? 0) > 0, 'promotion policies must be added when absent')
+  assert.ok((upgradedNoPolicies.shippingPolicies?.length ?? 0) > 0, 'shipping policies must be added when absent')
+
+  // commerceSupportWorkloadCsv: converts a valid workload export artifact to CSV.
+  const workload = commerceSupportWorkloadExport(seed, seedNowIso)
+  const csv = commerceSupportWorkloadCsv(workload)
+  assert.equal(typeof csv, 'string')
+  assert.ok(csv.includes(COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA), 'CSV must embed the schema string')
+  assert.ok(csv.includes('"schema"'), 'CSV must have a header row')
+  // Corrupted artifact must throw.
+  assert.throws(() => commerceSupportWorkloadCsv({ ...workload, digest: 'bad-digest' }))
+
+  // commerceWebsiteIntakeSnapshotDigest: deterministic SHA-256 of intake fields.
+  const source = { fingerprint: 'web-ab1234cd', approvalId: 'APR-001', snapshotId: 'SNAP-001', pageId: 'PAGE-001', siteName: 'Test Site', pagePath: '/shop/sm-1001' }
+  const intakeSnapshot = {
+    id: 'WINT-TESTID01',
+    createdAt: seedNowIso,
+    source,
+    sku: 'SM-1001',
+    quantity: 2,
+    itemName: 'Daily essentials basket',
+    unitPrice: 18500,
+    total: 37000,
+    creation: proof,
+  }
+  const snapshotDigest = commerceWebsiteIntakeSnapshotDigest(intakeSnapshot)
+  assert.ok(snapshotDigest.startsWith('sha256:'))
+  // Deterministic: same input produces the same digest.
+  assert.equal(commerceWebsiteIntakeSnapshotDigest(intakeSnapshot), snapshotDigest)
+
+  // createCommerceWebsiteIntake: adds a pending intake record to the state.
+  const intakeInput = { id: 'WINT-TESTID01', source, sku: 'SM-1001', quantity: 2 }
+  const withIntake = createCommerceWebsiteIntake(seed, intakeInput, proof)
+  assert.ok(withIntake !== null, 'valid intake must be created')
+  const intakes = commerceWebsiteIntakes(withIntake)
+  assert.equal(intakes.length, 1)
+  assert.equal(intakes[0].id, 'WINT-TESTID01')
+  assert.equal(intakes[0].sku, 'SM-1001')
+  assert.equal(intakes[0].quantity, 2)
+  assert.equal(intakes[0].total, 37000)
+  assert.equal(intakes[0].status, 'pending_confirmation')
+  assert.ok(intakes[0].snapshotDigest?.startsWith('sha256:'))
+  // Idempotent replay: same id + same fields returns the state unchanged.
+  const replayed = createCommerceWebsiteIntake(withIntake, intakeInput, proof)
+  assert.ok(replayed !== null, 'replay must succeed')
+  assert.equal(commerceWebsiteIntakes(replayed).length, 1)
+  // Invalid sku → null.
+  assert.equal(createCommerceWebsiteIntake(seed, { ...intakeInput, sku: 'NONEXISTENT' }, proof), null)
+  // Invalid id format → null.
+  assert.equal(createCommerceWebsiteIntake(seed, { ...intakeInput, id: 'BAD-ID' }, proof), null)
+  // Quantity 0 → null.
+  assert.equal(createCommerceWebsiteIntake(seed, { ...intakeInput, quantity: 0 }, proof), null)
+
+  // commerceCloseSettlementReview: matched settlement for ORD-1039 (Cash, 22500 MMK).
+  const closeExp = commerceCloseExpectation(seed, seedNowIso)
+  assert.ok(closeExp !== null)
+  const matchedSettlement = commerceCloseSettlementReview(seed, closeExp, [
+    { paymentMethod: 'Cash', countedMmk: 22500, varianceOwner: '', varianceReason: '' },
+  ])
+  assert.ok(matchedSettlement !== null)
+  assert.equal(matchedSettlement.schema, COMMERCE_CLOSE_SETTLEMENT_SCHEMA)
+  assert.equal(matchedSettlement.status, 'matched')
+  assert.equal(matchedSettlement.totalExpectedMmk, 22500)
+  assert.equal(matchedSettlement.totalCountedMmk, 22500)
+  // Variance settlement when count differs.
+  const varianceSettlement = commerceCloseSettlementReview(seed, closeExp, [
+    { paymentMethod: 'Cash', countedMmk: 20000, varianceOwner: 'Manager', varianceReason: 'Short count' },
+  ])
+  assert.ok(varianceSettlement !== null)
+  assert.equal(varianceSettlement.status, 'variance_review')
+  assert.equal(varianceSettlement.totalVarianceMmk, -2500)
+  // Empty input → null (no payment method lines).
+  assert.equal(commerceCloseSettlementReview(seed, closeExp, []), null)
 })
