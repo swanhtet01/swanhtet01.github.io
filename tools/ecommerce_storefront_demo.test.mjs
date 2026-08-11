@@ -32,14 +32,24 @@ import {
   commerceSupplierReturnClaimBalance,
   commerceSupplierReturnClaimStatus,
   commerceSupplierSourcingSelectedQuote,
+  commerceCatalogBaselineDigest,
+  commerceCatalogBaselines,
+  commerceCatalogChanges,
   commerceCloseExpectation,
   commerceCustomerCreditReview,
   commerceOrderCalculationDigest,
+  commercePurchaseBudgetEnvelopes,
+  commercePurchaseRequisitions,
+  commerceStorefrontConfigurationActionId,
   commerceStorefrontOrderTimeline,
+  commerceStorefrontRequestEquals,
+  commerceStorefrontRequestLines,
   commerceSupportCaseUrgency,
   commerceSupportQueue,
   commerceSupportServiceState,
   commerceSupportSlaSummary,
+  commerceSupplierSourcingDecisions,
+  commerceWorkingSampleCatalogId,
   commerceWorkingSampleSkus,
   compareCommercePurchaseOrderAttention,
   createEmptyCommerce,
@@ -806,4 +816,83 @@ test('commerceCustomerCreditReview, commerceOrderCalculationDigest, commerceStor
   // ORD-1041 and ORD-1042 have pending payment.
   assert.ok(closeExp.paymentExceptionOrderIds.includes('ORD-1041'))
   assert.ok(closeExp.paymentExceptionOrderIds.includes('ORD-1042'))
+})
+
+test('commerceStorefrontConfigurationActionId, accessors, commerceWorkingSampleCatalogId, commerceStorefrontRequestLines, commerceStorefrontRequestEquals, catalog baseline helpers', () => {
+  const seed = createSeedCommerce()
+  const VALID_DIGEST = 'sha256:' + 'a'.repeat(64)
+
+  // commerceStorefrontConfigurationActionId: valid inputs return expected action ID.
+  const actionId = commerceStorefrontConfigurationActionId(1, VALID_DIGEST)
+  assert.equal(actionId, `ACT-STOREFRONT-R1-${'a'.repeat(64)}`)
+
+  // Throws for revision < 1.
+  assert.throws(() => commerceStorefrontConfigurationActionId(0, VALID_DIGEST))
+  // Throws for invalid digest.
+  assert.throws(() => commerceStorefrontConfigurationActionId(1, 'not-a-digest'))
+
+  // commercePurchaseRequisitions: seed has no requisitions.
+  assert.deepEqual(commercePurchaseRequisitions(seed), [])
+
+  // commercePurchaseBudgetEnvelopes: seed has one envelope.
+  const envelopes = commercePurchaseBudgetEnvelopes(seed)
+  assert.equal(envelopes.length, 1)
+  assert.equal(envelopes[0].budgetCode, 'SHOP-STOCK')
+
+  // commerceSupplierSourcingDecisions: seed has no sourcing decisions.
+  assert.deepEqual(commerceSupplierSourcingDecisions(seed), [])
+
+  // commerceWorkingSampleCatalogId: seed has no working-sample baselines → null.
+  assert.equal(commerceWorkingSampleCatalogId(seed), null)
+
+  // Spa workspace has working-sample baselines → returns 'spa'.
+  const spa = spaWorkspace()
+  assert.equal(commerceWorkingSampleCatalogId(spa), 'spa')
+
+  // commerceStorefrontRequestLines: v1 request with a single line.
+  const v1Request = {
+    schema: 'supermega.ecommerce.order_request.v1',
+    mode: 'browser-local-request',
+    state: 'pending_shop_review',
+    id: 'ECR-00000001',
+    idempotencyKey: 'idem-001',
+    createdAt: '2026-07-23T08:00:00.000Z',
+    sourcePreviewDigest: VALID_DIGEST,
+    customerReference: 'Ko Aung',
+    fulfilment: 'pickup',
+    currency: 'MMK',
+    line: { sku: 'SM-1001', name: 'Daily essentials basket', variant: null, quantity: 2, unitPriceMmk: 18500 },
+    totalMmk: 37000,
+  }
+  const lines = commerceStorefrontRequestLines(v1Request)
+  assert.equal(lines.length, 1)
+  assert.equal(lines[0].sku, 'SM-1001')
+  assert.equal(lines[0].quantity, 2)
+  assert.equal(lines[0].lineTotalMmk, 37000)
+
+  // commerceStorefrontRequestEquals: identical v1 requests are equal.
+  assert.ok(commerceStorefrontRequestEquals(v1Request, { ...v1Request, line: { ...v1Request.line } }))
+
+  // Different SKU → not equal.
+  const diffSku = { ...v1Request, line: { ...v1Request.line, sku: 'SM-1002' } }
+  assert.ok(!commerceStorefrontRequestEquals(v1Request, diffSku))
+
+  // Different schema → not equal.
+  const diffSchema = { ...v1Request, schema: 'supermega.ecommerce.order_request.v2' }
+  assert.ok(!commerceStorefrontRequestEquals(v1Request, diffSchema))
+
+  // commerceCatalogBaselines: seed has one baseline per item (4 items).
+  const baselines = commerceCatalogBaselines(seed)
+  assert.equal(baselines.length, seed.items.length)
+
+  // commerceCatalogChanges: seed has no changes.
+  assert.deepEqual(commerceCatalogChanges(seed), [])
+
+  // commerceCatalogBaselineDigest: returns sha256: prefix and is deterministic.
+  const firstBaseline = baselines[0]
+  const baseDigest = commerceCatalogBaselineDigest(firstBaseline)
+  assert.ok(baseDigest.startsWith('sha256:'))
+  assert.equal(commerceCatalogBaselineDigest(firstBaseline), baseDigest)
+  // The digest matches the stored anchorDigest.
+  assert.equal(baseDigest, firstBaseline.anchorDigest)
 })
