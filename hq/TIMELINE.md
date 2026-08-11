@@ -2,7 +2,7 @@
 
 Updated: 2026-08-12
 Owner: founder / CEO
-Branch: fix/demo-seed-clock (494 commits ahead of origin)
+Branch: fix/demo-seed-clock (653 commits ahead of origin)
 
 ---
 
@@ -139,6 +139,12 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-request-order-value-brief (EcommerceOrderRequestV2.totalMmk min/max/avg/total); 29 checks; zero bundle cost — DONE (OPS-426)
 - [x] Analytics Codex: ecommerce-return-intent-reason-brief (EcommerceReturnIntent.reason text distribution + unique count); 25 checks; zero bundle cost — DONE (OPS-427)
 - [x] Analytics Codex: website-opening-plan-template-brief (WebsiteOpeningPlan.workflowTemplateId presence + enum flags); 32 checks; zero bundle cost — DONE (OPS-428)
+- [x] Analytics Codex: ecommerce-quote-line-unit-price-brief (EcommerceQuoteLine.unitPriceMmk min/max/avg across all quote lines); 28 checks; zero bundle cost — DONE (OPS-429)
+- [x] Analytics Codex: ecommerce-quote-line-name-variant-brief (EcommerceQuoteLine.name top-5 + variant presence rate and top-5); 28 checks; zero bundle cost — DONE (OPS-430)
+- [x] Analytics Codex: ecommerce-amendment-intent-line-changes-brief (EcommerceOrderAmendmentIntent.lineChanges SKU freq + qty direction); 35 checks; zero bundle cost — DONE (OPS-431)
+- [x] Analytics Codex: ecommerce-cancellation-intent-payment-status-brief (EcommerceCancellationIntent.paymentStatus pending vs reconciled); 22 checks; zero bundle cost — DONE (OPS-432)
+- [x] Analytics Codex: ecommerce-support-intent-description-brief (EcommerceSupportIntent.description length bands + min/max/avg); 31 checks; zero bundle cost — DONE (OPS-433)
+- [x] Analytics Codex: ecommerce-delivery-address-city-brief (EcommerceDeliveryAddressSnapshot.city top-5 distribution); 23 checks; zero bundle cost — DONE (OPS-434)
 
 ### Aug 25–31
 
