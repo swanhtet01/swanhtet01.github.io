@@ -3,6 +3,8 @@ import test from 'node:test'
 
 import {
   GUIDED_SAMPLE_SCHEDULE_ACTOR,
+  advanceShopServiceBooking,
+  cancelShopServiceBooking,
   createShopServiceSchedule,
   createShopServiceScheduleDemo,
   isGuidedSampleShopSchedule,
@@ -94,4 +96,67 @@ test('an empty schedule can switch industry pack, but any evidence blocks the sw
     () => provisionEmptyShopServiceSchedule(withBooking, 'spa'),
     /Reset that local demo/,
   )
+})
+
+test('a booking advances through the full lifecycle and terminal states block further operations', () => {
+  const proof = (happenedAt) => ({ actor: 'Operator', reason: 'Status update.', happenedAt })
+  const base = createShopServiceSchedule('spa')
+  const afterBook = scheduleShopServiceBooking(base, {
+    customerName: 'Naw Su',
+    contact: '09 444 555 666',
+    serviceId: base.services[0].id,
+    resourceId: base.resources[0].id,
+    startsAt: `${PLANNING_DAY}T04:00:00.000Z`,
+  }, { actor: 'Operator', reason: 'New appointment.', happenedAt: `${PLANNING_DAY}T03:30:00.000Z` })
+  const bookingId = afterBook.bookings[0].id
+  assert.equal(afterBook.bookings[0].status, 'held')
+
+  const confirmed = advanceShopServiceBooking(afterBook, bookingId, proof(`${PLANNING_DAY}T04:00:00.000Z`))
+  assert.equal(confirmed.bookings[0].status, 'confirmed')
+
+  const checkedIn = advanceShopServiceBooking(confirmed, bookingId, proof(`${PLANNING_DAY}T04:05:00.000Z`))
+  assert.equal(checkedIn.bookings[0].status, 'checked_in')
+
+  const completed = advanceShopServiceBooking(checkedIn, bookingId, proof(`${PLANNING_DAY}T05:00:00.000Z`))
+  assert.equal(completed.bookings[0].status, 'completed')
+
+  // Terminal state: completed booking cannot be advanced or cancelled.
+  assert.throws(() => advanceShopServiceBooking(completed, bookingId, proof(`${PLANNING_DAY}T05:01:00.000Z`)), /no next operating step/)
+  assert.throws(() => cancelShopServiceBooking(completed, bookingId, proof(`${PLANNING_DAY}T05:01:00.000Z`)), /cannot be cancelled/)
+})
+
+test('a booking can be cancelled from any non-terminal state and cannot be cancelled twice', () => {
+  const proof = (happenedAt) => ({ actor: 'Operator', reason: 'Cancellation.', happenedAt })
+  const base = createShopServiceSchedule('spa')
+  const afterBook = scheduleShopServiceBooking(base, {
+    customerName: 'Ma Hnin',
+    contact: '09 777 888 999',
+    serviceId: base.services[0].id,
+    resourceId: base.resources[0].id,
+    startsAt: `${PLANNING_DAY}T06:00:00.000Z`,
+  }, { actor: 'Operator', reason: 'New appointment.', happenedAt: `${PLANNING_DAY}T05:30:00.000Z` })
+  const bookingId = afterBook.bookings[0].id
+  assert.equal(afterBook.bookings[0].status, 'held')
+
+  // Cancel from held.
+  const cancelled = cancelShopServiceBooking(afterBook, bookingId, proof(`${PLANNING_DAY}T05:45:00.000Z`))
+  assert.equal(cancelled.bookings[0].status, 'cancelled')
+
+  // Cannot cancel twice or advance a cancelled booking.
+  assert.throws(() => cancelShopServiceBooking(cancelled, bookingId, proof(`${PLANNING_DAY}T05:46:00.000Z`)), /cannot be cancelled/)
+  assert.throws(() => advanceShopServiceBooking(cancelled, bookingId, proof(`${PLANNING_DAY}T05:46:00.000Z`)), /no next operating step/)
+
+  // Also verify cancel works from confirmed state.
+  const afterBook2 = scheduleShopServiceBooking(base, {
+    customerName: 'Ko Zaw',
+    contact: '09 321 654 987',
+    serviceId: base.services[0].id,
+    resourceId: base.resources[0].id,
+    startsAt: `${PLANNING_DAY}T07:00:00.000Z`,
+  }, { actor: 'Operator', reason: 'New appointment.', happenedAt: `${PLANNING_DAY}T06:30:00.000Z` })
+  const bookingId2 = afterBook2.bookings[0].id
+  const confirmed2 = advanceShopServiceBooking(afterBook2, bookingId2, proof(`${PLANNING_DAY}T07:00:00.000Z`))
+  assert.equal(confirmed2.bookings[0].status, 'confirmed')
+  const cancelledFromConfirmed = cancelShopServiceBooking(confirmed2, bookingId2, proof(`${PLANNING_DAY}T07:01:00.000Z`))
+  assert.equal(cancelledFromConfirmed.bookings[0].status, 'cancelled')
 })
