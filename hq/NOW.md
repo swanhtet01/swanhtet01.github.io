@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-03
+Updated: 2026-08-11
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -37,7 +37,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
 - Client setup keeps one smart import and launchpad; create/update focuses `Open next demo`; reset/restore share one bounded scope. A v4 setup baseline rejects seeded or pre-setup history as mission proof; installation stays review-gated.
 - Shop Stock has one Commerce authority. Orders and Website conversions reserve deterministic location/lots; cancellation releases, completion consumes, and sellable returns restore the exact fulfilled location/lot.
-- Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted from rejected units; no posting occurs.
+- Shop keeps a balanced accounting-review CSV grouped by payment method and a human-approved versioned tax code, rate, and inclusive/exclusive treatment. Receiving separates accepted from rejected units; no posting occurs. The accounting export packet now includes both an AP supplier payables handoff CSV (`supermega.commerce.supplier-payables-handoff.v1`) and an AR customer receivables handoff CSV (`supermega.commerce.customer-receivables-handoff.v1`); both are digest-bound, formula-safe, and carry explicit no-payment and no-collection-authority controls.
 - Ecommerce carries versioned contact/address snapshots through recovery and Shop handoff; hosted identity and provider execution remain absent.
 - Shop owns delivery zones, fees, promises, taxes, and payment eligibility. Ecommerce and Shop retain exact decisions; Shop rechecks authority before reservation.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
