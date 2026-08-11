@@ -141,6 +141,9 @@ import {
   recordCommerceOrderSupportServiceEvent,
   resolveCommerceOrderSupportCase,
   reopenCommerceOrderSupportCase,
+  approveCommercePurchaseBudgetEnvelope,
+  approveCommerceSupplierSourcingDecision,
+  approveCommercePurchaseRequisition,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -2309,4 +2312,129 @@ test('resolveCommerceOrderSupportCase and reopenCommerceOrderSupportCase close a
   // capturedAt not strictly after resolution proof → null.
   const staleCapturedAt = { ...reopenProof, actionId: 'ACT-TEST-T040-STALE', capturedAt: CAPTURED_AT }
   assert.equal(reopenCommerceOrderSupportCase(withResolved, reopenInput, staleCapturedAt, reopenExpect), null)
+})
+
+test('procurement approval chain — budget envelope, sourcing decision, and purchase requisition', () => {
+  const base = createSeedCommerce()
+
+  const ENV_ID = 'PBE-44444444-4444-4444-8444-444444444444'
+  const SSD_ID = 'SSD-44444444-4444-4444-8444-444444444444'
+  const PR_ID = 'PR-44444444-4444-4444-8444-444444444444'
+  const SKU = 'SM-1001'
+  const SUPPLIER = 'Test Supplier Co'
+  const QUOTE_REF = 'QR-T041-001'
+  const DELIVERY_AT = '2026-08-20T00:00:00.000Z'
+  const VALID_UNTIL = '2026-08-31T00:00:00.000Z'
+  const EXPECTED_AT = '2026-08-22T00:00:00.000Z'
+  const UNIT_COST = 16000
+  const QUANTITY = 10
+  const TOTAL_MMK = UNIT_COST * QUANTITY
+
+  // --- Budget envelope ---
+  const envInput = {
+    id: ENV_ID,
+    budgetCode: 'OPS-SUPPLIES-2026-Q3',
+    label: 'Operations supplies Q3 2026',
+    periodStart: '2026-08-01T00:00:00.000Z',
+    periodEnd: '2026-09-01T00:00:00.000Z',
+    ceilingMmk: 1_000_000,
+    perRequisitionLimitMmk: 500_000,
+  }
+  const envProof = { actionId: 'ACT-TEST-T041-ENV', capturedAt: CAPTURED_AT, actor: 'Procurement officer', reason: 'Q3 ops supplies budget approved', evidenceReference: 'BUDGET-APPROVAL:OPS-SUPPLIES-2026-Q3' }
+  const withEnv = approveCommercePurchaseBudgetEnvelope(base, envInput, envProof)
+  assert.ok(withEnv !== null, 'approveCommercePurchaseBudgetEnvelope must succeed')
+  const createdEnvelope = commercePurchaseBudgetEnvelopes(withEnv).find((e) => e.id === ENV_ID)
+  assert.ok(createdEnvelope !== undefined, 'new envelope must be findable by ID')
+  assert.equal(createdEnvelope.ceilingMmk, 1_000_000)
+
+  // Idempotent replay.
+  assert.ok(approveCommercePurchaseBudgetEnvelope(withEnv, envInput, envProof) !== null)
+
+  // capturedAt < periodStart → null.
+  const earlyProof = { ...envProof, actionId: 'ACT-TEST-T041-ENV-EARLY', capturedAt: '2026-07-31T00:00:00.000Z' }
+  assert.equal(approveCommercePurchaseBudgetEnvelope(base, { ...envInput, id: 'PBE-55555555-5555-4555-8555-555555555555' }, earlyProof), null)
+
+  // capturedAt >= periodEnd → null.
+  const lateProof = { ...envProof, actionId: 'ACT-TEST-T041-ENV-LATE', capturedAt: '2026-09-01T00:00:00.000Z' }
+  assert.equal(approveCommercePurchaseBudgetEnvelope(base, { ...envInput, id: 'PBE-55555555-5555-4555-8555-555555555555' }, lateProof), null)
+
+  // perRequisitionLimitMmk > ceilingMmk → null.
+  const overLimitProof = { ...envProof, actionId: 'ACT-TEST-T041-ENV-LIM' }
+  assert.equal(approveCommercePurchaseBudgetEnvelope(base, { ...envInput, id: 'PBE-55555555-5555-4555-8555-555555555555', perRequisitionLimitMmk: 2_000_000 }, overLimitProof), null)
+
+  // --- Sourcing decision ---
+  const ssdInput = {
+    id: SSD_ID,
+    sku: SKU,
+    quantity: QUANTITY,
+    quotes: [{
+      supplier: SUPPLIER,
+      quoteReference: QUOTE_REF,
+      vendorApprovalReference: 'VAR-T041-001',
+      unitCostMmk: UNIT_COST,
+      deliveryAt: DELIVERY_AT,
+      validUntil: VALID_UNTIL,
+    }],
+    selectedQuoteReference: QUOTE_REF,
+    unitCostToleranceBasisPoints: 500,
+    deliveryToleranceDays: 7,
+  }
+  const ssdProof = { actionId: 'ACT-TEST-T041-SSD', capturedAt: CAPTURED_AT, actor: 'Procurement officer', reason: 'Sourcing decision for SM-1001 Q3', evidenceReference: 'SOURCING:SM-1001:QR-T041-001' }
+  const withSsd = approveCommerceSupplierSourcingDecision(withEnv, ssdInput, ssdProof)
+  assert.ok(withSsd !== null, 'approveCommerceSupplierSourcingDecision must succeed')
+  const createdDecision = commerceSupplierSourcingDecisions(withSsd).find((d) => d.id === SSD_ID)
+  assert.ok(createdDecision !== undefined, 'new sourcing decision must be findable by ID')
+  const selectedQuote = commerceSupplierSourcingSelectedQuote(createdDecision)
+  assert.ok(selectedQuote !== null)
+  assert.equal(selectedQuote.quoteReference, QUOTE_REF)
+  assert.equal(selectedQuote.unitCostMmk, UNIT_COST)
+
+  // Idempotent replay.
+  assert.ok(approveCommerceSupplierSourcingDecision(withSsd, ssdInput, ssdProof) !== null)
+
+  // Mutated quantity → null (JSON mismatch on idempotency check).
+  assert.equal(approveCommerceSupplierSourcingDecision(withSsd, { ...ssdInput, quantity: 20 }, ssdProof), null)
+
+  // --- Purchase requisition ---
+  const prInput = {
+    id: PR_ID,
+    budgetEnvelopeId: ENV_ID,
+    sourceSourcingDecisionId: SSD_ID,
+    expectedAt: EXPECTED_AT,
+    supplier: SUPPLIER,
+    sku: SKU,
+    quantityRequested: QUANTITY,
+    unitCostMmk: UNIT_COST,
+    sourceDecisionDigest: 'sha256:' + 'a'.repeat(64),
+    sourceReplenishmentDigest: 'sha256:' + 'b'.repeat(64),
+  }
+  const prProof = { actionId: 'ACT-TEST-T041-PR', capturedAt: CAPTURED_AT, actor: 'Procurement officer', reason: 'Requisition for SM-1001 Q3 resupply', evidenceReference: 'REQUISITION:PR-44444444' }
+  const withPr = approveCommercePurchaseRequisition(withSsd, prInput, prProof)
+  assert.ok(withPr !== null, 'approveCommercePurchaseRequisition must succeed')
+  const createdRequisition = commercePurchaseRequisitions(withPr).find((r) => r.id === PR_ID)
+  assert.ok(createdRequisition !== undefined, 'new requisition must be findable by ID')
+  assert.equal(createdRequisition.totalMmk, TOTAL_MMK)
+
+  // Budget commitment now reflects the requisition.
+  const envelope = commercePurchaseBudgetEnvelopes(withPr).find((e) => e.id === ENV_ID)
+  const commitment = commercePurchaseBudgetCommitment(withPr, envelope)
+  assert.equal(commitment.committedMmk, TOTAL_MMK)
+  assert.equal(commitment.availableMmk, 1_000_000 - TOTAL_MMK)
+  assert.equal(commitment.openRequisitions, 1)
+  assert.equal(commitment.activePurchaseOrders, 0)
+
+  // Idempotent replay.
+  assert.ok(approveCommercePurchaseRequisition(withPr, prInput, prProof) !== null)
+
+  // SKU mismatch with sourcing decision → null.
+  assert.equal(approveCommercePurchaseRequisition(withSsd, { ...prInput, sku: 'SM-1003' }, { ...prProof, actionId: 'ACT-TEST-T041-PR-SKU' }), null)
+
+  // Quantity mismatch with sourcing decision → null.
+  assert.equal(approveCommercePurchaseRequisition(withSsd, { ...prInput, id: 'PR-55555555-5555-4555-8555-555555555555', quantityRequested: 5 }, { ...prProof, actionId: 'ACT-TEST-T041-PR-QTY' }), null)
+
+  // unitCostMmk above tolerance ceiling (maximumUnitCost = 16000 * 1.05 = 16800) → null.
+  assert.equal(approveCommercePurchaseRequisition(withSsd, { ...prInput, id: 'PR-55555555-5555-4555-8555-555555555555', unitCostMmk: 17000 }, { ...prProof, actionId: 'ACT-TEST-T041-PR-COST' }), null)
+
+  // Second requisition for the same sourcingDecisionId → null.
+  assert.equal(approveCommercePurchaseRequisition(withPr, { ...prInput, id: 'PR-55555555-5555-4555-8555-555555555555' }, { ...prProof, actionId: 'ACT-TEST-T041-PR-DUP' }), null)
 })
