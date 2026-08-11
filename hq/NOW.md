@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-03
+Updated: 2026-08-11
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
-- Checks: 106 Ecommerce, 342 Commerce, 327 Production, 10 Shop next-action, 109 Website, 95 security, 241 onboarding, 11 backup, 85 managed import, and 56 PostgreSQL 17 checks across eleven migrations.
+- Checks: 106 Ecommerce, 347 Commerce, 352 Production, 10 Shop next-action, 118 Website, 98 security, 272 onboarding, 11 backup, 85 managed import, and 56 PostgreSQL 17 checks across eleven migrations.
 - The deterministic 12-profile rehearsal passes 24 rows. Live Shop reaches the counter; Plant mobile passes output through next output; Website mobile passes edit through standalone file; Ecommerce mobile passes sample start, cart, quote, review, Shop order, return, and reload. All four product missions are overflow-free on desktop. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh/recreated setup is `0 proven`; a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero. Local/live desktop has no overflow or browser errors.
 - Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1` after guarded release `30823422205`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes. Responsive public-offer QA also passes.
