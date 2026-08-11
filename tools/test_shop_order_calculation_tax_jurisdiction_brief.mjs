@@ -45,7 +45,7 @@ function order({ taxJurisdictionCode, taxEffectiveFrom, hasCalculation = true } 
     fulfilment: { method: 'counter' },
   }
   if (hasCalculation) {
-    const calc = { taxMode: 'inclusive', taxMmk: 0 }
+    const calc = { schema: 'supermega.commerce.order-calculation.v2', taxMode: 'inclusive', taxMmk: 0, currency: 'MMK', catalogRevision: 1, taxConfigurationRevision: 1, taxCode: 'STANDARD', taxRateBasisPoints: 500, listedSubtotalMmk: 1000, subtotalMmk: 1000, totalMmk: 1050 }
     if (taxJurisdictionCode !== undefined) calc.taxJurisdictionCode = taxJurisdictionCode
     if (taxEffectiveFrom !== undefined) calc.taxEffectiveFrom = taxEffectiveFrom
     obj.calculation = calc

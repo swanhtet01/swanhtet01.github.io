@@ -1,3 +1,4 @@
+import { COMMERCE_ORDER_CALCULATION_V2_SCHEMA } from './commerce-workspace.ts'
 import type { CommerceState } from './commerce-workspace.ts'
 
 export type ShopOrderCalculationTaxJurisdictionBrief = {
@@ -30,17 +31,20 @@ export function projectShopOrderCalculationTaxJurisdictionBrief(
     if (calc === undefined) continue
     ordersWithCalculation++
 
-    if (calc.taxJurisdictionCode !== undefined) {
+    if (calc.schema !== COMMERCE_ORDER_CALCULATION_V2_SCHEMA) continue
+    const v2 = calc
+
+    if (v2.taxJurisdictionCode !== undefined) {
       ordersWithJurisdictionCode++
-      codeMap.set(calc.taxJurisdictionCode, (codeMap.get(calc.taxJurisdictionCode) ?? 0) + 1)
+      codeMap.set(v2.taxJurisdictionCode, (codeMap.get(v2.taxJurisdictionCode) ?? 0) + 1)
     }
 
-    if (calc.taxEffectiveFrom !== undefined) {
+    if (v2.taxEffectiveFrom !== undefined) {
       ordersWithTaxEffectiveFrom++
-      if (earliestTaxEffectiveFrom === null || calc.taxEffectiveFrom < earliestTaxEffectiveFrom)
-        earliestTaxEffectiveFrom = calc.taxEffectiveFrom
-      if (latestTaxEffectiveFrom === null || calc.taxEffectiveFrom > latestTaxEffectiveFrom)
-        latestTaxEffectiveFrom = calc.taxEffectiveFrom
+      if (earliestTaxEffectiveFrom === null || v2.taxEffectiveFrom < earliestTaxEffectiveFrom)
+        earliestTaxEffectiveFrom = v2.taxEffectiveFrom
+      if (latestTaxEffectiveFrom === null || v2.taxEffectiveFrom > latestTaxEffectiveFrom)
+        latestTaxEffectiveFrom = v2.taxEffectiveFrom
     }
   }
 
