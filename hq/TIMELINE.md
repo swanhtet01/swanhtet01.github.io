@@ -2,7 +2,7 @@
 
 Updated: 2026-08-11
 Owner: founder / CEO
-Branch: fix/demo-seed-clock (36 commits ahead of origin)
+Branch: fix/demo-seed-clock (37 commits ahead of origin)
 
 ---
 
@@ -16,7 +16,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Products**: Shop, Plant, Website, Ecommerce — all `release-candidate-local`. All four pass their full acceptance matrix (mobile, recovery, overflow, security, onboarding). No managed tenant. No live operators.
 
-**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 105 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 91 Plant quality CAPA + 29 enterprise verified-statements + 67 enterprise staff-roles checks.
+**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 105 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles checks.
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
@@ -48,6 +48,7 @@ _No founder decision required. Zero bundle cost._
 - [x] OPS-166 complete — Analytics Step 4: Plant + Website + Ecommerce emit sites (11 events across 4 files: Plant output.recorded, capa.opened, capa.resolved, job.released, shift.close.confirmed; Website preview.opened, edit.saved, file.downloaded; Ecommerce cart.built, quote.captured, order.request.submitted, shop.handoff.reached) (2026-08-11)
 - [x] OPS-167 complete — Analytics Step 5: session metrics view at /work/?view=local-metrics (LocalMetricsView, 2-column table, useSearchParams gate in WorkspaceControlsPage; +810 bytes) (2026-08-11)
 - [x] OPS-167b complete — Artifact budget ceiling raised 2,822,000 → 2,825,000 bytes; headroom restored to 3,041 bytes (2026-08-11)
+- [x] OPS-169 complete — Plant CAPA effectivenessDue field + isCapaEffectivenessOverdue; capa checks 66 → 73, combined 91 → 98 (2026-08-11)
 
 ### Aug 15–25
 
@@ -55,7 +56,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Step 5: Metrics page at `/work/?view=local-metrics` — DONE (OPS-167)
 - [x] Artifact budget ceiling raised to 2,825,000 bytes; headroom 3,041 bytes — DONE (OPS-167b)
 - [x] Test coverage: backup checks 90 → 105 (corrupt-header, restore-in-place, inspection properties) — DONE (OPS-168)
-- [ ] Plant CAPA: effectiveness-due field (time-gated closure check)
+- [x] Plant CAPA: effectiveness-due field (time-gated closure check) — DONE (OPS-169)
 
 ### Aug 25–31
 
