@@ -18633,6 +18633,30 @@ async function verifyOperationalReportRuntime() {
     let tamperedExportRejected = false
     try { await model.validateOperationalReportExport(tamperedExport) } catch { tamperedExportRejected = true }
     assert(tamperedExportRejected, 'operational_report_tampered_master_data_accepted')
+    const productionWithUrgentIssue = production.openProductionIssue(
+      productionState,
+      {
+        id: 'ISS-ROUTE-001', status: 'open', createdAt: '2026-07-29T11:00:00.000Z',
+        area: 'Line 01', summary: 'Route regression check issue', kind: 'quality',
+        severity: 'high', owner: 'Quality lead', dueAt: '2026-08-05T11:00:00.000Z',
+        containment: 'Line stopped pending review.',
+      },
+      { actionId: 'ACT-ROUTE-ISSUE-001', capturedAt: '2026-07-29T11:30:00.000Z', actor: 'Quality lead', reason: 'Route regression check.', evidenceReference: 'ROUTE-001' },
+    )
+    assert(productionWithUrgentIssue !== null, 'plant_route_regression_issue_rejected')
+    const urgentProductionReport = model.buildOperationalReport({
+      mode: 'local', allowedProducts: ['production'],
+      sources: [{ surface: 'production', mode: 'sample', revision: productionWithUrgentIssue.revision, updatedAt: null }],
+      production: productionWithUrgentIssue, now,
+    })
+    assert(urgentProductionReport.entries.some((entry) => entry.id === 'production.urgent_issues' && entry.route === '/plant/?tab=control'), 'plant_urgent_issues_route_wrong')
+    assert(report.entries.some((entry) => entry.id === 'production.open_jobs' && entry.route === '/plant/?tab=production'), 'plant_open_jobs_route_wrong')
+    const emptyProductionReport = model.buildOperationalReport({
+      mode: 'local', allowedProducts: ['production'],
+      sources: [{ surface: 'production', mode: 'sample', revision: 0, updatedAt: null }],
+      production: production.createEmptyProduction(), now,
+    })
+    assert(emptyProductionReport.entries.some((entry) => entry.id === 'production.ready' && entry.route === '/plant/?tab=production'), 'plant_ready_route_wrong')
   } catch (error) {
     fail(`operational_report_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
