@@ -134,6 +134,8 @@ import {
   recordCommerceOrderReturn,
   installCommerceWorkingSampleActivity,
   importCommerceCatalog,
+  authorizeCommerceSupplierReturn,
+  recordCommerceSupplierCreditNote,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1962,4 +1964,97 @@ test('importCommerceCatalog imports new catalog items and handles conflicts and 
     capturedAt: CAPTURED_AT,
     actor: 'Store Manager',
   }), null)
+})
+
+test('authorizeCommerceSupplierReturn and recordCommerceSupplierCreditNote process a supplier return and credit note', () => {
+  const seed = createSeedCommerce()
+  const SEED_PO_ID = 'PO-11111111-1111-4111-8111-111111111111'
+
+  // Receive the seed PO with 38 accepted and 2 damaged (returned to vendor).
+  const receiveProof = {
+    actionId: 'ACT-TEST-T038-RECEIVE',
+    capturedAt: CAPTURED_AT,
+    actor: 'Warehouse staff',
+    reason: 'Partial receipt with damaged units returned',
+    evidenceReference: 'evt-test-t038-receive',
+  }
+  const withReceipt = receiveCommercePurchaseOrder(
+    seed, SEED_PO_ID, 38, receiveProof,
+    undefined,
+    { quantityRejected: 2, reasonCode: 'damaged', disposition: 'return_to_vendor' },
+  )
+  assert.ok(withReceipt !== null, 'receiveCommercePurchaseOrder with discrepancy must succeed')
+
+  // The receipt movement id is deterministic from the proof actionId.
+  const receiptMovementId = 'MOV2:ACT-TEST-T038-RECEIVE'
+
+  // Authorize a return claim for the 2 rejected units.
+  const RETURN_ID = 'SRET-11111111-1111-4111-8111-111111111111'
+  const returnProof = {
+    actionId: 'ACT-TEST-T038-RETURN',
+    capturedAt: CAPTURED_AT,
+    actor: 'Purchasing officer',
+    reason: 'Damaged goods authorized for return',
+    evidenceReference: 'evt-test-t038-return',
+  }
+  const withReturn = authorizeCommerceSupplierReturn(
+    withReceipt,
+    SEED_PO_ID,
+    { id: RETURN_ID, receiptMovementId, internalReturnReference: 'RET-T038-001' },
+    returnProof,
+  )
+  assert.ok(withReturn !== null, 'authorizeCommerceSupplierReturn must succeed')
+
+  const returnPo = commercePurchaseOrders(withReturn).find((po) => po.id === SEED_PO_ID)
+  const returnClaims = commerceSupplierReturnClaims(returnPo)
+  assert.equal(returnClaims.length, 1)
+  assert.equal(returnClaims[0].id, RETURN_ID)
+  assert.equal(returnClaims[0].quantityRejected, 2)
+  assert.equal(returnClaims[0].claimAmountMmk, 8400)
+
+  // Idempotent: same return claim → returns current (not null).
+  assert.ok(authorizeCommerceSupplierReturn(withReturn, SEED_PO_ID,
+    { id: RETURN_ID, receiptMovementId, internalReturnReference: 'RET-T038-001' }, returnProof) !== null)
+
+  // Record a credit note for the full claim amount.
+  const CREDIT_ID = 'SCN-11111111-1111-4111-8111-111111111111'
+  const creditProof = {
+    actionId: 'ACT-TEST-T038-CREDIT',
+    capturedAt: CAPTURED_AT,
+    actor: 'Accounts officer',
+    reason: 'Supplier credit note received',
+    evidenceReference: 'evt-test-t038-credit',
+  }
+  const creditInput = {
+    id: CREDIT_ID,
+    supplierReference: 'SUPP-CN-2026-001',
+    issuedAt: CAPTURED_AT,
+    amountMmk: 8400,
+  }
+  const withCredit = recordCommerceSupplierCreditNote(withReturn, SEED_PO_ID, RETURN_ID, creditInput, creditProof)
+  assert.ok(withCredit !== null, 'recordCommerceSupplierCreditNote must succeed')
+
+  const creditedPo = commercePurchaseOrders(withCredit).find((po) => po.id === SEED_PO_ID)
+  const creditedClaims = commerceSupplierReturnClaims(creditedPo)
+  assert.equal(creditedClaims[0].creditNotes.length, 1)
+  assert.equal(creditedClaims[0].creditNotes[0].id, CREDIT_ID)
+  assert.equal(creditedClaims[0].creditNotes[0].amountMmk, 8400)
+  assert.equal(commerceSupplierReturnClaimStatus(creditedClaims[0]), 'credited')
+
+  // Idempotent: same credit note → returns current (not null).
+  assert.ok(recordCommerceSupplierCreditNote(withCredit, SEED_PO_ID, RETURN_ID, creditInput, creditProof) !== null)
+
+  // Amount exceeds remaining claim balance → null.
+  const credit2Proof = { ...creditProof, actionId: 'ACT-TEST-T038-CREDIT2' }
+  assert.equal(recordCommerceSupplierCreditNote(withReturn, SEED_PO_ID, RETURN_ID, {
+    ...creditInput,
+    id: 'SCN-22222222-2222-4222-8222-222222222222',
+    amountMmk: 9000,
+  }, credit2Proof), null)
+
+  // Invalid credit note id pattern → null.
+  assert.equal(recordCommerceSupplierCreditNote(withReturn, SEED_PO_ID, RETURN_ID, {
+    ...creditInput,
+    id: 'INVALID-CREDIT-ID',
+  }, creditProof), null)
 })
