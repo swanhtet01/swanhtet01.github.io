@@ -335,3 +335,74 @@ test('a fully-specified quality issue closes successfully once complete CAPA evi
   assert.equal(resolvedIssue.resolution.qualityCorrectiveAction.causeCategory, 'machine')
   assert.equal(resolvedIssue.resolution.qualityCorrectiveAction.recurrenceKey, 'machine:dimension-out-of-tolerance')
 })
+
+test('a second occurrence of the same failure mode records prior issue IDs in CAPA', () => {
+  const pack = plantIndustryPacks[0]
+  const state = demoActivity(pack)
+  const proof = (actionId, at) => ({
+    actionId,
+    capturedAt: at,
+    actor: 'Quality lead',
+    reason: 'CAPA evidence recorded after root-cause investigation.',
+    evidenceReference: 'CAPA-RECORD-002',
+  })
+
+  const withFirst = openProductionIssue(state, {
+    id: 'ISS-RECUR-001',
+    status: 'open',
+    createdAt: `${PLANNING_DAY}T09:00:00.000Z`,
+    area: 'Line A',
+    summary: 'Seal strength below specification first occurrence',
+    kind: 'quality',
+    severity: 'high',
+    owner: 'Quality lead',
+    dueAt: '2026-09-01T10:00:00.000Z',
+    containment: 'Batch held pending first investigation.',
+  }, proof('ACT-RECUR-OPEN-001', `${PLANNING_DAY}T09:30:00.000Z`))
+  assert.ok(withFirst)
+
+  const capa1 = buildProductionQualityCorrectiveAction(withFirst, 'ISS-RECUR-001', {
+    failureMode: 'Seal strength below specification',
+    causeCategory: 'machine',
+    rootCause: 'Sealing die temperature below minimum.',
+    correctiveAction: 'Temperature setpoint adjusted and held for one hour.',
+    verificationResult: 'Ten consecutive packs passed tensile test.',
+    effectivenessOwner: 'Quality lead',
+  })
+  assert.ok(capa1)
+  assert.deepEqual(capa1.priorIssueIds, [], 'first occurrence has no history')
+
+  const closedFirst = resolveProductionIssue(
+    withFirst, 'ISS-RECUR-001',
+    proof('ACT-RECUR-CLOSE-001', `${PLANNING_DAY}T11:00:00.000Z`),
+    undefined,
+    capa1,
+  )
+  assert.ok(closedFirst)
+
+  const withSecond = openProductionIssue(closedFirst, {
+    id: 'ISS-RECUR-002',
+    status: 'open',
+    createdAt: `${PLANNING_DAY}T14:00:00.000Z`,
+    area: 'Line A',
+    summary: 'Seal strength below specification second occurrence',
+    kind: 'quality',
+    severity: 'high',
+    owner: 'Quality lead',
+    dueAt: '2026-09-02T10:00:00.000Z',
+    containment: 'Batch held pending second investigation.',
+  }, proof('ACT-RECUR-OPEN-002', `${PLANNING_DAY}T14:30:00.000Z`))
+  assert.ok(withSecond)
+
+  const capa2 = buildProductionQualityCorrectiveAction(withSecond, 'ISS-RECUR-002', {
+    failureMode: 'Seal strength below specification',
+    causeCategory: 'machine',
+    rootCause: 'Temperature sensor drift led to setpoint failure.',
+    correctiveAction: 'Sensor replaced and recalibrated.',
+    verificationResult: 'Twenty consecutive packs passed tensile test.',
+    effectivenessOwner: 'Quality lead',
+  })
+  assert.ok(capa2, 'second CAPA must build')
+  assert.equal(capa2.recurrenceKey, capa1.recurrenceKey, 'same failure mode must yield the same recurrence key')
+  assert.deepEqual(capa2.priorIssueIds, ['ISS-RECUR-001'], 'second occurrence must reference the prior resolved issue')
+})

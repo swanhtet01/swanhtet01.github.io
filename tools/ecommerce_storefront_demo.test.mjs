@@ -214,3 +214,59 @@ test('a retail storefront uses trade vocabulary, not spa or generic wording', as
     `all storefront rows must be client products, saw ${JSON.stringify(rows.map((row) => row.sku))}`,
   )
 })
+
+const GYM_ITEMS = [
+  { sku: 'GYM-COACHING', name: 'Personal coaching session', onHand: 10, reorderAt: 2, price: 35000 },
+  { sku: 'GYM-ACCESS', name: 'Monthly access pass', onHand: 20, reorderAt: 5, price: 80000 },
+  { sku: 'GYM-YOGA', name: 'Yoga class pack', onHand: 8, reorderAt: 2, price: 25000 },
+  { sku: 'GYM-NUTRITION', name: 'Nutrition plan', onHand: 5, reorderAt: 1, price: 18000 },
+]
+
+function gymWorkspace() {
+  const installed = installCommerceWorkingSampleCatalog(createSeedCommerce(), {
+    sampleId: 'gym',
+    sampleName: 'Gym',
+    items: GYM_ITEMS,
+    capturedAt: CAPTURED_AT,
+  })
+  assert.ok(installed, 'the gym working sample must install')
+  return installed
+}
+
+test('a gym storefront uses coaching vocabulary, not spa or retail wording', async () => {
+  const state = gymWorkspace()
+  const storage = new Map([[COMMERCE_KEY, JSON.stringify(state)]])
+  const storageAdapter = {
+    getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, value) => { storage.set(key, String(value)) },
+    removeItem: (key) => { storage.delete(key) },
+  }
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } = await import(
+    '../showroom/src/products/ecommerce/storefront-draft.ts'
+  )
+  const result = await activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Fitness Studio', capturedAt: CAPTURED_AT },
+    {
+      storage: storageAdapter,
+      catalog: state.items,
+      locks: { request: async (_name, _options, callback) => callback() },
+    },
+  )
+  assert.ok(result.ok, `gym activation failed: ${result.ok ? '' : result.error}`)
+  const rows = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, storageAdapter).draft.merchandising
+  const collections = new Set(rows.map((row) => row.collection))
+  assert.ok(
+    collections.has('Coaching'),
+    `gym storefront must use coaching vocabulary, saw ${JSON.stringify([...collections])}`,
+  )
+  assert.ok(!collections.has('Treatments'), 'spa wording must not appear on a gym storefront')
+  assert.ok(!collections.has('Trade essentials'), 'retail wording must not appear on a gym storefront')
+  assert.ok(!collections.has('Featured today'), 'generic demo wording must not appear for a known pack')
+  assert.ok(
+    rows.every((row) => row.sku.startsWith('GYM-')),
+    `all gym storefront rows must be gym products, saw ${JSON.stringify(rows.map((row) => row.sku))}`,
+  )
+})
