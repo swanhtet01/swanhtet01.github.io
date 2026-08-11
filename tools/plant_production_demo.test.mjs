@@ -3,7 +3,9 @@ import test from 'node:test'
 
 import {
   GUIDED_SAMPLE_PRODUCTION_ACTOR,
+  PRODUCTION_QUALITY_CAPA_SCHEMA,
   appendGuidedSampleProductionActivity,
+  buildProductionQualityCorrectiveAction,
   createEmptyProduction,
   createSeedProduction,
   hasGuidedSampleProductionActivity,
@@ -281,4 +283,55 @@ test('CAPA is required only for a fully specified quality issue', () => {
     null,
     'a complete quality issue must not close without CAPA',
   )
+})
+
+test('a fully-specified quality issue closes successfully once complete CAPA evidence is provided', () => {
+  const pack = plantIndustryPacks[0]
+  const state = demoActivity(pack)
+  const proof = (actionId, at) => ({
+    actionId,
+    capturedAt: at,
+    actor: 'Quality lead',
+    reason: 'CAPA evidence recorded after root-cause investigation.',
+    evidenceReference: 'CAPA-RECORD-001',
+  })
+  const withFullIssue = openProductionIssue(state, {
+    id: 'ISS-CAPA-001',
+    status: 'open',
+    createdAt: `${PLANNING_DAY}T09:00:00.000Z`,
+    area: 'Line A',
+    summary: 'Product dimension out of tolerance',
+    kind: 'quality',
+    severity: 'high',
+    owner: 'Quality lead',
+    dueAt: '2026-09-01T10:00:00.000Z',
+    containment: 'Batch held, inspection in progress.',
+  }, proof('ACT-CAPA-OPEN-001', `${PLANNING_DAY}T09:30:00.000Z`))
+  assert.ok(withFullIssue, 'the complete quality issue must open')
+
+  const capa = buildProductionQualityCorrectiveAction(withFullIssue, 'ISS-CAPA-001', {
+    failureMode: 'Dimension out of tolerance',
+    causeCategory: 'machine',
+    rootCause: 'Cutting blade worn beyond specification; gap adjustment failed.',
+    correctiveAction: 'Replaced blade, recalibrated gap, and ran capability study.',
+    verificationResult: 'Three-hour production run confirms dimension is within specification.',
+    effectivenessOwner: 'Quality lead',
+  })
+  assert.ok(capa, 'CAPA evidence must build from valid inputs')
+  assert.equal(capa.contract, PRODUCTION_QUALITY_CAPA_SCHEMA)
+  assert.equal(capa.causeCategory, 'machine')
+  assert.deepEqual(capa.priorIssueIds, [], 'first occurrence has no prior issue IDs')
+
+  const closed = resolveProductionIssue(
+    withFullIssue, 'ISS-CAPA-001',
+    proof('ACT-CAPA-CLOSE-001', `${PLANNING_DAY}T11:00:00.000Z`),
+    undefined,
+    capa,
+  )
+  assert.ok(closed, 'a complete quality issue must close when CAPA evidence is provided')
+  const resolvedIssue = closed.issues.find((issue) => issue.id === 'ISS-CAPA-001')
+  assert.equal(resolvedIssue.status, 'resolved')
+  assert.ok(resolvedIssue.resolution.qualityCorrectiveAction, 'CAPA must be stored on the resolution')
+  assert.equal(resolvedIssue.resolution.qualityCorrectiveAction.causeCategory, 'machine')
+  assert.equal(resolvedIssue.resolution.qualityCorrectiveAction.recurrenceKey, 'machine:dimension-out-of-tolerance')
 })
