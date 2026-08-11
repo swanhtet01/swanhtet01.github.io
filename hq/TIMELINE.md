@@ -163,6 +163,12 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: website-lead-request-length-brief (WebsiteLead.request short/medium/long length bands + min/max/avg); 21 checks; zero bundle cost — DONE (OPS-450)
 - [x] Analytics Codex: website-page-slug-depth-brief (WebsitePage.slug root/shallow/nested/deep depth distribution + avg depth + unique slugs); 24 checks; zero bundle cost — DONE (OPS-451)
 - [x] Analytics Codex: website-release-locale-role-brief (WebsiteReleasePackage locale approved/draft + role 3-value distribution + unique actors); 22 checks; zero bundle cost — DONE (OPS-452)
+- [x] Analytics Codex: website-release-brand-brief (WebsiteReleasePackage.brand typography body/heading font names + fontsMatch + radiusPx sharp/rounded/veryRounded bands); 24 checks; zero bundle cost — DONE (OPS-453)
+- [x] Analytics Codex: ecommerce-cancellation-decision-value-brief (EcommerceCancellationDecision.totalMmk sum/min/max/avg across all decisions); 17 checks; zero bundle cost — DONE (OPS-454)
+- [x] Analytics Codex: ecommerce-return-intent-disposition-sku-brief (EcommerceReturnIntent restock/not_restocked split + SKU top-5 + totalQuantity/averageQuantity); 22 checks; zero bundle cost — DONE (OPS-455)
+- [x] Analytics Codex: ecommerce-return-intent-reason-length-brief (EcommerceReturnIntent.reason short/medium/long length bands + min/max/avg); 16 checks; zero bundle cost — DONE (OPS-456)
+- [x] Analytics Codex: website-release-media-brief (WebsiteReleasePackage.media bytes stats + decorativeRate + uniqueAltLocales); 26 checks; zero bundle cost — DONE (OPS-457)
+- [x] Analytics Codex: website-page-hero-seo-brief (WebsitePage.hero eyebrow/CTA presence + headline/summary avg lengths + SEO title/description completeness rates); 22 checks; zero bundle cost — DONE (OPS-458)
 
 ### Aug 25–31
 
