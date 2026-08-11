@@ -108,6 +108,10 @@ import {
   reconcileCommercePayment,
   recordCommerceCollectionAction,
   cancelCommerceOrder,
+  configureCommerceTax,
+  configureCommercePromotionPolicy,
+  configureCommerceShippingPolicy,
+  configureCommercePaymentPolicy,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1314,4 +1318,64 @@ test('registerCommerceItem, updateCommerceItem, reconcileCommercePayment, record
   assert.equal(withCancel.items.find((item) => item.sku === 'SM-1001')?.onHand, sm1001Before + 2)
   // Completed order (ORD-1039) has no releasable reservation → null.
   assert.equal(cancelCommerceOrder(seed, 'ORD-1039', cancelProof), null)
+})
+
+test('configureCommerceTax, configureCommercePromotionPolicy, configureCommerceShippingPolicy, and configureCommercePaymentPolicy configure operational policies', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+
+  // configureCommerceTax — the seed starts with no tax configurations.
+  assert.equal(commerceTaxConfigurations(seed).length, 0)
+  const taxProof = { actionId: 'ACT-TEST-T027-001', capturedAt: seedNowIso, actor: 'Config operator', reason: 'Configure tax.', evidenceReference: 'T027-TAX-REF' }
+  const taxInput = { code: 'MMR-GST', label: 'Myanmar GST', rateBasisPoints: 500, mode: 'exclusive', jurisdictionCode: 'MMR-YGN', effectiveFrom: seedNowIso }
+  const withTax = configureCommerceTax(seed, taxInput, taxProof)
+  assert.ok(withTax !== null, 'valid tax configuration must succeed')
+  assert.equal(commerceTaxConfigurations(withTax).length, 1)
+  assert.equal(commerceTaxConfigurations(withTax)[0].code, 'MMR-GST')
+  assert.equal(commerceTaxConfigurations(withTax)[0].rateBasisPoints, 500)
+  // Lowercase code fails the pattern → null.
+  assert.equal(configureCommerceTax(seed, { ...taxInput, code: 'mmr-gst' }, taxProof), null)
+  // effectiveFrom before capturedAt → null.
+  assert.equal(configureCommerceTax(seed, { ...taxInput, effectiveFrom: '2026-07-22T00:00:00.000Z' }, taxProof), null)
+
+  // configureCommercePromotionPolicy — seed has WELCOME; adding a new SUMMER10 code succeeds.
+  const promoProof = { actionId: 'ACT-TEST-T027-002', capturedAt: seedNowIso, actor: 'Config operator', reason: 'Add promotion.', evidenceReference: 'T027-PROMO-REF' }
+  const promoInput = { code: 'SUMMER10', discountBasisPoints: 1000, minimumSubtotalMmk: 20000, maximumDiscountMmk: 5000, status: 'active', effectiveFrom: seedNowIso, effectiveUntil: null }
+  const existingPromos = commercePromotionPolicies(seed).length
+  const withPromo = configureCommercePromotionPolicy(seed, promoInput, promoProof)
+  assert.ok(withPromo !== null, 'valid promotion policy must be created')
+  assert.equal(commercePromotionPolicies(withPromo).length, existingPromos + 1)
+  assert.ok(commercePromotionPolicies(withPromo).some((p) => p.code === 'SUMMER10'))
+  // Replay with same actionId → returns unchanged state (not null).
+  assert.ok(configureCommercePromotionPolicy(withPromo, promoInput, promoProof) !== null)
+  // Lowercase code fails the pattern → null.
+  assert.equal(configureCommercePromotionPolicy(seed, { ...promoInput, code: 'summer10' }, promoProof), null)
+  // Zero discountBasisPoints → null.
+  assert.equal(configureCommercePromotionPolicy(seed, { ...promoInput, discountBasisPoints: 0 }, promoProof), null)
+
+  // configureCommerceShippingPolicy — seed has YGN-CENTRAL; adding MDY-001 for Mandalay succeeds.
+  const shipProof = { actionId: 'ACT-TEST-T027-003', capturedAt: seedNowIso, actor: 'Config operator', reason: 'Add shipping zone.', evidenceReference: 'T027-SHIP-REF' }
+  const shipInput = { zoneCode: 'MDY-001', townships: ['Aungmyethazan', 'Chanayethazan'], feeMmk: 3000, promiseMinutes: 120, status: 'active', effectiveFrom: seedNowIso, effectiveUntil: null }
+  const existingShipping = commerceShippingPolicies(seed).length
+  const withShipping = configureCommerceShippingPolicy(seed, shipInput, shipProof)
+  assert.ok(withShipping !== null, 'valid shipping policy must be created')
+  assert.equal(commerceShippingPolicies(withShipping).length, existingShipping + 1)
+  assert.ok(commerceShippingPolicies(withShipping).some((p) => p.zoneCode === 'MDY-001'))
+  // promiseMinutes below minimum (15) → null.
+  assert.equal(configureCommerceShippingPolicy(seed, { ...shipInput, promiseMinutes: 5 }, shipProof), null)
+  // Unsorted townships (descending order) → null.
+  assert.equal(configureCommerceShippingPolicy(seed, { ...shipInput, townships: ['Chanayethazan', 'Aungmyethazan'] }, shipProof), null)
+
+  // configureCommercePaymentPolicy — seed has kbzpay_manual (maxMmk=5M); adding one with null max and different instructions succeeds.
+  const payProof = { actionId: 'ACT-TEST-T027-004', capturedAt: seedNowIso, actor: 'Config operator', reason: 'Update payment policy.', evidenceReference: 'T027-PAY-REF' }
+  const payInput = { adapter: 'kbzpay_manual', allowedFulfilments: ['delivery', 'pickup'], maximumOrderMmk: null, instructions: 'Send screenshot to KBZPay number 09XXXXXXX.', status: 'active', effectiveFrom: seedNowIso, effectiveUntil: null }
+  const existingPayments = commercePaymentPolicies(seed).length
+  const withPayment = configureCommercePaymentPolicy(seed, payInput, payProof)
+  assert.ok(withPayment !== null, 'valid payment policy must be created')
+  assert.equal(commercePaymentPolicies(withPayment).length, existingPayments + 1)
+  assert.ok(commercePaymentPolicies(withPayment).some((p) => p.adapter === 'kbzpay_manual' && p.maximumOrderMmk === null))
+  // Invalid adapter → null.
+  assert.equal(configureCommercePaymentPolicy(seed, { ...payInput, adapter: 'bad_adapter' }, payProof), null)
+  // Empty instructions → null.
+  assert.equal(configureCommercePaymentPolicy(seed, { ...payInput, instructions: '' }, payProof), null)
 })
