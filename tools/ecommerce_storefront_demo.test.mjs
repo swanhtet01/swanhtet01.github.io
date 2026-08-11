@@ -48,9 +48,20 @@ import {
   commerceSupportQueue,
   commerceSupportServiceState,
   commerceSupportSlaSummary,
+  commerceCurrentPaymentPolicy,
+  commerceCurrentPromotionPolicy,
+  commerceCurrentShippingPolicy,
+  commerceCurrentTaxConfiguration,
+  commerceCustomerCreditPolicies,
+  commerceCurrentCustomerCreditPolicy,
+  commerceEffectiveTaxConfiguration,
+  commercePurchaseOrders,
+  commerceSupplierReturnClaims,
   commerceSupplierSourcingDecisions,
   commerceWorkingSampleCatalogId,
   commerceWorkingSampleSkus,
+  normalizeCommerce,
+  validateCommerceState,
   compareCommercePurchaseOrderAttention,
   createEmptyCommerce,
   createSeedCommerce,
@@ -895,4 +906,72 @@ test('commerceStorefrontConfigurationActionId, accessors, commerceWorkingSampleC
   assert.equal(commerceCatalogBaselineDigest(firstBaseline), baseDigest)
   // The digest matches the stored anchorDigest.
   assert.equal(baseDigest, firstBaseline.anchorDigest)
+})
+
+test('commerceCurrentPolicy helpers, commercePurchaseOrders, commerceSupplierReturnClaims, normalizeCommerce, and validateCommerceState behave correctly', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+
+  // commerceCurrentTaxConfiguration: seed has no tax configurations → null.
+  assert.equal(commerceCurrentTaxConfiguration(seed), null)
+
+  // commerceEffectiveTaxConfiguration: seed has no configurations → null.
+  assert.equal(commerceEffectiveTaxConfiguration(seed, seedNowIso), null)
+  // Invalid timestamp → null.
+  assert.equal(commerceEffectiveTaxConfiguration(seed, 'bad-ts'), null)
+
+  // commerceCustomerCreditPolicies: seed has no credit policies → [].
+  assert.deepEqual(commerceCustomerCreditPolicies(seed), [])
+
+  // commerceCurrentCustomerCreditPolicy: no policies → null for any customer.
+  assert.equal(commerceCurrentCustomerCreditPolicy(seed, 'Daw Mya'), null)
+  // Invalid atTime → null.
+  assert.equal(commerceCurrentCustomerCreditPolicy(seed, 'Daw Mya', 'bad-ts'), null)
+
+  // commerceCurrentPaymentPolicy: seed has kbzpay_manual → returns the policy.
+  const kbzPolicy = commerceCurrentPaymentPolicy(seed, 'kbzpay_manual')
+  assert.ok(kbzPolicy !== null)
+  assert.equal(kbzPolicy.adapter, 'kbzpay_manual')
+
+  // Invalid adapter → null.
+  assert.equal(commerceCurrentPaymentPolicy(seed, 'unknown_adapter'), null)
+
+  // commerceCurrentShippingPolicy: seed has YGN-CENTRAL → returns the policy.
+  const shippingPolicy = commerceCurrentShippingPolicy(seed, 'YGN-CENTRAL')
+  assert.ok(shippingPolicy !== null)
+  assert.equal(shippingPolicy.zoneCode, 'YGN-CENTRAL')
+
+  // Unknown zone → null.
+  assert.equal(commerceCurrentShippingPolicy(seed, 'UNKNOWN-ZONE'), null)
+
+  // commerceCurrentPromotionPolicy: seed has WELCOME → returns the policy.
+  const promoPolicy = commerceCurrentPromotionPolicy(seed, 'WELCOME')
+  assert.ok(promoPolicy !== null)
+  assert.equal(promoPolicy.code, 'WELCOME')
+
+  // Unknown code → null.
+  assert.equal(commerceCurrentPromotionPolicy(seed, 'NONEXISTENT'), null)
+
+  // commercePurchaseOrders: seed has one PO for SM-1002.
+  const pos = commercePurchaseOrders(seed)
+  assert.equal(pos.length, 1)
+  assert.equal(pos[0].sku, 'SM-1002')
+  assert.equal(pos[0].quantityOrdered, 40)
+
+  // commerceSupplierReturnClaims: seed PO has no supplier returns → [].
+  assert.deepEqual(commerceSupplierReturnClaims(pos[0]), [])
+
+  // normalizeCommerce: seed has the workspace schema → returns a validated state.
+  const normalized = normalizeCommerce(seed)
+  assert.equal(normalized.schema, seed.schema)
+  assert.equal(normalized.items.length, seed.items.length)
+
+  // validateCommerceState: valid seed state returns without throwing.
+  const validated = validateCommerceState(seed)
+  assert.equal(validated.schema, seed.schema)
+  assert.equal(validated.orders.length, seed.orders.length)
+
+  // Invalid input throws.
+  assert.throws(() => validateCommerceState(null))
+  assert.throws(() => validateCommerceState({ schema: 'bad-schema' }))
 })
