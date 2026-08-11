@@ -7,7 +7,9 @@ import {
   commerceCustomerCreditExposure,
   commerceOrderAdjustedTotal,
   commerceOrderCalculation,
+  commerceOrderHasReleasableReservation,
   commerceOrderItemSummary,
+  commerceOrderLocationAllocationPreview,
   commerceOrderNeedsAction,
   commerceOrderPaymentTermsDays,
   commerceOrderPromiseUrgency,
@@ -19,7 +21,12 @@ import {
   commerceReceivablesAging,
   commerceShippingDecision,
   commerceShippingPolicies,
+  commerceStorefrontConfiguration,
+  commerceStorefrontRequests,
+  commerceSupplierReturnClaimBalance,
+  commerceSupplierReturnClaimStatus,
   commerceWorkingSampleSkus,
+  createEmptyCommerce,
   createSeedCommerce,
   installCommerceWorkingSampleCatalog,
 } from '../showroom/src/core/commerce-workspace.ts'
@@ -559,4 +566,38 @@ test('commerceOrderAdjustedTotal, commerceOrderNeedsAction, and commercePaymentA
   assert.equal(commercePaymentAdapterLabel('cash_on_delivery'), 'Cash on delivery')
   assert.equal(commercePaymentAdapterLabel('kbzpay_manual'), 'KBZPay')
   assert.equal(commercePaymentAdapterLabel('pay_on_pickup'), 'Cash')
+})
+
+test('storefront accessors, location allocation preview, releasable reservation, and supplier return claim helpers work correctly', () => {
+  const empty = createEmptyCommerce()
+  const seed = createSeedCommerce()
+
+  // State accessors return default values when the field is absent.
+  assert.deepEqual(commerceStorefrontRequests(empty), [])
+  assert.deepEqual(commerceStorefrontRequests(seed), [])
+  assert.equal(commerceStorefrontConfiguration(empty), null)
+  assert.equal(commerceStorefrontConfiguration(seed), null)
+
+  // No inventoryFoundation → location allocation preview is empty.
+  const baseOrder = seed.orders.find((o) => o.id === 'ORD-1042')
+  assert.ok(baseOrder)
+  assert.deepEqual(commerceOrderLocationAllocationPreview(seed, baseOrder), [])
+
+  // Unknown orderId → no releasable reservation.
+  assert.equal(commerceOrderHasReleasableReservation(seed, 'ORD-UNKNOWN'), false)
+  // Completed order → no releasable reservation.
+  assert.equal(commerceOrderHasReleasableReservation(seed, 'ORD-1039'), false)
+
+  // commerceSupplierReturnClaimStatus: three cases based on how much has been credited.
+  const noCredit = { claimAmountMmk: 5000, creditNotes: [] }
+  assert.equal(commerceSupplierReturnClaimStatus(noCredit), 'awaiting_credit')
+  const partialCredit = { claimAmountMmk: 5000, creditNotes: [{ amountMmk: 2000 }] }
+  assert.equal(commerceSupplierReturnClaimStatus(partialCredit), 'partially_credited')
+  const fullCredit = { claimAmountMmk: 5000, creditNotes: [{ amountMmk: 3000 }, { amountMmk: 2000 }] }
+  assert.equal(commerceSupplierReturnClaimStatus(fullCredit), 'credited')
+
+  // commerceSupplierReturnClaimBalance: claimAmountMmk minus sum of creditNotes.
+  assert.equal(commerceSupplierReturnClaimBalance(noCredit), 5000)
+  assert.equal(commerceSupplierReturnClaimBalance(partialCredit), 3000)
+  assert.equal(commerceSupplierReturnClaimBalance(fullCredit), 0)
 })
