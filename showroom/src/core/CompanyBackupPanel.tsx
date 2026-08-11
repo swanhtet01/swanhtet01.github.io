@@ -7,6 +7,7 @@ import {
   restoreCompanyBackup,
   type CompanyBackupInspection,
 } from './company-backup'
+import { lockedCapabilityNotice } from './capability-tiers'
 
 function formatBackupDate(value: string): string {
   try {
@@ -95,7 +96,7 @@ export function CompanyBackupPanel() {
     }
   }
 
-  return <section aria-label="Encrypted company backup" className="core-panel company-backup-panel">
+  return <><section aria-label="Encrypted company backup" className="core-panel company-backup-panel">
     <div className="company-backup-head">
       <div><span className="core-eyebrow">Company backup</span><h2>Move or recover this company.</h2><p>Free mode can download and restore current Shop, Plant, Website, Ecommerce, owner decisions, and local AI memory.</p></div>
       <span className="status-pill bounded">browser only</span>
@@ -118,4 +119,12 @@ export function CompanyBackupPanel() {
     </div> : null}
     <p aria-live="polite" className="form-notice company-backup-notice" role="status">{notice}</p>
   </section>
+  <section aria-label="Automatic off-device backup" className="core-panel company-backup-panel">
+    <div className="company-backup-head">
+      <div><span className="core-eyebrow">Automatic off-device backup</span><h2>{lockedCapabilityNotice('cloud-backup').label}</h2><p>{lockedCapabilityNotice('cloud-backup').outcome}</p></div>
+      <span className="status-pill">premium</span>
+    </div>
+    <p className="form-notice">{lockedCapabilityNotice('cloud-backup').reason} Manual encrypted backup stays free forever. <a className="text-link" href="/contact/?product=guide&source=managed-intelligence">Talk to us about this.</a></p>
+  </section>
+</>
 }
