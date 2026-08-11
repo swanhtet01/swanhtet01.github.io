@@ -3,9 +3,11 @@ import test from 'node:test'
 
 import {
   GUIDED_SAMPLE_SCHEDULE_ACTOR,
+  createShopServiceSchedule,
   createShopServiceScheduleDemo,
   isGuidedSampleShopSchedule,
   projectShopServiceSchedule,
+  provisionEmptyShopServiceSchedule,
   scheduleShopServiceBooking,
   shopIndustryPacks,
   validateShopServiceSchedule,
@@ -59,4 +61,37 @@ test('real appointment evidence is distinguishable from the guided sample', () =
     startsAt: `${PLANNING_DAY}T10:30:00.000Z`,
   }, { actor: 'Shop operator', reason: 'Real customer appointment.', happenedAt: `${PLANNING_DAY}T10:00:00.000Z` })
   assert.equal(isGuidedSampleShopSchedule(withHumanBooking), false)
+})
+
+test('an empty schedule can switch industry pack, but any evidence blocks the switch', () => {
+  const empty = createShopServiceSchedule('retail')
+  assert.equal(empty.revision, 0)
+  assert.equal(empty.bookings.length, 0)
+
+  const switched = provisionEmptyShopServiceSchedule(empty, 'spa')
+  validateShopServiceSchedule(switched)
+  assert.equal(switched.industryPackId, 'spa')
+  assert.equal(switched.revision, 0)
+
+  // A guided-sample demo carries events and bookings — switching is blocked.
+  const demo = createShopServiceScheduleDemo('retail', PLANNING_DAY)
+  assert.ok(demo.events.length > 0)
+  assert.throws(
+    () => provisionEmptyShopServiceSchedule(demo, 'spa'),
+    /Reset that local demo/,
+  )
+
+  // A schedule with real bookings is also blocked.
+  const withBooking = scheduleShopServiceBooking(createShopServiceSchedule('retail'), {
+    customerName: 'Walk-in',
+    contact: '09 111 222 333',
+    serviceId: empty.services[0].id,
+    resourceId: empty.resources[0].id,
+    startsAt: `${PLANNING_DAY}T05:00:00.000Z`,
+  }, { actor: 'Operator', reason: 'Real booking.', happenedAt: `${PLANNING_DAY}T04:30:00.000Z` })
+  assert.ok(withBooking.bookings.length > 0)
+  assert.throws(
+    () => provisionEmptyShopServiceSchedule(withBooking, 'spa'),
+    /Reset that local demo/,
+  )
 })
