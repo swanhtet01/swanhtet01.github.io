@@ -14,6 +14,49 @@ import {
   type LocalWorkspaceBackup,
 } from './local-workspace-backup'
 import { PageHeading, RuntimeBadge, type RuntimeHealth } from './CoreShell'
+import { loadCommerceWorkspace } from './commerce-workspace'
+import { loadProductionWorkspace } from './production-workspace'
+import { projectShopOrderProductionStatus } from './shop-production-status'
+import { projectCrossProductOperatingSummary } from './cross-product-report'
+
+function CrossProductView() {
+  const commerce = useMemo(() => loadCommerceWorkspace().state, [])
+  const production = useMemo(() => loadProductionWorkspace().state, [])
+  const summary = useMemo(() => projectCrossProductOperatingSummary(commerce, production, new Date().toISOString()), [commerce, production])
+  const orderStatuses = useMemo(() => projectShopOrderProductionStatus(commerce, production), [commerce, production])
+  const summaryRows: Array<readonly [string, string]> = [
+    ['Orders with Plant coverage', String(summary.ordersWithCoverage)],
+    ['Orders without coverage', String(summary.ordersWithoutCoverage)],
+    ['Orders on hold', String(summary.ordersOnHold)],
+    ['Orders all done', String(summary.ordersAllCompleted)],
+    ['Closed jobs with receipt gap', summary.closedJobsWithGap ? `${summary.closedJobsWithGap} (${summary.totalReceiptGap} units)` : 'None'],
+  ]
+  return (
+    <div className="workspace-screen settings-screen">
+      <PageHeading copy="Shop orders linked to Plant jobs. Read-only — nothing is changed." eyebrow="Cross-product" title="Order and production status" />
+      <div className="settings-control-stack">
+        <section className="core-panel">
+          <div><span className="core-eyebrow">Operating summary</span></div>
+          <div aria-label="Cross-product summary" className="readiness-list">
+            {summaryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+        </section>
+        {orderStatuses.length > 0
+          ? <section className="core-panel"><div><span className="core-eyebrow">Linked orders</span></div>
+              <div style={{ overflowX: 'auto' }}><table>
+                <thead><tr><th>Order</th><th>Customer</th><th>Item</th><th>Qty</th><th>Job</th><th>Line</th><th>Progress</th><th>Status</th><th>Due</th></tr></thead>
+                <tbody>{orderStatuses.flatMap((order) => order.linkedJobs.map((job) => (
+                  <tr key={`${order.orderId}:${job.jobId}`}>
+                    <td>{order.orderId}</td><td>{order.customer}</td><td>{order.item}</td><td>{order.quantity}</td>
+                    <td>{job.jobId}</td><td>{job.line}</td><td>{job.progress}%</td><td>{job.status}</td><td>{job.dueAt?.slice(0, 10) ?? '—'}</td>
+                  </tr>
+                )))}</tbody>
+              </table></div></section>
+          : <p className="form-notice">No Shop orders have linked Plant jobs yet. Create a production job from Shop demand first.</p>}
+      </div>
+    </div>
+  )
+}
 
 function LocalMetricsView() {
   const events = getSessionEvents()
@@ -72,6 +115,7 @@ export function WorkspaceControlsPage() {
     ['Next action', runtime.activationManifest?.next_action ?? runtime.requirements[0] ?? 'Open a product and continue working.'],
   ]
   if (searchParams.get('view') === 'local-metrics') return <LocalMetricsView />
+  if (searchParams.get('view') === 'cross-product') return <CrossProductView />
 
   function saveRestorePoint() {
     const backup = collectCurrentBackup()

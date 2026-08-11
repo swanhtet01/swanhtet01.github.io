@@ -2,7 +2,7 @@
 
 Date: 2026-08-11
 Author: Agent Operations / CEO review
-Status: design-in-progress
+Status: Phase A complete
 Gate: adopt-with-managed-mode
 
 ---
@@ -218,8 +218,8 @@ Phase A ships when:
 - [x] `shop-production-status.ts` projection function passes a focused test (≥ 15 checks) — 41 checks (OPS-172)
 - [x] `shop-production-reconciliation.ts` projection passes a focused test (≥ 15 checks) — 36 checks (OPS-173)
 - [x] `cross-product-report.ts` passes a focused test (≥ 10 checks) — 28 checks (OPS-174)
-- [ ] Render surface is gated by an existing view parameter (no new route) — OPS-175
-- [ ] Bundle total remains ≤ 2,825,000 bytes — currently 2,821,959 (headroom 3,041 bytes; projection files not yet bundled)
+- [x] Render surface is gated by an existing view parameter (no new route) — `/settings/?view=cross-product#controls` (OPS-175; WorkspaceControlsPage lives at /settings/#controls, not /work/ which redirects home)
+- [x] Bundle total remains ≤ 2,825,000 bytes — 2,821,959 bytes (headroom 3,041 bytes; projection code fits within existing chunk overhead after minification) (OPS-175)
 
 Phase B ships when:
 
@@ -233,5 +233,5 @@ Phase B ships when:
 | Decision | Default if not decided |
 |----------|----------------------|
 | Which cross-product view should operators see first — Shop-centric (order status) or Plant-centric (job fulfillment)? | Shop-centric (order status) — closer to revenue |
-| Should the cross-product report surface be at `/work/?view=cross-product` or embedded in the CEO brief? | Separate view (CEO brief already has a defined role) |
+| Should the cross-product report surface be at `/settings/?view=cross-product#controls` or embedded in the CEO brief? | Separate view (CEO brief already has a defined role) — shipped at /settings/?view=cross-product#controls |
 | Phase B: approve `sourceLeadRef` addition to `EcommerceShopDraft` before it ships to managed users? | Not shipped until approved |

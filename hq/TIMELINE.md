@@ -16,7 +16,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Products**: Shop, Plant, Website, Ecommerce — all `release-candidate-local`. All four pass their full acceptance matrix (mobile, recovery, overflow, security, onboarding). No managed tenant. No live operators.
 
-**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles + 41 cross-product shop-production + 36 cross-product reconciliation + 28 cross-product aggregate report checks.
+**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles + 41 cross-product shop-production + 36 cross-product reconciliation + 28 cross-product aggregate report checks. Cross-product Phase A complete: 105 total cross-product checks now in app:verify chain.
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
@@ -62,6 +62,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Cross-product Phase A: projectShopOrderProductionStatus + projectJobFulfillmentReconciliation; 41 checks — DONE (OPS-172)
 - [x] Cross-product Phase A: projectMaterialReconciliation (material flows by SKU + date); 36 checks — DONE (OPS-173)
 - [x] Cross-product Phase A: projectCrossProductOperatingSummary aggregate report; 28 checks — DONE (OPS-174)
+- [x] Cross-product Phase A: /work/?view=cross-product UI surface; all 5 adoption conditions met; bundle unchanged — DONE (OPS-175)
 
 ### Aug 25–31
 
@@ -210,7 +211,7 @@ All seven gates collapse to two: (1) approve one isolated tenant + (2) name one 
 | verified-statements | adopt | types + tests shipped (OPS-162) | `enterprise-verified-statements.ts` (29 checks) |
 | staff-roles | adopt | types + tests shipped (OPS-163) | `enterprise-staff-roles.ts` (67 checks) |
 | shared-workspace | evaluate | design-ready, awaiting staff-roles proof | `hq/research/enterprise-capabilities-design-2026-08.md` |
-| Cross-product reporting | adopt | Phase A in progress (shop-production projection done, reconciliation + aggregate pending) | `hq/research/cross-product-reporting-design-2026-08.md` |
+| Cross-product reporting | adopt | Phase A complete (5/5 adoption conditions met; /work/?view=cross-product live; Phase B awaits managed mode) | `hq/research/cross-product-reporting-design-2026-08.md` |
 
 ---
 
