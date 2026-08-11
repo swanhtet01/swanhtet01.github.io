@@ -113,7 +113,7 @@ const spaRoleGuides: Record<SpaGuideRole, { label: string; result: string; tasks
     tasks: [
       'Hold a time with the client name, contact, service, and therapist station.',
       'Confirm the booking when agreed; check the client in only after arrival.',
-      'Complete the visit, then record the reviewed sale and payment in Shop.',
+      'After the therapist marks treatment complete, review the checkout, verify the real receipt or cash, and close the visit.',
     ],
     boundary: 'Do not change prices, stock counts, refunds, or daily-close evidence without the owner.',
   },

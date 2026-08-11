@@ -62,6 +62,9 @@ from supermega_runtime.production_material_handoff import (
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
+    SPA_FRONT_DESK_CAPABILITY,
+    SPA_ROLE_CAPABILITIES,
+    SPA_THERAPIST_CAPABILITY,
     SURFACE_WRITE_CAPABILITIES,
     ApprovalRecord,
     CommandResult,
@@ -363,7 +366,7 @@ def _require_read_ready(readiness: TrialReadiness) -> None:
         raise _error(403, "trial_membership_required")
 
 
-def _require_write_ready(readiness: TrialReadiness, capability: str) -> None:
+def _require_write_foundation(readiness: TrialReadiness) -> None:
     infrastructure_blockers = [
         name
         for name, ready in (
@@ -380,8 +383,168 @@ def _require_write_ready(readiness: TrialReadiness, capability: str) -> None:
         raise _error(401, "trial_auth_required")
     if not readiness.membership_ready:
         raise _error(403, "trial_membership_required")
+
+
+def _restricted_spa_role(readiness: TrialReadiness) -> str | None:
+    selected = readiness.capabilities.intersection(SPA_ROLE_CAPABILITIES)
+    if len(selected) > 1:
+        return "invalid"
+    if SPA_FRONT_DESK_CAPABILITY in selected:
+        return "front-desk"
+    if SPA_THERAPIST_CAPABILITY in selected:
+        return "therapist"
+    return None
+
+
+def _require_write_ready(readiness: TrialReadiness, capability: str) -> None:
+    _require_write_foundation(readiness)
     if capability not in readiness.capabilities:
         raise _error(403, "trial_capability_required", required_capability=capability)
+    if capability == "commerce.write" and _restricted_spa_role(readiness) is not None:
+        raise _error(
+            403,
+            "spa_role_action_required",
+            required_capability="commerce.spa.scoped_action",
+        )
+
+
+def _require_spa_role_write_ready(
+    readiness: TrialReadiness,
+    allowed_roles: frozenset[str] | None,
+    *,
+    action: str,
+) -> None:
+    _require_write_foundation(readiness)
+    if "commerce.write" not in readiness.capabilities:
+        raise _error(
+            403,
+            "trial_capability_required",
+            required_capability="commerce.write",
+        )
+    role = _restricted_spa_role(readiness)
+    if role is None:
+        return
+    if role == "invalid" or allowed_roles is None or role not in allowed_roles:
+        raise _error(
+            403,
+            "spa_role_action_denied",
+            action=action,
+            role=role,
+        )
+
+
+def _spa_service_order(value: Any) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    lines = value.get("lines")
+    source_record_id = value.get("sourceRecordId")
+    return (
+        isinstance(lines, list)
+        and len(lines) == 1
+        and isinstance(lines[0], Mapping)
+        and lines[0].get("kind") == "service"
+        and value.get("channel") == "Spa appointment"
+        and isinstance(source_record_id, str)
+        and source_record_id.startswith("SPA-BOOKING-")
+        and value.get("id") == f"ORD-{source_record_id}"
+    )
+
+
+def _changed_record(
+    current: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    field: str,
+) -> tuple[Mapping[str, Any], Mapping[str, Any]] | None:
+    before_records = current.get(field)
+    after_records = candidate.get(field)
+    if not isinstance(before_records, list) or not isinstance(after_records, list):
+        return None
+    before_by_id = {
+        record.get("id"): record
+        for record in before_records
+        if isinstance(record, Mapping) and isinstance(record.get("id"), str)
+    }
+    changed = [
+        (before_by_id.get(record.get("id")), record)
+        for record in after_records
+        if isinstance(record, Mapping)
+        and before_by_id.get(record.get("id")) != record
+    ]
+    if len(changed) != 1 or not isinstance(changed[0][0], Mapping):
+        return None
+    return changed[0][0], changed[0][1]
+
+
+def _spa_command_allowed_roles(
+    event_type: str,
+    current: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+) -> frozenset[str] | None:
+    if event_type == "commerce.order.created":
+        before_ids = {
+            record.get("id")
+            for record in current.get("orders", [])
+            if isinstance(record, Mapping)
+        }
+        added = [
+            record
+            for record in candidate.get("orders", [])
+            if isinstance(record, Mapping) and record.get("id") not in before_ids
+        ] if isinstance(candidate.get("orders"), list) else []
+        return frozenset({"front-desk"}) if len(added) == 1 and _spa_service_order(added[0]) else None
+    if event_type in {"commerce.payment.reconciled", "commerce.order.advanced"}:
+        changed = _changed_record(current, candidate, "orders")
+        if changed and _spa_service_order(changed[0]) and _spa_service_order(changed[1]):
+            return frozenset({"front-desk"})
+        return None
+    return None
+
+
+def _spa_schedule_allowed_roles(
+    current: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+) -> frozenset[str] | None:
+    before = current.get("serviceSchedule")
+    after = candidate.get("serviceSchedule")
+    if not isinstance(after, Mapping) or after.get("industryPackId") != "spa":
+        return None
+    if before is None:
+        return frozenset()
+    if not isinstance(before, Mapping):
+        return None
+    events = after.get("events")
+    if not isinstance(events, list) or not events or not isinstance(events[-1], Mapping):
+        return None
+    latest = events[-1]
+    event_type = latest.get("type")
+    if event_type in {"service_registered", "resource_registered"}:
+        return frozenset()
+    if event_type in {"booking_scheduled", "booking_cancelled", "booking_checkout_linked"}:
+        return frozenset({"front-desk"})
+    if event_type != "booking_advanced":
+        return None
+    before_bookings = {
+        booking.get("id"): booking
+        for booking in before.get("bookings", [])
+        if isinstance(booking, Mapping)
+    } if isinstance(before.get("bookings"), list) else {}
+    changed = [
+        (before_bookings.get(booking.get("id")), booking)
+        for booking in after.get("bookings", [])
+        if isinstance(booking, Mapping)
+        and before_bookings.get(booking.get("id")) != booking
+    ] if isinstance(after.get("bookings"), list) else []
+    if len(changed) != 1 or not isinstance(changed[0][0], Mapping):
+        return None
+    prior, next_booking = changed[0]
+    if prior.get("status") == "checked_in" and next_booking.get("status") == "completed":
+        return frozenset({"therapist"})
+    if (prior.get("status"), next_booking.get("status")) in {
+        ("held", "confirmed"),
+        ("confirmed", "checked_in"),
+    }:
+        return frozenset({"front-desk"})
+    return None
 
 
 def _reject_client_identity(value: Any, *, path: str) -> None:
@@ -1455,7 +1618,7 @@ def create_trial_router(
     async def trial_service_schedule_save(request: Request) -> dict[str, Any]:
         principal = _resolve_principal(request, resolve_principal)
         readiness = _readiness(store, principal)
-        _require_write_ready(readiness, "commerce.write")
+        _require_write_foundation(readiness)
         if principal.actor_kind != "human":
             raise _error(403, "trial_human_approval_required")
         raw_body = await _bounded_json_body(request, maximum_bytes=64 * 1024)
@@ -1507,6 +1670,11 @@ def create_trial_router(
                 "evidenceReference": f"SHOP-SERVICE-SCHEDULE:R{revision}",
             }
         next_state = {**current_state, "serviceSchedule": schedule}
+        _require_spa_role_write_ready(
+            readiness,
+            _spa_schedule_allowed_roles(current_state, next_state),
+            action=f"service_schedule:{event_type}",
+        )
         result = _invoke(
             lambda: store.apply_command(
                 principal,
@@ -1928,7 +2096,22 @@ def create_trial_router(
             if body.event_type in WEBSITE_HUMAN_EVENTS and principal.actor_kind != "human":
                 raise _error(403, "trial_human_approval_required")
         readiness = _readiness(store, principal)
-        _require_write_ready(readiness, SURFACE_WRITE_CAPABILITIES[body.surface])
+        if body.surface == "commerce" and _restricted_spa_role(readiness) is not None:
+            _require_read_ready(readiness)
+            current_commerce = _invoke(lambda: store.get_state(principal, "commerce"))
+            candidate = body.payload.get("state")
+            allowed_roles = _spa_command_allowed_roles(
+                body.event_type,
+                current_commerce.state,
+                candidate if isinstance(candidate, Mapping) else {},
+            )
+            _require_spa_role_write_ready(
+                readiness,
+                allowed_roles,
+                action=body.event_type,
+            )
+        else:
+            _require_write_ready(readiness, SURFACE_WRITE_CAPABILITIES[body.surface])
         related_surfaces: tuple[str, ...] = ()
         state_precondition: StatePrecondition | None = None
         if body.surface == "commerce" and body.event_type == "commerce.website_intake.created":

@@ -113,6 +113,11 @@ SURFACE_WRITE_CAPABILITIES = {
 SURFACE_READ_CAPABILITIES = {
     surface: f"{surface}.read" for surface in SURFACE_WRITE_CAPABILITIES
 }
+SPA_FRONT_DESK_CAPABILITY = "commerce.spa.front_desk"
+SPA_THERAPIST_CAPABILITY = "commerce.spa.therapist"
+SPA_ROLE_CAPABILITIES = frozenset(
+    {SPA_FRONT_DESK_CAPABILITY, SPA_THERAPIST_CAPABILITY}
+)
 APPROVAL_READ_CAPABILITY = "approvals.read"
 APPROVAL_REQUEST_CAPABILITY = "approvals.request"
 APPROVAL_DECIDE_CAPABILITY = "approvals.decide"
@@ -3202,6 +3207,10 @@ class PostgresTrialStore:
         normalized = frozenset(str(item).strip() for item in capabilities if str(item).strip())
         if "company.control.approve" in normalized or "company.write" in normalized:
             return "owner"
+        if SPA_FRONT_DESK_CAPABILITY in normalized:
+            return "spa-front-desk"
+        if SPA_THERAPIST_CAPABILITY in normalized:
+            return "spa-therapist"
         if "approvals.decide" in normalized or any(item.endswith(".write") for item in normalized):
             return "operator"
         return "viewer"

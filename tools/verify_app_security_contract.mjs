@@ -416,7 +416,9 @@ requireContract('AI order intake provider cannot use tools, store responses, red
 requireContract('managed Shop appointments are tenant-scoped, human-only, identity-bound, and optimistic',
   /_resolve_principal\(request, resolve_principal\)/.test(serviceScheduleRoute)
   && /has_surface_read_capability\(readiness\.capabilities, "commerce"\)/.test(serviceScheduleRoute)
-  && /_require_write_ready\(readiness, "commerce\.write"\)/.test(serviceScheduleRoute)
+  && /_require_write_foundation\(readiness\)/.test(serviceScheduleRoute)
+  && /_require_spa_role_write_ready\(/.test(serviceScheduleRoute)
+  && /_spa_schedule_allowed_roles\(current_state, next_state\)/.test(serviceScheduleRoute)
   && /principal\.actor_kind != "human"/.test(serviceScheduleRoute)
   && /_reject_client_identity\(body\.schedule/.test(serviceScheduleRoute)
   && /expected_version=body\.expected_version/.test(serviceScheduleRoute)

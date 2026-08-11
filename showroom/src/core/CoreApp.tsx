@@ -1156,7 +1156,8 @@ export function OperationsPage({ product }: { product: ProductId }) {
   const requestedRequestId = searchParams.get('request')
   const view = product
   const requestedTab = searchParams.get('tab')
-  const commerceTab = commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'
+  const spaStaffAccess = managedIdentity?.access === 'spa-front-desk' || managedIdentity?.access === 'spa-therapist'
+  const commerceTab = spaStaffAccess ? 'orders' : commerceTabs.some((tab) => tab.id === requestedTab) ? requestedTab as CommerceTab : 'counter'
   const productionTab = productionTabs.some((tab) => tab.id === requestedTab) ? requestedTab as ProductionTab : 'production'
   const activeTab = view === 'commerce' ? commerceTab : productionTab
   const requestedTabIsCanonical = requestedTab === activeTab
@@ -1170,9 +1171,13 @@ export function OperationsPage({ product }: { product: ProductId }) {
     navigate(`${productCanonicalPath(view)}?tab=${tab}`, { replace: true })
   }
 
-  const tabs = view === 'commerce' ? commerceTabs : productionTabs
+  const tabs = view === 'commerce' ? spaStaffAccess ? [{ id: 'orders' as CommerceTab, label: 'Appointments' }] : commerceTabs : productionTabs
   const productCopy = view === 'commerce'
-    ? {
+    ? managedIdentity?.access === 'spa-front-desk'
+      ? 'Book, check in, and review completed visits for payment.'
+      : managedIdentity?.access === 'spa-therapist'
+        ? 'Complete checked-in treatments.'
+        : {
         today: 'See today’s next job and key numbers.',
         counter: 'Tap an item, choose payment, and confirm the sale.',
         orders: 'Finish fulfilment, follow up payment, and handle exceptions.',
@@ -1185,7 +1190,7 @@ export function OperationsPage({ product }: { product: ProductId }) {
 
   return (
     <div className={`workspace-screen operations-screen${view === 'commerce' ? ' commerce-screen' : ''}`} data-active-tab={activeTab}>
-      <PageHeading title={productDisplayName(view)} copy={productCopy} />
+      <PageHeading title={managedIdentity?.access === 'spa-front-desk' ? 'Spa front desk' : managedIdentity?.access === 'spa-therapist' ? 'Spa treatments' : productDisplayName(view)} copy={productCopy} />
       <nav className="workspace-toolbar view-tabs product-task-tabs" aria-label={`${productDisplayName(view)} tasks`}>{tabs.map((tab) => <button aria-current={activeTab === tab.id ? 'page' : undefined} key={tab.id} onClick={() => setTab(tab.id)} type="button">{tab.label}</button>)}</nav>
       <div className="workspace-view">{view === 'commerce' ? <CommercePage ecommerceCancellationNavigationIntent={ecommerceCancellationNavigationIntent} ecommerceCorrectionNavigationIntent={ecommerceCorrectionNavigationIntent} ecommerceNavigationDraft={ecommerceNavigationDraft} ecommerceOrderAmendmentNavigationIntent={ecommerceOrderAmendmentNavigationIntent} ecommerceOrderRescheduleNavigationIntent={ecommerceOrderRescheduleNavigationIntent} ecommerceReturnNavigationIntent={ecommerceReturnNavigationIntent} ecommerceSupportNavigationIntent={ecommerceSupportNavigationIntent} managedIdentity={managedIdentity} requestedRequestId={requestedRequestId} requestedSource={requestedSource} tab={commerceTab} /> : <ProductionPage managedIdentity={managedIdentity} tab={productionTab} />}</div>
     </div>
@@ -1789,6 +1794,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const purchaseOrderClock = useMinuteClock()
   const [shopPack] = useState<ShopIndustryPack | null>(readLocalShopIndustryPack)
   const [commerce, mutateCommerce, commerceStorageError, workspaceMode, managedVersion, managedWorkspaceId, commerceCanWrite, commerceSync] = useCommerceWorkspace(managedIdentity)
+  const spaFrontDesk = managedIdentity?.access === 'spa-front-desk'
+  const spaTherapist = managedIdentity?.access === 'spa-therapist'
+  const spaStaffAccess = spaFrontDesk || spaTherapist
   const shopSampleCatalogActive = Boolean(shopPack && commerceWorkingSampleCatalogId(commerce))
   const [relatedProduction] = useProductionWorkspace(managedIdentity)
   const currentTaxConfiguration = commerceCurrentTaxConfiguration(commerce)
@@ -2082,6 +2090,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const receivablesAging = commerceReceivablesAging(commerce, purchaseOrderClock)
   const supplierPayablesAging = commerceSupplierPayablesAging(commerce, purchaseOrderClock)
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
+  const spaServiceActionOrders = actionOrders.filter(commerceOrderIsServiceCheckout)
   const supportWorkQueue = commerceSupportQueue(commerce.orders, purchaseOrderClock)
   const nextSupportWork = supportWorkQueue[0] ?? null
   const nextSupportActionLabel = !nextSupportWork
@@ -3750,6 +3759,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     request: ShopServiceCheckoutRequest,
     paymentMethod: 'Cash' | 'KBZPay' | 'WavePay',
   ): Promise<{ orderId: string } | null> {
+    if (spaTherapist) {
+      setNotice('Front desk or owner access is required for checkout.')
+      return Promise.resolve(null)
+    }
     if (!commerceCanWrite || pendingAction || serviceCheckoutResolutionRef.current) {
       setNotice('Finish the current Shop change before reviewing this appointment checkout.')
       return Promise.resolve(null)
@@ -4631,11 +4644,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   function advanceOrder(orderId: string) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
+    const serviceCheckout = commerceOrderIsServiceCheckout(order)
+    if (spaStaffAccess && (!spaFrontDesk || !serviceCheckout)) {
+      setNotice('Front desk can close only a Spa visit checkout.')
+      return
+    }
     if (order.status === 'ready' && order.paymentStatus !== 'reconciled') {
       setNotice(`Reconcile ${order.id} payment before completion.`)
       return
     }
-    const serviceCheckout = commerceOrderIsServiceCheckout(order)
     const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: serviceCheckout ? 'ready' : 'preparing', preparing: 'ready', ready: 'completed' }
     const nextStatus = next[order.status]
     const summary = serviceCheckout
@@ -4661,11 +4678,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   function reconcilePayment(orderId: string) {
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'cancelled') return
+    const serviceCheckout = commerceOrderIsServiceCheckout(order)
+    if (spaStaffAccess && (!spaFrontDesk || !serviceCheckout)) {
+      setNotice('Front desk or owner access is required for Spa payment.')
+      return
+    }
     if (order.paymentStatus === 'reconciled') {
       setNotice(`${order.id} payment is already reconciled.`)
       return
     }
-    const serviceCheckout = commerceOrderIsServiceCheckout(order)
     queueAction({
       kind: 'payment_reconcile',
       subjectId: orderId,
@@ -4701,6 +4722,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function settleRefund(orderId: string) {
+    if (spaStaffAccess) {
+      setNotice('Refund settlement is an owner action.')
+      return
+    }
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.refundStatus !== 'due') {
       setNotice('Only a refund currently marked due can be recorded as settled.')
@@ -5507,6 +5532,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function cancelOrder(orderId: string, sourceIntent?: EcommerceCancellationIntent) {
+    if (spaStaffAccess) {
+      setNotice('Cancel the appointment before checkout. Order cancellation is an owner action.')
+      return
+    }
     const order = commerce.orders.find((candidate) => candidate.id === orderId)
     if (!order || order.status === 'completed' || order.status === 'cancelled') return
     if (sourceIntent && !ecommerceCancellationMatchesCurrentShop(commerce, sourceIntent)) {
@@ -6950,6 +6979,17 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     </div>
   }
 
+  if (spaStaffAccess) return <div className="operation-module spa-staff-module">
+    {commerceBoundary}
+    <Suspense fallback={<p className="form-notice" role="status">Loading appointments…</p>}><ShopServiceSchedule access={managedIdentity?.access} actor={managedIdentity?.email ?? 'Spa staff'} disabled={commerceControlsDisabled} initiallyOpen onReviewCheckout={spaFrontDesk ? reviewShopServiceCheckout : undefined} /></Suspense>
+    {spaFrontDesk ? <section className="core-panel order-queue-panel order-workspace" id="spa-payment-queue">
+      <div className="panel-head"><div><span className="core-eyebrow">Visit payment</span><h2>{spaServiceActionOrders.length ? `${spaServiceActionOrders.length} ${spaServiceActionOrders.length === 1 ? 'visit needs' : 'visits need'} action` : 'No visit payment waiting'}</h2></div><span className="panel-note">Check the real receipt or cash</span></div>
+      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={() => false} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={spaServiceActionOrders} />
+    </section> : null}
+    {notice ? <p className="form-notice" aria-live="polite">{notice}</p> : null}
+    {actionGate}
+  </div>
+
   if (tab === 'today') return <div className="operation-module shop-today-module">
     {commerceBoundary}
     <Suspense fallback={null}><ShopToday catalogReady={commerce.items.length > 0} metrics={shopTodayMetrics} modules={shopTodayModules} nextAction={shopAgentJob} nextDetail={shopAgentReason} nextLabel={shopAutopilotNextAction} nextTo={shopAgentPath} /></Suspense>
@@ -7081,7 +7121,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} onReviewCheckout={reviewShopServiceCheckout} /></Suspense>
+    <Suspense fallback={null}><ShopServiceSchedule access={managedIdentity?.access} actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} onReviewCheckout={reviewShopServiceCheckout} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)

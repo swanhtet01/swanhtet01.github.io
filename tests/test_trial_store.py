@@ -609,6 +609,16 @@ class TrialStoreTests(unittest.TestCase):
                         "capabilities": ["company.write", "commerce.write"],
                         "display_name": "Mingalar Fresh Mart",
                     },
+                    {
+                        "workspace_id": "company-spa-desk",
+                        "capabilities": ["commerce.write", "commerce.spa.front_desk"],
+                        "display_name": "Thiri Spa Front Desk",
+                    },
+                    {
+                        "workspace_id": "company-spa-treatment",
+                        "capabilities": ["commerce.write", "commerce.spa.therapist"],
+                        "display_name": "Thiri Spa Treatment",
+                    },
                 ]
 
             def fetchone(self):
@@ -647,15 +657,19 @@ class TrialStoreTests(unittest.TestCase):
                 return None
 
         store = DirectoryStore("postgresql://runtime.invalid/db", reducer=self.reducer)
-        workspaces, truncated = store.list_actor_workspaces(principal, limit=2)
+        workspaces, truncated = store.list_actor_workspaces(principal, limit=4)
 
         self.assertFalse(truncated)
         self.assertEqual(
             [workspace.to_dict() for workspace in workspaces],
-            [{"workspace_id": "company-a", "label": "Mingalar Fresh Mart", "access": "owner"}],
+            [
+                {"workspace_id": "company-a", "label": "Mingalar Fresh Mart", "access": "owner"},
+                {"workspace_id": "company-spa-desk", "label": "Thiri Spa Front Desk", "access": "spa-front-desk"},
+                {"workspace_id": "company-spa-treatment", "label": "Thiri Spa Treatment", "access": "spa-therapist"},
+            ],
         )
         self.assertEqual(statements[0][0], "set transaction read only")
-        self.assertTrue(any("limit %s" in query and parameters[-1] == 3 for query, parameters in statements))
+        self.assertTrue(any("limit %s" in query and parameters[-1] == 5 for query, parameters in statements))
         self.assertTrue(any("actor_workspace_directory()" in query for query, _parameters in statements))
         session_position = next(
             index for index, (query, _parameters) in enumerate(statements)
@@ -674,7 +688,7 @@ class TrialStoreTests(unittest.TestCase):
 
         session_active = False
         with self.assertRaisesRegex(TrialNotReadyError, "auth_session_active"):
-            store.list_actor_workspaces(principal, limit=2)
+            store.list_actor_workspaces(principal, limit=4)
 
     def test_postgres_schema_probe_requires_version_10_and_hardening_controls(self) -> None:
         def canonical_trigger_rows() -> list[dict[str, object]]:

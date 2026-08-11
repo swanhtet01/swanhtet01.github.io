@@ -71,6 +71,8 @@ class TrialRuntimeTests(unittest.TestCase):
         self.operator = TrialPrincipal("workspace-a", "actor-operator", "human")
         self.manager = TrialPrincipal("workspace-a", "actor-manager", "human")
         self.agent_manager = TrialPrincipal("workspace-a", "actor-agent-manager", "agent")
+        self.spa_front_desk = TrialPrincipal("workspace-a", "actor-spa-front-desk", "human")
+        self.spa_therapist = TrialPrincipal("workspace-a", "actor-spa-therapist", "human")
         self.other_operator = TrialPrincipal("workspace-b", "actor-other", "human")
         self.other_manager = TrialPrincipal("workspace-b", "actor-other-manager", "human")
         self.missing_member = TrialPrincipal("workspace-a", "actor-missing", "human")
@@ -78,6 +80,8 @@ class TrialRuntimeTests(unittest.TestCase):
             "operator-session": self.operator,
             "manager-session": self.manager,
             "agent-manager-session": self.agent_manager,
+            "spa-front-desk-session": self.spa_front_desk,
+            "spa-therapist-session": self.spa_therapist,
             "other-operator-session": self.other_operator,
             "other-manager-session": self.other_manager,
             "missing-session": self.missing_member,
@@ -107,6 +111,18 @@ class TrialRuntimeTests(unittest.TestCase):
             actor_id="actor-agent-manager",
             actor_kind="agent",
             capabilities=("website.write", "approvals.decide"),
+        )
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-spa-front-desk",
+            actor_kind="human",
+            capabilities=("commerce.write", "commerce.spa.front_desk"),
+        )
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-spa-therapist",
+            actor_kind="human",
+            capabilities=("commerce.write", "commerce.spa.therapist"),
         )
         store.provision_membership(
             workspace_id="workspace-b",
@@ -640,6 +656,268 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(forbidden_identity.status_code, 422)
         self.assertEqual(forbidden_identity.json()["detail"]["code"], "client_identity_forbidden")
+        client.close()
+
+    def test_spa_staff_roles_are_server_enforced_by_exact_workflow_step(self) -> None:
+        def state_reducer(
+            _surface: str,
+            _event_type: str,
+            current: Mapping[str, object],
+            payload: Mapping[str, object],
+        ) -> Mapping[str, object]:
+            candidate = payload.get("state")
+            return deepcopy(candidate) if isinstance(candidate, Mapping) else deepcopy(current)
+
+        store = InMemoryTrialStore(reducer=state_reducer)
+        self._provision(store)
+        client = self._client(store)
+        endpoint = "/api/trial/v1/commerce/service-schedule"
+        commerce = {
+            "schema": "supermega.commerce.workspace.v2",
+            "items": [{"sku": "SKU-1", "name": "Spa retail item", "onHand": 5, "reorderAt": 1, "price": 10000}],
+            "orders": [],
+            "movements": [],
+            "closes": [],
+        }
+        owner_workspace = client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.workspace.initialized",
+                "expected_version": 0,
+                "payload": {
+                    "state": commerce,
+                    "evidence": {
+                        "actionId": f"ACT-{uuid4()}",
+                        "capturedAt": "2026-08-11T00:55:00.000Z",
+                        "actor": "actor-operator",
+                        "reason": "Initialize the reviewed Spa workspace.",
+                        "evidenceReference": "SPA-WORKSPACE-1",
+                    },
+                },
+            },
+        )
+        self.assertEqual(owner_workspace.status_code, 200, owner_workspace.text)
+        schedule: dict[str, object] = {
+            "schema": "supermega.shop.service_schedule.v2",
+            "industryPackId": "spa",
+            "revision": 0,
+            "services": [{
+                "id": "service-session",
+                "name": "Standard treatment",
+                "durationMinutes": 60,
+                "priceMmk": 45000,
+                "active": True,
+            }],
+            "resources": [{
+                "id": "resource-staff-1",
+                "name": "Therapist 1",
+                "kind": "staff",
+                "active": True,
+            }],
+            "bookings": [],
+            "events": [],
+        }
+
+        owner_initialize = client.post(
+            endpoint,
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 1,
+                "captured_at": "2026-08-11T01:00:00.000Z",
+                "schedule": schedule,
+            },
+        )
+        self.assertEqual(owner_initialize.status_code, 200, owner_initialize.text)
+
+        booking = {
+            "id": "booking-0001",
+            "customerName": "Test client",
+            "contact": "09-000-000-000",
+            "serviceId": "service-session",
+            "resourceId": "resource-staff-1",
+            "startsAt": "2026-08-11T02:00:00.000Z",
+            "endsAt": "2026-08-11T03:00:00.000Z",
+            "status": "held",
+            "note": "Prefers a quiet room",
+            "createdAt": "2026-08-11T01:05:00.000Z",
+            "updatedAt": "2026-08-11T01:05:00.000Z",
+        }
+        scheduled = {
+            **deepcopy(schedule),
+            "revision": 1,
+            "bookings": [booking],
+            "events": [{
+                "revision": 1,
+                "type": "booking_scheduled",
+                "subjectId": "booking-0001",
+                "actor": "client-asserted-actor",
+                "reason": "Client requested this time.",
+                "happenedAt": "2026-08-11T01:05:00.000Z",
+            }],
+        }
+        front_desk_scheduled = client.post(
+            endpoint,
+            headers=self._headers("spa-front-desk-session"),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 2,
+                "captured_at": "2026-08-11T01:05:00.000Z",
+                "schedule": scheduled,
+            },
+        )
+        self.assertEqual(front_desk_scheduled.status_code, 200, front_desk_scheduled.text)
+        current_schedule = front_desk_scheduled.json()["result"]["state"]["serviceSchedule"]
+
+        def advance_candidate(status: str, revision: int, happened_at: str) -> dict[str, object]:
+            candidate = deepcopy(current_schedule)
+            candidate["revision"] = revision
+            candidate["bookings"][0]["status"] = status  # type: ignore[index]
+            candidate["bookings"][0]["updatedAt"] = happened_at  # type: ignore[index]
+            candidate["events"].append({  # type: ignore[union-attr]
+                "revision": revision,
+                "type": "booking_advanced",
+                "subjectId": "booking-0001",
+                "actor": "client-asserted-actor",
+                "reason": f"Advance appointment to {status}.",
+                "happenedAt": happened_at,
+            })
+            return candidate
+
+        for expected_version, status, revision, happened_at in (
+            (3, "confirmed", 2, "2026-08-11T01:10:00.000Z"),
+            (4, "checked_in", 3, "2026-08-11T01:55:00.000Z"),
+        ):
+            response = client.post(
+                endpoint,
+                headers=self._headers("spa-front-desk-session"),
+                json={
+                    "command_id": str(uuid4()),
+                    "expected_version": expected_version,
+                    "captured_at": happened_at,
+                    "schedule": advance_candidate(status, revision, happened_at),
+                },
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            current_schedule = response.json()["result"]["state"]["serviceSchedule"]
+
+        completed_candidate = advance_candidate("completed", 4, "2026-08-11T03:00:00.000Z")
+        front_desk_completion = client.post(
+            endpoint,
+            headers=self._headers("spa-front-desk-session"),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 5,
+                "captured_at": "2026-08-11T03:00:00.000Z",
+                "schedule": completed_candidate,
+            },
+        )
+        self.assertEqual(front_desk_completion.status_code, 403, front_desk_completion.text)
+        self.assertEqual(front_desk_completion.json()["detail"]["code"], "spa_role_action_denied")
+
+        therapist_completion = client.post(
+            endpoint,
+            headers=self._headers("spa-therapist-session"),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 5,
+                "captured_at": "2026-08-11T03:00:00.000Z",
+                "schedule": completed_candidate,
+            },
+        )
+        self.assertEqual(therapist_completion.status_code, 200, therapist_completion.text)
+        current_state = therapist_completion.json()["result"]["state"]
+
+        second_booking = {
+            **booking,
+            "id": "booking-0002",
+            "startsAt": "2026-08-12T02:00:00.000Z",
+            "endsAt": "2026-08-12T03:00:00.000Z",
+            "createdAt": "2026-08-11T03:05:00.000Z",
+            "updatedAt": "2026-08-11T03:05:00.000Z",
+        }
+        therapist_schedule = deepcopy(current_state["serviceSchedule"])
+        therapist_schedule["revision"] = 5
+        therapist_schedule["bookings"].append(second_booking)
+        therapist_schedule["events"].append({
+            "revision": 5,
+            "type": "booking_scheduled",
+            "subjectId": "booking-0002",
+            "actor": "client-asserted-actor",
+            "reason": "Attempt to create a second appointment.",
+            "happenedAt": "2026-08-11T03:05:00.000Z",
+        })
+        therapist_booking_attempt = client.post(
+            endpoint,
+            headers=self._headers("spa-therapist-session"),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 6,
+                "captured_at": "2026-08-11T03:05:00.000Z",
+                "schedule": therapist_schedule,
+            },
+        )
+        self.assertEqual(therapist_booking_attempt.status_code, 403, therapist_booking_attempt.text)
+
+        service_order = {
+            "id": "ORD-SPA-BOOKING-0001",
+            "sourceRecordId": "SPA-BOOKING-0001",
+            "channel": "Spa appointment",
+            "lines": [{"kind": "service"}],
+        }
+        service_checkout_state = {**deepcopy(current_state), "orders": [service_order]}
+        front_desk_checkout = client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers("spa-front-desk-session"),
+            json={
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.order.created",
+                "expected_version": 6,
+                "payload": {
+                    "state": service_checkout_state,
+                    "evidence": {
+                        "actionId": f"ACT-{uuid4()}",
+                        "capturedAt": "2026-08-11T03:10:00.000Z",
+                        "actor": "actor-spa-front-desk",
+                        "reason": "Prepare the completed visit for payment.",
+                        "evidenceReference": "SPA-BOOKING-0001",
+                    },
+                },
+            },
+        )
+        self.assertEqual(front_desk_checkout.status_code, 200, front_desk_checkout.text)
+
+        for event_type, candidate_state in (
+            ("commerce.item.created", {**deepcopy(service_checkout_state), "items": [{"sku": "RETAIL-1"}]}),
+            ("commerce.close.saved", {**deepcopy(service_checkout_state), "closes": [{"id": "CLOSE-1", "orderIds": [service_order["id"]]}]}),
+        ):
+            with self.subTest(event_type=event_type):
+                denied = client.post(
+                    "/api/trial/v1/commands",
+                    headers=self._headers("spa-front-desk-session"),
+                    json={
+                        "command_id": str(uuid4()),
+                        "surface": "commerce",
+                        "event_type": event_type,
+                        "expected_version": 7,
+                        "payload": {
+                            "state": candidate_state,
+                            "evidence": {
+                                "actionId": f"ACT-{uuid4()}",
+                                "capturedAt": "2026-08-11T03:15:00.000Z",
+                                "actor": "actor-spa-front-desk",
+                                "reason": "Attempt an owner-only action.",
+                                "evidenceReference": "ROLE-BOUNDARY-1",
+                            },
+                        },
+                    },
+                )
+                self.assertEqual(denied.status_code, 403, denied.text)
+                self.assertEqual(denied.json()["detail"]["code"], "spa_role_action_denied")
         client.close()
 
     def test_runtime_checks_membership_and_capability(self) -> None:

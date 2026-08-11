@@ -45,16 +45,19 @@ const AUTH_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const AUTH_CODE = /^[A-Za-z0-9._~-]{16,2048}$/
 const AUTH_TOKEN = /^[A-Za-z0-9._~-]{16,16384}$/
 
+export type ManagedWorkspaceAccess = 'owner' | 'operator' | 'viewer' | 'spa-front-desk' | 'spa-therapist'
+
 export type ManagedIdentity = {
   userId: string
   email: string
   workspaceId: string
+  access?: ManagedWorkspaceAccess
 }
 
 export type ManagedWorkspaceDirectoryEntry = {
   workspaceId: string
   label: string
-  access: 'owner' | 'operator' | 'viewer'
+  access: ManagedWorkspaceAccess
 }
 
 export type ManagedWorkspaceSignIn = {
@@ -2476,11 +2479,12 @@ function forgetWorkspace() {
   }
 }
 
-function identity(session: Session, workspaceId: string): ManagedIdentity {
+function identity(session: Session, workspaceId: string, access?: ManagedWorkspaceAccess): ManagedIdentity {
   return {
     userId: session.user.id,
     email: session.user.email ?? 'Named user',
     workspaceId,
+    ...(access ? { access } : {}),
   }
 }
 
@@ -2493,7 +2497,17 @@ export async function currentManagedIdentity(): Promise<ManagedIdentity | null> 
   const { data, error } = await supabase.auth.getSession()
   if (error || !data.session || data.session.user.is_anonymous !== false) return null
   if (currentManagedWorkspace() !== workspaceId) return null
-  return identity(data.session, workspaceId)
+  try {
+    const directory = await discoverManagedWorkspaces(data.session)
+    const selected = directory.workspaces.find((entry) => entry.workspaceId === workspaceId)
+    if (!selected) {
+      forgetWorkspace()
+      return null
+    }
+    return identity(data.session, workspaceId, selected.access)
+  } catch {
+    return null
+  }
 }
 
 function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry[] {
@@ -2515,7 +2529,7 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
       || typeof entry.label !== 'string'
       || !entry.label.trim()
       || entry.label.length > 120
-      || !['owner', 'operator', 'viewer'].includes(String(entry.access))) {
+      || !['owner', 'operator', 'viewer', 'spa-front-desk', 'spa-therapist'].includes(String(entry.access))) {
       throw new ManagedTrialError('The company account directory returned an invalid company.', {
         code: 'workspace_directory_invalid',
       })
@@ -2523,7 +2537,7 @@ function parseWorkspaceDirectory(value: unknown): ManagedWorkspaceDirectoryEntry
     return {
       workspaceId: entry.workspace_id,
       label: entry.label.trim(),
-      access: entry.access as ManagedWorkspaceDirectoryEntry['access'],
+      access: entry.access as ManagedWorkspaceAccess,
     }
   })
   if (new Set(workspaces.map((entry) => entry.workspaceId)).size !== workspaces.length) {
@@ -2756,7 +2770,8 @@ export async function completeManagedWorkspaceSignIn(
   workspace: string,
 ): Promise<ManagedIdentity> {
   const workspaceId = normalizeWorkspaceId(workspace)
-  if (!signIn.workspaces.some((entry) => entry.workspaceId === workspaceId)) {
+  const selectedWorkspace = signIn.workspaces.find((entry) => entry.workspaceId === workspaceId)
+  if (!selectedWorkspace) {
     throw new ManagedTrialError('Choose one of the companies assigned to this account.', {
       code: 'workspace_membership_missing',
     })
@@ -2769,7 +2784,7 @@ export async function completeManagedWorkspaceSignIn(
     })
   }
   rememberWorkspace(workspaceId)
-  return identity(data.session, workspaceId)
+  return identity(data.session, workspaceId, selectedWorkspace.access)
 }
 
 export async function signInManagedTrial(email: string, password: string, workspace: string) {

@@ -7,6 +7,7 @@ import {
   loadManagedServiceSchedule,
   saveManagedServiceSchedule,
   type ManagedIdentity,
+  type ManagedWorkspaceAccess,
 } from './managed-trial'
 
 import {
@@ -62,11 +63,13 @@ function initialSchedule() {
 type ShopServiceCheckoutPayment = 'Cash' | 'KBZPay' | 'WavePay'
 
 export function ShopServiceSchedule({
+  access: initialAccess,
   actor = 'Local Shop operator',
   disabled: externallyDisabled = false,
   initiallyOpen = false,
   onReviewCheckout,
 }: {
+  access?: ManagedWorkspaceAccess
   actor?: string
   disabled?: boolean
   initiallyOpen?: boolean
@@ -82,6 +85,7 @@ export function ShopServiceSchedule({
   const [managedLoading, setManagedLoading] = useState(true)
   const [managedSaving, setManagedSaving] = useState(false)
   const [managedConnected, setManagedConnected] = useState(false)
+  const [managedAccess, setManagedAccess] = useState<ManagedWorkspaceAccess | undefined>(initialAccess)
   const [checkoutBusyBookingId, setCheckoutBusyBookingId] = useState('')
   const [checkoutPayments, setCheckoutPayments] = useState<Record<string, ShopServiceCheckoutPayment>>({})
   const managedIdentityRef = useRef<ManagedIdentity | null>(null)
@@ -91,6 +95,20 @@ export function ShopServiceSchedule({
   const scheduleRef = useRef(schedule)
   const projection = useMemo(() => schedule ? projectShopServiceSchedule(schedule) : null, [schedule])
   const disabled = externallyDisabled || managedLoading || managedSaving
+  const managedRoleActive = managedConnected || Boolean(managedAccess)
+  const fullAccess = !managedRoleActive || managedAccess === 'owner' || managedAccess === 'operator'
+  const canManageSetup = fullAccess
+  const canRunFrontDesk = fullAccess || managedAccess === 'spa-front-desk'
+  const canCompleteTreatment = fullAccess || managedAccess === 'spa-therapist'
+  const accessLabel = managedAccess === 'spa-front-desk'
+    ? 'Front desk'
+    : managedAccess === 'spa-therapist'
+      ? 'Therapist'
+      : managedAccess === 'owner'
+        ? 'Owner / manager'
+        : managedAccess === 'viewer'
+          ? 'Read only'
+          : 'Shop operator'
 
   useEffect(() => {
     scheduleRef.current = schedule
@@ -108,6 +126,7 @@ export function ShopServiceSchedule({
       if (!active || !identity) return
       managedIdentityRef.current = identity
       setManagedConnected(true)
+      setManagedAccess(identity.access)
       const managed = await loadManagedServiceSchedule(identity)
       if (!active) return
       managedVersionRef.current = managed.version
@@ -187,6 +206,10 @@ export function ShopServiceSchedule({
 
   function createBooking(event: FormEvent) {
     event.preventDefault()
+    if (!canRunFrontDesk) {
+      setNotice('Front desk or owner access is required.')
+      return
+    }
     if (!schedule) return
     try {
       const startsAt = new Date(bookingDraft.startsAt)
@@ -201,6 +224,14 @@ export function ShopServiceSchedule({
 
   function advanceBooking(bookingId: string) {
     if (!schedule) return
+    const currentBooking = schedule.bookings.find((booking) => booking.id === bookingId)
+    const treatmentCompletion = currentBooking?.status === 'checked_in'
+    if (treatmentCompletion ? !canCompleteTreatment : !canRunFrontDesk) {
+      setNotice(treatmentCompletion
+        ? 'Therapist or owner access is required.'
+        : 'Front desk or owner access is required.')
+      return
+    }
     try {
       const next = advanceShopServiceBooking(schedule, bookingId, proof('Advanced by the responsible Shop operator.'))
       const booking = next.bookings.find((candidate) => candidate.id === bookingId)
@@ -211,6 +242,10 @@ export function ShopServiceSchedule({
   }
 
   function cancelBooking(bookingId: string) {
+    if (!canRunFrontDesk) {
+      setNotice('Front desk or owner access is required.')
+      return
+    }
     if (!schedule) return
     try {
       commit(cancelShopServiceBooking(schedule, bookingId, proof('Cancelled by the responsible Shop operator.')), 'Appointment cancelled; the resource is available again.')
@@ -220,6 +255,10 @@ export function ShopServiceSchedule({
   }
 
   async function reviewCheckout(bookingId: string) {
+    if (!canRunFrontDesk) {
+      setNotice('Front desk or owner access is required.')
+      return
+    }
     const current = scheduleRef.current
     if (!current || !onReviewCheckout) {
       setNotice('Shop checkout is unavailable. Reload the Shop workspace and try again.')
@@ -287,6 +326,10 @@ export function ShopServiceSchedule({
 
   function createService(event: FormEvent) {
     event.preventDefault()
+    if (!canManageSetup) {
+      setNotice('Owner access is required for Spa setup.')
+      return
+    }
     if (!schedule) return
     try {
       const next = registerShopService(schedule, { name: serviceDraft.name, durationMinutes: Number(serviceDraft.durationMinutes), priceMmk: Number(serviceDraft.priceMmk) }, proof('Added from Shop appointment setup.'))
@@ -301,6 +344,10 @@ export function ShopServiceSchedule({
 
   function createResource(event: FormEvent) {
     event.preventDefault()
+    if (!canManageSetup) {
+      setNotice('Owner access is required for Spa setup.')
+      return
+    }
     if (!schedule) return
     try {
       const next = registerShopServiceResource(schedule, resourceDraft, proof('Added from Shop appointment setup.'))
@@ -327,7 +374,14 @@ export function ShopServiceSchedule({
         <span><small>Services</small><strong>{projection.activeServices}</strong></span>
         <span><small>Staff / rooms</small><strong>{projection.activeResources}</strong></span>
       </div>
-      <form className="service-booking-form" onSubmit={createBooking}>
+      {managedRoleActive ? <p className="form-notice" data-spa-access={managedAccess ?? 'operator'}><strong>{accessLabel}</strong> · {managedAccess === 'spa-front-desk'
+        ? 'Book, check in, and review visit payment.'
+        : managedAccess === 'spa-therapist'
+          ? 'Complete checked-in treatments.'
+          : managedAccess === 'viewer'
+            ? 'View only.'
+            : 'Full Spa controls.'}</p> : null}
+      {canRunFrontDesk ? <form className="service-booking-form" onSubmit={createBooking}>
         <div><span className="core-eyebrow">New appointment</span><h3>Hold a time</h3><p>Shop blocks overlapping bookings for the same staff member, room, or equipment.</p></div>
         <label>Customer<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer name" required value={bookingDraft.customerName} /></label>
         <label>Contact<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="Phone or reference" required value={bookingDraft.contact} /></label>
@@ -336,26 +390,27 @@ export function ShopServiceSchedule({
         <label>Starts<input disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, startsAt: event.target.value }))} required type="datetime-local" value={bookingDraft.startsAt} /></label>
         <label>Note<input disabled={disabled} maxLength={300} onChange={(event) => setBookingDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Optional request" value={bookingDraft.note} /></label>
         <button className="core-button primary" disabled={disabled} type="submit">Hold appointment</button>
-      </form>
+      </form> : null}
       <section className="service-agenda" aria-label="Upcoming appointments">
         <div className="panel-head"><div><span className="core-eyebrow">Agenda</span><h3>{projection.upcoming.length ? 'Next appointments' : 'No upcoming appointments'}</h3></div><span className="panel-note">revision {schedule.revision}</span></div>
         {projection.upcoming.length ? projection.upcoming.slice(0, 12).map((booking) => {
           const service = serviceById.get(booking.serviceId)
           const resource = resourceById.get(booking.resourceId)
+          const canAdvanceThisBooking = booking.status === 'checked_in' ? canCompleteTreatment : canRunFrontDesk
           return <article key={booking.id}>
             <time dateTime={booking.startsAt}><strong>{new Date(booking.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong><small>{new Date(booking.startsAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</small></time>
             <div><strong>{booking.customerName}</strong><small>{service?.name} · {resource?.name} · {booking.contact}</small>{booking.note ? <em>{booking.note}</em> : null}</div>
-            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}{booking.checkoutOrderId ? <Link className="core-button compact" to={`/shop/?tab=orders#shop-order-${booking.checkoutOrderId}`}>Open checkout</Link> : booking.status === 'completed' ? <><label>Payment<select aria-label={`Payment for ${booking.customerName}`} disabled={disabled || checkoutBusyBookingId === booking.id} onChange={(event) => setCheckoutPayments((current) => ({ ...current, [booking.id]: event.target.value as ShopServiceCheckoutPayment }))} value={checkoutPayments[booking.id] ?? 'Cash'}><option>Cash</option><option>KBZPay</option><option>WavePay</option></select></label><button className="core-button compact" disabled={disabled || checkoutBusyBookingId === booking.id || !onReviewCheckout} onClick={() => void reviewCheckout(booking.id)} type="button">{checkoutBusyBookingId === booking.id ? 'Waiting…' : 'Review checkout'}</button><small>No payment or message is automatic.</small></> : null}</div>
+            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{nextActionLabels[booking.status] && canAdvanceThisBooking ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' && canRunFrontDesk ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}{booking.checkoutOrderId && canRunFrontDesk ? <Link className="core-button compact" to={`/shop/?tab=orders#shop-order-${booking.checkoutOrderId}`}>Open checkout</Link> : booking.status === 'completed' && canRunFrontDesk ? <><label>Payment<select aria-label={`Payment for ${booking.customerName}`} disabled={disabled || checkoutBusyBookingId === booking.id} onChange={(event) => setCheckoutPayments((current) => ({ ...current, [booking.id]: event.target.value as ShopServiceCheckoutPayment }))} value={checkoutPayments[booking.id] ?? 'Cash'}><option>Cash</option><option>KBZPay</option><option>WavePay</option></select></label><button className="core-button compact" disabled={disabled || checkoutBusyBookingId === booking.id || !onReviewCheckout} onClick={() => void reviewCheckout(booking.id)} type="button">{checkoutBusyBookingId === booking.id ? 'Waiting…' : 'Review checkout'}</button><small>No payment or message is automatic.</small></> : null}</div>
           </article>
-        }) : <p className="form-notice">Hold the first appointment above. Nothing is sent to the customer or an external calendar.</p>}
+        }) : <p className="form-notice">{canRunFrontDesk ? 'Hold the first appointment above. Nothing is sent to the customer or an external calendar.' : 'No appointment is waiting for this role.'}</p>}
       </section>
-      <details className="compact-disclosure service-schedule-setup">
+      {canManageSetup ? <details className="compact-disclosure service-schedule-setup">
         <summary><span>Services and resources</span><small>{schedule.services.length} services · {schedule.resources.length} resources</small></summary>
         <div>
           <form onSubmit={createService}><strong>Add service</strong><label>Name<input disabled={disabled} maxLength={160} onChange={(event) => setServiceDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Massage, class, consultation" required value={serviceDraft.name} /></label><label>Minutes<input disabled={disabled} max={1440} min={1} onChange={(event) => setServiceDraft((current) => ({ ...current, durationMinutes: event.target.value }))} required type="number" value={serviceDraft.durationMinutes} /></label><label>Price MMK<input disabled={disabled} min={1} onChange={(event) => setServiceDraft((current) => ({ ...current, priceMmk: event.target.value }))} required type="number" value={serviceDraft.priceMmk} /></label><button className="core-button" disabled={disabled} type="submit">Add service</button></form>
           <form onSubmit={createResource}><strong>Add staff or resource</strong><label>Name<input disabled={disabled} maxLength={160} onChange={(event) => setResourceDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name or Room 2" required value={resourceDraft.name} /></label><label>Type<select disabled={disabled} onChange={(event) => setResourceDraft((current) => ({ ...current, kind: event.target.value as typeof resourceDraft.kind }))} value={resourceDraft.kind}><option value="staff">Staff</option><option value="room">Room</option><option value="equipment">Equipment</option></select></label><button className="core-button" disabled={disabled} type="submit">Add resource</button></form>
         </div>
-      </details>
+      </details> : null}
       <p className="form-notice" aria-live="polite">{notice || (managedConnected ? 'Appointments persist in this company account. Customer messages, calendar sync, and payment remain separate human-approved actions.' : 'Appointments persist on this device. Sign in to share them with a company account.')}</p>
     </div>
   </details>
