@@ -170,6 +170,7 @@ import {
   buildProductionShiftHandoff,
   buildProductionBatchGenealogy,
   buildProductionQualityCorrectiveAction,
+  isCapaEffectivenessOverdue,
   buildProductionRecallTrace,
   closeProductionJob,
   compareProductionJobSchedule,
@@ -7524,11 +7525,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             : activeJobs.length && !materialEntries.length
               ? 'Sample first production run'
               : 'Inspection queue clear'
+  const closedCapaCount = resolvedIssues.filter((issue) => issue.kind === 'quality').length
+  const overdueCapaCount = resolvedIssues.filter((issue) => issue.resolution?.qualityCorrectiveAction && isCapaEffectivenessOverdue(issue.resolution.qualityCorrectiveAction, new Date(issueClock).toISOString())).length
   const plantInspectionRows = [
     ['Sample', activeJobs.length ? `${activeJobs.length} jobs` : 'No job'],
     ['NCR', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
     ['Containment', qualityIssuesWithContainment.length === openQualityIssues.length ? 'Owned' : `${openQualityIssues.length - qualityIssuesWithContainment.length} missing`],
-    ['CAPA', resolvedIssues.filter((issue) => issue.kind === 'quality').length ? `${resolvedIssues.filter((issue) => issue.kind === 'quality').length} closed` : 'None yet'],
+    ['CAPA', closedCapaCount ? (overdueCapaCount ? `${closedCapaCount} closed · ${overdueCapaCount} review overdue` : `${closedCapaCount} closed`) : 'None yet'],
     ['Evidence', heldJobs.length || openQualityIssues.length || materialEntries.length ? 'Required' : 'Ready'],
     ['Release', productionCanWrite && !pendingAction && !heldJobs.length && !openQualityIssues.length ? 'Owner review' : 'Blocked'],
   ] as const
@@ -9279,7 +9282,7 @@ function IssueList({ disabled = false, issues, now, onResolve }: { disabled?: bo
         {issue.maintenanceFindingSource ? <small style={wrappedIssueDetail}>Maintenance finding · {issue.maintenanceFindingSource.equipmentName} · Strategy R{issue.maintenanceFindingSource.strategyRevision} · Source {issue.maintenanceFindingSource.completionActionId}</small> : null}
         {issue.status === 'resolved' ? <small style={wrappedIssueDetail}>{issue.resolution ? `Resolved by ${issue.resolution.resolvedBy} · Evidence: ${issue.resolution.evidenceReference}` : 'Legacy resolution · no attributed proof was available'}</small> : null}
         {issue.resolution?.maintenanceCorrectiveAction ? <small style={wrappedIssueDetail}>Corrective action: {issue.resolution.maintenanceCorrectiveAction.correctiveAction} · Verified: {issue.resolution.maintenanceCorrectiveAction.verificationResult} · Final disposition: {issue.resolution.maintenanceCorrectiveAction.finalDisposition.replaceAll('_', ' ')}</small> : null}
-        {issue.resolution?.qualityCorrectiveAction ? <><small style={wrappedIssueDetail}>CAPA: {productionQualityCauseLabels[issue.resolution.qualityCorrectiveAction.causeCategory]} · {issue.resolution.qualityCorrectiveAction.failureMode} · Owner {issue.resolution.qualityCorrectiveAction.effectivenessOwner}</small><small style={wrappedIssueDetail}>{issue.resolution.qualityCorrectiveAction.priorIssueIds.length ? `Repeat · linked to ${issue.resolution.qualityCorrectiveAction.priorIssueIds.join(', ')}` : 'First classified occurrence'} · Verified: {issue.resolution.qualityCorrectiveAction.verificationResult}</small></> : null}
+        {issue.resolution?.qualityCorrectiveAction ? <><small style={wrappedIssueDetail}>CAPA: {productionQualityCauseLabels[issue.resolution.qualityCorrectiveAction.causeCategory]} · {issue.resolution.qualityCorrectiveAction.failureMode} · Owner {issue.resolution.qualityCorrectiveAction.effectivenessOwner}{isCapaEffectivenessOverdue(issue.resolution.qualityCorrectiveAction, new Date(now).toISOString()) ? ' · REVIEW OVERDUE' : ` · Review by ${formatIssueDue(issue.resolution.qualityCorrectiveAction.effectivenessDue)}`}</small><small style={wrappedIssueDetail}>{issue.resolution.qualityCorrectiveAction.priorIssueIds.length ? `Repeat · linked to ${issue.resolution.qualityCorrectiveAction.priorIssueIds.join(', ')}` : 'First classified occurrence'} · Verified: {issue.resolution.qualityCorrectiveAction.verificationResult}</small></> : null}
       </div>
       {issue.status === 'open' ? <button className="text-link" disabled={disabled} onClick={() => onResolve(issue.id)} type="button">{issue.kind === 'quality' ? 'Review CAPA' : 'Review close'}</button> : <b>Resolved</b>}
     </article>
