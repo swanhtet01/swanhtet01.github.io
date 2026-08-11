@@ -6,6 +6,7 @@ import { recordBehaviorSignal } from './behavior-trail'
 import type { ClientSolutionId } from './client-onboarding'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
+const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
 
 type RuntimeStatus = 'checking' | 'enterprise' | 'demo'
 
@@ -476,6 +477,7 @@ export function ProductHomePage() {
             </Link>
         })}
       </nav>
+      <Suspense fallback={null}><WorkspaceStatusPanel /></Suspense>
       <p className="product-home-note">Your product workspaces stay separate. Opening a sample does not change another product.</p>
     </div>
   )

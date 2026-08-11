@@ -153,6 +153,16 @@ details:not([open]) > :not(summary) { display: none; }
 .product-track-open { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; color: var(--core-green); font-size: 11px; white-space: nowrap; }
 .product-track-open span { font-size: 17px; }
 .product-home-note { margin: 0; color: var(--core-quiet); font-size: 10px; line-height: 1.5; text-align: center; }
+.wsp-panel { width: 100%; }
+.wsp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wsp-item { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--core-line); background: var(--core-panel); text-decoration: none; font-size: 13px; line-height: 1.4; }
+.wsp-item:hover { border-color: var(--core-ink); }
+.wsp-mark { display: block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.wsp-label { min-width: 0; color: var(--core-ink); }
+.wsp-arrow { color: var(--core-muted); font-size: 14px; }
+.wsp-critical { color: var(--core-danger); }
+.wsp-warning { color: var(--core-warn); }
+.wsp-action { color: var(--core-green); }
 .product-trial-context { min-height: 58px; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 16px; border: 1px solid rgba(11,116,94,.18); border-radius: 12px; padding: 8px 10px 8px 14px; background: linear-gradient(105deg, rgba(11,116,94,.09), rgba(255,255,255,.94)); }
 .product-trial-context > div:first-child { min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 2px 9px; align-items: center; }
 .product-trial-context span { color: var(--core-green); font-family: var(--core-mono); font-size: 8px; font-weight: 760; letter-spacing: .07em; text-transform: uppercase; }
