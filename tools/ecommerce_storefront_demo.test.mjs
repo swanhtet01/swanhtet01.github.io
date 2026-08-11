@@ -18,7 +18,11 @@ import {
   commerceAccountMappingConfigurations,
   commerceAccountRoles,
   commerceCorrectionCalculation,
+  commerceCurrentAccountMappingConfiguration,
   commerceOrderAcknowledgement,
+  commerceOrderCorrectionExpectation,
+  commerceSupplierPayablesHandoff,
+  commerceSupportWorkloadExport,
   commerceOrderAcknowledgementText,
   commerceOrderSupportOpenExpectation,
   commerceOrderSupportReopenExpectation,
@@ -1105,4 +1109,34 @@ test('commerceSupplierInvoiceMatch, commerceSupplierPerformance, commerceSupport
   assert.ok(correction !== null)
   assert.equal(correction.taxMode, 'not_configured')
   assert.equal(correction.totalMmk, 5000)
+})
+
+test('commerceOrderCorrectionExpectation, commerceSupplierPayablesHandoff, commerceSupportWorkloadExport, and commerceCurrentAccountMappingConfiguration', () => {
+  const seed = createSeedCommerce()
+
+  // ORD-1039 is the only completed + reconciled order — correction expectation is valid.
+  const correctionExpectation = commerceOrderCorrectionExpectation(seed, 'ORD-1039')
+  assert.ok(correctionExpectation !== null)
+  assert.equal(correctionExpectation.orderId, 'ORD-1039')
+  assert.equal(correctionExpectation.currentBalanceMmk, 22500)
+  assert.equal(correctionExpectation.correctionCount, 0)
+
+  // Non-completed orders and unknown IDs return null.
+  assert.equal(commerceOrderCorrectionExpectation(seed, 'ORD-1041'), null)
+  assert.equal(commerceOrderCorrectionExpectation(seed, 'NONEXISTENT'), null)
+
+  // Seed has no invoiced purchase orders → no payable rows → null.
+  assert.equal(commerceSupplierPayablesHandoff(seed), null)
+
+  // commerceSupportWorkloadExport: invalid timestamp throws.
+  assert.throws(() => commerceSupportWorkloadExport(seed, 'not-a-date'))
+
+  // Valid exact UTC timestamp produces an export with empty rows (no support cases in seed).
+  const workload = commerceSupportWorkloadExport(seed, '2026-07-23T08:00:00.000Z')
+  assert.equal(workload.schema, COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA)
+  assert.equal(workload.summary.totalCases, 0)
+  assert.deepEqual(workload.rows, [])
+
+  // Seed has no account mapping configurations.
+  assert.equal(commerceCurrentAccountMappingConfiguration(seed), null)
 })
