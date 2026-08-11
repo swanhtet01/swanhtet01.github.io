@@ -44,6 +44,12 @@ import {
   startProductionMaintenance,
   updateProductionJobPlan,
   validateProductionState,
+  productionIssueSeverities,
+  productionJobPriorities,
+  productionMachineStates,
+  productionMaterialUnits,
+  productionQualityCauseCategories,
+  productionWorkspaceCanWrite,
 } from '../showroom/src/core/production-workspace.ts'
 import { plantIndustryPacks } from '../showroom/src/core/plant-industry-packs.ts'
 
@@ -1010,4 +1016,30 @@ test('productionShiftOutput, productionStateCanonical, productionDowntimeInterva
   // productionMaintenanceFindingSource: returns null when no matching maintenance record.
   assert.equal(productionMaintenanceFindingSource(empty, ''), null)
   assert.equal(productionMaintenanceFindingSource(seed, 'ACT-NO-SUCH-RECORD'), null)
+})
+
+test('productionIssueSeverities, productionJobPriorities, productionMachineStates, productionMaterialUnits, productionQualityCauseCategories, and productionWorkspaceCanWrite are correct', () => {
+  // productionIssueSeverities: 4 ordered severity levels.
+  assert.deepEqual(productionIssueSeverities, ['critical', 'high', 'medium', 'low'])
+
+  // productionJobPriorities: 3 priority levels.
+  assert.deepEqual(productionJobPriorities, ['urgent', 'normal', 'low'])
+
+  // productionMachineStates: 3 machine states.
+  assert.deepEqual(productionMachineStates, ['running', 'attention', 'stopped'])
+
+  // productionMaterialUnits: standard set of measurement units.
+  assert.ok(productionMaterialUnits.includes('kg'))
+  assert.ok(productionMaterialUnits.includes('pcs'))
+  assert.ok(productionMaterialUnits.length >= 6)
+
+  // productionQualityCauseCategories: classic 6M categories.
+  assert.ok(productionQualityCauseCategories.includes('material'))
+  assert.ok(productionQualityCauseCategories.includes('machine'))
+  assert.equal(productionQualityCauseCategories.length, 6)
+
+  // productionWorkspaceCanWrite: returns false without browser storage and lock manager.
+  assert.equal(productionWorkspaceCanWrite(undefined, undefined), false)
+  // No storage → false.
+  assert.equal(productionWorkspaceCanWrite(null, undefined), false)
 })

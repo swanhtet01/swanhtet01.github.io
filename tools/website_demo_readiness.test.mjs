@@ -2,21 +2,30 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  MAX_WEBSITE_PAGES,
+  MAX_WEBSITE_SECTIONS,
+  WEBSITE_SCHEMA,
+  WEBSITE_STORAGE_KEY,
   commitWebsiteEditSession,
   createBlankPage,
   createBlankSection,
+  createId,
   createInitialWorkspace,
   createWebsiteArtifact,
   createWebsiteEditSession,
   createWebsitePreviewArtifact,
   duplicatePage,
   evidenceRequirements,
+  formatTimestamp,
   getCurrentApproval,
   getCurrentEvidence,
   getCurrentPublish,
+  isCurrentApproval,
+  isCurrentPublish,
   isReplaceableWebsiteSampleWorkspace,
   normalizeSlug,
   pageIssues,
+  previewDevices,
   readinessChecks,
   recordWebsiteEvidence,
   approveWebsiteRevision,
@@ -464,4 +473,39 @@ test('websiteSource, isReplaceableWebsiteSampleWorkspace, restoreWebsiteEditSess
 
   // getCurrentPublish: null when no publish has been recorded.
   assert.equal(getCurrentPublish(workspace), null)
+})
+
+test('WEBSITE_SCHEMA, MAX_WEBSITE_PAGES, previewDevices, createId, isCurrentApproval, isCurrentPublish, and formatTimestamp behave correctly', () => {
+  // Constants have expected values.
+  assert.equal(WEBSITE_SCHEMA, 'supermega.website.workspace.v2')
+  assert.equal(WEBSITE_STORAGE_KEY, 'supermega.website.workspace.v2')
+  assert.equal(MAX_WEBSITE_PAGES, 4)
+  assert.equal(MAX_WEBSITE_SECTIONS, 4)
+
+  // previewDevices: three entries covering desktop, tablet, and mobile.
+  assert.equal(previewDevices.length, 3)
+  assert.ok(previewDevices.some((d) => d.id === 'desktop'))
+  assert.ok(previewDevices.some((d) => d.id === 'mobile'))
+
+  // createId: returns a string starting with the given prefix.
+  const id = createId('pg')
+  assert.ok(id.startsWith('pg-'))
+  // Two calls produce different IDs.
+  assert.notEqual(createId('pg'), createId('pg'))
+
+  // isCurrentApproval: no approvals in the initial workspace → false for undefined.
+  const workspace = createInitialWorkspace()
+  assert.equal(isCurrentApproval(undefined, workspace), false)
+
+  // isCurrentPublish: no publishes in the initial workspace → false for undefined.
+  assert.equal(isCurrentPublish(undefined, workspace), false)
+
+  // formatTimestamp: valid ISO string produces a non-empty, non-'Unknown time' result.
+  const formatted = formatTimestamp('2026-07-23T08:00:00.000Z')
+  assert.equal(typeof formatted, 'string')
+  assert.notEqual(formatted, 'Unknown time')
+
+  // Invalid input → 'Unknown time'.
+  assert.equal(formatTimestamp('not-a-date'), 'Unknown time')
+  assert.equal(formatTimestamp(''), 'Unknown time')
 })
