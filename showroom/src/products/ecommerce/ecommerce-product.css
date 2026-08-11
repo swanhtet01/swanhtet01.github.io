@@ -53,6 +53,8 @@
   backdrop-filter: blur(16px);
 }
 
+.theme-dark .ecommerce-workspace-switch { border-color: rgba(86,240,193,.12); background: rgba(12,18,26,.96); }
+
 .ecommerce-workspace-switch > span,
 .ecommerce-preview-size > span {
   /* --core-muted is #56665d in light, so this is byte-identical there and only changes

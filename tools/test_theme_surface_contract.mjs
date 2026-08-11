@@ -112,18 +112,7 @@ const THEME_BLIND = new Map([
 // This list is a ratchet, not a waiver. Every entry is re-checked below against the live
 // stylesheets: an entry whose rule disappears, or whose surface gains a dark counterpart,
 // FAILS this guard and must be deleted in the same change that fixes it. It can only shrink.
-const UNCOVERED_LIGHT_SURFACES = new Map([
-  ['.product-trial-context', 'linear-gradient(105deg, rgba(11,116,94,.09), rgba(255,255,255,.94)) with no dark rule. Its small carries --core-muted (~2.05:1) and its strong inherits --core-ink (~1.07:1).'],
-  ['.next-task-card', 'linear-gradient(135deg, rgba(11,116,94,.075), #fff 48%) with no dark rule. The h2 inherits --core-ink (~1.07:1 on white) and the p carries --core-muted (~2.20:1).'],
-  ['.plant-job-import-repair span', 'rgba(255,251,235,.9) with no dark rule. The repair value inside it is --core-ink, ~1.03:1 in dark mode -- the same invisible-value shape as the Stock tab defect this guard was built for.'],
-  ['.website-intake', 'linear-gradient(110deg, rgba(11,116,94,.075), #fff 48%) with no dark rule. Its record lines carry --core-quiet (~3.53:1) and --core-ink (~1.07:1).'],
-  ['.ecommerce-workspace-switch', 'rgba(238,244,239,.96) with no dark rule. Its label span was deliberately moved to var(--core-muted) for dark mode, but the card behind it never flipped, so the token lands at ~1.97:1 instead of on the dark panel it was measured against.'],
-  ['.website-topbar', 'Two rules, rgba(246,244,238,.92) and rgba(255,255,255,.96), neither with a dark counterpart. The brand mark uses --website-green (~1.44:1 on white) and the meta line --website-muted (~2.20:1).'],
-  ['.website-sidebar', 'rgba(238,244,239,.96) with no dark rule; the navigation text inherits --website-ink at ~1.05:1.'],
-  ['.website-panel-actions', 'rgba(246,244,238,.9) with no dark rule; the action row inherits --website-ink at ~1.05:1.'],
-  ['.website-preview-toolbar', 'rgba(246,244,238,.92) with no dark rule; its code label carries --website-muted at ~2.00:1.'],
-  ['.website-notice', 'rgba(255,255,255,.96) with an explicit color: var(--website-muted), which is ~2.20:1 in dark mode. The only .theme-dark rule near it targets .website-notice-action:hover, not the toast surface.'],
-])
+const UNCOVERED_LIGHT_SURFACES = new Map([])
 
 let checks = 0
 function check(condition, label) {

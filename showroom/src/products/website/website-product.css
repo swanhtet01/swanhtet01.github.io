@@ -54,6 +54,11 @@
   background: #090f16;
   color: var(--website-ink);
 }
+.theme-dark .website-topbar { background: rgba(6,10,15,.9); }
+.theme-dark .website-sidebar { background: rgba(7,11,17,.96); }
+.theme-dark .website-panel-actions { background: var(--website-panel); }
+.theme-dark .website-preview-toolbar { background: var(--website-panel); }
+.theme-dark .website-notice { border-color: rgba(86,240,193,.2); background: rgba(12,18,26,.96); }
 
 .website-product *,
 .website-product *::before,

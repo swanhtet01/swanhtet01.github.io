@@ -1577,6 +1577,11 @@ textarea { min-height: 72px; resize: vertical; }
 }
 .theme-dark .core-sidebar { border-color: var(--core-line); background: rgba(7,11,17,.96); }
 .theme-dark .core-topbar { border-color: var(--core-line); background: rgba(6,10,15,.9); }
+.theme-dark .next-task-card { border-color: rgba(86,240,193,.18); background: linear-gradient(135deg, rgba(86,240,193,.08), var(--core-panel) 48%); }
+.theme-dark .product-trial-context { border-color: rgba(86,240,193,.18); background: linear-gradient(105deg, rgba(86,240,193,.09), var(--core-panel) 94%); }
+.theme-dark .plant-job-import-repair span { border-color: rgba(217,119,6,.25); background: rgba(40,30,8,.9); }
+.theme-dark .plant-job-import-repair small { color: #e89a4a; }
+.theme-dark .website-intake { border-color: rgba(86,240,193,.2); background: linear-gradient(110deg, rgba(86,240,193,.07), var(--core-panel) 48%); }
 .theme-dark .core-main { background: transparent; }
 .theme-dark .core-nav a:hover { background: rgba(86,240,193,.07); }
 .theme-dark .core-nav a.active { border-color: rgba(86,240,193,.22); background: rgba(86,240,193,.1); }
