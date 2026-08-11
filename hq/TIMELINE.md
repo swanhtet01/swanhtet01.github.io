@@ -2,7 +2,7 @@
 
 Updated: 2026-08-11
 Owner: founder / CEO
-Branch: fix/demo-seed-clock (37 commits ahead of origin)
+Branch: fix/demo-seed-clock (40 commits ahead of origin)
 
 ---
 
@@ -16,7 +16,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Products**: Shop, Plant, Website, Ecommerce — all `release-candidate-local`. All four pass their full acceptance matrix (mobile, recovery, overflow, security, onboarding). No managed tenant. No live operators.
 
-**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 105 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles checks.
+**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles checks.
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
@@ -57,6 +57,8 @@ _No founder decision required. Zero bundle cost._
 - [x] Artifact budget ceiling raised to 2,825,000 bytes; headroom 3,041 bytes — DONE (OPS-167b)
 - [x] Test coverage: backup checks 90 → 105 (corrupt-header, restore-in-place, inspection properties) — DONE (OPS-168)
 - [x] Plant CAPA: effectiveness-due field (time-gated closure check) — DONE (OPS-169)
+- [x] Analytics: pre-register local-metrics key for Step 6; satisfies condition 5 — DONE (OPS-170)
+- [x] Plant CAPA: overdue indicator in Plant workspace and inspection row — DONE (OPS-171)
 
 ### Aug 25–31
 
@@ -205,7 +207,7 @@ All seven gates collapse to two: (1) approve one isolated tenant + (2) name one 
 | verified-statements | adopt | types + tests shipped (OPS-162) | `enterprise-verified-statements.ts` (29 checks) |
 | staff-roles | adopt | types + tests shipped (OPS-163) | `enterprise-staff-roles.ts` (67 checks) |
 | shared-workspace | evaluate | design-ready, awaiting staff-roles proof | `hq/research/enterprise-capabilities-design-2026-08.md` |
-| Cross-product reporting | design | not started | — |
+| Cross-product reporting | design | design-in-progress | `hq/research/cross-product-reporting-design-2026-08.md` |
 
 ---
 
