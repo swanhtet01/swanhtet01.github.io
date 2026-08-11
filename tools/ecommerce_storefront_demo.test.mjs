@@ -116,6 +116,10 @@ import {
   saveCommerceClose,
   commerceDailyCloseExport,
   commerceAccountingHandoff,
+  configureCommerceAccountMapping,
+  configureCommerceCustomerCreditPolicy,
+  receiveCommerceStock,
+  countCommerceStock,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1434,4 +1438,61 @@ test('advanceCommerceOrder, saveCommerceClose, commerceDailyCloseExport, and com
   assert.ok(Array.isArray(handoff.entries) && handoff.entries.length > 0)
   // Unknown closeId → null (no close export → null handoff).
   assert.equal(commerceAccountingHandoff(withClose, 'CLOSE-NONEXISTENT'), null)
+})
+
+test('configureCommerceAccountMapping, configureCommerceCustomerCreditPolicy, receiveCommerceStock, and countCommerceStock manage GL mapping, credit, and inventory', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+  const proof = { actionId: 'ACT-TEST-T029-001', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Test.', evidenceReference: 'T029-REF-001' }
+
+  // configureCommerceAccountMapping — provide a full set of GL account codes, one per role.
+  const glMappings = commerceAccountRoles.map((accountRole, i) => ({
+    accountRole,
+    externalAccountCode: String(1000 + i * 100),
+  }))
+  const withMapping = configureCommerceAccountMapping(seed, { mappings: glMappings }, proof)
+  assert.ok(withMapping !== null, 'valid GL mapping must succeed')
+  assert.equal(commerceAccountMappingConfigurations(withMapping).length, 1)
+  assert.equal(commerceAccountMappingConfigurations(withMapping)[0].mappings.length, commerceAccountRoles.length)
+  // Too few mappings → null.
+  assert.equal(configureCommerceAccountMapping(seed, { mappings: glMappings.slice(0, 3) }, proof), null)
+  // Roles in wrong order (first two swapped) → null.
+  const swappedMappings = [...glMappings]
+  ;[swappedMappings[0], swappedMappings[1]] = [swappedMappings[1], swappedMappings[0]]
+  assert.equal(configureCommerceAccountMapping(seed, { mappings: swappedMappings }, proof), null)
+
+  // configureCommerceCustomerCreditPolicy — extend 30-day terms to seed customer Ko Aung.
+  const creditProof = { ...proof, actionId: 'ACT-TEST-T029-002' }
+  const creditInput = { customer: 'Ko Aung', creditLimitMmk: 100000, maxPaymentTermsDays: 30, status: 'active' }
+  const withCredit = configureCommerceCustomerCreditPolicy(seed, creditInput, creditProof)
+  assert.ok(withCredit !== null, 'valid credit policy must be created')
+  assert.equal(commerceCustomerCreditPolicies(withCredit).length, 1)
+  assert.equal(commerceCustomerCreditPolicies(withCredit)[0].customer, 'Ko Aung')
+  assert.equal(commerceCustomerCreditPolicies(withCredit)[0].maxPaymentTermsDays, 30)
+  // 15 days is not in the allowed set {0, 7, 30} → null.
+  assert.equal(configureCommerceCustomerCreditPolicy(seed, { ...creditInput, maxPaymentTermsDays: 15 }, creditProof), null)
+  // Empty customer string → null.
+  assert.equal(configureCommerceCustomerCreditPolicy(seed, { ...creditInput, customer: '' }, creditProof), null)
+
+  // receiveCommerceStock — add 20 units of SM-1002 (seed onHand=8, reorderAt=12 → stock exception before receive).
+  const receiveProof = { ...proof, actionId: 'ACT-TEST-T029-003' }
+  const sm1002Before = seed.items.find((item) => item.sku === 'SM-1002')?.onHand ?? 0
+  const withReceived = receiveCommerceStock(seed, 'SM-1002', 20, receiveProof)
+  assert.ok(withReceived !== null, 'valid stock receive must succeed')
+  assert.equal(withReceived.items.find((item) => item.sku === 'SM-1002')?.onHand, sm1002Before + 20)
+  assert.ok(withReceived.movements.some((m) => m.kind === 'receipt' && m.sku === 'SM-1002' && m.quantityDelta === 20))
+  // Zero quantity → null.
+  assert.equal(receiveCommerceStock(seed, 'SM-1002', 0, receiveProof), null)
+  // Non-existent SKU → null.
+  assert.equal(receiveCommerceStock(seed, 'SM-NONEXISTENT', 5, receiveProof), null)
+
+  // countCommerceStock — physical count of SM-1003 (seed onHand=21) finds 25; delta = +4.
+  const countProof = { ...proof, actionId: 'ACT-TEST-T029-004' }
+  const sm1003Before = seed.items.find((item) => item.sku === 'SM-1003')?.onHand ?? 0
+  const withCount = countCommerceStock(seed, 'SM-1003', 25, countProof)
+  assert.ok(withCount !== null, 'valid stock count must succeed')
+  assert.equal(withCount.items.find((item) => item.sku === 'SM-1003')?.onHand, 25)
+  assert.ok(withCount.movements.some((m) => m.kind === 'count' && m.sku === 'SM-1003' && m.countedQuantity === 25 && m.quantityDelta === 25 - sm1003Before))
+  // Non-existent SKU → null.
+  assert.equal(countCommerceStock(seed, 'SM-NONEXISTENT', 10, countProof), null)
 })
