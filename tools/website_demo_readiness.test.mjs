@@ -6,18 +6,24 @@ import {
   createBlankPage,
   createBlankSection,
   createInitialWorkspace,
+  createWebsiteArtifact,
   createWebsiteEditSession,
+  createWebsitePreviewArtifact,
   duplicatePage,
   evidenceRequirements,
   getCurrentApproval,
   getCurrentEvidence,
+  getCurrentPublish,
+  isReplaceableWebsiteSampleWorkspace,
   normalizeSlug,
   pageIssues,
   readinessChecks,
   recordWebsiteEvidence,
   approveWebsiteRevision,
+  restoreWebsiteEditSession,
   updateWebsiteEditSession,
   websiteEditSessionMatches,
+  websiteSource,
   workspaceFingerprint,
 } from '../showroom/src/products/website/website-model.ts'
 import {
@@ -406,4 +412,56 @@ test('createBlankSection, workspaceFingerprint, getCurrentEvidence, and getCurre
   const touched = { ...approved, siteName: 'New Name After Approval' }
   assert.deepEqual(getCurrentEvidence(touched), [], 'evidence must be empty after content change')
   assert.equal(getCurrentApproval(touched), null, 'approval must be null after content change')
+})
+
+test('websiteSource, isReplaceableWebsiteSampleWorkspace, restoreWebsiteEditSession, createWebsiteArtifact, createWebsitePreviewArtifact, and getCurrentPublish behave correctly', () => {
+  const workspace = createInitialWorkspace()
+  const fp = workspaceFingerprint(workspace)
+
+  // websiteSource: reflects contentRevision and fingerprint.
+  const source = websiteSource(workspace)
+  assert.equal(source.contentRevision, 0)
+  assert.equal(source.digest, fp)
+
+  // isReplaceableWebsiteSampleWorkspace: false for initial workspace (no working sample marker).
+  assert.equal(isReplaceableWebsiteSampleWorkspace(workspace), false)
+
+  // After installWebsiteWorkingSample, the workspace becomes replaceable.
+  const installed = installWebsiteWorkingSample(workspace, {
+    templateId: websiteStarterTemplates[0].id,
+    businessName: 'Test Business',
+    capturedAt: CAPTURED_AT,
+  })
+  assert.ok(installed)
+  assert.equal(isReplaceableWebsiteSampleWorkspace(installed), true)
+
+  // restoreWebsiteEditSession: null for invalid input; valid session for a created session.
+  assert.equal(restoreWebsiteEditSession(null), null)
+  assert.equal(restoreWebsiteEditSession('not-json'), null)
+  assert.equal(restoreWebsiteEditSession({}), null)
+  const session = createWebsiteEditSession(workspace)
+  const restored = restoreWebsiteEditSession(session)
+  assert.ok(restored !== null)
+  assert.equal(restored.baseRevision, 0)
+  assert.equal(restored.baseContentRevision, 0)
+  assert.equal(restored.baseFingerprint, fp)
+  // Also works from a serialized JSON string.
+  const restoredFromJson = restoreWebsiteEditSession(JSON.stringify(session))
+  assert.ok(restoredFromJson !== null)
+  assert.equal(restoredFromJson.baseRevision, 0)
+
+  // createWebsiteArtifact: all ready pages from the initial workspace.
+  const artifact = createWebsiteArtifact(workspace)
+  assert.equal(artifact.schema, 'supermega.website.artifact.v1')
+  assert.equal(artifact.siteName, workspace.siteName)
+  assert.ok(artifact.contentDigest.startsWith('site-'))
+  assert.equal(artifact.pages.length, workspace.pages.filter((p) => p.stage === 'ready').length)
+
+  // createWebsitePreviewArtifact: includes all pages regardless of stage.
+  const preview = createWebsitePreviewArtifact(workspace)
+  assert.equal(preview.schema, 'supermega.website.artifact.v1')
+  assert.equal(preview.pages.length, workspace.pages.length)
+
+  // getCurrentPublish: null when no publish has been recorded.
+  assert.equal(getCurrentPublish(workspace), null)
 })
