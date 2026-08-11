@@ -2,7 +2,7 @@
 
 Updated: 2026-08-11
 Owner: founder / CEO
-Branch: fix/demo-seed-clock (20 commits ahead of origin)
+Branch: fix/demo-seed-clock (28 commits ahead of origin)
 
 ---
 
@@ -16,7 +16,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Products**: Shop, Plant, Website, Ecommerce — all `release-candidate-local`. All four pass their full acceptance matrix (mobile, recovery, overflow, security, onboarding). No managed tenant. No live operators.
 
-**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 10 Shop next-action + 109 Website + 95 security + 241 onboarding + 11 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables checks.
+**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 11 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 91 Plant quality CAPA + 29 enterprise verified-statements + 67 enterprise staff-roles checks.
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
@@ -35,21 +35,29 @@ _No founder decision required. Zero bundle cost._
 ### Aug 11–15
 
 - [x] OPS-155 complete — AR customer receivables handoff CSV (2026-08-11)
-- [ ] R&D research docs: OpenTelemetry implementation plan, order-intake-agent evaluation, durable-workflows comparison
-- [ ] Comprehensive agent team plan published (`hq/AGENT-TEAM-PLAN.md`)
-- [ ] Comprehensive timeline published (this document)
+- [x] OPS-157 complete — R&D research docs: OpenTelemetry implementation plan, order-intake-agent evaluation, durable-workflows comparison (2026-08-11)
+- [x] OPS-157 complete — Comprehensive agent team plan published (`hq/AGENT-TEAM-PLAN.md`) (2026-08-11)
+- [x] OPS-157 complete — Comprehensive timeline published (this document) (2026-08-11)
+- [x] OPS-158 complete — Shop next-action raised from 10 → 128 checks; AR receivables wired into app:verify (2026-08-11)
+- [x] OPS-159 complete — Plant quality CAPA test suite: 66 checks (CAPA build, resolve, recurrence, Unicode, tamper) (2026-08-11)
+- [x] OPS-160 complete — Analytics design + enterprise capabilities design published (2026-08-11)
+- [x] OPS-161 complete — Analytics Step 1+2: MetricsCollector + hash-based page visits, live in bundle (2026-08-11)
+- [x] OPS-162 complete — verified-statements: OwnerVerification type + SHA-256 tamper detection (29 checks) (2026-08-11)
+- [x] OPS-163 complete — staff-roles: 9-role taxonomy + write-authority matrix (67 checks) (2026-08-11)
 
 ### Aug 15–25
 
-- [ ] Test coverage: raise Shop next-action checks from 10 → 30+ (cover reject, amend, return, handoff)
-- [ ] Test coverage: raise backup checks from 11 → 25+ (cover incremental, restore-in-place, corrupt-header)
-- [ ] Plant CAPA effectiveness review: add a time-gated "effectiveness-due" field so a corrective action does not close silently after one day
-- [ ] Artifact budget: locate and remove any dead tree-shaking opportunity; target 2,000 bytes freed
+- [ ] Analytics Step 3-4: Shop + Plant + Website + Ecommerce emit sites (14 action events)
+- [ ] Analytics Step 5: Metrics page at `/work/?view=local-metrics`
+- [ ] Test coverage: backup checks from 11 → 25+ (incremental, restore-in-place, corrupt-header)
+- [ ] Plant CAPA: effectiveness-due field (time-gated closure check)
+- [ ] Artifact budget: locate and remove dead tree-shaking opportunities; target 2,000 bytes freed
 
 ### Aug 25–31
 
-- [ ] R&D decision: durable-workflows gate → keep kernel queue, record Vercel Workflows as target for managed mode
-- [ ] Portfolio update: record all three R&D evaluations as complete
+- [ ] Portfolio update: confirm all R&D evaluations recorded (complete as of OPS-157/160)
+- [ ] Analytics Step 6: localStorage retention (go/no-go conditions pass first)
+- [ ] Analytics Step 7: CEO brief integration (reads local-metrics artifact)
 - [ ] Branch push to origin and pull request opened for review (requires founder approval to merge)
 
 ---
@@ -184,12 +192,15 @@ All seven gates collapse to two: (1) approve one isolated tenant + (2) name one 
 
 | Track | Gate | Status | Document |
 |-------|------|--------|----------|
-| OpenTelemetry | adopt-with-managed-mode | research-ready | `hq/research/opentelemetry-implementation-plan-2026-08.md` |
-| Durable workflows | evaluate | decided — keep kernel queue | `hq/research/durable-workflows-comparison-2026-08.md` |
-| Order intake agent | evaluate | evaluation-design | `hq/research/order-intake-agent-evaluation-2026-08.md` |
-| Verified statements | design | not started | enterprise-product-roadmap |
-| Staff roles | design | not started | enterprise-product-roadmap |
-| Cross-product reporting | design | not started | enterprise-product-roadmap |
+| OpenTelemetry | adopt-with-managed-mode | implementation-plan-ready | `hq/research/opentelemetry-implementation-plan-2026-08.md` |
+| Durable workflows | adopt-with-managed-mode | decided — keep kernel queue | `hq/research/durable-workflows-comparison-2026-08.md` |
+| Order intake agent | evaluate | evaluation-design-complete | `hq/research/order-intake-agent-evaluation-2026-08.md` |
+| Local analytics | adopt | implementation-steps-ready | `hq/research/analytics-design-2026-08.md` |
+| Enterprise capabilities | evaluate | design-ready (3 tiers) | `hq/research/enterprise-capabilities-design-2026-08.md` |
+| verified-statements | adopt | types + tests shipped (OPS-162) | `enterprise-verified-statements.ts` (29 checks) |
+| staff-roles | adopt | types + tests shipped (OPS-163) | `enterprise-staff-roles.ts` (67 checks) |
+| shared-workspace | evaluate | design-ready, awaiting staff-roles proof | `hq/research/enterprise-capabilities-design-2026-08.md` |
+| Cross-product reporting | design | not started | — |
 
 ---
 
