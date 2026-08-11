@@ -18803,6 +18803,22 @@ async function verifyBehaviorTrailRuntime() {
     model.recordBehaviorSignal(storage, signal)
     const recorded = model.readBehaviorTrail(storage)
     assert(recorded.length === 1 && recorded[0].event === 'data_setup_opened' && recorded[0].route === '/ecommerce/', 'behavior_activation_signal_not_deduplicated')
+
+    const jobEntries = [
+      { id: 'J-1', event: 'agent_job_chosen', product: 'commerce', route: '/shop/', detail: 'Open counter for next sale', createdAt: '2026-08-03T08:00:00.000Z' },
+      { id: 'J-2', event: 'agent_job_chosen', product: 'commerce', route: '/shop/', detail: 'Open counter for next sale', createdAt: '2026-08-03T09:00:00.000Z' },
+      { id: 'J-3', event: 'agent_job_chosen', product: 'commerce', route: '/shop/?tab=inventory', detail: 'Reorder low stock', createdAt: '2026-08-03T10:00:00.000Z' },
+      { id: 'J-4', event: 'agent_job_chosen', product: 'production', route: '/plant/', detail: 'Record shift output', createdAt: '2026-08-03T11:00:00.000Z' },
+    ]
+    const prefs = model.summarizeBehaviorPreferences(jobEntries)
+    assert(prefs.contract === 'supermega.behavior_preference.v1'
+      && prefs.chosenSignals === 4
+      && prefs.productCount === 2
+      && prefs.preferred?.detail === 'Open counter for next sale'
+      && prefs.preferred?.chosenCount === 2
+      && prefs.latest?.detail === 'Record shift output', 'behavior_preference_summary_wrong')
+    const emptyPrefs = model.summarizeBehaviorPreferences([])
+    assert(emptyPrefs.chosenSignals === 0 && emptyPrefs.preferred === null && emptyPrefs.latest === null, 'behavior_empty_preference_summary_wrong')
   } catch (error) {
     fail(`behavior_trail_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
