@@ -175,6 +175,9 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-reschedule-intent-reason-length-brief (EcommerceOrderRescheduleIntent.reason short/medium/long length bands + min/max/avg); 16 checks; zero bundle cost — DONE (OPS-462)
 - [x] Analytics Codex: ecommerce-amendment-intent-reason-length-brief (EcommerceOrderAmendmentIntent.reason short/medium/long length bands + min/max/avg); 16 checks; zero bundle cost — DONE (OPS-463)
 - [x] Analytics Codex: ecommerce-request-line-count-brief (EcommerceOrderRequestV2.lines.length total/avg/min/max + singleLine/multiLine split); 28 checks; zero bundle cost — DONE (OPS-464)
+- [x] Analytics Codex: ecommerce-cancellation-intent-reason-text-brief (EcommerceCancellationIntent.reason free-text short/medium/long + rates + min/max/avg); 37 checks; zero bundle cost — DONE (OPS-465)
+- [x] Analytics Codex: ecommerce-cancellation-decision-reason-text-brief (EcommerceCancellationDecision.reason free-text short/medium/long + rates + min/max/avg); 37 checks; zero bundle cost — DONE (OPS-466)
+- [x] Analytics Codex: website-publish-approval-evidence-brief (WebsiteWorkspace.approvals evidenceIds min/max/avg + uniqueReviewers + migratedRate); 31 checks; zero bundle cost — DONE (OPS-467)
 
 ### Aug 25–31
 
