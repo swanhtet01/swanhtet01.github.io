@@ -16,6 +16,7 @@ export function projectShopStorefrontCustomerNamePhoneBrief(
   const phoneMap = new Map<string, number>()
 
   for (const request of commerce.storefrontRequests ?? []) {
+    if (request.schema === 'supermega.ecommerce.order_request.v1') continue
     const profile = request.customerProfile
     if (profile !== undefined) {
       totalProfiles++
