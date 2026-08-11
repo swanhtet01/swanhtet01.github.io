@@ -157,6 +157,12 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: website-lead-status-source-page-brief (WebsiteLead.status new/qualified/closed pipeline + sourcePage top-5); 28 checks; zero bundle cost — DONE (OPS-444)
 - [x] Analytics Codex: website-page-stage-navigation-brief (WebsitePage.stage draft/ready + navigation visibility rate + label top-5); 26 checks; zero bundle cost — DONE (OPS-445)
 - [x] Analytics Codex: website-publish-evidence-kind-brief (PublishEvidence.kind content/responsive/links distribution + allKindsPresent flag); 32 checks; zero bundle cost — DONE (OPS-446)
+- [x] Analytics Codex: website-opening-plan-brief (WebsiteOpeningPlan hasPlan + pageCount + workflowTemplate identity flags + hasWorkingSample); 24 checks; zero bundle cost — DONE (OPS-447)
+- [x] Analytics Codex: ecommerce-correction-intent-refund-status-brief (EcommerceCorrectionIntent.refundStatus none/due/settled 3-value distribution); 19 checks; zero bundle cost — DONE (OPS-448)
+- [x] Analytics Codex: ecommerce-cancellation-decision-order-status-actor-brief (EcommerceCancellationDecision orderStatus distribution + actor top-5); 21 checks; zero bundle cost — DONE (OPS-449)
+- [x] Analytics Codex: website-lead-request-length-brief (WebsiteLead.request short/medium/long length bands + min/max/avg); 21 checks; zero bundle cost — DONE (OPS-450)
+- [x] Analytics Codex: website-page-slug-depth-brief (WebsitePage.slug root/shallow/nested/deep depth distribution + avg depth + unique slugs); 24 checks; zero bundle cost — DONE (OPS-451)
+- [x] Analytics Codex: website-release-locale-role-brief (WebsiteReleasePackage locale approved/draft + role 3-value distribution + unique actors); 22 checks; zero bundle cost — DONE (OPS-452)
 
 ### Aug 25–31
 
