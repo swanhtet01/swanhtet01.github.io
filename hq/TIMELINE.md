@@ -16,7 +16,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Products**: Shop, Plant, Website, Ecommerce — all `release-candidate-local`. All four pass their full acceptance matrix (mobile, recovery, overflow, security, onboarding). No managed tenant. No live operators.
 
-**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles + 41 cross-product shop-production + 36 cross-product reconciliation + 28 cross-product aggregate report + 45 shop revenue summary + 45 Plant OEE summary + 33 Website lead funnel summary + 28 Ecommerce pipeline summary checks. Cross-product Phase A complete (105 checks in app:verify chain). Four-product analytics coverage: Shop revenue, Plant OEE, Website leads, Ecommerce pipeline — all zero bundle cost.
+**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles + 41 cross-product shop-production + 36 cross-product reconciliation + 28 cross-product aggregate report + 45 shop revenue summary + 45 Plant OEE summary + 33 Website lead funnel summary + 28 Ecommerce pipeline summary + 39 customer journey summary checks. Cross-product Phase A complete (105 checks in app:verify chain). Five analytics view surfaces: Shop revenue, Cross-product, Plant OEE, Website leads, Local metrics.
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
@@ -70,6 +70,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Ecommerce pipeline summary: projectEcommercePipelineSummary (pending requests, fulfilment, return/cancel intents); 28 checks; zero bundle cost — DONE (OPS-180)
 - [x] Plant OEE view: /settings/?view=plant-oee#controls (production summary + byLine table); +2,588 bytes; ceiling → 2,836,000 — DONE (OPS-181)
 - [x] Website lead view: /settings/?view=website-leads#controls (funnel summary + bySourcePage table); +3,072 bytes; ceiling → 2,840,000 — DONE (OPS-182)
+- [x] Customer journey summary: projectCustomerJourneySummary (unique/repeat/new customers, top 5 by revenue, avgOrdersPerCustomer); 39 checks; zero bundle cost — DONE (OPS-183)
 
 ### Aug 25–31
 
@@ -226,10 +227,10 @@ All seven gates collapse to two: (1) approve one isolated tenant + (2) name one 
 
 | Metric | Value | Gate |
 |--------|-------|------|
-| Total bytes | 2,821,959 | < 2,825,000 |
-| Headroom | 3,041 bytes | |
-| Largest JS chunk | 394,120 bytes | < 500,000 |
-| Largest JS headroom | 105,880 bytes | |
-| Status | manageable | review every slice; Step 6 (localStorage) adds ~200 bytes |
+| Total bytes | 2,836,231 | < 2,840,000 |
+| Headroom | 3,769 bytes | |
+| Largest JS chunk | 394,820 bytes | < 500,000 |
+| Largest JS headroom | 105,180 bytes | |
+| Status | manageable | review every slice; Step 6 (localStorage) adds ~200 bytes; CRM journey view (OPS-184) will consume most remaining headroom — raise ceiling after that slice |
 
 Every new product slice must pass `npm run app:verify` before commit. Any slice that brings headroom below 2,000 bytes requires an offsetting removal.
