@@ -131,6 +131,7 @@ import {
   markCommerceSupplierInvoicePayableReady,
   commerceSupplierPayablesHandoffCsv,
   recordCommerceOrderReturn,
+  installCommerceWorkingSampleActivity,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1751,4 +1752,47 @@ test('recordCommerceOrderReturn records a post-completion order return', () => {
   assert.equal(recordCommerceOrderReturn(seed, { ...returnInput, quantity: 0 }, proof, returnExp), null)
   // Non-completed order (ORD-1042 is 'preparing') → expectation null → null.
   assert.equal(recordCommerceOrderReturn(seed, { ...returnInput, orderId: 'ORD-1042' }, proof, returnExp), null)
+})
+
+test('installCommerceWorkingSampleActivity installs counter sales and a pending order', () => {
+  const state = spaWorkspace()
+
+  const input = {
+    sampleId: 'spa',
+    sampleName: 'Spa',
+    counterSales: [
+      { recordedAt: CAPTURED_AT, payment: 'Cash', lines: [{ sku: 'SPA-FACIAL', quantity: 1 }] },
+      { recordedAt: CAPTURED_AT, payment: 'KBZPay', lines: [{ sku: 'SPA-MASSAGE', quantity: 1 }] },
+    ],
+    pendingOrder: {
+      customerName: 'Ko Aung',
+      requestedAt: CAPTURED_AT,
+      promisedFor: '2026-08-08T02:30:00.000Z',
+      lines: [{ sku: 'SPA-SCRUB', quantity: 2 }],
+    },
+  }
+  const activity = installCommerceWorkingSampleActivity(state, input)
+  assert.ok(activity !== null, 'installCommerceWorkingSampleActivity must succeed with valid inputs')
+
+  // Two completed sales + one pending order = 3 working-sample orders.
+  const sampleOrders = activity.orders.filter((o) => o.id.startsWith('SETUP-SAMPLE-SPA-'))
+  assert.equal(sampleOrders.length, 3)
+  assert.ok(activity.orders.some((o) => o.id === 'SETUP-SAMPLE-SPA-SALE-1' && o.status === 'completed'))
+  assert.ok(activity.orders.some((o) => o.id === 'SETUP-SAMPLE-SPA-SALE-2' && o.status === 'completed'))
+  assert.ok(activity.orders.some((o) => o.id === 'SETUP-SAMPLE-SPA-ORDER' && o.status === 'confirmed'))
+
+  // Idempotent: calling again with the same input returns the same state.
+  assert.ok(installCommerceWorkingSampleActivity(activity, input) !== null)
+
+  // Wrong sampleId (doesn't match installed catalog 'spa') → null.
+  assert.equal(installCommerceWorkingSampleActivity(state, { ...input, sampleId: 'wellness' }), null)
+
+  // Empty counterSales → null.
+  assert.equal(installCommerceWorkingSampleActivity(state, { ...input, counterSales: [] }), null)
+
+  // Unknown SKU in counterSales → null.
+  assert.equal(installCommerceWorkingSampleActivity(state, {
+    ...input,
+    counterSales: [{ recordedAt: CAPTURED_AT, payment: 'Cash', lines: [{ sku: 'SPA-NONEXISTENT', quantity: 1 }] }],
+  }), null)
 })
