@@ -126,6 +126,7 @@ import {
   createCommercePurchaseOrder,
   receiveCommercePurchaseOrder,
   cancelCommercePurchaseOrder,
+  recordCommerceOrderCorrection,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1597,4 +1598,41 @@ test('createCommercePurchaseOrder, receiveCommercePurchaseOrder, and cancelComme
   assert.ok(cancelCommercePurchaseOrder(withCancelled, poId, cancelProof) !== null)
   // capturedAt ('2026-07-23') < latestReceiptAt ('2026-07-30') → null.
   assert.equal(cancelCommercePurchaseOrder(withReceived, poId, cancelProof), null)
+})
+
+test('recordCommerceOrderCorrection records a post-completion order correction', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+
+  // ORD-1039 is the only completed+reconciled order in seed and has no corrections yet.
+  const correctionExp = commerceOrderCorrectionExpectation(seed, 'ORD-1039')
+  assert.ok(correctionExp !== null, 'ORD-1039 must be eligible for correction')
+  assert.equal(correctionExp.orderId, 'ORD-1039')
+  assert.equal(correctionExp.correctionCount, 0)
+  assert.equal(correctionExp.currentBalanceMmk, 22500)
+
+  // Record a credit correction for a pricing error on ORD-1039.
+  const proof = { actionId: 'ACT-TEST-T032-CREDIT', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Price was listed incorrectly.', evidenceReference: 'T032-CREDIT-REF' }
+  const corrInput = { orderId: 'ORD-1039', kind: 'credit', reasonCode: 'pricing_error', listedAmountMmk: 1000 }
+  const withCredit = recordCommerceOrderCorrection(seed, corrInput, proof, correctionExp)
+  assert.ok(withCredit !== null, 'valid credit correction must succeed')
+  const correctedOrder = withCredit.orders.find((o) => o.id === 'ORD-1039')
+  assert.equal(correctedOrder?.corrections?.length, 1)
+  assert.equal(correctedOrder?.corrections?.[0]?.kind, 'credit')
+  assert.equal(correctedOrder?.corrections?.[0]?.reasonCode, 'pricing_error')
+  // Replay (same actionId, same input) → unchanged state.
+  assert.ok(recordCommerceOrderCorrection(withCredit, corrInput, proof, correctionExp) !== null)
+
+  // Stale expectation (withCredit has a correction; correctionExp was derived from seed) → null.
+  const staleProof = { ...proof, actionId: 'ACT-TEST-T032-STALE' }
+  assert.equal(recordCommerceOrderCorrection(withCredit, corrInput, staleProof, correctionExp), null)
+
+  // Invalid correction kind → null.
+  assert.equal(recordCommerceOrderCorrection(seed, { ...corrInput, kind: 'invalid' }, proof, correctionExp), null)
+  // Invalid reason code → null.
+  assert.equal(recordCommerceOrderCorrection(seed, { ...corrInput, reasonCode: 'bad_code' }, proof, correctionExp), null)
+  // listedAmountMmk = 0 → null.
+  assert.equal(recordCommerceOrderCorrection(seed, { ...corrInput, listedAmountMmk: 0 }, proof, correctionExp), null)
+  // Order not completed (ORD-1042 is 'preparing') → commerceOrderCorrectionExpectation returns null → mismatch → null.
+  assert.equal(recordCommerceOrderCorrection(seed, { ...corrInput, orderId: 'ORD-1042' }, proof, correctionExp), null)
 })
