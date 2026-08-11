@@ -112,6 +112,10 @@ import {
   configureCommercePromotionPolicy,
   configureCommerceShippingPolicy,
   configureCommercePaymentPolicy,
+  advanceCommerceOrder,
+  saveCommerceClose,
+  commerceDailyCloseExport,
+  commerceAccountingHandoff,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1378,4 +1382,56 @@ test('configureCommerceTax, configureCommercePromotionPolicy, configureCommerceS
   assert.equal(configureCommercePaymentPolicy(seed, { ...payInput, adapter: 'bad_adapter' }, payProof), null)
   // Empty instructions → null.
   assert.equal(configureCommercePaymentPolicy(seed, { ...payInput, instructions: '' }, payProof), null)
+})
+
+test('advanceCommerceOrder, saveCommerceClose, commerceDailyCloseExport, and commerceAccountingHandoff drive the order lifecycle and daily close', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+
+  // advanceCommerceOrder: ORD-1042 is 'preparing' in the seed; advance it to 'ready'.
+  const advanceProof = { actionId: 'ACT-TEST-T028-ADV', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'Order is packed and ready.', evidenceReference: 'T028-ADV-REF' }
+  const withReady = advanceCommerceOrder(seed, 'ORD-1042', 'preparing', advanceProof)
+  assert.ok(withReady !== null, 'advancing preparing→ready must succeed')
+  assert.equal(withReady.orders.find((o) => o.id === 'ORD-1042')?.status, 'ready')
+  // Wrong expectedStatus (seed has 'preparing', not 'ready') → null.
+  assert.equal(advanceCommerceOrder(seed, 'ORD-1042', 'ready', advanceProof), null)
+  // ORD-1039 is already 'completed' → cannot advance → null.
+  assert.equal(advanceCommerceOrder(seed, 'ORD-1039', 'completed', advanceProof), null)
+  // ORD-1041 is 'ready' but paymentStatus is 'pending' → cannot complete → null.
+  assert.equal(advanceCommerceOrder(seed, 'ORD-1041', 'ready', advanceProof), null)
+
+  // saveCommerceClose: close the day using ORD-1039 (the only completed+reconciled seed order).
+  const closeExp = commerceCloseExpectation(seed, seedNowIso)
+  assert.ok(closeExp !== null, 'seed must produce a valid close expectation')
+  assert.ok(closeExp.orderIds.includes('ORD-1039'), 'ORD-1039 must be in the close')
+  assert.equal(closeExp.total, 22500, 'ORD-1039 total is 22500 MMK')
+  const closeId = 'CLOSE-11111111-1111-4111-8111-111111111111'
+  const closeProof = { actionId: 'ACT-11111111-1111-4111-8111-111111111111', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'End-of-day close.', evidenceReference: 'T028-CLOSE-REF' }
+  const withClose = saveCommerceClose(seed, closeId, closeProof, closeExp)
+  assert.ok(withClose !== null, 'daily close must be saved')
+  assert.equal(withClose.closes.length, 1)
+  assert.equal(withClose.closes[0].id, closeId)
+  assert.equal(withClose.closes[0].total, 22500)
+  // Replay with same proof and closeId → returns unchanged state (not null).
+  assert.ok(saveCommerceClose(withClose, closeId, closeProof, closeExp) !== null)
+  // Bad closeId pattern → null.
+  assert.equal(saveCommerceClose(seed, 'CLOSE-BAD-ID', closeProof, closeExp), null)
+
+  // commerceDailyCloseExport: derive the export artifact from the saved close.
+  const dailyExport = commerceDailyCloseExport(withClose, closeId)
+  assert.ok(dailyExport !== null, 'daily close export must be generated')
+  assert.equal(dailyExport.schema, COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA)
+  assert.equal(dailyExport.totalMmk, 22500)
+  assert.equal(dailyExport.orderCount, 1)
+  assert.ok(dailyExport.orders.some((o) => o.orderId === 'ORD-1039'))
+  // Unknown closeId → null.
+  assert.equal(commerceDailyCloseExport(withClose, 'CLOSE-NONEXISTENT'), null)
+
+  // commerceAccountingHandoff: builds journal entries (entries unmapped since no GL mapping is configured).
+  const handoff = commerceAccountingHandoff(withClose, closeId)
+  assert.ok(handoff !== null, 'accounting handoff must be generated even without account mapping')
+  assert.equal(handoff.schema, COMMERCE_ACCOUNTING_HANDOFF_SCHEMA)
+  assert.ok(Array.isArray(handoff.entries) && handoff.entries.length > 0)
+  // Unknown closeId → null (no close export → null handoff).
+  assert.equal(commerceAccountingHandoff(withClose, 'CLOSE-NONEXISTENT'), null)
 })
