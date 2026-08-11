@@ -178,6 +178,9 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-cancellation-intent-reason-text-brief (EcommerceCancellationIntent.reason free-text short/medium/long + rates + min/max/avg); 37 checks; zero bundle cost — DONE (OPS-465)
 - [x] Analytics Codex: ecommerce-cancellation-decision-reason-text-brief (EcommerceCancellationDecision.reason free-text short/medium/long + rates + min/max/avg); 37 checks; zero bundle cost — DONE (OPS-466)
 - [x] Analytics Codex: website-publish-approval-evidence-brief (WebsiteWorkspace.approvals evidenceIds min/max/avg + uniqueReviewers + migratedRate); 31 checks; zero bundle cost — DONE (OPS-467)
+- [x] Analytics Codex: ecommerce-reschedule-intent-promise-date-brief (originalPromisedAt vs requestedPromisedAt delta hours + buckets); 40 checks; zero bundle cost — DONE (OPS-468)
+- [x] Analytics Codex: website-local-publish-ready-pages-brief (LocalPublishRecord readyPageIds + approvalRate + evidenceIds + migratedRate); 38 checks; zero bundle cost — DONE (OPS-469)
+- [x] Analytics Codex: website-lead-decision-age-brief (decidedLeadCount + decisionNote bands + decision age hours); 41 checks; zero bundle cost — DONE (OPS-470)
 
 ### Aug 25–31
 
