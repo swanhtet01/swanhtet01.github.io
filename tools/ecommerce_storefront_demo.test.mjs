@@ -33,8 +33,8 @@ test('working-sample SKUs are recoverable and exclude the generic Shop seed item
   const skus = commerceWorkingSampleSkus(state)
   assert.deepEqual(skus, ['SPA-FACIAL', 'SPA-MASSAGE', 'SPA-OIL', 'SPA-SCRUB'])
   assert.ok(skus.every((sku) => sku.startsWith('SPA-')))
-  // The seed catalog stays in Shop but is never reported as client sample stock.
-  assert.ok(state.items.some((item) => item.sku.startsWith('SM-')))
+  // The install is on a clean slate — seed SKUs are absent from the workspace.
+  assert.ok(!state.items.some((item) => item.sku.startsWith('SM-')))
   assert.ok(!skus.some((sku) => sku.startsWith('SM-')))
 })
 
