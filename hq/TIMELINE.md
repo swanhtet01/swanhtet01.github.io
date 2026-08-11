@@ -184,6 +184,9 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-correction-intent-reason-text-brief (EcommerceCorrectionIntent.reason free-text short/medium/long + rates); 34 checks; zero bundle cost — DONE (OPS-471)
 - [x] Analytics Codex: website-publish-evidence-finding-length-brief (PublishEvidence.finding observation text short/medium/long + rates); 34 checks; zero bundle cost — DONE (OPS-472)
 - [x] Analytics Codex: website-workflow-event-reason-length-brief (WebsiteWorkflowEvent.reason approval note short/medium/long + rates); 34 checks; zero bundle cost — DONE (OPS-473)
+- [x] Analytics Codex: website-page-staleness-brief (WebsitePage.updatedAt age fresh/recent/stale + rates + min/max/avg days); 37 checks; zero bundle cost — DONE (OPS-474)
+- [x] Analytics Codex: website-publish-approval-note-length-brief (PublishApproval.note withNoteRate + short/medium/long bands); 34 checks; zero bundle cost — DONE (OPS-475)
+- [x] Analytics Codex: ecommerce-delivery-address-line1-brief (EcommerceDeliveryAddressSnapshot.line1 blank rate + length stats); 28 checks; zero bundle cost — DONE (OPS-476)
 
 ### Aug 25–31
 
