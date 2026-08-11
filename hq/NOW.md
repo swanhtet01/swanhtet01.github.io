@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-262 (`f836c315`) aligns controlled Plant shift evidence. OPS-263 (`3c0cf4db`) adds a mobile-proven Spa starter with five treatments, three stations, thirteen stock items, and role guidance. Next: `shop-spa-appointment-to-checkout-handoff`; pilots stay owner-gated.
+- OPS-263 (`3c0cf4db`) adds a mobile-proven Spa starter. OPS-264 (`2754965b`) links one completed appointment to exactly one reviewed, payment-pending Shop order with no automatic charge, message, or service stock movement. Next: `shop-spa-payment-and-daily-close-proof`; pilots stay owner-gated.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-263 proves the Spa appointment lifecycle and one stock exception at 390x844 with zero browser errors; the sister handoff is `SuperMega/Spa Starter/START_HERE.md` in OneDrive. CLAUDE-009 remains owner-controlled at `0fc5cf7d`.
+- Codex is sole integrator. OPS-264 proves cancel-with-zero-order, one reviewed checkout, exact retry safety, reload, direct appointment-to-order navigation, and zero fake service stock at 390x844; the sister handoff and fifth screenshot are in `SuperMega/Spa Starter/`. CLAUDE-009 remains owner-controlled at `0fc5cf7d`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-spa-appointment-to-checkout-handoff`: bind one completed Spa booking to one reviewable Shop checkout or order exactly once, with no automatic payment, message, or duplicate revenue; prove cancel, reload, and mobile recovery.
+1. Complete `shop-spa-payment-and-daily-close-proof`: remove the false Start preparing step from a completed treatment, retain human payment review, and prove one appointment-linked service order through reload and Daily close without stock movement or duplicate revenue.
 2. Use CLAUDE-009 only as an optional owner-controlled review of checkpoint `0fc5cf7d`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.

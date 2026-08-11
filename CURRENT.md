@@ -1,6 +1,6 @@
 # SuperMega current direction
 
-Last confirmed: 2026-08-10
+Last confirmed: 2026-08-11
 Authority: this file, `site-manifest.json`, and `hq/portfolio.json`
 
 SuperMega builds simple operating products for Myanmar businesses. The customer portfolio is exactly **Shop**, **Plant**, **Website**, and **Ecommerce**. Bounded **AI assistance** is a shared capability inside those products, not a fifth product. SuperMega HQ, R&D, agent coordination, Ops, Console, and machine coordination are internal company systems.
