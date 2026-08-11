@@ -17,12 +17,16 @@ import {
   LEGACY_COMMERCE_KEYS,
   commerceAccountMappingConfigurations,
   commerceAccountRoles,
+  commerceCorrectionCalculation,
   commerceOrderAcknowledgement,
   commerceOrderAcknowledgementText,
   commerceOrderSupportOpenExpectation,
   commerceOrderSupportReopenExpectation,
   commerceOrderSupportResolveExpectation,
   commerceOrderSupportServiceExpectation,
+  commerceSupplierInvoiceMatch,
+  commerceSupplierPerformance,
+  commerceSupportCheckpointState,
   commerceTaxConfigurations,
   commerceTaxDecision,
   commerceWebsiteIntakes,
@@ -1068,4 +1072,37 @@ test('support expectation queries return null for seed state and order acknowled
   assert.equal(typeof text, 'string')
   assert.ok(text.includes('SUPERMEGA ORDER ACKNOWLEDGEMENT'))
   assert.ok(text.includes('ORD-1039'))
+})
+
+test('commerceSupplierInvoiceMatch, commerceSupplierPerformance, commerceSupportCheckpointState, and commerceCorrectionCalculation behave correctly', () => {
+  const seed = createSeedCommerce()
+  const seedPO = commercePurchaseOrders(seed)[0]
+  assert.ok(seedPO, 'seed must have a purchase order')
+
+  // commerceSupplierInvoiceMatch throws when the PO has no supplier invoice.
+  assert.throws(() => commerceSupplierInvoiceMatch(seed, seedPO))
+
+  // commerceSupplierPerformance returns one entry per supplier — seed has one PO.
+  const performance = commerceSupplierPerformance(seed, Date.parse('2026-07-23T08:00:00.000Z'))
+  assert.ok(Array.isArray(performance))
+  assert.ok(performance.length >= 1)
+  assert.equal(performance[0].supplier, 'Myanmar Beverage Supply')
+  assert.equal(performance[0].totalOrders, 1)
+
+  // commerceSupportCheckpointState returns null for both checkpoints when no events exist.
+  const checkpoints = commerceSupportCheckpointState({ serviceEvents: [], status: 'open' })
+  assert.equal(checkpoints.acknowledged, null)
+  assert.equal(checkpoints.firstResponseReady, null)
+
+  // commerceCorrectionCalculation: null for missing or zero amount.
+  const completedOrder = seed.orders.find((o) => o.id === 'ORD-1039')
+  assert.ok(completedOrder)
+  assert.equal(commerceCorrectionCalculation(completedOrder, 0), null)
+  assert.equal(commerceCorrectionCalculation({ ...completedOrder, calculation: undefined }, 5000), null)
+
+  // Valid amount on v1-calculation order returns not_configured tax mode.
+  const correction = commerceCorrectionCalculation(completedOrder, 5000)
+  assert.ok(correction !== null)
+  assert.equal(correction.taxMode, 'not_configured')
+  assert.equal(correction.totalMmk, 5000)
 })
