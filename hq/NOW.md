@@ -50,6 +50,15 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Public states the offer: four browser-local products stay free; managed adds approved cross-product context, company history and roles, reviewed actions, recovery, and support only after identity, tenant, recovery, and write controls pass (`25cac2f5`).
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
+## R&D decisions (2026-08-11)
+
+Three research evaluations complete:
+- **OpenTelemetry** (`adopt-with-managed-mode`): Six-layer instrumentation plan with attribute redaction (hard block: customer names, MMK amounts, Myanmar phone numbers, free-text; safe: trace IDs, workspace UUIDs, operation names, durations, bucket counts). Thirty named spans across all four products. Implementation split: Phase A (local Jaeger, runnable now), Phase B (managed mode, behind five gate conditions). Document: `hq/research/opentelemetry-implementation-plan-2026-08.md`.
+- **Durable workflows** (`adopt-with-managed-mode`, decided): Keep kernel queue for current bounded needs. Vercel Workflows is the intended target for suspend/resume approval-wait patterns when managed persistence is proven. Cloud Tasks rejected. Eight adoption conditions listed. Document: `hq/research/durable-workflows-comparison-2026-08.md`.
+- **Order intake agent** (`evaluate`, design complete): 20-fixture corpus, per-field provenance spans, server-only constraint, two-panel human review, zero-side-effects checklist, correction-effort formula (`fields_corrected / total_extracted_fields`), four-category go/no-go criteria. Document: `hq/research/order-intake-agent-evaluation-2026-08.md`.
+
+Planning documents published: `hq/TIMELINE.md` (five-phase roadmap, blocking decision registry, artifact budget watchline) and `hq/AGENT-TEAM-PLAN.md` (four teams, twelve roles, assignment protocol, delegation format, escalation matrix).
+
 ## Verified baseline
 
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.

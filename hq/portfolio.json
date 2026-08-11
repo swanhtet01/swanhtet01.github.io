@@ -1,6 +1,6 @@
 {
   "schemaVersion": "supermega.hq.portfolio.v3",
-  "updatedAt": "2026-07-31",
+  "updatedAt": "2026-08-11",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
   "completedLocalAutomations": [
@@ -274,21 +274,28 @@
   "researchGates": [
     {
       "candidate": "durable-workflows",
-      "decision": "evaluate",
-      "gate": "Compare Vercel Workflows with the existing Cloud Tasks runtime using one approval-wait use case.",
-      "source": "https://vercel.com/docs/workflows"
+      "decision": "adopt-with-managed-mode",
+      "gate": "Adopt Vercel Workflows for approval-wait patterns only after managed persistence is proven, callback authentication satisfies the RLS tenant boundary, exactly-once order creation is verified, and the single-assignment lease is checked before workflow start.",
+      "source": "https://vercel.com/docs/workflows",
+      "researchDoc": "hq/research/durable-workflows-comparison-2026-08.md",
+      "decidedAt": "2026-08-11",
+      "decision_rationale": "Kernel queue satisfies current bounded needs. Vercel Workflows is architecturally correct for suspend/resume approval-wait. Cloud Tasks rejected as equivalent-but-heavier. Adopt Vercel Workflows when managed mode is proven."
     },
     {
       "candidate": "order-intake-agent",
       "decision": "evaluate",
       "gate": "Adopt only after the existing fixture corpus, server-only structured output, provenance, budget, human review, and zero-side-effect checks pass.",
-      "source": "https://platform.openai.com/docs/guides/structured-outputs"
+      "source": "https://platform.openai.com/docs/guides/structured-outputs",
+      "researchDoc": "hq/research/order-intake-agent-evaluation-2026-08.md",
+      "evaluationStatus": "design-complete"
     },
     {
       "candidate": "opentelemetry",
       "decision": "adopt-with-managed-mode",
       "gate": "Redact customer content and correlate request, workflow, model, tool, and database operations.",
-      "source": "https://vercel.com/docs/tracing/instrumentation"
+      "source": "https://vercel.com/docs/tracing/instrumentation",
+      "researchDoc": "hq/research/opentelemetry-implementation-plan-2026-08.md",
+      "evaluationStatus": "implementation-plan-ready"
     },
     {
       "candidate": "dense-data-grid",
