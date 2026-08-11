@@ -130,6 +130,7 @@ import {
   recordCommerceSupplierInvoice,
   markCommerceSupplierInvoicePayableReady,
   commerceSupplierPayablesHandoffCsv,
+  recordCommerceOrderReturn,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1704,4 +1705,50 @@ test('recordCommerceSupplierInvoice, markCommerceSupplierInvoicePayableReady, co
   assert.ok(csv.includes(COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA), 'CSV must include the schema identifier')
   assert.ok(csv.includes(seedPoId), 'CSV must include the PO ID')
   assert.ok(csv.includes('\r\n'), 'CSV must use CRLF line endings')
+})
+
+test('recordCommerceOrderReturn records a post-completion order return', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+
+  // ORD-1039 is completed with SM-1004 qty=1 and no prior returns.
+  const returnExp = commerceOrderReturnExpectation(seed, 'ORD-1039', 'SM-1004', 'not_restocked')
+  assert.ok(returnExp !== null, 'ORD-1039 SM-1004 must be eligible for return')
+  assert.equal(returnExp.orderId, 'ORD-1039')
+  assert.equal(returnExp.soldQuantity, 1)
+  assert.equal(returnExp.returnedQuantity, 0)
+
+  // not_restocked: item is returned but not put back into stock.
+  const proof = { actionId: 'ACT-TEST-T034-RETURN', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Customer returned item.', evidenceReference: 'T034-RETURN-REF' }
+  const returnInput = { orderId: 'ORD-1039', sku: 'SM-1004', quantity: 1, disposition: 'not_restocked' }
+  const withReturn = recordCommerceOrderReturn(seed, returnInput, proof, returnExp)
+  assert.ok(withReturn !== null, 'recording a not_restocked return must succeed')
+  const order1039 = withReturn.orders.find((o) => o.id === 'ORD-1039')
+  assert.equal(order1039?.returns?.length, 1)
+  assert.equal(order1039?.returns?.[0]?.sku, 'SM-1004')
+  assert.equal(order1039?.returns?.[0]?.quantity, 1)
+  assert.equal(order1039?.returns?.[0]?.disposition, 'not_restocked')
+  // onHand is unchanged for not_restocked.
+  assert.equal(withReturn.items.find((i) => i.sku === 'SM-1004')?.onHand, seed.items.find((i) => i.sku === 'SM-1004')?.onHand)
+  // Replay → unchanged state.
+  assert.ok(recordCommerceOrderReturn(withReturn, returnInput, proof, returnExp) !== null)
+
+  // restock disposition: item is returned to stock.
+  const sm1004Before = seed.items.find((i) => i.sku === 'SM-1004')?.onHand ?? 0
+  const restockExp = commerceOrderReturnExpectation(seed, 'ORD-1039', 'SM-1004', 'restock', 1)
+  assert.ok(restockExp !== null, 'ORD-1039 SM-1004 must be eligible for restock return')
+  const restockProof = { ...proof, actionId: 'ACT-TEST-T034-RESTOCK' }
+  const withRestock = recordCommerceOrderReturn(seed, { ...returnInput, disposition: 'restock' }, restockProof, restockExp)
+  assert.ok(withRestock !== null, 'recording a restock return must succeed')
+  assert.equal(withRestock.items.find((i) => i.sku === 'SM-1004')?.onHand, sm1004Before + 1)
+
+  // After all units returned, expectation is null (returnedQuantity >= soldQuantity).
+  assert.equal(commerceOrderReturnExpectation(withReturn, 'ORD-1039', 'SM-1004', 'not_restocked'), null)
+
+  // Invalid disposition → null.
+  assert.equal(recordCommerceOrderReturn(seed, { ...returnInput, disposition: 'invalid' }, proof, returnExp), null)
+  // Zero quantity → null.
+  assert.equal(recordCommerceOrderReturn(seed, { ...returnInput, quantity: 0 }, proof, returnExp), null)
+  // Non-completed order (ORD-1042 is 'preparing') → expectation null → null.
+  assert.equal(recordCommerceOrderReturn(seed, { ...returnInput, orderId: 'ORD-1042' }, proof, returnExp), null)
 })
