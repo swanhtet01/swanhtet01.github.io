@@ -12,6 +12,7 @@ import {
   type CommerceState,
 } from './commerce-workspace.ts'
 import {
+  readRestrictedShopServiceSchedule,
   readShopServiceSchedule,
   type ShopServiceSchedule,
 } from './shop-service-scheduling.ts'
@@ -221,6 +222,7 @@ export type ManagedCommandEvidence = {
 export type ManagedServiceScheduleRecord = {
   version: number
   schedule: ShopServiceSchedule | null
+  privacyScope: 'full' | 'restricted'
 }
 
 export type ManagedBootstrap = {
@@ -3416,11 +3418,13 @@ export async function retainManagedContextProfile(request: {
   )
 }
 
-function managedServiceSchedule(value: unknown) {
+function managedServiceSchedule(value: unknown, privacyScope: 'full' | 'restricted') {
   try {
     return value === null || value === undefined
       ? null
-      : readShopServiceSchedule(JSON.stringify(value))
+      : privacyScope === 'restricted'
+        ? readRestrictedShopServiceSchedule(value)
+        : readShopServiceSchedule(JSON.stringify(value))
   } catch {
     throw new ManagedTrialError('The managed appointment schedule is invalid.', {
       code: 'managed_service_schedule_invalid',
@@ -3441,14 +3445,19 @@ export async function loadManagedServiceSchedule(
     || response.workspace_id !== identity.workspaceId
     || typeof response.version !== 'number'
     || !Number.isSafeInteger(response.version)
-    || response.version < 1) {
+    || response.version < 1
+    || (response.privacy_scope !== 'full' && response.privacy_scope !== 'restricted')
+    || (identity.access === 'spa-therapist' || identity.access === 'viewer'
+      ? response.privacy_scope !== 'restricted'
+      : response.privacy_scope !== 'full')) {
     throw new ManagedTrialError('The managed appointment response is invalid.', {
       code: 'managed_service_schedule_response_invalid',
     })
   }
   return {
     version: response.version,
-    schedule: managedServiceSchedule(response.schedule),
+    schedule: managedServiceSchedule(response.schedule, response.privacy_scope),
+    privacyScope: response.privacy_scope,
   }
 }
 
@@ -3458,6 +3467,53 @@ export async function saveManagedServiceSchedule(request: {
   identity: ManagedIdentity
   schedule: ShopServiceSchedule
 }): Promise<ManagedServiceScheduleRecord> {
+  if (request.identity.access === 'spa-therapist') {
+    const latest = request.schedule.events.at(-1)
+    const booking = latest
+      ? request.schedule.bookings.find((candidate) => candidate.id === latest.subjectId)
+      : undefined
+    if (!latest
+      || latest.type !== 'booking_advanced'
+      || !booking
+      || booking.status !== 'completed'
+      || booking.updatedAt !== latest.happenedAt) {
+      throw new ManagedTrialError('Therapist access can complete only one checked-in treatment.', {
+        code: 'spa_treatment_completion_invalid',
+      })
+    }
+    const response = await authorizedRequest<unknown>(
+      '/api/trial/v1/commerce/service-schedule/actions/complete-treatment',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          command_id: request.commandId,
+          expected_version: request.expectedVersion,
+          booking_id: booking.id,
+          captured_at: latest.happenedAt,
+        }),
+      },
+      true,
+      request.identity,
+    )
+    if (!isRecord(response)
+      || response.workspace_id !== request.identity.workspaceId
+      || response.privacy_scope !== 'restricted'
+      || typeof response.version !== 'number'
+      || !Number.isSafeInteger(response.version)
+      || response.version !== request.expectedVersion + 1
+      || typeof response.idempotent_replay !== 'boolean') {
+      throw new ManagedTrialError('The therapist completion response is invalid.', {
+        code: 'spa_treatment_completion_response_invalid',
+      })
+    }
+    const schedule = managedServiceSchedule(response.schedule, 'restricted')
+    if (!schedule) {
+      throw new ManagedTrialError('The therapist completion did not return the current schedule.', {
+        code: 'spa_treatment_completion_response_invalid',
+      })
+    }
+    return { version: response.version, schedule, privacyScope: 'restricted' }
+  }
   const response = await authorizedRequest<unknown>(
     '/api/trial/v1/commerce/service-schedule',
     {
@@ -3474,7 +3530,7 @@ export async function saveManagedServiceSchedule(request: {
   )
   const result = isRecord(response) && isRecord(response.result) ? response.result : null
   const state = result && isRecord(result.state) ? result.state : null
-  const nextSchedule = state ? managedServiceSchedule(state.serviceSchedule) : null
+  const nextSchedule = state ? managedServiceSchedule(state.serviceSchedule, 'full') : null
   const expectedEvent = request.schedule.revision === 0
     ? 'commerce.service_schedule.initialized'
     : 'commerce.service_schedule.saved'
@@ -3489,7 +3545,7 @@ export async function saveManagedServiceSchedule(request: {
       code: 'managed_service_schedule_save_invalid',
     })
   }
-  return { version: result.version, schedule: nextSchedule }
+  return { version: result.version, schedule: nextSchedule, privacyScope: 'full' }
 }
 
 export async function prepareManagedOrderIntakeDraft(request: {

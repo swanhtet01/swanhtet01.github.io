@@ -408,12 +408,24 @@ if (!managedTrialSource.includes("'spa-front-desk' | 'spa-therapist'")
   || !managedTrialRuntimeSource.includes('SPA_THERAPIST_CAPABILITY')
   || !managedTrialRuntimeSource.includes('spa_role_action_denied')
   || !managedTrialRuntimeSource.includes('_spa_schedule_allowed_roles')
+  || !managedTrialRuntimeSource.includes('_project_spa_schedule_for_read')
+  || !managedTrialRuntimeSource.includes('_project_state_record_for_read')
+  || !managedTrialRuntimeSource.includes('/commerce/service-schedule/actions/complete-treatment')
   || !managedTrialStoreRuntime.includes('return "spa-front-desk"')
   || !managedTrialStoreRuntime.includes('return "spa-therapist"')) fail('spa_staff_role_boundary_missing')
+if (!managedTrialSource.includes('readRestrictedShopServiceSchedule')
+  || !managedTrialSource.includes("privacyScope: 'full' | 'restricted'")
+  || !managedTrialSource.includes("request.identity.access === 'spa-therapist'")
+  || !managedTrialSource.includes('/api/trial/v1/commerce/service-schedule/actions/complete-treatment')
+  || !shopServiceScheduleSource.includes('readRestrictedShopServiceSchedule')
+  || !shopServiceScheduleSource.includes("contact: `private:${clientId}`")) fail('spa_server_field_privacy_boundary_missing')
 if (!shopServiceScheduleUiSource.includes("booking.contact}` : ''")
   || !shopServiceScheduleUiSource.includes("canRunFrontDesk ? <small>{booking.appointmentUpdates === 'allowed'")
   || !shopServiceScheduleUiSource.includes("const canExportClients = !managedRoleActive || managedAccess === 'owner'")
   || !shopServiceScheduleUiSource.includes('if (!schedule || !canExportClients) return')
+  || !shopServiceScheduleUiSource.includes('useState<ShopServiceSchedule | null>(null)')
+  || !shopServiceScheduleUiSource.includes("if (!identity) {\n        const local = initialSchedule()")
+  || shopServiceScheduleUiSource.includes('JSON.stringify(managed.schedule)')
   || !shopServiceScheduleUiSource.includes("/^[=+\\-@\\t\\r]/.test(text)")
   || !shopServiceScheduleUiSource.includes("link.download = 'spa-clients.csv'")) fail('spa_client_privacy_ui_boundary_missing')
 if (!clientOnboardingUiSource.includes('loadManagedServiceSchedule')
@@ -8840,6 +8852,19 @@ async function verifyShopServiceScheduleRuntime() {
     v2Schedule.bookings = v2Schedule.bookings.map(({ clientId: _clientId, appointmentUpdates: _appointmentUpdates, ...booking }) => booking)
     const migratedV2 = model.readShopServiceSchedule(JSON.stringify(v2Schedule))
     assert(migratedV2.clients.length === 1 && migratedV2.bookings[0].clientId === migratedV2.clients[0].id && migratedV2.bookings[0].appointmentUpdates === 'not_recorded', 'shop_service_schedule_v2_client_migration_failed')
+    const restrictedSchedule = {
+      schema: state.schema,
+      industryPackId: state.industryPackId,
+      revision: state.revision,
+      services: state.services,
+      resources: state.resources,
+      bookings: state.bookings.map(({ contact: _contact, appointmentUpdates: _appointmentUpdates, ...booking }) => booking),
+      events: state.events,
+    }
+    const hydratedRestricted = model.readRestrictedShopServiceSchedule(restrictedSchedule)
+    assert(hydratedRestricted.clients.length === 1 && hydratedRestricted.bookings[0].contact === `private:${state.bookings[0].clientId}` && !JSON.stringify(hydratedRestricted).includes('09-000-000'), 'shop_service_restricted_schedule_not_safely_hydrated')
+    assertThrows(() => model.readRestrictedShopServiceSchedule({ ...restrictedSchedule, clients: state.clients }), 'shop_service_restricted_schedule_accepted_client_records')
+    assertThrows(() => model.readRestrictedShopServiceSchedule({ ...restrictedSchedule, bookings: [{ ...restrictedSchedule.bookings[0], contact: '09-000-000' }] }), 'shop_service_restricted_schedule_accepted_contact')
     assertThrows(() => model.scheduleShopServiceBooking(state, { customerName: 'Client B', contact: '09-111-111', appointmentUpdates: 'declined', serviceId, resourceId, startsAt: '2026-07-29T05:00:00.000Z' }, proof(4, 'Conflicting request')), 'shop_service_booking_conflict_succeeded')
     const projected = model.projectShopServiceSchedule(state, new Date('2026-07-29T04:15:00.000Z'))
     assert(projected.today.length === 1 && projected.upcoming.length === 1 && projected.expectedRevenueMmk === 75_000 && projected.awaitingArrival === 1, 'shop_service_schedule_projection_wrong')
@@ -22414,8 +22439,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded cumulative 121 KB allowance includes reviewed Plant evidence alignment plus the realistic Spa template and role guide; initial-load and core-app chunk budgets remain unchanged.
-if (bytes > 2_944_000) fail(`artifact_budget:${bytes}`)
+// The bounded cumulative allowance includes reviewed Plant evidence alignment plus the realistic Spa workflow, client privacy, and staff-role controls; initial-load and core-app chunk budgets remain unchanged.
+if (bytes > 2_948_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

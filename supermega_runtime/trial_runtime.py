@@ -258,6 +258,17 @@ class TrialServiceScheduleSaveRequest(_StrictRequest):
     schedule: dict[str, Any]
 
 
+class TrialSpaTreatmentCompleteRequest(_StrictRequest):
+    command_id: UUID
+    expected_version: int = Field(ge=1)
+    booking_id: str = Field(
+        min_length=12,
+        max_length=80,
+        pattern=r"^booking-[0-9]{4,10}$",
+    )
+    captured_at: str = Field(min_length=20, max_length=40)
+
+
 class TrialDecisionSubject(_StrictRequest):
     kind: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9._-]+$")
     id: str = Field(min_length=1, max_length=160)
@@ -394,6 +405,56 @@ def _restricted_spa_role(readiness: TrialReadiness) -> str | None:
     if SPA_THERAPIST_CAPABILITY in selected:
         return "therapist"
     return None
+
+
+def _spa_schedule_privacy_scope(readiness: TrialReadiness) -> Literal["full", "restricted"]:
+    role = _restricted_spa_role(readiness)
+    return (
+        "restricted"
+        if role in {"therapist", "invalid"} or "commerce.write" not in readiness.capabilities
+        else "full"
+    )
+
+
+def _project_spa_schedule_for_read(
+    schedule: object,
+    readiness: TrialReadiness,
+) -> dict[str, Any] | None:
+    if schedule is None:
+        return None
+    if not isinstance(schedule, Mapping):
+        raise TrialValidationError("commerce service schedule is invalid.")
+    projected = deepcopy(dict(schedule))
+    if _spa_schedule_privacy_scope(readiness) == "full":
+        return projected
+    projected.pop("clients", None)
+    bookings = projected.get("bookings")
+    if isinstance(bookings, list):
+        projected["bookings"] = [
+            {
+                key: deepcopy(value)
+                for key, value in dict(booking).items()
+                if key not in {"contact", "appointmentUpdates"}
+            }
+            for booking in bookings
+            if isinstance(booking, Mapping)
+        ]
+    return projected
+
+
+def _project_state_record_for_read(
+    record: TrialState,
+    readiness: TrialReadiness,
+) -> dict[str, Any]:
+    projected = record.to_dict()
+    if record.surface != "commerce" or _spa_schedule_privacy_scope(readiness) == "full":
+        return projected
+    state = projected.get("state")
+    if isinstance(state, Mapping):
+        safe_state = deepcopy(dict(state))
+        safe_state.pop("serviceSchedule", None)
+        projected["state"] = safe_state
+    return projected
 
 
 def _require_write_ready(readiness: TrialReadiness, capability: str) -> None:
@@ -538,7 +599,7 @@ def _spa_schedule_allowed_roles(
         return None
     prior, next_booking = changed[0]
     if prior.get("status") == "checked_in" and next_booking.get("status") == "completed":
-        return frozenset({"therapist"})
+        return frozenset()
     if (prior.get("status"), next_booking.get("status")) in {
         ("held", "confirmed"),
         ("confirmed", "checked_in"),
@@ -1103,7 +1164,10 @@ def create_trial_router(
         readiness = _readiness(store, principal)
         _require_read_ready(readiness)
         states = {
-            surface: _invoke(lambda surface=surface: store.get_state(principal, surface)).to_dict()
+            surface: _project_state_record_for_read(
+                _invoke(lambda surface=surface: store.get_state(principal, surface)),
+                readiness,
+            )
             for surface in TRIAL_SURFACE_ORDER
             if has_surface_read_capability(readiness.capabilities, surface)
         }
@@ -1611,7 +1675,11 @@ def create_trial_router(
         return {
             "workspace_id": principal.workspace_id,
             "version": commerce.version,
-            "schedule": deepcopy(state.get("serviceSchedule")),
+            "privacy_scope": _spa_schedule_privacy_scope(readiness),
+            "schedule": _project_spa_schedule_for_read(
+                state.get("serviceSchedule"),
+                readiness,
+            ),
         }
 
     @router.post("/commerce/service-schedule")
@@ -1686,6 +1754,106 @@ def create_trial_router(
             )
         )
         return _command_response(result)
+
+    @router.post("/commerce/service-schedule/actions/complete-treatment")
+    async def trial_spa_treatment_complete(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_write_foundation(readiness)
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        if _restricted_spa_role(readiness) != "therapist":
+            raise _error(
+                403,
+                "spa_role_action_denied",
+                action="service_schedule:complete_treatment",
+                role=_restricted_spa_role(readiness),
+            )
+        raw_body = await _bounded_json_body(request, maximum_bytes=4096)
+        try:
+            body = TrialSpaTreatmentCompleteRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "spa_treatment_completion_invalid") from exc
+        commerce = _invoke(lambda: store.get_state(principal, "commerce"))
+        if not commerce.state:
+            raise _error(409, "commerce_workspace_required")
+        current_state = _invoke(lambda: validate_commerce_state(commerce.state))
+        current_schedule = current_state.get("serviceSchedule")
+        if not isinstance(current_schedule, Mapping) or current_schedule.get("industryPackId") != "spa":
+            raise _error(409, "spa_schedule_required")
+        schedule = deepcopy(dict(current_schedule))
+        bookings = schedule.get("bookings")
+        indexes = [
+            index
+            for index, booking in enumerate(bookings)
+            if isinstance(booking, Mapping) and booking.get("id") == body.booking_id
+        ] if isinstance(bookings, list) else []
+        if len(indexes) != 1:
+            raise _error(404, "spa_booking_not_found")
+        booking = dict(bookings[indexes[0]])
+        reason = "Completed the checked-in Spa treatment."
+        if booking.get("status") == "checked_in":
+            revision = int(schedule.get("revision", -1)) + 1
+            booking["status"] = "completed"
+            booking["updatedAt"] = body.captured_at
+            bookings[indexes[0]] = booking
+            events = schedule.get("events")
+            if not isinstance(events, list):
+                raise _error(422, "spa_schedule_evidence_required")
+            schedule["revision"] = revision
+            events.append({
+                "revision": revision,
+                "type": "booking_advanced",
+                "subjectId": body.booking_id,
+                "actor": principal.actor_id,
+                "reason": reason,
+                "happenedAt": body.captured_at,
+            })
+        elif booking.get("status") == "completed":
+            revision = int(schedule.get("revision", -1))
+            events = schedule.get("events")
+            latest = events[-1] if isinstance(events, list) and events else None
+            if not (
+                isinstance(latest, Mapping)
+                and latest.get("revision") == revision
+                and latest.get("type") == "booking_advanced"
+                and latest.get("subjectId") == body.booking_id
+                and latest.get("actor") == principal.actor_id
+                and latest.get("reason") == reason
+                and latest.get("happenedAt") == body.captured_at
+            ):
+                raise _error(409, "spa_treatment_already_completed")
+        else:
+            raise _error(409, "spa_treatment_not_checked_in")
+        next_state = {**current_state, "serviceSchedule": schedule}
+        evidence = {
+            "actionId": f"ACT-SERVICE-SCHEDULE-R{revision}",
+            "capturedAt": body.captured_at,
+            "actor": principal.actor_id,
+            "reason": reason,
+            "evidenceReference": f"SHOP-SERVICE-SCHEDULE:R{revision}",
+        }
+        result = _invoke(
+            lambda: store.apply_command(
+                principal,
+                command_id=body.command_id,
+                surface="commerce",
+                event_type="commerce.service_schedule.saved",
+                expected_version=body.expected_version,
+                payload={"state": next_state, "evidence": evidence},
+            )
+        )
+        result_state = _invoke(lambda: validate_commerce_state(result.state))
+        return {
+            "workspace_id": principal.workspace_id,
+            "version": result.version,
+            "privacy_scope": "restricted",
+            "schedule": _project_spa_schedule_for_read(
+                result_state.get("serviceSchedule"),
+                readiness,
+            ),
+            "idempotent_replay": result.idempotent_replay,
+        }
 
     @router.post("/imports/validate")
     async def trial_import_validation(request: Request) -> dict[str, Any]:

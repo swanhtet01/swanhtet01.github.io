@@ -646,6 +646,62 @@ export function readShopServiceSchedule(value: string | null) {
   }
 }
 
+function isScheduleRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasExactScheduleFields(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []) {
+  const allowed = new Set([...required, ...optional])
+  return required.every((field) => Object.hasOwn(value, field))
+    && Object.keys(value).every((field) => allowed.has(field))
+}
+
+export function readRestrictedShopServiceSchedule(value: unknown) {
+  const scheduleFields = ['schema', 'industryPackId', 'revision', 'services', 'resources', 'bookings', 'events'] as const
+  const bookingFields = ['id', 'clientId', 'customerName', 'serviceId', 'resourceId', 'startsAt', 'endsAt', 'status', 'note', 'createdAt', 'updatedAt'] as const
+  if (!isScheduleRecord(value)
+    || !hasExactScheduleFields(value, scheduleFields)
+    || value.schema !== SHOP_SERVICE_SCHEDULE_SCHEMA
+    || !Array.isArray(value.services)
+    || !Array.isArray(value.resources)
+    || !Array.isArray(value.bookings)
+    || !Array.isArray(value.events)) throw new Error('The restricted appointment view is invalid.')
+  const bookings: ShopServiceBooking[] = value.bookings.map((candidate) => {
+    if (!isScheduleRecord(candidate)
+      || !hasExactScheduleFields(candidate, bookingFields, ['checkoutOrderId'])
+      || typeof candidate.clientId !== 'string') throw new Error('The restricted appointment view contains an invalid booking.')
+    const clientId = boundedText(candidate.clientId, 'Booking client ID', 80)
+    return {
+      ...candidate,
+      clientId,
+      contact: `private:${clientId}`,
+      appointmentUpdates: 'not_recorded',
+    } as ShopServiceBooking
+  })
+  const clientsById = new Map<string, ShopServiceClient>()
+  for (const booking of bookings) {
+    const existing = clientsById.get(booking.clientId)
+    const createdAt = existing && existing.createdAt < booking.createdAt ? existing.createdAt : booking.createdAt
+    const updatedAt = existing && existing.updatedAt > booking.updatedAt ? existing.updatedAt : booking.updatedAt
+    clientsById.set(booking.clientId, {
+      id: booking.clientId,
+      name: existing?.name ?? booking.customerName,
+      contact: booking.contact,
+      appointmentUpdates: 'not_recorded',
+      createdAt,
+      updatedAt,
+    })
+  }
+  return validateShopServiceSchedule({
+    ...value,
+    services: value.services,
+    resources: value.resources,
+    clients: [...clientsById.values()],
+    bookings,
+    events: value.events,
+  } as ShopServiceSchedule)
+}
+
 export function provisionEmptyShopServiceSchedule(state: ShopServiceSchedule, industryPackId: ShopIndustryPackId) {
   validateShopServiceSchedule(state)
   if (state.bookings.length || state.events.length || state.revision !== 0) {

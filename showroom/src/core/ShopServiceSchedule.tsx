@@ -76,11 +76,10 @@ export function ShopServiceSchedule({
   initiallyOpen?: boolean
   onReviewCheckout?: (request: ShopServiceCheckoutRequest, payment: ShopServiceCheckoutPayment) => Promise<{ orderId: string } | null>
 }) {
-  const [initial] = useState(initialSchedule)
-  const [schedule, setSchedule] = useState<ShopServiceSchedule | null>(initial.schedule)
-  const [notice, setNotice] = useState(initial.error)
+  const [schedule, setSchedule] = useState<ShopServiceSchedule | null>(null)
+  const [notice, setNotice] = useState('')
   const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)
-  const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', appointmentUpdates: 'declined' as 'allowed' | 'declined', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
+  const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', appointmentUpdates: 'declined' as 'allowed' | 'declined', serviceId: '', resourceId: '', startsAt: nextLocalStart(), note: '' })
   const [serviceDraft, setServiceDraft] = useState({ name: '', durationMinutes: '60', priceMmk: '' })
   const [resourceDraft, setResourceDraft] = useState({ name: '', kind: 'staff' as 'staff' | 'room' | 'equipment' })
   const [managedLoading, setManagedLoading] = useState(true)
@@ -125,7 +124,20 @@ export function ShopServiceSchedule({
   useEffect(() => {
     let active = true
     void currentManagedIdentity().then(async (identity) => {
-      if (!active || !identity) return
+      if (!active) return
+      if (!identity) {
+        const local = initialSchedule()
+        setSchedule(local.schedule)
+        setNotice(local.error)
+        if (local.schedule) {
+          setBookingDraft((current) => ({
+            ...current,
+            serviceId: current.serviceId || local.schedule?.services[0]?.id || '',
+            resourceId: current.resourceId || local.schedule?.resources[0]?.id || '',
+          }))
+        }
+        return
+      }
       managedIdentityRef.current = identity
       setManagedConnected(true)
       setManagedAccess(identity.access)
@@ -134,13 +146,17 @@ export function ShopServiceSchedule({
       managedVersionRef.current = managed.version
       if (managed.schedule) {
         setSchedule(managed.schedule)
-        window.localStorage.setItem(SHOP_SERVICE_SCHEDULE_STORAGE_KEY, JSON.stringify(managed.schedule))
+        setBookingDraft((current) => ({
+          ...current,
+          serviceId: current.serviceId || managed.schedule?.services[0]?.id || '',
+          resourceId: current.resourceId || managed.schedule?.resources[0]?.id || '',
+        }))
         setNotice('Appointments loaded from this company account.')
       } else {
         setNotice('Managed appointments are ready. Your next change will create the shared schedule.')
       }
     }).catch((error) => {
-      if (active) setNotice(error instanceof Error ? `${error.message} Appointments remain available on this device.` : 'Managed appointments are unavailable; this device remains available.')
+      if (active) setNotice(error instanceof Error ? `${error.message} Appointments stayed locked on this device.` : 'Appointments stayed locked because account access could not be checked.')
     }).finally(() => {
       if (active) setManagedLoading(false)
     })
@@ -153,15 +169,19 @@ export function ShopServiceSchedule({
 
   function commit(next: ShopServiceSchedule, message: string) {
     setSchedule(next)
-    try {
-      persistLocal(next)
-      setNotice(message)
-    } catch {
-      setNotice('The appointment changed in memory but could not be saved on this device. Do not close this page until local storage is available.')
-    }
     const identity = managedIdentityRef.current
+    if (!identity) {
+      try {
+        persistLocal(next)
+        setNotice(message)
+      } catch {
+        setNotice('The appointment changed in memory but could not be saved on this device. Do not close this page until local storage is available.')
+      }
+      return
+    }
+    setNotice(message)
     const expectedVersion = managedVersionRef.current
-    if (!identity || expectedVersion === null) return
+    if (expectedVersion === null) return
     if (managedSaveBusyRef.current) {
       setNotice('Wait for the current company appointment change to finish.')
       return
@@ -177,7 +197,6 @@ export function ShopServiceSchedule({
       managedVersionRef.current = saved.version
       if (saved.schedule) {
         setSchedule(saved.schedule)
-        try { persistLocal(saved.schedule) } catch { /* The managed copy remains authoritative. */ }
       }
       setNotice(`${message} Shared company schedule saved.`)
     }).catch(async (error) => {
@@ -187,7 +206,6 @@ export function ShopServiceSchedule({
           managedVersionRef.current = current.version
           if (current.schedule) {
             setSchedule(current.schedule)
-            try { persistLocal(current.schedule) } catch { /* The managed copy remains authoritative. */ }
           }
           setNotice('Another user changed appointments first. The current shared schedule was reloaded; review and try again.')
           return
@@ -297,9 +315,9 @@ export function ShopServiceSchedule({
       const linkProof = proof('Linked the completed appointment to its reviewed Shop checkout.')
       const next = linkShopServiceBookingCheckout(latest, bookingId, result.orderId, linkProof)
       setSchedule(next)
-      try { persistLocal(next) } catch { /* The managed copy can still retain the link. */ }
       const identity = managedIdentityRef.current
       if (!identity) {
+        try { persistLocal(next) } catch { /* The in-memory checkout link remains visible for recovery. */ }
         setNotice(`Checkout ${result.orderId} linked on this device. Payment still needs reconciliation in Orders.`)
         return
       }
@@ -313,7 +331,6 @@ export function ShopServiceSchedule({
         const managedNext = linkShopServiceBookingCheckout(fresh.schedule, bookingId, result.orderId, linkProof)
         if (managedNext === fresh.schedule) {
           setSchedule(fresh.schedule)
-          try { persistLocal(fresh.schedule) } catch { /* The managed copy is authoritative. */ }
           setNotice(`Checkout ${result.orderId} was already linked in the company account. Payment still needs reconciliation in Orders.`)
           return
         }
@@ -326,7 +343,6 @@ export function ShopServiceSchedule({
         managedVersionRef.current = saved.version
         if (saved.schedule) {
           setSchedule(saved.schedule)
-          try { persistLocal(saved.schedule) } catch { /* The managed copy is authoritative. */ }
         }
         setNotice(`Checkout ${result.orderId} linked in the company account. Payment still needs reconciliation in Orders.`)
       } finally {

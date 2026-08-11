@@ -73,6 +73,7 @@ class TrialRuntimeTests(unittest.TestCase):
         self.agent_manager = TrialPrincipal("workspace-a", "actor-agent-manager", "agent")
         self.spa_front_desk = TrialPrincipal("workspace-a", "actor-spa-front-desk", "human")
         self.spa_therapist = TrialPrincipal("workspace-a", "actor-spa-therapist", "human")
+        self.spa_viewer = TrialPrincipal("workspace-a", "actor-spa-viewer", "human")
         self.other_operator = TrialPrincipal("workspace-b", "actor-other", "human")
         self.other_manager = TrialPrincipal("workspace-b", "actor-other-manager", "human")
         self.missing_member = TrialPrincipal("workspace-a", "actor-missing", "human")
@@ -82,6 +83,7 @@ class TrialRuntimeTests(unittest.TestCase):
             "agent-manager-session": self.agent_manager,
             "spa-front-desk-session": self.spa_front_desk,
             "spa-therapist-session": self.spa_therapist,
+            "spa-viewer-session": self.spa_viewer,
             "other-operator-session": self.other_operator,
             "other-manager-session": self.other_manager,
             "missing-session": self.missing_member,
@@ -123,6 +125,12 @@ class TrialRuntimeTests(unittest.TestCase):
             actor_id="actor-spa-therapist",
             actor_kind="human",
             capabilities=("commerce.write", "commerce.spa.therapist"),
+        )
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-spa-viewer",
+            actor_kind="human",
+            capabilities=("commerce.read",),
         )
         store.provision_membership(
             workspace_id="workspace-b",
@@ -544,7 +552,7 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(empty.status_code, 200, empty.text)
         self.assertEqual(
             empty.json(),
-            {"workspace_id": "workspace-a", "version": 1, "schedule": None},
+            {"workspace_id": "workspace-a", "version": 1, "privacy_scope": "full", "schedule": None},
         )
         schedule = {
             "schema": "supermega.shop.service_schedule.v2",
@@ -787,6 +795,32 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(current_schedule["clients"][0]["appointmentUpdates"], "allowed")
         self.assertEqual(current_schedule["events"][0]["actor"], "actor-spa-front-desk")
 
+        front_desk_read = client.get(endpoint, headers=self._headers("spa-front-desk-session"))
+        self.assertEqual(front_desk_read.status_code, 200, front_desk_read.text)
+        self.assertEqual(front_desk_read.json()["privacy_scope"], "full")
+        self.assertEqual(front_desk_read.json()["schedule"]["clients"][0]["contact"], "09-000-000-000")
+        for session in ("spa-therapist-session", "spa-viewer-session"):
+            with self.subTest(session=session):
+                restricted_read = client.get(endpoint, headers=self._headers(session))
+                self.assertEqual(restricted_read.status_code, 200, restricted_read.text)
+                self.assertEqual(restricted_read.json()["privacy_scope"], "restricted")
+                restricted_schedule = restricted_read.json()["schedule"]
+                self.assertNotIn("clients", restricted_schedule)
+                self.assertNotIn("contact", restricted_schedule["bookings"][0])
+                self.assertNotIn("appointmentUpdates", restricted_schedule["bookings"][0])
+                self.assertNotIn("09-000-000-000", restricted_read.text)
+                self.assertNotIn("consentRecordedAt", restricted_read.text)
+                restricted_bootstrap = client.get(
+                    "/api/trial/v1/bootstrap",
+                    headers=self._headers(session),
+                )
+                self.assertEqual(restricted_bootstrap.status_code, 200, restricted_bootstrap.text)
+                self.assertNotIn(
+                    "serviceSchedule",
+                    restricted_bootstrap.json()["states"]["commerce"]["state"],
+                )
+                self.assertNotIn("09-000-000-000", restricted_bootstrap.text)
+
         def advance_candidate(status: str, revision: int, happened_at: str) -> dict[str, object]:
             candidate = deepcopy(current_schedule)
             candidate["revision"] = revision
@@ -833,7 +867,7 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(front_desk_completion.status_code, 403, front_desk_completion.text)
         self.assertEqual(front_desk_completion.json()["detail"]["code"], "spa_role_action_denied")
 
-        therapist_completion = client.post(
+        therapist_full_schedule_attempt = client.post(
             endpoint,
             headers=self._headers("spa-therapist-session"),
             json={
@@ -843,8 +877,40 @@ class TrialRuntimeTests(unittest.TestCase):
                 "schedule": completed_candidate,
             },
         )
+        self.assertEqual(therapist_full_schedule_attempt.status_code, 403, therapist_full_schedule_attempt.text)
+        completion_command_id = str(uuid4())
+        completion_body = {
+            "command_id": completion_command_id,
+            "expected_version": 5,
+            "booking_id": "booking-0001",
+            "captured_at": "2026-08-11T03:00:00.000Z",
+        }
+        therapist_completion = client.post(
+            f"{endpoint}/actions/complete-treatment",
+            headers=self._headers("spa-therapist-session"),
+            json=completion_body,
+        )
         self.assertEqual(therapist_completion.status_code, 200, therapist_completion.text)
-        current_state = therapist_completion.json()["result"]["state"]
+        self.assertEqual(therapist_completion.json()["privacy_scope"], "restricted")
+        self.assertTrue(therapist_completion.json()["schedule"]["bookings"][0]["status"] == "completed")
+        self.assertNotIn("09-000-000-000", therapist_completion.text)
+        self.assertNotIn("appointmentUpdates", therapist_completion.text)
+        completion_replay = client.post(
+            f"{endpoint}/actions/complete-treatment",
+            headers=self._headers("spa-therapist-session"),
+            json=completion_body,
+        )
+        self.assertEqual(completion_replay.status_code, 200, completion_replay.text)
+        self.assertTrue(completion_replay.json()["idempotent_replay"])
+        front_desk_completion_attempt = client.post(
+            f"{endpoint}/actions/complete-treatment",
+            headers=self._headers("spa-front-desk-session"),
+            json={**completion_body, "command_id": str(uuid4()), "expected_version": 6},
+        )
+        self.assertEqual(front_desk_completion_attempt.status_code, 403, front_desk_completion_attempt.text)
+        owner_bootstrap = client.get("/api/trial/v1/bootstrap", headers=self._headers())
+        self.assertEqual(owner_bootstrap.status_code, 200, owner_bootstrap.text)
+        current_state = owner_bootstrap.json()["states"]["commerce"]["state"]
 
         second_booking = {
             **booking,
