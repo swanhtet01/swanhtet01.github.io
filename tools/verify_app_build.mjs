@@ -11300,10 +11300,12 @@ async function verifyCommerceRuntime() {
       items: cafeSampleItems,
       capturedAt: '2026-07-23T09:00:00.000Z',
     })
-    assert(cafeWorkingSample?.items.length === model.createSeedCommerce().items.length + 2
+    assert(cafeWorkingSample?.items.length === cafeSampleItems.length
       && cafeWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
+      && !cafeWorkingSample.items.some((item) => item.sku === 'SM-1001')
+      && cafeWorkingSample.orders.length === 0
       && model.commerceWorkingSampleCatalogId(cafeWorkingSample) === 'cafe',
-    'commerce_working_sample_was_not_installed_or_identified')
+    'commerce_working_sample_was_not_installed_on_clean_slate')
     const replayedCafeWorkingSample = model.installCommerceWorkingSampleCatalog(cafeWorkingSample, {
       sampleId: 'cafe',
       sampleName: 'Cafe',
@@ -11319,6 +11321,8 @@ async function verifyCommerceRuntime() {
     })
     assert(spaWorkingSample?.items.some((item) => item.sku === 'SPA-MASSAGE')
       && !spaWorkingSample.items.some((item) => item.sku === 'MENU-MOHINGA')
+      && !spaWorkingSample.items.some((item) => item.sku === 'SM-1001')
+      && spaWorkingSample.orders.length === 0
       && model.commerceWorkingSampleCatalogId(spaWorkingSample) === 'spa',
     'commerce_working_sample_could_not_replace_an_untouched_prior_pack')
     const cafeWithOperatorData = model.registerCommerceItem(cafeWorkingSample, {

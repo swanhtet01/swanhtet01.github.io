@@ -6384,10 +6384,13 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
       return null
     }
   }
-  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce())) return null
-  if (requestedItems.some((item) => base.items.some((existing) => existing.sku === item.sku))) return null
+  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce())
+      && JSON.stringify(base) !== JSON.stringify(createEmptyCommerce())) return null
 
-  let next = base
+  const installBase = createEmptyCommerce()
+  if (requestedItems.some((item) => installBase.items.some((existing) => existing.sku === item.sku))) return null
+
+  let next = installBase
   for (const [index, item] of requestedItems.entries()) {
     const registered = registerCommerceItem(next, item, {
       actionId: `${requestedPrefix}${String(index + 1).padStart(3, '0')}`,
