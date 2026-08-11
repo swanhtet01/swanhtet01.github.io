@@ -2,7 +2,7 @@
 
 Updated: 2026-08-12
 Owner: founder / CEO
-Branch: fix/demo-seed-clock (497 commits ahead of origin)
+Branch: fix/demo-seed-clock (487 commits ahead of origin)
 
 ---
 
@@ -129,6 +129,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Ecommerce request value distribution: projectEcommerceRequestValueDistribution (small/medium/large buckets by totalMmk, averageRequestValueMmk, highestRequestValueMmk, byFulfilment delivery/pickup); 32 checks; zero bundle cost — DONE (OPS-209)
 - [x] Plant downtime summary: projectPlantDowntimeSummary (totalIncidents/completedIntervals/activeDowntimeCount from downtime_started/ended event pairs, totalDowntimeMinutes/avg/longest, byMachine sorted desc); 40 checks; zero bundle cost — DONE (OPS-208)
 - [x] Plant WIP summary: projectPlantWipSummary (openJobCount, target/output/scrap accumulation, completionRate%, overdueJobCount from dueAt < asOf, onHoldCount from qualityHold, byPriority urgent/normal/low/unspecified); 28 checks; zero bundle cost — DONE (OPS-207)
+- [x] Analytics Codex: ecommerce-request-storefront-profile-brief (EcommerceOrderRequestV2.sourceStorefrontRevision min/max + customerProfile.name distribution); 44 checks; zero bundle cost — DONE (OPS-419)
+- [x] Analytics Codex: website-opening-plan-package-digest-brief (WebsiteOpeningPlan.packageDigest presence + raw value + algorithm prefix); 17 checks; zero bundle cost — DONE (OPS-420)
+- [x] Analytics Codex: ecommerce-delivery-address-instructions-brief (EcommerceDeliveryAddressSnapshot.instructions presence rate + text distribution); 30 checks; zero bundle cost — DONE (OPS-421)
+- [x] Analytics Codex: website-local-publish-artifact-brief (LocalPublishRecord.artifact presence rate + page count stats + siteName distribution); 35 checks; zero bundle cost — DONE (OPS-422)
 
 ### Aug 25–31
 
