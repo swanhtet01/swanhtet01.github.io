@@ -10,6 +10,7 @@ import {
   buildProductionRecallTrace,
   buildProductionShiftHandoff,
   closeProductionJob,
+  completeProductionMaintenance,
   createEmptyProduction,
   createSeedProduction,
   endProductionDowntime,
@@ -18,6 +19,7 @@ import {
   isGuidedSampleProduction,
   placeProductionQualityHold,
   productionDowntimeIntervals,
+  productionMaintenanceRecords,
   productionShiftOutput,
   openProductionIssue,
   recordProductionMaterialConsumption,
@@ -27,6 +29,8 @@ import {
   resolveProductionIssue,
   recordProductionMachineState,
   startProductionDowntime,
+  startProductionMaintenance,
+  updateProductionJobPlan,
   validateProductionState,
 } from '../showroom/src/core/production-workspace.ts'
 import { plantIndustryPacks } from '../showroom/src/core/plant-industry-packs.ts'
@@ -663,4 +667,111 @@ test('downtime can be started and ended on a machine and double-start is blocked
     evidenceReference: 'DT-LOG-003',
   })
   assert.equal(doubleEnd, null, 'ending downtime when no interval is open must return null')
+})
+
+test('updateProductionJobPlan updates priority, due date, and owner and blocks invalid cases', () => {
+  const pack = plantIndustryPacks[0]
+  const state = installedSample(pack)
+  const jobId = state.jobs[0].id
+
+  const proof = {
+    actionId: 'ACT-PLAN-UPDATE-001',
+    capturedAt: `${PLANNING_DAY}T01:30:00.000Z`,
+    actor: 'Planner',
+    reason: 'Urgency escalation.',
+    evidenceReference: 'PLAN-LOG-001',
+  }
+
+  const updated = updateProductionJobPlan(
+    state, jobId, 'urgent', '2026-09-01T10:00:00.000Z', 'New owner', proof,
+  )
+  assert.ok(updated, 'plan update must succeed')
+  const job = updated.jobs.find((j) => j.id === jobId)
+  assert.equal(job.priority, 'urgent')
+  assert.equal(job.owner, 'New owner')
+
+  // Idempotent replay returns the same state.
+  const replay = updateProductionJobPlan(updated, jobId, 'urgent', '2026-09-01T10:00:00.000Z', 'New owner', proof)
+  assert.equal(replay, updated, 'idempotent plan update must return the same state')
+
+  // Updating a closed job must return null.
+  const closeProof = {
+    actionId: 'ACT-PLAN-CLOSE-001',
+    capturedAt: `${PLANNING_DAY}T08:00:00.000Z`,
+    actor: 'Operator',
+    reason: 'Short close.',
+    evidenceReference: 'PLAN-LOG-002',
+  }
+  const withOutput = recordProductionOutput(state, jobId, 10, SHIFT_REF, {
+    actionId: 'ACT-PLAN-OUT-001',
+    capturedAt: `${PLANNING_DAY}T02:00:00.000Z`,
+    actor: 'Operator',
+    reason: 'Output.',
+    evidenceReference: 'PLAN-LOG-003',
+  })
+  assert.ok(withOutput)
+  const closed = closeProductionJob(withOutput, jobId, SHIFT_REF, closeProof)
+  assert.ok(closed, 'close must succeed')
+  const updateOnClosed = updateProductionJobPlan(closed, jobId, 'normal', '2026-09-02T10:00:00.000Z', 'Owner', {
+    actionId: 'ACT-PLAN-UPDATE-002',
+    capturedAt: `${PLANNING_DAY}T09:00:00.000Z`,
+    actor: 'Planner',
+    reason: 'Try to update closed job.',
+    evidenceReference: 'PLAN-LOG-004',
+  })
+  assert.equal(updateOnClosed, null, 'updating a closed job must return null')
+})
+
+test('startProductionMaintenance and completeProductionMaintenance run a full lifecycle', () => {
+  const pack = plantIndustryPacks[0]
+  const state = installedSample(pack)
+  const machineId = state.machines[0].id
+
+  const startProof = {
+    actionId: 'ACT-MAINT-START-001',
+    capturedAt: `${PLANNING_DAY}T06:00:00.000Z`,
+    actor: 'Maintenance technician',
+    reason: 'Scheduled preventive maintenance.',
+    evidenceReference: 'MAINT-LOG-001',
+  }
+  const afterStart = startProductionMaintenance(state, machineId, 'Maintenance technician', startProof)
+  assert.ok(afterStart, 'maintenance must start')
+  const records = productionMaintenanceRecords(afterStart)
+  assert.equal(records.length, 1)
+  assert.equal(records[0].machineId, machineId)
+  assert.ok(!records[0].completion, 'maintenance record must be open after start')
+
+  // Double-start must return null.
+  const doubleStart = startProductionMaintenance(afterStart, machineId, 'Maintenance technician', {
+    actionId: 'ACT-MAINT-START-002',
+    capturedAt: `${PLANNING_DAY}T06:01:00.000Z`,
+    actor: 'Maintenance technician',
+    reason: 'Second attempt.',
+    evidenceReference: 'MAINT-LOG-002',
+  })
+  assert.equal(doubleStart, null, 'starting maintenance on a machine already under maintenance must return null')
+
+  // Complete maintenance (no strategy → no result required).
+  const endProof = {
+    actionId: 'ACT-MAINT-END-001',
+    capturedAt: `${PLANNING_DAY}T07:00:00.000Z`,
+    actor: 'Maintenance technician',
+    reason: 'Maintenance completed.',
+    evidenceReference: 'MAINT-LOG-001',
+  }
+  const completed = completeProductionMaintenance(afterStart, machineId, startProof.actionId, endProof)
+  assert.ok(completed, 'maintenance must complete')
+  const completedRecords = productionMaintenanceRecords(completed)
+  assert.equal(completedRecords.length, 1)
+  assert.ok(completedRecords[0].completion, 'maintenance record must carry completion after close')
+
+  // Completing again must return null (no open record).
+  const doubleComplete = completeProductionMaintenance(completed, machineId, startProof.actionId, {
+    actionId: 'ACT-MAINT-END-002',
+    capturedAt: `${PLANNING_DAY}T07:01:00.000Z`,
+    actor: 'Maintenance technician',
+    reason: 'Second complete attempt.',
+    evidenceReference: 'MAINT-LOG-003',
+  })
+  assert.equal(doubleComplete, null, 'completing maintenance with no open record must return null')
 })
