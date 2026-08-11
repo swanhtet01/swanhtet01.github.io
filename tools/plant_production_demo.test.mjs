@@ -22,8 +22,10 @@ import {
   parseProductionMaterialQuantity,
   placeProductionQualityHold,
   productionDowntimeIntervals,
+  productionMaintenanceDueQueue,
   productionMaintenanceRecords,
   productionShiftOutput,
+  productionWorkingSamplePackId,
   openProductionIssue,
   recordProductionMaterialConsumption,
   recordProductionOutput,
@@ -884,4 +886,31 @@ test('parseProductionMaterialQuantity and compareProductionJobSchedule behave co
   const sameDueB = { ...normalJob, id: 'JOB-I', dueAt: '2026-08-15T08:00:00.000Z' }
   assert.ok(compareProductionJobSchedule(sameDueA, sameDueB) < 0, 'JOB-H < JOB-I by id')
   assert.equal(compareProductionJobSchedule(sameDueA, sameDueA), 0, 'same job compares to 0')
+})
+
+test('productionMaintenanceDueQueue and productionWorkingSamplePackId behave correctly', () => {
+  const AS_OF = `${PLANNING_DAY}T06:00:00.000Z`
+
+  // productionMaintenanceDueQueue: seed state has no equipmentMaster → empty items.
+  const queue = productionMaintenanceDueQueue(createSeedProduction(), AS_OF)
+  assert.equal(queue.contract, 'supermega.production.maintenance-due-queue.v1')
+  assert.equal(queue.asOf, AS_OF)
+  assert.deepEqual(queue.items, [])
+
+  // Invalid asOf (non-UTC or non-millisecond precision) must throw.
+  assert.throws(() => productionMaintenanceDueQueue(createSeedProduction(), '2026-08-07'), /canonical UTC millisecond/)
+  assert.throws(() => productionMaintenanceDueQueue(createSeedProduction(), 'not-a-date'), /canonical UTC millisecond/)
+
+  // productionWorkingSamplePackId: empty state → null (no sample events).
+  assert.equal(productionWorkingSamplePackId(createSeedProduction()), null)
+  assert.equal(productionWorkingSamplePackId(createEmptyProduction()), null)
+
+  // An installed sample state → the sampleId (== pack.id) used during installation.
+  const pack = plantIndustryPacks[0]
+  const withSample = installedSample(pack)
+  assert.equal(productionWorkingSamplePackId(withSample), pack.id)
+
+  // After appending guided activity the pack id is still readable.
+  const withActivity = demoActivity(pack)
+  assert.equal(productionWorkingSamplePackId(withActivity), pack.id)
 })
