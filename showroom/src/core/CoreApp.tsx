@@ -240,6 +240,7 @@ import {
   type ShopIndustryPack,
 } from './shop-service-scheduling'
 import { decideShopNextAction } from './shop-next-action'
+import { lockedCapabilityNotice } from './capability-tiers'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -6421,6 +6422,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
         <div className="inventory-tools-content">
           {supplierControl}
+          <section aria-label="AI demand advice" className="core-panel company-backup-panel"><div className="company-backup-head"><div><span className="core-eyebrow">AI demand advice</span><h2>{lockedCapabilityNotice('ai-demand-advice').label}</h2><p>{lockedCapabilityNotice('ai-demand-advice').outcome}</p></div><span className="status-pill">premium</span></div><p className="form-notice">{lockedCapabilityNotice('ai-demand-advice').reason} <a className="text-link" href="/contact/?product=guide&source=managed-intelligence">Talk to us about this.</a></p></section>
           {commerce.items.length ? <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} production={relatedProduction} scope={orderDraftScope} /></Suspense> : <p className="empty-state">Add products before enabling locations, lots, available-to-promise, or supplier policies.</p>}
         </div>
       </details>
