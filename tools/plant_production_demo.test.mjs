@@ -5,17 +5,21 @@ import {
   GUIDED_SAMPLE_PRODUCTION_ACTOR,
   PRODUCTION_QUALITY_CAPA_SCHEMA,
   appendGuidedSampleProductionActivity,
+  buildProductionBatchGenealogy,
   buildProductionQualityCorrectiveAction,
   createEmptyProduction,
   createSeedProduction,
   hasGuidedSampleProductionActivity,
   installProductionWorkingSampleJobs,
   isGuidedSampleProduction,
+  placeProductionQualityHold,
   productionShiftOutput,
   openProductionIssue,
+  recordProductionMaterialConsumption,
+  recordProductionOutput,
+  releaseProductionQualityHold,
   resolveProductionIssue,
   recordProductionMachineState,
-  recordProductionOutput,
   validateProductionState,
 } from '../showroom/src/core/production-workspace.ts'
 import { plantIndustryPacks } from '../showroom/src/core/plant-industry-packs.ts'
@@ -405,4 +409,90 @@ test('a second occurrence of the same failure mode records prior issue IDs in CA
   assert.ok(capa2, 'second CAPA must build')
   assert.equal(capa2.recurrenceKey, capa1.recurrenceKey, 'same failure mode must yield the same recurrence key')
   assert.deepEqual(capa2.priorIssueIds, ['ISS-RECUR-001'], 'second occurrence must reference the prior resolved issue')
+})
+
+test('a quality hold can be placed on a job and released, and idempotent replay returns the unchanged state', () => {
+  const pack = plantIndustryPacks[0]
+  const state = demoActivity(pack)
+  const jobId = state.jobs[0].id
+  const holdProof = {
+    actionId: 'ACT-HOLD-001',
+    capturedAt: `${PLANNING_DAY}T10:00:00.000Z`,
+    actor: 'Quality lead',
+    reason: 'Suspected contamination batch flagged for inspection.',
+    evidenceReference: 'QA-HOLD-001',
+  }
+  const held = placeProductionQualityHold(state, jobId, holdProof)
+  assert.ok(held, 'quality hold must be placed')
+  validateProductionState(held)
+  assert.ok(held.jobs.find((job) => job.id === jobId)?.qualityHold, 'job must carry the hold record')
+
+  // Idempotent replay returns the same state.
+  const replayHeld = placeProductionQualityHold(held, jobId, holdProof)
+  assert.ok(replayHeld, 'idempotent replay must succeed')
+  assert.equal(replayHeld, held, 'idempotent replay must return the exact same state reference')
+
+  const releaseProof = {
+    actionId: 'ACT-HOLD-002',
+    capturedAt: `${PLANNING_DAY}T11:00:00.000Z`,
+    actor: 'Quality lead',
+    reason: 'Inspection complete: batch cleared.',
+    evidenceReference: 'QA-HOLD-002',
+  }
+  const released = releaseProductionQualityHold(held, jobId, releaseProof)
+  assert.ok(released, 'quality hold must be released')
+  validateProductionState(released)
+  assert.ok(!released.jobs.find((job) => job.id === jobId)?.qualityHold, 'hold must be absent after release')
+
+  // Releasing from a job with no hold returns null.
+  assert.equal(
+    releaseProductionQualityHold(state, jobId, releaseProof),
+    null,
+    'releasing a hold on a job that has none must return null',
+  )
+})
+
+test('batch genealogy captures material, output, and quality-hold events for a job', () => {
+  const pack = plantIndustryPacks[0]
+  const state = installedSample(pack)
+  const jobId = state.jobs[0].id
+  const proofAt = (actionId, at) => ({
+    actionId,
+    capturedAt: at,
+    actor: 'Shift operator',
+    reason: 'Recorded during shift.',
+    evidenceReference: 'SHIFT-LOG-GEN-001',
+  })
+
+  const withMaterial = recordProductionMaterialConsumption(
+    state, jobId,
+    pack.setup.materialId,
+    'LOT-2026-001',
+    50,
+    pack.setup.materialUnit,
+    SHIFT_REF,
+    proofAt('ACT-GEN-MAT-001', `${PLANNING_DAY}T02:00:00.000Z`),
+  )
+  assert.ok(withMaterial, 'material consumption must record')
+
+  const withOutput = recordProductionOutput(withMaterial, jobId, 40, SHIFT_REF, proofAt('ACT-GEN-OUT-001', `${PLANNING_DAY}T03:00:00.000Z`))
+  assert.ok(withOutput, 'output must record')
+
+  const holdProof = { actionId: 'ACT-GEN-HOLD-001', capturedAt: `${PLANNING_DAY}T04:00:00.000Z`, actor: 'Quality lead', reason: 'Hold for inspection.', evidenceReference: 'QA-GEN-001' }
+  const withHold = placeProductionQualityHold(withOutput, jobId, holdProof)
+  assert.ok(withHold, 'hold must be placed')
+
+  const genealogy = buildProductionBatchGenealogy(withHold, jobId)
+  assert.ok(genealogy, 'genealogy must build')
+  assert.equal(genealogy.job.id, jobId)
+  assert.equal(genealogy.evidenceCoverage.materialEntryCount, 1)
+  assert.equal(genealogy.evidenceCoverage.materialLotEntryCount, 1)
+  assert.equal(genealogy.evidenceCoverage.outputEntryCount, 1)
+  assert.equal(genealogy.evidenceCoverage.qualityEventCount, 1)
+  assert.equal(genealogy.materialEntries[0].materialLot, 'LOT-2026-001')
+  assert.equal(genealogy.job.status, 'quality_hold')
+  assert.ok(genealogy.digest, 'genealogy must carry a digest')
+
+  // Unknown job returns null.
+  assert.equal(buildProductionBatchGenealogy(withHold, 'UNKNOWN-JOB'), null)
 })
