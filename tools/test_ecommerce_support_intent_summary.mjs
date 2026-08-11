@@ -52,7 +52,7 @@ function intent(category, orderId = 'order-1', sourceRequestId = 'req-1') {
 }
 
 function state(supportIntents = []) {
-  return { requests: [], returnIntents: [], supportIntents, correctionIntents: [], cancellationIntents: [], cancellationDecisions: [], orderAmendmentIntents: [], orderRescheduleIntents: [] }
+  return { requests: [], returnIntents: [], supportIntents, correctionIntents: [], cancellationIntents: [], cancellationDecisions: [], amendmentIntents: [], rescheduleIntents: [] }
 }
 
 // 1. Empty state → all zeros, topCategory null

@@ -55,7 +55,7 @@ function req(customerReference, totalMmk = 50_000) {
 }
 
 function state(requests = []) {
-  return { requests, returnIntents: [], supportIntents: [], correctionIntents: [], cancellationIntents: [], cancellationDecisions: [], orderAmendmentIntents: [], orderRescheduleIntents: [] }
+  return { requests, returnIntents: [], supportIntents: [], correctionIntents: [], cancellationIntents: [], cancellationDecisions: [], amendmentIntents: [], rescheduleIntents: [] }
 }
 
 // 1. Empty state → all zeros
