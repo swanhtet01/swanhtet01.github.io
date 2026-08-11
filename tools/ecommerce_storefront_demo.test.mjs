@@ -103,6 +103,11 @@ import {
   commerceWebsiteIntakeSnapshotDigest,
   createCommerceWebsiteIntake,
   commerceCloseSettlementReview,
+  registerCommerceItem,
+  updateCommerceItem,
+  reconcileCommercePayment,
+  recordCommerceCollectionAction,
+  cancelCommerceOrder,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1249,4 +1254,64 @@ test('createCommerceCatalogBaseline, upgradeCommerceSeedPolicies, commerceSuppor
   assert.equal(varianceSettlement.totalVarianceMmk, -2500)
   // Empty input → null (no payment method lines).
   assert.equal(commerceCloseSettlementReview(seed, closeExp, []), null)
+})
+
+test('registerCommerceItem, updateCommerceItem, reconcileCommercePayment, recordCommerceCollectionAction, and cancelCommerceOrder behave correctly', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+
+  // registerCommerceItem: adds a new item to the state.
+  const newItem = { sku: 'SM-1005', name: 'New product', onHand: 10, reorderAt: 3, price: 15000 }
+  const regProof = { actionId: 'ACT-REG-SM1005', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Register new product.', evidenceReference: 'REG-REF-001' }
+  const withItem = registerCommerceItem(seed, newItem, regProof)
+  assert.ok(withItem !== null, 'valid item registration must succeed')
+  assert.ok(withItem.items.some((item) => item.sku === 'SM-1005'))
+  // Opening movement must be recorded.
+  assert.ok(withItem.movements.some((m) => m.kind === 'opening' && m.sku === 'SM-1005' && m.quantityDelta === 10))
+  // Catalog baseline must be created.
+  assert.ok(commerceCatalogBaselines(withItem).some((b) => b.sku === 'SM-1005'))
+  // Duplicate SKU → null.
+  assert.equal(registerCommerceItem(withItem, newItem, { ...regProof, actionId: 'ACT-REG-DUP' }), null)
+  // Invalid price → null.
+  assert.equal(registerCommerceItem(seed, { ...newItem, price: 0, sku: 'SM-1006' }, regProof), null)
+
+  // updateCommerceItem: changes the price of SM-1001 (seed price = 18500, reorderAt = 10).
+  const updateProof = { actionId: 'ACT-UPD-SM1001', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Price update.', evidenceReference: 'UPD-REF-001' }
+  const update = { sku: 'SM-1001', expectedPrice: 18500, nextPrice: 19000, expectedReorderAt: 10, nextReorderAt: 10 }
+  const withUpdate = updateCommerceItem(seed, update, updateProof)
+  assert.ok(withUpdate !== null, 'valid price update must succeed')
+  assert.equal(withUpdate.items.find((item) => item.sku === 'SM-1001')?.price, 19000)
+  // Wrong expectedPrice → null.
+  assert.equal(updateCommerceItem(seed, { ...update, expectedPrice: 99999 }, updateProof), null)
+  // No actual change (price and reorderAt both match next values) → null.
+  assert.equal(updateCommerceItem(seed, { ...update, nextPrice: 18500 }, updateProof), null)
+
+  // reconcileCommercePayment: marks pending ORD-1041 as reconciled.
+  const payProof = { actionId: 'ACT-PAY-1041', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'Payment collected.', evidenceReference: 'PAY-REF-1041' }
+  const withPay = reconcileCommercePayment(seed, 'ORD-1041', payProof)
+  assert.ok(withPay !== null, 'payment reconciliation must succeed')
+  const reconciledOrder = withPay.orders.find((o) => o.id === 'ORD-1041')
+  assert.equal(reconciledOrder?.paymentStatus, 'reconciled')
+  assert.equal(reconciledOrder?.paymentReconciliationActionId, 'ACT-PAY-1041')
+  // Non-existent order → null.
+  assert.equal(reconcileCommercePayment(seed, 'ORD-NONEXISTENT', payProof), null)
+
+  // recordCommerceCollectionAction: records a customer contact on pending ORD-1042.
+  const colProof = { actionId: 'ACT-COL-1042', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'Chased payment.', evidenceReference: 'COL-REF-1042' }
+  const withCol = recordCommerceCollectionAction(seed, 'ORD-1042', colProof)
+  assert.ok(withCol !== null, 'collection action must be recorded')
+  const colOrder = withCol.orders.find((o) => o.id === 'ORD-1042')
+  assert.equal(colOrder?.collectionActions?.length, 1)
+  assert.equal(colOrder?.collectionActions?.[0].kind, 'customer_contact')
+
+  // cancelCommerceOrder: cancels ORD-1042 and releases the 2-unit SM-1001 reserve.
+  const cancelProof = { actionId: 'ACT-CANCEL-1042', capturedAt: seedNowIso, actor: 'Counter operator', reason: 'Customer cancelled.', evidenceReference: 'CANCEL-REF-1042' }
+  const sm1001Before = seed.items.find((item) => item.sku === 'SM-1001')?.onHand ?? 0
+  const withCancel = cancelCommerceOrder(seed, 'ORD-1042', cancelProof)
+  assert.ok(withCancel !== null, 'cancel must succeed for an order with a releasable reservation')
+  assert.equal(withCancel.orders.find((o) => o.id === 'ORD-1042')?.status, 'cancelled')
+  // Stock must be released back.
+  assert.equal(withCancel.items.find((item) => item.sku === 'SM-1001')?.onHand, sm1001Before + 2)
+  // Completed order (ORD-1039) has no releasable reservation → null.
+  assert.equal(cancelCommerceOrder(seed, 'ORD-1039', cancelProof), null)
 })
