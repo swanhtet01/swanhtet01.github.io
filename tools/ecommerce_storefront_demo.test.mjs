@@ -32,6 +32,14 @@ import {
   commerceSupplierReturnClaimBalance,
   commerceSupplierReturnClaimStatus,
   commerceSupplierSourcingSelectedQuote,
+  commerceCloseExpectation,
+  commerceCustomerCreditReview,
+  commerceOrderCalculationDigest,
+  commerceStorefrontOrderTimeline,
+  commerceSupportCaseUrgency,
+  commerceSupportQueue,
+  commerceSupportServiceState,
+  commerceSupportSlaSummary,
   commerceWorkingSampleSkus,
   compareCommercePurchaseOrderAttention,
   createEmptyCommerce,
@@ -713,4 +721,89 @@ test('commerceCatalogDigestSource, compareCommercePurchaseOrderAttention, commer
   assert.equal(aging.blockedInvoiceCount, 0)
   assert.equal(aging.paymentAuthority, 'none')
   assert.equal(aging.paymentInitiated, false)
+})
+
+test('commerceCustomerCreditReview, commerceOrderCalculationDigest, commerceStorefrontOrderTimeline, commerceSupportServiceState, commerceSupportCaseUrgency, commerceSupportQueue, commerceSupportSlaSummary, and commerceCloseExpectation behave correctly', () => {
+  const seed = createSeedCommerce()
+  const seedNow = Date.parse('2026-07-23T08:00:00.000Z')
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+
+  // commerceCustomerCreditReview: paymentTermsDays=0 is always allowed (cash_terms).
+  const cashReview = commerceCustomerCreditReview(seed, 'Daw Mya', 22500, 0)
+  assert.equal(cashReview.allowed, true)
+  assert.equal(cashReview.reason, 'cash_terms')
+  assert.equal(cashReview.exposureBeforeMmk, 0)
+  assert.equal(cashReview.orderAmountMmk, 22500)
+
+  // When no credit policy exists for the customer, credit terms are not approved.
+  const noPolicyReview = commerceCustomerCreditReview(seed, 'Daw Mya', 22500, 30)
+  assert.equal(noPolicyReview.allowed, false)
+  assert.equal(noPolicyReview.reason, 'policy_missing')
+  assert.equal(noPolicyReview.policy, null)
+
+  // commerceOrderCalculationDigest: returns null when order has no calculation.
+  const emptyOrder = { id: 'ORD-NOCALC' }
+  assert.equal(commerceOrderCalculationDigest(emptyOrder), null)
+
+  // Returns a sha256: prefixed string when order has a calculation.
+  const completedOrder = seed.orders.find((o) => o.id === 'ORD-1039')
+  const digest = commerceOrderCalculationDigest(completedOrder)
+  assert.equal(typeof digest, 'string')
+  assert.ok(digest.startsWith('sha256:'))
+  // Deterministic: calling again returns the same value.
+  assert.equal(commerceOrderCalculationDigest(completedOrder), digest)
+
+  // commerceStorefrontOrderTimeline: seed has no storefrontRequests → empty timeline.
+  const timeline = commerceStorefrontOrderTimeline(seed)
+  assert.deepEqual(timeline, [])
+
+  // commerceSupportServiceState: no owner/priority/dueAt fields → null.
+  const noServiceCase = { status: 'open', caseId: 'SC-001', category: 'delivery', customerRequestedAt: seedNowIso }
+  assert.equal(commerceSupportServiceState(noServiceCase), null)
+
+  // Returns state when owner, priority, and dueAt are set.
+  const servicedCase = { status: 'open', caseId: 'SC-002', category: 'payment', customerRequestedAt: seedNowIso, owner: 'support-op', priority: 'high', dueAt: '2026-07-24T08:00:00.000Z' }
+  const serviceState = commerceSupportServiceState(servicedCase)
+  assert.ok(serviceState !== null)
+  assert.equal(serviceState.owner, 'support-op')
+  assert.equal(serviceState.priority, 'high')
+
+  // commerceSupportCaseUrgency: resolved status returns 'resolved'.
+  const resolvedCase = { status: 'resolved', caseId: 'SC-003', category: 'delivery', customerRequestedAt: seedNowIso }
+  assert.equal(commerceSupportCaseUrgency(resolvedCase, seedNow), 'resolved')
+
+  // Open case with no service state returns 'untriaged'.
+  assert.equal(commerceSupportCaseUrgency(noServiceCase, seedNow), 'untriaged')
+
+  // Open case whose dueAt is in the past returns 'overdue'.
+  const overdueCase = { status: 'open', caseId: 'SC-004', category: 'delivery', customerRequestedAt: seedNowIso, owner: 'support-op', priority: 'high', dueAt: '2026-07-01T00:00:00.000Z' }
+  assert.equal(commerceSupportCaseUrgency(overdueCase, seedNow), 'overdue')
+
+  // commerceSupportQueue: seed orders have no open support cases → empty queue.
+  const queue = commerceSupportQueue(seed.orders, seedNow)
+  assert.deepEqual(queue, [])
+
+  // commerceSupportSlaSummary: no open cases → all counts are zero.
+  const sla = commerceSupportSlaSummary(seed.orders, seedNow)
+  assert.equal(sla.openCases, 0)
+  assert.equal(sla.overdueCases, 0)
+  assert.equal(sla.awaitingAcknowledgement, 0)
+  assert.equal(sla.awaitingFirstResponse, 0)
+  assert.equal(sla.firstResponseReady, 0)
+  assert.equal(sla.responseTargetMisses, 0)
+
+  // commerceCloseExpectation: invalid timestamp returns null.
+  assert.equal(commerceCloseExpectation(seed, 'not-a-timestamp'), null)
+
+  // Valid capturedAt after the completed order's fulfilment → non-null expectation.
+  const closeExp = commerceCloseExpectation(seed, seedNowIso)
+  assert.ok(closeExp !== null)
+  // Only ORD-1039 is completed and reconciled.
+  assert.deepEqual(closeExp.orderIds, ['ORD-1039'])
+  assert.equal(closeExp.total, 22500)
+  // SM-1002 is below reorderAt (onHand: 8, reorderAt: 12).
+  assert.ok(closeExp.stockExceptionSkus.includes('SM-1002'))
+  // ORD-1041 and ORD-1042 have pending payment.
+  assert.ok(closeExp.paymentExceptionOrderIds.includes('ORD-1041'))
+  assert.ok(closeExp.paymentExceptionOrderIds.includes('ORD-1042'))
 })
