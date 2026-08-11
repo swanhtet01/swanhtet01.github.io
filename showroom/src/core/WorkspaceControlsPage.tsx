@@ -22,6 +22,43 @@ import { projectShopRevenueSummary } from './shop-revenue-summary'
 import { projectPlantOeeSummary } from './plant-oee-summary'
 import { projectWebsiteLeadSummary } from './website-lead-summary'
 import { readWebsiteLeadLedger } from '../products/website/website-leads'
+import { projectCustomerJourneySummary } from './customer-journey-summary'
+
+function CustomerJourneyView() {
+  const commerce = useMemo(() => loadCommerceWorkspace().state, [])
+  const summary = useMemo(() => projectCustomerJourneySummary(commerce), [commerce])
+  const summaryRows: Array<readonly [string, string]> = [
+    ['Unique customers', String(summary.uniqueCustomers)],
+    ['Repeat customers', String(summary.repeatCustomers)],
+    ['New customers', String(summary.newCustomers)],
+    ['Avg orders / customer', summary.uniqueCustomers > 0 ? String(summary.averageOrdersPerCustomer) : '—'],
+  ]
+  return (
+    <div className="workspace-screen settings-screen">
+      <PageHeading copy="Customer order history from Shop records. Read-only." eyebrow="CRM" title="Customer journey" />
+      <div className="settings-control-stack">
+        <section className="core-panel">
+          <div><span className="core-eyebrow">Customer summary</span></div>
+          <div aria-label="Customer journey summary" className="readiness-list">
+            {summaryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+        </section>
+        {summary.topCustomers.length > 0
+          ? <section className="core-panel"><div><span className="core-eyebrow">Top customers by revenue</span></div>
+              <div style={{ overflowX: 'auto' }}><table>
+                <thead><tr><th>Customer</th><th>Orders</th><th>Revenue</th><th>Completed</th><th>Cancelled</th><th>Last order</th></tr></thead>
+                <tbody>{summary.topCustomers.map((c) => (
+                  <tr key={c.customer}>
+                    <td>{c.customer}</td><td>{c.orderCount}</td><td>{c.totalRevenue.toLocaleString()}</td>
+                    <td>{c.completedOrders}</td><td>{c.cancelledOrders}</td><td>{c.lastOrderDate?.slice(0, 10) ?? '—'}</td>
+                  </tr>
+                ))}</tbody>
+              </table></div></section>
+          : <p className="form-notice">No Shop orders yet. Complete a sale to see customer history here.</p>}
+      </div>
+    </div>
+  )
+}
 
 function CrossProductView() {
   const commerce = useMemo(() => loadCommerceWorkspace().state, [])
@@ -247,6 +284,7 @@ export function WorkspaceControlsPage() {
   if (searchParams.get('view') === 'shop-revenue') return <ShopRevenueView />
   if (searchParams.get('view') === 'plant-oee') return <PlantOeeView />
   if (searchParams.get('view') === 'website-leads') return <WebsiteLeadsView />
+  if (searchParams.get('view') === 'customer-journey') return <CustomerJourneyView />
 
   function saveRestorePoint() {
     const backup = collectCurrentBackup()
