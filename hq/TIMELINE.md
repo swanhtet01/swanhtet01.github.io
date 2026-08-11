@@ -151,6 +151,12 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-amendment-intent-fulfilment-value-brief (EcommerceOrderAmendmentIntent fulfilment pair distribution + originalTotalMmk); 28 checks; zero bundle cost — DONE (OPS-438)
 - [x] Analytics Codex: ecommerce-buying-event-action-brief (EcommerceBuyingEvent.action 8-value enum + exception rate); 29 checks; zero bundle cost — DONE (OPS-439)
 - [x] Analytics Codex: ecommerce-quote-line-sku-quantity-value-brief (EcommerceQuoteLine SKU top-5 + qty bands + lineTotalMmk stats); 38 checks; zero bundle cost — DONE (OPS-440)
+- [x] Analytics Codex: ecommerce-correction-intent-kind-reason-brief (EcommerceCorrectionIntent.requestedKind credit/debit + 4-value reasonCode); 25 checks; zero bundle cost — DONE (OPS-441)
+- [x] Analytics Codex: ecommerce-correction-intent-amounts-brief (EcommerceCorrectionIntent listedAmountMmk + originalBalanceMmk + sourceCorrectionCount stats); 29 checks; zero bundle cost — DONE (OPS-442)
+- [x] Analytics Codex: ecommerce-reschedule-intent-fulfilment-value-brief (EcommerceOrderRescheduleIntent pickup/delivery split + originalTotalMmk stats); 21 checks; zero bundle cost — DONE (OPS-443)
+- [x] Analytics Codex: website-lead-status-source-page-brief (WebsiteLead.status new/qualified/closed pipeline + sourcePage top-5); 28 checks; zero bundle cost — DONE (OPS-444)
+- [x] Analytics Codex: website-page-stage-navigation-brief (WebsitePage.stage draft/ready + navigation visibility rate + label top-5); 26 checks; zero bundle cost — DONE (OPS-445)
+- [x] Analytics Codex: website-publish-evidence-kind-brief (PublishEvidence.kind content/responsive/links distribution + allKindsPresent flag); 32 checks; zero bundle cost — DONE (OPS-446)
 
 ### Aug 25–31
 
