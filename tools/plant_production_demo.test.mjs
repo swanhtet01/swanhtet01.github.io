@@ -15,6 +15,7 @@ import {
   createSeedProduction,
   endProductionDowntime,
   hasGuidedSampleProductionActivity,
+  importProductionJobs,
   installProductionWorkingSampleJobs,
   isGuidedSampleProduction,
   placeProductionQualityHold,
@@ -774,4 +775,71 @@ test('startProductionMaintenance and completeProductionMaintenance run a full li
     evidenceReference: 'MAINT-LOG-003',
   })
   assert.equal(doubleComplete, null, 'completing maintenance with no open record must return null')
+})
+
+test('importProductionJobs creates new jobs, detects already-present ids, and reports replayed state', () => {
+  const pack = plantIndustryPacks[0]
+  const state = installedSample(pack)
+  const SOURCE_DIGEST = `sha256:${'a'.repeat(64)}`
+
+  const newJobs = [
+    {
+      id: `${pack.setup.outputPrefix}-201`,
+      line: `${pack.setup.workCentrePrefix}-2`,
+      product: 'Import batch A',
+      target: 50,
+      output: 0,
+      owner: 'Import planner',
+      priority: 'urgent',
+      dueAt: '2026-09-15T10:00:00.000Z',
+    },
+    {
+      id: `${pack.setup.outputPrefix}-202`,
+      line: `${pack.setup.workCentrePrefix}-2`,
+      product: 'Import batch B',
+      target: 80,
+      output: 0,
+      owner: 'Import planner',
+      priority: 'normal',
+      dueAt: '2026-09-22T10:00:00.000Z',
+    },
+  ]
+
+  const result = importProductionJobs(state, {
+    jobs: newJobs,
+    sourceDigest: SOURCE_DIGEST,
+    capturedAt: `${PLANNING_DAY}T08:00:00.000Z`,
+    actor: 'Production planner',
+  })
+  assert.ok(result, 'import must succeed')
+  assert.equal(result.created, 2, 'both new jobs must be created')
+  assert.equal(result.alreadyPresent, 0)
+  assert.equal(result.replayed, false)
+  validateProductionState(result.state)
+  assert.ok(result.state.jobs.some((j) => j.id === newJobs[0].id))
+  assert.ok(result.state.jobs.some((j) => j.id === newJobs[1].id))
+
+  // Re-importing the same jobs returns alreadyPresent=2, created=0, replayed=true.
+  const reImport = importProductionJobs(result.state, {
+    jobs: newJobs,
+    sourceDigest: SOURCE_DIGEST,
+    capturedAt: `${PLANNING_DAY}T08:01:00.000Z`,
+    actor: 'Production planner',
+  })
+  assert.ok(reImport, 're-import must not fail')
+  assert.equal(reImport.created, 0)
+  assert.equal(reImport.alreadyPresent, 2)
+  assert.equal(reImport.replayed, true)
+
+  // Invalid source digest format returns null.
+  assert.equal(
+    importProductionJobs(state, { jobs: newJobs, sourceDigest: 'not-a-sha256', capturedAt: `${PLANNING_DAY}T08:00:00.000Z`, actor: 'Planner' }),
+    null,
+  )
+
+  // Empty jobs list returns null.
+  assert.equal(
+    importProductionJobs(state, { jobs: [], sourceDigest: SOURCE_DIGEST, capturedAt: `${PLANNING_DAY}T08:00:00.000Z`, actor: 'Planner' }),
+    null,
+  )
 })

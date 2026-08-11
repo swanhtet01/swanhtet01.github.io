@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   GUIDED_SAMPLE_SCHEDULE_ACTOR,
+  SHOP_SERVICE_SCHEDULE_SCHEMA,
   advanceShopServiceBooking,
   cancelShopServiceBooking,
   createShopServiceSchedule,
@@ -10,6 +11,7 @@ import {
   isGuidedSampleShopSchedule,
   projectShopServiceSchedule,
   provisionEmptyShopServiceSchedule,
+  readShopServiceSchedule,
   registerShopService,
   registerShopServiceResource,
   scheduleShopServiceBooking,
@@ -209,4 +211,30 @@ test('shopScheduleVocabulary returns pack-specific wording and falls back gracef
 
   // shopIndustryPack throws on an unknown id.
   assert.throws(() => shopIndustryPack('unknown-pack'), /supported Shop industry pack/)
+})
+
+test('readShopServiceSchedule returns a fresh schedule for null, round-trips valid JSON, and throws for corrupt data', () => {
+  // Null input → fresh retail schedule.
+  const fresh = readShopServiceSchedule(null)
+  validateShopServiceSchedule(fresh)
+  assert.equal(fresh.schema, SHOP_SERVICE_SCHEDULE_SCHEMA)
+  assert.equal(fresh.revision, 0)
+
+  // Empty string → same as null.
+  const fromEmpty = readShopServiceSchedule('')
+  validateShopServiceSchedule(fromEmpty)
+  assert.equal(fromEmpty.revision, 0)
+
+  // A valid serialised schedule round-trips correctly.
+  const demo = createShopServiceScheduleDemo('spa', PLANNING_DAY)
+  const serialised = JSON.stringify(demo)
+  const roundTripped = readShopServiceSchedule(serialised)
+  validateShopServiceSchedule(roundTripped)
+  assert.deepEqual(roundTripped, demo)
+
+  // Corrupt JSON must throw with a clear message.
+  assert.throws(
+    () => readShopServiceSchedule('{not valid json}'),
+    /unreadable/i,
+  )
 })
