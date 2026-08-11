@@ -4,10 +4,13 @@ import test from 'node:test'
 import {
   commitWebsiteEditSession,
   createBlankPage,
+  createBlankSection,
   createInitialWorkspace,
   createWebsiteEditSession,
   duplicatePage,
   evidenceRequirements,
+  getCurrentApproval,
+  getCurrentEvidence,
   normalizeSlug,
   pageIssues,
   readinessChecks,
@@ -15,6 +18,7 @@ import {
   approveWebsiteRevision,
   updateWebsiteEditSession,
   websiteEditSessionMatches,
+  workspaceFingerprint,
 } from '../showroom/src/products/website/website-model.ts'
 import {
   applyWebsiteStarterBrief,
@@ -348,4 +352,58 @@ test('evidence and approval workflow requires all checks to pass before approval
     note: 'Second approval attempt.',
   })
   assert.equal(reApproved, approved, 'approval when one is already current must return unchanged workspace')
+})
+
+test('createBlankSection, workspaceFingerprint, getCurrentEvidence, and getCurrentApproval behave correctly', () => {
+  const capturedAt = CAPTURED_AT
+
+  // createBlankSection: returns a blank section with an id prefixed 'section-'.
+  const section = createBlankSection()
+  assert.ok(section.id.startsWith('section-'), 'blank section id must start with section-')
+  assert.equal(section.eyebrow, '')
+  assert.equal(section.title, '')
+  assert.equal(section.body, '')
+
+  // workspaceFingerprint: stable for the same workspace, changes when content changes.
+  const workspace = createInitialWorkspace()
+  const fp1 = workspaceFingerprint(workspace)
+  assert.ok(fp1.startsWith('web-'), 'fingerprint must start with web-')
+  assert.equal(workspaceFingerprint(workspace), fp1, 'fingerprint must be deterministic')
+  const modified = { ...workspace, siteName: 'Changed Site Name' }
+  assert.notEqual(workspaceFingerprint(modified), fp1, 'fingerprint must change when siteName changes')
+
+  // getCurrentEvidence: empty on a fresh workspace; populated after recording all requirements.
+  assert.deepEqual(getCurrentEvidence(workspace), [], 'no evidence on a fresh workspace')
+  assert.equal(getCurrentApproval(workspace), null, 'no approval on a fresh workspace')
+
+  let ws = workspace
+  for (const req of evidenceRequirements) {
+    ws = recordWebsiteEvidence(ws, {
+      actionId: `ACT-EVIDENCE-UTIL-${req.id.toUpperCase()}`,
+      capturedAt,
+      kind: req.id,
+      finding: `Checked ${req.id} — passed.`,
+      reference: `REVIEW-UTIL-${req.id.toUpperCase()}`,
+      verifiedBy: 'Founder',
+    })
+  }
+  const evidence = getCurrentEvidence(ws)
+  assert.equal(evidence.length, evidenceRequirements.length, 'all evidence must be current')
+
+  // getCurrentApproval: null before approval, non-null after.
+  assert.equal(getCurrentApproval(ws), null, 'no approval before approveWebsiteRevision')
+  const approved = approveWebsiteRevision(ws, {
+    actionId: 'ACT-APPROVE-UTIL-001',
+    capturedAt,
+    reviewer: 'Founder',
+    note: 'Utility test approval.',
+  })
+  const approval = getCurrentApproval(approved)
+  assert.ok(approval !== null, 'approval must be present after approveWebsiteRevision')
+  assert.equal(approval.reviewer, 'Founder')
+
+  // After modifying the workspace, the evidence and approval are no longer current.
+  const touched = { ...approved, siteName: 'New Name After Approval' }
+  assert.deepEqual(getCurrentEvidence(touched), [], 'evidence must be empty after content change')
+  assert.equal(getCurrentApproval(touched), null, 'approval must be null after content change')
 })
