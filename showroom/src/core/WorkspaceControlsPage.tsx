@@ -18,6 +18,7 @@ import { loadCommerceWorkspace } from './commerce-workspace'
 import { loadProductionWorkspace } from './production-workspace'
 import { projectShopOrderProductionStatus } from './shop-production-status'
 import { projectCrossProductOperatingSummary } from './cross-product-report'
+import { projectShopRevenueSummary } from './shop-revenue-summary'
 
 function CrossProductView() {
   const commerce = useMemo(() => loadCommerceWorkspace().state, [])
@@ -53,6 +54,59 @@ function CrossProductView() {
                 )))}</tbody>
               </table></div></section>
           : <p className="form-notice">No Shop orders have linked Plant jobs yet. Create a production job from Shop demand first.</p>}
+      </div>
+    </div>
+  )
+}
+
+function ShopRevenueView() {
+  const commerce = useMemo(() => loadCommerceWorkspace().state, [])
+  const summary = useMemo(() => projectShopRevenueSummary(commerce), [commerce])
+  const summaryRows: Array<readonly [string, string]> = [
+    ['Total revenue', String(summary.totalRevenue)],
+    ['Completed revenue', String(summary.completedRevenue)],
+    ['Orders', String(summary.orderCount)],
+    ['Completed', String(summary.completedCount)],
+    ['Cancelled', String(summary.cancelledCount)],
+    ['Average order value', String(summary.averageOrderValue)],
+  ]
+  return (
+    <div className="workspace-screen settings-screen">
+      <PageHeading copy="Revenue projection from Shop orders and shift closes. Read-only." eyebrow="Shop" title="Revenue summary" />
+      <div className="settings-control-stack">
+        <section className="core-panel">
+          <div><span className="core-eyebrow">Revenue summary</span></div>
+          <div aria-label="Revenue summary" className="readiness-list">
+            {summaryRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
+          </div>
+        </section>
+        {Object.keys(summary.byChannel).length > 0
+          ? <section className="core-panel"><div><span className="core-eyebrow">By channel</span></div>
+              <div style={{ overflowX: 'auto' }}><table>
+                <thead><tr><th>Channel</th><th>Revenue</th><th>Orders</th></tr></thead>
+                <tbody>{Object.entries(summary.byChannel).map(([ch, v]) => (
+                  <tr key={ch}><td>{ch}</td><td>{v.revenue}</td><td>{v.count}</td></tr>
+                ))}</tbody>
+              </table></div></section>
+          : null}
+        {summary.topSkus.length > 0
+          ? <section className="core-panel"><div><span className="core-eyebrow">Top SKUs</span></div>
+              <div style={{ overflowX: 'auto' }}><table>
+                <thead><tr><th>SKU</th><th>Revenue</th><th>Orders</th></tr></thead>
+                <tbody>{summary.topSkus.map((s) => (
+                  <tr key={s.sku}><td>{s.sku}</td><td>{s.revenue}</td><td>{s.count}</td></tr>
+                ))}</tbody>
+              </table></div></section>
+          : null}
+        {summary.closeSummary.length > 0
+          ? <section className="core-panel"><div><span className="core-eyebrow">Shift closes</span></div>
+              <div style={{ overflowX: 'auto' }}><table>
+                <thead><tr><th>Date</th><th>Revenue</th><th>Orders</th></tr></thead>
+                <tbody>{summary.closeSummary.map((c, i) => (
+                  <tr key={i}><td>{c.businessDate}</td><td>{c.total}</td><td>{c.orders}</td></tr>
+                ))}</tbody>
+              </table></div></section>
+          : <p className="form-notice">No shift closes recorded yet. Close a shift in Shop to populate this view.</p>}
       </div>
     </div>
   )
@@ -116,6 +170,7 @@ export function WorkspaceControlsPage() {
   ]
   if (searchParams.get('view') === 'local-metrics') return <LocalMetricsView />
   if (searchParams.get('view') === 'cross-product') return <CrossProductView />
+  if (searchParams.get('view') === 'shop-revenue') return <ShopRevenueView />
 
   function saveRestorePoint() {
     const backup = collectCurrentBackup()

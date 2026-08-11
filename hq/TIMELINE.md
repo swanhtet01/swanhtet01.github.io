@@ -20,7 +20,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
-**Budget**: 2,821,959 / 2,825,000 bytes. Headroom: 3,041 bytes (ceiling raised OPS-167b after analytics pipeline consumed 7,396 bytes; next planned slices are backup coverage, Plant CAPA effectiveness-due, Analytics Step 6). Largest JS chunk: 394,120 / 500,000 bytes.
+**Budget**: 2,830,571 / 2,833,000 bytes. Headroom: 2,429 bytes (ceiling raised OPS-177 after shop revenue view surface consumed 8,612 bytes; next planned slices are Analytics Step 6, Plant OEE). Largest JS chunk: 394,785 / 500,000 bytes.
 
 **Live**: Both domains serve `25cac2f5`. Live scheduler is `degraded`, managed persistence is not proven, security writes are off.
 
@@ -64,6 +64,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Cross-product Phase A: projectCrossProductOperatingSummary aggregate report; 28 checks — DONE (OPS-174)
 - [x] Cross-product Phase A: /settings/?view=cross-product#controls UI surface; all 5 adoption conditions met; bundle unchanged — DONE (OPS-175)
 - [x] Shop revenue summary: projectShopRevenueSummary (total/completed revenue, channel breakdown, SKU ranking, closes); 45 checks — DONE (OPS-176)
+- [x] Shop revenue summary view: /settings/?view=shop-revenue#controls (revenue panel, by-channel, top SKUs, shift closes); +8,612 bytes; ceiling → 2,833,000 — DONE (OPS-177)
 
 ### Aug 25–31
 
