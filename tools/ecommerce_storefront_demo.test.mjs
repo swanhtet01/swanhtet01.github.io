@@ -18,6 +18,9 @@ import {
   commercePaymentPolicies,
   commercePromotionDecision,
   commercePromotionPolicies,
+  commercePurchaseBudgetCommitment,
+  commercePurchaseOrderArrivalUrgency,
+  commercePurchaseOrderProgress,
   commerceReceivablesAging,
   commerceShippingDecision,
   commerceShippingPolicies,
@@ -25,6 +28,7 @@ import {
   commerceStorefrontRequests,
   commerceSupplierReturnClaimBalance,
   commerceSupplierReturnClaimStatus,
+  commerceSupplierSourcingSelectedQuote,
   commerceWorkingSampleSkus,
   createEmptyCommerce,
   createSeedCommerce,
@@ -600,4 +604,57 @@ test('storefront accessors, location allocation preview, releasable reservation,
   assert.equal(commerceSupplierReturnClaimBalance(noCredit), 5000)
   assert.equal(commerceSupplierReturnClaimBalance(partialCredit), 3000)
   assert.equal(commerceSupplierReturnClaimBalance(fullCredit), 0)
+})
+
+test('commerceSupplierSourcingSelectedQuote, commercePurchaseBudgetCommitment, commercePurchaseOrderProgress, and commercePurchaseOrderArrivalUrgency behave correctly', () => {
+  const seed = createSeedCommerce()
+  const seedNow = Date.parse('2026-07-23T08:00:00.000Z')
+
+  // commerceSupplierSourcingSelectedQuote: finds by quoteReference, null when absent.
+  const quoteObj = { quoteReference: 'QR-001', supplierName: 'Myanmar Beverage', totalMmk: 168_000 }
+  assert.equal(commerceSupplierSourcingSelectedQuote({ quotes: [], selectedQuoteReference: 'QR-001' }), null)
+  assert.deepEqual(commerceSupplierSourcingSelectedQuote({ quotes: [quoteObj], selectedQuoteReference: 'QR-001' }), quoteObj)
+  assert.equal(commerceSupplierSourcingSelectedQuote({ quotes: [quoteObj], selectedQuoteReference: 'QR-999' }), null)
+
+  // commercePurchaseBudgetCommitment: seed has no requisitions → zero commitment.
+  const envelope = seed.purchaseBudgetEnvelopes[0]
+  assert.ok(envelope)
+  const commitment = commercePurchaseBudgetCommitment(seed, envelope)
+  assert.equal(commitment.committedMmk, 0)
+  assert.equal(commitment.availableMmk, envelope.ceilingMmk)
+  assert.equal(commitment.utilizationBasisPoints, 0)
+  assert.equal(commitment.openRequisitions, 0)
+  assert.equal(commitment.activePurchaseOrders, 0)
+
+  // commercePurchaseOrderProgress: seed PO has no receipt movements → open, full remaining.
+  const po = seed.purchaseOrders[0]
+  assert.ok(po)
+  const progress = commercePurchaseOrderProgress(seed, po)
+  assert.equal(progress.status, 'open')
+  assert.equal(progress.received, 0)
+  assert.equal(progress.rejected, 0)
+  assert.equal(progress.delivered, 0)
+  assert.equal(progress.remaining, po.quantityOrdered)
+
+  // commercePurchaseOrderArrivalUrgency: urgency depends on status and timing.
+  const openProgress = { status: 'open', received: 0, rejected: 0, delivered: 0, remaining: 10 }
+
+  // Closed statuses return 'closed' regardless of timing.
+  assert.equal(commercePurchaseOrderArrivalUrgency({ id: 'PO-T', quantityOrdered: 10 }, { ...openProgress, status: 'received' }, seedNow), 'closed')
+  assert.equal(commercePurchaseOrderArrivalUrgency({ id: 'PO-T', quantityOrdered: 10 }, { ...openProgress, status: 'cancelled' }, seedNow), 'closed')
+
+  // No expectedAt → 'unrecorded'.
+  assert.equal(commercePurchaseOrderArrivalUrgency({ id: 'PO-T', quantityOrdered: 10 }, openProgress, seedNow), 'unrecorded')
+
+  // expectedAt in the past → 'late'.
+  const latePo = { id: 'PO-T', quantityOrdered: 10, expectedAt: new Date(seedNow - 60_000).toISOString() }
+  assert.equal(commercePurchaseOrderArrivalUrgency(latePo, openProgress, seedNow), 'late')
+
+  // expectedAt within 24 h → 'due_soon'.
+  const dueSoonPo = { id: 'PO-T', quantityOrdered: 10, expectedAt: new Date(seedNow + 23 * 60 * 60 * 1000).toISOString() }
+  assert.equal(commercePurchaseOrderArrivalUrgency(dueSoonPo, openProgress, seedNow), 'due_soon')
+
+  // expectedAt more than 24 h away → 'scheduled'.
+  const scheduledPo = { id: 'PO-T', quantityOrdered: 10, expectedAt: new Date(seedNow + 48 * 60 * 60 * 1000).toISOString() }
+  assert.equal(commercePurchaseOrderArrivalUrgency(scheduledPo, openProgress, seedNow), 'scheduled')
 })
