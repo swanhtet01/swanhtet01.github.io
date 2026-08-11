@@ -8,6 +8,7 @@ import {
   buildProductionBatchGenealogy,
   buildProductionQualityCorrectiveAction,
   buildProductionRecallTrace,
+  buildProductionShiftHandoff,
   createEmptyProduction,
   createSeedProduction,
   hasGuidedSampleProductionActivity,
@@ -536,4 +537,27 @@ test('recall trace finds a job by input lot and returns null for an unrecognised
 
   // An empty string or blank query must return null.
   assert.equal(buildProductionRecallTrace(withMaterial, ''), null)
+})
+
+test('shift handoff collects output and material entries for the planning day shift', () => {
+  const pack = plantIndustryPacks[0]
+  const state = demoActivity(pack)
+
+  const handoff = buildProductionShiftHandoff(state, SHIFT_REF)
+  assert.ok(handoff, 'shift handoff must build for a shift that has activity')
+  assert.equal(handoff.shiftRef, SHIFT_REF)
+  assert.ok(handoff.shiftEntries.length >= 1, 'handoff must include output entries for the shift')
+  assert.ok(handoff.materialEntries.length >= 1, 'handoff must include material entries for the shift')
+  assert.ok(handoff.shiftOutput.goodUnits >= 1, 'shift output must have at least one good unit')
+  assert.ok(handoff.materialTotals.length >= 1, 'handoff must aggregate material totals')
+  assert.ok(handoff.machineObservations.length >= 1, 'handoff must carry machine observations')
+
+  // A shift with no recorded activity produces an empty but valid handoff.
+  const emptyShift = buildProductionShiftHandoff(state, '2026-01-01 Night')
+  assert.ok(emptyShift, 'a valid but unrecorded shift must still return a handoff')
+  assert.equal(emptyShift.shiftEntries.length, 0)
+  assert.equal(emptyShift.materialEntries.length, 0)
+
+  // An invalid shift reference returns null.
+  assert.equal(buildProductionShiftHandoff(state, ''), null)
 })
