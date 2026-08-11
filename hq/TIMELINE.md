@@ -2,7 +2,7 @@
 
 Updated: 2026-08-12
 Owner: founder / CEO
-Branch: fix/demo-seed-clock (487 commits ahead of origin)
+Branch: fix/demo-seed-clock (494 commits ahead of origin)
 
 ---
 
@@ -133,6 +133,12 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: website-opening-plan-package-digest-brief (WebsiteOpeningPlan.packageDigest presence + raw value + algorithm prefix); 17 checks; zero bundle cost — DONE (OPS-420)
 - [x] Analytics Codex: ecommerce-delivery-address-instructions-brief (EcommerceDeliveryAddressSnapshot.instructions presence rate + text distribution); 30 checks; zero bundle cost — DONE (OPS-421)
 - [x] Analytics Codex: website-local-publish-artifact-brief (LocalPublishRecord.artifact presence rate + page count stats + siteName distribution); 35 checks; zero bundle cost — DONE (OPS-422)
+- [x] Analytics Codex: ecommerce-request-fulfilment-brief (EcommerceOrderRequestV2.fulfilment pickup/delivery enum distribution); 33 checks; zero bundle cost — DONE (OPS-423)
+- [x] Analytics Codex: ecommerce-request-payment-adapter-brief (EcommerceOrderRequestV2.quote.payment.adapter 3-way enum distribution); 38 checks; zero bundle cost — DONE (OPS-424)
+- [x] Analytics Codex: ecommerce-request-promotion-code-brief (EcommerceOrderRequestV2.quote.promotion.code presence rate + top-5 distribution); 32 checks; zero bundle cost — DONE (OPS-425)
+- [x] Analytics Codex: ecommerce-request-order-value-brief (EcommerceOrderRequestV2.totalMmk min/max/avg/total); 29 checks; zero bundle cost — DONE (OPS-426)
+- [x] Analytics Codex: ecommerce-return-intent-reason-brief (EcommerceReturnIntent.reason text distribution + unique count); 25 checks; zero bundle cost — DONE (OPS-427)
+- [x] Analytics Codex: website-opening-plan-template-brief (WebsiteOpeningPlan.workflowTemplateId presence + enum flags); 32 checks; zero bundle cost — DONE (OPS-428)
 
 ### Aug 25–31
 
