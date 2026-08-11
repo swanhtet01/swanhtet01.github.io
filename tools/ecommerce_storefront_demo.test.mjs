@@ -159,3 +159,58 @@ test('a storefront uses the industry vocabulary of the client pack', async () =>
     `notes must read as trade guidance, saw ${JSON.stringify(rows.map((row) => row.note))}`,
   )
 })
+
+const RETAIL_ITEMS = [
+  { sku: 'RTL-SHIRT', name: 'Cotton shirt', onHand: 12, reorderAt: 3, price: 18000 },
+  { sku: 'RTL-PANTS', name: 'Denim pants', onHand: 8, reorderAt: 2, price: 35000 },
+  { sku: 'RTL-JACKET', name: 'Light jacket', onHand: 4, reorderAt: 1, price: 58000 },
+  { sku: 'RTL-BAG', name: 'Tote bag', onHand: 6, reorderAt: 2, price: 12000 },
+]
+
+function retailWorkspace() {
+  const installed = installCommerceWorkingSampleCatalog(createSeedCommerce(), {
+    sampleId: 'retail',
+    sampleName: 'Retail',
+    items: RETAIL_ITEMS,
+    capturedAt: CAPTURED_AT,
+  })
+  assert.ok(installed, 'the retail working sample must install')
+  return installed
+}
+
+test('a retail storefront uses trade vocabulary, not spa or generic wording', async () => {
+  const state = retailWorkspace()
+  const storage = new Map([[COMMERCE_KEY, JSON.stringify(state)]])
+  const storageAdapter = {
+    getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, value) => { storage.set(key, String(value)) },
+    removeItem: (key) => { storage.delete(key) },
+  }
+  const { activateLocalEcommerceWorkingSample } = await import(
+    '../showroom/src/products/ecommerce/local-merchandising-import.ts'
+  )
+  const { LOCAL_STOREFRONT_DRAFT_SCOPE, readStorefrontDraft } = await import(
+    '../showroom/src/products/ecommerce/storefront-draft.ts'
+  )
+  const result = await activateLocalEcommerceWorkingSample(
+    { templateId: 'social-storefront', businessName: 'Rangoon Threads', capturedAt: CAPTURED_AT },
+    {
+      storage: storageAdapter,
+      catalog: state.items,
+      locks: { request: async (_name, _options, callback) => callback() },
+    },
+  )
+  assert.ok(result.ok, `retail activation failed: ${result.ok ? '' : result.error}`)
+  const rows = readStorefrontDraft(LOCAL_STOREFRONT_DRAFT_SCOPE, storageAdapter).draft.merchandising
+  const collections = new Set(rows.map((row) => row.collection))
+  assert.ok(
+    collections.has('Trade essentials'),
+    `retail storefront must use retail vocabulary, saw ${JSON.stringify([...collections])}`,
+  )
+  assert.ok(!collections.has('Treatments'), 'spa wording must not bleed onto a retail storefront')
+  assert.ok(!collections.has('Featured today'), 'generic demo wording must not appear for a known pack')
+  assert.ok(
+    rows.every((row) => row.sku.startsWith('RTL-')),
+    `all storefront rows must be client products, saw ${JSON.stringify(rows.map((row) => row.sku))}`,
+  )
+})
