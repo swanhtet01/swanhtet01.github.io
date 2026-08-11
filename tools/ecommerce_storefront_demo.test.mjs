@@ -17,6 +17,12 @@ import {
   LEGACY_COMMERCE_KEYS,
   commerceAccountMappingConfigurations,
   commerceAccountRoles,
+  commerceOrderAcknowledgement,
+  commerceOrderAcknowledgementText,
+  commerceOrderSupportOpenExpectation,
+  commerceOrderSupportReopenExpectation,
+  commerceOrderSupportResolveExpectation,
+  commerceOrderSupportServiceExpectation,
   commerceTaxConfigurations,
   commerceTaxDecision,
   commerceWebsiteIntakes,
@@ -1031,4 +1037,35 @@ test('commerce workspace schema constants and simple collection accessors are co
   const taxDecision = commerceTaxDecision(createSeedCommerce(), 10000, '2026-07-23T08:00:00.000Z')
   assert.ok(taxDecision !== null)
   assert.equal(taxDecision.status, 'not_configured')
+})
+
+test('support expectation queries return null for seed state and order acknowledgement works on ORD-1039', () => {
+  const seed = createSeedCommerce()
+
+  // Support expectation functions require a storefront-sourced completed order.
+  // ORD-1039 is completed but has no sourceRecordId (ECR-*), so all return null.
+  const VALID_INTENT = 'ESR-12345678-1234-4123-8123-123456789ABC'
+  assert.equal(commerceOrderSupportOpenExpectation(seed, 'ORD-1039', VALID_INTENT), null)
+  assert.equal(commerceOrderSupportOpenExpectation(seed, 'NONEXISTENT', VALID_INTENT), null)
+
+  // Support service / resolve / reopen require an existing support case.
+  assert.equal(commerceOrderSupportServiceExpectation(seed, 'ORD-1039', 'CASE-001'), null)
+  assert.equal(commerceOrderSupportResolveExpectation(seed, 'ORD-1039', 'CASE-001'), null)
+  assert.equal(commerceOrderSupportReopenExpectation(seed, 'ORD-1039', 'CASE-001'), null)
+
+  // commerceOrderAcknowledgement: non-existent order returns null.
+  assert.equal(commerceOrderAcknowledgement(seed, 'NONEXISTENT'), null)
+
+  // ORD-1039 has a valid calculation, lines, fulfilment, and matching reserve movement.
+  const ack = commerceOrderAcknowledgement(seed, 'ORD-1039')
+  assert.ok(ack !== null, 'ORD-1039 must produce an order acknowledgement')
+  assert.equal(ack.schema, COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA)
+  assert.equal(ack.orderId, 'ORD-1039')
+  assert.equal(ack.totalMmk, 22500)
+
+  // commerceOrderAcknowledgementText formats the acknowledgement as a string report.
+  const text = commerceOrderAcknowledgementText(ack)
+  assert.equal(typeof text, 'string')
+  assert.ok(text.includes('SUPERMEGA ORDER ACKNOWLEDGEMENT'))
+  assert.ok(text.includes('ORD-1039'))
 })
