@@ -8,6 +8,7 @@ import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceO
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
+import { emitMetric } from '../analytics/metrics-collector'
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
@@ -3152,6 +3153,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       route: commerceLocation.pathname + commerceLocation.search,
       detail: 'Created a reviewed Shop order and reserved its stock.',
     })
+    if (pendingAction.presentation === 'counter') emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })
+    if (pendingAction.kind === 'daily_close') emitMetric({ product: 'shop', capability: 'shop-daily-close', action: 'shift.close.confirmed', ts: Date.now() })
     setNotice(pendingAction.presentation === 'counter'
       ? `Order ${commerceOrderDisplayReference(pendingAction.subjectId)} created. Stock reserved. Finish fulfilment and reconcile payment before completion.`
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
@@ -3644,6 +3647,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             ? reserveCommerceOrder(paymentPolicyState, ownedOrder, proof)
             : null
         })
+        emitMetric({ product: 'shop', capability: 'shop-orders', action: 'order.created', ts: Date.now() })
         if (ecommerceDraft) {
           consumedEcommerceDraftId.current = ecommerceDraft.id
           navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
@@ -6364,7 +6368,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
         {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
           <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
-          <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href}>Download accounting CSV</a>
+          <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href} onClick={() => emitMetric({ product: 'shop', capability: 'shop-accounting-handoff', action: 'accounting.export.downloaded', ts: Date.now() })}>Download accounting CSV</a>
         </div> : null}
       </details> : null}
       {actionHistory}
