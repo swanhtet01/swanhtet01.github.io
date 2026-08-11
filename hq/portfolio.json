@@ -298,6 +298,20 @@
       "evaluationStatus": "implementation-plan-ready"
     },
     {
+      "candidate": "analytics",
+      "decision": "adopt",
+      "gate": "Adopt only after: TypeScript compile check passes with no PII field names in MetricEvent; emit sites reviewed against PII list by founder/engineering lead; metrics page renders on fresh setup; founder approves the aggregate schema; device reset clears the localStorage key.",
+      "researchDoc": "hq/research/analytics-design-2026-08.md",
+      "evaluationStatus": "implementation-steps-ready"
+    },
+    {
+      "candidate": "enterprise-capabilities",
+      "decision": "evaluate",
+      "gate": "Adopt in sequence: verified-statements (after managed-storage-proof + shop-pilot-evidence), then staff-roles (after verified-statements + one named operator), then shared-workspace (after staff-roles + OEE pilot evidence). Each tier requires the prior to be proven in production.",
+      "researchDoc": "hq/research/enterprise-capabilities-design-2026-08.md",
+      "evaluationStatus": "design-ready"
+    },
+    {
       "candidate": "dense-data-grid",
       "decision": "defer",
       "gate": "Adopt TanStack Table or virtualization only after measured row volume exceeds the native interface.",
