@@ -3,6 +3,8 @@ import test from 'node:test'
 
 import {
   COMMERCE_KEY,
+  commercePaymentDecision,
+  commercePaymentPolicies,
   commerceWorkingSampleSkus,
   createSeedCommerce,
   installCommerceWorkingSampleCatalog,
@@ -269,4 +271,50 @@ test('a gym storefront uses coaching vocabulary, not spa or retail wording', asy
     rows.every((row) => row.sku.startsWith('GYM-')),
     `all gym storefront rows must be gym products, saw ${JSON.stringify(rows.map((row) => row.sku))}`,
   )
+})
+
+test('payment decision approves matching adapter+fulfilment pairs and rejects mismatches', () => {
+  const state = createSeedCommerce()
+  const policies = commercePaymentPolicies(state)
+  assert.ok(policies.length >= 3, 'seed must carry at least three payment policies')
+  const REVIEWED_AT = '2026-08-08T02:00:00.000Z'
+
+  // pay_on_pickup with pickup → approved; with delivery → rejected.
+  const pickupApproved = commercePaymentDecision(policies, 'pay_on_pickup', 'pickup', 50000, REVIEWED_AT)
+  assert.ok(pickupApproved, 'pay_on_pickup must return a decision')
+  assert.equal(pickupApproved.status, 'approved')
+  assert.equal(pickupApproved.reason, 'approved')
+
+  const pickupWrongFulfilment = commercePaymentDecision(policies, 'pay_on_pickup', 'delivery', 50000, REVIEWED_AT)
+  assert.ok(pickupWrongFulfilment)
+  assert.equal(pickupWrongFulfilment.status, 'rejected')
+  assert.equal(pickupWrongFulfilment.reason, 'fulfilment_not_allowed')
+
+  // cash_on_delivery with delivery, within limit → approved.
+  const codApproved = commercePaymentDecision(policies, 'cash_on_delivery', 'delivery', 100000, REVIEWED_AT)
+  assert.ok(codApproved)
+  assert.equal(codApproved.status, 'approved')
+
+  // cash_on_delivery above the 500,000 MMK cap → rejected.
+  const codExceeded = commercePaymentDecision(policies, 'cash_on_delivery', 'delivery', 600000, REVIEWED_AT)
+  assert.ok(codExceeded)
+  assert.equal(codExceeded.status, 'rejected')
+  assert.equal(codExceeded.reason, 'amount_exceeded')
+
+  // kbzpay_manual allows both fulfilments.
+  const kbzPickup = commercePaymentDecision(policies, 'kbzpay_manual', 'pickup', 200000, REVIEWED_AT)
+  assert.ok(kbzPickup)
+  assert.equal(kbzPickup.status, 'approved')
+  const kbzDelivery = commercePaymentDecision(policies, 'kbzpay_manual', 'delivery', 200000, REVIEWED_AT)
+  assert.ok(kbzDelivery)
+  assert.equal(kbzDelivery.status, 'approved')
+
+  // An invalid adapter must return null.
+  assert.equal(commercePaymentDecision(policies, 'unknown_adapter', 'pickup', 50000, REVIEWED_AT), null)
+
+  // An empty policy list means not_found.
+  const notFound = commercePaymentDecision([], 'pay_on_pickup', 'pickup', 50000, REVIEWED_AT)
+  assert.ok(notFound)
+  assert.equal(notFound.status, 'rejected')
+  assert.equal(notFound.reason, 'not_found')
 })
