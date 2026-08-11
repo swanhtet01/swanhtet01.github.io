@@ -25,10 +25,13 @@ import {
   parseProductionMaterialQuantity,
   placeProductionQualityHold,
   productionDowntimeIntervals,
+  productionJobPlanSourceDigest,
   productionMaintenanceDueQueue,
+  productionMaintenanceFindingSource,
   productionMaintenanceRecords,
   productionShiftCloseSourceDigest,
   productionShiftOutput,
+  productionStateCanonical,
   productionWorkingSamplePackId,
   openProductionIssue,
   recordProductionMaterialConsumption,
@@ -969,4 +972,42 @@ test('format functions produce structured text from shift handoff, genealogy, an
   assert.ok(typeof traceText === 'string' && traceText.trim().length > 0)
   const traceParsed = JSON.parse(traceText)
   assert.ok(traceParsed.query)
+})
+
+test('productionShiftOutput, productionStateCanonical, productionDowntimeIntervals, productionMaintenanceRecords, productionJobPlanSourceDigest, and productionMaintenanceFindingSource behave correctly', () => {
+  const seed = createSeedProduction()
+  const empty = createEmptyProduction()
+
+  // productionShiftOutput: invalid ref and empty events both return zero output.
+  const zeroOut = { goodUnits: 0, scrapUnits: 0, entryCount: 0 }
+  assert.deepEqual(productionShiftOutput(seed, 'SHIFT-001'), zeroOut)
+  assert.deepEqual(productionShiftOutput(seed, 'x'.repeat(81)), zeroOut)
+  assert.deepEqual(productionShiftOutput(empty, ''), zeroOut)
+
+  // productionStateCanonical: returns a string and is deterministic.
+  const canonical = productionStateCanonical(seed)
+  assert.equal(typeof canonical, 'string')
+  assert.ok(canonical.length > 0)
+  assert.equal(productionStateCanonical(seed), canonical)
+  assert.notEqual(productionStateCanonical(empty), canonical)
+
+  // productionDowntimeIntervals: returns empty array when no events recorded.
+  assert.deepEqual(productionDowntimeIntervals(seed), [])
+  assert.deepEqual(productionDowntimeIntervals(empty), [])
+
+  // productionMaintenanceRecords: returns empty array when no events recorded.
+  assert.deepEqual(productionMaintenanceRecords(seed), [])
+  assert.deepEqual(productionMaintenanceRecords(empty), [])
+
+  // productionJobPlanSourceDigest: returns a deterministic sha256 string.
+  const job = seed.jobs[0]
+  assert.ok(job)
+  const digest = productionJobPlanSourceDigest('plant:local-sample', job)
+  assert.ok(digest.startsWith('sha256:'))
+  assert.equal(productionJobPlanSourceDigest('plant:local-sample', job), digest)
+  assert.notEqual(productionJobPlanSourceDigest('plant:other-scope', job), digest)
+
+  // productionMaintenanceFindingSource: returns null when no matching maintenance record.
+  assert.equal(productionMaintenanceFindingSource(empty, ''), null)
+  assert.equal(productionMaintenanceFindingSource(seed, 'ACT-NO-SUCH-RECORD'), null)
 })
