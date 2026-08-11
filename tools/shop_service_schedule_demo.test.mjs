@@ -10,8 +10,12 @@ import {
   isGuidedSampleShopSchedule,
   projectShopServiceSchedule,
   provisionEmptyShopServiceSchedule,
+  registerShopService,
+  registerShopServiceResource,
   scheduleShopServiceBooking,
+  shopIndustryPack,
   shopIndustryPacks,
+  shopScheduleVocabulary,
   validateShopServiceSchedule,
 } from '../showroom/src/core/shop-service-scheduling.ts'
 
@@ -159,4 +163,50 @@ test('a booking can be cancelled from any non-terminal state and cannot be cance
   assert.equal(confirmed2.bookings[0].status, 'confirmed')
   const cancelledFromConfirmed = cancelShopServiceBooking(confirmed2, bookingId2, proof(`${PLANNING_DAY}T07:01:00.000Z`))
   assert.equal(cancelledFromConfirmed.bookings[0].status, 'cancelled')
+})
+
+test('registerShopService and registerShopServiceResource extend the schedule and appear in projections', () => {
+  const proof = { actor: 'Owner', reason: 'Setup.', happenedAt: `${PLANNING_DAY}T08:00:00.000Z` }
+  const base = createShopServiceSchedule('spa')
+  const initialServiceCount = base.services.length
+  const initialResourceCount = base.resources.length
+
+  const withService = registerShopService(base, {
+    name: 'Hot stone therapy',
+    durationMinutes: 90,
+    priceMmk: 75000,
+  }, proof)
+  validateShopServiceSchedule(withService)
+  assert.equal(withService.services.length, initialServiceCount + 1)
+  const newService = withService.services.find((s) => s.name === 'Hot stone therapy')
+  assert.ok(newService)
+  assert.equal(newService.durationMinutes, 90)
+  assert.equal(newService.priceMmk, 75000)
+  assert.equal(newService.active, true)
+
+  const withResource = registerShopServiceResource(base, { name: 'Room 3', kind: 'room' }, proof)
+  validateShopServiceSchedule(withResource)
+  assert.equal(withResource.resources.length, initialResourceCount + 1)
+  const newResource = withResource.resources.find((r) => r.name === 'Room 3')
+  assert.ok(newResource)
+  assert.equal(newResource.kind, 'room')
+
+  // An invalid resource kind must throw.
+  assert.throws(() => registerShopServiceResource(base, { name: 'Robot', kind: 'machine' }, proof), /staff, room, or equipment/)
+})
+
+test('shopScheduleVocabulary returns pack-specific wording and falls back gracefully', () => {
+  for (const pack of shopIndustryPacks) {
+    const vocab = shopScheduleVocabulary(pack.id)
+    assert.ok(vocab.plural, `${pack.id} must have a plural label`)
+    assert.ok(vocab.singular, `${pack.id} must have a singular label`)
+    assert.ok(vocab.holdAction, `${pack.id} must have a holdAction label`)
+  }
+  // Unknown pack degrades to neutral wording rather than throwing.
+  const fallback = shopScheduleVocabulary('unknown-pack')
+  assert.ok(fallback.plural)
+  assert.ok(fallback.singular)
+
+  // shopIndustryPack throws on an unknown id.
+  assert.throws(() => shopIndustryPack('unknown-pack'), /supported Shop industry pack/)
 })
