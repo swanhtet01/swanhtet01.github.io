@@ -28,8 +28,10 @@ import {
   previewDevices,
   readinessChecks,
   recordWebsiteEvidence,
+  recordWebsiteSnapshot,
   approveWebsiteRevision,
   restoreWebsiteEditSession,
+  restoreWorkspace,
   updateWebsiteEditSession,
   websiteEditSessionMatches,
   websiteSource,
@@ -508,4 +510,24 @@ test('WEBSITE_SCHEMA, MAX_WEBSITE_PAGES, previewDevices, createId, isCurrentAppr
   // Invalid input → 'Unknown time'.
   assert.equal(formatTimestamp('not-a-date'), 'Unknown time')
   assert.equal(formatTimestamp(''), 'Unknown time')
+})
+
+test('restoreWorkspace and recordWebsiteSnapshot behave correctly', () => {
+  const workspace = createInitialWorkspace()
+
+  // restoreWorkspace: valid workspace returns itself.
+  const restored = restoreWorkspace(workspace)
+  assert.ok(restored !== null)
+  assert.equal(restored.schema, workspace.schema)
+
+  // null / unknown value returns null.
+  assert.equal(restoreWorkspace(null), null)
+  assert.equal(restoreWorkspace({}), null)
+  assert.equal(restoreWorkspace('not-a-workspace'), null)
+
+  // recordWebsiteSnapshot: throws when no current approval exists.
+  assert.throws(() => recordWebsiteSnapshot(workspace, {
+    actionId: 'ACT-SNAP-001',
+    capturedAt: CAPTURED_AT,
+  }))
 })

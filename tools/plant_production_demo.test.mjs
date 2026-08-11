@@ -50,6 +50,8 @@ import {
   productionMaterialUnits,
   productionQualityCauseCategories,
   productionWorkspaceCanWrite,
+  currentProductionShiftClose,
+  currentProductionShiftCloseEvidence,
 } from '../showroom/src/core/production-workspace.ts'
 import { plantIndustryPacks } from '../showroom/src/core/plant-industry-packs.ts'
 
@@ -1042,4 +1044,15 @@ test('productionIssueSeverities, productionJobPriorities, productionMachineState
   assert.equal(productionWorkspaceCanWrite(undefined, undefined), false)
   // No storage → false.
   assert.equal(productionWorkspaceCanWrite(null, undefined), false)
+})
+
+test('currentProductionShiftClose and currentProductionShiftCloseEvidence return null when no eligible event exists', () => {
+  // Empty production has no events → both return null.
+  assert.equal(currentProductionShiftClose(createEmptyProduction()), null)
+  assert.equal(currentProductionShiftCloseEvidence(createEmptyProduction()), null)
+
+  // Seed production has events but none of kind 'shift_closed' as the first event.
+  const seed = createSeedProduction()
+  assert.equal(currentProductionShiftClose(seed), null)
+  assert.equal(currentProductionShiftCloseEvidence(seed), null)
 })
