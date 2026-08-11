@@ -120,6 +120,7 @@ import {
   commerceOrderLocationAllocationPreview,
   commerceOrderNeedsAction,
   commerceOrderHasReleasableReservation,
+  commerceOrderIsServiceCheckout,
   commerceOrderPromiseUrgency,
   commerceReceivablesAging,
   compareCommercePurchaseOrderAttention,
@@ -945,7 +946,7 @@ function fulfilmentLabel(value: string | undefined) {
 }
 
 function commerceOrderReturnLines(order: CommerceOrder) {
-  return order.lines?.map((line) => ({
+  return order.lines?.filter((line) => line.kind !== 'service').map((line) => ({
     sku: line.sku,
     name: line.variant ? `${line.name} · ${line.variant}` : line.name,
     quantity: line.quantity,
@@ -1026,6 +1027,8 @@ const accountableActionSubmitLabels: Record<ShopActionKind | PlantActionKind, st
 
 function accountableActionSubmitLabel(action: PendingAccountableAction) {
   if (action.kind === 'order_status') {
+    if (action.summary.startsWith('Prepare Spa payment')) return 'Ready for payment'
+    if (action.summary.startsWith('Close Spa visit')) return 'Close visit'
     if (action.after === 'preparing') return 'Start preparing'
     if (action.after === 'ready') return 'Mark order ready'
     if (action.after === 'completed') return 'Complete order'
@@ -4632,9 +4635,27 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(`Reconcile ${order.id} payment before completion.`)
       return
     }
-    const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
+    const serviceCheckout = commerceOrderIsServiceCheckout(order)
+    const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: serviceCheckout ? 'ready' : 'preparing', preparing: 'ready', ready: 'completed' }
     const nextStatus = next[order.status]
-    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status, commerceActionProof(action), managedIdentity ? 'managed-server' : 'client')) })
+    const summary = serviceCheckout
+      ? nextStatus === 'completed' ? `Close Spa visit ${orderId}` : `Prepare Spa payment ${orderId}`
+      : `Advance ${orderId} fulfilment`
+    queueAction({
+      kind: 'order_status',
+      subjectId: orderId,
+      summary,
+      before: serviceCheckout ? `${order.status} · treatment already completed` : order.status,
+      after: serviceCheckout ? `${nextStatus} · no service stock movement` : nextStatus,
+      ...(serviceCheckout ? {
+        evidenceReferenceLocked: true,
+        evidenceReferenceSuggestion: order.sourceRecordId,
+        reasonSuggestion: nextStatus === 'completed'
+          ? 'Close the completed Spa visit after reviewed payment.'
+          : 'Recover the completed Spa appointment directly to payment review.',
+      } : {}),
+      apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status, commerceActionProof(action), managedIdentity ? 'managed-server' : 'client')),
+    })
   }
 
   function reconcilePayment(orderId: string) {
@@ -4644,7 +4665,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(`${order.id} payment is already reconciled.`)
       return
     }
-    queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
+    const serviceCheckout = commerceOrderIsServiceCheckout(order)
+    queueAction({
+      kind: 'payment_reconcile',
+      subjectId: orderId,
+      summary: serviceCheckout ? `Record ${order.payment} for Spa visit ${order.id}` : `Reconcile ${order.id} payment`,
+      before: `${order.payment} · ${order.paymentStatus}`,
+      after: serviceCheckout ? `${order.payment} · reconciled · no payment provider called` : `${order.payment} · reconciled`,
+      ...(serviceCheckout ? { reasonSuggestion: `Record the externally received ${order.payment} payment for the completed Spa visit.` } : {}),
+      apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))),
+    })
   }
 
   function recordCollectionContact(orderId: string) {
@@ -7681,6 +7711,7 @@ function OrderList({
   if (!orders.length) return <Empty>No orders need action.</Empty>
   const nextAction: Record<'confirmed' | 'preparing' | 'ready', string> = { confirmed: 'Start preparing', preparing: 'Mark ready', ready: 'Complete' }
   return <div className="order-list">{orders.map((order) => {
+    const serviceCheckout = commerceOrderIsServiceCheckout(order)
     const active = order.status === 'confirmed' || order.status === 'preparing' || order.status === 'ready'
     const needsPayment = order.paymentStatus === 'pending'
     const reconcileIsPrimary = needsPayment && (order.status === 'ready' || order.status === 'completed')
@@ -7694,7 +7725,7 @@ function OrderList({
     return <article data-highlighted={highlightedTargetId === targetId ? 'true' : undefined} id={targetId} key={order.id} tabIndex={-1}>
       <div>
         <div className="order-statuses">
-          <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'pending' : 'bounded'}`}>{order.status}</span>
+          <span className={`status-pill ${order.status === 'completed' ? 'approved' : order.status === 'cancelled' ? 'pending' : 'bounded'}`}>{serviceCheckout ? order.status === 'completed' ? 'visit closed' : order.status === 'ready' ? 'treatment complete' : 'checkout recovery' : order.status}</span>
           <span className={`status-pill ${order.paymentStatus === 'reconciled' ? 'approved' : 'pending'}`}>payment {order.paymentStatus}</span>
           {order.refundStatus === 'due' ? <span className="status-pill pending">refund due</span> : null}
           {promiseUrgency === 'late' ? <span className="status-pill pending">late</span> : null}
@@ -7708,11 +7739,11 @@ function OrderList({
             : `${order.lines.length} items · ${order.quantity} units`
           : `${order.item} × ${order.quantity}`}</strong>
         <details className="order-record-details">
-          <summary><span>{order.id} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
+          <summary><span>{order.id} · {serviceCheckout ? order.sourceRecordId : order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
-            <small>{order.id} · {accountingScopeCode(order.accountingScope)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+            <small>{order.id} · {accountingScopeCode(order.accountingScope)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{serviceCheckout ? ' · in-person visit' : order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''}{serviceCheckout ? '' : ` · ${order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'}`}{` · created ${formatTime(order.createdAt)}`}</small>
           </div>
         </details>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
@@ -7721,7 +7752,7 @@ function OrderList({
         <b>{formatMoney(order.total)}</b>
         {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
         {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
-        {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
+        {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{serviceCheckout ? order.status === 'ready' ? 'Close visit' : 'Ready for payment' : nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
         {hasSecondaryActions ? <details className="order-row-more">
           <summary aria-label={`More options for ${order.id}`}>More</summary>
           <div>

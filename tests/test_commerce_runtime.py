@@ -9166,7 +9166,6 @@ class CommerceRuntimeTests(unittest.TestCase):
             "refundStatus": "none",
             "fulfilment": "pickup",
             "fulfilmentReference": "SPA-BOOKING-0001 completed 2026-07-29T05:30:00.000Z",
-            "promisedAt": "2026-07-29T05:46:00.000Z",
             "sourceRecordId": "SPA-BOOKING-0001",
             "evidenceReference": "SPA-BOOKING-0001",
             "lines": [{
@@ -9187,7 +9186,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 "totalMmk": 45000,
             },
             "total": 45000,
-            "status": "confirmed",
+            "status": "ready",
         }
         checked_out = apply_event(
             completed,
@@ -9198,6 +9197,96 @@ class CommerceRuntimeTests(unittest.TestCase):
         self.assertEqual(checked_out["items"], completed["items"])
         self.assertEqual(checked_out["movements"], completed["movements"])
         self.assertEqual(checked_out["orders"][0]["paymentStatus"], "pending")
+        self.assertEqual(checked_out["orders"][0]["status"], "ready")
+        self.assertNotIn("promisedAt", checked_out["orders"][0])
+
+        legacy_order = deepcopy(service_order)
+        legacy_order["status"] = "confirmed"
+        legacy_order["promisedAt"] = "2026-07-29T05:46:00.000Z"
+        legacy_state = validate_commerce_state({
+            **checked_out,
+            "orders": [legacy_order, *checked_out["orders"][1:]],
+        })
+        recovery_evidence = {
+            "actionId": "ACT-SPA-BOOKING-0001-READY-RECOVERY",
+            "capturedAt": "2026-07-29T05:33:00.000Z",
+            "actor": "operator-1",
+            "reason": "Recover the legacy service checkout directly to payment review.",
+            "evidenceReference": "SPA-BOOKING-0001",
+        }
+        recovered_order = {
+            **legacy_order,
+            "status": "ready",
+            "advancementActionIds": [recovery_evidence["actionId"]],
+        }
+        recovered = apply_event(
+            legacy_state,
+            "commerce.order.advanced",
+            {**legacy_state, "orders": [recovered_order, *legacy_state["orders"][1:]]},
+            recovery_evidence,
+        )
+        self.assertEqual(recovered["orders"][0]["status"], "ready")
+        self.assertEqual(recovered["items"], legacy_state["items"])
+        self.assertEqual(recovered["movements"], legacy_state["movements"])
+
+        payment_evidence = {
+            "actionId": "ACT-SPA-BOOKING-0001-PAYMENT",
+            "capturedAt": "2026-07-29T05:33:00.000Z",
+            "actor": "operator-1",
+            "reason": "Reviewed the externally received Spa payment.",
+            "evidenceReference": "CASH-SPA-0001",
+        }
+        paid_order = {
+            **service_order,
+            "paymentStatus": "reconciled",
+            "paymentReconciledAt": payment_evidence["capturedAt"],
+            "paymentReconciliationActionId": payment_evidence["actionId"],
+            "paymentReconciledBy": payment_evidence["actor"],
+            "paymentReconciliationReason": payment_evidence["reason"],
+            "paymentEvidenceReference": payment_evidence["evidenceReference"],
+        }
+        paid = apply_event(
+            checked_out,
+            "commerce.payment.reconciled",
+            {**checked_out, "orders": [paid_order, *checked_out["orders"][1:]]},
+            payment_evidence,
+        )
+        completion_evidence = {
+            "actionId": "ACT-SPA-BOOKING-0001-VISIT-CLOSE",
+            "capturedAt": "2026-07-29T05:34:00.000Z",
+            "actor": "operator-1",
+            "reason": "Close the completed and paid Spa visit.",
+            "evidenceReference": "SPA-BOOKING-0001",
+        }
+        completed_order = {
+            **paid_order,
+            "status": "completed",
+            "completion": completion_evidence,
+        }
+        closed_visit = apply_event(
+            paid,
+            "commerce.order.advanced",
+            {**paid, "orders": [completed_order, *paid["orders"][1:]]},
+            completion_evidence,
+        )
+        close_action_id = "ACT-00000000-0000-4000-8000-000000000064"
+        close_id = "CLOSE-00000000-0000-4000-8000-000000000064"
+        close = close_record(
+            closed_visit,
+            close_action_id,
+            close_id=close_id,
+            captured_at="2026-07-29T05:35:00.000Z",
+        )
+        closed_day = apply_event(
+            closed_visit,
+            "commerce.close.saved",
+            {**closed_visit, "closes": [close, *closed_visit["closes"]]},
+        )
+        self.assertEqual(closed_day["orders"][0]["status"], "completed")
+        self.assertEqual(closed_day["orders"][0]["paymentStatus"], "reconciled")
+        self.assertEqual(closed_day["closes"][0]["orderIds"], [service_order["id"]])
+        self.assertEqual(closed_day["items"], completed["items"])
+        self.assertEqual(closed_day["movements"], completed["movements"])
 
         linked_schedule = deepcopy(schedule)
         linked_schedule["revision"] = 5

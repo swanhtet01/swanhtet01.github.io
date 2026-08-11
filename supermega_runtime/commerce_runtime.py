@@ -818,6 +818,24 @@ def _reservation_lines(order: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [{"sku": item_sku, "quantity": order["quantity"]}] if item_sku else []
 
 
+def _is_service_checkout(order: Mapping[str, Any]) -> bool:
+    lines = order.get("lines")
+    source_record_id = order.get("sourceRecordId")
+    return (
+        isinstance(lines, list)
+        and len(lines) == 1
+        and isinstance(lines[0], Mapping)
+        and lines[0].get("kind") == "service"
+        and order.get("channel") == "Spa appointment"
+        and order.get("fulfilment") == "pickup"
+        and isinstance(source_record_id, str)
+        and _SPA_BOOKING_SOURCE_PATTERN.fullmatch(source_record_id) is not None
+        and order.get("id") == f"ORD-{source_record_id}"
+        and order.get("evidenceReference") == source_record_id
+        and isinstance(order.get("creation"), Mapping)
+    )
+
+
 def _movement_id(action_id: str, suffix: str | None = None) -> str:
     encoded_action_id = quote(action_id, safe="-_.!~*'()")
     return f"MOV2:{encoded_action_id}{f':{suffix}' if suffix else ''}"
@@ -8830,7 +8848,8 @@ def _validate_new_order_and_reservation(
         if active_scope_configuration is not None
         else None
     )
-    if _inventory_foundation(current) is not None and (
+    service_checkout = _is_service_checkout(order)
+    if _inventory_foundation(current) is not None and not service_checkout and (
         expected_scope is None or not expected_scope.get("inventoryLocationId")
     ):
         raise TrialValidationError(
@@ -8869,8 +8888,13 @@ def _validate_new_order_and_reservation(
         raise TrialValidationError(
             "a new order requires the current deterministic pricing calculation."
         )
-    if order.get("status") != "confirmed" or order.get("paymentStatus") != "pending" or order.get("refundStatus") != "none":
-        raise TrialValidationError("a new order must start confirmed with pending payment and no refund exception.")
+    expected_status = "ready" if service_checkout else "confirmed"
+    if order.get("status") != expected_status or order.get("paymentStatus") != "pending" or order.get("refundStatus") != "none":
+        raise TrialValidationError(
+            "a new Spa service checkout must start ready for payment with no refund exception."
+            if service_checkout
+            else "a new order must start confirmed with pending payment and no refund exception."
+        )
     payment_terms_days = _order_payment_terms_days(order)
     if payment_terms_days is None:
         raise TrialValidationError("a new order requires a supported customer credit term.")
@@ -8913,11 +8937,18 @@ def _validate_new_order_and_reservation(
         raise TrialValidationError("a new order requires pickup or delivery fulfilment.")
     _text(order.get("owner"), "new order.owner", maximum=120)
     _text(order.get("fulfilmentReference"), "new order.fulfilmentReference", maximum=160)
-    promised_at = datetime.fromisoformat(
-        _timestamp(order.get("promisedAt"), "new order.promisedAt").replace(
-            "Z", "+00:00"
+    promised_at: datetime | None = None
+    if service_checkout:
+        if "promisedAt" in order:
+            raise TrialValidationError(
+                "a completed Spa appointment checkout cannot invent a future fulfilment promise."
+            )
+    else:
+        promised_at = datetime.fromisoformat(
+            _timestamp(order.get("promisedAt"), "new order.promisedAt").replace(
+                "Z", "+00:00"
+            )
         )
-    )
     lines = _reservation_lines(order)
     service_lines = [
         line
@@ -9157,7 +9188,12 @@ def _validate_advanced(current: Mapping[str, Any], next_state: Mapping[str, Any]
     _require_unchanged(current, next_state, "items", "movements", "closes")
     _require_website_intakes_unchanged(current, next_state)
     before, after = _one_changed(current["orders"], next_state["orders"], "orders")
-    if _NEXT_ORDER_STATUS.get(before["status"]) != after["status"]:
+    expected_status = (
+        "ready"
+        if before["status"] == "confirmed" and _is_service_checkout(before)
+        else _NEXT_ORDER_STATUS.get(before["status"])
+    )
+    if expected_status != after["status"]:
         raise TrialValidationError("order status must advance exactly one lifecycle step.")
     if before["status"] == "ready" and before["paymentStatus"] != "reconciled":
         raise TrialValidationError("payment must be reconciled before order completion.")

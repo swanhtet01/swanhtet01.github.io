@@ -509,6 +509,7 @@ export type CommerceOrderAcknowledgement = {
 export type CommerceOrderPromiseUrgency = 'late' | 'due_soon' | 'scheduled' | 'unrecorded'
 
 export function commerceOrderPromiseUrgency(order: CommerceOrder, now: number): CommerceOrderPromiseUrgency {
+  if (commerceOrderIsServiceCheckout(order)) return 'scheduled'
   const promisedAt = order.promisedAt ? Date.parse(order.promisedAt) : Number.NaN
   if (!Number.isFinite(promisedAt) || !Number.isFinite(now)) return 'unrecorded'
   if (promisedAt <= now) return 'late'
@@ -2166,6 +2167,19 @@ export function commerceOrderItemSummary(lines: CommerceOrderLine[]) {
 
 const commerceServiceSkuPattern = /^SPA-SVC-[A-Z0-9-]{1,64}$/
 const commerceSpaBookingSourcePattern = /^SPA-BOOKING-\d{4,10}$/
+
+export function commerceOrderIsServiceCheckout(order: CommerceOrder) {
+  const lines = order.lines ?? []
+  return lines.length === 1
+    && lines[0].kind === 'service'
+    && order.channel === 'Spa appointment'
+    && order.fulfilment === 'pickup'
+    && typeof order.sourceRecordId === 'string'
+    && commerceSpaBookingSourcePattern.test(order.sourceRecordId)
+    && order.id === `ORD-${order.sourceRecordId}`
+    && order.evidenceReference === order.sourceRecordId
+    && order.creation !== undefined
+}
 
 function reservationLinesForOrder(order: CommerceOrder) {
   if (order.lines !== undefined) return order.lines
@@ -7433,7 +7447,6 @@ export function createCommerceServiceOrder(
       && line.quantity === 1
       && line.unitPriceMmk === input.servicePriceMmk ? current : null
   }
-  const promisedAt = new Date(Number(capturedAt / 1_000n) + 15 * 60_000).toISOString()
   return reserveCommerceOrder(current, {
     id: orderId,
     createdAt: proof.capturedAt,
@@ -7447,7 +7460,6 @@ export function createCommerceServiceOrder(
     refundStatus: 'none',
     fulfilment: 'pickup',
     fulfilmentReference,
-    promisedAt,
     sourceRecordId: input.sourceRecordId,
     evidenceReference: input.sourceRecordId,
     lines: [{
@@ -7459,31 +7471,32 @@ export function createCommerceServiceOrder(
     }],
     creation: { ...proof },
     total: input.servicePriceMmk,
-    status: 'confirmed',
+    status: 'ready',
   }, proof)
 }
 
 export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder, proof: CommerceActionProof) {
+  const serviceCheckout = commerceOrderIsServiceCheckout(order)
   const promisedAt = timestampMicros(order.promisedAt)
   const createdAt = timestampMicros(order.createdAt)
   const confirmedAt = timestampMicros(proof.capturedAt)
   const activeScopeConfiguration = commerceCurrentAccountingScopeConfiguration(state)
   const accountingScope = activeScopeConfiguration ? commerceAccountingScopeSnapshot(activeScopeConfiguration) : undefined
-  if (state.inventoryFoundation && !accountingScope?.inventoryLocationId) return null
+  if (state.inventoryFoundation && !accountingScope?.inventoryLocationId && !serviceCheckout) return null
   if (!validProof(proof)
     || order.creditDecision !== undefined
-    || order.status !== 'confirmed'
+    || order.status !== (serviceCheckout ? 'ready' : 'confirmed')
     || order.owner !== proof.actor
     || !['pickup', 'delivery'].includes(order.fulfilment ?? '')
     || typeof order.fulfilmentReference !== 'string'
     || !order.fulfilmentReference.trim()
     || order.fulfilmentReference !== order.fulfilmentReference.trim()
     || order.fulfilmentReference.length > 160
-    || promisedAt === null
     || createdAt === null
     || confirmedAt === null
-    || promisedAt <= createdAt
-    || promisedAt <= confirmedAt
+    || (serviceCheckout ? order.promisedAt !== undefined : promisedAt === null)
+    || (!serviceCheckout && (promisedAt as bigint) <= createdAt)
+    || (!serviceCheckout && (promisedAt as bigint) <= confirmedAt)
     || !Number.isSafeInteger(order.quantity)
     || order.quantity < 1
     || !Number.isSafeInteger(order.total)
@@ -11086,6 +11099,7 @@ export function advanceCommerceOrder(
   const order = current.orders.find((candidate) => candidate.id === orderId)
   if (!order || order.status !== expectedStatus || order.status === 'completed' || order.status === 'cancelled') return null
   const currentStatus = order.status as 'confirmed' | 'preparing' | 'ready'
+  const serviceCheckout = commerceOrderIsServiceCheckout(order)
   if (order.status === 'ready' && order.paymentStatus !== 'reconciled') return null
   if (!proof
     || !validProof(proof)
@@ -11107,7 +11121,7 @@ export function advanceCommerceOrder(
       retainedProof = { ...proof, capturedAt: latestBasis.timestamp }
     }
   }
-  const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
+  const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: serviceCheckout ? 'ready' : 'preparing', preparing: 'ready', ready: 'completed' }
   let inventoryFoundation = current.inventoryFoundation
   if (currentStatus === 'ready' && inventoryFoundation && reservationLinesForOrder(order).length) {
     try {

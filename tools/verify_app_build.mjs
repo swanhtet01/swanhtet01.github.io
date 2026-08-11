@@ -350,10 +350,16 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   || !shopServiceScheduleUiSource.includes("scrollIntoView({ block: 'start' })")
   || !coreSource.includes("lazy(() => import('./ShopServiceSchedule')")
   || !coreSource.includes('createCommerceServiceOrder(current, {')
+  || !coreSource.includes('commerceOrderIsServiceCheckout(order)')
   || !coreSource.includes('onReviewCheckout={reviewShopServiceCheckout}')
+  || !coreSource.includes("'Ready for payment'")
+  || !coreSource.includes("'Close visit'")
+  || !coreSource.includes("'treatment complete'")
+  || !coreSource.includes('no payment provider called')
   || !commerceSource.includes("kind?: 'service'")
   || !commerceSource.includes('creation?: CommerceActionProof')
   || !commerceSource.includes('createCommerceServiceOrder(')
+  || !commerceSource.includes('export function commerceOrderIsServiceCheckout(')
   || !coreSource.includes("initiallyOpen={commerceLocation.hash === '#shop-service-schedule'}")
   || !coreCssSource.includes('.service-booking-form')
   || !coreCssSource.includes('.service-agenda article')) fail('shop_service_schedule_contract_missing')
@@ -377,6 +383,8 @@ if (!managedTrialSource.includes('loadManagedServiceSchedule')
   || !managedCommerceRuntime.includes('service schedule evidence history is immutable')
   || !managedCommerceRuntime.includes('booking_checkout_linked')
   || !managedCommerceRuntime.includes('a stock-free order must be one evidence-bound Spa service checkout')
+  || !managedCommerceRuntime.includes('a new Spa service checkout must start ready for payment with no refund exception')
+  || !managedCommerceRuntime.includes('a completed Spa appointment checkout cannot invent a future fulfilment promise')
   || !managedCommerceRuntime.includes('service checkout cannot create a stock movement')
   || !managedTrialStoreRuntime.includes('commerce.service_schedule.initialized')
   || !managedTrialStoreRuntime.includes('commerce.service_schedule.saved')) fail('managed_shop_service_schedule_contract_missing')
@@ -8831,7 +8839,9 @@ async function verifyShopServiceScheduleRuntime() {
     assert(checkedOut?.orders.length === 1
       && checkedOut.orders[0].id === 'ORD-SPA-BOOKING-0003'
       && checkedOut.orders[0].lines?.[0].kind === 'service'
+      && checkedOut.orders[0].status === 'ready'
       && checkedOut.orders[0].paymentStatus === 'pending'
+      && checkedOut.orders[0].promisedAt === undefined
       && checkedOut.orders[0].creation?.actionId === checkoutProof.actionId
       && checkedOut.items.length === 0
       && checkedOut.movements.length === 0, 'shop_service_checkout_created_fake_stock_or_lost_proof')
@@ -8855,6 +8865,62 @@ async function verifyShopServiceScheduleRuntime() {
       completedAt: checkoutRequest.completedAt,
       payment: 'KBZPay',
     }, { ...checkoutProof, actionId: 'ACT-SPA-BOOKING-0003-CHECKOUT-CONFLICT' }) === null, 'shop_service_checkout_conflict_overwrote_snapshot')
+    const legacyServiceOrder = commerceModel.validateCommerceState({
+      ...structuredClone(checkedOut),
+      orders: [{ ...structuredClone(checkedOut.orders[0]), status: 'confirmed', promisedAt: '2026-07-29T03:28:00.000Z' }],
+    })
+    const recoveredServiceOrder = commerceModel.advanceCommerceOrder(legacyServiceOrder, checkedOut.orders[0].id, 'confirmed', {
+      actionId: 'ACT-SPA-BOOKING-0003-READY-RECOVERY',
+      capturedAt: '2026-07-29T03:14:00.000Z',
+      actor: 'Shop owner',
+      reason: 'Recover the legacy service checkout directly to payment review.',
+      evidenceReference: checkoutRequest.sourceRecordId,
+    })
+    assert(recoveredServiceOrder?.orders[0].status === 'ready'
+      && recoveredServiceOrder.orders[0].advancementActionIds?.length === 1
+      && recoveredServiceOrder.movements.length === 0, 'shop_service_checkout_legacy_fulfilment_recovery_failed')
+    const servicePaymentProof = {
+      actionId: 'ACT-SPA-BOOKING-0003-PAYMENT',
+      capturedAt: '2026-07-29T03:14:00.000Z',
+      actor: 'Shop owner',
+      reason: 'Reviewed the externally received Spa payment.',
+      evidenceReference: 'KBZPAY-SPA-0003',
+    }
+    const paidServiceOrder = commerceModel.reconcileCommercePayment(checkedOut, checkedOut.orders[0].id, servicePaymentProof)
+    const visitCloseProof = {
+      actionId: 'ACT-SPA-BOOKING-0003-VISIT-CLOSE',
+      capturedAt: '2026-07-29T03:15:00.000Z',
+      actor: 'Shop owner',
+      reason: 'Close the completed and paid Spa visit.',
+      evidenceReference: checkoutRequest.sourceRecordId,
+    }
+    const closedServiceOrder = commerceModel.advanceCommerceOrder(paidServiceOrder, checkedOut.orders[0].id, 'ready', visitCloseProof)
+    const serviceCloseCapturedAt = '2026-07-29T03:16:00.000Z'
+    const serviceCloseExpected = commerceModel.commerceCloseExpectation(closedServiceOrder, serviceCloseCapturedAt)
+    const serviceSettlementInput = [{ paymentMethod: 'KBZPay', countedMmk: 75_000, varianceOwner: '', varianceReason: '' }]
+    const serviceCloseProof = {
+      actionId: 'ACT-00000000-0000-4000-8000-000000000064',
+      capturedAt: serviceCloseCapturedAt,
+      actor: 'Shop owner',
+      reason: 'Reviewed the Spa payment and closed the business day.',
+      evidenceReference: 'SPA-CLOSE-2026-07-29',
+    }
+    const closedServiceDay = commerceModel.saveCommerceClose(
+      closedServiceOrder,
+      'CLOSE-00000000-0000-4000-8000-000000000064',
+      serviceCloseProof,
+      serviceCloseExpected,
+      serviceSettlementInput,
+    )
+    assert(paidServiceOrder?.orders[0].paymentStatus === 'reconciled'
+      && closedServiceOrder?.orders[0].status === 'completed'
+      && closedServiceOrder.orders[0].completion?.actionId === visitCloseProof.actionId
+      && closedServiceOrder.movements.length === 0
+      && serviceCloseExpected?.orderIds.join(',') === checkedOut.orders[0].id
+      && closedServiceDay?.closes[0].orderIds.join(',') === checkedOut.orders[0].id
+      && closedServiceDay.closes[0].settlement?.status === 'matched'
+      && closedServiceDay.items.length === 0
+      && closedServiceDay.movements.length === 0, 'shop_service_payment_close_or_stock_isolation_failed')
     state = model.linkShopServiceBookingCheckout(state, bookingId, checkedOut.orders[0].id, proof(14, 'Linked reviewed checkout'))
     assert(state.bookings[0].checkoutOrderId === checkedOut.orders[0].id
       && state.events.at(-1).type === 'booking_checkout_linked'
