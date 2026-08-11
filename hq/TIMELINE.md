@@ -16,7 +16,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Products**: Shop, Plant, Website, Ecommerce — all `release-candidate-local`. All four pass their full acceptance matrix (mobile, recovery, overflow, security, onboarding). No managed tenant. No live operators.
 
-**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles checks.
+**Test baseline**: 106 Ecommerce + 342 Commerce + 327 Production + 128 Shop next-action + 109 Website + 95 security + 241 onboarding + 108 backup + 85 managed-import + 56 PostgreSQL + 58 AR receivables + 98 Plant quality CAPA (quality_hold 25 + capa 73) + 29 enterprise verified-statements + 67 enterprise staff-roles + 41 cross-product shop-production checks.
 
 **Accounting export packet**: AP supplier payables handoff + AR customer receivables handoff, both digest-bound. Shop accounting packet surfaces daily-close CSV, payables CSV, and receivables CSV to the operator.
 
@@ -59,6 +59,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Plant CAPA: effectiveness-due field (time-gated closure check) — DONE (OPS-169)
 - [x] Analytics: pre-register local-metrics key for Step 6; satisfies condition 5 — DONE (OPS-170)
 - [x] Plant CAPA: overdue indicator in Plant workspace and inspection row — DONE (OPS-171)
+- [x] Cross-product Phase A: projectShopOrderProductionStatus + projectJobFulfillmentReconciliation; 41 checks — DONE (OPS-172)
 
 ### Aug 25–31
 
@@ -166,7 +167,7 @@ _North-star: 10 operators, 3 business types, measured time-saved, zero data inci
 
 - OpenTelemetry: activate with managed mode; scrubber passes 40-span golden corpus; no PII in 1,000 synthetic spans
 - Durable workflows: adopt Vercel Workflows for the approval-wait pattern after managed persistence is proven; eight adoption conditions verified
-- Cross-product reporting: Shop → Plant job tracking; Ecommerce → Shop reconciliation; Website → Ecommerce conversion path
+- Cross-product reporting: Phase A (Shop → Plant job tracking + fulfillment reconciliation) in progress; Phase B (Ecommerce → Shop, Website → Ecommerce conversion) requires managed persistence
 
 ### Late 2027 — AI-native workflows
 
@@ -207,7 +208,7 @@ All seven gates collapse to two: (1) approve one isolated tenant + (2) name one 
 | verified-statements | adopt | types + tests shipped (OPS-162) | `enterprise-verified-statements.ts` (29 checks) |
 | staff-roles | adopt | types + tests shipped (OPS-163) | `enterprise-staff-roles.ts` (67 checks) |
 | shared-workspace | evaluate | design-ready, awaiting staff-roles proof | `hq/research/enterprise-capabilities-design-2026-08.md` |
-| Cross-product reporting | design | design-in-progress | `hq/research/cross-product-reporting-design-2026-08.md` |
+| Cross-product reporting | adopt | Phase A in progress (shop-production projection done, reconciliation + aggregate pending) | `hq/research/cross-product-reporting-design-2026-08.md` |
 
 ---
 
