@@ -144,6 +144,8 @@ import {
   approveCommercePurchaseBudgetEnvelope,
   approveCommerceSupplierSourcingDecision,
   approveCommercePurchaseRequisition,
+  issueCommerceStockToProduction,
+  receiveCommerceProductionBatch,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -2437,4 +2439,117 @@ test('procurement approval chain — budget envelope, sourcing decision, and pur
 
   // Second requisition for the same sourcingDecisionId → null.
   assert.equal(approveCommercePurchaseRequisition(withPr, { ...prInput, id: 'PR-55555555-5555-4555-8555-555555555555' }, { ...prProof, actionId: 'ACT-TEST-T041-PR-DUP' }), null)
+})
+
+test('issueCommerceStockToProduction and receiveCommerceProductionBatch manage production stock flows', () => {
+  const base = createSeedCommerce()
+
+  // SM-1001 has onHand=34 in the seed — issue 5 units to production.
+  const SOURCE_DIGEST_ISSUE = 'sha256:' + 'c'.repeat(64)
+  const ISSUE_REQUEST = {
+    requestId: 'PROD-REQ-T042-001',
+    sourceCommandDigest: SOURCE_DIGEST_ISSUE,
+    jobId: 'PROD-JOB-T042-001',
+    materialId: 'PROD-MAT-T042-001',
+    inputLotId: 'PROD-LOT-T042-001',
+    quantityMilli: 5000,
+    unit: 'kg',
+  }
+  const ISSUE_SKU = 'SM-1001'
+  const ISSUE_QUANTITY = 5
+  const CONVERSION_NOTE = '5 units of SM-1001 issued as raw material'
+  const issueProof = {
+    actionId: 'ACT-TEST-T042-ISSUE',
+    capturedAt: CAPTURED_AT,
+    actor: 'Production supervisor',
+    reason: 'Issue stock for production job T042',
+    evidenceReference: 'PRODUCTION-ISSUE:PROD-REQ-T042-001',
+  }
+
+  const withIssue = issueCommerceStockToProduction(base, ISSUE_REQUEST, ISSUE_SKU, ISSUE_QUANTITY, CONVERSION_NOTE, issueProof)
+  assert.ok(withIssue !== null, 'issueCommerceStockToProduction must succeed')
+
+  // SM-1001 onHand must decrease by 5 (34 → 29).
+  const sm1001After = withIssue.items.find((item) => item.sku === ISSUE_SKU)
+  assert.equal(sm1001After.onHand, 34 - ISSUE_QUANTITY)
+
+  // A production_issue movement must exist with the correct fields.
+  const issueMovement = withIssue.movements.find((m) => m.kind === 'production_issue' && m.actionId === issueProof.actionId)
+  assert.ok(issueMovement !== undefined, 'production_issue movement must exist')
+  assert.equal(issueMovement.sku, ISSUE_SKU)
+  assert.equal(issueMovement.quantityDelta, -ISSUE_QUANTITY)
+  assert.equal(issueMovement.productionRequestId, ISSUE_REQUEST.requestId)
+
+  // Idempotent replay.
+  assert.ok(issueCommerceStockToProduction(withIssue, ISSUE_REQUEST, ISSUE_SKU, ISSUE_QUANTITY, CONVERSION_NOTE, issueProof) !== null)
+
+  // Duplicate requestId (different actionId) → null.
+  assert.equal(issueCommerceStockToProduction(withIssue, ISSUE_REQUEST, ISSUE_SKU, ISSUE_QUANTITY, CONVERSION_NOTE, { ...issueProof, actionId: 'ACT-TEST-T042-ISSUE-DUP' }), null)
+
+  // Excessive stock quantity (> onHand) → null.
+  const bigRequest = { ...ISSUE_REQUEST, requestId: 'PROD-REQ-T042-002' }
+  assert.equal(issueCommerceStockToProduction(base, bigRequest, ISSUE_SKU, 999, CONVERSION_NOTE, { ...issueProof, actionId: 'ACT-TEST-T042-ISSUE-BIG' }), null)
+
+  // Unknown SKU → null.
+  const unknownRequest = { ...ISSUE_REQUEST, requestId: 'PROD-REQ-T042-003' }
+  assert.equal(issueCommerceStockToProduction(base, unknownRequest, 'SM-UNKNOWN', ISSUE_QUANTITY, CONVERSION_NOTE, { ...issueProof, actionId: 'ACT-TEST-T042-ISSUE-UNK' }), null)
+
+  // --- Receive production batch ---
+  // SM-1003 has onHand=21 in the seed — receive 10 finished units from production.
+  const SOURCE_DIGEST_RECV = 'sha256:' + 'd'.repeat(64)
+  const RELEASE_ID = 'QREL-T042-001'
+  const RECV_SKU = 'SM-1003'
+  const RECV_QUANTITY = 10
+  const RELEASED_AT = '2026-08-08T01:00:00.000Z'  // one hour before CAPTURED_AT
+  const batchReceipt = {
+    releaseId: RELEASE_ID,
+    sourceCommandDigest: SOURCE_DIGEST_RECV,
+    jobId: ISSUE_REQUEST.jobId,
+    outputBatchId: 'BATCH-T042-001',
+    releasedAt: RELEASED_AT,
+    sourceProduct: 'Household refill batch',
+    sku: RECV_SKU,
+    quantity: RECV_QUANTITY,
+  }
+  const recvEvidenceRef = `PLANT-BATCH:${RELEASE_ID}:${SOURCE_DIGEST_RECV}:LOC-MAIN`
+  const recvProof = {
+    actionId: 'ACT-TEST-T042-RECV',
+    capturedAt: CAPTURED_AT,
+    actor: 'Warehouse receiver',
+    reason: 'Receive finished batch from production',
+    evidenceReference: recvEvidenceRef,
+  }
+
+  const withRecv = receiveCommerceProductionBatch(withIssue, batchReceipt, recvProof)
+  assert.ok(withRecv !== null, 'receiveCommerceProductionBatch must succeed')
+
+  // SM-1003 onHand must increase by 10 (21 → 31).
+  const sm1003After = withRecv.items.find((item) => item.sku === RECV_SKU)
+  assert.equal(sm1003After.onHand, 21 + RECV_QUANTITY)
+
+  // A production_receipt movement must exist with the correct fields.
+  const recvMovement = withRecv.movements.find((m) => m.kind === 'production_receipt' && m.actionId === recvProof.actionId)
+  assert.ok(recvMovement !== undefined, 'production_receipt movement must exist')
+  assert.equal(recvMovement.sku, RECV_SKU)
+  assert.equal(recvMovement.quantityDelta, RECV_QUANTITY)
+  assert.equal(recvMovement.productionReleaseId, RELEASE_ID)
+
+  // Idempotent replay (no locationReceipt needed).
+  assert.ok(receiveCommerceProductionBatch(withRecv, batchReceipt, recvProof) !== null)
+
+  // Duplicate releaseId (different actionId) → null.
+  assert.equal(receiveCommerceProductionBatch(withRecv, batchReceipt, { ...recvProof, actionId: 'ACT-TEST-T042-RECV-DUP' }), null)
+
+  // Wrong evidence reference → null.
+  const freshRelease = { ...batchReceipt, releaseId: 'QREL-T042-002' }
+  assert.equal(receiveCommerceProductionBatch(base, freshRelease, { ...recvProof, actionId: 'ACT-TEST-T042-RECV-BAD', evidenceReference: 'WRONG-REF' }), null)
+
+  // capturedAt before releasedAt → null (uses QREL-T042-002 to avoid dup-releaseId rejection).
+  const earlyRecvProof = {
+    ...recvProof,
+    actionId: 'ACT-TEST-T042-RECV-EARLY',
+    capturedAt: '2026-08-07T00:00:00.000Z',
+    evidenceReference: `PLANT-BATCH:QREL-T042-002:${SOURCE_DIGEST_RECV}:LOC-MAIN`,
+  }
+  assert.equal(receiveCommerceProductionBatch(base, freshRelease, earlyRecvProof), null)
 })
