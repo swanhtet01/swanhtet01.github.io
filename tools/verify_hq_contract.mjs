@@ -252,7 +252,7 @@ requireContract('one bounded agent operating model is authoritative',
     && product.localAutomation.reason?.trim())
   && Array.isArray(portfolio.localImprovementQueue)
   && portfolio.localImprovementQueue.length === 1
-  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'plant'
+  && portfolio.localImprovementQueue.map((entry) => entry.productId).join(',') === 'shop'
   && portfolio.localImprovementQueue.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'contract,priority,productId,reason,status,workOrder,workOrderId'
     && entry.contract === 'supermega.product-improvement-authority.v1'
@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-224'
   && completedAutomationArchive.entries?.length === 72
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 37
+  && portfolioSource.completedLocalAutomations.length === 39
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 109
+  && portfolio.completedLocalAutomations.length === 111
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -612,10 +612,16 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[108]?.productId === 'plant'
   && portfolio.completedLocalAutomations[108]?.workOrderId === 'plant-controlled-batch-job-progress-alignment'
   && portfolio.completedLocalAutomations[108]?.checkpoint === 'OPS-261'
+  && portfolio.completedLocalAutomations[109]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[109]?.workOrderId === 'plant-controlled-batch-shift-evidence-alignment'
+  && portfolio.completedLocalAutomations[109]?.checkpoint === 'OPS-262'
+  && portfolio.completedLocalAutomations[110]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[110]?.workOrderId === 'shop-spa-realistic-template-onboarding'
+  && portfolio.completedLocalAutomations[110]?.checkpoint === 'OPS-263'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'plant-controlled-batch-shift-evidence-alignment'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-spa-appointment-to-checkout-handoff'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1945,6 +1951,12 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-261 | CEO + Plant Controlled-progress Alignment / Agent Operations Codex | done-local |')
   && workboard.includes('only a human-released complete batch finishes the job')
   && workboard.includes('The receipt advances `plant-controlled-batch-shift-evidence-alignment`')
+  && workboard.includes('| OPS-262 | CEO + Plant Shift-evidence Alignment / Agent Operations Codex | done-local |')
+  && workboard.includes('Product checkpoint `f836c315` projects a current source-bound controlled batch')
+  && workboard.includes('The user-directed next slice became `shop-spa-realistic-template-onboarding`')
+  && workboard.includes('| OPS-263 | CEO + Shop Spa Starter / Agent Operations Codex | done-local |')
+  && workboard.includes('five treatments, three therapist-room stations, thirteen treatment and aftercare stock items')
+  && workboard.includes('The receipt advances `shop-spa-appointment-to-checkout-handoff`')
   && workboard.includes('| CLAUDE-009 | Claude Code | ready-owner-login |')
   && workboard.includes('Shop setup-recovery checkpoint `0fc5cf7d`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -2022,7 +2034,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'ecommerce-local-multiline-order-lifecycle-acceptance' && entry.checkpoint === 'OPS-259')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-local-multimaterial-batch-to-shop-stock-acceptance' && entry.checkpoint === 'OPS-260')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-controlled-batch-job-progress-alignment' && entry.checkpoint === 'OPS-261')
-  && portfolio.localImprovementQueue[0].workOrderId === 'plant-controlled-batch-shift-evidence-alignment')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'plant-controlled-batch-shift-evidence-alignment' && entry.checkpoint === 'OPS-262')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-realistic-template-onboarding' && entry.checkpoint === 'OPS-263')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-spa-appointment-to-checkout-handoff')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
