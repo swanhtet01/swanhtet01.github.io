@@ -123,6 +123,9 @@ import {
   settleCommerceRefund,
   commerceDailyCloseCsv,
   commerceAccountingHandoffCsv,
+  createCommercePurchaseOrder,
+  receiveCommercePurchaseOrder,
+  cancelCommercePurchaseOrder,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1546,4 +1549,52 @@ test('settleCommerceRefund, commerceDailyCloseCsv, and commerceAccountingHandoff
   assert.ok(typeof handoffCsv === 'string' && handoffCsv.length > 0, 'accounting handoff CSV must be non-empty')
   assert.ok(handoffCsv.includes(COMMERCE_ACCOUNTING_HANDOFF_SCHEMA), 'handoff CSV must include the schema identifier')
   assert.ok(handoffCsv.includes('\r\n'), 'handoff CSV must use CRLF line endings')
+})
+
+test('createCommercePurchaseOrder, receiveCommercePurchaseOrder, and cancelCommercePurchaseOrder manage the purchase order lifecycle', () => {
+  const seed = createSeedCommerce()
+  const seedNowIso = '2026-07-23T08:00:00.000Z'
+  const expectedAt = '2026-07-30T08:00:00.000Z'
+
+  // createCommercePurchaseOrder — SM-1003 has no active PO in seed.
+  const poId = 'PO-33333333-3333-4333-8333-333333333333'
+  const createProof = { actionId: 'ACT-TEST-T031-CREATE', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Replenish SM-1003.', evidenceReference: 'T031-CREATE-REF' }
+  const poInput = { id: poId, sku: 'SM-1003', supplier: 'Super Supplier Ltd', quantityOrdered: 50, unitCostMmk: 9000, expectedAt }
+  const withPo = createCommercePurchaseOrder(seed, poInput, createProof)
+  assert.ok(withPo !== null, 'creating a PO for SM-1003 must succeed')
+  assert.ok(commercePurchaseOrders(withPo).some((po) => po.id === poId && po.sku === 'SM-1003' && po.quantityOrdered === 50))
+  // SM-1002 already has an active PO in seed → a second one returns null.
+  assert.equal(createCommercePurchaseOrder(seed, { ...poInput, id: 'PO-44444444-4444-4444-8444-444444444444', sku: 'SM-1002' }, createProof), null)
+  // Invalid PO ID format → null.
+  assert.equal(createCommercePurchaseOrder(seed, { ...poInput, id: 'PO-BADINPUT' }, createProof), null)
+  // expectedAt equal to capturedAt (not strictly after) → null.
+  assert.equal(createCommercePurchaseOrder(seed, { ...poInput, expectedAt: seedNowIso }, createProof), null)
+  // Replay (same id and all matching details) → returns unchanged state.
+  assert.ok(createCommercePurchaseOrder(withPo, poInput, createProof) !== null)
+
+  // receiveCommercePurchaseOrder — partial delivery: 30 of 50 ordered units arriving at expectedAt.
+  const sm1003Before = withPo.items.find((item) => item.sku === 'SM-1003')?.onHand ?? 0
+  const receiveProof = { actionId: 'ACT-TEST-T031-RECEIVE', capturedAt: expectedAt, actor: 'Warehouse staff', reason: 'Partial delivery received.', evidenceReference: 'T031-RECEIVE-REF' }
+  const withReceived = receiveCommercePurchaseOrder(withPo, poId, 30, receiveProof)
+  assert.ok(withReceived !== null, 'partial receipt of 30 units must succeed')
+  assert.equal(withReceived.items.find((item) => item.sku === 'SM-1003')?.onHand, sm1003Before + 30)
+  assert.ok(withReceived.movements.some((m) => m.kind === 'receipt' && m.purchaseOrderId === poId && m.quantityDelta === 30))
+  // 21 exceeds remaining (50 − 30 = 20) → null.
+  const overProof = { ...receiveProof, actionId: 'ACT-TEST-T031-OVER' }
+  assert.equal(receiveCommercePurchaseOrder(withReceived, poId, 21, overProof), null)
+  // Zero quantity → null.
+  const zeroProof = { ...receiveProof, actionId: 'ACT-TEST-T031-ZERO' }
+  assert.equal(receiveCommercePurchaseOrder(withPo, poId, 0, zeroProof), null)
+  // Non-existent PO → null.
+  assert.equal(receiveCommercePurchaseOrder(withPo, 'PO-99999999-9999-4999-8999-999999999999', 10, receiveProof), null)
+
+  // cancelCommercePurchaseOrder — cancel the receipt-free PO; capturedAt equals PO createdAt so the >= check passes.
+  const cancelProof = { actionId: 'ACT-TEST-T031-CANCEL', capturedAt: seedNowIso, actor: 'Store manager', reason: 'Supplier unavailable.', evidenceReference: 'T031-CANCEL-REF' }
+  const withCancelled = cancelCommercePurchaseOrder(withPo, poId, cancelProof)
+  assert.ok(withCancelled !== null, 'cancelling a receipt-free PO must succeed')
+  assert.ok(commercePurchaseOrders(withCancelled).find((po) => po.id === poId)?.cancellation !== undefined)
+  // Replay cancel → returns unchanged state (idempotent).
+  assert.ok(cancelCommercePurchaseOrder(withCancelled, poId, cancelProof) !== null)
+  // capturedAt ('2026-07-23') < latestReceiptAt ('2026-07-30') → null.
+  assert.equal(cancelCommercePurchaseOrder(withReceived, poId, cancelProof), null)
 })
