@@ -172,6 +172,9 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: website-release-template-brief (WebsiteReleasePackage.template version v1/v2 + componentCount + uniqueComponentIds); 16 checks; zero bundle cost — DONE (OPS-459)
 - [x] Analytics Codex: website-release-source-evidence-brief (WebsiteReleaseSource.evidence content/links/responsive distribution + uniqueVerifiers + hasAllThreeKinds); 26 checks; zero bundle cost — DONE (OPS-460)
 - [x] Analytics Codex: website-release-migration-brief (WebsiteReleasePackage.migration hasMigration + isFirstRelease + hasChain + operationCount + template version pair); 20 checks; zero bundle cost — DONE (OPS-461)
+- [x] Analytics Codex: ecommerce-reschedule-intent-reason-length-brief (EcommerceOrderRescheduleIntent.reason short/medium/long length bands + min/max/avg); 16 checks; zero bundle cost — DONE (OPS-462)
+- [x] Analytics Codex: ecommerce-amendment-intent-reason-length-brief (EcommerceOrderAmendmentIntent.reason short/medium/long length bands + min/max/avg); 16 checks; zero bundle cost — DONE (OPS-463)
+- [x] Analytics Codex: ecommerce-request-line-count-brief (EcommerceOrderRequestV2.lines.length total/avg/min/max + singleLine/multiLine split); 28 checks; zero bundle cost — DONE (OPS-464)
 
 ### Aug 25–31
 
