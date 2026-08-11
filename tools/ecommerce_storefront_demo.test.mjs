@@ -2,8 +2,25 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  COMMERCE_ACCOUNTING_HANDOFF_SCHEMA,
+  COMMERCE_CLOSE_SETTLEMENT_SCHEMA,
+  COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA,
   COMMERCE_KEY,
+  COMMERCE_LOCK,
+  COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA,
   COMMERCE_ORDER_CALCULATION_SCHEMA,
+  COMMERCE_ORDER_CALCULATION_V2_SCHEMA,
+  COMMERCE_STOREFRONT_SCHEMA,
+  COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA,
+  COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA,
+  COMMERCE_WORKSPACE_SCHEMA,
+  LEGACY_COMMERCE_KEYS,
+  commerceAccountMappingConfigurations,
+  commerceAccountRoles,
+  commerceTaxConfigurations,
+  commerceTaxDecision,
+  commerceWebsiteIntakes,
+  commerceWorkspaceCanWrite,
   commerceCatalogDigestSource,
   commerceCustomerCreditExposure,
   commerceOrderAdjustedTotal,
@@ -974,4 +991,44 @@ test('commerceCurrentPolicy helpers, commercePurchaseOrders, commerceSupplierRet
   // Invalid input throws.
   assert.throws(() => validateCommerceState(null))
   assert.throws(() => validateCommerceState({ schema: 'bad-schema' }))
+})
+
+test('commerce workspace schema constants and simple collection accessors are correct', () => {
+  // Schema string constants.
+  assert.equal(COMMERCE_WORKSPACE_SCHEMA, 'supermega.commerce.workspace.v2')
+  assert.equal(COMMERCE_LOCK, 'supermega-commerce-workspace-v2')
+  assert.ok(Array.isArray(LEGACY_COMMERCE_KEYS))
+  assert.ok(LEGACY_COMMERCE_KEYS.length >= 2)
+  assert.ok(LEGACY_COMMERCE_KEYS.includes('supermega.commerce.workspace.v1'))
+  assert.equal(COMMERCE_STOREFRONT_SCHEMA, 'supermega.ecommerce.storefront.v1')
+  assert.equal(COMMERCE_ORDER_CALCULATION_V2_SCHEMA, 'supermega.commerce.order-calculation.v2')
+  assert.equal(COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA, 'supermega.commerce.daily-close-export.v3')
+  assert.equal(COMMERCE_ACCOUNTING_HANDOFF_SCHEMA, 'supermega.commerce.accounting-handoff.v3')
+  assert.equal(COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA, 'supermega.commerce.supplier-payables-handoff.v1')
+  assert.equal(COMMERCE_CLOSE_SETTLEMENT_SCHEMA, 'supermega.commerce.close-settlement.v1')
+  assert.equal(COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA, 'supermega.commerce.support-workload.v1')
+  assert.equal(COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA, 'supermega.commerce.order-acknowledgement.v1')
+
+  // commerceAccountRoles includes all legacy + new roles.
+  assert.ok(Array.isArray(commerceAccountRoles))
+  assert.ok(commerceAccountRoles.length >= 7)
+  assert.ok(commerceAccountRoles.includes('sales_revenue'))
+  assert.ok(commerceAccountRoles.includes('sales_adjustment'))
+
+  // Collection accessors return empty arrays on empty state.
+  const empty = createEmptyCommerce()
+  assert.deepEqual(commerceWebsiteIntakes(empty), [])
+  assert.deepEqual(commerceTaxConfigurations(empty), [])
+  assert.deepEqual(commerceAccountMappingConfigurations(empty), [])
+
+  // commerceWorkspaceCanWrite returns false without browser storage or lock manager.
+  assert.equal(commerceWorkspaceCanWrite(undefined, undefined), false)
+
+  // commerceTaxDecision returns null for an invalid timestamp.
+  assert.equal(commerceTaxDecision(createSeedCommerce(), 10000, 'not-a-date'), null)
+
+  // commerceTaxDecision on seed with valid timestamp reports not_configured (no tax config in seed).
+  const taxDecision = commerceTaxDecision(createSeedCommerce(), 10000, '2026-07-23T08:00:00.000Z')
+  assert.ok(taxDecision !== null)
+  assert.equal(taxDecision.status, 'not_configured')
 })
