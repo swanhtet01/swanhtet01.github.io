@@ -300,6 +300,23 @@ textarea { min-height: 72px; resize: vertical; }
 .accountable-action-gate { position: fixed; inset: 0; width: min(680px,calc(100% - 36px)); max-height: calc(100svh - 36px); margin: auto; overflow: auto; border: 1px solid var(--core-line-strong); border-radius: 16px; padding: 24px; color: var(--core-ink); background: #fff; box-shadow: 0 30px 90px rgba(25,54,42,.24); }
 .accountable-action-gate[open] { display: grid; gap: 20px; }
 .accountable-action-gate::backdrop { background: rgba(19,25,41,.5); backdrop-filter: blur(6px); }
+.receipt-dialog { position: fixed; inset: 0; width: min(440px,calc(100% - 24px)); max-height: calc(100svh - 24px); margin: auto; overflow: auto; padding: 0; border: 1px solid var(--core-line-strong); border-radius: 14px; color: var(--core-ink); background: #fff; box-shadow: 0 20px 60px rgba(25,54,42,.22); }
+.receipt-dialog::backdrop { background: rgba(19,25,41,.46); backdrop-filter: blur(4px); }
+.receipt-dialog-header { padding: 16px 18px 12px; border-bottom: 1px solid var(--core-line); }
+.receipt-dialog-header h2 { margin: 4px 0 2px; font-size: 18px; }
+.receipt-dialog-header p { margin: 0; color: var(--core-quiet); font-size: 13px; }
+.receipt-dialog-header small { color: var(--core-quiet); font-size: 11px; font-variant-numeric: tabular-nums; }
+.receipt-dialog-lines { width: 100%; border-collapse: collapse; padding: 10px 0; }
+.receipt-dialog-lines td { padding: 4px 18px; font-size: 13px; vertical-align: top; }
+.receipt-num { text-align: right; white-space: nowrap; padding-left: 8px !important; font-variant-numeric: tabular-nums; }
+.receipt-dialog-totals { padding: 10px 18px; border-top: 1px solid var(--core-line); font-size: 13px; }
+.receipt-dialog-totals > div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.receipt-total-row { border-top: 1px solid var(--core-line); margin-top: 4px; padding-top: 4px; font-size: 14px; font-weight: 600; }
+.receipt-dialog-payment { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 18px; border-top: 1px solid var(--core-line); font-size: 13px; }
+.receipt-dialog-payment small { flex-basis: 100%; color: var(--core-quiet); }
+.receipt-dialog-delivery { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 18px; border-top: 1px solid var(--core-line); font-size: 13px; color: var(--core-quiet); }
+.receipt-dialog-notice { margin: 0; padding: 8px 18px; font-size: 11px; color: var(--core-quiet); border-top: 1px solid var(--core-line); }
+.receipt-dialog-actions { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--core-line); }
 .action-change h2 { margin: 5px 0 10px; font-size: 22px; }
 .action-change-flow { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 0; }
 .action-change-flow > div { min-width: 0; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px; background: var(--core-surface-soft); }
@@ -1562,11 +1579,12 @@ textarea { min-height: 72px; resize: vertical; }
 .theme-dark .core-button.primary { border-color: var(--core-green); background: var(--core-green); color: #02120d; }
 .theme-dark input, .theme-dark select, .theme-dark textarea { border-color: var(--core-line-strong); background: #090f16; color: var(--core-ink); }
 .theme-dark input::placeholder, .theme-dark textarea::placeholder { color: #657386; }
-.theme-dark .core-panel, .theme-dark .production-mode-banner, .theme-dark .accountable-action-gate { border-color: var(--core-line); background: var(--core-panel); box-shadow: 0 18px 48px rgba(0,0,0,.22); }
+.theme-dark .core-panel, .theme-dark .production-mode-banner, .theme-dark .accountable-action-gate, .theme-dark .receipt-dialog { border-color: var(--core-line); background: var(--core-panel); box-shadow: 0 18px 48px rgba(0,0,0,.22); }
 .theme-dark .runtime-badge.demo, .theme-dark .runtime-badge.enterprise { border-color: rgba(86,240,193,.22); color: var(--core-green); }
 .theme-dark .mobile-nav { border-color: var(--core-line); background: rgba(7,11,17,.97); box-shadow: 0 -12px 34px rgba(0,0,0,.28); }
 .theme-dark .mobile-nav a.active { border-color: var(--core-green); color: var(--core-green); }
 .theme-dark .accountable-action-gate::backdrop { background: rgba(0,3,7,.76); }
+.theme-dark .receipt-dialog::backdrop { background: rgba(0,3,7,.68); }
 .theme-dark :focus-visible { outline-color: rgba(86,240,193,.48); }
 
 .commerce-screen { gap: 10px; }

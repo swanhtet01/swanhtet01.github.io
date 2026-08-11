@@ -152,6 +152,7 @@ import {
   type CommerceTaxConfiguration,
   type CommerceTaxMode,
   type CommerceCustomerCreditPolicyStatus,
+  type CommerceOrderAcknowledgement,
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import { projectShopInventory } from './shop-inventory-foundation'
@@ -246,6 +247,7 @@ const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module)
 const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
 const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: module.ShopToday })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
+const ReceiptDialog = lazy(() => import('./ReceiptDialog').then((module) => ({ default: module.ReceiptDialog })))
 
 type PurchaseOrderDraft =
   | { mode: 'create'; requisitionId?: string; sku: string; supplier: string; expectedAt: string; quantity: string; unitCostMmk: string }
@@ -1543,6 +1545,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     })
     return downloads
   }, [commerce])
+  const [receiptAck, setReceiptAck] = useState<CommerceOrderAcknowledgement | null>(null)
   const latestClose = commerce.closes.find((close) => close.operator)
   const latestCloseDownload = useMemo(() => {
     if (!latestClose) return null
@@ -5978,7 +5981,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
+      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onViewReceipt={setReceiptAck} orders={actionOrders} />
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
@@ -6174,6 +6177,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       else returnTriggerRefs.current.delete(orderId)
     }}
     acknowledgementDownloads={orderAcknowledgementDownloads}
+    onViewReceipt={setReceiptAck}
     orders={closedOrders}
     returnDraft={returnDraft}
     returnLocationPreview={returnLocationPreview}
@@ -6347,6 +6351,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {actionHistory}
     </div>
   </details>
+  <Suspense fallback={null}><ReceiptDialog ack={receiptAck} onClose={() => setReceiptAck(null)} /></Suspense>
   {actionGate}</div>
 
   if (tab === 'inventory') return <div className="operation-module">
@@ -6600,6 +6605,7 @@ function OrderList({
   onCancel,
   onReconcilePayment,
   onSettleRefund,
+  onViewReceipt,
 }: {
   acknowledgementDownloads: Map<string, OrderAcknowledgementDownload>
   orders: CommerceOrder[]
@@ -6610,6 +6616,7 @@ function OrderList({
   onCancel: (id: string) => void
   onReconcilePayment: (id: string) => void
   onSettleRefund: (id: string) => void
+  onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
 }) {
   const promiseNow = useMinuteClock()
   if (!orders.length) return <Empty>No orders need action.</Empty>
@@ -6659,6 +6666,7 @@ function OrderList({
           <summary aria-label={`More options for ${order.id}`}>More</summary>
           <div>
             {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
+            {acknowledgement ? <button className="text-link" data-order-receipt="view" onClick={() => onViewReceipt(acknowledgement.artifact)} type="button">View receipt</button> : null}
             {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
             {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel order</button> : null}
           </div>
@@ -6702,6 +6710,7 @@ function ClosedOrderHistory({
   onCorrectionTrigger,
   onReturnEditor,
   onReturnTrigger,
+  onViewReceipt,
   orders,
   returnDraft,
   returnLocationPreview,
@@ -6744,6 +6753,7 @@ function ClosedOrderHistory({
   onCorrectionTrigger: (orderId: string, node: HTMLButtonElement | null) => void
   onReturnEditor: (node: HTMLFormElement | null) => void
   onReturnTrigger: (orderId: string, node: HTMLButtonElement | null) => void
+  onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
   orders: CommerceOrder[]
   returnDraft: CommerceReturnDraft | null
   returnLocationPreview: string
@@ -6833,6 +6843,7 @@ function ClosedOrderHistory({
       <div className="order-archive-actions">
         <b>{formatMoney(adjustedTotal)}</b>
         {adjustedTotal !== order.total ? <small>original {formatMoney(order.total)}</small> : null}
+        {acknowledgement ? <button className="text-link" data-order-receipt="view" onClick={() => onViewReceipt(acknowledgement.artifact)} type="button">View receipt</button> : null}
         {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
         {order.status === 'completed' && (returnable || editing) ? <button
           aria-expanded={editing}
