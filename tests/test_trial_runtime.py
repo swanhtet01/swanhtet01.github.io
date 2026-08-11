@@ -701,7 +701,7 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(owner_workspace.status_code, 200, owner_workspace.text)
         schedule: dict[str, object] = {
-            "schema": "supermega.shop.service_schedule.v2",
+            "schema": "supermega.shop.service_schedule.v3",
             "industryPackId": "spa",
             "revision": 0,
             "services": [{
@@ -717,6 +717,7 @@ class TrialRuntimeTests(unittest.TestCase):
                 "kind": "staff",
                 "active": True,
             }],
+            "clients": [],
             "bookings": [],
             "events": [],
         }
@@ -735,8 +736,10 @@ class TrialRuntimeTests(unittest.TestCase):
 
         booking = {
             "id": "booking-0001",
+            "clientId": "client-0001",
             "customerName": "Test client",
             "contact": "09-000-000-000",
+            "appointmentUpdates": "allowed",
             "serviceId": "service-session",
             "resourceId": "resource-staff-1",
             "startsAt": "2026-08-11T02:00:00.000Z",
@@ -749,6 +752,15 @@ class TrialRuntimeTests(unittest.TestCase):
         scheduled = {
             **deepcopy(schedule),
             "revision": 1,
+            "clients": [{
+                "id": "client-0001",
+                "name": "Test client",
+                "contact": "09-000-000-000",
+                "appointmentUpdates": "allowed",
+                "consentRecordedAt": "2026-08-11T01:05:00.000Z",
+                "createdAt": "2026-08-11T01:05:00.000Z",
+                "updatedAt": "2026-08-11T01:05:00.000Z",
+            }],
             "bookings": [booking],
             "events": [{
                 "revision": 1,
@@ -771,6 +783,9 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(front_desk_scheduled.status_code, 200, front_desk_scheduled.text)
         current_schedule = front_desk_scheduled.json()["result"]["state"]["serviceSchedule"]
+        self.assertEqual(current_schedule["clients"][0]["id"], "client-0001")
+        self.assertEqual(current_schedule["clients"][0]["appointmentUpdates"], "allowed")
+        self.assertEqual(current_schedule["events"][0]["actor"], "actor-spa-front-desk")
 
         def advance_candidate(status: str, revision: int, happened_at: str) -> dict[str, object]:
             candidate = deepcopy(current_schedule)

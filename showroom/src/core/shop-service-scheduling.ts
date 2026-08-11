@@ -1,6 +1,7 @@
-export const SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v2' as const
+export const SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v3' as const
 export const SHOP_SERVICE_SCHEDULE_STORAGE_KEY = 'supermega.shop.service-schedule.v1'
-const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v1' as const
+const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V1 = 'supermega.shop.service_schedule.v1' as const
+const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V2 = 'supermega.shop.service_schedule.v2' as const
 
 export type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'
 
@@ -32,11 +33,24 @@ export type ShopServiceResource = {
 }
 
 export type ShopServiceBookingStatus = 'held' | 'confirmed' | 'checked_in' | 'completed' | 'cancelled'
+export type ShopServiceAppointmentUpdates = 'allowed' | 'declined' | 'not_recorded'
+
+export type ShopServiceClient = {
+  id: string
+  name: string
+  contact: string
+  appointmentUpdates: ShopServiceAppointmentUpdates
+  consentRecordedAt?: string
+  createdAt: string
+  updatedAt: string
+}
 
 export type ShopServiceBooking = {
   id: string
+  clientId: string
   customerName: string
   contact: string
+  appointmentUpdates: ShopServiceAppointmentUpdates
   serviceId: string
   resourceId: string
   startsAt: string
@@ -63,6 +77,7 @@ export type ShopServiceSchedule = {
   revision: number
   services: ShopService[]
   resources: ShopServiceResource[]
+  clients: ShopServiceClient[]
   bookings: ShopServiceBooking[]
   events: ShopServiceScheduleEvent[]
 }
@@ -76,6 +91,7 @@ export type ShopServiceScheduleProof = {
 export type ShopServiceScheduleProjection = {
   activeServices: number
   activeResources: number
+  clients: number
   today: ShopServiceBooking[]
   upcoming: ShopServiceBooking[]
   awaitingArrival: number
@@ -273,16 +289,29 @@ export function createShopServiceSchedule(industryPackId: ShopIndustryPackId = '
     revision: 0,
     services: pack.services.map((service) => ({ ...service, active: true })),
     resources: pack.resources.map((resource) => ({ ...resource, active: true })),
+    clients: [],
     bookings: [],
     events: [],
   }
+}
+
+function normalizedContact(value: string) {
+  const contact = boundedText(value, 'Customer contact')
+  if (contact.includes('@')) return `email:${contact.toLocaleLowerCase()}`
+  const digits = contact.replace(/\D/g, '')
+  if (digits.length >= 7) return `phone:${digits.startsWith('09') ? `95${digits.slice(1)}` : digits}`
+  return `reference:${contact.toLocaleLowerCase().replace(/\s+/g, ' ')}`
+}
+
+function normalizedName(value: string) {
+  return boundedText(value, 'Customer name').toLocaleLowerCase().replace(/\s+/g, ' ')
 }
 
 export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   if (!state || state.schema !== SHOP_SERVICE_SCHEDULE_SCHEMA) throw new Error('Unsupported Shop service schedule.')
   shopIndustryPack(state.industryPackId)
   if (!Number.isSafeInteger(state.revision) || state.revision < 0) throw new Error('Invalid Shop service schedule revision.')
-  if (!Array.isArray(state.services) || !Array.isArray(state.resources) || !Array.isArray(state.bookings) || !Array.isArray(state.events)) throw new Error('Incomplete Shop service schedule.')
+  if (!Array.isArray(state.services) || !Array.isArray(state.resources) || !Array.isArray(state.clients) || !Array.isArray(state.bookings) || !Array.isArray(state.events)) throw new Error('Incomplete Shop service schedule.')
   const serviceIds = new Set<string>()
   for (const service of state.services) {
     const id = boundedText(service.id, 'Service ID', 80)
@@ -302,13 +331,39 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
     if (!['staff', 'room', 'equipment'].includes(resource.kind)) throw new Error(`Resource ${id} has an invalid kind.`)
     if (typeof resource.active !== 'boolean') throw new Error(`Resource ${id} has an invalid active state.`)
   }
+  const clientIds = new Set<string>()
+  const clientContacts = new Set<string>()
+  for (const client of state.clients) {
+    const id = boundedText(client.id, 'Client ID', 80)
+    if (clientIds.has(id) || !/^client-(?:legacy-)?\d{4,10}$/.test(id)) throw new Error(`Duplicate or invalid client ${id}.`)
+    clientIds.add(id)
+    boundedText(client.name, 'Client name')
+    const contact = normalizedContact(client.contact)
+    if (clientContacts.has(contact)) throw new Error('A customer contact can belong to only one client record.')
+    clientContacts.add(contact)
+    if (!['allowed', 'declined', 'not_recorded'].includes(client.appointmentUpdates)) throw new Error(`Client ${id} has an invalid appointment-update choice.`)
+    const createdAt = validIso(client.createdAt, 'Client creation time')
+    const updatedAt = validIso(client.updatedAt, 'Client update time')
+    if (updatedAt < createdAt) throw new Error(`Client ${id} update time is invalid.`)
+    if (client.appointmentUpdates === 'not_recorded') {
+      if (client.consentRecordedAt !== undefined) throw new Error(`Client ${id} cannot claim consent evidence.`)
+    } else if (client.consentRecordedAt === undefined || validIso(client.consentRecordedAt, 'Client consent time') > updatedAt) {
+      throw new Error(`Client ${id} consent evidence is invalid.`)
+    }
+  }
+  const clientById = new Map(state.clients.map((client) => [client.id, client]))
   const bookingIds = new Set<string>()
   for (const booking of state.bookings) {
     const id = boundedText(booking.id, 'Booking ID', 80)
     if (bookingIds.has(id)) throw new Error(`Duplicate booking ${id}.`)
     bookingIds.add(id)
+    const client = clientById.get(boundedText(booking.clientId, 'Booking client ID', 80))
+    if (!client
+      || normalizedContact(client.contact) !== normalizedContact(booking.contact)
+      || normalizedName(client.name) !== normalizedName(booking.customerName)) throw new Error(`Booking ${id} does not match its client record.`)
     boundedText(booking.customerName, 'Customer name')
     boundedText(booking.contact, 'Customer contact')
+    if (!['allowed', 'declined', 'not_recorded'].includes(booking.appointmentUpdates)) throw new Error(`Booking ${id} has an invalid appointment-update choice.`)
     if (!serviceIds.has(booking.serviceId)) throw new Error(`Booking ${id} references an unknown service.`)
     if (!resourceIds.has(booking.resourceId)) throw new Error(`Booking ${id} references an unknown resource.`)
     const startsAt = validIso(booking.startsAt, 'Booking start')
@@ -380,6 +435,7 @@ export function registerShopServiceResource(state: ShopServiceSchedule, input: P
 export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
   customerName: string
   contact: string
+  appointmentUpdates: Exclude<ShopServiceAppointmentUpdates, 'not_recorded'>
   serviceId: string
   resourceId: string
   startsAt: string
@@ -399,10 +455,36 @@ export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
     && Date.parse(booking.startsAt) < endsAt)
   if (conflict) throw new Error(`${resource.name} is already booked during that time.`)
   const revision = state.revision + 1
+  const customerName = boundedText(input.customerName, 'Customer name')
+  const contact = boundedText(input.contact, 'Customer contact')
+  if (!['allowed', 'declined'].includes(input.appointmentUpdates)) throw new Error('Record whether appointment updates are allowed.')
+  const contactKey = normalizedContact(contact)
+  const existingClient = state.clients.find((client) => normalizedContact(client.contact) === contactKey)
+  if (existingClient && normalizedName(existingClient.name) !== normalizedName(customerName)) {
+    throw new Error(`This contact already belongs to ${existingClient.name}. Review the client before booking.`)
+  }
+  const client: ShopServiceClient = existingClient
+    ? {
+        ...existingClient,
+        appointmentUpdates: input.appointmentUpdates,
+        consentRecordedAt: evidence.happenedAt,
+        updatedAt: evidence.happenedAt,
+      }
+    : {
+        id: identifier('client', revision),
+        name: customerName,
+        contact,
+        appointmentUpdates: input.appointmentUpdates,
+        consentRecordedAt: evidence.happenedAt,
+        createdAt: evidence.happenedAt,
+        updatedAt: evidence.happenedAt,
+      }
   const booking: ShopServiceBooking = {
     id: identifier('booking', revision),
-    customerName: boundedText(input.customerName, 'Customer name'),
-    contact: boundedText(input.contact, 'Customer contact'),
+    clientId: client.id,
+    customerName: client.name,
+    contact: client.contact,
+    appointmentUpdates: input.appointmentUpdates,
     serviceId: service.id,
     resourceId: resource.id,
     startsAt: new Date(startsAt).toISOString(),
@@ -412,7 +494,10 @@ export function scheduleShopServiceBooking(state: ShopServiceSchedule, input: {
     createdAt: evidence.happenedAt,
     updatedAt: evidence.happenedAt,
   }
-  const next = appendEvent({ ...state, bookings: [...state.bookings, booking] }, { type: 'booking_scheduled', subjectId: booking.id, ...evidence })
+  const clients = existingClient
+    ? state.clients.map((candidate) => candidate.id === existingClient.id ? client : candidate)
+    : [...state.clients, client]
+  const next = appendEvent({ ...state, clients, bookings: [...state.bookings, booking] }, { type: 'booking_scheduled', subjectId: booking.id, ...evidence })
   return validateShopServiceSchedule(next)
 }
 
@@ -501,6 +586,7 @@ export function projectShopServiceSchedule(state: ShopServiceSchedule, now = new
   return {
     activeServices: state.services.filter((service) => service.active).length,
     activeResources: state.resources.filter((resource) => resource.active).length,
+    clients: state.clients.length,
     today,
     upcoming,
     awaitingArrival: today.filter((booking) => booking.status === 'held' || booking.status === 'confirmed').length,
@@ -510,14 +596,51 @@ export function projectShopServiceSchedule(state: ShopServiceSchedule, now = new
   }
 }
 
+export function shopServiceClientExportRows(state: ShopServiceSchedule) {
+  validateShopServiceSchedule(state)
+  return state.clients.map((client) => ({
+    name: client.name,
+    contact: client.contact,
+    appointmentUpdates: client.appointmentUpdates,
+    consentRecordedAt: client.consentRecordedAt ?? '',
+    appointments: state.bookings.filter((booking) => booking.clientId === client.id && booking.status !== 'cancelled').length,
+    completedVisits: state.bookings.filter((booking) => booking.clientId === client.id && booking.status === 'completed').length,
+  }))
+}
+
+function migrateLegacyShopServiceSchedule(parsed: Record<string, unknown>) {
+  const source = parsed.schema === LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V1 && !parsed.industryPackId
+    ? { ...parsed, schema: LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V2, industryPackId: 'spa' }
+    : parsed
+  if (source.schema !== LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V2) return source
+  const clients: ShopServiceClient[] = []
+  const clientByContact = new Map<string, ShopServiceClient>()
+  const bookings = (Array.isArray(source.bookings) ? source.bookings : []).map((candidate) => {
+    const booking = candidate as ShopServiceBooking
+    const key = normalizedContact(booking.contact)
+    let client = clientByContact.get(key)
+    if (!client) {
+      client = {
+        id: `client-legacy-${String(clients.length + 1).padStart(4, '0')}`,
+        name: booking.customerName,
+        contact: booking.contact,
+        appointmentUpdates: 'not_recorded',
+        createdAt: booking.createdAt,
+        updatedAt: booking.createdAt,
+      }
+      clients.push(client)
+      clientByContact.set(key, client)
+    }
+    return { ...booking, clientId: client.id, customerName: client.name, contact: client.contact, appointmentUpdates: 'not_recorded' as const }
+  })
+  return { ...source, schema: SHOP_SERVICE_SCHEDULE_SCHEMA, clients, bookings }
+}
+
 export function readShopServiceSchedule(value: string | null) {
   if (!value) return createShopServiceSchedule()
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>
-    if (parsed.schema === LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA && !parsed.industryPackId) {
-      return validateShopServiceSchedule({ ...parsed, schema: SHOP_SERVICE_SCHEDULE_SCHEMA, industryPackId: 'spa' } as ShopServiceSchedule)
-    }
-    return validateShopServiceSchedule(parsed as unknown as ShopServiceSchedule)
+    return validateShopServiceSchedule(migrateLegacyShopServiceSchedule(parsed) as unknown as ShopServiceSchedule)
   } catch {
     throw new Error('Saved appointments are unreadable. Export or clear the local evidence before continuing.')
   }

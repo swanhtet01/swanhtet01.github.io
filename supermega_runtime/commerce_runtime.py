@@ -225,7 +225,8 @@ _MAX_SUPPORT_SERVICE_EVENTS_PER_CASE = 100
 _MAX_CORRECTIONS_PER_ORDER = 100
 _MAX_COLLECTION_ACTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
-_SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
+_SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v3"
+_LEGACY_SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
 _SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
 _SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
     {
@@ -241,6 +242,9 @@ _SUPPORT_CASE_ID_PATTERN = re.compile(
 )
 _SERVICE_SCHEDULE_BOOKING_STATUSES = frozenset(
     {"held", "confirmed", "checked_in", "completed", "cancelled"}
+)
+_SERVICE_SCHEDULE_APPOINTMENT_UPDATES = frozenset(
+    {"allowed", "declined", "not_recorded"}
 )
 _SERVICE_ORDER_SKU_PATTERN = re.compile(r"SPA-SVC-[A-Z0-9-]{1,64}")
 _SPA_BOOKING_SOURCE_PATTERN = re.compile(r"SPA-BOOKING-[0-9]{4,10}")
@@ -290,7 +294,7 @@ _ISO_TIMESTAMP_PATTERN = re.compile(
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
 _SERVICE_SCHEDULE_FIELDS = frozenset(
-    {"schema", "industryPackId", "revision", "services", "resources", "bookings", "events"}
+    {"schema", "industryPackId", "revision", "services", "resources", "clients", "bookings", "events"}
 )
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
 _CATALOG_CHANGE_FIELDS = frozenset(
@@ -1104,8 +1108,54 @@ def _storefront_request(value: object, field: str) -> dict[str, Any]:
     return request
 
 
-def _validate_service_schedule(value: object) -> dict[str, Any]:
+def _service_contact_key(value: object, field: str) -> str:
+    contact = _text(value, field, maximum=160)
+    if "@" in contact:
+        return f"email:{contact.casefold()}"
+    digits = re.sub(r"\D", "", contact)
+    if len(digits) >= 7:
+        return f"phone:{f'95{digits[1:]}' if digits.startswith('09') else digits}"
+    return f"reference:{' '.join(contact.casefold().split())}"
+
+
+def _service_name_key(value: object, field: str) -> str:
+    return " ".join(_text(value, field, maximum=160).casefold().split())
+
+
+def _migrate_service_schedule(value: object) -> dict[str, Any]:
     schedule = _object(value, "commerce state.serviceSchedule")
+    if schedule.get("schema") != _LEGACY_SERVICE_SCHEDULE_SCHEMA:
+        return schedule
+    migrated = deepcopy(schedule)
+    clients: list[dict[str, Any]] = []
+    clients_by_contact: dict[str, dict[str, Any]] = {}
+    bookings: list[dict[str, Any]] = []
+    for index, candidate in enumerate(_list(schedule.get("bookings"), "commerce state.serviceSchedule.bookings")):
+        booking = deepcopy(_object(candidate, f"commerce state.serviceSchedule.bookings[{index}]"))
+        contact_key = _service_contact_key(booking.get("contact"), f"commerce state.serviceSchedule.bookings[{index}].contact")
+        client = clients_by_contact.get(contact_key)
+        if client is None:
+            client = {
+                "id": f"client-legacy-{len(clients) + 1:04d}",
+                "name": booking.get("customerName"),
+                "contact": booking.get("contact"),
+                "appointmentUpdates": "not_recorded",
+                "createdAt": booking.get("createdAt"),
+                "updatedAt": booking.get("createdAt"),
+            }
+            clients.append(client)
+            clients_by_contact[contact_key] = client
+        booking["customerName"] = client["name"]
+        booking["contact"] = client["contact"]
+        booking["clientId"] = client["id"]
+        booking["appointmentUpdates"] = "not_recorded"
+        bookings.append(booking)
+    migrated.update({"schema": _SERVICE_SCHEDULE_SCHEMA, "clients": clients, "bookings": bookings})
+    return migrated
+
+
+def _validate_service_schedule(value: object) -> dict[str, Any]:
+    schedule = _migrate_service_schedule(value)
     _exact_fields(
         schedule,
         "commerce state.serviceSchedule",
@@ -1123,9 +1173,10 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
     )
     services = _list(schedule.get("services"), "commerce state.serviceSchedule.services")
     resources = _list(schedule.get("resources"), "commerce state.serviceSchedule.resources")
+    clients = _list(schedule.get("clients"), "commerce state.serviceSchedule.clients")
     bookings = _list(schedule.get("bookings"), "commerce state.serviceSchedule.bookings")
     events = _list(schedule.get("events"), "commerce state.serviceSchedule.events")
-    if len(services) > 100 or len(resources) > 100 or len(bookings) > 500 or len(events) > 1000:
+    if len(services) > 100 or len(resources) > 100 or len(clients) > 500 or len(bookings) > 500 or len(events) > 1000:
         raise TrialValidationError("commerce state.serviceSchedule exceeds managed workspace limits.")
 
     service_ids: list[str] = []
@@ -1163,6 +1214,42 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             raise TrialValidationError(f"{field} kind or active state is invalid.")
     _unique(resource_ids, "commerce state.serviceSchedule resource ID")
 
+    client_ids: list[str] = []
+    client_contact_keys: list[str] = []
+    client_by_id: dict[str, dict[str, Any]] = {}
+    for index, candidate in enumerate(clients):
+        field = f"commerce state.serviceSchedule.clients[{index}]"
+        client = _object(candidate, field)
+        _exact_fields(
+            client,
+            field,
+            required=frozenset({"id", "name", "contact", "appointmentUpdates", "createdAt", "updatedAt"}),
+            optional=frozenset({"consentRecordedAt"}),
+        )
+        client_id = _text(client.get("id"), f"{field}.id", maximum=80)
+        if re.fullmatch(r"client-(?:legacy-)?[0-9]{4,10}", client_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        client_ids.append(client_id)
+        _text(client.get("name"), f"{field}.name", maximum=160)
+        client_contact_keys.append(_service_contact_key(client.get("contact"), f"{field}.contact"))
+        appointment_updates = client.get("appointmentUpdates")
+        if appointment_updates not in _SERVICE_SCHEDULE_APPOINTMENT_UPDATES:
+            raise TrialValidationError(f"{field}.appointmentUpdates is invalid.")
+        created_at = _timestamp(client.get("createdAt"), f"{field}.createdAt")
+        updated_at = _timestamp(client.get("updatedAt"), f"{field}.updatedAt")
+        if datetime.fromisoformat(updated_at.replace("Z", "+00:00")) < datetime.fromisoformat(created_at.replace("Z", "+00:00")):
+            raise TrialValidationError(f"{field}.updatedAt is invalid.")
+        if appointment_updates == "not_recorded":
+            if "consentRecordedAt" in client:
+                raise TrialValidationError(f"{field} cannot claim consent evidence.")
+        else:
+            consent_at = _timestamp(client.get("consentRecordedAt"), f"{field}.consentRecordedAt")
+            if datetime.fromisoformat(consent_at.replace("Z", "+00:00")) > datetime.fromisoformat(updated_at.replace("Z", "+00:00")):
+                raise TrialValidationError(f"{field}.consentRecordedAt is invalid.")
+        client_by_id[client_id] = client
+    _unique(client_ids, "commerce state.serviceSchedule client ID")
+    _unique(client_contact_keys, "commerce state.serviceSchedule client contact")
+
     booking_ids: list[str] = []
     normalized_bookings: list[dict[str, Any]] = []
     for index, candidate in enumerate(bookings):
@@ -1173,7 +1260,7 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             field,
             required=frozenset(
                 {
-                    "id", "customerName", "contact", "serviceId", "resourceId", "startsAt",
+                    "id", "clientId", "customerName", "contact", "appointmentUpdates", "serviceId", "resourceId", "startsAt",
                     "endsAt", "status", "note", "createdAt", "updatedAt",
                 }
             ),
@@ -1181,8 +1268,21 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
         )
         booking_id = _text(booking.get("id"), f"{field}.id", maximum=80)
         booking_ids.append(booking_id)
-        _text(booking.get("customerName"), f"{field}.customerName", maximum=160)
-        _text(booking.get("contact"), f"{field}.contact", maximum=160)
+        customer_name_key = _service_name_key(
+            booking.get("customerName"), f"{field}.customerName"
+        )
+        contact_key = _service_contact_key(booking.get("contact"), f"{field}.contact")
+        client = client_by_id.get(booking.get("clientId"))
+        if (
+            client is None
+            or contact_key
+            != _service_contact_key(client.get("contact"), f"{field}.client.contact")
+            or customer_name_key
+            != _service_name_key(client.get("name"), f"{field}.client.name")
+        ):
+            raise TrialValidationError(f"{field} does not match its client record.")
+        if booking.get("appointmentUpdates") not in _SERVICE_SCHEDULE_APPOINTMENT_UPDATES:
+            raise TrialValidationError(f"{field}.appointmentUpdates is invalid.")
         if booking.get("serviceId") not in service_ids or booking.get("resourceId") not in resource_ids:
             raise TrialValidationError(f"{field} references an unknown service or resource.")
         starts_at = _timestamp(booking.get("startsAt"), f"{field}.startsAt")
@@ -11530,6 +11630,7 @@ def _validate_service_schedule_saved(
             and latest["subjectId"] == after["services"][-1]["id"]
             and after["services"][-1]["active"] is True
             and after["resources"] == before["resources"]
+            and after["clients"] == before["clients"]
             and after["bookings"] == before["bookings"]
         )
     elif event_type == "resource_registered":
@@ -11539,18 +11640,53 @@ def _validate_service_schedule_saved(
             and latest["subjectId"] == after["resources"][-1]["id"]
             and after["resources"][-1]["active"] is True
             and after["services"] == before["services"]
+            and after["clients"] == before["clients"]
             and after["bookings"] == before["bookings"]
         )
     elif event_type == "booking_scheduled":
+        booking = after["bookings"][-1] if len(after["bookings"]) == len(before["bookings"]) + 1 else None
+        before_clients = {client["id"]: client for client in before["clients"]}
+        prior_client = before_clients.get(booking["clientId"]) if booking else None
+        if booking and prior_client:
+            expected_client = (
+                prior_client
+                if booking["appointmentUpdates"] == "not_recorded"
+                else {
+                    **prior_client,
+                    "appointmentUpdates": booking["appointmentUpdates"],
+                    "consentRecordedAt": latest["happenedAt"],
+                    "updatedAt": latest["happenedAt"],
+                }
+            )
+            expected_clients = [
+                expected_client if client["id"] == prior_client["id"] else client
+                for client in before["clients"]
+            ]
+        elif booking:
+            expected_client = {
+                "id": booking["clientId"],
+                "name": booking["customerName"],
+                "contact": booking["contact"],
+                "appointmentUpdates": booking["appointmentUpdates"],
+                "createdAt": latest["happenedAt"],
+                "updatedAt": latest["happenedAt"],
+            }
+            if booking["appointmentUpdates"] != "not_recorded":
+                expected_client["consentRecordedAt"] = latest["happenedAt"]
+            expected_clients = [*before["clients"], expected_client]
+        else:
+            expected_clients = []
         valid_change = (
             len(after["bookings"]) == len(before["bookings"]) + 1
             and after["bookings"][:-1] == before["bookings"]
             and latest["subjectId"] == after["bookings"][-1]["id"]
             and after["bookings"][-1]["status"] == "held"
+            and after["bookings"][-1]["appointmentUpdates"] in {"allowed", "declined"}
             and after["bookings"][-1]["createdAt"] == latest["happenedAt"]
             and after["bookings"][-1]["updatedAt"] == latest["happenedAt"]
             and after["services"] == before["services"]
             and after["resources"] == before["resources"]
+            and after["clients"] == expected_clients
         )
     elif event_type == "booking_checkout_linked":
         before_by_id = {booking["id"]: booking for booking in before["bookings"]}
@@ -11588,6 +11724,7 @@ def _validate_service_schedule_saved(
             and len(linked_orders) == 1
             and after["services"] == before["services"]
             and after["resources"] == before["resources"]
+            and after["clients"] == before["clients"]
         )
     else:
         before_by_id = {booking["id"]: booking for booking in before["bookings"]}
@@ -11626,6 +11763,7 @@ def _validate_service_schedule_saved(
             and changed["id"] == latest["subjectId"]
             and after["services"] == before["services"]
             and after["resources"] == before["resources"]
+            and after["clients"] == before["clients"]
         )
     if not valid_change:
         raise TrialValidationError(
@@ -11652,9 +11790,9 @@ def _validate_service_schedule_initialized(
         raise TrialValidationError(
             "service schedule initialization requires a clean industry pack without operating evidence."
         )
-    if not schedule["services"] or not schedule["resources"] or schedule["bookings"]:
+    if not schedule["services"] or not schedule["resources"] or schedule["clients"] or schedule["bookings"]:
         raise TrialValidationError(
-            "service schedule initialization requires services and resources but no bookings."
+            "service schedule initialization requires services and resources but no clients or bookings."
         )
 
 
