@@ -45,6 +45,8 @@
     "journey:plant-shop:verify": "node tools/test_plant_to_shop_journey.mjs",
     "journey:shop-plant:verify": "node tools/test_shop_to_plant_journey.mjs",
     "cross:shop-production:verify": "node tools/test_cross_product_shop_production.mjs",
+    "cross:reconciliation:verify": "node tools/test_shop_production_reconciliation.mjs",
+    "cross:report:verify": "node tools/test_cross_product_report.mjs",
     "website:trade-brief:verify": "node tools/test_website_trade_brief.mjs",
     "website:trade-detect:verify": "node tools/test_website_trade_detection.mjs",
     "ecommerce:returns:verify": "node tools/test_ecommerce_return_intent.mjs",

@@ -215,11 +215,11 @@ All projections live in the `operating-models` chunk alongside `shop-production-
 
 Phase A ships when:
 
-- [ ] `shop-production-status.ts` projection function passes a focused test (≥ 15 checks)
-- [ ] `shop-production-reconciliation.ts` projection passes a focused test (≥ 15 checks)
-- [ ] `cross-product-report.ts` passes a focused test (≥ 10 checks)
-- [ ] Render surface is gated by an existing view parameter (no new route)
-- [ ] Bundle total remains ≤ 2,825,000 bytes
+- [x] `shop-production-status.ts` projection function passes a focused test (≥ 15 checks) — 41 checks (OPS-172)
+- [x] `shop-production-reconciliation.ts` projection passes a focused test (≥ 15 checks) — 36 checks (OPS-173)
+- [x] `cross-product-report.ts` passes a focused test (≥ 10 checks) — 28 checks (OPS-174)
+- [ ] Render surface is gated by an existing view parameter (no new route) — OPS-175
+- [ ] Bundle total remains ≤ 2,825,000 bytes — currently 2,821,959 (headroom 3,041 bytes; projection files not yet bundled)
 
 Phase B ships when:
 
