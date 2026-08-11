@@ -133,6 +133,7 @@ import {
   commerceSupplierPayablesHandoffCsv,
   recordCommerceOrderReturn,
   installCommerceWorkingSampleActivity,
+  importCommerceCatalog,
 } from '../showroom/src/core/commerce-workspace.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
@@ -1894,4 +1895,71 @@ test('createCommerceWebsiteIntake and convertCommerceWebsiteIntake register and 
 
   // Invalid paymentMethod → null.
   assert.equal(convertCommerceWebsiteIntake(withIntake, 'WINT-ORD12345', { ...convertInput, paymentMethod: 'credit_card' }, convertProof), null)
+})
+
+test('importCommerceCatalog imports new catalog items and handles conflicts and idempotency', () => {
+  const seed = createSeedCommerce()
+
+  const IMPORT_DIGEST = 'sha256:' + 'a'.repeat(64)
+  const importItems = [
+    { sku: 'IMP-ITEM-01', name: 'Imported item one', onHand: 10, reorderAt: 3, price: 5000 },
+    { sku: 'IMP-ITEM-02', name: 'Imported item two', onHand: 20, reorderAt: 5, price: 8000 },
+  ]
+
+  const result = importCommerceCatalog(seed, {
+    items: importItems,
+    sourceDigest: IMPORT_DIGEST,
+    capturedAt: CAPTURED_AT,
+    actor: 'Store Manager',
+  })
+  assert.ok(result !== null, 'importCommerceCatalog must succeed with valid input')
+  assert.equal(result.created, 2)
+  assert.equal(result.alreadyPresent, 0)
+  assert.equal(result.replayed, false)
+  assert.ok(result.state.items.some((i) => i.sku === 'IMP-ITEM-01'))
+  assert.ok(result.state.items.some((i) => i.sku === 'IMP-ITEM-02'))
+
+  // Idempotent: same items already present → created=0, alreadyPresent=2, replayed=true.
+  const result2 = importCommerceCatalog(result.state, {
+    items: importItems,
+    sourceDigest: IMPORT_DIGEST,
+    capturedAt: CAPTURED_AT,
+    actor: 'Store Manager',
+  })
+  assert.ok(result2 !== null, 'repeat import of same items must succeed')
+  assert.equal(result2.created, 0)
+  assert.equal(result2.alreadyPresent, 2)
+  assert.equal(result2.replayed, true)
+
+  // Invalid sourceDigest → null.
+  assert.equal(importCommerceCatalog(seed, {
+    items: importItems,
+    sourceDigest: 'not-a-digest',
+    capturedAt: CAPTURED_AT,
+    actor: 'Store Manager',
+  }), null)
+
+  // Empty items array → null.
+  assert.equal(importCommerceCatalog(seed, {
+    items: [],
+    sourceDigest: IMPORT_DIGEST,
+    capturedAt: CAPTURED_AT,
+    actor: 'Store Manager',
+  }), null)
+
+  // Duplicate SKUs in items array → null.
+  assert.equal(importCommerceCatalog(seed, {
+    items: [importItems[0], importItems[0]],
+    sourceDigest: IMPORT_DIGEST,
+    capturedAt: CAPTURED_AT,
+    actor: 'Store Manager',
+  }), null)
+
+  // Existing SKU with mismatched field value → null.
+  assert.equal(importCommerceCatalog(seed, {
+    items: [{ sku: 'SM-1001', name: 'Wrong product name', onHand: 34, reorderAt: 10, price: 18500 }],
+    sourceDigest: IMPORT_DIGEST,
+    capturedAt: CAPTURED_AT,
+    actor: 'Store Manager',
+  }), null)
 })
