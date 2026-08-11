@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-224'
   && completedAutomationArchive.entries?.length === 72
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 43
+  && portfolioSource.completedLocalAutomations.length === 44
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 115
+  && portfolio.completedLocalAutomations.length === 116
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -630,10 +630,13 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[114]?.productId === 'shop'
   && portfolio.completedLocalAutomations[114]?.workOrderId === 'shop-spa-client-record-and-consent-boundary'
   && portfolio.completedLocalAutomations[114]?.checkpoint === 'OPS-267'
+  && portfolio.completedLocalAutomations[115]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[115]?.workOrderId === 'shop-spa-server-field-privacy-and-therapist-action'
+  && portfolio.completedLocalAutomations[115]?.checkpoint === 'OPS-268'
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-spa-client-retention-and-field-privacy-boundary'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-spa-client-retention-export-and-anonymization'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -1981,6 +1984,9 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && workboard.includes('| OPS-267 | CEO + Shop Spa Client Privacy / Agent Operations Codex | done-local |')
   && workboard.includes('Every new booking must record `allowed` or `declined`')
   && workboard.includes('The receipt advances `shop-spa-client-retention-and-field-privacy-boundary`')
+  && workboard.includes('| OPS-268 | CEO + Shop Spa Field Privacy / Agent Operations Codex | done-local |')
+  && workboard.includes('therapist and viewer GET responses omit client records')
+  && workboard.includes('The receipt advances `shop-spa-client-retention-export-and-anonymization`')
   && workboard.includes('| CLAUDE-009 | Claude Code | ready-owner-login |')
   && workboard.includes('Shop setup-recovery checkpoint `0fc5cf7d`')
   && portfolio.products.every((product) => product.localAutomation.status === 'owner-gated')
@@ -2064,7 +2070,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-payment-and-daily-close-proof' && entry.checkpoint === 'OPS-265')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-role-access-and-staff-handoff' && entry.checkpoint === 'OPS-266')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-client-record-and-consent-boundary' && entry.checkpoint === 'OPS-267')
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-spa-client-retention-and-field-privacy-boundary')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-server-field-privacy-and-therapist-action' && entry.checkpoint === 'OPS-268')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-spa-client-retention-export-and-anonymization')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")
