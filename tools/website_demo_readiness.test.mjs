@@ -6,8 +6,10 @@ import {
   readinessChecks,
 } from '../showroom/src/products/website/website-model.ts'
 import {
+  applyWebsiteStarterBrief,
   installWebsiteWorkingSample,
   isUntouchedWebsiteStarter,
+  websiteStarterBriefIssues,
   websiteStarterTemplates,
 } from '../showroom/src/products/website/website-starter.ts'
 
@@ -143,4 +145,49 @@ test('a client can import their real pages over a working sample, but not over r
   const withOwnerEvidence = { ...sample, localPublishes: [...(sample.localPublishes ?? []), { id: 'pub-1' }] }
   assert.equal(isReplaceableWebsiteSampleWorkspace(withOwnerEvidence), false)
   assert.equal(importWebsitePageDrafts(withOwnerEvidence, importInput), null)
+})
+
+test('the starter brief validator catches invalid fields before any workspace is touched', () => {
+  const validBrief = {
+    templateId: 'lead-generation',
+    businessName: 'Yangon Wellness Spa',
+    audience: 'health-conscious adults in Yangon',
+    offer: 'personalized spa treatments and wellness packages',
+    proof: 'Over 500 five-star reviews since 2021.',
+    contactHref: '',
+  }
+  assert.deepEqual(websiteStarterBriefIssues(validBrief), [], 'a complete brief must have no issues')
+  assert.ok(websiteStarterBriefIssues({ ...validBrief, templateId: 'unknown-layout' }).some((issue) => issue.field === 'templateId'))
+  assert.ok(websiteStarterBriefIssues({ ...validBrief, businessName: '' }).some((issue) => issue.field === 'businessName'))
+  assert.ok(websiteStarterBriefIssues({ ...validBrief, offer: '' }).some((issue) => issue.field === 'offer'))
+  assert.ok(websiteStarterBriefIssues({ ...validBrief, contactHref: 'http://insecure' }).some((issue) => issue.field === 'contactHref'))
+  assert.ok(websiteStarterBriefIssues({ ...validBrief, contactHref: 'https://contact.example.com' }).length === 0, 'a valid HTTPS contact is accepted')
+})
+
+test('applying a starter brief on a fresh workspace customises content with the business name', () => {
+  const workspace = createInitialWorkspace()
+  assert.ok(isUntouchedWebsiteStarter(workspace))
+
+  const brief = {
+    templateId: 'lead-generation',
+    businessName: 'Shwe Spa and Wellness',
+    audience: 'working professionals',
+    offer: 'expert massage and wellness sessions',
+    proof: 'Certified therapists with 10+ years of experience.',
+    contactHref: 'https://shwespa.com/contact',
+  }
+  const applied = applyWebsiteStarterBrief(workspace, brief, CAPTURED_AT)
+  assert.ok(applied !== workspace, 'applying a valid brief must produce a new workspace')
+  assert.equal(applied.siteName, 'Shwe Spa and Wellness')
+  assert.ok(
+    applied.pages.some((page) => JSON.stringify(page).includes('Shwe Spa and Wellness')),
+    'business name must appear in page content',
+  )
+
+  // Applying with a brief that has issues returns the unchanged workspace.
+  const badBrief = { ...brief, businessName: '' }
+  assert.equal(applyWebsiteStarterBrief(workspace, badBrief, CAPTURED_AT), workspace, 'invalid brief must not modify the workspace')
+
+  // Applying on a touched workspace also returns it unchanged.
+  assert.equal(applyWebsiteStarterBrief(applied, brief, CAPTURED_AT), applied, 'brief must not apply over a modified workspace')
 })
