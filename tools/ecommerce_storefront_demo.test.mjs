@@ -102,6 +102,7 @@ import {
   commerceSupportWorkloadCsv,
   commerceWebsiteIntakeSnapshotDigest,
   createCommerceWebsiteIntake,
+  convertCommerceWebsiteIntake,
   commerceCloseSettlementReview,
   registerCommerceItem,
   updateCommerceItem,
@@ -1795,4 +1796,102 @@ test('installCommerceWorkingSampleActivity installs counter sales and a pending 
     ...input,
     counterSales: [{ recordedAt: CAPTURED_AT, payment: 'Cash', lines: [{ sku: 'SPA-NONEXISTENT', quantity: 1 }] }],
   }), null)
+})
+
+test('createCommerceWebsiteIntake and convertCommerceWebsiteIntake register and convert a website order', () => {
+  const seed = createSeedCommerce()
+
+  const source = {
+    fingerprint: 'web-a1b2c3d4',
+    approvalId: 'appr-001',
+    snapshotId: 'snap-001',
+    pageId: 'page-001',
+    siteName: 'supermega.dev',
+    pagePath: '/products/sm-1001',
+  }
+
+  const intakeProof = {
+    actionId: 'ACT-TEST-T036-INTAKE',
+    capturedAt: CAPTURED_AT,
+    actor: 'Website visitor',
+    reason: 'Customer initiated purchase',
+    evidenceReference: 'evt-test-t036-intake',
+  }
+
+  // Create a website intake for SM-1001, qty 2.
+  const withIntake = createCommerceWebsiteIntake(
+    seed,
+    { id: 'WINT-ORD12345', source, sku: 'SM-1001', quantity: 2 },
+    intakeProof,
+  )
+  assert.ok(withIntake !== null, 'createCommerceWebsiteIntake must succeed for valid input')
+
+  const intakes = commerceWebsiteIntakes(withIntake)
+  assert.equal(intakes.length, 1)
+  assert.equal(intakes[0].id, 'WINT-ORD12345')
+  assert.equal(intakes[0].status, 'pending_confirmation')
+  assert.equal(intakes[0].sku, 'SM-1001')
+  assert.equal(intakes[0].quantity, 2)
+
+  // Idempotent on same id, source, sku, quantity → returns current (not null).
+  assert.ok(createCommerceWebsiteIntake(withIntake, { id: 'WINT-ORD12345', source, sku: 'SM-1001', quantity: 2 }, intakeProof) !== null)
+
+  // Idempotent on source quadruple (fingerprint|approvalId|snapshotId|pageId) with same sku/qty → returns current.
+  const proof2 = { ...intakeProof, actionId: 'ACT-TEST-T036-INTAKE2' }
+  assert.ok(createCommerceWebsiteIntake(withIntake, { id: 'WINT-ANOTHER1', source, sku: 'SM-1001', quantity: 2 }, proof2) !== null)
+
+  // Invalid id pattern → null.
+  assert.equal(createCommerceWebsiteIntake(seed, { id: 'INVALID-ID', source, sku: 'SM-1001', quantity: 2 }, intakeProof), null)
+
+  // Quantity out of range → null.
+  assert.equal(createCommerceWebsiteIntake(seed, { id: 'WINT-RANGE001', source, sku: 'SM-1001', quantity: 0 }, intakeProof), null)
+  assert.equal(createCommerceWebsiteIntake(seed, { id: 'WINT-RANGE002', source, sku: 'SM-1001', quantity: 100 }, intakeProof), null)
+
+  // Unknown SKU → null.
+  assert.equal(createCommerceWebsiteIntake(seed, { id: 'WINT-NOSKU001', source, sku: 'SM-GHOST000', quantity: 1 }, intakeProof), null)
+
+  // Convert the intake to a confirmed order.
+  const convertProof = {
+    actionId: 'ACT-TEST-T036-CONVERT',
+    capturedAt: CAPTURED_AT,
+    actor: 'Store staff',
+    reason: 'Order confirmed by store',
+    evidenceReference: 'evt-test-t036-convert',
+  }
+  const convertInput = {
+    customer: 'Ko Mg Mg',
+    fulfilmentMethod: 'local_delivery',
+    paymentMethod: 'cash_on_delivery',
+    promisedAt: '2026-08-08T06:00:00.000Z',
+  }
+
+  const sm1001Before = seed.items.find((i) => i.sku === 'SM-1001').onHand
+  const converted = convertCommerceWebsiteIntake(withIntake, 'WINT-ORD12345', convertInput, convertProof)
+  assert.ok(converted !== null, 'convertCommerceWebsiteIntake must succeed for valid input')
+
+  // Order id is derived from intake.id.slice(5).
+  const order = converted.orders.find((o) => o.id === 'ORD-WEB-ORD12345')
+  assert.ok(order, 'order must exist with id ORD-WEB-ORD12345')
+  assert.equal(order.status, 'confirmed')
+  assert.equal(order.channel, 'Website')
+  assert.equal(order.fulfilment, 'delivery')
+  assert.equal(order.payment, 'Cash on delivery')
+
+  // Item onHand decreases by intake quantity.
+  assert.equal(converted.items.find((i) => i.sku === 'SM-1001').onHand, sm1001Before - 2)
+
+  // Intake status becomes converted.
+  assert.equal(commerceWebsiteIntakes(converted).find((i) => i.id === 'WINT-ORD12345').status, 'converted')
+
+  // Idempotent: same conversion input and proof on already-converted intake → returns current (not null).
+  assert.ok(convertCommerceWebsiteIntake(converted, 'WINT-ORD12345', convertInput, convertProof) !== null)
+
+  // promisedAt equal to capturedAt → null (must be strictly after).
+  assert.equal(convertCommerceWebsiteIntake(withIntake, 'WINT-ORD12345', { ...convertInput, promisedAt: CAPTURED_AT }, convertProof), null)
+
+  // Invalid fulfilmentMethod → null.
+  assert.equal(convertCommerceWebsiteIntake(withIntake, 'WINT-ORD12345', { ...convertInput, fulfilmentMethod: 'courier' }, convertProof), null)
+
+  // Invalid paymentMethod → null.
+  assert.equal(convertCommerceWebsiteIntake(withIntake, 'WINT-ORD12345', { ...convertInput, paymentMethod: 'credit_card' }, convertProof), null)
 })
