@@ -146,9 +146,16 @@ import {
   approveCommercePurchaseRequisition,
   issueCommerceStockToProduction,
   receiveCommerceProductionBatch,
+  returnCommerceStockFromProduction,
   loadCommerceWorkspace,
   restoreBrowserLocalSamplePaymentPolicies,
 } from '../showroom/src/core/commerce-workspace.ts'
+
+import {
+  buildShopInventoryImportPackage,
+  createEmptyShopInventoryState,
+  applyShopInventoryImport,
+} from '../showroom/src/core/shop-inventory-foundation.ts'
 
 const CAPTURED_AT = '2026-08-08T02:00:00.000Z'
 
@@ -2623,4 +2630,124 @@ test('loadCommerceWorkspace and restoreBrowserLocalSamplePaymentPolicies cover w
   // Tampered decision (policyRevision differs from what the function would compute) → null.
   const tampered = { ...seedDecision, policyRevision: 99999 }
   assert.equal(restoreBrowserLocalSamplePaymentPolicies(blankState, tampered, 'pickup', 10000), null)
+})
+
+test('returnCommerceStockFromProduction returns stock from production and rejects malformed inputs', () => {
+  const seed = createSeedCommerce()
+  const VALID_DIGEST = 'sha256:' + '0'.repeat(64)
+
+  // --- Null path 1: invalid proof (empty actionId) → null ---
+  const badProof = { actionId: '', capturedAt: CAPTURED_AT, actor: 'Op', reason: 'r', evidenceReference: 'e' }
+  assert.equal(returnCommerceStockFromProduction(
+    seed,
+    { sourceIssueActionId: 'ACT-TEST-T044-ISSUE', productionQuantityMilli: 1000, stockQuantity: 1, stockUnitId: 'LOT-X', locationId: 'LOC-T044-A', expectedInventoryHeadDigest: VALID_DIGEST },
+    badProof,
+  ), null)
+
+  // --- Null path 2: no matching source issue in state (sourceIssues.length !== 1) → null ---
+  const returnProof2 = { actionId: 'ACT-TEST-T044-RET-1', capturedAt: CAPTURED_AT, actor: 'Warehouse', reason: 'Return test', evidenceReference: 'T044-RET-REF-1' }
+  assert.equal(returnCommerceStockFromProduction(
+    seed,
+    { sourceIssueActionId: 'ACT-NONEXISTENT-T044', productionQuantityMilli: 1000, stockQuantity: 1, stockUnitId: 'LOT-T044-001', locationId: 'LOC-T044-A', expectedInventoryHeadDigest: VALID_DIGEST },
+    returnProof2,
+  ), null)
+
+  // --- Null path 3: state has a production_issue movement but no inventoryFoundation → null ---
+  const SOURCE_DIGEST_ISSUE = 'sha256:' + 'c'.repeat(64)
+  const issueRequest44 = {
+    requestId: 'PROD-REQ-T044-001',
+    sourceCommandDigest: SOURCE_DIGEST_ISSUE,
+    jobId: 'PROD-JOB-T044-001',
+    materialId: 'PROD-MAT-T044-001',
+    inputLotId: 'PROD-LOT-T044-001',
+    quantityMilli: 5000,
+    unit: 'kg',
+  }
+  const issueProof44 = { actionId: 'ACT-TEST-T044-ISSUE-A', capturedAt: CAPTURED_AT, actor: 'Production supervisor', reason: 'Issue to production', evidenceReference: 'PRODUCTION-ISSUE:PROD-REQ-T044-001' }
+  const withIssueOnly = issueCommerceStockToProduction(seed, issueRequest44, 'SM-1001', 5, '5 units of SM-1001 issued', issueProof44)
+  assert.ok(withIssueOnly !== null, 'issueCommerceStockToProduction must succeed for null-path 3 setup')
+  const returnProof3 = { actionId: 'ACT-TEST-T044-RET-2', capturedAt: CAPTURED_AT, actor: 'Warehouse', reason: 'Return test', evidenceReference: 'T044-RET-REF-2' }
+  assert.equal(returnCommerceStockFromProduction(
+    withIssueOnly,
+    { sourceIssueActionId: 'ACT-TEST-T044-ISSUE-A', productionQuantityMilli: 5000, stockQuantity: 5, stockUnitId: 'LOT-T044-001', locationId: 'LOC-T044-A', expectedInventoryHeadDigest: VALID_DIGEST },
+    returnProof3,
+  ), null)
+
+  // --- Positive path: full inventoryFoundation setup ---
+
+  // Step 1: Create a minimal commerce state with one item (onHand=10).
+  const SKU = 'T044-SKU'
+  const itemProof = { actionId: 'ACT-TEST-T044-ITEM', capturedAt: CAPTURED_AT, actor: 'Operator', reason: 'Register item for test', evidenceReference: 'T044-ITEM-REF' }
+  const withItem = registerCommerceItem(createEmptyCommerce(), { sku: SKU, name: 'Test material 044', onHand: 10, reorderAt: 2, price: 5000 }, itemProof)
+  assert.ok(withItem !== null, 'registerCommerceItem must succeed')
+
+  // Step 2: Build an import package with 10 units of T044-SKU at LOC-T044-A.
+  const importPkg = buildShopInventoryImportPackage({
+    importId: 'IMP-T044-001',
+    sourceDigest: 'sha256:' + 'e'.repeat(64),
+    clients: [{ id: 'CLI-T044-001', name: 'Test client' }],
+    vendors: [{ id: 'VEN-T044-001', name: 'Test vendor' }],
+    locations: [{ id: 'LOC-T044-A', name: 'Location A' }, { id: 'LOC-T044-B', name: 'Location B' }],
+    stockUnits: [{ id: 'LOT-T044-001', sku: SKU, tracking: 'lot', trackingCode: 'BATCH-T044-001' }],
+    openings: [{ stockUnitId: 'LOT-T044-001', locationId: 'LOC-T044-A', vendorId: 'VEN-T044-001', quantity: 10 }],
+    catalogSkus: [SKU],
+  })
+
+  // Step 3: Apply the import to a fresh inventory state.
+  const emptyInv = createEmptyShopInventoryState()
+  const importProof = { actionId: 'ACT-TEST-T044-IMPORT', capturedAt: CAPTURED_AT, actor: 'Inventory manager', reason: 'Initial inventory import', evidenceReference: 'T044-IMPORT-REF' }
+  const invResult = applyShopInventoryImport(emptyInv, importPkg, importProof, [SKU], emptyInv.headDigest)
+  assert.ok(invResult && !invResult.replayed, 'inventory import must succeed and not be replayed')
+
+  // Step 4: Combine the commerce state with the inventory foundation.
+  // invResult.state has availableToPromise=10 for T044-SKU, matching withItem.onHand=10.
+  const commerceWithFoundation = { ...withItem, inventoryFoundation: invResult.state }
+
+  // Step 5: Issue 5 units to production — updates both commerce onHand and inventoryFoundation.
+  const issueRequest2 = {
+    requestId: 'PROD-REQ-T044-002',
+    sourceCommandDigest: 'sha256:' + 'f'.repeat(64),
+    jobId: 'PROD-JOB-T044-002',
+    materialId: 'PROD-MAT-T044-002',
+    inputLotId: 'PROD-LOT-T044-002',
+    quantityMilli: 5000,
+    unit: 'kg',
+  }
+  const issueProof2 = { actionId: 'ACT-TEST-T044-ISSUE-B', capturedAt: CAPTURED_AT, actor: 'Production supervisor', reason: 'Issue material for production', evidenceReference: 'PRODUCTION-ISSUE:PROD-REQ-T044-002' }
+  const withIssue = issueCommerceStockToProduction(commerceWithFoundation, issueRequest2, SKU, 5, '5 units of T044-SKU issued as raw material', issueProof2)
+  assert.ok(withIssue !== null, 'issueCommerceStockToProduction with inventoryFoundation must succeed')
+  assert.equal(withIssue.items.find((i) => i.sku === SKU)?.onHand, 5, 'onHand must decrease to 5 after issue')
+
+  // Step 6: Return 2 of the 5 issued units (partial return preserving ratio: 2000milli/2 = 5000milli/5).
+  // The return goes back to LOT-T044-001 at LOC-T044-A — the same lot/location the issue drew from.
+  const returnProofPos = { actionId: 'ACT-TEST-T044-RET-POS', capturedAt: CAPTURED_AT, actor: 'Warehouse receiver', reason: 'Partial production return', evidenceReference: 'T044-RET-POS-REF' }
+  const withReturn = returnCommerceStockFromProduction(
+    withIssue,
+    {
+      sourceIssueActionId: 'ACT-TEST-T044-ISSUE-B',
+      productionQuantityMilli: 2000,
+      stockQuantity: 2,
+      stockUnitId: 'LOT-T044-001',
+      locationId: 'LOC-T044-A',
+      expectedInventoryHeadDigest: withIssue.inventoryFoundation.headDigest,
+    },
+    returnProofPos,
+  )
+  assert.ok(withReturn !== null, 'returnCommerceStockFromProduction must succeed')
+  assert.equal(withReturn.items.find((i) => i.sku === SKU)?.onHand, 7, 'onHand must increase to 7 after returning 2 units')
+
+  const returnMovement = withReturn.movements.find((m) => m.kind === 'production_return' && m.actionId === returnProofPos.actionId)
+  assert.ok(returnMovement !== undefined, 'production_return movement must exist')
+  assert.equal(returnMovement.quantityDelta, 2, 'movement quantityDelta must equal returned stockQuantity')
+  assert.equal(returnMovement.productionIssueActionId, 'ACT-TEST-T044-ISSUE-B', 'productionIssueActionId must reference the source issue')
+
+  // Idempotent replay: same proof on already-returned state → returns current (not null).
+  assert.ok(returnCommerceStockFromProduction(withReturn, {
+    sourceIssueActionId: 'ACT-TEST-T044-ISSUE-B',
+    productionQuantityMilli: 2000,
+    stockQuantity: 2,
+    stockUnitId: 'LOT-T044-001',
+    locationId: 'LOC-T044-A',
+    expectedInventoryHeadDigest: withReturn.inventoryFoundation.headDigest,
+  }, returnProofPos) !== null, 'idempotent replay must return current state')
 })
