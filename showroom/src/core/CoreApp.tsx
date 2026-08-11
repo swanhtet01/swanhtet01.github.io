@@ -150,6 +150,7 @@ import {
   configureCommerceShippingPolicy,
   configureCommercePaymentPolicy,
   createCommerceCatalogBaseline,
+  createCommerceServiceOrder,
   createCommercePurchaseOrder,
   markCommerceSupplierInvoicePayableReady,
   recordCommerceSupplierInvoice,
@@ -288,6 +289,7 @@ import {
   readShopServiceSchedule,
   shopIndustryPack,
   type ShopIndustryPack,
+  type ShopServiceCheckoutRequest,
 } from './shop-service-scheduling'
 import { decideShopNextAction } from './shop-next-action'
 import {
@@ -1877,6 +1879,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const orderDraftScopeRef = useRef(orderDraftScope)
   const orderDraftOperationEpochRef = useRef(0)
   const orderDraftResetEpochRef = useRef(0)
+  const serviceCheckoutResolutionRef = useRef<{
+    orderId: string
+    resolve: (result: { orderId: string } | null) => void
+  } | null>(null)
   const [actionTrigger, setActionTrigger] = useState<HTMLElement | null>(null)
   const [notice, setNotice] = useState('')
   const [catalogDraft, setCatalogDraft] = useState({ sku: '', name: '', onHand: '', reorderAt: '', price: '', reason: '', evidenceReference: '' })
@@ -3737,6 +3743,54 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     return true
   }
 
+  function reviewShopServiceCheckout(
+    request: ShopServiceCheckoutRequest,
+    paymentMethod: 'Cash' | 'KBZPay' | 'WavePay',
+  ): Promise<{ orderId: string } | null> {
+    if (!commerceCanWrite || pendingAction || serviceCheckoutResolutionRef.current) {
+      setNotice('Finish the current Shop change before reviewing this appointment checkout.')
+      return Promise.resolve(null)
+    }
+    const orderId = `ORD-${request.sourceRecordId}`
+    const calculation = commerceOrderCalculation(commerceRef.current, request.servicePriceMmk, new Date().toISOString())
+    const expectedTotal = calculation?.totalMmk ?? request.servicePriceMmk
+    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    return new Promise((resolve) => {
+      serviceCheckoutResolutionRef.current = { orderId, resolve }
+      const queued = queueAction({
+        kind: 'order_create',
+        subjectId: orderId,
+        summary: `Create checkout for ${request.serviceName}`,
+        before: `Completed appointment ${request.sourceRecordId} · no linked Shop checkout`,
+        after: `One payment-pending Shop order · ${formatMoney(expectedTotal)} · ${paymentMethod} selected · no payment captured or customer contacted`,
+        evidenceReferenceLocked: true,
+        evidenceReferenceSuggestion: request.sourceRecordId,
+        reasonSuggestion: 'Convert the completed treatment into one accountable payment-pending checkout.',
+        apply: async (action) => {
+          const proof = commerceActionProof(action)
+          await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => createCommerceServiceOrder(current, {
+            sourceRecordId: request.sourceRecordId,
+            customer: request.customerName,
+            serviceSku: request.serviceSku,
+            serviceName: request.serviceName,
+            servicePriceMmk: request.servicePriceMmk,
+            completedAt: request.completedAt,
+            payment: paymentMethod,
+          }, proof))
+          const pendingResolution = serviceCheckoutResolutionRef.current
+          if (pendingResolution?.orderId === orderId) {
+            serviceCheckoutResolutionRef.current = null
+            pendingResolution.resolve({ orderId })
+          }
+        },
+      }, returnFocus)
+      if (!queued) {
+        serviceCheckoutResolutionRef.current = null
+        resolve(null)
+      }
+    })
+  }
+
   function queueCatalogItem(event: FormEvent) {
     event.preventDefault()
     const itemSku = itemDraft.sku.trim().toUpperCase()
@@ -3888,6 +3942,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       await pendingAction.apply(record)
     } catch (error) {
       if (error instanceof ShopReviewRequiredError) {
+        const pendingResolution = serviceCheckoutResolutionRef.current
+        if (pendingResolution?.orderId === pendingAction.subjectId) {
+          serviceCheckoutResolutionRef.current = null
+          pendingResolution.resolve(null)
+        }
         setPendingAction(null)
         setNotice(error.message)
       }
@@ -6688,6 +6747,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }
 
   function cancelCommerceActionReview() {
+    const serviceCheckoutResolution = serviceCheckoutResolutionRef.current
+    if (serviceCheckoutResolution && serviceCheckoutResolution.orderId === pendingAction?.subjectId) {
+      serviceCheckoutResolutionRef.current = null
+      setPendingAction(null)
+      serviceCheckoutResolution.resolve(null)
+      setNotice('Checkout review cancelled. The appointment and Shop orders were not modified.')
+      return
+    }
     const restorePreparedEcommerce = pendingAction?.kind === 'order_create' && Boolean(preparedEcommerceDraft)
     const restorePreparedWebsite = pendingAction?.kind === 'order_create' && Boolean(preparedWebsiteLead)
     const restorePreparedOrderSource = restorePreparedEcommerce || restorePreparedWebsite
@@ -6984,7 +7051,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} /></Suspense>
+    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} onReviewCheckout={reviewShopServiceCheckout} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)

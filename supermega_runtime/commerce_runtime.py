@@ -228,7 +228,10 @@ _MAX_MOVEMENT_ID_LENGTH = 2_000
 _SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
 _SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
 _SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
-    {"service_registered", "resource_registered", "booking_scheduled", "booking_advanced", "booking_cancelled"}
+    {
+        "service_registered", "resource_registered", "booking_scheduled",
+        "booking_advanced", "booking_cancelled", "booking_checkout_linked",
+    }
 )
 _SUPPORT_INTENT_ID_PATTERN = re.compile(
     r"ESR-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
@@ -239,6 +242,8 @@ _SUPPORT_CASE_ID_PATTERN = re.compile(
 _SERVICE_SCHEDULE_BOOKING_STATUSES = frozenset(
     {"held", "confirmed", "checked_in", "completed", "cancelled"}
 )
+_SERVICE_ORDER_SKU_PATTERN = re.compile(r"SPA-SVC-[A-Z0-9-]{1,64}")
+_SPA_BOOKING_SOURCE_PATTERN = re.compile(r"SPA-BOOKING-[0-9]{4,10}")
 _PURCHASE_ORDER_ID_PATTERN = re.compile(
     r"PO-[0-9A-F]{8}-[0-9A-F]{4}-4[0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}"
 )
@@ -378,6 +383,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
         "sourceRecordId",
         "evidenceReference",
         "lines",
+        "creation",
         "advancementActionIds",
         "completion",
         "returns",
@@ -387,7 +393,7 @@ _ORDER_OPTIONAL_FIELDS = frozenset(
     }
 )
 _ORDER_LINE_REQUIRED_FIELDS = frozenset({"sku", "name", "quantity", "unitPriceMmk"})
-_ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant"})
+_ORDER_LINE_OPTIONAL_FIELDS = frozenset({"variant", "kind"})
 _COLLECTION_ACTION_FIELDS = frozenset({"kind", "proof"})
 _ORDER_CALCULATION_SCHEMA = "supermega.commerce.order-calculation.v1"
 _ORDER_CALCULATION_V2_SCHEMA = "supermega.commerce.order-calculation.v2"
@@ -806,6 +812,7 @@ def _reservation_lines(order: Mapping[str, Any]) -> list[dict[str, Any]]:
         return [
             {"sku": line["sku"], "quantity": line["quantity"]}
             for line in order["lines"]
+            if line.get("kind") != "service"
         ]
     item_sku = order.get("itemSku")
     return [{"sku": item_sku, "quantity": order["quantity"]}] if item_sku else []
@@ -1152,6 +1159,7 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
                     "endsAt", "status", "note", "createdAt", "updatedAt",
                 }
             ),
+            optional=frozenset({"checkoutOrderId"}),
         )
         booking_id = _text(booking.get("id"), f"{field}.id", maximum=80)
         booking_ids.append(booking_id)
@@ -1175,6 +1183,18 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
         _blankable_text(booking.get("note"), f"{field}.note", maximum=300)
         _timestamp(booking.get("createdAt"), f"{field}.createdAt")
         _timestamp(booking.get("updatedAt"), f"{field}.updatedAt")
+        if "checkoutOrderId" in booking:
+            checkout_order_id = _text(
+                booking.get("checkoutOrderId"),
+                f"{field}.checkoutOrderId",
+                maximum=120,
+            )
+            if (
+                booking.get("status") != "completed"
+                or checkout_order_id != f"ORD-SPA-{booking_id.upper()}"
+                or re.fullmatch(r"booking-[0-9]{4,10}", booking_id) is None
+            ):
+                raise TrialValidationError(f"{field}.checkoutOrderId is invalid.")
         normalized_bookings.append(booking)
     _unique(booking_ids, "commerce state.serviceSchedule booking ID")
     blocking = [booking for booking in normalized_bookings if booking["status"] != "cancelled"]
@@ -2542,6 +2562,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
     reconciliation_action_ids: list[str] = []
     refund_settlement_action_ids: list[str] = []
     advancement_action_ids: list[str] = []
+    creation_action_ids: list[str] = []
     completion_action_ids: list[str] = []
     return_action_ids: list[str] = []
     support_action_ids: list[str] = []
@@ -2584,6 +2605,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
         _integer(order["quantity"], f"orders[{index}].quantity", minimum=1)
         _integer(order["total"], f"orders[{index}].total")
         captured_total: int | None = None
+        captured_service_line_count = 0
         if "lines" in order:
             lines = _list(order["lines"], f"orders[{index}].lines")
             if not 1 <= len(lines) <= _MAX_ORDER_LINES:
@@ -2604,7 +2626,14 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                     optional=_ORDER_LINE_OPTIONAL_FIELDS,
                 )
                 line_sku = _text(line["sku"], f"{line_field}.sku", maximum=80)
-                if line_sku not in item_by_sku:
+                service_line = line.get("kind") == "service"
+                if "kind" in line and not service_line:
+                    raise TrialValidationError(f"{line_field}.kind is invalid.")
+                if service_line:
+                    if _SERVICE_ORDER_SKU_PATTERN.fullmatch(line_sku) is None:
+                        raise TrialValidationError(f"{line_field}.sku is not a supported service reference.")
+                    captured_service_line_count += 1
+                elif line_sku not in item_by_sku:
                     raise TrialValidationError(f"{line_field}.sku is unknown.")
                 _text(line["name"], f"{line_field}.name")
                 if "variant" in line:
@@ -2633,7 +2662,11 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 line_skus.append(line_sku)
                 validated_lines.append(line)
             _unique(line_skus, f"orders[{index}] line SKU")
-            expected_item_sku = validated_lines[0]["sku"] if len(validated_lines) == 1 else None
+            expected_item_sku = (
+                validated_lines[0]["sku"]
+                if len(validated_lines) == 1 and validated_lines[0].get("kind") != "service"
+                else None
+            )
             if (
                 order["item"] != _order_item_summary(validated_lines)
                 or order.get("itemSku") != expected_item_sku
@@ -2947,6 +2980,76 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 )
                 if field == "sourceRecordId":
                     source_record_ids.append(value_text)
+        if "creation" in order:
+            creation = _action_proof(
+                order["creation"],
+                f"orders[{index}].creation",
+            )
+            if (
+                creation["capturedAt"] != order["createdAt"]
+                or creation["actor"] != order.get("owner")
+                or creation["evidenceReference"] != order.get("evidenceReference")
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}].creation does not bind the original order evidence."
+                )
+            creation_action_ids.append(creation["actionId"])
+        if captured_service_line_count:
+            source_record_id = str(order.get("sourceRecordId", ""))
+            if (
+                captured_service_line_count != len(order.get("lines", []))
+                or captured_service_line_count != 1
+                or order.get("channel") != "Spa appointment"
+                or order.get("fulfilment") != "pickup"
+                or _SPA_BOOKING_SOURCE_PATTERN.fullmatch(source_record_id) is None
+                or order.get("evidenceReference") != source_record_id
+                or "creation" not in order
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}] service checkout is not bound to one completed Spa appointment."
+                )
+            schedule = state.get("serviceSchedule")
+            if not isinstance(schedule, Mapping) or schedule.get("industryPackId") != "spa":
+                raise TrialValidationError(
+                    f"orders[{index}] service checkout requires the managed Spa schedule."
+                )
+            booking_matches = [
+                booking
+                for booking in schedule.get("bookings", [])
+                if isinstance(booking, Mapping)
+                and f"SPA-{str(booking.get('id', '')).upper()}" == source_record_id
+            ]
+            booking = booking_matches[0] if len(booking_matches) == 1 else None
+            service = next(
+                (
+                    candidate
+                    for candidate in schedule.get("services", [])
+                    if isinstance(candidate, Mapping)
+                    and booking is not None
+                    and candidate.get("id") == booking.get("serviceId")
+                ),
+                None,
+            )
+            line = order["lines"][0]
+            if (
+                booking is None
+                or service is None
+                or booking.get("status") != "completed"
+                or booking.get("customerName") != order.get("customer")
+                or booking.get("checkoutOrderId") not in {None, order["id"]}
+                or line.get("sku") != f"SPA-SVC-{str(service.get('id', '')).upper()}"
+                or line.get("name") != service.get("name")
+                or line.get("quantity") != 1
+                or line.get("unitPriceMmk") != service.get("priceMmk")
+                or order.get("id") != f"ORD-{source_record_id}"
+            ):
+                raise TrialValidationError(
+                    f"orders[{index}] service checkout does not match its completed Spa appointment."
+                )
+        elif "creation" in order:
+            raise TrialValidationError(
+                f"orders[{index}].creation is only supported for service checkout."
+            )
         if "promisedAt" in order:
             promised_at = datetime.fromisoformat(
                 _timestamp(
@@ -3478,11 +3581,27 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 correction_action_ids.append(action_id)
         order_ids.append(order_id)
         order_by_id[order_id] = order
+    schedule = state.get("serviceSchedule")
+    if isinstance(schedule, Mapping):
+        for booking in schedule.get("bookings", []):
+            if not isinstance(booking, Mapping) or "checkoutOrderId" not in booking:
+                continue
+            linked_order = order_by_id.get(str(booking["checkoutOrderId"]))
+            expected_source = f"SPA-{str(booking.get('id', '')).upper()}"
+            if (
+                linked_order is None
+                or linked_order.get("sourceRecordId") != expected_source
+                or linked_order.get("channel") != "Spa appointment"
+            ):
+                raise TrialValidationError(
+                    f"service booking {booking.get('id')} checkout link is not backed by its Shop order."
+                )
     _unique(order_ids, "Order ID")
     _unique(source_record_ids, "Order source record ID")
     _unique(reconciliation_action_ids, "Payment reconciliation action ID")
     _unique(refund_settlement_action_ids, "Refund settlement action ID")
     _unique(advancement_action_ids, "Order advancement action ID")
+    _unique(creation_action_ids, "Order creation action ID")
     _unique(completion_action_ids, "Order completion action ID")
     _unique(return_action_ids, "Order return action ID")
     _unique(support_action_ids, "Order support action ID")
@@ -4715,6 +4834,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
             *reconciliation_action_ids,
             *refund_settlement_action_ids,
             *advancement_action_ids,
+            *creation_action_ids,
             *completion_action_ids,
             *return_action_ids,
             *support_action_ids,
@@ -4757,7 +4877,7 @@ def validate_commerce_state(value: object) -> dict[str, Any]:
                 if isinstance(scope, Mapping)
                 else None
             )
-            if location_id is None:
+            if location_id is None or not _reservation_lines(order):
                 continue
             reservations = [
                 command["payload"]
@@ -4936,7 +5056,13 @@ def _validate_event_evidence(
         raise TrialValidationError(
             "command evidence actor must be the new order owner."
         )
-    if event_type == "commerce.item.updated":
+    if event_type == "commerce.order.created" and "creation" in next_state["orders"][0]:
+        creation = next_state["orders"][0]["creation"]
+        if not _proof_matches_evidence(creation, evidence):
+            raise TrialValidationError(
+                "command evidence must match the service order creation proof."
+            )
+    elif event_type == "commerce.item.updated":
         changes = _catalog_changes(next_state)
         proof = changes[0]["proof"] if changes else {}
         if not isinstance(proof, Mapping) or not _proof_matches_evidence(
@@ -5355,12 +5481,19 @@ def _validate_event_evidence(
         "commerce.order.cancelled": "order_release",
         "commerce.website_intake.converted": "order_reserve",
     }.get(event_type)
+    if (
+        event_type == "commerce.order.created"
+        and not _reservation_lines(next_state["orders"][0])
+    ):
+        location_order_kind = None
     if event_type == "commerce.order.advanced":
-        _, advanced_order = _one_changed(
+        prior_order, advanced_order = _one_changed(
             current["orders"], next_state["orders"], "orders"
         )
         if advanced_order["status"] == "completed":
-            location_order_kind = "order_fulfil"
+            location_order_kind = (
+                "order_fulfil" if _reservation_lines(prior_order) else None
+            )
     if location_order_kind and _inventory_foundation(current) is not None:
         foundation = _inventory_foundation(next_state)
         commands = foundation.get("commands") if foundation is not None else None
@@ -5394,6 +5527,11 @@ def _validate_event_evidence(
         "commerce.purchase_order.received": "receipt",
         "commerce.website_intake.converted": "reserve",
     }.get(event_type)
+    if (
+        event_type == "commerce.order.created"
+        and not _reservation_lines(next_state["orders"][0])
+    ):
+        movement_kind = None
     if movement_kind:
         added_count = len(next_state["movements"]) - len(current["movements"])
         added_movements = next_state["movements"][:added_count]
@@ -8173,6 +8311,12 @@ def _order_inventory_transition(
         raise TrialValidationError(
             "an order cannot remove the location inventory record."
         )
+    if not lines:
+        if next_foundation != current_foundation:
+            raise TrialValidationError(
+                "a stock-free service checkout cannot change location inventory."
+            )
+        return
     catalog_skus = [str(item["sku"]) for item in current["items"]]
     try:
         before = validate_shop_inventory_state(current_foundation, catalog_skus)
@@ -8775,8 +8919,40 @@ def _validate_new_order_and_reservation(
         )
     )
     lines = _reservation_lines(order)
+    service_lines = [
+        line
+        for line in order.get("lines", [])
+        if isinstance(line, Mapping) and line.get("kind") == "service"
+    ]
     if not lines:
-        raise TrialValidationError("a new order must reference at least one inventory item.")
+        if (
+            len(service_lines) != 1
+            or len(order.get("lines", [])) != 1
+            or order.get("channel") != "Spa appointment"
+            or _SPA_BOOKING_SOURCE_PATTERN.fullmatch(str(source_record_id)) is None
+            or order.get("id") != f"ORD-{source_record_id}"
+            or order.get("evidenceReference") != source_record_id
+            or order.get("creation") is None
+        ):
+            raise TrialValidationError(
+                "a stock-free order must be one evidence-bound Spa service checkout."
+            )
+        if next_state["items"] != current["items"]:
+            raise TrialValidationError(
+                "a Spa service checkout cannot change physical stock items."
+            )
+        if next_state["movements"] != current["movements"]:
+            raise TrialValidationError(
+                "a Spa service checkout cannot create a stock movement."
+            )
+        _order_inventory_transition(
+            current,
+            next_state,
+            order,
+            [],
+            kind="order_reserve",
+        )
+        return
     if (
         len(next_state["movements"]) != len(current["movements"]) + len(lines)
         or next_state["movements"][len(lines):] != current["movements"]
@@ -11337,6 +11513,43 @@ def _validate_service_schedule_saved(
             and after["bookings"][-1]["status"] == "held"
             and after["bookings"][-1]["createdAt"] == latest["happenedAt"]
             and after["bookings"][-1]["updatedAt"] == latest["happenedAt"]
+            and after["services"] == before["services"]
+            and after["resources"] == before["resources"]
+        )
+    elif event_type == "booking_checkout_linked":
+        before_by_id = {booking["id"]: booking for booking in before["bookings"]}
+        changed_bookings = [
+            booking
+            for booking in after["bookings"]
+            if before_by_id.get(booking["id"]) != booking
+        ]
+        changed = changed_bookings[0] if len(changed_bookings) == 1 else None
+        prior = before_by_id.get(changed["id"]) if changed else None
+        expected_order_id = f"ORD-SPA-{str(latest['subjectId']).upper()}"
+        expected_booking = (
+            {
+                **prior,
+                "checkoutOrderId": expected_order_id,
+                "updatedAt": latest["happenedAt"],
+            }
+            if prior
+            and prior.get("status") == "completed"
+            and prior.get("checkoutOrderId") is None
+            else None
+        )
+        linked_orders = [
+            order
+            for order in next_state["orders"]
+            if order.get("id") == expected_order_id
+            and order.get("sourceRecordId") == f"SPA-{str(latest['subjectId']).upper()}"
+        ]
+        valid_change = (
+            len(after["bookings"]) == len(before["bookings"])
+            and {booking["id"] for booking in after["bookings"]} == set(before_by_id)
+            and len(changed_bookings) == 1
+            and changed == expected_booking
+            and changed["id"] == latest["subjectId"]
+            and len(linked_orders) == 1
             and after["services"] == before["services"]
             and after["resources"] == before["resources"]
         )

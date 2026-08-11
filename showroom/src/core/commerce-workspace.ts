@@ -52,6 +52,7 @@ export type CommerceOrderLine = {
   sku: string
   name: string
   variant?: string
+  kind?: 'service'
   quantity: number
   unitPriceMmk: number
 }
@@ -427,6 +428,7 @@ export type CommerceOrder = {
   sourceRecordId?: string
   evidenceReference?: string
   lines?: CommerceOrderLine[]
+  creation?: CommerceActionProof
   advancementActionIds?: string[]
   completion?: CommerceActionProof
   returns?: CommerceOrderReturn[]
@@ -2162,8 +2164,13 @@ export function commerceOrderItemSummary(lines: CommerceOrderLine[]) {
   return lines.length === 1 ? lines[0].name : `${lines.length} items`
 }
 
+const commerceServiceSkuPattern = /^SPA-SVC-[A-Z0-9-]{1,64}$/
+const commerceSpaBookingSourcePattern = /^SPA-BOOKING-\d{4,10}$/
+
 function reservationLinesForOrder(order: CommerceOrder) {
-  if (order.lines !== undefined) return order.lines.map((line) => ({ sku: line.sku, quantity: line.quantity }))
+  if (order.lines !== undefined) return order.lines
+    .filter((line) => line.kind !== 'service')
+    .map((line) => ({ sku: line.sku, quantity: line.quantity }))
   return order.itemSku ? [{ sku: order.itemSku, quantity: order.quantity }] : []
 }
 
@@ -2547,6 +2554,7 @@ export function validateCommerceState(value: unknown): CommerceState {
   const reconciliationActionIds: string[] = []
   const refundSettlementActionIds: string[] = []
   const advancementActionIds: string[] = []
+  const creationActionIds: string[] = []
   const completionActionIds: string[] = []
   const returnActionIds: string[] = []
   const supportActionIds: string[] = []
@@ -3408,15 +3416,21 @@ export function validateCommerceState(value: unknown): CommerceState {
     assertSafeInteger(candidate.quantity, `orders[${index}].quantity`, 1)
     assertSafeInteger(candidate.total, `orders[${index}].total`)
     let capturedLineSubtotal: number | null = null
+    let capturedServiceLineCount = 0
     if (candidate.lines !== undefined) {
       if (!Array.isArray(candidate.lines) || candidate.lines.length < 1 || candidate.lines.length > maxOrderLines) throw new Error(`orders[${index}].lines must contain 1 to ${maxOrderLines} entries.`)
       const lineSkus: string[] = []
       let capturedQuantity = 0
       let capturedTotal = 0
       for (const [lineIndex, lineCandidate] of candidate.lines.entries()) {
-        if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant'])) throw new Error(`orders[${index}].lines[${lineIndex}] is invalid.`)
+        if (!isRecord(lineCandidate) || !hasExactKeys(lineCandidate, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant', 'kind'])) throw new Error(`orders[${index}].lines[${lineIndex}] is invalid.`)
         const lineSku = canonicalText(lineCandidate.sku, `orders[${index}].lines[${lineIndex}].sku`, 80)
-        if (!itemSkus.includes(lineSku)) throw new Error(`orders[${index}].lines[${lineIndex}].sku is unknown.`)
+        const serviceLine = lineCandidate.kind === 'service'
+        if (lineCandidate.kind !== undefined && !serviceLine) throw new Error(`orders[${index}].lines[${lineIndex}].kind is invalid.`)
+        if (serviceLine) {
+          if (!commerceServiceSkuPattern.test(lineSku)) throw new Error(`orders[${index}].lines[${lineIndex}].sku is not a supported service reference.`)
+          capturedServiceLineCount += 1
+        } else if (!itemSkus.includes(lineSku)) throw new Error(`orders[${index}].lines[${lineIndex}].sku is unknown.`)
         canonicalText(lineCandidate.name, `orders[${index}].lines[${lineIndex}].name`)
         if (lineCandidate.variant !== undefined) canonicalText(lineCandidate.variant, `orders[${index}].lines[${lineIndex}].variant`)
         assertSafeInteger(lineCandidate.quantity, `orders[${index}].lines[${lineIndex}].quantity`, 1)
@@ -3432,7 +3446,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       assertUnique(lineSkus, `orders[${index}] line SKU`)
       capturedLineSubtotal = capturedTotal
       const capturedLines = candidate.lines as CommerceOrderLine[]
-      const expectedItemSku = capturedLines.length === 1 ? capturedLines[0].sku : undefined
+      const expectedItemSku = capturedLines.length === 1 && capturedLines[0].kind !== 'service' ? capturedLines[0].sku : undefined
       if (candidate.item !== commerceOrderItemSummary(capturedLines)
         || candidate.itemSku !== expectedItemSku
         || candidate.quantity !== capturedQuantity) throw new Error(`orders[${index}] does not match its immutable line snapshots.`)
@@ -3607,6 +3621,37 @@ export function validateCommerceState(value: unknown): CommerceState {
           : requiredText(candidate[field], `orders[${index}].${field}`)
         if (field === 'sourceRecordId') sourceRecordIds.push(fieldValue)
       }
+    }
+    if (candidate.creation !== undefined) {
+      if (!isRecord(candidate.creation)
+        || !hasExactKeys(candidate.creation, ['actionId', 'capturedAt', 'actor', 'reason', 'evidenceReference'])
+        || !validProof(candidate.creation as CommerceActionProof)) {
+        throw new Error(`orders[${index}].creation is invalid.`)
+      }
+      const creation = candidate.creation as unknown as CommerceActionProof
+      for (const field of ['actionId', 'actor', 'reason', 'evidenceReference'] as const) {
+        canonicalText(creation[field], `orders[${index}].creation.${field}`, field === 'actionId' ? 160 : 180)
+      }
+      if (creation.capturedAt !== candidate.createdAt
+        || creation.actor !== candidate.owner
+        || creation.evidenceReference !== candidate.evidenceReference) {
+        throw new Error(`orders[${index}].creation does not bind the original order evidence.`)
+      }
+      creationActionIds.push(creation.actionId)
+    }
+    if (capturedServiceLineCount) {
+      if (capturedServiceLineCount !== candidate.lines?.length
+        || capturedServiceLineCount !== 1
+        || candidate.channel !== 'Spa appointment'
+        || candidate.fulfilment !== 'pickup'
+        || typeof candidate.sourceRecordId !== 'string'
+        || !commerceSpaBookingSourcePattern.test(candidate.sourceRecordId)
+        || candidate.evidenceReference !== candidate.sourceRecordId
+        || candidate.creation === undefined) {
+        throw new Error(`orders[${index}] service checkout is not bound to one completed Spa appointment.`)
+      }
+    } else if (candidate.creation !== undefined) {
+      throw new Error(`orders[${index}].creation is only supported for service checkout.`)
     }
     if (candidate.promisedAt !== undefined) {
       const promisedAt = timestampMicros(candidate.promisedAt)
@@ -4664,6 +4709,7 @@ export function validateCommerceState(value: unknown): CommerceState {
     ...reconciliationActionIds,
     ...refundSettlementActionIds,
     ...advancementActionIds,
+    ...creationActionIds,
     ...completionActionIds,
     ...returnActionIds,
     ...supportActionIds,
@@ -4702,7 +4748,7 @@ export function validateCommerceState(value: unknown): CommerceState {
       }
       for (const order of value.orders as CommerceOrder[]) {
         const locationId = order.accountingScope?.inventoryLocationId
-        if (!locationId) continue
+        if (!locationId || !reservationLinesForOrder(order).length) continue
         const reservations = (value.inventoryFoundation as ShopInventoryState).commands.filter((command) => (
           command.payload.kind === 'order_reserve' && command.payload.orderId === order.id
         ))
@@ -4921,6 +4967,7 @@ function movementFor(
 
 function actionIdIsUsed(state: CommerceState, actionId: string) {
   return state.movements.some((movement) => movement.actionId === actionId)
+    || state.orders.some((order) => order.creation?.actionId === actionId)
     || state.orders.some((order) => order.paymentReconciliationActionId === actionId || order.refundSettlementActionId === actionId)
     || state.orders.some((order) => order.advancementActionIds?.includes(actionId))
     || state.orders.some((order) => order.completion?.actionId === actionId)
@@ -7302,10 +7349,12 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
   let total = 0
   for (const line of order.lines) {
     if (!isRecord(line)
-      || !hasExactKeys(line, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant'])
+      || !hasExactKeys(line, ['sku', 'name', 'quantity', 'unitPriceMmk'], ['variant', 'kind'])
       || typeof line.sku !== 'string' || line.sku !== line.sku.trim() || !line.sku
       || typeof line.name !== 'string' || line.name !== line.name.trim() || !line.name
       || (line.variant !== undefined && (typeof line.variant !== 'string' || line.variant !== line.variant.trim() || !line.variant))
+      || (line.kind !== undefined && line.kind !== 'service')
+      || (line.kind === 'service' && !commerceServiceSkuPattern.test(line.sku))
       || !Number.isSafeInteger(line.quantity) || line.quantity < 1
       || !Number.isSafeInteger(line.unitPriceMmk) || line.unitPriceMmk < 1
       || skus.has(line.sku)) return null
@@ -7317,7 +7366,7 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
     quantity = nextQuantity
     total = nextTotal
   }
-  const expectedItemSku = order.lines.length === 1 ? order.lines[0].sku : undefined
+  const expectedItemSku = order.lines.length === 1 && order.lines[0].kind !== 'service' ? order.lines[0].sku : undefined
   const pricedTotal = (order.promotionDecision?.netSubtotalMmk ?? total) + (order.shippingDecision?.feeMmk ?? 0)
   if (order.promotionDecision && (order.promotionDecision.grossSubtotalMmk !== total
     || order.promotionDecision.netSubtotalMmk !== total - order.promotionDecision.discountMmk
@@ -7331,6 +7380,87 @@ function validatedOrderLineSnapshots(order: CommerceOrder): CommerceOrderLine[] 
     && (order.calculation?.schema === COMMERCE_ORDER_CALCULATION_V2_SCHEMA
       ? order.calculation.listedSubtotalMmk === pricedTotal && order.total === order.calculation.totalMmk
       : order.total === pricedTotal) ? order.lines : null
+}
+
+export type CommerceServiceOrderInput = {
+  sourceRecordId: string
+  customer: string
+  serviceSku: string
+  serviceName: string
+  servicePriceMmk: number
+  completedAt: string
+  payment: 'Cash' | 'KBZPay' | 'WavePay'
+}
+
+export function createCommerceServiceOrder(
+  state: CommerceState,
+  input: CommerceServiceOrderInput,
+  proof: CommerceActionProof,
+) {
+  let current: CommerceState
+  try { current = validateCommerceState(state) } catch { return null }
+  const customer = optionalText(input?.customer)
+  const serviceName = optionalText(input?.serviceName)
+  const completedAt = timestampMicros(input?.completedAt)
+  const capturedAt = timestampMicros(proof?.capturedAt)
+  if (!validProof(proof)
+    || !commerceSpaBookingSourcePattern.test(input?.sourceRecordId ?? '')
+    || !commerceServiceSkuPattern.test(input?.serviceSku ?? '')
+    || !customer || customer !== input.customer || customer.length > 180
+    || !serviceName || serviceName !== input.serviceName || serviceName.length > 180
+    || !Number.isSafeInteger(input.servicePriceMmk) || input.servicePriceMmk < 1
+    || completedAt === null || capturedAt === null || completedAt > capturedAt
+    || !['Cash', 'KBZPay', 'WavePay'].includes(input.payment)
+    || proof.evidenceReference !== input.sourceRecordId) return null
+  const orderId = `ORD-${input.sourceRecordId}`
+  const fulfilmentReference = `${input.sourceRecordId} completed ${input.completedAt}`
+  const existing = current.orders.filter((order) => order.id === orderId || order.sourceRecordId === input.sourceRecordId)
+  if (existing.length) {
+    const order = existing.length === 1 ? existing[0] : null
+    const line = order?.lines?.length === 1 ? order.lines[0] : null
+    return order
+      && order.id === orderId
+      && order.customer === customer
+      && order.channel === 'Spa appointment'
+      && order.payment === input.payment
+      && order.fulfilment === 'pickup'
+      && order.fulfilmentReference === fulfilmentReference
+      && order.sourceRecordId === input.sourceRecordId
+      && order.evidenceReference === input.sourceRecordId
+      && line?.kind === 'service'
+      && line.sku === input.serviceSku
+      && line.name === serviceName
+      && line.quantity === 1
+      && line.unitPriceMmk === input.servicePriceMmk ? current : null
+  }
+  const promisedAt = new Date(Number(capturedAt / 1_000n) + 15 * 60_000).toISOString()
+  return reserveCommerceOrder(current, {
+    id: orderId,
+    createdAt: proof.capturedAt,
+    customer,
+    owner: proof.actor,
+    channel: 'Spa appointment',
+    item: serviceName,
+    quantity: 1,
+    payment: input.payment,
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    fulfilment: 'pickup',
+    fulfilmentReference,
+    promisedAt,
+    sourceRecordId: input.sourceRecordId,
+    evidenceReference: input.sourceRecordId,
+    lines: [{
+      sku: input.serviceSku,
+      name: serviceName,
+      kind: 'service',
+      quantity: 1,
+      unitPriceMmk: input.servicePriceMmk,
+    }],
+    creation: { ...proof },
+    total: input.servicePriceMmk,
+    status: 'confirmed',
+  }, proof)
 }
 
 export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder, proof: CommerceActionProof) {
@@ -7366,6 +7496,7 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     || (order.accountingScope !== undefined && !sameAccountingScopeSnapshot(order.accountingScope, accountingScope))) return null
   if (Boolean(order.sourceRecordId) !== Boolean(order.evidenceReference)
     || (order.evidenceReference && order.evidenceReference !== proof.evidenceReference)) return null
+  if (order.creation !== undefined && !sameActionProof(order.creation, proof)) return null
   if (order.promotionDecision) {
     const expectedPromotion = commercePromotionDecision(
       commercePromotionPolicies(state),
@@ -7474,11 +7605,21 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
   }] : [])
   if (!lines.length
     || (order.lines === undefined && (order.item !== legacyItem?.name || legacyItem.price * order.quantity !== order.total))) return null
+  const serviceLines = lines.filter((line) => line.kind === 'service')
+  if (serviceLines.length && (serviceLines.length !== lines.length
+    || serviceLines.length !== 1
+    || order.channel !== 'Spa appointment'
+    || !commerceSpaBookingSourcePattern.test(order.sourceRecordId ?? '')
+    || order.evidenceReference !== order.sourceRecordId
+    || order.fulfilment !== 'pickup'
+    || !order.creation
+    || !sameActionProof(order.creation, proof))) return null
   if (actionIdIsUsed(state, proof.actionId)) return null
   const duplicate = state.orders.some((candidate) => candidate.id === order.id || Boolean(order.sourceRecordId && candidate.sourceRecordId === order.sourceRecordId))
   if (duplicate) return null
   const nextBalances = new Map<string, number>()
   for (const line of lines) {
+    if (line.kind === 'service') continue
     const matchingItems = state.items.filter((candidate) => candidate.sku === line.sku)
     const item = matchingItems.length === 1 ? matchingItems[0] : undefined
     if (!item
@@ -7526,21 +7667,22 @@ export function reserveCommerceOrder(state: CommerceState, order: CommerceOrder,
     ...(accountingScope ? { accountingScope } : {}),
     ...(creditDecision ? { creditDecision } : {}),
   }
-  const movements = lines.map((line, index) => movementFor(
+  const reservationLines = lines.filter((line) => line.kind !== 'service')
+  const movements = reservationLines.map((line, index) => movementFor(
     proof,
     { kind: 'reserve', sku: line.sku, quantityDelta: -line.quantity, orderId: order.id },
-    lines.length > 1 ? `L${index + 1}` : undefined,
+    reservationLines.length > 1 ? `L${index + 1}` : undefined,
   ))
   const nextItems = state.items.map((candidate) => nextBalances.has(candidate.sku) ? { ...candidate, onHand: nextBalances.get(candidate.sku) as number } : candidate)
   let inventoryFoundation = state.inventoryFoundation
-  if (inventoryFoundation) {
+  if (inventoryFoundation && reservationLines.length) {
     try {
       const catalogSkus = state.items.map((candidate) => candidate.sku).sort()
       if (!shopInventoryMatchesItems(inventoryFoundation, state.items)) return null
       const locationResult = reserveShopInventoryOrder(inventoryFoundation, {
         orderId: order.id,
         customerReference: order.customer,
-        lines: lines.map(({ sku, quantity }) => ({ sku, quantity })),
+        lines: reservationLines.map(({ sku, quantity }) => ({ sku, quantity })),
         proof,
         catalogSkus,
         expectedHeadDigest: inventoryFoundation.headDigest,
@@ -10967,7 +11109,7 @@ export function advanceCommerceOrder(
   }
   const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
   let inventoryFoundation = current.inventoryFoundation
-  if (currentStatus === 'ready' && inventoryFoundation) {
+  if (currentStatus === 'ready' && inventoryFoundation && reservationLinesForOrder(order).length) {
     try {
       const catalogSkus = current.items.map((item) => item.sku).sort()
       if (!shopInventoryMatchesItems(inventoryFoundation, current.items)) return null

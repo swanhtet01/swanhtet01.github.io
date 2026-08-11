@@ -45,11 +45,12 @@ export type ShopServiceBooking = {
   note: string
   createdAt: string
   updatedAt: string
+  checkoutOrderId?: string
 }
 
 export type ShopServiceScheduleEvent = {
   revision: number
-  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled'
+  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'booking_checkout_linked'
   subjectId: string
   actor: string
   reason: string
@@ -81,6 +82,18 @@ export type ShopServiceScheduleProjection = {
   inService: number
   completedToday: number
   expectedRevenueMmk: number
+}
+
+export type ShopServiceCheckoutRequest = {
+  bookingId: string
+  sourceRecordId: string
+  customerName: string
+  contact: string
+  serviceId: string
+  serviceSku: string
+  serviceName: string
+  servicePriceMmk: number
+  completedAt: string
 }
 
 const bookingTransitions: Record<Exclude<ShopServiceBookingStatus, 'completed' | 'cancelled'>, ShopServiceBookingStatus> = {
@@ -232,6 +245,18 @@ function identifier(prefix: string, revision: number) {
   return `${prefix}-${String(revision).padStart(4, '0')}`
 }
 
+export function shopServiceCommerceSku(serviceId: string) {
+  const normalized = boundedText(serviceId, 'Service ID', 64).toUpperCase()
+  if (!/^[A-Z0-9-]+$/.test(normalized)) throw new Error('Service ID cannot become a Shop checkout reference.')
+  return `SPA-SVC-${normalized}`
+}
+
+export function shopServiceCheckoutSourceId(bookingId: string) {
+  const normalized = boundedText(bookingId, 'Booking ID', 80).toUpperCase()
+  if (!/^BOOKING-\d{4,10}$/.test(normalized)) throw new Error('Booking ID cannot become a Shop checkout reference.')
+  return `SPA-${normalized}`
+}
+
 function proofRecord(proof: ShopServiceScheduleProof) {
   return {
     actor: boundedText(proof.actor, 'Actor', 120),
@@ -293,6 +318,12 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
     if (booking.note.length > 300) throw new Error(`Booking ${id} note is too long.`)
     validIso(booking.createdAt, 'Booking creation time')
     validIso(booking.updatedAt, 'Booking update time')
+    if (booking.checkoutOrderId !== undefined) {
+      const checkoutOrderId = boundedText(booking.checkoutOrderId, 'Checkout order ID', 120)
+      if (booking.status !== 'completed' || checkoutOrderId !== `ORD-${shopServiceCheckoutSourceId(id)}`) {
+        throw new Error(`Booking ${id} has an invalid checkout link.`)
+      }
+    }
   }
   const blocking = state.bookings.filter((booking) => booking.status !== 'cancelled')
   for (let left = 0; left < blocking.length; left += 1) {
@@ -307,6 +338,7 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   if (state.events.length !== state.revision) throw new Error('Shop service schedule evidence is incomplete.')
   state.events.forEach((event, index) => {
     if (event.revision !== index + 1) throw new Error('Shop service schedule evidence revisions are not continuous.')
+    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'booking_checkout_linked'].includes(event.type)) throw new Error('Shop service schedule evidence type is invalid.')
     boundedText(event.subjectId, 'Evidence subject', 80)
     boundedText(event.actor, 'Evidence actor', 120)
     boundedText(event.reason, 'Evidence reason', 240)
@@ -411,13 +443,60 @@ export function cancelShopServiceBooking(state: ShopServiceSchedule, bookingId: 
   return validateShopServiceSchedule(next)
 }
 
+export function shopServiceCheckoutRequest(state: ShopServiceSchedule, bookingId: string): ShopServiceCheckoutRequest | null {
+  validateShopServiceSchedule(state)
+  const booking = state.bookings.find((candidate) => candidate.id === bookingId)
+  if (!booking || booking.status !== 'completed' || booking.checkoutOrderId) return null
+  const service = state.services.find((candidate) => candidate.id === booking.serviceId)
+  if (!service) return null
+  return {
+    bookingId: booking.id,
+    sourceRecordId: shopServiceCheckoutSourceId(booking.id),
+    customerName: booking.customerName,
+    contact: booking.contact,
+    serviceId: service.id,
+    serviceSku: shopServiceCommerceSku(service.id),
+    serviceName: service.name,
+    servicePriceMmk: service.priceMmk,
+    completedAt: booking.updatedAt,
+  }
+}
+
+export function linkShopServiceBookingCheckout(
+  state: ShopServiceSchedule,
+  bookingId: string,
+  orderId: string,
+  proof: ShopServiceScheduleProof,
+) {
+  validateShopServiceSchedule(state)
+  const evidence = proofRecord(proof)
+  const booking = state.bookings.find((candidate) => candidate.id === bookingId)
+  if (!booking) throw new Error('Booking not found.')
+  if (booking.status !== 'completed') throw new Error('Complete the appointment before checkout.')
+  const expectedOrderId = `ORD-${shopServiceCheckoutSourceId(booking.id)}`
+  if (orderId !== expectedOrderId) throw new Error('Checkout order does not match this appointment.')
+  if (booking.checkoutOrderId) {
+    if (booking.checkoutOrderId !== orderId) throw new Error('This appointment is already linked to another checkout.')
+    return state
+  }
+  const next = appendEvent({
+    ...state,
+    bookings: state.bookings.map((candidate) => candidate.id === bookingId
+      ? { ...candidate, checkoutOrderId: orderId, updatedAt: evidence.happenedAt }
+      : candidate),
+  }, { type: 'booking_checkout_linked', subjectId: bookingId, ...evidence })
+  return validateShopServiceSchedule(next)
+}
+
 export function projectShopServiceSchedule(state: ShopServiceSchedule, now = new Date()) : ShopServiceScheduleProjection {
   validateShopServiceSchedule(state)
   const localDay = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
   const todayKey = localDay.format(now)
   const activeBookings = state.bookings.filter((booking) => booking.status !== 'cancelled')
   const today = activeBookings.filter((booking) => localDay.format(new Date(booking.startsAt)) === todayKey).sort((left, right) => left.startsAt.localeCompare(right.startsAt))
-  const upcoming = activeBookings.filter((booking) => Date.parse(booking.endsAt) >= now.getTime()).sort((left, right) => left.startsAt.localeCompare(right.startsAt))
+  const upcoming = activeBookings.filter((booking) => Date.parse(booking.endsAt) >= now.getTime()
+    || (booking.status === 'completed'
+      && (!booking.checkoutOrderId || localDay.format(new Date(booking.startsAt)) === todayKey))).sort((left, right) => left.startsAt.localeCompare(right.startsAt))
   const serviceById = new Map(state.services.map((service) => [service.id, service]))
   return {
     activeServices: state.services.filter((service) => service.active).length,

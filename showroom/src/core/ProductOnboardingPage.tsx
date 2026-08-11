@@ -265,12 +265,12 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       setNotice('Enter a business name.')
       return
     }
-    if ((product === 'commerce' || product === 'ecommerce' || product === 'production') && !useDemo && !reviewedBusinessDataReady) {
-      setNotice(`Import real ${product === 'production' ? 'Plant jobs' : 'Shop products'} first${managedIdentity ? '.' : ', or choose the demo option below.'}`)
-      return
-    }
     if (workspaceStarted) {
       navigate(onboardingJourney.firstTaskPath)
+      return
+    }
+    if ((product === 'commerce' || product === 'ecommerce' || product === 'production') && !useDemo && !reviewedBusinessDataReady) {
+      setNotice(`Import real ${product === 'production' ? 'Plant jobs' : 'Shop products'} first${managedIdentity ? '.' : ', or choose the demo option below.'}`)
       return
     }
     if (workspaceBusy) return

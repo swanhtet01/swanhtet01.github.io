@@ -9078,6 +9078,174 @@ class CommerceRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             validate_commerce_state({**current, "serviceSchedule": wrong_duration})
 
+    def test_completed_spa_booking_creates_one_stock_free_checkout_and_links_once(self) -> None:
+        current = catalog_state()
+        schedule = {
+            "schema": "supermega.shop.service_schedule.v2",
+            "industryPackId": "spa",
+            "revision": 4,
+            "services": [{
+                "id": "service-session",
+                "name": "Standard treatment",
+                "durationMinutes": 60,
+                "priceMmk": 45000,
+                "active": True,
+            }],
+            "resources": [{
+                "id": "resource-room-1",
+                "name": "Treatment room 1",
+                "kind": "room",
+                "active": True,
+            }],
+            "bookings": [{
+                "id": "booking-0001",
+                "customerName": "Client A",
+                "contact": "09-111-111",
+                "serviceId": "service-session",
+                "resourceId": "resource-room-1",
+                "startsAt": "2026-07-29T04:30:00.000Z",
+                "endsAt": "2026-07-29T05:30:00.000Z",
+                "status": "completed",
+                "note": "Medium pressure",
+                "createdAt": "2026-07-29T04:00:00.000Z",
+                "updatedAt": "2026-07-29T05:30:00.000Z",
+            }],
+            "events": [
+                {
+                    "revision": 1,
+                    "type": "booking_scheduled",
+                    "subjectId": "booking-0001",
+                    "actor": "operator-1",
+                    "reason": "Scheduled from the Shop appointment workspace.",
+                    "happenedAt": "2026-07-29T04:00:00.000Z",
+                },
+                {
+                    "revision": 2,
+                    "type": "booking_advanced",
+                    "subjectId": "booking-0001",
+                    "actor": "operator-1",
+                    "reason": "Customer confirmed.",
+                    "happenedAt": "2026-07-29T04:05:00.000Z",
+                },
+                {
+                    "revision": 3,
+                    "type": "booking_advanced",
+                    "subjectId": "booking-0001",
+                    "actor": "operator-1",
+                    "reason": "Customer checked in.",
+                    "happenedAt": "2026-07-29T04:30:00.000Z",
+                },
+                {
+                    "revision": 4,
+                    "type": "booking_advanced",
+                    "subjectId": "booking-0001",
+                    "actor": "operator-1",
+                    "reason": "Treatment completed.",
+                    "happenedAt": "2026-07-29T05:30:00.000Z",
+                },
+            ],
+        }
+        completed = validate_commerce_state({**current, "serviceSchedule": schedule})
+        creation = {
+            "actionId": "ACT-SPA-BOOKING-0001-CHECKOUT",
+            "capturedAt": "2026-07-29T05:31:00.000Z",
+            "actor": "operator-1",
+            "reason": "Convert the completed treatment into one accountable payment-pending checkout.",
+            "evidenceReference": "SPA-BOOKING-0001",
+        }
+        service_order = {
+            "id": "ORD-SPA-BOOKING-0001",
+            "createdAt": creation["capturedAt"],
+            "customer": "Client A",
+            "owner": "operator-1",
+            "channel": "Spa appointment",
+            "item": "Standard treatment",
+            "quantity": 1,
+            "payment": "Cash",
+            "paymentStatus": "pending",
+            "refundStatus": "none",
+            "fulfilment": "pickup",
+            "fulfilmentReference": "SPA-BOOKING-0001 completed 2026-07-29T05:30:00.000Z",
+            "promisedAt": "2026-07-29T05:46:00.000Z",
+            "sourceRecordId": "SPA-BOOKING-0001",
+            "evidenceReference": "SPA-BOOKING-0001",
+            "lines": [{
+                "sku": "SPA-SVC-SERVICE-SESSION",
+                "name": "Standard treatment",
+                "kind": "service",
+                "quantity": 1,
+                "unitPriceMmk": 45000,
+            }],
+            "creation": creation,
+            "calculation": {
+                "schema": "supermega.commerce.order-calculation.v1",
+                "currency": "MMK",
+                "catalogRevision": 0,
+                "subtotalMmk": 45000,
+                "taxMode": "not_configured",
+                "taxMmk": 0,
+                "totalMmk": 45000,
+            },
+            "total": 45000,
+            "status": "confirmed",
+        }
+        checked_out = apply_event(
+            completed,
+            "commerce.order.created",
+            {**completed, "orders": [service_order, *completed["orders"]]},
+            creation,
+        )
+        self.assertEqual(checked_out["items"], completed["items"])
+        self.assertEqual(checked_out["movements"], completed["movements"])
+        self.assertEqual(checked_out["orders"][0]["paymentStatus"], "pending")
+
+        linked_schedule = deepcopy(schedule)
+        linked_schedule["revision"] = 5
+        linked_schedule["bookings"][0]["checkoutOrderId"] = service_order["id"]
+        linked_schedule["bookings"][0]["updatedAt"] = "2026-07-29T05:32:00.000Z"
+        linked_schedule["events"].append({
+            "revision": 5,
+            "type": "booking_checkout_linked",
+            "subjectId": "booking-0001",
+            "actor": "operator-1",
+            "reason": "Linked the completed appointment to its reviewed Shop checkout.",
+            "happenedAt": "2026-07-29T05:32:00.000Z",
+        })
+        linked = apply_event(
+            checked_out,
+            "commerce.service_schedule.saved",
+            {**checked_out, "serviceSchedule": linked_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R5",
+                "capturedAt": "2026-07-29T05:32:00.000Z",
+                "actor": "operator-1",
+                "reason": "Linked the completed appointment to its reviewed Shop checkout.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
+            },
+        )
+        self.assertEqual(
+            linked["serviceSchedule"]["bookings"][0]["checkoutOrderId"],
+            "ORD-SPA-BOOKING-0001",
+        )
+
+        wrong_price = deepcopy(service_order)
+        wrong_price["lines"][0]["unitPriceMmk"] = 46000
+        wrong_price["total"] = 46000
+        wrong_price["calculation"]["subtotalMmk"] = 46000
+        wrong_price["calculation"]["totalMmk"] = 46000
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                completed,
+                "commerce.order.created",
+                {**completed, "orders": [wrong_price, *completed["orders"]]},
+                creation,
+            )
+
+        orphaned_link = deepcopy(linked)
+        orphaned_link["orders"] = linked["orders"][1:]
+        with self.assertRaises(TrialValidationError):
+            validate_commerce_state(orphaned_link)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router'
 
 import {
   ManagedTrialError,
@@ -12,12 +13,15 @@ import {
   SHOP_SERVICE_SCHEDULE_STORAGE_KEY,
   advanceShopServiceBooking,
   cancelShopServiceBooking,
+  linkShopServiceBookingCheckout,
   projectShopServiceSchedule,
   readShopServiceSchedule,
   registerShopService,
   registerShopServiceResource,
   scheduleShopServiceBooking,
+  shopServiceCheckoutRequest,
   type ShopServiceBookingStatus,
+  type ShopServiceCheckoutRequest,
   type ShopServiceSchedule,
 } from './shop-service-scheduling'
 
@@ -55,7 +59,19 @@ function initialSchedule() {
   }
 }
 
-export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: externallyDisabled = false, initiallyOpen = false }: { actor?: string; disabled?: boolean; initiallyOpen?: boolean }) {
+type ShopServiceCheckoutPayment = 'Cash' | 'KBZPay' | 'WavePay'
+
+export function ShopServiceSchedule({
+  actor = 'Local Shop operator',
+  disabled: externallyDisabled = false,
+  initiallyOpen = false,
+  onReviewCheckout,
+}: {
+  actor?: string
+  disabled?: boolean
+  initiallyOpen?: boolean
+  onReviewCheckout?: (request: ShopServiceCheckoutRequest, payment: ShopServiceCheckoutPayment) => Promise<{ orderId: string } | null>
+}) {
   const [initial] = useState(initialSchedule)
   const [schedule, setSchedule] = useState<ShopServiceSchedule | null>(initial.schedule)
   const [notice, setNotice] = useState(initial.error)
@@ -66,12 +82,19 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
   const [managedLoading, setManagedLoading] = useState(true)
   const [managedSaving, setManagedSaving] = useState(false)
   const [managedConnected, setManagedConnected] = useState(false)
+  const [checkoutBusyBookingId, setCheckoutBusyBookingId] = useState('')
+  const [checkoutPayments, setCheckoutPayments] = useState<Record<string, ShopServiceCheckoutPayment>>({})
   const managedIdentityRef = useRef<ManagedIdentity | null>(null)
   const managedVersionRef = useRef<number | null>(null)
   const managedSaveBusyRef = useRef(false)
   const schedulePanelRef = useRef<HTMLDetailsElement>(null)
+  const scheduleRef = useRef(schedule)
   const projection = useMemo(() => schedule ? projectShopServiceSchedule(schedule) : null, [schedule])
   const disabled = externallyDisabled || managedLoading || managedSaving
+
+  useEffect(() => {
+    scheduleRef.current = schedule
+  }, [schedule])
 
   useEffect(() => {
     if (!initiallyOpen) return
@@ -196,6 +219,72 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
     }
   }
 
+  async function reviewCheckout(bookingId: string) {
+    const current = scheduleRef.current
+    if (!current || !onReviewCheckout) {
+      setNotice('Shop checkout is unavailable. Reload the Shop workspace and try again.')
+      return
+    }
+    const request = shopServiceCheckoutRequest(current, bookingId)
+    if (!request) {
+      setNotice('Complete this appointment once before starting checkout.')
+      return
+    }
+    setCheckoutBusyBookingId(bookingId)
+    try {
+      const result = await onReviewCheckout(request, checkoutPayments[bookingId] ?? 'Cash')
+      if (!result) {
+        setNotice('Checkout review cancelled. No order or payment was created.')
+        return
+      }
+      const latest = scheduleRef.current
+      if (!latest) throw new Error('Appointments need recovery before the checkout can be linked.')
+      const linkProof = proof('Linked the completed appointment to its reviewed Shop checkout.')
+      const next = linkShopServiceBookingCheckout(latest, bookingId, result.orderId, linkProof)
+      setSchedule(next)
+      try { persistLocal(next) } catch { /* The managed copy can still retain the link. */ }
+      const identity = managedIdentityRef.current
+      if (!identity) {
+        setNotice(`Checkout ${result.orderId} linked on this device. Payment still needs reconciliation in Orders.`)
+        return
+      }
+      if (managedSaveBusyRef.current) throw new Error('Wait for the current company appointment change, then reopen this checkout.')
+      managedSaveBusyRef.current = true
+      setManagedSaving(true)
+      try {
+        const fresh = await loadManagedServiceSchedule(identity)
+        managedVersionRef.current = fresh.version
+        if (!fresh.schedule) throw new Error('The shared appointment schedule is unavailable. This device retained the checkout link.')
+        const managedNext = linkShopServiceBookingCheckout(fresh.schedule, bookingId, result.orderId, linkProof)
+        if (managedNext === fresh.schedule) {
+          setSchedule(fresh.schedule)
+          try { persistLocal(fresh.schedule) } catch { /* The managed copy is authoritative. */ }
+          setNotice(`Checkout ${result.orderId} was already linked in the company account. Payment still needs reconciliation in Orders.`)
+          return
+        }
+        const saved = await saveManagedServiceSchedule({
+          commandId: crypto.randomUUID(),
+          expectedVersion: fresh.version,
+          identity,
+          schedule: managedNext,
+        })
+        managedVersionRef.current = saved.version
+        if (saved.schedule) {
+          setSchedule(saved.schedule)
+          try { persistLocal(saved.schedule) } catch { /* The managed copy is authoritative. */ }
+        }
+        setNotice(`Checkout ${result.orderId} linked in the company account. Payment still needs reconciliation in Orders.`)
+      } finally {
+        managedSaveBusyRef.current = false
+        setManagedSaving(false)
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Checkout could not be linked. No automatic payment or customer message was attempted.')
+    } finally {
+      setCheckoutBusyBookingId('')
+    }
+  }
+
   function createService(event: FormEvent) {
     event.preventDefault()
     if (!schedule) return
@@ -256,7 +345,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
           return <article key={booking.id}>
             <time dateTime={booking.startsAt}><strong>{new Date(booking.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong><small>{new Date(booking.startsAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</small></time>
             <div><strong>{booking.customerName}</strong><small>{service?.name} · {resource?.name} · {booking.contact}</small>{booking.note ? <em>{booking.note}</em> : null}</div>
-            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}</div>
+            <div><span className={`status-pill ${booking.status === 'completed' ? 'approved' : booking.status === 'checked_in' ? 'pending' : 'bounded'}`}>{statusLabels[booking.status]}</span>{nextActionLabels[booking.status] ? <button className="core-button compact" disabled={disabled} onClick={() => advanceBooking(booking.id)} type="button">{nextActionLabels[booking.status]}</button> : null}{booking.status !== 'completed' && booking.status !== 'cancelled' ? <button className="text-link danger-text" disabled={disabled} onClick={() => cancelBooking(booking.id)} type="button">Cancel</button> : null}{booking.checkoutOrderId ? <Link className="core-button compact" to={`/shop/?tab=orders#shop-order-${booking.checkoutOrderId}`}>Open checkout</Link> : booking.status === 'completed' ? <><label>Payment<select aria-label={`Payment for ${booking.customerName}`} disabled={disabled || checkoutBusyBookingId === booking.id} onChange={(event) => setCheckoutPayments((current) => ({ ...current, [booking.id]: event.target.value as ShopServiceCheckoutPayment }))} value={checkoutPayments[booking.id] ?? 'Cash'}><option>Cash</option><option>KBZPay</option><option>WavePay</option></select></label><button className="core-button compact" disabled={disabled || checkoutBusyBookingId === booking.id || !onReviewCheckout} onClick={() => void reviewCheckout(booking.id)} type="button">{checkoutBusyBookingId === booking.id ? 'Waiting…' : 'Review checkout'}</button><small>No payment or message is automatic.</small></> : null}</div>
           </article>
         }) : <p className="form-notice">Hold the first appointment above. Nothing is sent to the customer or an external calendar.</p>}
       </section>

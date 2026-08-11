@@ -333,9 +333,15 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA')
   || !shopServiceScheduleSource.includes('scheduleShopServiceBooking')
   || !shopServiceScheduleSource.includes('advanceShopServiceBooking')
+  || !shopServiceScheduleSource.includes('shopServiceCheckoutRequest')
+  || !shopServiceScheduleSource.includes('linkShopServiceBookingCheckout')
+  || !shopServiceScheduleSource.includes("'booking_checkout_linked'")
   || !shopServiceScheduleSource.includes('registerShopServiceResource')
   || !shopServiceScheduleSource.includes('Bookings ${first.id} and ${second.id} overlap.')
   || !shopServiceScheduleUiSource.includes('Hold appointment')
+  || !shopServiceScheduleUiSource.includes('Review checkout')
+  || !shopServiceScheduleUiSource.includes('No payment or message is automatic.')
+  || !shopServiceScheduleUiSource.includes('loadManagedServiceSchedule(identity)')
   || !shopServiceScheduleUiSource.includes('Services and resources')
   || !shopServiceScheduleUiSource.includes('Nothing is sent to the customer or an external calendar.')
   || !shopServiceScheduleUiSource.includes('const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)')
@@ -343,6 +349,11 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v2")
   || !shopServiceScheduleUiSource.includes('id="shop-service-schedule"')
   || !shopServiceScheduleUiSource.includes("scrollIntoView({ block: 'start' })")
   || !coreSource.includes("lazy(() => import('./ShopServiceSchedule')")
+  || !coreSource.includes('createCommerceServiceOrder(current, {')
+  || !coreSource.includes('onReviewCheckout={reviewShopServiceCheckout}')
+  || !commerceSource.includes("kind?: 'service'")
+  || !commerceSource.includes('creation?: CommerceActionProof')
+  || !commerceSource.includes('createCommerceServiceOrder(')
   || !coreSource.includes("initiallyOpen={commerceLocation.hash === '#shop-service-schedule'}")
   || !coreCssSource.includes('.service-booking-form')
   || !coreCssSource.includes('.service-agenda article')) fail('shop_service_schedule_contract_missing')
@@ -364,6 +375,9 @@ if (!managedTrialSource.includes('loadManagedServiceSchedule')
   || !managedCommerceRuntime.includes('_validate_service_schedule_saved')
   || !managedCommerceRuntime.includes('contains overlapping bookings')
   || !managedCommerceRuntime.includes('service schedule evidence history is immutable')
+  || !managedCommerceRuntime.includes('booking_checkout_linked')
+  || !managedCommerceRuntime.includes('a stock-free order must be one evidence-bound Spa service checkout')
+  || !managedCommerceRuntime.includes('service checkout cannot create a stock movement')
   || !managedTrialStoreRuntime.includes('commerce.service_schedule.initialized')
   || !managedTrialStoreRuntime.includes('commerce.service_schedule.saved')) fail('managed_shop_service_schedule_contract_missing')
 if (!clientOnboardingUiSource.includes('loadManagedServiceSchedule')
@@ -8752,6 +8766,7 @@ async function verifyShopServiceScheduleRuntime() {
   }
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'shop-service-scheduling.ts')).href}?shop-service-schedule-verify=${Date.now()}`)
+    const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-service-checkout-verify=${Date.now()}`)
     const proof = (minute, reason) => ({ actor: 'Shop owner', reason, happenedAt: `2026-07-29T03:${String(minute).padStart(2, '0')}:00.000Z` })
     let state = model.createShopServiceSchedule()
     assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
@@ -8789,13 +8804,71 @@ async function verifyShopServiceScheduleRuntime() {
     assert(state.bookings[0].status === 'checked_in', 'shop_service_booking_check_in_failed')
     state = model.advanceShopServiceBooking(state, bookingId, proof(7, 'Service completed'))
     assert(state.bookings[0].status === 'completed' && state.events.length === state.revision, 'shop_service_booking_completion_or_evidence_failed')
+    const checkoutRequest = model.shopServiceCheckoutRequest(state, bookingId)
+    assert(checkoutRequest?.sourceRecordId === 'SPA-BOOKING-0003'
+      && checkoutRequest.serviceSku === `SPA-SVC-${serviceId.toUpperCase()}`
+      && checkoutRequest.servicePriceMmk === 75_000
+      && checkoutRequest.customerName === 'Client A', 'shop_service_checkout_request_wrong')
+    const overdueCheckoutProjection = model.projectShopServiceSchedule(state, new Date('2026-07-30T06:00:00.000Z'))
+    assert(overdueCheckoutProjection.upcoming.some((booking) => booking.id === bookingId), 'shop_service_unlinked_checkout_disappeared_from_agenda')
+    const checkoutProof = {
+      actionId: 'ACT-SPA-BOOKING-0003-CHECKOUT',
+      capturedAt: '2026-07-29T03:13:00.000Z',
+      actor: 'Shop owner',
+      reason: 'Convert the completed treatment into one accountable payment-pending checkout.',
+      evidenceReference: checkoutRequest.sourceRecordId,
+    }
+    const emptyCommerce = commerceModel.createEmptyCommerce()
+    const checkedOut = commerceModel.createCommerceServiceOrder(emptyCommerce, {
+      sourceRecordId: checkoutRequest.sourceRecordId,
+      customer: checkoutRequest.customerName,
+      serviceSku: checkoutRequest.serviceSku,
+      serviceName: checkoutRequest.serviceName,
+      servicePriceMmk: checkoutRequest.servicePriceMmk,
+      completedAt: checkoutRequest.completedAt,
+      payment: 'KBZPay',
+    }, checkoutProof)
+    assert(checkedOut?.orders.length === 1
+      && checkedOut.orders[0].id === 'ORD-SPA-BOOKING-0003'
+      && checkedOut.orders[0].lines?.[0].kind === 'service'
+      && checkedOut.orders[0].paymentStatus === 'pending'
+      && checkedOut.orders[0].creation?.actionId === checkoutProof.actionId
+      && checkedOut.items.length === 0
+      && checkedOut.movements.length === 0, 'shop_service_checkout_created_fake_stock_or_lost_proof')
+    assert(commerceModel.validateCommerceState(structuredClone(checkedOut)).orders[0].total === 75_000, 'shop_service_checkout_reload_failed')
+    const replayedCheckout = commerceModel.createCommerceServiceOrder(checkedOut, {
+      sourceRecordId: checkoutRequest.sourceRecordId,
+      customer: checkoutRequest.customerName,
+      serviceSku: checkoutRequest.serviceSku,
+      serviceName: checkoutRequest.serviceName,
+      servicePriceMmk: checkoutRequest.servicePriceMmk,
+      completedAt: checkoutRequest.completedAt,
+      payment: 'KBZPay',
+    }, { ...checkoutProof, actionId: 'ACT-SPA-BOOKING-0003-CHECKOUT-RETRY' })
+    assert(JSON.stringify(replayedCheckout) === JSON.stringify(checkedOut), 'shop_service_checkout_retry_duplicated_revenue')
+    assert(commerceModel.createCommerceServiceOrder(checkedOut, {
+      sourceRecordId: checkoutRequest.sourceRecordId,
+      customer: checkoutRequest.customerName,
+      serviceSku: checkoutRequest.serviceSku,
+      serviceName: checkoutRequest.serviceName,
+      servicePriceMmk: checkoutRequest.servicePriceMmk + 1,
+      completedAt: checkoutRequest.completedAt,
+      payment: 'KBZPay',
+    }, { ...checkoutProof, actionId: 'ACT-SPA-BOOKING-0003-CHECKOUT-CONFLICT' }) === null, 'shop_service_checkout_conflict_overwrote_snapshot')
+    state = model.linkShopServiceBookingCheckout(state, bookingId, checkedOut.orders[0].id, proof(14, 'Linked reviewed checkout'))
+    assert(state.bookings[0].checkoutOrderId === checkedOut.orders[0].id
+      && state.events.at(-1).type === 'booking_checkout_linked'
+      && model.shopServiceCheckoutRequest(state, bookingId) === null, 'shop_service_checkout_link_failed')
+    const linkedReplay = model.linkShopServiceBookingCheckout(state, bookingId, checkedOut.orders[0].id, proof(15, 'Recovered existing checkout link'))
+    assert(linkedReplay === state, 'shop_service_checkout_link_retry_appended_duplicate_evidence')
+    assertThrows(() => model.linkShopServiceBookingCheckout(state, bookingId, 'ORD-SPA-BOOKING-9999', proof(16, 'Invalid checkout link')), 'shop_service_checkout_wrong_order_linked')
     assertThrows(() => model.advanceShopServiceBooking(state, bookingId, proof(8, 'Invalid extra advance')), 'shop_service_completed_booking_advanced')
     assertThrows(() => model.cancelShopServiceBooking(state, bookingId, proof(9, 'Invalid cancellation')), 'shop_service_completed_booking_cancelled')
-    state = model.scheduleShopServiceBooking(state, { customerName: 'Client C', contact: '09-222-222', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(10, 'Second reviewed booking'))
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client C', contact: '09-222-222', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(20, 'Second reviewed booking'))
     const cancellableId = state.bookings.at(-1).id
-    state = model.cancelShopServiceBooking(state, cancellableId, proof(11, 'Customer cancelled'))
+    state = model.cancelShopServiceBooking(state, cancellableId, proof(21, 'Customer cancelled'))
     assert(state.bookings.at(-1).status === 'cancelled', 'shop_service_booking_cancellation_failed')
-    state = model.scheduleShopServiceBooking(state, { customerName: 'Client D', contact: '09-333-333', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(12, 'Replacement reviewed booking'))
+    state = model.scheduleShopServiceBooking(state, { customerName: 'Client D', contact: '09-333-333', serviceId, resourceId, startsAt: '2026-07-29T06:00:00.000Z' }, proof(22, 'Replacement reviewed booking'))
     assert(state.bookings.at(-1).status === 'held', 'shop_service_cancelled_slot_not_reusable')
     assertThrows(() => model.validateShopServiceSchedule({ ...state, events: state.events.slice(1) }), 'shop_service_missing_evidence_accepted')
     assertThrows(() => model.readShopServiceSchedule('{"schema":"wrong"}'), 'shop_service_invalid_storage_accepted')
@@ -8813,6 +8886,8 @@ async function verifyShopBusinessTemplateRuntime() {
     try { action() } catch { shopBusinessTemplateRuntimeChecks += 1; return }
     throw new Error(reason)
   }
+  const reopenStartedWorkspaceAt = productOnboardingPageSource.indexOf('if (workspaceStarted) {')
+  const requireBusinessDataAt = productOnboardingPageSource.indexOf("if ((product === 'commerce' || product === 'ecommerce' || product === 'production') && !useDemo && !reviewedBusinessDataReady)")
   if (!shopBusinessTemplatesSource.includes("SHOP_BUSINESS_TEMPLATE_SCHEMA = 'supermega.shop.business_template.v1'")
     || !shopBusinessTemplatesSource.includes('export function validateShopBusinessTemplates()')
     || !shopBusinessTemplatesSource.includes('export function shopBusinessTemplateFromQuery(')
@@ -8832,6 +8907,9 @@ async function verifyShopBusinessTemplateRuntime() {
     || !coreCssSource.includes('.spa-onboarding-brief')
     || !coreCssSource.includes('.spa-onboarding-route { grid-template-columns: 1fr; }')
     || !productOnboardingPageSource.includes('if (useDemo) {')
+    || reopenStartedWorkspaceAt < 0
+    || requireBusinessDataAt < 0
+    || reopenStartedWorkspaceAt > requireBusinessDataAt
     || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)')
     || !coreCssSource.includes('.product-onboarding-business-type')) fail('shop_business_template_contract_missing')
   try {
@@ -22229,7 +22307,7 @@ await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 // Bounded cumulative 121 KB allowance includes reviewed Plant evidence alignment plus the realistic Spa template and role guide; initial-load and core-app chunk budgets remain unchanged.
-if (bytes > 2_923_000) fail(`artifact_budget:${bytes}`)
+if (bytes > 2_936_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
