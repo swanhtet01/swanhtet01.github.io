@@ -412,6 +412,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-correction-intent-reason-code-rates-brief (correctionIntents reasonCode rates: 9 fields, 4 pairs — pricingErrorRate, serviceRecoveryRate, feeAdjustmentRate, otherReasonRate); 23 checks; zero bundle cost — DONE (OPS-699)
 - [x] Analytics Codex: ecommerce-reschedule-intent-direction-rates-brief (rescheduleIntents direction rates: 5 fields, 2 paired — forwardRate, pushedBackRate; direction computed from dates); 23 checks; zero bundle cost — DONE (OPS-700)
 - [x] Analytics Codex: ecommerce-return-intent-disposition-rates-brief (returnIntents disposition rates: 5 fields, 2 paired — restockRate, notRestockedRate); 23 checks; zero bundle cost — DONE (OPS-701)
+- [x] Analytics Codex: ecommerce-amendment-intent-fulfilment-switch-rates-brief (amendmentIntents switch rates: 5 fields, 2 paired — switchedRate, notSwitchedRate; computed from fromFulfilment !== toFulfilment); 23 checks; zero bundle cost — DONE (OPS-702)
+- [x] Analytics Codex: ecommerce-support-intent-customer-message-sent-rates-brief (supportIntents customerMessageSent rates: 5 fields, 2 paired — customerMessageSentRate, notCustomerMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-703)
+- [x] Analytics Codex: ecommerce-support-intent-external-message-sent-rates-brief (supportIntents externalMessageSent rates: 5 fields, 2 paired — externalMessageSentRate, notExternalMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-704)
+- [x] Analytics Codex: ecommerce-support-intent-refund-started-rates-brief (supportIntents refundStarted rates: 5 fields, 2 paired — refundStartedRate, notRefundStartedRate); 23 checks; zero bundle cost — DONE (OPS-705)
 
 ### Aug 25–31
 
