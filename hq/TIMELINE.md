@@ -420,6 +420,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-rates-brief (correctionIntents ledgerPosted rates: 5 fields, 2 paired — ledgerPostedRate, notLedgerPostedRate); 23 checks; zero bundle cost — DONE (OPS-707)
 - [x] Analytics Codex: ecommerce-amendment-intent-order-changed-rates-brief (amendmentIntents orderChanged rates: 5 fields, 2 paired — orderChangedRate, notOrderChangedRate); 23 checks; zero bundle cost — DONE (OPS-708)
 - [x] Analytics Codex: ecommerce-reschedule-intent-customer-message-sent-rates-brief (rescheduleIntents customerMessageSent rates: 5 fields, 2 paired — customerMessageSentRate, notCustomerMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-709)
+- [x] Analytics Codex: ecommerce-correction-intent-order-changed-rates-brief (correctionIntents orderChanged rates: 5 fields, 2 paired — orderChangedRate, notOrderChangedRate); 23 checks; zero bundle cost — DONE (OPS-710)
+- [x] Analytics Codex: ecommerce-correction-intent-payment-changed-rates-brief (correctionIntents paymentChanged rates: 5 fields, 2 paired — paymentChangedRate, notPaymentChangedRate); 23 checks; zero bundle cost — DONE (OPS-711)
+- [x] Analytics Codex: ecommerce-correction-intent-tax-filed-rates-brief (correctionIntents taxFiled rates: 5 fields, 2 paired — taxFiledRate, notTaxFiledRate); 23 checks; zero bundle cost — DONE (OPS-712)
+- [x] Analytics Codex: ecommerce-correction-intent-customer-message-sent-rates-brief (correctionIntents customerMessageSent rates: 5 fields, 2 paired — customerMessageSentRate, notCustomerMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-713)
 
 ### Aug 25–31
 
