@@ -346,6 +346,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-amendment-intent-to-fulfilment-order-status-brief (amendmentIntents toFulfilment delivery/pickup × orderStatus confirmed/preparing/ready: 2×3 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-633)
 - [x] Analytics Codex: ecommerce-support-intent-customer-message-external-message-brief (supportIntents customerMessageSent boolean × externalMessageSent boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-634)
 - [x] Analytics Codex: ecommerce-support-intent-external-message-refund-started-brief (supportIntents externalMessageSent boolean × refundStarted boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-635)
+- [x] Analytics Codex: ecommerce-reschedule-intent-customer-message-order-status-brief (rescheduleIntents customerMessageSent boolean × orderStatus confirmed/preparing/ready: 2×3 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-636)
+- [x] Analytics Codex: ecommerce-reschedule-intent-customer-message-fulfilment-brief (rescheduleIntents customerMessageSent boolean × fulfilment delivery/pickup: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-637)
+- [x] Analytics Codex: ecommerce-reschedule-intent-customer-message-direction-brief (rescheduleIntents customerMessageSent boolean × direction forward/pushedBack: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-638)
+- [x] Analytics Codex: ecommerce-correction-intent-customer-message-refund-status-brief (correctionIntents customerMessageSent boolean × refundStatus none/partial/full: 2×3 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-639)
 
 ### Aug 25–31
 
