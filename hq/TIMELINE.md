@@ -49,6 +49,10 @@ _No founder decision required. Zero bundle cost._
 - [x] OPS-167 complete — Analytics Step 5: session metrics view at /work/?view=local-metrics (LocalMetricsView, 2-column table, useSearchParams gate in WorkspaceControlsPage; +810 bytes) (2026-08-11)
 - [x] OPS-167b complete — Artifact budget ceiling raised 2,822,000 → 2,825,000 bytes; headroom restored to 3,041 bytes (2026-08-11)
 - [x] OPS-169 complete — Plant CAPA effectivenessDue field + isCapaEffectivenessOverdue; capa checks 66 → 73, combined 91 → 98 (2026-08-11)
+- [x] Analytics Codex: ecommerce-reschedule-intent-refund-started-rates-brief (EcommerceOrderRescheduleIntent.refundStarted boolean rates; 5-field pattern); 23 checks; zero bundle cost — DONE (OPS-730)
+- [x] Analytics Codex: ecommerce-reschedule-intent-rider-booked-rates-brief (EcommerceOrderRescheduleIntent.riderBooked boolean rates; unique field not present in other intent types); 23 checks; zero bundle cost — DONE (OPS-731)
+- [x] Analytics Codex: ecommerce-reschedule-intent-provider-called-rates-brief (EcommerceOrderRescheduleIntent.providerCalled boolean rates; completes all 7 rescheduleIntents booleans); 23 checks; zero bundle cost — DONE (OPS-732)
+- [x] Analytics Codex: ecommerce-support-intent-external-message-sent-rates-brief (EcommerceSupportIntent.externalMessageSent boolean rates; 5-field pattern); 23 checks; zero bundle cost — DONE (OPS-733)
 
 ### Aug 15–25
 
