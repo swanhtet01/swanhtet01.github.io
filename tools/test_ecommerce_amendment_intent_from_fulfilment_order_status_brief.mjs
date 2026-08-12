@@ -77,80 +77,75 @@ function state(amendmentIntents = []) {
 {
   const r = projectEcommerceAmendmentIntentFromFulfilmentOrderStatusBrief(state())
   check(r.totalIntents === 0, 'empty: totalIntents 0')
-  check(r.fromDeliveryConfirmedCount === 0, 'empty: fromDeliveryConfirmedCount 0')
-  check(r.fromPickupReadyCount === 0, 'empty: fromPickupReadyCount 0')
+  check(r.deliveryConfirmedCount === 0, 'empty: deliveryConfirmedCount 0')
+  check(r.pickupConfirmedCount === 0, 'empty: pickupConfirmedCount 0')
 }
 
-// 2. From delivery + confirmed
+// 2. Delivery + confirmed
 {
   const r = projectEcommerceAmendmentIntentFromFulfilmentOrderStatusBrief(state([
     amendmentIntent('delivery', 'confirmed'),
   ]))
   check(r.totalIntents === 1, 'delivery-confirmed: totalIntents 1')
-  check(r.fromDeliveryConfirmedCount === 1, 'delivery-confirmed: fromDeliveryConfirmedCount 1')
-  check(r.fromDeliveryPreparingCount === 0, 'delivery-confirmed: fromDeliveryPreparingCount 0')
-  check(r.fromPickupConfirmedCount === 0, 'delivery-confirmed: fromPickupConfirmedCount 0')
+  check(r.deliveryConfirmedCount === 1, 'delivery-confirmed: deliveryConfirmedCount 1')
+  check(r.deliveryPreparingCount === 0, 'delivery-confirmed: deliveryPreparingCount 0')
+  check(r.pickupConfirmedCount === 0, 'delivery-confirmed: pickupConfirmedCount 0')
 }
 
-// 3. From pickup + preparing
+// 3. Delivery + preparing
 {
   const r = projectEcommerceAmendmentIntentFromFulfilmentOrderStatusBrief(state([
-    amendmentIntent('pickup', 'preparing'),
+    amendmentIntent('delivery', 'preparing'),
   ]))
-  check(r.fromPickupPreparingCount === 1, 'pickup-preparing: fromPickupPreparingCount 1')
-  check(r.fromPickupConfirmedCount === 0, 'pickup-preparing: fromPickupConfirmedCount 0')
-  check(r.totalIntents === 1, 'pickup-preparing: totalIntents 1')
-  check(r.fromDeliveryPreparingCount === 0, 'pickup-preparing: fromDeliveryPreparingCount 0')
+  check(r.totalIntents === 1, 'delivery-preparing: totalIntents 1')
+  check(r.deliveryPreparingCount === 1, 'delivery-preparing: deliveryPreparingCount 1')
+  check(r.deliveryReadyCount === 0, 'delivery-preparing: deliveryReadyCount 0')
+  check(r.deliveryConfirmedCount === 0, 'delivery-preparing: deliveryConfirmedCount 0')
 }
 
-// 4. From delivery + ready
+// 4. Delivery + ready
 {
   const r = projectEcommerceAmendmentIntentFromFulfilmentOrderStatusBrief(state([
     amendmentIntent('delivery', 'ready'),
   ]))
-  check(r.fromDeliveryReadyCount === 1, 'delivery-ready: fromDeliveryReadyCount 1')
-  check(r.fromDeliveryConfirmedCount === 0, 'delivery-ready: fromDeliveryConfirmedCount 0')
   check(r.totalIntents === 1, 'delivery-ready: totalIntents 1')
+  check(r.deliveryReadyCount === 1, 'delivery-ready: deliveryReadyCount 1')
+  check(r.pickupReadyCount === 0, 'delivery-ready: pickupReadyCount 0')
 }
 
-// 5. From pickup + confirmed
+// 5. Pickup + confirmed
 {
   const r = projectEcommerceAmendmentIntentFromFulfilmentOrderStatusBrief(state([
     amendmentIntent('pickup', 'confirmed'),
   ]))
-  check(r.fromPickupConfirmedCount === 1, 'pickup-confirmed: fromPickupConfirmedCount 1')
-  check(r.fromPickupPreparingCount === 0, 'pickup-confirmed: fromPickupPreparingCount 0')
   check(r.totalIntents === 1, 'pickup-confirmed: totalIntents 1')
+  check(r.pickupConfirmedCount === 1, 'pickup-confirmed: pickupConfirmedCount 1')
+  check(r.deliveryConfirmedCount === 0, 'pickup-confirmed: deliveryConfirmedCount 0')
 }
 
-// 6. All 6 cells
+// 6. Mixed: 2 delivery+confirmed, 1 pickup+preparing, 1 pickup+ready
 {
   const r = projectEcommerceAmendmentIntentFromFulfilmentOrderStatusBrief(state([
     amendmentIntent('delivery', 'confirmed'),
-    amendmentIntent('delivery', 'preparing'),
-    amendmentIntent('delivery', 'ready'),
-    amendmentIntent('pickup', 'confirmed'),
+    amendmentIntent('delivery', 'confirmed'),
     amendmentIntent('pickup', 'preparing'),
     amendmentIntent('pickup', 'ready'),
   ]))
-  check(r.totalIntents === 6, 'all-cells: totalIntents 6')
-  check(r.fromDeliveryConfirmedCount === 1, 'all-cells: fromDeliveryConfirmedCount 1')
-  check(r.fromPickupPreparingCount === 1, 'all-cells: fromPickupPreparingCount 1')
-  check(r.fromDeliveryReadyCount === 1, 'all-cells: fromDeliveryReadyCount 1')
+  check(r.totalIntents === 4, 'mixed: totalIntents 4')
+  check(r.deliveryConfirmedCount === 2, 'mixed: deliveryConfirmedCount 2')
+  check(r.pickupPreparingCount === 1, 'mixed: pickupPreparingCount 1')
+  check(r.pickupReadyCount === 1, 'mixed: pickupReadyCount 1')
 }
 
-// 7. Remaining sub-bucket counts for case 6
+// 7. All pickup + preparing
 {
   const r = projectEcommerceAmendmentIntentFromFulfilmentOrderStatusBrief(state([
-    amendmentIntent('delivery', 'confirmed'),
-    amendmentIntent('delivery', 'preparing'),
-    amendmentIntent('delivery', 'ready'),
-    amendmentIntent('pickup', 'confirmed'),
     amendmentIntent('pickup', 'preparing'),
-    amendmentIntent('pickup', 'ready'),
+    amendmentIntent('pickup', 'preparing'),
+    amendmentIntent('pickup', 'preparing'),
   ]))
-  check(r.fromDeliveryPreparingCount === 1, 'sub-buckets: fromDeliveryPreparingCount 1')
-  check(r.fromPickupReadyCount === 1, 'sub-buckets: fromPickupReadyCount 1')
+  check(r.totalIntents === 3, 'all-pickup-preparing: totalIntents 3')
+  check(r.pickupPreparingCount === 3, 'all-pickup-preparing: pickupPreparingCount 3')
 }
 
 console.log(`ecommerce-amendment-intent-from-fulfilment-order-status-brief: ${checks} checks passed`)

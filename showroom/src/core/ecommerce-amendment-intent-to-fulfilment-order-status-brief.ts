@@ -2,12 +2,12 @@ import type { EcommerceBuyingState } from '../products/ecommerce/ecommerce-buyin
 
 export type EcommerceAmendmentIntentToFulfilmentOrderStatusBrief = {
   totalIntents: number
-  deliveryConfirmedCount: number
-  deliveryPreparingCount: number
-  deliveryReadyCount: number
-  pickupConfirmedCount: number
-  pickupPreparingCount: number
-  pickupReadyCount: number
+  toDeliveryConfirmedCount: number
+  toDeliveryPreparingCount: number
+  toDeliveryReadyCount: number
+  toPickupConfirmedCount: number
+  toPickupPreparingCount: number
+  toPickupReadyCount: number
 }
 
 export function projectEcommerceAmendmentIntentToFulfilmentOrderStatusBrief(
@@ -17,42 +17,41 @@ export function projectEcommerceAmendmentIntentToFulfilmentOrderStatusBrief(
   if (total === 0) {
     return {
       totalIntents: 0,
-      deliveryConfirmedCount: 0,
-      deliveryPreparingCount: 0,
-      deliveryReadyCount: 0,
-      pickupConfirmedCount: 0,
-      pickupPreparingCount: 0,
-      pickupReadyCount: 0,
+      toDeliveryConfirmedCount: 0,
+      toDeliveryPreparingCount: 0,
+      toDeliveryReadyCount: 0,
+      toPickupConfirmedCount: 0,
+      toPickupPreparingCount: 0,
+      toPickupReadyCount: 0,
     }
   }
 
-  let deliveryConfirmedCount = 0
-  let deliveryPreparingCount = 0
-  let deliveryReadyCount = 0
-  let pickupConfirmedCount = 0
-  let pickupPreparingCount = 0
-  let pickupReadyCount = 0
+  let toDeliveryConfirmedCount = 0
+  let toDeliveryPreparingCount = 0
+  let toDeliveryReadyCount = 0
+  let toPickupConfirmedCount = 0
+  let toPickupPreparingCount = 0
+  let toPickupReadyCount = 0
 
   for (const intent of buying.amendmentIntents) {
-    const isDelivery = intent.toFulfilment === 'delivery'
-    if (isDelivery) {
-      if (intent.orderStatus === 'confirmed') deliveryConfirmedCount++
-      else if (intent.orderStatus === 'preparing') deliveryPreparingCount++
-      else deliveryReadyCount++
+    if (intent.toFulfilment === 'delivery') {
+      if (intent.orderStatus === 'confirmed') toDeliveryConfirmedCount++
+      else if (intent.orderStatus === 'preparing') toDeliveryPreparingCount++
+      else toDeliveryReadyCount++
     } else {
-      if (intent.orderStatus === 'confirmed') pickupConfirmedCount++
-      else if (intent.orderStatus === 'preparing') pickupPreparingCount++
-      else pickupReadyCount++
+      if (intent.orderStatus === 'confirmed') toPickupConfirmedCount++
+      else if (intent.orderStatus === 'preparing') toPickupPreparingCount++
+      else toPickupReadyCount++
     }
   }
 
   return {
     totalIntents: total,
-    deliveryConfirmedCount,
-    deliveryPreparingCount,
-    deliveryReadyCount,
-    pickupConfirmedCount,
-    pickupPreparingCount,
-    pickupReadyCount,
+    toDeliveryConfirmedCount,
+    toDeliveryPreparingCount,
+    toDeliveryReadyCount,
+    toPickupConfirmedCount,
+    toPickupPreparingCount,
+    toPickupReadyCount,
   }
 }
