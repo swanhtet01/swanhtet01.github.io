@@ -265,6 +265,7 @@ textarea { min-height: 72px; resize: vertical; }
 .template-contract small { grid-column: 2; color: var(--core-quiet); font-size: 7px; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .form-notice { min-height: 16px; margin: 7px 0 0; color: var(--core-quiet); font-size: 12px; line-height: 1.5; }
+.form-notice[data-tone="error"] { color: var(--core-danger); }
 .accountable-action-gate { position: fixed; inset: 0; width: min(680px,calc(100% - 36px)); max-height: calc(100svh - 36px); margin: auto; overflow: auto; border: 1px solid var(--core-line-strong); border-radius: 16px; padding: 24px; color: var(--core-ink); background: #fff; box-shadow: 0 30px 90px rgba(25,54,42,.24); }
 .accountable-action-gate[open] { display: grid; gap: 20px; }
 .accountable-action-gate::backdrop { background: rgba(19,25,41,.5); backdrop-filter: blur(6px); }
@@ -1083,10 +1084,10 @@ textarea { min-height: 72px; resize: vertical; }
 .managed-login-panel > div:first-child { display: grid; gap: 6px; }
 .managed-login-panel h2 { margin: 0; color: var(--core-ink); font-size: 18px; }
 .managed-login-panel p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.55; }
-.managed-login-panel label { display: grid; gap: 6px; color: var(--core-muted); font-size: 10px; font-weight: 760; }
-.managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0; height: 42px; border: 1px solid var(--core-line); border-radius: 6px; padding: 0 10px; background: var(--core-panel-raised); color: var(--core-ink); font-size: 12px; }
+.managed-login-panel label { display: grid; gap: 6px; color: var(--core-muted); font-size: 12px; font-weight: 760; }
+.managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0; border: 1px solid var(--core-line); border-radius: 6px; padding: 0 10px; background: var(--core-panel-raised); color: var(--core-ink); font-size: 12px; }
 .managed-login-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.account-inline-link { width: fit-content; color: var(--core-accent); font-size: 11px; font-weight: 760; text-decoration: none; }
+.account-inline-link { width: fit-content; min-height: 44px; display: inline-flex; align-items: center; color: var(--core-accent); font-size: 12px; font-weight: 760; text-decoration: none; }
 .account-inline-link:hover { text-decoration: underline; }
 .account-link-button { font: inherit; cursor: pointer; }
 .premium-pilot-boundary { padding-top: 10px; border-top: 1px solid var(--core-line); }
@@ -1696,7 +1697,6 @@ textarea { min-height: 72px; resize: vertical; }
   .mobile-brand { display: flex !important; }
   .topbar-title, .topbar-meta > span { display: none !important; }
   .topbar-meta > a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; color: var(--core-muted); font-size: 10px; font-weight: 720; text-decoration: none; }
-  .core-topbar .mobile-account-link,
   .core-topbar .runtime-badge { display: none; }
   .mobile-nav { position: fixed; inset: auto 0 0; z-index: 40; width: 100%; max-width: 100%; min-height: 64px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line); padding-bottom: env(safe-area-inset-bottom); background: rgba(255,255,255,.97); box-shadow: 0 -12px 34px rgba(25,54,42,.1); backdrop-filter: blur(18px); }
   .mobile-nav a { min-width: 0; display: grid; place-items: center; border-top: 2px solid transparent; padding-inline: 2px; overflow: hidden; color: var(--core-quiet); font-size: 9px; font-weight: 740; text-align: center; text-overflow: ellipsis; text-decoration: none; white-space: nowrap; }
@@ -2090,6 +2090,7 @@ textarea { min-height: 72px; resize: vertical; }
   .compact-disclosure > summary { min-height: 44px; }
   .core-button, .core-button.compact, .text-link, .core-topbar .mobile-brand .core-brand, .topbar-meta > a, .segmented-control button, .segmented-control a, .view-tabs button, .mobile-nav a { min-height: 44px; }
   input, select, textarea { font-size: 16px; }
+  .managed-login-panel input, .managed-login-panel select { font-size: 16px; }
   .module-today .summary-strip.compact-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .module-today .summary-strip.compact-summary > span { border-bottom: 0; }
   .module-today .summary-strip.compact-summary > span:first-child { border-right: 1px solid var(--core-line); }

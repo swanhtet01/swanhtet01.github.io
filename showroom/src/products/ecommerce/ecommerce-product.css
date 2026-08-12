@@ -1196,7 +1196,7 @@
 
 .ecommerce-cart-line > b {
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .ecommerce-cart-line > button {
@@ -1207,7 +1207,7 @@
   background: transparent;
   color: #7a5142;
   font: inherit;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
   cursor: pointer;
 }
@@ -1333,6 +1333,7 @@
   background: #fff;
   color: #17231d;
   font: inherit;
+  font-size: 12px;
   font-size: 11px;
 }
 
@@ -1726,6 +1727,18 @@
 @media (max-width: 560px) {
   .ecommerce-product {
     overflow-x: clip;
+  }
+
+  /* Component font sizes outrank the shared input floor; re-assert it so iOS does not
+     zoom the viewport while the operator is entering checkout or return details. */
+  .ecommerce-buying-body > form input,
+  .ecommerce-buying-body > form select,
+  .ecommerce-buying-body > form textarea,
+  .ecommerce-cart-line input,
+  .ecommerce-return-form input,
+  .ecommerce-return-form select,
+  .ecommerce-return-form textarea {
+    font-size: 16px;
   }
 
   .ecommerce-heading h1 {

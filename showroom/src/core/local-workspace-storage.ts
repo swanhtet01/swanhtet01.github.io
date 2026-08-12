@@ -7,6 +7,10 @@ const exactWorkspaceKeys = new Set([
   'supermega.accountable.actions.v1',
   'supermega.behavior-trail.v1',
   'supermega.shop.order_draft_reset.v1',
+  // The in-progress counter sale and remembered operator name must participate in local
+  // reset, restore points, and backup restore so a reset cannot retain the previous sale.
+  'supermega.shop.counter_draft.v1',
+  'supermega.last_operator.v1',
   'supermega.ecommerce.storefront_draft_reset.v1',
   'supermega.team.workspace.v4',
   'supermega.website.workspace.v2',

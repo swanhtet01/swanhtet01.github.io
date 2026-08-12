@@ -15,7 +15,8 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 // button that quietly does nothing. Either way local workspace data is untouched: it lives
 // in this browser's storage, not in the component tree, so the reassurance is honest.
 
-const CHUNK_FAILURE = /ChunkLoadError|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i
+// The last alternative is Vite's wording when a lazy route's stylesheet preload fails.
+const CHUNK_FAILURE = /ChunkLoadError|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i
 
 function isChunkFailure(error: unknown) {
   if (!error) return false

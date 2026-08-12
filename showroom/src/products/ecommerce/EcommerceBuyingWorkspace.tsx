@@ -13,20 +13,15 @@ import {
   buildEcommerceReturnIntent,
   buildEcommerceSupportIntent,
   createEmptyEcommerceBuyingState,
-  deriveEcommerceCustomerRequestState,
   ecommerceAvailablePaymentAdapters,
-  ecommerceQuoteNextAction,
   ecommerceBuyingStateStorageKey,
   ecommercePaymentMatchesFulfilment,
-  readEcommerceRequestReceiptDismissal,
   prepareEcommerceShopDraftV2,
   projectEcommerceReturnOutcome,
   projectEcommerceCorrectionOutcome,
   projectEcommerceSupportOutcome,
-  recoverEcommerceCartRemoval,
   readEcommerceBuyingState,
   saveEcommerceOrderRequestV2,
-  saveEcommerceRequestReceiptDismissal,
   saveEcommerceCancellationIntent,
   saveEcommerceCorrectionIntent,
   saveEcommerceOrderAmendment,
@@ -40,8 +35,6 @@ import {
   type EcommerceOrderAmendmentIntent,
   type EcommerceOrderRescheduleIntent,
   type EcommerceCartLine,
-  type EcommerceCustomerRequestState,
-  type EcommerceRemovedCartLine,
   type EcommerceFulfilment,
   type EcommercePaymentAdapter,
   type EcommerceReturnDisposition,
@@ -50,34 +43,6 @@ import {
   type EcommerceSupportIntent,
   type EcommerceShopDraftV2,
 } from './ecommerce-buying-lifecycle'
-import {
-  closeEcommerceOrderChangeDraft,
-  closeEcommerceOrderRescheduleDraft,
-  createEcommerceOrderChangeOpening,
-  createEcommerceOrderRescheduleOpening,
-  recoverEcommerceOrderChangeDraft,
-  recoverEcommerceOrderRescheduleDraft,
-  type EcommerceClosedOrderChangeDraft,
-  type EcommerceClosedOrderRescheduleDraft,
-  type EcommerceOrderChangeDraft,
-  type EcommerceOrderChangeOpening,
-  type EcommerceOrderRescheduleDraft,
-  type EcommerceOrderRescheduleOpening,
-} from './ecommerce-order-change-draft'
-import {
-  createEcommerceCheckoutEntryRecovery,
-  ecommerceCheckoutEntryDraft,
-  ecommerceCheckoutEntryDraftHasContent,
-  ecommerceCheckoutEntryRecoveriesMatch,
-  ecommerceCheckoutEntryRecoveryMatchesDraft,
-  ecommerceCheckoutEntryRecoverySource,
-  ecommerceCheckoutEntryRecoveryStorageKey,
-  restoreEcommerceCheckoutEntryRecovery,
-  reviewEcommerceCheckoutEntryRecovery,
-  type EcommerceCheckoutEntryDraft,
-  type EcommerceCheckoutEntryRecovery,
-  type EcommerceCheckoutEntryRecoverySource,
-} from './ecommerce-checkout-entry-recovery'
 import {
   commerceOrderAcknowledgement,
   commerceOrderCorrectionExpectation,
@@ -98,7 +63,7 @@ type EcommerceBuyingWorkspaceProps = {
   currentCatalog: CommerceItem[]
   disabled: boolean
   onCartChange: (cart: EcommerceCartLine[]) => void
-  onOpenShopOrder: (orderId: string) => void
+  onContinueInShop: (requestId: string) => void
   onDraft: (draft: EcommerceShopDraftV2) => void
   onOpenManagedRequest?: (requestId: string) => void
   onOpenCancellation: (intent: EcommerceCancellationIntent) => void
@@ -107,13 +72,8 @@ type EcommerceBuyingWorkspaceProps = {
   onOpenReschedule: (intent: EcommerceOrderRescheduleIntent) => void
   onOpenReturns: (intent: EcommerceReturnIntent) => void
   onOpenSupport: (intent: EcommerceSupportIntent) => void
-  onRecordManagedRequest?: (
-    request: EcommerceBuyingState['requests'][number],
-    supersededRequest?: EcommerceBuyingState['requests'][number] | null,
-  ) => Promise<void>
-  onRecoveryPendingChange: (pending: boolean) => void
-  onRequestCurrentChange: (current: boolean) => void
-  onRequestStateChange: (state: EcommerceCustomerRequestState) => void
+  onRecordManagedRequest?: (request: EcommerceBuyingState['requests'][number]) => Promise<void>
+  onRequestStateChange: (state: 'idle' | 'waiting_shop_review' | 'confirmed') => void
   preview: StorefrontPreview
   scope: string
   sourcePreviewDigest: string
@@ -132,17 +92,6 @@ type EcommerceAmendmentStatus = {
   state: 'waiting_shop_review' | 'replacement_needed' | 'replacement_created' | 'review_required'
   replacementOrderId: string
 }
-
-type EcommerceCartQuantityIssues = Record<string, string>
-
-type EcommerceCheckoutEntryRecoveryState = {
-  scope: string
-  recovery: EcommerceCheckoutEntryRecovery
-}
-
-type EcommerceRemovedCartLineNotice = EcommerceRemovedCartLine & Readonly<{
-  itemName: string
-}>
 
 type EcommerceRescheduleStatus = {
   intent: EcommerceOrderRescheduleIntent
@@ -184,7 +133,7 @@ export function EcommerceBuyingWorkspace({
   currentCatalog,
   disabled,
   onCartChange,
-  onOpenShopOrder,
+  onContinueInShop,
   onDraft,
   onOpenManagedRequest,
   onOpenCancellation,
@@ -194,8 +143,6 @@ export function EcommerceBuyingWorkspace({
   onOpenReturns,
   onOpenSupport,
   onRecordManagedRequest,
-  onRecoveryPendingChange,
-  onRequestCurrentChange,
   onRequestStateChange,
   preview,
   scope,
@@ -218,32 +165,12 @@ export function EcommerceBuyingWorkspace({
   const [paymentAdapter, setPaymentAdapter] = useState<EcommercePaymentAdapter>('pay_on_pickup')
   const [promotionCode, setPromotionCode] = useState('')
   const [open, setOpen] = useState(false)
-  const [orderHistoryExpanded, setOrderHistoryExpanded] = useState(false)
   const [quoteBusy, setQuoteBusy] = useState(false)
   const [handoffBusy, setHandoffBusy] = useState(false)
   const [freshQuoteId, setFreshQuoteId] = useState('')
   const [quoteClock, setQuoteClock] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
-  const [cartQuantityDrafts, setCartQuantityDrafts] = useState<Record<string, string>>({})
-  const [cartQuantityIssues, setCartQuantityIssues] = useState<EcommerceCartQuantityIssues>({})
-  const [removedCartLine, setRemovedCartLine] = useState<EcommerceRemovedCartLineNotice | null>(null)
-  const [checkoutEntryRecoveryState, setCheckoutEntryRecoveryState] = useState<EcommerceCheckoutEntryRecoveryState | null>(null)
-  const [checkoutEntryRecoveryNotice, setCheckoutEntryRecoveryNotice] = useState('')
-  const [checkoutEntryHydratedIdentity, setCheckoutEntryHydratedIdentity] = useState('')
-  const [checkoutEntrySourceState, setCheckoutEntrySourceState] = useState<{
-    context: {
-      scope: string
-      commerceState: CommerceState
-      currentCatalog: CommerceItem[]
-      preview: StorefrontPreview
-      buyingState: EcommerceBuyingState
-      sourcePreviewDigest: string
-      sourceStorefrontRevision: number | null
-      sourceStorefrontActionId: string | null
-    } | null
-    value: EcommerceCheckoutEntryRecoverySource | null
-    error: string
-  }>({ context: null, value: null, error: '' })
+  const [cartDrafts, setCartDrafts] = useState<Record<string, string>>({})
   const [returnDraft, setReturnDraft] = useState<{
     orderId: string
     sku: string
@@ -272,26 +199,23 @@ export function EcommerceBuyingWorkspace({
     reason: string
   } | null>(null)
   const [cancellationBusy, setCancellationBusy] = useState(false)
-  const [amendmentDraft, setAmendmentDraft] = useState<EcommerceOrderChangeDraft | null>(null)
-  const [closedAmendmentDraft, setClosedAmendmentDraft] = useState<EcommerceClosedOrderChangeDraft | null>(null)
+  const [amendmentDraft, setAmendmentDraft] = useState<{
+    orderId: string
+    mode: 'details' | 'items'
+    fulfilment: EcommerceFulfilment
+    lines: Array<{ sku: string; name: string; quantity: string }>
+    customerName: string
+    customerPhone: string
+    addressLine1: string
+    addressTownship: string
+    addressCity: string
+    deliveryInstructions: string
+    reason: string
+  } | null>(null)
   const [amendmentBusy, setAmendmentBusy] = useState(false)
-  const [rescheduleDraft, setRescheduleDraft] = useState<EcommerceOrderRescheduleDraft | null>(null)
-  const [closedRescheduleDraft, setClosedRescheduleDraft] = useState<EcommerceClosedOrderRescheduleDraft | null>(null)
+  const [rescheduleDraft, setRescheduleDraft] = useState<{ orderId: string; requestedPromisedAt: string; reason: string } | null>(null)
   const [rescheduleBusy, setRescheduleBusy] = useState(false)
   const requestReceiptRef = useRef<HTMLElement>(null)
-  const checkoutSummaryRef = useRef<HTMLElement>(null)
-  const checkoutRecoveryActionRef = useRef<HTMLButtonElement>(null)
-  const checkoutRecoveryHydrationRef = useRef('')
-  const checkoutLastWrittenRecoveryRef = useRef<EcommerceCheckoutEntryRecovery | null>(null)
-  const customerNameRef = useRef<HTMLInputElement>(null)
-  const cartQuantityRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  const cartRemovalUndoRef = useRef<HTMLButtonElement>(null)
-  const amendmentOpeningRef = useRef<EcommerceOrderChangeOpening | null>(null)
-  const amendmentRecoveryRef = useRef<HTMLButtonElement>(null)
-  const amendmentModeRef = useRef<HTMLSelectElement>(null)
-  const rescheduleOpeningRef = useRef<EcommerceOrderRescheduleOpening | null>(null)
-  const rescheduleRecoveryRef = useRef<HTMLButtonElement>(null)
-  const rescheduleDateRef = useRef<HTMLInputElement>(null)
   const samplePaymentPolicies = useMemo(() => createSeedCommerce().paymentPolicies ?? [], [])
 
   const emptyBuyingState = useMemo(() => createEmptyEcommerceBuyingState(scope), [scope])
@@ -305,29 +229,11 @@ export function EcommerceBuyingWorkspace({
     : emptyBuyingState
   const recoveryStatus = recoveryRead.scope === scope ? recoveryRead.status : 'checking'
   const recoveryIssue = recoveryRead.scope === scope ? recoveryRead.issue : ''
-  const checkoutEntrySourceBuyingState = buyingState.scope === scope ? buyingState : emptyBuyingState
-  const sourceStorefrontRevision = sourceStorefront?.revision ?? null
-  const sourceStorefrontActionId = sourceStorefront?.actionId ?? null
-  const checkoutEntrySourceContext = checkoutEntrySourceState.context
-  const checkoutEntrySource = checkoutEntrySourceContext
-    && checkoutEntrySourceContext.scope === scope
-    && checkoutEntrySourceContext.commerceState === commerceState
-    && checkoutEntrySourceContext.currentCatalog === currentCatalog
-    && checkoutEntrySourceContext.preview === preview
-    && checkoutEntrySourceContext.buyingState === checkoutEntrySourceBuyingState
-    && checkoutEntrySourceContext.sourcePreviewDigest === sourcePreviewDigest
-    && checkoutEntrySourceContext.sourceStorefrontRevision === sourceStorefrontRevision
-    && checkoutEntrySourceContext.sourceStorefrontActionId === sourceStorefrontActionId
-    ? checkoutEntrySourceState.value
-    : null
 
   useEffect(() => {
     let current = true
     void readEcommerceBuyingState(scope).then((result) => {
       if (!current) return
-      setCartQuantityDrafts({})
-      setCartQuantityIssues({})
-      setRemovedCartLine(null)
       const recoveredState = result.state ?? createEmptyEcommerceBuyingState(scope)
       setRecoveryRead({ scope, status: result.status, issue: result.error })
       setBuyingState(recoveredState)
@@ -342,32 +248,16 @@ export function EcommerceBuyingWorkspace({
       setPaymentAdapter('pay_on_pickup')
       setPromotionCode('')
       setOpen(false)
-      setOrderHistoryExpanded(false)
       setFreshQuoteId('')
       setReturnDraft(null)
       setSupportDraft(null)
       setCorrectionDraft(null)
       setCancellationDraft(null)
       setAmendmentDraft(null)
-      setClosedAmendmentDraft(null)
-      amendmentOpeningRef.current = null
       setRescheduleDraft(null)
-      setClosedRescheduleDraft(null)
-      rescheduleOpeningRef.current = null
       setNotice('')
       const latest = recoveredState.requests[0]
       if (!latest || latest.sourcePreviewDigest !== sourcePreviewDigest) return
-      let dismissedRequestId: string
-      try {
-        dismissedRequestId = readEcommerceRequestReceiptDismissal(window.localStorage, scope)
-      } catch {
-        setNotice('Saved order-receipt recovery needs review. The previous checkout was not restored.')
-        return
-      }
-      if (dismissedRequestId === latest.id) {
-        setNotice('Ready for a new order. The previous order remains in Shop history.')
-        return
-      }
       onCartChange(latest.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
       setCustomerName(latest.customerProfile?.name ?? latest.customerReference)
       setCustomerPhone(latest.customerProfile?.phone ?? '')
@@ -385,52 +275,6 @@ export function EcommerceBuyingWorkspace({
     })
     return () => { current = false }
   }, [onCartChange, scope, sourcePreviewDigest])
-
-  useEffect(() => {
-    if (recoveryStatus === 'checking') return
-    let current = true
-    void ecommerceCheckoutEntryRecoverySource(scope, {
-      commerceState,
-      currentCatalog,
-      preview,
-      buyingState: checkoutEntrySourceBuyingState,
-      sourcePreviewDigest,
-      sourceStorefront: sourceStorefrontRevision === null || sourceStorefrontActionId === null
-        ? null
-        : { revision: sourceStorefrontRevision, actionId: sourceStorefrontActionId },
-    }).then((value) => {
-      if (current) setCheckoutEntrySourceState({
-        context: {
-          scope,
-          commerceState,
-          currentCatalog,
-          preview,
-          buyingState: checkoutEntrySourceBuyingState,
-          sourcePreviewDigest,
-          sourceStorefrontRevision,
-          sourceStorefrontActionId,
-        },
-        value,
-        error: '',
-      })
-    }).catch(() => {
-      if (current) setCheckoutEntrySourceState({
-        context: {
-          scope,
-          commerceState,
-          currentCatalog,
-          preview,
-          buyingState: checkoutEntrySourceBuyingState,
-          sourcePreviewDigest,
-          sourceStorefrontRevision,
-          sourceStorefrontActionId,
-        },
-        value: null,
-        error: 'Unfinished checkout recovery is unavailable on this device.',
-      })
-    })
-    return () => { current = false }
-  }, [checkoutEntrySourceBuyingState, commerceState, currentCatalog, preview, recoveryStatus, scope, sourcePreviewDigest, sourceStorefrontActionId, sourceStorefrontRevision])
 
   useEffect(() => {
     const storageKey = ecommerceBuyingStateStorageKey(scope)
@@ -458,17 +302,10 @@ export function EcommerceBuyingWorkspace({
   }, [scope])
 
   useEffect(() => {
-    if (!removedCartLine) return
-    const frame = window.requestAnimationFrame(() => cartRemovalUndoRef.current?.focus({ preventScroll: true }))
-    return () => window.cancelAnimationFrame(frame)
-  }, [removedCartLine])
-
-  useEffect(() => {
     const latest = activeBuyingState.requests[0]
     if (!latest || latest.id !== freshQuoteId) return
     const remainingMs = Date.parse(latest.quote.expiresAt) - Date.now()
     const timeoutId = window.setTimeout(() => {
-      setQuoteClock(Date.now())
       setFreshQuoteId((current) => current === latest.id ? '' : current)
     }, Math.max(0, remainingMs))
     return () => window.clearTimeout(timeoutId)
@@ -491,7 +328,8 @@ export function EcommerceBuyingWorkspace({
     ? combinedOrderTimeline.find((entry) => entry.request.id === latestRequest.id) ?? null
     : null
   const latestRequestOrder = latestRequestEntry?.order ?? null
-  const latestRequestCompleted = latestRequestEntry?.stage === 'completed'
+  const customerRequestState = latestRequestOrder ? 'confirmed' : latestRequest ? 'waiting_shop_review' : 'idle'
+  useEffect(() => onRequestStateChange(customerRequestState), [customerRequestState, onRequestStateChange])
   const customerReference = [customerName.trim(), customerPhone.trim()].filter(Boolean).join(' · ')
   const trackedCustomerReference = customerReference || latestRequest?.customerReference || ''
   const replacementRequestIds = new Set([
@@ -504,8 +342,6 @@ export function EcommerceBuyingWorkspace({
       ? entry.request.customerProfile.phone === customerPhone.trim()
       : entry.request.customerReference === trackedCustomerReference)
   )).filter((entry) => !replacementRequestIds.has(entry.request.id) || Boolean(entry.order))
-  const customerOrderHistoryLimit = Math.min(5, customerOrderTimeline.length)
-  const visibleCustomerOrderTimeline = customerOrderTimeline.slice(0, orderHistoryExpanded ? customerOrderHistoryLimit : 1)
   const completedCustomerOrders = customerOrderTimeline.filter((entry) => entry.stage === 'completed' && entry.order?.completion)
   const activeCustomerOrders = customerOrderTimeline.filter((entry) => (
     entry.order && ['confirmed', 'preparing', 'ready'].includes(entry.order.status)
@@ -618,42 +454,10 @@ export function EcommerceBuyingWorkspace({
     return statuses
   }, [])
   const pendingRescheduleIntents = rescheduleStatuses.filter((status) => status.state !== 'replacement_created')
-  const orderChangeConflictIds = [
-    ...activeBuyingState.amendmentIntents.map((intent) => intent.orderId),
-    ...activeBuyingState.rescheduleIntents.map((intent) => intent.orderId),
-    ...activeBuyingState.cancellationIntents.map((intent) => intent.orderId),
-  ]
-  const pendingOrderHelpCount = pendingAmendmentIntents.length + pendingRescheduleIntents.length
-    + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length
-    + pendingCorrectionIntents.length
-  const orderChangeRecovery = closedAmendmentDraft
-    ? recoverEcommerceOrderChangeDraft(null, closedAmendmentDraft, activeCustomerOrders, orderChangeConflictIds)
-    : null
-  const recoverableOrderChangeId = orderChangeRecovery?.ok ? orderChangeRecovery.draft.orderId : ''
-  useEffect(() => {
-    if (!recoverableOrderChangeId) return
-    const frame = window.requestAnimationFrame(() => amendmentRecoveryRef.current?.focus({ preventScroll: true }))
-    return () => window.cancelAnimationFrame(frame)
-  }, [closedAmendmentDraft, recoverableOrderChangeId])
-  const rescheduleRecovery = closedRescheduleDraft
-    ? recoverEcommerceOrderRescheduleDraft(null, closedRescheduleDraft, activeCustomerOrders, orderChangeConflictIds)
-    : null
-  const recoverableRescheduleId = rescheduleRecovery?.ok ? rescheduleRecovery.draft.orderId : ''
-  useEffect(() => {
-    if (!recoverableRescheduleId) return
-    const frame = window.requestAnimationFrame(() => rescheduleRecoveryRef.current?.focus({ preventScroll: true }))
-    return () => window.cancelAnimationFrame(frame)
-  }, [closedRescheduleDraft, recoverableRescheduleId])
-  const orderHelpDraftOpen = Boolean(amendmentDraft || rescheduleDraft || cancellationDraft || returnDraft || supportDraft || correctionDraft)
-  const showOrderHelpActions = !orderHelpDraftOpen
-  const orderHelpOpen = orderHelpDraftOpen || Boolean(orderChangeRecovery?.ok || rescheduleRecovery?.ok)
   const cartItems = useMemo(() => cart.map((line) => ({
     ...line,
     item: preview.items.find((item) => item.sku === line.sku),
-    quantityLimit: Math.min(99, Math.max(0, currentCatalog.find((item) => item.sku === line.sku)?.onHand ?? 0)),
-  })), [cart, currentCatalog, preview.items])
-  const firstCartQuantityIssueSku = cart.find((line) => Boolean(cartQuantityIssues[line.sku]))?.sku ?? ''
-  const cartHasQuantityIssue = Boolean(firstCartQuantityIssueSku)
+  })), [cart, preview.items])
   const cartTotal = cartItems.reduce((total, line) => (
     total + (line.item?.unitPriceMmk ?? 0) * line.quantity
   ), 0)
@@ -680,11 +484,10 @@ export function EcommerceBuyingWorkspace({
     ? paymentAdapter
     : availablePaymentAdapters[0] ?? paymentAdapter
   const paymentPolicyReady = availablePaymentAdapters.includes(effectivePaymentAdapter)
-  const latestRequestCheckoutMatches = Boolean(latestRequest
+  const quoteCurrent = Boolean(latestRequest
+    && latestRequest.id === freshQuoteId
     && latestRequest.scope === scope
     && latestRequest.sourcePreviewDigest === sourcePreviewDigest
-    && latestRequest.sourceStorefrontRevision === (sourceStorefront?.revision ?? null)
-    && latestRequest.sourceStorefrontActionId === (sourceStorefront?.actionId ?? null)
     && latestRequest.customerReference === customerReference
     && (!latestRequest.customerProfile || latestRequest.customerProfile.name === customerName.trim())
     && (!latestRequest.customerProfile || latestRequest.customerProfile.phone === customerPhone.trim())
@@ -696,464 +499,53 @@ export function EcommerceBuyingWorkspace({
     && latestRequest.fulfilment === fulfilment
     && latestRequest.quote.payment.adapter === effectivePaymentAdapter
     && (latestRequest.quote.promotion.code ?? '') === promotionCode.trim()
-    && !cartHasQuantityIssue
     && cartMatchesRequest(cart, latestRequest))
-  const quoteCurrent = Boolean(latestRequestCheckoutMatches && latestRequest?.id === freshQuoteId)
-  const customerRequestState = deriveEcommerceCustomerRequestState({
-    checkoutMatches: latestRequestCheckoutMatches,
-    hasConfirmedOrder: Boolean(latestRequestOrder),
-    hasRequest: Boolean(latestRequest),
-    now: quoteClock,
-    quoteExpiresAt: latestRequest?.quote.expiresAt ?? null,
-  })
-  const quoteNextAction = ecommerceQuoteNextAction(
-    customerRequestState,
-    cart.reduce((total, line) => total + line.quantity, 0),
-  )
-  const replacingCurrentRequest = Boolean(latestRequest && !latestRequestOrder && quoteNextAction)
-  const latestRequestConfirmed = Boolean(latestRequestOrder)
-  useEffect(() => {
-    onRequestStateChange(customerRequestState)
-    onRequestCurrentChange(latestRequestConfirmed)
-  }, [customerRequestState, latestRequestConfirmed, onRequestCurrentChange, onRequestStateChange])
-  const checkoutEntryDraftInput = {
-    lines: cart.map((line) => ({
-      sku: line.sku,
-      quantity: line.quantity,
-      quantityDraft: cartQuantityDrafts[line.sku] ?? String(line.quantity),
-    })),
-    removedCartLine: removedCartLine ? {
-      line: { ...removedCartLine.line },
-      index: removedCartLine.index,
-      itemName: removedCartLine.itemName,
-    } : null,
-    customerName,
-    customerPhone,
-    addressLine1,
-    addressTownship,
-    addressCity,
-    deliveryInstructions,
-    fulfilment,
-    paymentAdapter,
-    promotionCode,
-  }
-  const checkoutEntryHasMeaningfulDraft = ecommerceCheckoutEntryDraftHasContent(checkoutEntryDraftInput)
-  let currentCheckoutEntryDraft: EcommerceCheckoutEntryDraft | null = null
-  if (checkoutEntryHasMeaningfulDraft) {
-    try {
-      currentCheckoutEntryDraft = ecommerceCheckoutEntryDraft(checkoutEntryDraftInput)
-    } catch {
-      currentCheckoutEntryDraft = null
-    }
-  }
-  const checkoutEntryMatchesLatestRequest = Boolean(currentCheckoutEntryDraft
-    && latestRequest
-    && !currentCheckoutEntryDraft.removedCartLine
-    && latestRequest.scope === scope
-    && latestRequest.sourcePreviewDigest === sourcePreviewDigest
-    && latestRequest.sourceStorefrontRevision === (sourceStorefront?.revision ?? null)
-    && latestRequest.sourceStorefrontActionId === (sourceStorefront?.actionId ?? null)
-    && currentCheckoutEntryDraft.lines.every((line) => line.quantityDraft === String(line.quantity))
-    && cartMatchesRequest(currentCheckoutEntryDraft.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })), latestRequest)
-    && currentCheckoutEntryDraft.customerName === (latestRequest.customerProfile?.name ?? latestRequest.customerReference)
-    && currentCheckoutEntryDraft.customerPhone === (latestRequest.customerProfile?.phone ?? '')
-    && currentCheckoutEntryDraft.fulfilment === latestRequest.fulfilment
-    && currentCheckoutEntryDraft.paymentAdapter === latestRequest.quote.payment.adapter
-    && currentCheckoutEntryDraft.promotionCode === (latestRequest.quote.promotion.code ?? '')
-    && (latestRequest.fulfilment === 'delivery'
-      ? Boolean(latestRequest.deliveryAddress
-        && currentCheckoutEntryDraft.addressLine1 === latestRequest.deliveryAddress.line1
-        && currentCheckoutEntryDraft.addressTownship === latestRequest.deliveryAddress.township
-        && currentCheckoutEntryDraft.addressCity === latestRequest.deliveryAddress.city
-        && currentCheckoutEntryDraft.deliveryInstructions === (latestRequest.deliveryAddress.instructions ?? ''))
-      : !currentCheckoutEntryDraft.addressLine1
-        && !currentCheckoutEntryDraft.addressTownship
-        && currentCheckoutEntryDraft.addressCity === 'Yangon'
-        && !currentCheckoutEntryDraft.deliveryInstructions))
-  const checkoutEntryDraftJson = currentCheckoutEntryDraft ? JSON.stringify(currentCheckoutEntryDraft) : ''
-  const checkoutEntrySourceIdentity = checkoutEntrySource ? JSON.stringify(checkoutEntrySource) : ''
-  const checkoutEntryHydrationIdentity = checkoutEntrySource
-    ? `${scope}|${checkoutEntrySource.stateDigest}`
-    : ''
-  const activeCheckoutEntryRecovery = checkoutEntryRecoveryState?.scope === scope
-    ? checkoutEntryRecoveryState.recovery
-    : null
-  const checkoutEntryRecoveryReview = activeCheckoutEntryRecovery && checkoutEntrySource
-    ? reviewEcommerceCheckoutEntryRecovery(
-        activeCheckoutEntryRecovery,
-        scope,
-        checkoutEntrySource,
-        currentCatalog,
-        preview,
-      )
-    : null
-  const hasCheckoutEntryRecovery = Boolean(activeCheckoutEntryRecovery)
-  const hasActiveCheckoutEntryDraft = Boolean(
-    checkoutEntrySource
-    && currentCheckoutEntryDraft
-    && !checkoutEntryMatchesLatestRequest
-    && !hasCheckoutEntryRecovery
-    && (recoveryStatus === 'empty' || recoveryStatus === 'ready'),
-  )
-
-  useEffect(() => {
-    if (!checkoutEntryHydrationIdentity || !checkoutEntrySource) return
-    if (checkoutRecoveryHydrationRef.current === checkoutEntryHydrationIdentity
-      && checkoutEntryHydratedIdentity === checkoutEntryHydrationIdentity) return
-    checkoutRecoveryHydrationRef.current = checkoutEntryHydrationIdentity
-    setCheckoutEntryHydratedIdentity('')
-    const timer = window.setTimeout(() => {
-      try {
-        const key = ecommerceCheckoutEntryRecoveryStorageKey(scope)
-        const raw = window.localStorage.getItem(key)
-        const restored = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
-        if (raw && !restored) window.localStorage.removeItem(key)
-        checkoutLastWrittenRecoveryRef.current = null
-        setCheckoutEntryRecoveryState(restored ? { scope, recovery: restored } : null)
-        setCheckoutEntryHydratedIdentity(checkoutEntryHydrationIdentity)
-        if (restored) requestAnimationFrame(() => checkoutRecoveryActionRef.current?.focus({ preventScroll: true }))
-      } catch {
-        setCheckoutEntryRecoveryState(null)
-        setCheckoutEntryHydratedIdentity(checkoutEntryHydrationIdentity)
-        setCheckoutEntryRecoveryNotice('Checkout recovery is unavailable. Finish or clear this checkout before leaving.')
-      }
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [checkoutEntryHydratedIdentity, checkoutEntryHydrationIdentity, checkoutEntrySource, scope])
-
-  useEffect(() => {
-    if (!checkoutEntrySourceIdentity
-      || !checkoutEntryDraftJson
-      || !hasActiveCheckoutEntryDraft
-      || checkoutEntryHydratedIdentity !== checkoutEntryHydrationIdentity) return
-    const timer = window.setTimeout(() => {
-      try {
-        const sourceForPersistence = JSON.parse(checkoutEntrySourceIdentity) as EcommerceCheckoutEntryRecoverySource
-        const draftForPersistence = JSON.parse(checkoutEntryDraftJson) as EcommerceCheckoutEntryDraft
-        const key = ecommerceCheckoutEntryRecoveryStorageKey(scope)
-        const raw = window.localStorage.getItem(key)
-        const retained = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
-        const lastWritten = checkoutLastWrittenRecoveryRef.current
-        if (retained && (!lastWritten || !ecommerceCheckoutEntryRecoveriesMatch(retained, lastWritten))) {
-          setCheckoutEntryRecoveryState({ scope, recovery: retained })
-          setCheckoutEntryRecoveryNotice('Another tab has an unfinished checkout. Resume or discard it before replacing it.')
-          requestAnimationFrame(() => checkoutRecoveryActionRef.current?.focus({ preventScroll: true }))
-          return
-        }
-        const next = createEcommerceCheckoutEntryRecovery(scope, sourceForPersistence, draftForPersistence)
-        window.localStorage.setItem(key, JSON.stringify(next))
-        checkoutLastWrittenRecoveryRef.current = next
-        setCheckoutEntryRecoveryNotice('')
-      } catch {
-        setCheckoutEntryRecoveryNotice('This checkout stays in this tab. Send or clear it before leaving Ecommerce.')
-      }
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [checkoutEntryDraftJson, checkoutEntryHydratedIdentity, checkoutEntryHydrationIdentity, checkoutEntrySourceIdentity, hasActiveCheckoutEntryDraft, scope])
-
-  useEffect(() => {
-    if (hasActiveCheckoutEntryDraft || hasCheckoutEntryRecovery) return
-    const lastWritten = checkoutLastWrittenRecoveryRef.current
-    if (!lastWritten) return
-    const timer = window.setTimeout(() => {
-      try {
-        const key = ecommerceCheckoutEntryRecoveryStorageKey(scope)
-        const raw = window.localStorage.getItem(key)
-        const current = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
-        if (current && ecommerceCheckoutEntryRecoveriesMatch(current, lastWritten)) window.localStorage.removeItem(key)
-        checkoutLastWrittenRecoveryRef.current = null
-      } catch {
-        setCheckoutEntryRecoveryNotice('The cleared checkout recovery could not be removed from this device.')
-      }
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [hasActiveCheckoutEntryDraft, hasCheckoutEntryRecovery, scope])
-
-  useEffect(() => {
-    const recoveryKey = ecommerceCheckoutEntryRecoveryStorageKey(scope)
-    function refreshCheckoutEntryRecovery(event: StorageEvent) {
-      if (event.key !== recoveryKey && event.key !== null) return
-      try {
-        const raw = window.localStorage.getItem(recoveryKey)
-        const restored = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
-        checkoutLastWrittenRecoveryRef.current = null
-        setCheckoutEntryRecoveryState(restored ? { scope, recovery: restored } : null)
-        if (restored) {
-          setCheckoutEntryRecoveryNotice('The unfinished checkout changed in another tab. Review it before continuing.')
-          requestAnimationFrame(() => checkoutRecoveryActionRef.current?.focus({ preventScroll: true }))
-        }
-      } catch {
-        setCheckoutEntryRecoveryState(null)
-      }
-    }
-    window.addEventListener('storage', refreshCheckoutEntryRecovery)
-    return () => window.removeEventListener('storage', refreshCheckoutEntryRecovery)
-  }, [scope])
-
-  useEffect(() => {
-    onRecoveryPendingChange(hasCheckoutEntryRecovery)
-    return () => onRecoveryPendingChange(false)
-  }, [hasCheckoutEntryRecovery, onRecoveryPendingChange])
-
+  const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
   const recoveryBlocked = recoveryStatus !== 'empty' && recoveryStatus !== 'ready'
   const recoveredCheckoutNotice = latestRequest
     ? Date.parse(latestRequest.quote.expiresAt) > quoteClock
       ? `${latestRequest.id} recovered on this device. It remains waiting for Shop review.`
       : `${latestRequest.id} was recovered, but its quote expired. Review a new total.`
     : ''
-  const checkoutNotice = firstCartQuantityIssueSku
-    ? cartQuantityIssues[firstCartQuantityIssueSku]
-    : latestRequestConfirmed && latestRequestOrder
+  const checkoutNotice = latestRequestConfirmed && latestRequestOrder
     ? `${latestRequest?.id} is confirmed as ${latestRequestOrder.id}. ${latestRequestEntry?.paymentStatus === 'reconciled' ? 'Payment is reconciled in Shop.' : 'Payment still needs Shop reconciliation.'}`
-    : notice || checkoutEntryRecoveryNotice || checkoutEntrySourceState.error || (latestRequestOrder
+    : notice || (latestRequestOrder
       ? `${latestRequest?.id} is already confirmed as ${latestRequestOrder.id}. Review a new total only to start another order.`
       : recoveredCheckoutNotice || recoveryIssue || (cart.length
-        ? 'Review the cart. Shop controls order and payment actions.'
+        ? 'Review the cart. Shop handles orders, stock, delivery, refunds, and payment review.'
         : 'Add a product to begin.'))
 
-  function checkoutEntryRecoveryIsCurrent(target: EcommerceCheckoutEntryRecoveryState) {
-    try {
-      const raw = window.localStorage.getItem(ecommerceCheckoutEntryRecoveryStorageKey(target.scope))
-      const current = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
-      if (current && ecommerceCheckoutEntryRecoveriesMatch(current, target.recovery)) return true
-      checkoutLastWrittenRecoveryRef.current = null
-      setCheckoutEntryRecoveryState(current ? { scope: target.scope, recovery: current } : null)
-      setCheckoutEntryRecoveryNotice(current
-        ? 'Another tab changed this checkout. Review the newer recovery before continuing.'
-        : 'This checkout was already resolved in another tab.')
-    } catch {
-      setCheckoutEntryRecoveryNotice('Checkout recovery could not be checked. No request, payment, or stock change was created.')
-    }
-    return false
+  function updateCart(sku: string, quantity: number) {
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return
+    onCartChange(cart.map((line) => line.sku === sku ? { ...line, quantity } : line))
+    setNotice('Cart changed. Review a new total before Shop review.')
   }
 
-  function clearCheckoutEntryRecovery(target = checkoutEntryRecoveryState) {
-    if (!target) return true
-    if (!checkoutEntryRecoveryIsCurrent(target)) return false
-    try {
-      window.localStorage.removeItem(ecommerceCheckoutEntryRecoveryStorageKey(target.scope))
-    } catch {
-      setCheckoutEntryRecoveryNotice('Checkout recovery could not be removed. No request, payment, or stock change was created.')
-      return false
-    }
-    checkoutLastWrittenRecoveryRef.current = null
-    if (checkoutEntryRecoveryState === target) setCheckoutEntryRecoveryState(null)
-    return true
+  // Keep an input draft so backspace-and-retype works without ever writing an invalid
+  // quantity into the cart. Blur snaps the field back to the accepted 1-99 value.
+  function draftCartQuantity(sku: string, raw: string) {
+    setCartDrafts((previous) => ({ ...previous, [sku]: raw }))
+    const parsed = Number(raw)
+    if (Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 99) updateCart(sku, parsed)
   }
 
-  function clearMatchingCheckoutEntryRecovery(
-    draft = currentCheckoutEntryDraft,
-    source = checkoutEntrySource,
-  ) {
-    if (!draft || !source) return
-    try {
-      const key = ecommerceCheckoutEntryRecoveryStorageKey(scope)
-      const raw = window.localStorage.getItem(key)
-      const current = raw ? restoreEcommerceCheckoutEntryRecovery(raw) : null
-      if (current && ecommerceCheckoutEntryRecoveryMatchesDraft(current, scope, source, draft)) {
-        window.localStorage.removeItem(key)
-        checkoutLastWrittenRecoveryRef.current = null
-      }
-    } catch {
-      // A retained or newer source-bound recovery cannot create an Ecommerce request.
-    }
-  }
-
-  function quantityIssueForDraft(draft: string, itemName: string, quantityLimit: number) {
-    const quantity = Number(draft)
-    if (quantityLimit < 1) return `${itemName} is no longer available. Remove this line to continue. Your cart and checkout are unchanged.`
-    if (!draft.trim() || !Number.isSafeInteger(quantity) || quantity < 1) {
-      return `Enter a whole number from 1 to ${quantityLimit} for ${itemName}. Your cart and checkout are unchanged.`
-    }
-    if (quantity > quantityLimit) {
-      return `Only ${quantityLimit} ${quantityLimit === 1 ? 'unit is' : 'units are'} available for ${itemName}. Your cart and checkout are unchanged.`
-    }
-    return ''
-  }
-
-  function resumeCheckoutEntryRecovery() {
-    const target = checkoutEntryRecoveryState
-    if (!target
-      || target.scope !== scope
-      || !activeCheckoutEntryRecovery
-      || !checkoutEntryRecoveryReview?.ok) {
-      setCheckoutEntryRecoveryNotice('This checkout cannot resume because the storefront, catalog, or Shop record changed. Discard it to continue.')
-      return
-    }
-    if (!checkoutEntryRecoveryIsCurrent(target)) return
-    const recovered = checkoutEntryRecoveryReview.draft
-    const quantityDrafts = Object.fromEntries(recovered.lines.map((line) => [line.sku, line.quantityDraft]))
-    const quantityIssues = Object.fromEntries(recovered.lines.flatMap((line) => {
-      const item = preview.items.find((candidate) => candidate.sku === line.sku)
-      const quantityLimit = Math.min(99, Math.max(0, currentCatalog.find((candidate) => candidate.sku === line.sku)?.onHand ?? 0))
-      const issue = quantityIssueForDraft(line.quantityDraft, item?.name ?? line.sku, quantityLimit)
-      return issue ? [[line.sku, issue]] : []
-    }))
-    onCartChange(recovered.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })))
-    setCartQuantityDrafts(quantityDrafts)
-    setCartQuantityIssues(quantityIssues)
-    setRemovedCartLine(recovered.removedCartLine ? {
-      line: { ...recovered.removedCartLine.line },
-      index: recovered.removedCartLine.index,
-      itemName: recovered.removedCartLine.itemName,
-    } : null)
-    setCustomerName(recovered.customerName)
-    setCustomerPhone(recovered.customerPhone)
-    setAddressLine1(recovered.addressLine1)
-    setAddressTownship(recovered.addressTownship)
-    setAddressCity(recovered.addressCity)
-    setDeliveryInstructions(recovered.deliveryInstructions)
-    setFulfilment(recovered.fulfilment)
-    setPaymentAdapter(recovered.paymentAdapter)
-    setPromotionCode(recovered.promotionCode)
-    setOpen(true)
-    setFreshQuoteId('')
-    checkoutLastWrittenRecoveryRef.current = target.recovery
-    setCheckoutEntryRecoveryState(null)
-    setCheckoutEntryRecoveryNotice('Unfinished checkout resumed. No request, order, payment, stock, or message changed.')
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const firstIssueSku = recovered.lines.find((line) => Boolean(quantityIssues[line.sku]))?.sku
-      const focusTarget = recovered.removedCartLine
-        ? cartRemovalUndoRef.current
-        : firstIssueSku
-          ? cartQuantityRefs.current[firstIssueSku]
-          : customerNameRef.current
-      focusTarget?.scrollIntoView({ block: 'center' })
-      focusTarget?.focus({ preventScroll: true })
-      if (focusTarget instanceof HTMLInputElement) focusTarget.select()
-    }))
-  }
-
-  function discardCheckoutEntryRecovery() {
-    if (!activeCheckoutEntryRecovery) return
-    if (!clearCheckoutEntryRecovery()) return
-    setCartQuantityDrafts({})
-    setCartQuantityIssues({})
-    setRemovedCartLine(null)
-    onCartChange([])
-    setCustomerName('')
-    setCustomerPhone('')
-    setAddressLine1('')
-    setAddressTownship('')
-    setAddressCity('Yangon')
-    setDeliveryInstructions('')
-    setFulfilment('pickup')
-    setPaymentAdapter('pay_on_pickup')
-    setPromotionCode('')
-    setOpen(false)
-    setFreshQuoteId('')
-    setCheckoutEntryRecoveryNotice('Unfinished checkout discarded. No request, order, payment, stock, or message changed.')
-    requestAnimationFrame(() => requestAnimationFrame(() => checkoutSummaryRef.current?.focus({ preventScroll: true })))
-  }
-
-  function focusCartQuantity(sku: string) {
-    requestAnimationFrame(() => {
-      const input = cartQuantityRefs.current[sku]
-      if (!input) return
-      input.scrollIntoView({ block: 'center' })
-      input.focus({ preventScroll: true })
-      input.select()
-    })
-  }
-
-  function updateCart(sku: string, draft: string, itemName: string, quantityLimit: number) {
-    setCartQuantityDrafts((current) => ({ ...current, [sku]: draft }))
-    const quantity = Number(draft)
-    const issue = quantityIssueForDraft(draft, itemName, quantityLimit)
-    if (issue) {
-      setCartQuantityIssues((current) => ({ ...current, [sku]: issue }))
-      setNotice(issue)
-      return
-    }
-    setCartQuantityIssues((current) => {
-      if (!current[sku]) return current
-      const next = { ...current }
+  function commitCartQuantity(sku: string) {
+    setCartDrafts((previous) => {
+      const next = { ...previous }
       delete next[sku]
       return next
     })
-    onCartChange(cart.map((line) => line.sku === sku ? { ...line, quantity } : line))
-    setNotice(`Quantity updated to ${quantity}. Your checkout details are still here; review a new total before Shop review.`)
   }
 
   function removeFromCart(sku: string) {
-    const index = cart.findIndex((line) => line.sku === sku)
-    if (index < 0) return
-    const line = cart[index]
-    const itemName = preview.items.find((item) => item.sku === sku)?.name ?? sku
-    setRemovedCartLine({ line: { ...line }, index, itemName })
-    setCartQuantityDrafts((current) => {
-      const next = { ...current }
-      delete next[sku]
-      return next
-    })
-    setCartQuantityIssues((current) => {
-      const next = { ...current }
-      delete next[sku]
-      return next
-    })
     onCartChange(cart.filter((line) => line.sku !== sku))
-    setFreshQuoteId('')
-    setNotice(`${itemName} removed. Undo is available; your checkout details are still here. No quote, Shop request, payment, or stock changed.`)
-  }
-
-  function undoCartRemoval() {
-    if (!removedCartLine) return
-    const recovery = recoverEcommerceCartRemoval(cart, removedCartLine, currentCatalog)
-    if (!recovery.ok) {
-      if (recovery.reason === 'already_present') {
-        setRemovedCartLine(null)
-        setNotice(`${removedCartLine.itemName} is already in the cart. Nothing else changed.`)
-        return
-      }
-      if (recovery.reason === 'insufficient_stock') {
-        setNotice(`Cannot restore ${removedCartLine.line.quantity} ${recovery.available === 1 ? 'unit' : 'units'} of ${removedCartLine.itemName}; only ${recovery.available} available now. The item stays removed and your checkout details are unchanged. No quote or Shop request was created.`)
-        return
-      }
-      setRemovedCartLine(null)
-      setNotice('Line recovery failed. Nothing was restored or sent.')
-      return
-    }
-    onCartChange(recovery.cart)
-    setCartQuantityDrafts((current) => ({ ...current, [removedCartLine.line.sku]: String(removedCartLine.line.quantity) }))
-    setCartQuantityIssues((current) => {
-      if (!current[removedCartLine.line.sku]) return current
-      const next = { ...current }
-      delete next[removedCartLine.line.sku]
-      return next
-    })
-    setFreshQuoteId('')
-    setRemovedCartLine(null)
-    setNotice(`${removedCartLine.itemName} restored at quantity ${removedCartLine.line.quantity}. Your checkout details are still here; review a new total. No quote, Shop request, payment, or stock changed.`)
-    requestAnimationFrame(() => focusCartQuantity(removedCartLine.line.sku))
+    setNotice('Item removed. No Shop record or payment changed.')
   }
 
   function beginAnotherOrder() {
-    if (latestRequest && latestRequestOrder) {
-      try {
-        saveEcommerceRequestReceiptDismissal(window.localStorage, scope, latestRequest.id)
-      } catch {
-        setNotice('The previous order receipt could not be closed safely. Nothing was cleared; try again before entering another customer order.')
-        return
-      }
-    }
-    clearMatchingCheckoutEntryRecovery()
-    expireOrderChangeRecovery()
-    setCartQuantityDrafts({})
-    setCartQuantityIssues({})
-    setRemovedCartLine(null)
     onCartChange([])
-    setCustomerName('')
-    setCustomerPhone('')
-    setAddressLine1('')
-    setAddressTownship('')
-    setAddressCity('Yangon')
-    setDeliveryInstructions('')
-    setFulfilment('pickup')
-    setPaymentAdapter('pay_on_pickup')
-    setPromotionCode('')
-    setOpen(false)
     setFreshQuoteId('')
-    setNotice('Ready for a new order. The previous order remains in Shop history.')
+    setNotice('Ready for a new order. Add products, then review the current total.')
   }
 
   function changeFulfilment(next: EcommerceFulfilment) {
@@ -1186,10 +578,6 @@ export function EcommerceBuyingWorkspace({
       setNotice('That order cannot be reordered from current stock. Nothing changed.')
       return
     }
-    expireOrderChangeRecovery()
-    setCartQuantityDrafts({})
-    setCartQuantityIssues({})
-    setRemovedCartLine(null)
     onCartChange(nextCart)
     setCustomerName(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.customerProfile?.name ?? entry.request.customerReference : entry.request.customerReference)
     setCustomerPhone(entry.request.schema === 'supermega.ecommerce.order_request.v2' ? entry.request.customerProfile?.phone ?? '' : '')
@@ -1203,12 +591,11 @@ export function EcommerceBuyingWorkspace({
     setOpen(true)
     setNotice(blockedCount
       ? `${nextCart.length} available line${nextCart.length === 1 ? '' : 's'} added at current prices; ${blockedCount} unavailable line${blockedCount === 1 ? '' : 's'} skipped. Review a new quote.`
-      : 'Items added at current prices. Review a new quote.')
+      : 'Previous items added at current prices. Review a new quote; no Shop order, stock, message, or payment changed.')
   }
 
   function orderStageLabel(entry: CommerceStorefrontOrderTimelineEntry) {
     if (entry.stage === 'waiting_shop_review') return quoteExpiredWithoutOrder(entry) ? 'Quote expired' : 'Waiting for Shop review'
-    if (entry.stage === 'superseded') return 'Replaced'
     if (entry.stage === 'confirmed') return 'Confirmed'
     if (entry.stage === 'preparing') return 'Preparing'
     if (entry.stage === 'ready') return entry.request.fulfilment === 'pickup' ? 'Ready for pickup' : 'Ready for delivery'
@@ -1220,19 +607,8 @@ export function EcommerceBuyingWorkspace({
     return !entry.order && 'quote' in entry.request && Date.parse(entry.request.quote.expiresAt) <= quoteClock
   }
 
-  function expireOrderChangeRecovery() {
-    setClosedAmendmentDraft(null)
-    amendmentOpeningRef.current = null
-    setClosedRescheduleDraft(null)
-    rescheduleOpeningRef.current = null
-  }
-
   function openReturnRequest(entry: CommerceStorefrontOrderTimelineEntry) {
     const order = entry.order
-    if (order?.refundStatus === 'settled') {
-      setNotice('This order already has settled refund evidence. Use Get help for a later issue.')
-      return
-    }
     const lines = order?.lines?.map((line) => {
       const returned = (order.returns ?? [])
         .filter((record) => record.sku === line.sku)
@@ -1247,11 +623,10 @@ export function EcommerceBuyingWorkspace({
       setNotice('This order already has a return request waiting for Shop review.')
       return
     }
-    expireOrderChangeRecovery()
     setCancellationDraft(null)
     setSupportDraft(null)
     setReturnDraft({ orderId: order.id, sku: lines[0].sku, quantity: '1', disposition: 'restock', reason: '' })
-    setNotice('Describe the return for Shop review. Nothing changes here.')
+    setNotice('Describe the return, then send the exact request to Shop review. No refund or stock change starts here.')
   }
 
   function openCancellationRequest(entry: CommerceStorefrontOrderTimelineEntry) {
@@ -1265,16 +640,15 @@ export function EcommerceBuyingWorkspace({
       return
     }
     if (activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === order.id)) {
-      setNotice('This order already has a reschedule request.')
+      setNotice('This order already has one recoverable reschedule request.')
       return
     }
-    expireOrderChangeRecovery()
     setReturnDraft(null)
     setSupportDraft(null)
     setAmendmentDraft(null)
     setRescheduleDraft(null)
     setCancellationDraft({ orderId: order.id, reasonCode: 'changed_mind', reason: '' })
-    setNotice('Tell Shop why. Nothing changes until Shop approves.')
+    setNotice('Tell Shop why you want to cancel. The order, stock, payment, refund, and customer messages stay unchanged until Shop approves.')
   }
 
   function openAmendmentRequest(entry: CommerceStorefrontOrderTimelineEntry) {
@@ -1282,20 +656,23 @@ export function EcommerceBuyingWorkspace({
     const lines = order?.lines ?? []
     const request = entry.request
     if (!order || order.status !== 'confirmed' || order.paymentStatus !== 'pending' || order.refundStatus !== 'none' || !lines.length) {
-      setNotice('Changes are available only before preparation or payment.')
+      setNotice('Order changes are available only before preparation and payment confirmation.')
       return
     }
     if (request.schema !== 'supermega.ecommerce.order_request.v2' || !request.customerProfile) {
-      setNotice('Verified customer details are missing. Create a current request first.')
+      setNotice('This order predates verified customer details and cannot be corrected through the replacement workflow.')
       return
     }
     if (activeBuyingState.amendmentIntents.some((intent) => intent.orderId === order.id)
-      || activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === order.id)
-      || activeBuyingState.cancellationIntents.some((intent) => intent.orderId === order.id)) {
+      || activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === order.id)) {
       setNotice('This order already has one recoverable change request.')
       return
     }
-    const draft: EcommerceOrderChangeDraft = {
+    setCancellationDraft(null)
+    setReturnDraft(null)
+    setSupportDraft(null)
+    setRescheduleDraft(null)
+    setAmendmentDraft({
       orderId: order.id,
       mode: 'details',
       fulfilment: request.fulfilment,
@@ -1307,147 +684,47 @@ export function EcommerceBuyingWorkspace({
       addressCity: request.deliveryAddress?.city ?? 'Yangon',
       deliveryInstructions: request.deliveryAddress?.instructions ?? '',
       reason: '',
-    }
-    const opening = createEcommerceOrderChangeOpening(draft, entry)
-    if (!opening) {
-      setNotice('Accepted order evidence changed. Nothing opened.')
-      return
-    }
-    expireOrderChangeRecovery()
-    setCancellationDraft(null)
-    setReturnDraft(null)
-    setSupportDraft(null)
-    setRescheduleDraft(null)
-    amendmentOpeningRef.current = opening
-    setAmendmentDraft(draft)
-    setNotice('Edit the change. Shop revalidates and confirms any replacement.')
-  }
-
-  function closeAmendmentRequest() {
-    if (!amendmentDraft || !amendmentOpeningRef.current) {
-      setNotice('Close failed safely; the change stays open.')
-      return
-    }
-    const closed = closeEcommerceOrderChangeDraft(amendmentDraft, amendmentOpeningRef.current)
-    setClosedAmendmentDraft(closed)
-    setAmendmentDraft(null)
-    amendmentOpeningRef.current = null
-    setNotice(closed
-      ? 'Change closed. Reopen once to restore unsent fields; nothing was sent.'
-      : 'Order correction closed. Nothing changed.')
-  }
-
-  function reopenAmendmentRequest() {
-    if (!closedAmendmentDraft) return
-    const recovery = recoverEcommerceOrderChangeDraft(null, closedAmendmentDraft, activeCustomerOrders, orderChangeConflictIds)
-    if (!recovery.ok) {
-      setClosedAmendmentDraft(null)
-      amendmentOpeningRef.current = null
-      setNotice(recovery.reason === 'change_pending'
-        ? 'A Shop change is pending, so recovery expired.'
-        : recovery.reason === 'order_inactive'
-          ? 'The order is no longer changeable, so recovery expired.'
-          : 'Order evidence changed, so recovery expired safely.')
-      return
-    }
-    setClosedAmendmentDraft(null)
-    setCancellationDraft(null)
-    setReturnDraft(null)
-    setSupportDraft(null)
-    setCorrectionDraft(null)
-    setRescheduleDraft(null)
-    amendmentOpeningRef.current = recovery.opening
-    setAmendmentDraft(recovery.draft)
-    setNotice('Unsent change restored exactly. Review before sending to Shop.')
-    window.requestAnimationFrame(() => amendmentModeRef.current?.focus({ preventScroll: true }))
+    })
+    setNotice('Correct contact, delivery, or item details. Shop replaces the accepted order only after revalidating the exact original and current policies; the replacement still needs human confirmation.')
   }
 
   function openRescheduleRequest(entry: CommerceStorefrontOrderTimelineEntry) {
     const order = entry.order
     if (!order || order.status !== 'confirmed' || order.paymentStatus !== 'pending' || order.refundStatus !== 'none' || !order.promisedAt) {
-      setNotice('Time changes are available only before preparation or payment.')
+      setNotice('Promise changes are available only before preparation and payment confirmation.')
       return
     }
     if (activeBuyingState.amendmentIntents.some((intent) => intent.orderId === order.id)
       || activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === order.id)
       || activeBuyingState.cancellationIntents.some((intent) => intent.orderId === order.id)) {
-      setNotice('This order already has a change or cancellation request.')
+      setNotice('This order already has one recoverable change or cancellation request.')
       return
     }
     const minimum = quoteClock + 2 * 60 * 60 * 1000
     const afterOriginal = Date.parse(order.promisedAt) + 24 * 60 * 60 * 1000
-    const draft: EcommerceOrderRescheduleDraft = {
+    setAmendmentDraft(null)
+    setCancellationDraft(null)
+    setReturnDraft(null)
+    setSupportDraft(null)
+    setRescheduleDraft({
       orderId: order.id,
       requestedPromisedAt: localPromiseInput(new Date(Math.max(minimum, afterOriginal))),
       reason: '',
-    }
-    const opening = createEcommerceOrderRescheduleOpening(draft, entry)
-    if (!opening) {
-      setNotice('Accepted promise evidence changed. Nothing opened.')
-      return
-    }
-    expireOrderChangeRecovery()
-    setAmendmentDraft(null)
-    setCancellationDraft(null)
-    setReturnDraft(null)
-    setSupportDraft(null)
-    rescheduleOpeningRef.current = opening
-    setRescheduleDraft(draft)
-    setNotice('Choose a requested time. Shop reviews it before any replacement.')
-  }
-
-  function closeRescheduleRequest() {
-    if (!rescheduleDraft || !rescheduleOpeningRef.current) {
-      setNotice('Close failed safely; the reschedule stays open.')
-      return
-    }
-    const closed = closeEcommerceOrderRescheduleDraft(rescheduleDraft, rescheduleOpeningRef.current)
-    setClosedRescheduleDraft(closed)
-    setRescheduleDraft(null)
-    rescheduleOpeningRef.current = null
-    setNotice(closed
-      ? 'Time change closed. Reopen once to restore its unsent fields.'
-      : 'Reschedule closed. The order and promise are unchanged.')
-  }
-
-  function reopenRescheduleRequest() {
-    if (!closedRescheduleDraft) return
-    const recovery = recoverEcommerceOrderRescheduleDraft(null, closedRescheduleDraft, activeCustomerOrders, orderChangeConflictIds)
-    if (!recovery.ok) {
-      setClosedRescheduleDraft(null)
-      rescheduleOpeningRef.current = null
-      setNotice(recovery.reason === 'change_pending'
-        ? 'A Shop change is pending, so recovery expired.'
-        : recovery.reason === 'order_inactive'
-          ? 'The order is no longer reschedulable, so recovery expired.'
-          : 'Order evidence changed, so recovery expired safely.')
-      return
-    }
-    setClosedRescheduleDraft(null)
-    setClosedAmendmentDraft(null)
-    amendmentOpeningRef.current = null
-    setAmendmentDraft(null)
-    setCancellationDraft(null)
-    setReturnDraft(null)
-    setSupportDraft(null)
-    setCorrectionDraft(null)
-    rescheduleOpeningRef.current = recovery.opening
-    setRescheduleDraft(recovery.draft)
-    setNotice('Unsent time and reason restored. Review before sending to Shop.')
-    window.requestAnimationFrame(() => rescheduleDateRef.current?.focus({ preventScroll: true }))
+    })
+    setNotice('Choose a new requested time. Shop will recheck the current promise policy before replacing the original order; no rider or message is sent.')
   }
 
   async function openRescheduleInShop(intent: EcommerceOrderRescheduleIntent) {
     const replacementRequest = activeBuyingState.requests.find((request) => request.id === intent.replacementRequestId)
     if (!replacementRequest) {
-      setNotice('The replacement request is missing. Nothing opened in Shop.')
+      setNotice('The reschedule replacement request is missing from recovery. Nothing was opened in Shop.')
       return
     }
     try {
       if (onRecordManagedRequest) await onRecordManagedRequest(replacementRequest)
       onOpenReschedule(intent)
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Sync failed; the reschedule remains saved locally.')
+      setNotice(error instanceof Error ? error.message : 'The managed reschedule request could not be synchronized. It remains saved locally.')
     }
   }
 
@@ -1470,7 +747,7 @@ export function EcommerceBuyingWorkspace({
     if (!amendmentDraft || amendmentBusy || disabled || recoveryBlocked) return
     const entry = activeCustomerOrders.find((candidate) => candidate.order?.id === amendmentDraft.orderId)
     if (!entry?.order || entry.request.schema !== 'supermega.ecommerce.order_request.v2' || !globalThis.crypto?.randomUUID) {
-      setNotice('Current order evidence is unavailable. Nothing was recorded.')
+      setNotice('Secure amendment identity or current Ecommerce order evidence is unavailable. Nothing was recorded.')
       return
     }
     const replacementCart = amendmentDraft.lines.map((line) => ({
@@ -1492,7 +769,7 @@ export function EcommerceBuyingWorkspace({
         ? originalPayment
         : amendmentDraft.fulfilment === 'delivery' ? 'cash_on_delivery' : 'pay_on_pickup'
       if (!originalRequest.customerProfile) {
-        throw new Error('Verified contact is missing. Create a current request first.')
+        throw new Error('This order predates verified contact snapshots. Re-enter it with current customer details before requesting a correction.')
       }
       const replacementReference = `${amendmentDraft.customerName.trim()} · ${amendmentDraft.customerPhone.trim()}`
       const quote = await buildEcommerceCheckoutQuote({
@@ -1531,9 +808,7 @@ export function EcommerceBuyingWorkspace({
       const saved = await saveEcommerceOrderAmendment(scope, replacementRequest, intent, activeBuyingState.headDigest)
       setBuyingState(saved)
       setRecoveryRead({ scope, status: 'ready', issue: '' })
-      setClosedAmendmentDraft(null)
       setAmendmentDraft(null)
-      amendmentOpeningRef.current = null
       setNotice(`${intent.id} and ${replacementRequest.id} are saved together. No order, stock, payment, refund, message, or provider changed.`)
       if (onRecordManagedRequest) await onRecordManagedRequest(replacementRequest)
       onOpenAmendment(intent)
@@ -1549,7 +824,7 @@ export function EcommerceBuyingWorkspace({
     if (!rescheduleDraft || rescheduleBusy || disabled || recoveryBlocked) return
     const entry = activeCustomerOrders.find((candidate) => candidate.order?.id === rescheduleDraft.orderId)
     if (!entry?.order || entry.request.schema !== 'supermega.ecommerce.order_request.v2' || !globalThis.crypto?.randomUUID) {
-      setNotice('Current order evidence is unavailable. Nothing was recorded.')
+      setNotice('Secure reschedule identity or current Ecommerce order evidence is unavailable. Nothing was recorded.')
       return
     }
     const requestedPromise = new Date(rescheduleDraft.requestedPromisedAt)
@@ -1600,9 +875,7 @@ export function EcommerceBuyingWorkspace({
       const saved = await saveEcommerceOrderReschedule(scope, replacementRequest, intent, activeBuyingState.headDigest)
       setBuyingState(saved)
       setRecoveryRead({ scope, status: 'ready', issue: '' })
-      setClosedRescheduleDraft(null)
       setRescheduleDraft(null)
-      rescheduleOpeningRef.current = null
       setNotice(`${intent.id} and ${replacementRequest.id} are saved together. No order, stock, payment, refund, rider, message, or provider changed.`)
       if (onRecordManagedRequest) await onRecordManagedRequest(replacementRequest)
       onOpenReschedule(intent)
@@ -1618,7 +891,7 @@ export function EcommerceBuyingWorkspace({
     if (!cancellationDraft || cancellationBusy || disabled || recoveryBlocked) return
     const order = activeCustomerOrders.find((entry) => entry.order?.id === cancellationDraft.orderId)?.order
     if (!order || !globalThis.crypto?.randomUUID) {
-      setNotice('Current order evidence is unavailable. Nothing was recorded.')
+      setNotice('Secure cancellation identity or current Shop order evidence is unavailable. Nothing was recorded.')
       return
     }
     setCancellationBusy(true)
@@ -1695,11 +968,10 @@ export function EcommerceBuyingWorkspace({
       setNotice('This order already has a help request waiting for Shop review.')
       return
     }
-    expireOrderChangeRecovery()
     setCancellationDraft(null)
     setReturnDraft(null)
     setSupportDraft({ orderId: order.id, category: 'order_status', description: '' })
-    setNotice('Describe the issue for Shop review. Nothing is sent here.')
+    setNotice('Describe what you need. Shop will open an accountable case; no message or refund is sent here.')
   }
 
   async function submitSupportRequest(event: FormEvent<HTMLFormElement>) {
@@ -1707,7 +979,7 @@ export function EcommerceBuyingWorkspace({
     if (!supportDraft || supportBusy || disabled || recoveryBlocked) return
     const order = completedCustomerOrders.find((entry) => entry.order?.id === supportDraft.orderId)?.order
     if (!order?.completion || !globalThis.crypto?.randomUUID) {
-      setNotice('Completed order evidence is unavailable. Nothing was recorded.')
+      setNotice('Secure support identity or completed order evidence is unavailable. Nothing was recorded.')
       return
     }
     setSupportBusy(true)
@@ -1744,12 +1016,11 @@ export function EcommerceBuyingWorkspace({
       setNotice('This order already has a balance correction waiting for Shop review.')
       return
     }
-    expireOrderChangeRecovery()
     setCancellationDraft(null)
     setReturnDraft(null)
     setSupportDraft(null)
     setCorrectionDraft({ orderId: order.id, requestedKind: 'credit', reasonCode: 'pricing_error', listedAmountMmk: '', reason: '' })
-    setNotice('Describe the issue. Shop rechecks tax and totals.')
+    setNotice('Describe the balance issue. Shop must recheck tax and totals before recording a review-only correction note.')
   }
 
   async function submitCorrectionRequest(event: FormEvent<HTMLFormElement>) {
@@ -1795,11 +1066,6 @@ export function EcommerceBuyingWorkspace({
 
   async function reviewOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (firstCartQuantityIssueSku) {
-      setNotice(`${cartQuantityIssues[firstCartQuantityIssueSku]} No Shop request was created.`)
-      focusCartQuantity(firstCartQuantityIssueSku)
-      return
-    }
     if (disabled || quoteBusy || recoveryBlocked || !cart.length) return
     if (!paymentPolicyReady) {
       setNotice(`Shop has no active payment method for ${fulfilment}. Set one up in Shop before reviewing this order.`)
@@ -1809,8 +1075,6 @@ export function EcommerceBuyingWorkspace({
       setNotice('Secure checkout identity is unavailable. Nothing was recorded.')
       return
     }
-    const reviewedRecoveryDraft = currentCheckoutEntryDraft
-    const reviewedRecoverySource = checkoutEntrySource
     setQuoteBusy(true)
     setNotice('')
     try {
@@ -1838,11 +1102,7 @@ export function EcommerceBuyingWorkspace({
         && Date.parse(retained.quote.expiresAt) > quotedAt.getTime()
         && cartMatchesRequest(cart, retained))
       if (retainedMatches && retained && onRecordManagedRequest) {
-        const retainedPrior = retained.supersedesRequestId
-          ? activeBuyingState.requests.find((candidate) => candidate.id === retained.supersedesRequestId) ?? null
-          : null
-        await onRecordManagedRequest(retained, retainedPrior)
-        clearMatchingCheckoutEntryRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
+        await onRecordManagedRequest(retained)
         setFreshQuoteId(retained.id)
         setQuoteClock(quotedAt.getTime())
         setNotice('This order request is in the Company Shop inbox. No order, stock, message, or charge changed.')
@@ -1875,17 +1135,12 @@ export function EcommerceBuyingWorkspace({
         quotedAt: quotedAt.toISOString(),
         expiresAt: new Date(quotedAt.getTime() + 15 * 60 * 1000).toISOString(),
       })
-      const supersededRequest = latestRequest && !latestRequestOrder
-        && (Date.parse(latestRequest.quote.expiresAt) <= quotedAt.getTime() || !latestRequestCheckoutMatches)
-        ? latestRequest
-        : null
-      const request = await buildEcommerceOrderRequestV2(quote, sourceStorefront, supersededRequest?.id ?? null)
+      const request = await buildEcommerceOrderRequestV2(quote, sourceStorefront)
       const saved = await saveEcommerceOrderRequestV2(scope, request, activeBuyingState.headDigest)
       setBuyingState(saved)
       setRecoveryRead({ scope, status: 'ready', issue: '' })
       setFreshQuoteId('')
-      if (onRecordManagedRequest) await onRecordManagedRequest(request, supersededRequest)
-      clearMatchingCheckoutEntryRecovery(reviewedRecoveryDraft, reviewedRecoverySource)
+      if (onRecordManagedRequest) await onRecordManagedRequest(request)
       recordBehaviorSignal(window.localStorage, {
         event: 'first_value_completed',
         product: 'ecommerce',
@@ -1942,44 +1197,6 @@ export function EcommerceBuyingWorkspace({
     }
   }
 
-  if (activeCheckoutEntryRecovery) {
-    const recoveredDraft = checkoutEntryRecoveryReview?.ok
-      ? checkoutEntryRecoveryReview.draft
-      : activeCheckoutEntryRecovery.draft
-    const recoveredUnits = recoveredDraft.lines.reduce((total, line) => total + line.quantity, 0)
-    return (
-      <section
-        aria-labelledby="ecommerce-checkout-recovery-title"
-        aria-live="polite"
-        className="ecommerce-checkout-entry-recovery"
-        data-state={checkoutEntryRecoveryReview?.ok ? 'ready' : 'conflict'}
-        id="ecommerce-buying-workspace"
-        tabIndex={-1}
-      >
-        <div className="ecommerce-checkout-entry-recovery-copy">
-          <span className="core-eyebrow">Unfinished checkout found</span>
-          <h2 id="ecommerce-checkout-recovery-title">{checkoutEntryRecoveryReview?.ok ? 'Continue this checkout?' : 'This checkout needs a fresh start'}</h2>
-          <p>{checkoutEntryRecoveryReview?.ok
-            ? 'Resume the exact cart, raw quantities, customer details, delivery, payment, promotion, and undo state. Nothing is sent automatically.'
-            : 'The storefront, Shop catalog, or order record changed after this checkout began. Discard the older recovery to protect the current source.'}</p>
-        </div>
-        <div aria-label="Recovered checkout summary" className="ecommerce-checkout-entry-recovery-summary" role="group">
-          <span><small>Cart</small><strong>{recoveredUnits ? `${recoveredUnits} item${recoveredUnits === 1 ? '' : 's'}` : 'No current line'}</strong></span>
-          <span><small>Customer</small><strong>{recoveredDraft.customerName || 'Name not entered'}</strong></span>
-          <span><small>Receive</small><strong>{recoveredDraft.fulfilment === 'delivery' ? recoveredDraft.addressTownship || 'Delivery details unfinished' : 'Pickup'}</strong></span>
-          <span><small>Payment</small><strong>{paymentLabel(recoveredDraft.paymentAdapter)}</strong></span>
-          {recoveredDraft.removedCartLine ? <span><small>Undo</small><strong>{recoveredDraft.removedCartLine.itemName} can be restored</strong></span> : null}
-        </div>
-        <div className="ecommerce-checkout-entry-recovery-actions">
-          <button className="core-button secondary" onClick={discardCheckoutEntryRecovery} ref={checkoutEntryRecoveryReview?.ok ? undefined : checkoutRecoveryActionRef} type="button">Discard</button>
-          {checkoutEntryRecoveryReview?.ok ? <button className="core-button primary" onClick={resumeCheckoutEntryRecovery} ref={checkoutRecoveryActionRef} type="button">Resume checkout</button> : null}
-        </div>
-        {checkoutEntryRecoveryNotice ? <p className="form-notice" role="status">{checkoutEntryRecoveryNotice}</p> : null}
-        <small className="ecommerce-checkout-entry-recovery-boundary">No quote, request, order, stock, payment, delivery, provider, message, or company write happens here. Source: buying revision {activeCheckoutEntryRecovery.source.buyingRevision}.</small>
-      </section>
-    )
-  }
-
   return (
     <>
       <details
@@ -1989,33 +1206,27 @@ export function EcommerceBuyingWorkspace({
         open={open}
         tabIndex={-1}
       >
-        <summary ref={checkoutSummaryRef} tabIndex={-1}>
+        <summary>
           <span><strong>Cart and checkout</strong><small>Review one total before Shop</small></span>
           <b>{cart.length ? `${cart.length} ${cart.length === 1 ? 'item' : 'items'}` : latestRequest ? 'Recovered' : 'Empty'}</b>
         </summary>
         <div className="ecommerce-buying-body">
           {cart.length ? (
             <div aria-label="Cart items" className="ecommerce-cart" role="group">
-              {cartItems.map(({ item, quantity, quantityLimit, sku }, index) => {
-                const itemName = item?.name ?? sku
-                const quantityIssue = cartQuantityIssues[sku] ?? ''
-                const quantityHelpId = `ecommerce-cart-quantity-${index}-help`
-                const quantityIssueId = `ecommerce-cart-quantity-${index}-issue`
-                return <div className={`ecommerce-cart-line${quantityIssue ? ' has-issue' : ''}`} data-ecommerce-cart-quantity-line={sku} key={sku}>
+              {cartItems.map(({ item, quantity, sku }) => (
+                <div className="ecommerce-cart-line" key={sku}>
                   <span>
-                    <strong>{itemName}</strong>
+                    <strong>{item?.name ?? sku}</strong>
                     <small>{item?.variant || sku} · {item ? formatMmk(item.unitPriceMmk) : 'Unavailable'}</small>
                   </span>
-                  <label className="ecommerce-cart-quantity">
-                    <span className="sr-only">Quantity for {itemName}</span>
-                    <input aria-describedby={`${quantityHelpId}${quantityIssue ? ` ${quantityIssueId}` : ''}`} aria-invalid={Boolean(quantityIssue)} aria-label={`Quantity for ${itemName}`} data-ecommerce-cart-quantity-field={sku} inputMode="numeric" max={Math.max(1, quantityLimit)} min={1} onChange={(event) => updateCart(sku, event.target.value, itemName, quantityLimit)} ref={(node) => { cartQuantityRefs.current[sku] = node }} step={1} type="number" value={cartQuantityDrafts[sku] ?? String(quantity)} />
-                    <small className="ecommerce-cart-quantity-help" id={quantityHelpId}>{quantityLimit > 0 ? `1 to ${quantityLimit} available` : 'Unavailable now'}</small>
+                  <label>
+                    <span className="sr-only">Quantity for {item?.name ?? sku}</span>
+                    <input aria-label={`Quantity for ${item?.name ?? sku}`} inputMode="numeric" max={99} min={1} onBlur={() => commitCartQuantity(sku)} onChange={(event) => draftCartQuantity(sku, event.target.value)} step={1} type="number" value={cartDrafts[sku] ?? String(quantity)} />
                   </label>
                   <b>{item ? formatMmk(item.unitPriceMmk * quantity) : '—'}</b>
-                  <button aria-label={`Remove ${itemName}`} disabled={disabled} onClick={() => removeFromCart(sku)} type="button">Remove</button>
-                  {quantityIssue ? <p className="ecommerce-cart-quantity-issue" id={quantityIssueId} role="alert"><span>{quantityIssue}</span><button onClick={() => focusCartQuantity(sku)} type="button">Fix quantity</button></p> : null}
+                  <button aria-label={`Remove ${item?.name ?? sku}`} onClick={() => removeFromCart(sku)} type="button">Remove</button>
                 </div>
-              })}
+              ))}
               <div className="ecommerce-cart-total"><span>Products</span><strong>{formatMmk(cartTotal)}</strong></div>
             </div>
           ) : (
@@ -2025,24 +1236,14 @@ export function EcommerceBuyingWorkspace({
             </div>
           )}
 
-          {removedCartLine ? (
-            <div className="ecommerce-cart-remove-recovery" data-ecommerce-cart-remove-recovery={removedCartLine.line.sku} role="status">
-              <span>
-                <strong>{removedCartLine.itemName} removed</strong>
-                <small>Quantity {removedCartLine.line.quantity} can be restored after a current stock check. Checkout details stay here.</small>
-              </span>
-              <button aria-label={`Undo remove ${removedCartLine.itemName}`} disabled={disabled} onClick={undoCartRemoval} ref={cartRemovalUndoRef} type="button">Undo remove</button>
-            </div>
-          ) : null}
-
-          <form onSubmit={(event) => void reviewOrder(event)}>
+          <form aria-busy={quoteBusy} onSubmit={(event) => void reviewOrder(event)}>
             <label>
               <span>Name</span>
-              <input autoComplete="name" data-checkout-primary-field="true" maxLength={80} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Ma Su" ref={customerNameRef} required value={customerName} />
+              <input autoComplete="name" maxLength={80} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Ma Su" required value={customerName} />
             </label>
             <label>
               <span>Phone</span>
-              <input autoComplete="tel" inputMode="tel" maxLength={32} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="e.g. 09 123 456 789" required value={customerPhone} />
+              <input autoComplete="tel" inputMode="tel" maxLength={32} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="e.g. 09 123 456 789" required type="tel" value={customerPhone} />
             </label>
             <label>
               <span>Receive order</span>
@@ -2086,17 +1287,17 @@ export function EcommerceBuyingWorkspace({
               <span>Promotion code <small>optional · Shop checks it</small></span>
               <input maxLength={40} onChange={(event) => setPromotionCode(event.target.value)} placeholder="Optional" value={promotionCode} />
             </label>
-            {!quoteCurrent && !latestRequestConfirmed && replacingCurrentRequest
-              ? <p className="form-notice" data-ecommerce-replaces={latestRequest?.id} role="status">Replaces request {latestRequest?.id}. Earlier request stays in Your orders; Shop creates no order until review.</p>
-              : null}
-            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" data-ecommerce-submit-mode={replacingCurrentRequest ? 'replacement' : 'new'} data-ecommerce-quote-review-action="true" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
-              {quoteBusy ? replacingCurrentRequest ? 'Replacing...' : 'Sending...' : replacingCurrentRequest ? 'Replace current request' : 'Send order request'}
+            {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
+              {quoteBusy ? 'Sending...' : 'Send order request'}
             </button> : null}
+            <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
+              ? 'Checking saved checkout recovery...'
+              : checkoutNotice}</p>
           </form>
 
           {latestRequest ? latestRequestOrder && latestRequestConfirmed ? (
-            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true" ref={requestReceiptRef} tabIndex={-1}>
-              <span className="status-pill ready">{latestRequestCompleted ? 'Completed in Shop' : 'Confirmed in Shop'}</span>
+            <article className="ecommerce-request-receipt ecommerce-quote-receipt" data-current="true">
+              <span className="status-pill ready">Confirmed in Shop</span>
               <strong>Order {latestRequestOrder.id}</strong>
               <b>{formatMmk(latestRequestOrder.total)}</b>
               <div className="ecommerce-quote-boundaries">
@@ -2105,8 +1306,8 @@ export function EcommerceBuyingWorkspace({
                 <span><small>Payment</small><b>{latestRequestEntry?.paymentStatus === 'reconciled' ? 'Confirmed' : 'Pending in Shop'}</b></span>
                 <span><small>Promise</small><b>{latestRequestOrder.promisedAt ? new Date(latestRequestOrder.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not set'}</b></span>
               </div>
-              <small>Request {latestRequest.id} · {latestRequestCompleted ? 'Shop completed fulfilment and retained the accountable order.' : 'Shop recorded the order and stock reservation.'}</small>
-              <button className="core-button primary" disabled={disabled} onClick={() => onOpenShopOrder(latestRequestOrder.id)} type="button">{latestRequestCompleted ? 'View completed Shop order' : 'Continue in Shop'}</button>
+              <small>Request {latestRequest.id} · Shop recorded the order and stock reservation.</small>
+              <button className="core-button primary" disabled={disabled} onClick={() => onContinueInShop(latestRequest.id)} type="button">Continue in Shop</button>
               <button className="core-button secondary" disabled={disabled} onClick={beginAnotherOrder} type="button">Start another order</button>
             </article>
           ) : quoteCurrent ? (
@@ -2123,15 +1324,15 @@ export function EcommerceBuyingWorkspace({
               <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
               <p>{onRecordManagedRequest ? 'Company Shop received this request.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
               <button className="core-button secondary" disabled={!quoteCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
-                {handoffBusy ? 'Opening Shop…' : 'Open Shop operator review'}
+                {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>
             </article>
           ) : (
             <div className="ecommerce-stale-quote" role="status">
-              <strong>{latestRequestOrder ? 'Start another order' : quoteNextAction?.headline ?? 'Review the current total'}</strong>
+              <strong>{latestRequestOrder ? 'Start another order' : 'Cart changed — review a new total'}</strong>
               <small>{latestRequestOrder
                 ? `Order ${latestRequestOrder.id} is already confirmed. Review a new total only when creating another order.`
-                : quoteNextAction?.summary ?? 'The previous request remains in Your orders and cannot continue with this checkout.'}</small>
+                : 'The previous quote remains in Your orders and cannot continue with this cart.'}</small>
             </div>
           ) : null}
 
@@ -2141,8 +1342,8 @@ export function EcommerceBuyingWorkspace({
               <b>{customerOrderTimeline.length ? `${customerOrderTimeline.length} found` : 'Enter contact above'}</b>
             </div>
             {customerOrderTimeline.length ? (
-              <div className="ecommerce-order-history" id="ecommerce-order-history">
-                {visibleCustomerOrderTimeline.map((entry) => (
+              <div className="ecommerce-order-history">
+                {customerOrderTimeline.slice(0, 5).map((entry) => (
                   <article key={entry.request.id}>
                     <span>
                       <small>{entry.request.id}</small>
@@ -2152,29 +1353,23 @@ export function EcommerceBuyingWorkspace({
                     <div>
                       <small>{entry.request.fulfilment === 'pickup' ? 'Pickup' : 'Delivery'}</small>
                       <small>{entry.paymentStatus === 'reconciled' ? 'Payment confirmed' : entry.paymentStatus === 'pending' ? 'Payment pending' : 'Payment not charged'}</small>
-                       {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : entry.supersededByRequestId ? <small>Replaced by {entry.supersededByRequestId}</small> : quoteExpiredWithoutOrder(entry) ? <small>Review again for the current total</small> : <small>Shop confirms the promise</small>}
+                       {entry.order?.promisedAt ? <small>Promise {new Date(entry.order.promisedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</small> : quoteExpiredWithoutOrder(entry) ? <small>Review again for the current total</small> : <small>Shop confirms the promise</small>}
                        {entry.returnedQuantity ? <small>{entry.returnedQuantity} returned in Shop</small> : null}
                     </div>
                     <button className="core-button secondary" disabled={disabled} onClick={() => reorder(entry)} type="button">Reorder</button>
                   </article>
                 ))}
-                {customerOrderHistoryLimit > 1 ? <button aria-controls="ecommerce-order-history" aria-expanded={orderHistoryExpanded} className="text-link ecommerce-order-history-toggle" onClick={() => setOrderHistoryExpanded((current) => !current)} type="button">
-                  {orderHistoryExpanded ? 'Show latest only' : `Show ${customerOrderHistoryLimit - 1} older ${customerOrderHistoryLimit === 2 ? 'order' : 'orders'}`}
-                </button> : null}
               </div>
             ) : <p>Use the same name and phone as checkout to see request, fulfilment, and payment status here.</p>}
           </section>
 
-          <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
-            ? 'Checking saved checkout recovery…'
-            : checkoutNotice}</p>
         </div>
       </details>
 
-      <details className="ecommerce-after-purchase" open={orderHelpOpen || undefined}>
-        <summary><span><strong>Order help</strong><small>Changes, returns, and support</small></span><b>{pendingOrderHelpCount ? `${pendingOrderHelpCount} waiting` : 'Shop review'}</b></summary>
+      <details className="ecommerce-after-purchase" open={Boolean(amendmentDraft || rescheduleDraft || cancellationDraft || returnDraft || supportDraft || correctionDraft) || undefined}>
+        <summary><span><strong>Order help</strong><small>Change active orders or resolve completed-order issues</small></span><b>{pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length + pendingCorrectionIntents.length ? `${pendingAmendmentIntents.length + pendingRescheduleIntents.length + pendingCancellationIntents.length + pendingReturnIntents.length + pendingSupportIntents.length + pendingCorrectionIntents.length} waiting` : 'Shop review'}</b></summary>
         <div className="ecommerce-return-workspace">
-          <p>Shop reviews every request before anything changes.</p>
+          <p>Shop reviews every change, cancellation, return, and help request. Nothing here changes an order, stock, payment, refund, delivery, provider, or customer message by itself.</p>
           {pendingAmendmentIntents.map(({ intent, state }) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>{state === 'replacement_needed' ? 'Replacement needs confirmation' : state === 'review_required' ? 'Change needs fresh review' : 'Order change waiting'}</strong><small>{intent.orderId} / {intent.lineChanges.map((line) => `${line.sku} ${line.fromQuantity}→${line.toQuantity}`).join(', ') || `${intent.fromFulfilment}→${intent.toFulfilment}`}</small></span>
             <button className="core-button secondary" disabled={disabled} onClick={() => void openAmendmentInShop(intent)} type="button">Continue in Shop</button>
@@ -2210,50 +1405,39 @@ export function EcommerceBuyingWorkspace({
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenSupport(intent)} type="button">Continue in Shop</button>
           </article>)}
           {supportOutcomes.slice(0, 3).map((outcome) => <article className="ecommerce-return-status" key={outcome.caseId}>
-            <span><strong>{outcome.state === 'resolved' ? 'Help resolved' : outcome.firstResponseReadyAt ? 'Response ready' : outcome.acknowledgedAt ? 'Shop acknowledged' : 'Shop is reviewing'}</strong><small>{outcome.orderId} / {outcome.category.replaceAll('_', ' ')} / owner {outcome.owner} / target {new Date(outcome.dueAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}{outcome.cycle === 'follow_up' ? ' / follow-up' : ''}</small></span>
-            <b>{outcome.state === 'resolved' ? outcome.resolutionOutcome?.replaceAll('_', ' ') : outcome.firstResponseReadyAt ? outcome.responseTargetMet ? 'On target' : 'Target missed' : outcome.acknowledgedAt ? 'Response pending' : `${outcome.priority} priority`}</b>
+            <span><strong>{outcome.state === 'resolved' ? 'Help resolved' : 'Shop is reviewing'}</strong><small>{outcome.orderId} / {outcome.category.replaceAll('_', ' ')} / owner {outcome.owner}</small></span>
+            <b>{outcome.state === 'resolved' ? outcome.resolutionOutcome?.replaceAll('_', ' ') : `${outcome.priority} priority`}</b>
           </article>)}
           {pendingCorrectionIntents.map((intent) => <article className="ecommerce-return-status" key={intent.id}>
             <span><strong>Balance review waiting</strong><small>{intent.orderId} / {intent.requestedKind} {formatMmk(intent.listedAmountMmk)} / {intent.reasonCode.replaceAll('_', ' ')}</small></span>
             <button className="core-button secondary" disabled={disabled} onClick={() => onOpenCorrection(intent)} type="button">Continue in Shop</button>
           </article>)}
           {correctionOutcomes.slice(0, 3).map((outcome) => <article className="ecommerce-return-status" key={`correction-outcome:${outcome.intentId}`}>
-            <span><strong>Balance reviewed</strong><small>{outcome.orderId} / {outcome.kind} note {formatMmk(outcome.adjustmentTotalMmk)} / balance {formatMmk(outcome.balanceBeforeMmk)} → {formatMmk(outcome.balanceAfterMmk)} / reviewed by {outcome.reviewedBy}</small></span>
-            <b>Invoice unchanged · no money moved</b>
+            <span><strong>Correction reviewed</strong><small>{outcome.orderId} / {outcome.kind} {formatMmk(outcome.adjustmentTotalMmk)} / reviewed by {outcome.reviewedBy}</small></span>
+            <b>Posting review required</b>
           </article>)}
-          {orderChangeRecovery?.ok && showOrderHelpActions ? <div className="ecommerce-order-change-recovery" data-ecommerce-order-change-recovery={orderChangeRecovery.draft.orderId} role="status">
-            <span><strong>Resume unsent change?</strong><small>{orderChangeRecovery.draft.orderId} can reopen once. Nothing is sent or changed.</small></span>
-            <button className="core-button secondary" disabled={disabled} onClick={reopenAmendmentRequest} ref={amendmentRecoveryRef} type="button">Reopen change</button>
-          </div> : null}
-          {rescheduleRecovery?.ok && showOrderHelpActions ? <div className="ecommerce-order-change-recovery" data-ecommerce-order-reschedule-recovery={rescheduleRecovery.draft.orderId} role="status">
-            <span><strong>Resume unsent time?</strong><small>{rescheduleRecovery.draft.orderId} can reopen once. Nothing is sent or changed.</small></span>
-            <button className="core-button secondary" disabled={disabled} onClick={reopenRescheduleRequest} ref={rescheduleRecoveryRef} type="button">Reopen time</button>
-          </div> : null}
-          {showOrderHelpActions ? activeCustomerOrders.map((entry) => {
-            const conflict = orderChangeConflictIds.includes(entry.order?.id ?? '')
-            const editable = entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !conflict
-            return <article className="ecommerce-return-status" key={entry.order?.id}>
-              <span><strong>{entry.order?.id}</strong><small>{orderStageLabel(entry)} / {formatMmk(entry.order?.total ?? entry.request.totalMmk)}</small></span>
-              <div className="ecommerce-return-actions">
-                {editable ? <><button className="core-button secondary" disabled={disabled} onClick={() => openRescheduleRequest(entry)} type="button">Change time</button><button className="core-button secondary" disabled={disabled} onClick={() => openAmendmentRequest(entry)} type="button">Change details</button></> : null}
-                {!conflict ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Cancel order</button> : null}
-              </div>
-            </article>
-          }) : null}
-          {showOrderHelpActions ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+          {!amendmentDraft && !rescheduleDraft && !cancellationDraft && !returnDraft && !supportDraft && !correctionDraft ? activeCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
+            <span><strong>{entry.order?.id}</strong><small>{orderStageLabel(entry)} / {formatMmk(entry.order?.total ?? entry.request.totalMmk)}</small></span>
+            <div className="ecommerce-return-actions">
+              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openRescheduleRequest(entry)} type="button">Change time</button> : null}
+              {entry.order?.status === 'confirmed' && entry.order.paymentStatus === 'pending' && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openAmendmentRequest(entry)} type="button">Change details</button> : null}
+              {!activeBuyingState.cancellationIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.amendmentIntents.some((intent) => intent.orderId === entry.order?.id) && !activeBuyingState.rescheduleIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCancellationRequest(entry)} type="button">Cancel order</button> : null}
+            </div>
+          </article>) : null}
+          {!amendmentDraft && !rescheduleDraft && !cancellationDraft && !returnDraft && !supportDraft && !correctionDraft ? completedCustomerOrders.map((entry) => <article className="ecommerce-return-status" key={entry.order?.id}>
             <span><strong>{entry.order?.id}</strong><small>{entry.order?.lines?.map((line) => `${line.name} x ${line.quantity}`).join(' / ') ?? entry.order?.item}</small></span>
             <div className="ecommerce-return-actions">
-              {entry.order?.refundStatus !== 'settled' && !pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Return</button> : null}
+              {!pendingReturnIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openReturnRequest(entry)} type="button">Return</button> : null}
               {!pendingSupportIntents.some((intent) => intent.orderId === entry.order?.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openSupportRequest(entry)} type="button">Get help</button> : null}
               {!pendingCorrectionIntents.some((intent) => intent.orderId === entry.order?.id) && entry.order && commerceOrderCorrectionExpectation(commerceState, entry.order.id) ? <button className="core-button secondary" disabled={disabled} onClick={() => openCorrectionRequest(entry)} type="button">Fix balance</button> : null}
             </div>
           </article>) : null}
           {amendmentDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitAmendmentRequest(event)}>
-            <span><strong>Change {amendmentDraft.orderId}</strong><small>Shop reviews and separately confirms any replacement.</small></span>
-            <label>What needs correcting?<select disabled={disabled || amendmentBusy} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, mode: event.target.value as 'details' | 'items' } : current)} ref={amendmentModeRef} value={amendmentDraft.mode}><option value="details">Contact or delivery details</option><option value="items">Item quantities</option></select></label>
+            <span><strong>Change {amendmentDraft.orderId}</strong><small>Shop keeps the accepted order immutable, revalidates this correction, then prepares a separately confirmed replacement.</small></span>
+            <label>What needs correcting?<select disabled={disabled || amendmentBusy} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, mode: event.target.value as 'details' | 'items' } : current)} value={amendmentDraft.mode}><option value="details">Contact or delivery details</option><option value="items">Item quantities</option></select></label>
             {amendmentDraft.mode === 'details' ? <>
               <label>Name<input autoComplete="name" disabled={disabled || amendmentBusy} maxLength={80} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, customerName: event.target.value } : current)} required value={amendmentDraft.customerName} /></label>
-              <label>Phone<input autoComplete="tel" disabled={disabled || amendmentBusy} inputMode="tel" maxLength={32} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, customerPhone: event.target.value } : current)} required value={amendmentDraft.customerPhone} /></label>
+              <label>Phone<input autoComplete="tel" disabled={disabled || amendmentBusy} inputMode="tel" maxLength={32} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, customerPhone: event.target.value } : current)} required type="tel" value={amendmentDraft.customerPhone} /></label>
               {amendmentDraft.fulfilment === 'delivery' ? <>
                 <label>Delivery address<input autoComplete="street-address" disabled={disabled || amendmentBusy} maxLength={120} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, addressLine1: event.target.value } : current)} required value={amendmentDraft.addressLine1} /></label>
                 <label>Township<input disabled={disabled || amendmentBusy} maxLength={80} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, addressTownship: event.target.value } : current)} required value={amendmentDraft.addressTownship} /></label>
@@ -2262,13 +1446,13 @@ export function EcommerceBuyingWorkspace({
               </> : null}
             </> : amendmentDraft.lines.map((line) => <label key={line.sku}>{line.name}<input disabled={disabled || amendmentBusy} inputMode="numeric" max="99" min="1" onChange={(event) => setAmendmentDraft((current) => current ? { ...current, lines: current.lines.map((candidate) => candidate.sku === line.sku ? { ...candidate, quantity: event.target.value } : candidate) } : current)} required step="1" type="number" value={line.quantity} /></label>)}
             <label className="ecommerce-return-reason">Why change it?<textarea disabled={disabled || amendmentBusy} maxLength={300} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={amendmentDraft.reason} /></label>
-            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || amendmentBusy} type="submit">{amendmentBusy ? 'Saving…' : 'Send correction to Shop'}</button><button className="core-button secondary" disabled={disabled || amendmentBusy} onClick={closeAmendmentRequest} type="button">Close</button></div>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || amendmentBusy} type="submit">{amendmentBusy ? 'Saving...' : 'Send correction to Shop'}</button><button className="core-button secondary" disabled={disabled || amendmentBusy} onClick={() => { setAmendmentDraft(null); setNotice('Order correction closed. Nothing changed.') }} type="button">Close</button></div>
           </form> : null}
           {rescheduleDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitRescheduleRequest(event)}>
-            <span><strong>Change time for {rescheduleDraft.orderId}</strong><small>Shop reviews the time before any replacement.</small></span>
-            <label>Requested date and time<input disabled={disabled || rescheduleBusy} min={localPromiseInput(new Date(quoteClock + 30 * 60 * 1000))} onInput={(event) => setRescheduleDraft({ ...rescheduleDraft, requestedPromisedAt: event.currentTarget.value })} ref={rescheduleDateRef} required type="datetime-local" value={rescheduleDraft.requestedPromisedAt} /></label>
+            <span><strong>Change time for {rescheduleDraft.orderId}</strong><small>Shop checks current delivery and payment policy before cancelling the original. A second confirmation creates the replacement.</small></span>
+            <label>Requested date and time<input disabled={disabled || rescheduleBusy} min={localPromiseInput(new Date(quoteClock + 30 * 60 * 1000))} onChange={(event) => setRescheduleDraft((current) => current ? { ...current, requestedPromisedAt: event.target.value } : current)} required type="datetime-local" value={rescheduleDraft.requestedPromisedAt} /></label>
             <label className="ecommerce-return-reason">Why change it?<textarea disabled={disabled || rescheduleBusy} maxLength={300} onChange={(event) => setRescheduleDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={rescheduleDraft.reason} /></label>
-            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || rescheduleBusy} type="submit">{rescheduleBusy ? 'Saving…' : 'Send time to Shop'}</button><button className="core-button secondary" disabled={disabled || rescheduleBusy} onClick={closeRescheduleRequest} type="button">Close</button></div>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || rescheduleBusy} type="submit">{rescheduleBusy ? 'Saving...' : 'Send time to Shop'}</button><button className="core-button secondary" disabled={disabled || rescheduleBusy} onClick={() => { setRescheduleDraft(null); setNotice('Reschedule closed. The order and promise are unchanged.') }} type="button">Close</button></div>
           </form> : null}
           {cancellationDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitCancellationRequest(event)}>
             <span><strong>Cancel {cancellationDraft.orderId}</strong><small>Shop must recheck the order, reserved stock, payment, and refund impact.</small></span>
