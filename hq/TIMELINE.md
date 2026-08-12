@@ -416,6 +416,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-support-intent-customer-message-sent-rates-brief (supportIntents customerMessageSent rates: 5 fields, 2 paired — customerMessageSentRate, notCustomerMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-703)
 - [x] Analytics Codex: ecommerce-support-intent-external-message-sent-rates-brief (supportIntents externalMessageSent rates: 5 fields, 2 paired — externalMessageSentRate, notExternalMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-704)
 - [x] Analytics Codex: ecommerce-support-intent-refund-started-rates-brief (supportIntents refundStarted rates: 5 fields, 2 paired — refundStartedRate, notRefundStartedRate); 23 checks; zero bundle cost — DONE (OPS-705)
+- [x] Analytics Codex: ecommerce-correction-intent-refund-started-rates-brief (correctionIntents refundStarted rates: 5 fields, 2 paired — refundStartedRate, notRefundStartedRate); 23 checks; zero bundle cost — DONE (OPS-706)
+- [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-rates-brief (correctionIntents ledgerPosted rates: 5 fields, 2 paired — ledgerPostedRate, notLedgerPostedRate); 23 checks; zero bundle cost — DONE (OPS-707)
+- [x] Analytics Codex: ecommerce-amendment-intent-order-changed-rates-brief (amendmentIntents orderChanged rates: 5 fields, 2 paired — orderChangedRate, notOrderChangedRate); 23 checks; zero bundle cost — DONE (OPS-708)
+- [x] Analytics Codex: ecommerce-reschedule-intent-customer-message-sent-rates-brief (rescheduleIntents customerMessageSent rates: 5 fields, 2 paired — customerMessageSentRate, notCustomerMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-709)
 
 ### Aug 25–31
 
