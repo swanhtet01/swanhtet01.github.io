@@ -36,15 +36,15 @@ function returnIntent(quantity = 1) {
     schema: 'supermega.ecommerce.return_intent.v1',
     state: 'pending_shop_review',
     scope: 'scope-1',
-    id: `RTI-${intentId}`,
+    id: `ERI-${intentId}`,
     idempotencyKey: `ik-${intentId}`,
     createdAt: '2026-08-01T09:00:00Z',
     orderId: `ORD-${intentId}`,
     sourceRequestId: `REQ-${intentId}`,
     sku: `SKU-${intentId}`,
     quantity,
-    disposition: { action: 'refund', notes: null },
-    reason: 'Item not as described',
+    disposition: 'restock',
+    reason: 'Return reason',
     refundStatus: 'not_started',
     evidenceReference: `ev-${intentId}`,
   }
@@ -72,64 +72,66 @@ function state(returnIntents = []) {
 {
   const r = projectEcommerceReturnIntentQuantityBrief(state())
   check(r.totalIntents === 0, 'empty: totalIntents 0')
-  check(r.minQuantity === null, 'empty: minQuantity null')
-  check(r.maxQuantity === null, 'empty: maxQuantity null')
-  check(r.sumQuantity === 0, 'empty: sumQuantity 0')
+  check(r.singleItemCount === 0, 'empty: singleItemCount 0')
+  check(r.multiItemCount === 0, 'empty: multiItemCount 0')
 }
 
-// 2. Single intent — quantity 3
+// 2. Single qty-1 return
 {
-  const r = projectEcommerceReturnIntentQuantityBrief(state([returnIntent(3)]))
-  check(r.totalIntents === 1, 'single: totalIntents 1')
-  check(r.minQuantity === 3, 'single: minQuantity 3')
-  check(r.maxQuantity === 3, 'single: maxQuantity 3')
-  check(r.sumQuantity === 3, 'single: sumQuantity 3')
+  const r = projectEcommerceReturnIntentQuantityBrief(state([returnIntent(1)]))
+  check(r.totalIntents === 1, 'qty1: totalIntents 1')
+  check(r.singleItemCount === 1, 'qty1: singleItemCount 1')
+  check(r.multiItemCount === 0, 'qty1: multiItemCount 0')
 }
 
-// 3. Two intents — min, max, sum correct
+// 3. Single qty-2 return
+{
+  const r = projectEcommerceReturnIntentQuantityBrief(state([returnIntent(2)]))
+  check(r.totalIntents === 1, 'qty2: totalIntents 1')
+  check(r.singleItemCount === 0, 'qty2: singleItemCount 0')
+  check(r.multiItemCount === 1, 'qty2: multiItemCount 1')
+}
+
+// 4. Two qty-1 returns
+{
+  const r = projectEcommerceReturnIntentQuantityBrief(state([returnIntent(1), returnIntent(1)]))
+  check(r.totalIntents === 2, 'two-qty1: totalIntents 2')
+  check(r.singleItemCount === 2, 'two-qty1: singleItemCount 2')
+  check(r.multiItemCount === 0, 'two-qty1: multiItemCount 0')
+}
+
+// 5. Two multi-item returns (different quantities)
+{
+  const r = projectEcommerceReturnIntentQuantityBrief(state([returnIntent(3), returnIntent(5)]))
+  check(r.totalIntents === 2, 'two-multi: totalIntents 2')
+  check(r.singleItemCount === 0, 'two-multi: singleItemCount 0')
+  check(r.multiItemCount === 2, 'two-multi: multiItemCount 2')
+}
+
+// 6. Mixed: 2 single + 1 multi
 {
   const r = projectEcommerceReturnIntentQuantityBrief(state([
-    returnIntent(2),
-    returnIntent(5),
-  ]))
-  check(r.totalIntents === 2, 'two: totalIntents 2')
-  check(r.minQuantity === 2, 'two: minQuantity 2')
-  check(r.maxQuantity === 5, 'two: maxQuantity 5')
-  check(r.sumQuantity === 7, 'two: sumQuantity 7')
-}
-
-// 4. Three intents out of order — correct min/max/sum
-{
-  const r = projectEcommerceReturnIntentQuantityBrief(state([
+    returnIntent(1),
     returnIntent(4),
     returnIntent(1),
-    returnIntent(3),
   ]))
-  check(r.totalIntents === 3, 'unsorted: totalIntents 3')
-  check(r.minQuantity === 1, 'unsorted: minQuantity 1')
-  check(r.maxQuantity === 4, 'unsorted: maxQuantity 4')
-  check(r.sumQuantity === 8, 'unsorted: sumQuantity 8')
+  check(r.totalIntents === 3, 'mixed: totalIntents 3')
+  check(r.singleItemCount === 2, 'mixed: singleItemCount 2')
+  check(r.multiItemCount === 1, 'mixed: multiItemCount 1')
+  check(r.singleItemCount + r.multiItemCount === r.totalIntents, 'mixed: counts sum to total')
 }
 
-// 5. All same quantity
+// 7. All multi-item (qty >= 2)
 {
   const r = projectEcommerceReturnIntentQuantityBrief(state([
     returnIntent(2),
-    returnIntent(2),
-    returnIntent(2),
+    returnIntent(10),
+    returnIntent(3),
   ]))
-  check(r.totalIntents === 3, 'same: totalIntents 3')
-  check(r.minQuantity === 2, 'same: minQuantity 2')
-  check(r.maxQuantity === 2, 'same: maxQuantity 2')
-  check(r.sumQuantity === 6, 'same: sumQuantity 6')
-}
-
-// 6. Large quantities — min equals max for single large value
-{
-  const r = projectEcommerceReturnIntentQuantityBrief(state([returnIntent(100)]))
-  check(r.minQuantity === r.maxQuantity, 'large: min equals max')
-  check(r.sumQuantity === 100, 'large: sumQuantity 100')
-  check(r.totalIntents === 1, 'large: totalIntents 1')
+  check(r.totalIntents === 3, 'all-multi: totalIntents 3')
+  check(r.singleItemCount === 0, 'all-multi: singleItemCount 0')
+  check(r.multiItemCount === 3, 'all-multi: multiItemCount 3')
+  check(r.singleItemCount + r.multiItemCount === r.totalIntents, 'all-multi: counts sum to total')
 }
 
 console.log(`ecommerce-return-intent-quantity-brief: ${checks} checks passed`)
