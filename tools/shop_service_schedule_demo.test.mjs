@@ -238,3 +238,74 @@ test('readShopServiceSchedule returns a fresh schedule for null, round-trips val
     /unreadable/i,
   )
 })
+
+test('booking the same resource during an overlapping window throws', () => {
+  const base = createShopServiceSchedule('spa')
+  const service = base.services[0]
+  const resource = base.resources[0]
+  const startA = `${PLANNING_DAY}T05:00:00.000Z`
+
+  const withFirst = scheduleShopServiceBooking(base, {
+    customerName: 'Ma Aye',
+    contact: '09 111 222 333',
+    serviceId: service.id,
+    resourceId: resource.id,
+    startsAt: startA,
+  }, { actor: 'Operator', reason: 'First booking.', happenedAt: `${PLANNING_DAY}T04:30:00.000Z` })
+
+  // Second booking starts half-way through the first window — must be rejected.
+  const halfwayMs = Math.floor(service.durationMinutes / 2) * 60_000
+  const overlapStart = new Date(Date.parse(startA) + halfwayMs).toISOString()
+
+  assert.throws(
+    () => scheduleShopServiceBooking(withFirst, {
+      customerName: 'Ma Su',
+      contact: '09 444 555 666',
+      serviceId: service.id,
+      resourceId: resource.id,
+      startsAt: overlapStart,
+    }, { actor: 'Operator', reason: 'Overlapping attempt.', happenedAt: `${PLANNING_DAY}T04:45:00.000Z` }),
+    /already booked during that time/,
+  )
+})
+
+test('back-to-back bookings on the same resource succeed when windows do not overlap', () => {
+  const base = createShopServiceSchedule('spa')
+  const service = base.services[0]
+  const resource = base.resources[0]
+  const startA = `${PLANNING_DAY}T05:00:00.000Z`
+
+  const withFirst = scheduleShopServiceBooking(base, {
+    customerName: 'Ma Aye',
+    contact: '09 111 222 333',
+    serviceId: service.id,
+    resourceId: resource.id,
+    startsAt: startA,
+  }, { actor: 'Operator', reason: 'First booking.', happenedAt: `${PLANNING_DAY}T04:30:00.000Z` })
+
+  // Second starts exactly when the first ends — no overlap.
+  const adjacentStart = new Date(Date.parse(startA) + service.durationMinutes * 60_000).toISOString()
+
+  const withSecond = scheduleShopServiceBooking(withFirst, {
+    customerName: 'Ko Zaw',
+    contact: '09 777 888 999',
+    serviceId: service.id,
+    resourceId: resource.id,
+    startsAt: adjacentStart,
+  }, { actor: 'Operator', reason: 'Back-to-back booking.', happenedAt: `${PLANNING_DAY}T04:45:00.000Z` })
+
+  assert.equal(withSecond.bookings.length, 2)
+  assert.ok(withSecond.bookings.every((b) => b.status !== 'cancelled'))
+})
+
+test('a v1 schedule without industryPackId migrates to v2 with spa as the default', () => {
+  const base = createShopServiceSchedule('retail')
+  // Simulate a stored v1 schedule: same structure but old schema, no industryPackId.
+  const { industryPackId: _drop, ...rest } = base
+  const v1Json = JSON.stringify({ ...rest, schema: 'supermega.shop.service_schedule.v1' })
+
+  const migrated = readShopServiceSchedule(v1Json)
+  validateShopServiceSchedule(migrated)
+  assert.equal(migrated.schema, SHOP_SERVICE_SCHEDULE_SCHEMA)
+  assert.equal(migrated.industryPackId, 'spa')
+})

@@ -254,7 +254,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
         <button className="core-button primary" disabled={disabled} type="submit">{vocabulary.holdAction}</button>
       </form>
       <section className="service-agenda" aria-label={`Upcoming ${vocabulary.plural.toLowerCase()}`}>
-        <div className="panel-head"><div><span className="core-eyebrow">Agenda</span><h3>{projection.upcoming.length ? `Next ${vocabulary.plural.toLowerCase()}` : `No upcoming ${vocabulary.plural.toLowerCase()}`}</h3></div><span className="panel-note">revision {schedule.revision}</span></div>
+        <div className="panel-head"><div><span className="core-eyebrow">Agenda</span><h3>{projection.upcoming.length ? `Next ${vocabulary.plural.toLowerCase()}` : `No upcoming ${vocabulary.plural.toLowerCase()}`}</h3></div></div>
         {projection.upcoming.length ? projection.upcoming.slice(0, 12).map((booking) => {
           const service = serviceById.get(booking.serviceId)
           const resource = resourceById.get(booking.resourceId)
