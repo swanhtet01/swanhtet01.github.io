@@ -33,7 +33,7 @@ export function projectEcommerceSupportIntentCustomerMessageDescriptionLengthBri
 
   for (const intent of buying.supportIntents) {
     const isShort = intent.description.length <= 40
-    if (intent.customerMessageSent) {
+    if (intent.externalMessageSent) {
       if (isShort) messageSentShortCount++
       else messageSentDetailedCount++
     } else {

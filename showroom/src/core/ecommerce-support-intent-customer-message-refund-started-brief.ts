@@ -32,7 +32,7 @@ export function projectEcommerceSupportIntentCustomerMessageRefundStartedBrief(
   let noMessageNoRefundCount = 0
 
   for (const intent of buying.supportIntents) {
-    if (intent.customerMessageSent) {
+    if (intent.externalMessageSent) {
       if (intent.refundStarted) messageSentRefundStartedCount++
       else messageSentNoRefundCount++
     } else {

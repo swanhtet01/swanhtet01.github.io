@@ -32,7 +32,7 @@ export function projectEcommerceSupportIntentCustomerMessageExternalMessageBrief
   let noMessageNoExternalCount = 0
 
   for (const intent of buying.supportIntents) {
-    if (intent.customerMessageSent) {
+    if (intent.externalMessageSent) {
       if (intent.externalMessageSent) messageSentExternalSentCount++
       else messageSentNoExternalCount++
     } else {

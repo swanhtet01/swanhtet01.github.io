@@ -25,7 +25,7 @@ export function projectEcommerceSupportIntentCustomerMessageSentRatesBrief(
   let customerMessageSentCount = 0
 
   for (const intent of buying.supportIntents) {
-    if (intent.customerMessageSent) customerMessageSentCount++
+    if (intent.externalMessageSent) customerMessageSentCount++
   }
 
   const notCustomerMessageSentCount = total - customerMessageSentCount

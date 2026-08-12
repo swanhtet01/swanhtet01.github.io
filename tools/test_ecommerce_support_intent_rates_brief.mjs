@@ -30,20 +30,19 @@ function check(condition, label) {
 }
 
 let intentId = 0
-function supportIntent(customerMessageSent = false, externalMessageSent = false, refundStarted = false) {
+function supportIntent({ externalMessageSent = false, refundStarted = false } = {}) {
   intentId++
   return {
     schema: 'supermega.ecommerce.support_intent.v1',
-    state: 'open',
+    state: 'pending_shop_review',
     scope: 'scope-1',
-    id: `ESI-${intentId}`,
-    idempotencyKey: `ik-${intentId}`,
+    id: `ESR-${intentId}`,
+    idempotencyKey: `ESI-${intentId}`,
     createdAt: '2026-08-01T09:00:00Z',
     orderId: `ORD-${intentId}`,
     sourceRequestId: `REQ-${intentId}`,
     category: 'order_status',
     description: 'Support description',
-    customerMessageSent,
     externalMessageSent,
     refundStarted,
     evidenceReference: `ev-${intentId}`,
@@ -72,75 +71,64 @@ function state(supportIntents = []) {
 {
   const r = projectEcommerceSupportIntentRatesBrief(state())
   check(r.totalIntents === 0, 'empty: totalIntents 0')
-  check(r.customerNotificationRate === 0, 'empty: customerNotificationRate 0')
+  check(r.externalMessageRate === 0, 'empty: externalMessageRate 0')
   check(r.refundStartedRate === 0, 'empty: refundStartedRate 0')
 }
 
-// 2. One intent with customer notification
+// 2. One intent with external message sent
 {
   const r = projectEcommerceSupportIntentRatesBrief(state([
-    supportIntent(true),
+    supportIntent({ externalMessageSent: true }),
   ]))
-  check(r.totalIntents === 1, 'notified: totalIntents 1')
-  check(r.customerNotificationCount === 1, 'notified: customerNotificationCount 1')
-  check(r.customerNotificationRate === 1, 'notified: customerNotificationRate 1')
-}
-
-// 3. One intent with external message only
-{
-  const r = projectEcommerceSupportIntentRatesBrief(state([
-    supportIntent(false, true),
-  ]))
+  check(r.totalIntents === 1, 'external: totalIntents 1')
   check(r.externalMessageCount === 1, 'external: externalMessageCount 1')
   check(r.externalMessageRate === 1, 'external: externalMessageRate 1')
-  check(r.customerNotificationCount === 0, 'external: customerNotificationCount 0')
+  check(r.refundStartedCount === 0, 'external: refundStartedCount 0')
 }
 
-// 4. One intent with refund started
+// 3. One intent with refund started
 {
   const r = projectEcommerceSupportIntentRatesBrief(state([
-    supportIntent(false, false, true),
+    supportIntent({ refundStarted: true }),
   ]))
   check(r.refundStartedCount === 1, 'refund: refundStartedCount 1')
   check(r.refundStartedRate === 1, 'refund: refundStartedRate 1')
   check(r.externalMessageCount === 0, 'refund: externalMessageCount 0')
 }
 
-// 5. Two intents, one customer notified
+// 4. One intent with both true
 {
   const r = projectEcommerceSupportIntentRatesBrief(state([
-    supportIntent(true),
-    supportIntent(false),
+    supportIntent({ externalMessageSent: true, refundStarted: true }),
   ]))
-  check(r.totalIntents === 2, 'half-notified: totalIntents 2')
-  check(r.customerNotificationRate === 0.5, 'half-notified: customerNotificationRate 0.5')
-  check(r.externalMessageRate === 0, 'half-notified: externalMessageRate 0')
+  check(r.externalMessageCount === 1, 'both: externalMessageCount 1')
+  check(r.refundStartedCount === 1, 'both: refundStartedCount 1')
+}
+
+// 5. Two intents — one external only, one refund only
+{
+  const r = projectEcommerceSupportIntentRatesBrief(state([
+    supportIntent({ externalMessageSent: true }),
+    supportIntent({ refundStarted: true }),
+  ]))
+  check(r.totalIntents === 2, 'mixed: totalIntents 2')
+  check(r.externalMessageRate === 0.5, 'mixed: externalMessageRate 0.5')
+  check(r.refundStartedRate === 0.5, 'mixed: refundStartedRate 0.5')
 }
 
 // 6. Four intents mixed
 {
   const r = projectEcommerceSupportIntentRatesBrief(state([
-    supportIntent(true, true, true),
-    supportIntent(true, false, true),
-    supportIntent(true, false, false),
-    supportIntent(false, false, false),
+    supportIntent({ externalMessageSent: true, refundStarted: true }),
+    supportIntent({ externalMessageSent: true }),
+    supportIntent({ refundStarted: true }),
+    supportIntent(),
   ]))
-  check(r.totalIntents === 4, 'mixed: totalIntents 4')
-  check(r.customerNotificationRate === 0.75, 'mixed: customerNotificationRate 0.75')
-  check(r.externalMessageRate === 0.25, 'mixed: externalMessageRate 0.25')
-  check(r.refundStartedRate === 0.5, 'mixed: refundStartedRate 0.5')
-  check(r.refundStartedCount === 2, 'mixed: refundStartedCount 2')
-}
-
-// 7. Two intents, one with all true
-{
-  const r = projectEcommerceSupportIntentRatesBrief(state([
-    supportIntent(true, true, true),
-    supportIntent(false, false, false),
-  ]))
-  check(r.customerNotificationRate === 0.5, 'half-full: customerNotificationRate 0.5')
-  check(r.externalMessageRate === 0.5, 'half-full: externalMessageRate 0.5')
-  check(r.refundStartedRate === 0.5, 'half-full: refundStartedRate 0.5')
+  check(r.totalIntents === 4, 'four: totalIntents 4')
+  check(r.externalMessageCount === 2, 'four: externalMessageCount 2')
+  check(r.externalMessageRate === 0.5, 'four: externalMessageRate 0.5')
+  check(r.refundStartedCount === 2, 'four: refundStartedCount 2')
+  check(r.refundStartedRate === 0.5, 'four: refundStartedRate 0.5')
 }
 
 console.log(`ecommerce-support-intent-rates-brief: ${checks} checks passed`)

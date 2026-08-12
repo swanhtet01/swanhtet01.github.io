@@ -2,8 +2,6 @@ import type { EcommerceBuyingState } from '../products/ecommerce/ecommerce-buyin
 
 export type EcommerceSupportIntentRatesBrief = {
   totalIntents: number
-  customerNotificationCount: number
-  customerNotificationRate: number
   externalMessageCount: number
   externalMessageRate: number
   refundStartedCount: number
@@ -17,8 +15,6 @@ export function projectEcommerceSupportIntentRatesBrief(
   if (total === 0) {
     return {
       totalIntents: 0,
-      customerNotificationCount: 0,
-      customerNotificationRate: 0,
       externalMessageCount: 0,
       externalMessageRate: 0,
       refundStartedCount: 0,
@@ -26,12 +22,10 @@ export function projectEcommerceSupportIntentRatesBrief(
     }
   }
 
-  let customerNotificationCount = 0
   let externalMessageCount = 0
   let refundStartedCount = 0
 
   for (const intent of buying.supportIntents) {
-    if (intent.customerMessageSent) customerNotificationCount++
     if (intent.externalMessageSent) externalMessageCount++
     if (intent.refundStarted) refundStartedCount++
   }
@@ -40,8 +34,6 @@ export function projectEcommerceSupportIntentRatesBrief(
 
   return {
     totalIntents: total,
-    customerNotificationCount,
-    customerNotificationRate: rate(customerNotificationCount),
     externalMessageCount,
     externalMessageRate: rate(externalMessageCount),
     refundStartedCount,
