@@ -1,51 +1,15 @@
 import type { EcommerceBuyingState } from '../products/ecommerce/ecommerce-buying-lifecycle.ts'
-
 export type EcommerceSupportIntentCategoryBrief = {
-  totalIntents: number
-  orderStatusCount: number
-  deliveryIssueCount: number
-  paymentQuestionCount: number
-  itemIssueCount: number
-  otherCount: number
-  orderStatusRate: number
-  deliveryIssueRate: number
-  paymentQuestionRate: number
-  itemIssueRate: number
-  otherRate: number
+  totalIntents: number; uniqueCategories: number; topCategory: string | null; topCategoryCount: number
 }
-
-export function projectEcommerceSupportIntentCategoryBrief(
-  buying: EcommerceBuyingState,
-): EcommerceSupportIntentCategoryBrief {
-  let orderStatusCount = 0
-  let deliveryIssueCount = 0
-  let paymentQuestionCount = 0
-  let itemIssueCount = 0
-  let otherCount = 0
-
+export function projectEcommerceSupportIntentCategoryBrief(buying: EcommerceBuyingState): EcommerceSupportIntentCategoryBrief {
+  const total = buying.supportIntents.length
+  if (total === 0) return { totalIntents: 0, uniqueCategories: 0, topCategory: null, topCategoryCount: 0 }
+  const counts = new Map<string, number>()
   for (const intent of buying.supportIntents) {
-    switch (intent.category) {
-      case 'order_status': orderStatusCount++; break
-      case 'delivery_issue': deliveryIssueCount++; break
-      case 'payment_question': paymentQuestionCount++; break
-      case 'item_issue': itemIssueCount++; break
-      default: otherCount++; break
-    }
+    counts.set(intent.category, (counts.get(intent.category) ?? 0) + 1)
   }
-
-  const totalIntents = orderStatusCount + deliveryIssueCount + paymentQuestionCount + itemIssueCount + otherCount
-
-  return {
-    totalIntents,
-    orderStatusCount,
-    deliveryIssueCount,
-    paymentQuestionCount,
-    itemIssueCount,
-    otherCount,
-    orderStatusRate: totalIntents > 0 ? Math.round((orderStatusCount / totalIntents) * 100) : 0,
-    deliveryIssueRate: totalIntents > 0 ? Math.round((deliveryIssueCount / totalIntents) * 100) : 0,
-    paymentQuestionRate: totalIntents > 0 ? Math.round((paymentQuestionCount / totalIntents) * 100) : 0,
-    itemIssueRate: totalIntents > 0 ? Math.round((itemIssueCount / totalIntents) * 100) : 0,
-    otherRate: totalIntents > 0 ? Math.round((otherCount / totalIntents) * 100) : 0,
-  }
+  let topCategory: string | null = null; let topCategoryCount = 0
+  for (const [key, count] of counts) { if (count > topCategoryCount) { topCategoryCount = count; topCategory = key } }
+  return { totalIntents: total, uniqueCategories: counts.size, topCategory, topCategoryCount }
 }

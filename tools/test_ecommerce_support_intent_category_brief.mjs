@@ -1,4 +1,3 @@
-// Ecommerce support intent category brief: 5-value enum distribution.
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -35,22 +34,22 @@ function supportIntent(category = 'order_status') {
   intentId++
   return {
     schema: 'supermega.ecommerce.support_intent.v1',
-    state: 'pending_shop_review',
+    state: 'open',
     scope: 'scope-1',
-    id: `SI-${intentId}`,
+    id: `ESI-${intentId}`,
     idempotencyKey: `ik-${intentId}`,
     createdAt: '2026-08-01T09:00:00Z',
     orderId: `ORD-${intentId}`,
     sourceRequestId: `REQ-${intentId}`,
     category,
-    description: 'Test support request',
+    description: 'Support description',
     externalMessageSent: false,
     refundStarted: false,
     evidenceReference: `ev-${intentId}`,
   }
 }
 
-function state(supportIntents) {
+function state(supportIntents = []) {
   return {
     schema: 'supermega.ecommerce.buying_lifecycle.v1',
     scope: 'scope-1',
@@ -70,108 +69,69 @@ function state(supportIntents) {
 
 // 1. Empty state
 {
-  const r = projectEcommerceSupportIntentCategoryBrief(state([]))
+  const r = projectEcommerceSupportIntentCategoryBrief(state())
   check(r.totalIntents === 0, 'empty: totalIntents 0')
-  check(r.orderStatusCount === 0, 'empty: orderStatusCount 0')
-  check(r.deliveryIssueCount === 0, 'empty: deliveryIssueCount 0')
-  check(r.paymentQuestionCount === 0, 'empty: paymentQuestionCount 0')
-  check(r.itemIssueCount === 0, 'empty: itemIssueCount 0')
-  check(r.otherCount === 0, 'empty: otherCount 0')
-  check(r.orderStatusRate === 0, 'empty: orderStatusRate 0')
+  check(r.uniqueCategories === 0, 'empty: uniqueCategories 0')
+  check(r.topCategory === null, 'empty: topCategory null')
+  check(r.topCategoryCount === 0, 'empty: topCategoryCount 0')
 }
 
 // 2. Single intent — order_status
 {
   const r = projectEcommerceSupportIntentCategoryBrief(state([supportIntent('order_status')]))
-  check(r.totalIntents === 1, 'single-os: totalIntents 1')
-  check(r.orderStatusCount === 1, 'single-os: orderStatusCount 1')
-  check(r.orderStatusRate === 100, 'single-os: orderStatusRate 100')
-  check(r.deliveryIssueRate === 0, 'single-os: deliveryIssueRate 0')
+  check(r.totalIntents === 1, 'single: totalIntents 1')
+  check(r.uniqueCategories === 1, 'single: uniqueCategories 1')
+  check(r.topCategory === 'order_status', 'single: topCategory')
+  check(r.topCategoryCount === 1, 'single: topCategoryCount 1')
 }
 
-// 3. All delivery_issue
+// 3. Two intents same category — uniqueCategories 1, topCount 2
 {
-  const r = projectEcommerceSupportIntentCategoryBrief(
-    state([supportIntent('delivery_issue'), supportIntent('delivery_issue')]),
-  )
-  check(r.deliveryIssueCount === 2, 'all-di: deliveryIssueCount 2')
-  check(r.deliveryIssueRate === 100, 'all-di: deliveryIssueRate 100')
-  check(r.orderStatusRate === 0, 'all-di: orderStatusRate 0')
+  const r = projectEcommerceSupportIntentCategoryBrief(state([
+    supportIntent('delivery_issue'),
+    supportIntent('delivery_issue'),
+  ]))
+  check(r.totalIntents === 2, 'same-cat: totalIntents 2')
+  check(r.uniqueCategories === 1, 'same-cat: uniqueCategories 1')
+  check(r.topCategory === 'delivery_issue', 'same-cat: topCategory')
+  check(r.topCategoryCount === 2, 'same-cat: topCategoryCount 2')
 }
 
-// 4. All payment_question
+// 4. Two intents different categories — uniqueCategories 2
 {
-  const r = projectEcommerceSupportIntentCategoryBrief(state([supportIntent('payment_question')]))
-  check(r.paymentQuestionCount === 1, 'pq: paymentQuestionCount 1')
-  check(r.paymentQuestionRate === 100, 'pq: paymentQuestionRate 100')
+  const r = projectEcommerceSupportIntentCategoryBrief(state([
+    supportIntent('payment_question'),
+    supportIntent('item_issue'),
+  ]))
+  check(r.totalIntents === 2, 'two-diff: totalIntents 2')
+  check(r.uniqueCategories === 2, 'two-diff: uniqueCategories 2')
+  check(r.topCategoryCount === 1, 'two-diff: topCategoryCount 1')
+  check(r.topCategory !== null, 'two-diff: topCategory set')
 }
 
-// 5. All item_issue
+// 5. Three intents: one category dominant
 {
-  const r = projectEcommerceSupportIntentCategoryBrief(state([supportIntent('item_issue')]))
-  check(r.itemIssueCount === 1, 'ii: itemIssueCount 1')
-  check(r.itemIssueRate === 100, 'ii: itemIssueRate 100')
+  const r = projectEcommerceSupportIntentCategoryBrief(state([
+    supportIntent('other'),
+    supportIntent('order_status'),
+    supportIntent('other'),
+  ]))
+  check(r.totalIntents === 3, 'dominant: totalIntents 3')
+  check(r.uniqueCategories === 2, 'dominant: uniqueCategories 2')
+  check(r.topCategory === 'other', 'dominant: topCategory')
+  check(r.topCategoryCount === 2, 'dominant: topCategoryCount 2')
 }
 
-// 6. All other
+// 6. Five intents all different categories
 {
-  const r = projectEcommerceSupportIntentCategoryBrief(state([supportIntent('other')]))
-  check(r.otherCount === 1, 'other: otherCount 1')
-  check(r.otherRate === 100, 'other: otherRate 100')
+  const r = projectEcommerceSupportIntentCategoryBrief(state([
+    supportIntent('order_status'),
+    supportIntent('delivery_issue'),
+    supportIntent('payment_question'),
+  ]))
+  check(r.totalIntents === 3, 'all-diff: totalIntents 3')
+  check(r.uniqueCategories === 3, 'all-diff: uniqueCategories 3')
+  check(r.topCategoryCount === 1, 'all-diff: topCategoryCount 1')
 }
 
-// 7. Mixed: one of each (5 total) → 20% each
-{
-  const r = projectEcommerceSupportIntentCategoryBrief(
-    state([
-      supportIntent('order_status'),
-      supportIntent('delivery_issue'),
-      supportIntent('payment_question'),
-      supportIntent('item_issue'),
-      supportIntent('other'),
-    ]),
-  )
-  check(r.totalIntents === 5, 'mixed: totalIntents 5')
-  check(r.orderStatusRate === 20, 'mixed: orderStatusRate 20')
-  check(r.deliveryIssueRate === 20, 'mixed: deliveryIssueRate 20')
-  check(r.paymentQuestionRate === 20, 'mixed: paymentQuestionRate 20')
-  check(r.itemIssueRate === 20, 'mixed: itemIssueRate 20')
-  check(r.otherRate === 20, 'mixed: otherRate 20')
-}
-
-// 8. Counts sum to totalIntents
-{
-  const r = projectEcommerceSupportIntentCategoryBrief(
-    state([supportIntent('order_status'), supportIntent('delivery_issue'), supportIntent('other')]),
-  )
-  check(
-    r.orderStatusCount + r.deliveryIssueCount + r.paymentQuestionCount + r.itemIssueCount + r.otherCount === r.totalIntents,
-    'invariant: counts sum to total',
-  )
-}
-
-// 9. Rounding: 1/3 → 33%, 2/3 → 67%
-{
-  const r = projectEcommerceSupportIntentCategoryBrief(
-    state([supportIntent('delivery_issue'), supportIntent('order_status'), supportIntent('order_status')]),
-  )
-  check(r.orderStatusRate === 67, 'round: orderStatusRate 67')
-  check(r.deliveryIssueRate === 33, 'round: deliveryIssueRate 33')
-}
-
-// 10. Dominant category: 3 order_status + 1 other → 75%/25%
-{
-  const r = projectEcommerceSupportIntentCategoryBrief(
-    state([
-      supportIntent('order_status'),
-      supportIntent('order_status'),
-      supportIntent('order_status'),
-      supportIntent('other'),
-    ]),
-  )
-  check(r.orderStatusRate === 75, 'dominant: orderStatusRate 75')
-  check(r.otherRate === 25, 'dominant: otherRate 25')
-  check(r.deliveryIssueRate === 0, 'dominant: deliveryIssueRate 0')
-}
-
-console.log(JSON.stringify({ ok: true, checks }))
+console.log(`ecommerce-support-intent-category-brief: ${checks} checks passed`)
