@@ -381,6 +381,9 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-payment-changed-brief (correctionIntents ledgerPosted boolean × paymentChanged boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-668)
 - [x] Analytics Codex: ecommerce-correction-intent-tax-filed-payment-changed-brief (correctionIntents taxFiled boolean × paymentChanged boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-669)
 - [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-customer-message-brief (correctionIntents ledgerPosted boolean × customerMessageSent boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-670)
+- [x] Analytics Codex: ecommerce-correction-intent-tax-filed-customer-message-brief (correctionIntents taxFiled boolean × customerMessageSent boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-671)
+- [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-provider-called-brief (correctionIntents ledgerPosted boolean × providerCalled boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-672)
+- [x] Analytics Codex: ecommerce-correction-intent-tax-filed-provider-called-brief (correctionIntents taxFiled boolean × providerCalled boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-673) — completes all ledger/tax × operational-boolean correctionIntent cross-tabs
 
 ### Aug 25–31
 
