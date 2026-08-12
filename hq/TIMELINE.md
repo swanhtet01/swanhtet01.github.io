@@ -298,6 +298,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-return-intent-disposition-quantity-brief (returnIntents disposition restock/not_restocked × quantity single/multi: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-585)
 - [x] Analytics Codex: ecommerce-amendment-intent-line-count-switch-brief (amendmentIntents lineCount single/multi × fromFulfilment===toFulfilment same/switch: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-586)
 - [x] Analytics Codex: ecommerce-correction-intent-kind-source-count-brief (correctionIntents requestedKind credit/debit × sourceCorrectionCount first/repeat: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-587)
+- [x] Analytics Codex: ecommerce-cancellation-intent-reason-code-payment-status-brief (cancellationIntents reasonCode 5-way × paymentStatus pending/reconciled: 5×2 cross-tab, 11 fields); 23 checks; zero bundle cost — DONE (OPS-588)
+- [x] Analytics Codex: ecommerce-request-fulfilment-promotion-brief (requests fulfilment delivery/pickup × promotion.code!==null: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-589)
+- [x] Analytics Codex: ecommerce-request-payment-adapter-line-count-brief (requests paymentAdapter 3-way × lines.length===1 single/multi: 3×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-590)
+- [x] Analytics Codex: ecommerce-request-payment-adapter-promotion-brief (requests paymentAdapter 3-way × promotion.code!==null: 3×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-591)
 
 ### Aug 25–31
 
