@@ -30,7 +30,7 @@ function check(condition, label) {
 }
 
 let intentId = 0
-function supportIntent({ customerMessageSent = false } = {}) {
+function supportIntent({ externalMessageSent = false } = {}) {
   intentId++
   return {
     schema: 'supermega.ecommerce.support_intent.v1',
@@ -43,8 +43,7 @@ function supportIntent({ customerMessageSent = false } = {}) {
     sourceRequestId: `REQ-${intentId}`,
     category: 'order_status',
     description: 'Support description',
-    customerMessageSent,
-    externalMessageSent: false,
+    externalMessageSent,
     refundStarted: false,
     evidenceReference: `ev-${intentId}`,
   }
@@ -81,7 +80,7 @@ function state(supportIntents = []) {
 // 2. Single sent — 3 checks
 {
   const r = projectEcommerceSupportIntentCustomerMessageSentRatesBrief(state([
-    supportIntent({ customerMessageSent: true }),
+    supportIntent({ externalMessageSent: true }),
   ]))
   check(r.totalIntents === 1, 'sent:total')
   check(r.customerMessageSentCount === 1, 'sent:count')
@@ -99,8 +98,8 @@ function state(supportIntents = []) {
 // 4. 2 sent — 3 checks
 {
   const r = projectEcommerceSupportIntentCustomerMessageSentRatesBrief(state([
-    supportIntent({ customerMessageSent: true }),
-    supportIntent({ customerMessageSent: true }),
+    supportIntent({ externalMessageSent: true }),
+    supportIntent({ externalMessageSent: true }),
   ]))
   check(r.customerMessageSentCount === 2, 'twoSent:count')
   check(r.notCustomerMessageSentCount === 0, 'twoSent:notCount')
@@ -120,7 +119,7 @@ function state(supportIntents = []) {
 // 6. 1 sent + 1 not sent — 3 checks
 {
   const r = projectEcommerceSupportIntentCustomerMessageSentRatesBrief(state([
-    supportIntent({ customerMessageSent: true }),
+    supportIntent({ externalMessageSent: true }),
     supportIntent(),
   ]))
   check(r.totalIntents === 2, 'half:total')
@@ -131,7 +130,7 @@ function state(supportIntents = []) {
 // 7. Precision: 1 sent + 2 not sent (1/3 = 0.3333) — 4 checks
 {
   const r = projectEcommerceSupportIntentCustomerMessageSentRatesBrief(state([
-    supportIntent({ customerMessageSent: true }),
+    supportIntent({ externalMessageSent: true }),
     supportIntent(),
     supportIntent(),
   ]))

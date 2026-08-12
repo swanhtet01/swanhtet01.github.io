@@ -30,7 +30,7 @@ function check(condition, label) {
 }
 
 let intentId = 0
-function supportIntent(customerMessageSent = false, refundStarted = false) {
+function supportIntent(externalMessageSent = false, refundStarted = false) {
   intentId++
   return {
     schema: 'supermega.ecommerce.support_intent.v1',
@@ -41,11 +41,10 @@ function supportIntent(customerMessageSent = false, refundStarted = false) {
     createdAt: '2026-08-01T09:00:00Z',
     orderId: `ORD-${intentId}`,
     sourceRequestId: `REQ-${intentId}`,
-    sourceAcknowledgementDigest: `sad-${intentId}`,
     category: 'order_status',
     description: 'A support description',
+    externalMessageSent,
     refundStarted,
-    customerMessageSent,
     evidenceReference: `ev-${intentId}`,
   }
 }

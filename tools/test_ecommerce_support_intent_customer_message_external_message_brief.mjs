@@ -29,12 +29,18 @@ function check(condition, label) {
   assert.ok(condition, label)
 }
 
+// After the rename, customerMessageSent became externalMessageSent. This brief now
+// cross-tabs externalMessageSent with itself (degenerate). Semantics:
+//   externalMessageSent=true  -> messageSentExternalSentCount (messageSentCount)
+//   externalMessageSent=false -> noMessageNoExternalCount (noMessageCount)
+//   messageSentNoExternalCount and noMessageExternalSentCount are always 0.
+
 let intentId = 0
-function supportIntent(customerMessageSent = false, externalMessageSent = false) {
+function supportIntent({ externalMessageSent = false } = {}) {
   intentId++
   return {
     schema: 'supermega.ecommerce.support_intent.v1',
-    state: 'open',
+    state: 'pending_shop_review',
     scope: 'scope-1',
     id: `ESI-${intentId}`,
     idempotencyKey: `ik-${intentId}`,
@@ -43,7 +49,6 @@ function supportIntent(customerMessageSent = false, externalMessageSent = false)
     sourceRequestId: `REQ-${intentId}`,
     category: 'order_status',
     description: 'Support description',
-    customerMessageSent,
     externalMessageSent,
     refundStarted: false,
     evidenceReference: `ev-${intentId}`,
@@ -76,72 +81,70 @@ function state(supportIntents = []) {
   check(r.noMessageCount === 0, 'empty: noMessageCount 0')
 }
 
-// 2. Message sent + external sent
+// 2. externalMessageSent=true -> messageSentExternalSentCount
 {
   const r = projectEcommerceSupportIntentCustomerMessageExternalMessageBrief(state([
-    supportIntent(true, true),
+    supportIntent({ externalMessageSent: true }),
   ]))
-  check(r.totalIntents === 1, 'msg-external: totalIntents 1')
-  check(r.messageSentExternalSentCount === 1, 'msg-external: messageSentExternalSentCount 1')
-  check(r.messageSentNoExternalCount === 0, 'msg-external: messageSentNoExternalCount 0')
-  check(r.messageSentCount === 1, 'msg-external: messageSentCount 1')
+  check(r.totalIntents === 1, 'sent: totalIntents 1')
+  check(r.messageSentExternalSentCount === 1, 'sent: messageSentExternalSentCount 1')
+  check(r.messageSentNoExternalCount === 0, 'sent: messageSentNoExternalCount 0')
+  check(r.messageSentCount === 1, 'sent: messageSentCount 1')
 }
 
-// 3. Message sent + no external
+// 3. externalMessageSent=false -> noMessageNoExternalCount
 {
   const r = projectEcommerceSupportIntentCustomerMessageExternalMessageBrief(state([
-    supportIntent(true, false),
+    supportIntent(),
   ]))
-  check(r.totalIntents === 1, 'msg-noexternal: totalIntents 1')
-  check(r.messageSentNoExternalCount === 1, 'msg-noexternal: messageSentNoExternalCount 1')
-  check(r.messageSentCount === 1, 'msg-noexternal: messageSentCount 1')
-  check(r.noMessageCount === 0, 'msg-noexternal: noMessageCount 0')
+  check(r.totalIntents === 1, 'notsent: totalIntents 1')
+  check(r.noMessageNoExternalCount === 1, 'notsent: noMessageNoExternalCount 1')
+  check(r.noMessageExternalSentCount === 0, 'notsent: noMessageExternalSentCount 0')
+  check(r.noMessageCount === 1, 'notsent: noMessageCount 1')
 }
 
-// 4. No message + external sent
+// 4. Two sent -> messageSentExternalSentCount 2
 {
   const r = projectEcommerceSupportIntentCustomerMessageExternalMessageBrief(state([
-    supportIntent(false, true),
+    supportIntent({ externalMessageSent: true }),
+    supportIntent({ externalMessageSent: true }),
   ]))
-  check(r.totalIntents === 1, 'nomsg-external: totalIntents 1')
-  check(r.noMessageExternalSentCount === 1, 'nomsg-external: noMessageExternalSentCount 1')
-  check(r.noMessageCount === 1, 'nomsg-external: noMessageCount 1')
+  check(r.messageSentExternalSentCount === 2, 'twosent: messageSentExternalSentCount 2')
+  check(r.noMessageNoExternalCount === 0, 'twosent: noMessageNoExternalCount 0')
+  check(r.messageSentCount === 2, 'twosent: messageSentCount 2')
 }
 
-// 5. No message + no external
+// 5. Two not sent -> noMessageNoExternalCount 2
 {
   const r = projectEcommerceSupportIntentCustomerMessageExternalMessageBrief(state([
-    supportIntent(false, false),
+    supportIntent(),
+    supportIntent(),
   ]))
-  check(r.totalIntents === 1, 'nomsg-noexternal: totalIntents 1')
-  check(r.noMessageNoExternalCount === 1, 'nomsg-noexternal: noMessageNoExternalCount 1')
-  check(r.noMessageCount === 1, 'nomsg-noexternal: noMessageCount 1')
+  check(r.noMessageNoExternalCount === 2, 'twonotsent: noMessageNoExternalCount 2')
+  check(r.messageSentExternalSentCount === 0, 'twonotsent: messageSentExternalSentCount 0')
 }
 
-// 6. All 4 cells
+// 6. One sent + one not sent -> split counts
 {
   const r = projectEcommerceSupportIntentCustomerMessageExternalMessageBrief(state([
-    supportIntent(true, true),
-    supportIntent(true, false),
-    supportIntent(false, true),
-    supportIntent(false, false),
+    supportIntent({ externalMessageSent: true }),
+    supportIntent(),
   ]))
-  check(r.totalIntents === 4, 'all-cells: totalIntents 4')
-  check(r.messageSentExternalSentCount === 1, 'all-cells: messageSentExternalSentCount 1')
-  check(r.noMessageNoExternalCount === 1, 'all-cells: noMessageNoExternalCount 1')
-  check(r.messageSentCount === 2, 'all-cells: messageSentCount 2')
+  check(r.totalIntents === 2, 'mixed: totalIntents 2')
+  check(r.messageSentExternalSentCount === 1, 'mixed: messageSentExternalSentCount 1')
+  check(r.noMessageNoExternalCount === 1, 'mixed: noMessageNoExternalCount 1')
+  check(r.messageSentCount === 1, 'mixed: messageSentCount 1')
+  check(r.noMessageCount === 1, 'mixed: noMessageCount 1')
 }
 
-// 7. Row totals
+// 7. Degenerate cells always 0
 {
   const r = projectEcommerceSupportIntentCustomerMessageExternalMessageBrief(state([
-    supportIntent(true, true),
-    supportIntent(true, false),
-    supportIntent(false, true),
-    supportIntent(false, false),
+    supportIntent({ externalMessageSent: true }),
+    supportIntent(),
   ]))
-  check(r.noMessageCount === 2, 'row-totals: noMessageCount 2')
-  check(r.messageSentNoExternalCount === 1, 'row-totals: messageSentNoExternalCount 1')
+  check(r.messageSentNoExternalCount === 0, 'degenerate: messageSentNoExternalCount always 0')
+  check(r.noMessageExternalSentCount === 0, 'degenerate: noMessageExternalSentCount always 0')
 }
 
 console.log(`ecommerce-support-intent-customer-message-external-message-brief: ${checks} checks passed`)

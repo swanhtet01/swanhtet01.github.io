@@ -33,7 +33,7 @@ const SHORT_DESC = 'Short description'
 const DETAILED_DESC = 'Very detailed description of the support issue encountered with this order'
 
 let intentId = 0
-function supportIntent(customerMessageSent = false, description = SHORT_DESC) {
+function supportIntent(externalMessageSent = false, description = SHORT_DESC) {
   intentId++
   return {
     schema: 'supermega.ecommerce.support_intent.v1',
@@ -44,11 +44,10 @@ function supportIntent(customerMessageSent = false, description = SHORT_DESC) {
     createdAt: '2026-08-01T09:00:00Z',
     orderId: `ORD-${intentId}`,
     sourceRequestId: `REQ-${intentId}`,
-    sourceAcknowledgementDigest: `sad-${intentId}`,
     category: 'order_status',
     description,
+    externalMessageSent,
     refundStarted: false,
-    customerMessageSent,
     evidenceReference: `ev-${intentId}`,
   }
 }
