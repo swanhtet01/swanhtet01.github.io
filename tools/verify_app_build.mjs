@@ -2873,17 +2873,17 @@ if (settingsAdvancedIndex < 0
 // pack and one Plant pack and the rest of the packs were unreachable claims.
 if (!appSource.includes('<Route element={<SettingsEntry />} path="settings/*" />')
   || !appSource.includes('{import.meta.env.DEV ? <Route element={<Suspense fallback={<ProductLoading name="client builder" />}><SettingsPage /></Suspense>} path="internal/client-builder/*" /> : null}')
-  || !productOnboardingPageSource.includes('{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}')
+  // Plant still uses a traditional pack dropdown; the Shop pack is derived from
+  // the business template selected in the visual grid (no manual pack picker).
   || !productOnboardingPageSource.includes('{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}')
-  || !productOnboardingPageSource.includes('onChange={(event) => changeShopIndustryPack(event.target.value)}')
   || !productOnboardingPageSource.includes('onChange={(event) => changePlantIndustryPack(event.target.value)}')
   || !productOnboardingPageSource.includes('savePlantIndustryPackId(plantIndustryPackId, window.localStorage)')
   || !productOnboardingPageSource.includes('provisionLocalShopIndustryPack(selectedShopIndustryPack.id)')
   || !productOnboardingPageSource.includes('provisionLocalShopWorkingSample(selectedShopIndustryPack.id, onboardingTemplate.id)')
-  // A starter catalog is written for one shop type; offering all seven against
-  // any pack would install a pharmacy catalog into a spa workspace.
-  || !productOnboardingPageSource.includes('shopBusinessTemplates.filter((template) => template.industryPackId === selectedShopIndustryPack.id)')
-  || !productOnboardingPageSource.includes('{availableBusinessTemplates.map((template)')) fail('product_setup_industry_pack_pickers_unreachable')
+  // All 11 business templates are shown in a direct visual grid so clients pick
+  // their exact Myanmar business type in one tap rather than two dropdowns.
+  || !productOnboardingPageSource.includes('business-template-grid')
+  || !productOnboardingPageSource.includes('{shopBusinessTemplates.map((template)')) fail('product_setup_industry_pack_pickers_unreachable')
 if (!commerceOrderDraftSource.includes("COMMERCE_ORDER_DRAFT_SCHEMA = 'supermega.shop.order_draft.v1'")
   || !commerceOrderDraftSource.includes("['sku', 'quantity', 'unitPriceMmk', 'availableAtSave']")
   || !commerceOrderDraftSource.includes('COMMERCE_ORDER_DRAFT_MAX_BYTES')
@@ -7206,11 +7206,11 @@ async function verifyShopBusinessTemplateRuntime() {
     || !productOnboardingRuntimeSource.includes('export async function provisionLocalShopBusinessTemplateSample')
     || !productOnboardingPageSource.includes('provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)')
     || !productOnboardingPageSource.includes("shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))")
-    || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
-    || !productOnboardingPageSource.includes('availableBusinessTemplates.map((template)')
-    || !productOnboardingPageSource.includes('Standard {selectedShopIndustryPack.name.toLowerCase()} sample')
+    || !productOnboardingPageSource.includes('className="business-template-grid"')
+    || !productOnboardingPageSource.includes('{shopBusinessTemplates.map((template)')
+    || !productOnboardingPageSource.includes('BUSINESS_TEMPLATE_ICONS')
     || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(selectedShopIndustryPack.id, onboardingTemplate.id)')
-    || !coreCssSource.includes('.product-onboarding-business-type')) fail('shop_business_template_contract_missing')
+    || !coreCssSource.includes('.business-template-grid')) fail('shop_business_template_contract_missing')
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')).href}?shop-business-template-verify=${Date.now()}`)
     const onboardingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?shop-business-template-import-verify=${Date.now()}`)

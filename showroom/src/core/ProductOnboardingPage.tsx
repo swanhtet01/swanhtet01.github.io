@@ -42,9 +42,22 @@ import {
 } from './plant-industry-packs'
 import {
   shopIndustryPack,
-  shopIndustryPacks,
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
+
+const BUSINESS_TEMPLATE_ICONS: Record<string, string> = {
+  'mini-mart': '🛒',
+  'pharmacy': '💊',
+  'phone-electronics': '📱',
+  'fashion': '👗',
+  'hardware': '🔧',
+  'tea-coffee': '☕',
+  'auto-parts': '🔩',
+  'restaurant': '🍜',
+  'spa': '💆',
+  'gym': '💪',
+  'school': '📚',
+}
 import {
   useAccountableActions,
   useManagedIdentity,
@@ -98,7 +111,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
     () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
   )
-  const [businessTypeOpen, setBusinessTypeOpen] = useState(() => businessTemplateId !== null)
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]
@@ -107,7 +119,6 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
   // Starter catalogs are written for one shop type, so offering the others here
   // would install a catalog that contradicts the schedule and capabilities.
-  const availableBusinessTemplates = shopBusinessTemplates.filter((template) => template.industryPackId === selectedShopIndustryPack.id)
   const onboardingTemplate = setup.product === product
     ? templateFor(product, setup.templateId)
     : product === 'commerce'
@@ -157,19 +168,14 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     return () => window.clearTimeout(packTimer)
   }, [product, selectedShopIndustryPack.entryPoint, selectedShopIndustryPack.workflowTemplateId, setSetup, setup.entryPoint, setup.product, setup.templateId])
 
-  function changeBusinessTemplate(value: string) {
-    const next = shopBusinessTemplateFromQuery(value)
-    setBusinessTemplateId(next)
-    setSetup((current) => (current.product === 'commerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
-  }
-
-  function changeShopIndustryPack(value: string) {
-    const next = shopIndustryPacks.find((pack) => pack.id === value)
-    if (!next) return
-    setShopIndustryPackId(next.id)
-    // A starter catalog belongs to one shop type, so keep the pair coherent
-    // rather than letting a pharmacy catalog ride along into a spa workspace.
-    if (selectedBusinessTemplate && selectedBusinessTemplate.industryPackId !== next.id) setBusinessTemplateId(null)
+  function selectBusinessTemplate(id: ShopBusinessTemplateId | null) {
+    if (id === null) {
+      setBusinessTemplateId(null)
+    } else {
+      const template = shopBusinessTemplate(id)
+      setBusinessTemplateId(template.id)
+      setShopIndustryPackId(template.industryPackId)
+    }
     setSetup((current) => (current.product === 'commerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
   }
 
@@ -299,25 +305,33 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           {product === 'commerce' ? (
-            <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setBusinessTypeOpen(event.currentTarget.open)} open={businessTypeOpen}>
-              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : `${selectedShopIndustryPack.name} sample`}</small></summary>
-              <label className="demo-pack-select">Shop type
-                <select onChange={(event) => changeShopIndustryPack(event.target.value)} value={selectedShopIndustryPack.id}>
-                  {shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
-                </select>
-                <small>{selectedShopIndustryPack.firstWorkflow} {selectedShopIndustryPack.description}</small>
-              </label>
+            <div className="business-template-picker">
+              <div className="business-template-picker-header">
+                <span className="core-eyebrow">Business type</span>
+                {selectedBusinessTemplate ? (
+                  <p>{selectedBusinessTemplate.description} {selectedBusinessTemplate.catalog.length} starter items.</p>
+                ) : (
+                  <p>Pick your business type to get a matching starter catalog with real Myanmar prices and reorder levels.</p>
+                )}
+              </div>
+              <div className="business-template-grid" role="group" aria-label="Business type">
+                {shopBusinessTemplates.map((template) => (
+                  <button
+                    aria-pressed={businessTemplateId === template.id}
+                    className="business-template-card"
+                    data-selected={businessTemplateId === template.id || undefined}
+                    key={template.id}
+                    onClick={() => selectBusinessTemplate(businessTemplateId === template.id ? null : template.id)}
+                    type="button"
+                  >
+                    <span className="business-template-icon" aria-hidden="true">{BUSINESS_TEMPLATE_ICONS[template.id]}</span>
+                    <span className="business-template-name-en">{template.name.en}</span>
+                    <span className="business-template-name-my">{template.name.my}</span>
+                  </button>
+                ))}
+              </div>
               <ul className="product-onboarding-capabilities">{selectedShopIndustryPack.capabilities.map((capability) => <li key={capability}>{capability}</li>)}</ul>
-              {availableBusinessTemplates.length ? (
-                <label className="demo-pack-select">Starter data
-                  <select onChange={(event) => changeBusinessTemplate(event.target.value)} value={businessTemplateId ?? ''}>
-                    <option value="">Standard {selectedShopIndustryPack.name.toLowerCase()} sample</option>
-                    {availableBusinessTemplates.map((template) => <option key={template.id} value={template.id}>{template.name.en} · {template.name.my}</option>)}
-                  </select>
-                  <small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.` : 'Keep the standard sample, or pick a business type for a fuller starter catalog.'}</small>
-                </label>
-              ) : null}
-            </details>
+            </div>
           ) : null}
           {product === 'production' ? (
             <details className="compact-disclosure product-onboarding-business-type" open>

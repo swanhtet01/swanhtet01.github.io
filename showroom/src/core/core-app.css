@@ -809,6 +809,16 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-help { margin: 0; color: var(--core-muted); font-size: 10px; }
 .product-onboarding-help a { color: var(--core-ink); font-weight: 780; text-underline-offset: 3px; }
 .product-onboarding-help a:hover { color: var(--core-green); }
+.business-template-picker { display: grid; gap: 10px; }
+.business-template-picker-header { display: grid; gap: 4px; }
+.business-template-picker-header p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.5; }
+.business-template-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 6px; }
+.business-template-card { display: grid; gap: 2px; border: 1px solid var(--core-line); border-radius: 9px; padding: 10px 8px 8px; background: var(--core-panel-raised); cursor: pointer; text-align: center; transition: border-color .12s, background .12s; }
+.business-template-card:hover { border-color: var(--core-green); background: var(--core-green-soft); }
+.business-template-card[data-selected] { border-color: var(--core-green); background: var(--core-green-soft); box-shadow: 0 0 0 2px color-mix(in srgb, var(--core-green) 22%, transparent); }
+.business-template-icon { font-size: 22px; line-height: 1; margin-bottom: 2px; }
+.business-template-name-en { color: var(--core-ink); font-size: 9px; font-weight: 760; line-height: 1.3; }
+.business-template-name-my { color: var(--core-quiet); font-size: 9px; line-height: 1.3; }
 .ai-setup-guide { display: grid; grid-template-columns: minmax(220px,1fr) minmax(300px,.9fr) auto; align-items: center; gap: 18px; border-top: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 14px 18px; background: var(--core-green-soft); }
 .ai-setup-guide-copy { min-width: 0; display: grid; gap: 4px; }
 .ai-setup-guide-copy h2 { margin: 0; font-size: 16px; line-height: 1.25; }
@@ -1704,6 +1714,9 @@ textarea { min-height: 72px; resize: vertical; }
   .product-onboarding-primary { align-items: stretch; flex-direction: column; }
   .product-onboarding-primary .core-button { width: 100%; }
   .product-onboarding-help a { min-height: 44px; display: inline-flex; align-items: center; }
+  .business-template-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; }
+  .business-template-card { padding: 8px 6px 6px; }
+  .business-template-icon { font-size: 18px; }
   .page-heading { align-items: flex-start; }
   .page-heading p { white-space: normal; }
   .operations-screen .page-heading { flex-direction: column; gap: 8px; }
