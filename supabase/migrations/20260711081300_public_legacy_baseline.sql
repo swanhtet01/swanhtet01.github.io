@@ -27,9 +27,12 @@
 
 begin;
 
-create extension if not exists "uuid-ossp";
-create extension if not exists pgcrypto;
-create extension if not exists vector;
+-- Schema-qualified on purpose: on a fresh replay (preview branch) an unqualified create lands the
+-- extension in public, whose functions default to EXECUTE for PUBLIC -- the browser-quarantine
+-- packet then correctly refuses to apply (proven on branch usmpllbckvrucbjptiuq, 2026-08-12).
+create extension if not exists "uuid-ossp" with schema extensions;
+create extension if not exists pgcrypto with schema extensions;
+create extension if not exists vector with schema extensions;
 
 do $enum$
 begin
