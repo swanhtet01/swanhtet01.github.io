@@ -314,6 +314,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-cancellation-intent-order-cancelled-payment-status-brief (cancellationIntents orderCancelled boolean × paymentStatus pending/reconciled: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-601)
 - [x] Analytics Codex: ecommerce-cancellation-intent-customer-message-order-status-brief (cancellationIntents customerMessageSent boolean × orderStatus confirmed/preparing/ready: 2×3 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-602)
 - [x] Analytics Codex: ecommerce-cancellation-intent-order-cancelled-refund-status-brief (cancellationIntents orderCancelled boolean × refundStatus none/due/settled: 2×3 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-603)
+- [x] Analytics Codex: ecommerce-cancellation-intent-order-cancelled-order-status-brief (cancellationIntents orderCancelled boolean × orderStatus confirmed/preparing/ready: 2×3 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-604)
+- [x] Analytics Codex: ecommerce-cancellation-intent-customer-message-payment-status-brief (cancellationIntents customerMessageSent boolean × paymentStatus pending/reconciled: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-605)
+- [x] Analytics Codex: ecommerce-cancellation-intent-customer-message-refund-status-brief (cancellationIntents customerMessageSent boolean × refundStatus none/due/settled: 2×3 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-606)
+- [x] Analytics Codex: ecommerce-support-intent-customer-message-description-length-brief (supportIntents customerMessageSent boolean × description.length≤40 short/detailed: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-607)
 
 ### Aug 25–31
 
