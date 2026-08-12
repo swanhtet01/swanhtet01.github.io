@@ -366,6 +366,9 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-correction-intent-customer-message-payment-changed-brief (correctionIntents customerMessageSent boolean × paymentChanged boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-653)
 - [x] Analytics Codex: ecommerce-correction-intent-provider-called-order-changed-brief (correctionIntents providerCalled boolean × orderChanged boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-654)
 - [x] Analytics Codex: ecommerce-correction-intent-provider-called-payment-changed-brief (correctionIntents providerCalled boolean × paymentChanged boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-655)
+- [x] Analytics Codex: ecommerce-correction-intent-refund-started-order-changed-brief (correctionIntents refundStarted boolean × orderChanged boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-656)
+- [x] Analytics Codex: ecommerce-correction-intent-refund-started-payment-changed-brief (correctionIntents refundStarted boolean × paymentChanged boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-657)
+- [x] Analytics Codex: ecommerce-correction-intent-order-changed-payment-changed-brief (correctionIntents orderChanged boolean × paymentChanged boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-658)
 
 ### Aug 25–31
 
