@@ -126,6 +126,7 @@
     "hq:verify:live:self-test": "node tools/verify_hq_live_state.mjs --self-test"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.4"
+    "@electric-sql/pglite": "0.5.4",
+    "yaml": "2.9.0"
   }
 }

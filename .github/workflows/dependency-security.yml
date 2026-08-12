@@ -2,14 +2,7 @@ name: Dependency Security Audit
 
 on:
   pull_request:
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - 'showroom/package.json'
-      - 'showroom/package-lock.json'
-      - 'kernel/package.json'
-      - 'kernel/package-lock.json'
-      - '.github/workflows/dependency-security.yml'
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
   schedule:
     - cron: '25 3 * * 1'
@@ -49,3 +42,15 @@ jobs:
       - name: Audit locked dependencies
         working-directory: ${{ matrix.directory }}
         run: npm audit --audit-level=low
+
+  required-check:
+    name: Dependency Security Audit
+    if: ${{ always() }}
+    needs: npm-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every dependency audit
+        env:
+          AUDIT_RESULT: ${{ needs.npm-audit.result }}
+        run: test "$AUDIT_RESULT" = "success"

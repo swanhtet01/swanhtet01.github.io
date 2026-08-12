@@ -1,8 +1,10 @@
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, mkdtemp, readFile as readRawFile, rm } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { copyFile, mkdir, mkdtemp, readFile as readRawFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { isAlias, isMap, isScalar, isSeq, parseDocument } from 'yaml'
 
 import { validateSchedulerExecutionBudget } from './scheduler_authority_contract.mjs'
 
@@ -19,6 +21,16 @@ const ciWorkflow = await readFile(resolve(root, '.github/workflows/showroom-ci.y
 const dependencyAuditWorkflow = await readFile(resolve(root, '.github/workflows/dependency-security.yml'), 'utf8')
 const publicHealthWorkflow = await readFile(resolve(root, '.github/workflows/supermega-public-live-health.yml'), 'utf8')
 const kernelWorkflow = await readFile(resolve(root, '.github/workflows/kernel-deploy.yml'), 'utf8')
+const workflowDirectory = resolve(root, '.github/workflows')
+const requiredWorkflowFiles = new Set(['showroom-ci.yml', 'dependency-security.yml', 'kernel-deploy.yml'])
+const otherWorkflowSources = await Promise.all(
+  (await readdir(workflowDirectory, { withFileTypes: true }))
+    .filter((entry) => entry.isFile()
+      && /\.ya?ml$/i.test(entry.name)
+      && !requiredWorkflowFiles.has(entry.name))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((entry) => readFile(resolve(workflowDirectory, entry.name), 'utf8')),
+)
 const generator = await readFile(resolve(root, 'tools/write_app_vercel_config.mjs'), 'utf8')
 const appVerifier = await readFile(resolve(root, 'tools/verify_app_release_live.mjs'), 'utf8')
 const publicVerifier = await readFile(resolve(root, 'tools/verify_public_release_live.mjs'), 'utf8')
@@ -45,23 +57,520 @@ const agentConnectorMap = previewServer.slice(
 )
 const failures = []
 const checks = []
+const REQUIRED_PULL_REQUEST_TYPES = ['opened', 'synchronize', 'reopened', 'ready_for_review']
+const REQUIRED_JOB_CONDITION = "github.event_name != 'pull_request' || github.event.pull_request.draft == false"
+const REQUIRED_CONTEXTS = [
+  'SuperMega App CI',
+  'Dependency Security Audit',
+  'Kernel Console - Verify & Owner-Gated Release',
+]
+const EXPECTED_APP_CI_JOB = {
+  name: 'SuperMega App CI',
+  if: REQUIRED_JOB_CONDITION,
+  'runs-on': 'ubuntu-latest',
+  'timeout-minutes': 10,
+  steps: [
+    { name: 'Checkout', uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' },
+    {
+      name: 'Setup Node',
+      uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020',
+      with: { 'node-version': 24, cache: 'npm', 'cache-dependency-path': 'package-lock.json\nshowroom/package-lock.json\n' },
+    },
+    {
+      name: 'Setup Python',
+      uses: 'actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97',
+      with: { 'python-version': '3.12', cache: 'pip', 'cache-dependency-path': 'requirements-test.txt' },
+    },
+    {
+      name: 'Verify canonical API contracts',
+      run: "python -m pip install --disable-pip-version-check -r requirements-test.txt\npython -m unittest discover -s tests -p 'test_*.py' -v\n",
+    },
+    { name: 'Install migration verifier', run: 'npm ci --ignore-scripts' },
+    {
+      name: 'Verify coordinated release and RLS guards',
+      run: 'python tools/validate_supermega_database_url.py --self-test\nnpm run database:migrations:verify\nnode tools/verify_coordinated_release_live.mjs --self-test\nnode tools/verify_app_deploy_workflow.mjs\nnode tools/verify_public_deploy_guard.mjs\n',
+    },
+    { name: 'Install dependencies', 'working-directory': 'showroom', run: 'npm ci' },
+    { name: 'Lint app', 'working-directory': 'showroom', run: 'npm run lint' },
+    { name: 'Generate app deployment contract', run: 'node tools/write_app_vercel_config.mjs' },
+    {
+      name: 'Build and verify canonical app',
+      env: { SUPERMEGA_RELEASE_COMMIT: '${{ github.sha }}' },
+      run: 'npm run app:build:checked',
+    },
+  ],
+}
+const EXPECTED_KERNEL_VERIFY_JOB = {
+  name: 'Kernel Console - Verify & Owner-Gated Release',
+  if: REQUIRED_JOB_CONDITION,
+  'runs-on': 'ubuntu-latest',
+  'timeout-minutes': 20,
+  steps: [
+    {
+      name: 'Checkout the reviewed commit',
+      uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+      with: { ref: '${{ github.sha }}', 'fetch-depth': 1 },
+    },
+    {
+      name: 'Setup Node',
+      uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020',
+      with: { 'node-version': 24, cache: 'npm', 'cache-dependency-path': 'kernel/package-lock.json' },
+    },
+    { name: 'Install kernel dependencies', run: 'npm --prefix kernel ci --no-audit --no-fund' },
+    { name: 'Verify kernel and release contract', run: 'npm --prefix kernel run verify' },
+  ],
+}
+const EXPECTED_CI_CONCURRENCY = {
+  group: 'showroom-ci-${{ github.ref }}',
+  'cancel-in-progress': true,
+}
+const EXPECTED_DEPENDENCY_CONCURRENCY = {
+  group: 'dependency-security-${{ github.ref }}',
+  'cancel-in-progress': true,
+}
+const EXPECTED_KERNEL_CONCURRENCY = {
+  group: 'kernel-console-${{ github.ref }}',
+  'cancel-in-progress': "${{ github.event_name == 'pull_request' }}",
+}
+const EXPECTED_KERNEL_PUSH = {
+  branches: ['main'],
+  paths: [
+    'kernel/**',
+    'tools/test_connector_resilience.mjs',
+    'tools/test_crew_resilience.mjs',
+    'tools/resolve_vercel_rollback_target.mjs',
+    '.github/workflows/kernel-deploy.yml',
+  ],
+}
+const EXPECTED_KERNEL_WORKFLOW_DISPATCH = {
+  inputs: {
+    release_sha: {
+      description: 'Exact 40-character SHA at the current main tip',
+      required: true,
+      type: 'string',
+    },
+    confirmation: {
+      description: 'Type RELEASE KERNEL followed by the exact SHA',
+      required: true,
+      type: 'string',
+    },
+  },
+}
+const EXPECTED_KERNEL_RELEASE_JOB_DIGEST = 'sha256:2b3bc3cb159f79cc80e40ea0bbb4a78b68aa16a2006a5d2d9425cc5dbe4e0bc0'
+
+function plainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function exactKeys(value, expected) {
+  return plainObject(value)
+    && JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...expected].sort())
+}
+
+function canonicalJson(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`
+}
+
+function canonicalDigest(value) {
+  return `sha256:${createHash('sha256').update(canonicalJson(value)).digest('hex')}`
+}
+
+function safeYamlNode(node) {
+  if (node === null) return true
+  if (isAlias(node) || node?.anchor || node?.tag) return false
+  if (isScalar(node)) return true
+  if (isSeq(node)) return node.items.every(safeYamlNode)
+  if (isMap(node)) {
+    return node.items.every((pair) => isScalar(pair.key)
+      && typeof pair.key.value === 'string'
+      && safeYamlNode(pair.key)
+      && safeYamlNode(pair.value))
+  }
+  return false
+}
+
+function parseWorkflow(source) {
+  if (typeof source !== 'string'
+    || source.length > 256_000
+    || source.includes('\0')
+    || source.includes('\t')) return null
+  let document
+  try {
+    document = parseDocument(normalizeSourceText(source), {
+      prettyErrors: false,
+      strict: true,
+      uniqueKeys: true,
+      version: '1.2',
+    })
+  } catch {
+    return null
+  }
+  if (document.errors.length > 0
+    || document.warnings.length > 0
+    || !safeYamlNode(document.contents)) return null
+  let value
+  try {
+    value = document.toJS({ maxAliasCount: 0 })
+  } catch {
+    return null
+  }
+  return plainObject(value) ? value : null
+}
+
+function mutateWorkflowSource(source, mutate) {
+  const value = parseWorkflow(source)
+  if (!value) throw new Error('workflow_fixture_invalid')
+  mutate(value)
+  return JSON.stringify(value)
+}
+
+function pullRequestRunsForEveryReviewableChange(workflow) {
+  if (typeof workflow === 'string') workflow = parseWorkflow(workflow)
+  const pullRequest = workflow?.on?.pull_request
+  return exactKeys(pullRequest, ['types'])
+    && JSON.stringify(pullRequest.types) === JSON.stringify(REQUIRED_PULL_REQUEST_TYPES)
+    && !Object.hasOwn(workflow, 'defaults')
+}
+
+function jobNameIsGloballyUnique(workflow, context, expectedJobKey) {
+  const matches = Object.entries(workflow.jobs || {})
+    .filter(([, job]) => plainObject(job) && job.name === context)
+    .map(([jobKey]) => jobKey)
+  return matches.length === 1 && matches[0] === expectedJobKey
+}
+
+function jobNamesAreStatic(workflow) {
+  return plainObject(workflow?.jobs)
+    && Object.values(workflow.jobs).every((job) => !plainObject(job)
+      || !Object.hasOwn(job, 'name')
+      || (typeof job.name === 'string' && !job.name.includes('${{')))
+}
+
+function stepsAreBlocking(steps) {
+  return Array.isArray(steps)
+    && steps.length > 0
+    && steps.every((step) => plainObject(step)
+      && !Object.hasOwn(step, 'continue-on-error')
+      && !Object.hasOwn(step, 'if'))
+}
+
+function exactBlockingRequiredJob(workflow, jobKey, context, expectedJob) {
+  const job = workflow?.jobs?.[jobKey]
+  return canonicalJson(job) === canonicalJson(expectedJob)
+    && job.name === context
+    && stepsAreBlocking(job.steps)
+    && jobNameIsGloballyUnique(workflow, context, jobKey)
+}
+
+function exactRequiredWorkflowEnvelope(workflow, name, eventKeys, jobKeys, expectedConcurrency) {
+  return exactKeys(workflow, ['name', 'on', 'permissions', 'concurrency', 'jobs'])
+    && workflow.name === name
+    && exactKeys(workflow.on, eventKeys)
+    && exactKeys(workflow.permissions, ['contents'])
+    && workflow.permissions.contents === 'read'
+    && canonicalJson(workflow.concurrency) === canonicalJson(expectedConcurrency)
+    && exactKeys(workflow.jobs, jobKeys)
+}
+
+function exactKernelProductionAuthority(workflow) {
+  return canonicalJson(workflow?.on?.push) === canonicalJson(EXPECTED_KERNEL_PUSH)
+    && canonicalJson(workflow?.on?.workflow_dispatch) === canonicalJson(EXPECTED_KERNEL_WORKFLOW_DISPATCH)
+    && canonicalDigest(workflow?.jobs?.release) === EXPECTED_KERNEL_RELEASE_JOB_DIGEST
+}
+
+function exactDependencyAuditWorkflow(workflow) {
+  if (!pullRequestRunsForEveryReviewableChange(workflow)
+    || !exactRequiredWorkflowEnvelope(
+      workflow,
+      'Dependency Security Audit',
+      ['pull_request', 'workflow_dispatch', 'schedule'],
+      ['npm-audit', 'required-check'],
+      EXPECTED_DEPENDENCY_CONCURRENCY,
+    )
+    || workflow.on.workflow_dispatch !== null
+    || JSON.stringify(workflow.on.schedule) !== JSON.stringify([{ cron: '25 3 * * 1' }])) return false
+
+  const audit = workflow.jobs['npm-audit']
+  const expectedMatrix = [
+    { package: 'platform', directory: '.' },
+    { package: 'app', directory: 'showroom' },
+    { package: 'kernel', directory: 'kernel' },
+  ]
+  if (!exactKeys(audit, ['name', 'if', 'runs-on', 'timeout-minutes', 'strategy', 'steps'])
+    || audit.name !== 'Audit ${{ matrix.package }}'
+    || audit.if !== REQUIRED_JOB_CONDITION
+    || audit['runs-on'] !== 'ubuntu-latest'
+    || audit['timeout-minutes'] !== 5
+    || !exactKeys(audit.strategy, ['fail-fast', 'matrix'])
+    || audit.strategy['fail-fast'] !== false
+    || !exactKeys(audit.strategy.matrix, ['include'])
+    || JSON.stringify(audit.strategy.matrix.include) !== JSON.stringify(expectedMatrix)
+    || !stepsAreBlocking(audit.steps)
+    || audit.steps.length !== 3
+    || !exactKeys(audit.steps[0], ['name', 'uses'])
+    || audit.steps[0].name !== 'Checkout'
+    || audit.steps[0].uses !== 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+    || !exactKeys(audit.steps[1], ['name', 'uses', 'with'])
+    || audit.steps[1].name !== 'Setup Node'
+    || audit.steps[1].uses !== 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020'
+    || !exactKeys(audit.steps[1].with, ['node-version'])
+    || audit.steps[1].with['node-version'] !== 24
+    || !exactKeys(audit.steps[2], ['name', 'working-directory', 'run'])
+    || audit.steps[2].name !== 'Audit locked dependencies'
+    || audit.steps[2]['working-directory'] !== '${{ matrix.directory }}'
+    || audit.steps[2].run !== 'npm audit --audit-level=low') return false
+
+  const required = workflow.jobs['required-check']
+  return exactKeys(required, ['name', 'if', 'needs', 'runs-on', 'timeout-minutes', 'steps'])
+    && required.name === 'Dependency Security Audit'
+    && required.if === '${{ always() }}'
+    && required.needs === 'npm-audit'
+    && required['runs-on'] === 'ubuntu-latest'
+    && required['timeout-minutes'] === 2
+    && jobNameIsGloballyUnique(workflow, 'Dependency Security Audit', 'required-check')
+    && stepsAreBlocking(required.steps)
+    && required.steps.length === 1
+    && exactKeys(required.steps[0], ['name', 'env', 'run'])
+    && required.steps[0].name === 'Require every dependency audit'
+    && exactKeys(required.steps[0].env, ['AUDIT_RESULT'])
+    && required.steps[0].env.AUDIT_RESULT === '${{ needs.npm-audit.result }}'
+    && required.steps[0].run === 'test "$AUDIT_RESULT" = "success"'
+}
+
+function requiredCheckWorkflowsValid(ciSource, dependencySource, kernelSource, additionalSources = otherWorkflowSources) {
+  const ci = parseWorkflow(ciSource)
+  const dependency = parseWorkflow(dependencySource)
+  const kernel = parseWorkflow(kernelSource)
+  const additional = additionalSources.map(parseWorkflow)
+  if (!ci
+    || !dependency
+    || !kernel
+    || additional.some((workflow) => !workflow || !jobNamesAreStatic(workflow))) return false
+  const contexts = [ci, dependency, kernel, ...additional].flatMap((workflow) => Object.values(workflow.jobs || {}))
+    .filter(plainObject)
+    .map((job) => job.name)
+    .filter((name) => REQUIRED_CONTEXTS.includes(name))
+  return JSON.stringify(contexts.sort()) === JSON.stringify([...REQUIRED_CONTEXTS].sort())
+    && exactRequiredWorkflowEnvelope(
+      ci,
+      'SuperMega App CI',
+      ['pull_request', 'workflow_dispatch'],
+      ['validate'],
+      EXPECTED_CI_CONCURRENCY,
+    )
+    && ci.on.workflow_dispatch === null
+    && exactRequiredWorkflowEnvelope(
+      kernel,
+      'Kernel Console - Verify & Owner-Gated Release',
+      ['push', 'pull_request', 'workflow_dispatch'],
+      ['verify', 'release'],
+      EXPECTED_KERNEL_CONCURRENCY,
+    )
+    && exactKernelProductionAuthority(kernel)
+    && pullRequestRunsForEveryReviewableChange(ci)
+    && pullRequestRunsForEveryReviewableChange(kernel)
+    && exactBlockingRequiredJob(ci, 'validate', 'SuperMega App CI', EXPECTED_APP_CI_JOB)
+    && exactDependencyAuditWorkflow(dependency)
+    && exactBlockingRequiredJob(kernel, 'verify', 'Kernel Console - Verify & Owner-Gated Release', EXPECTED_KERNEL_VERIFY_JOB)
+}
 
 function requireContract(name, condition) {
   checks.push(name)
   if (!condition) failures.push(name)
 }
 
+const parsedKernelWorkflow = parseWorkflow(kernelWorkflow)
+const parsedKernelRelease = parsedKernelWorkflow?.jobs?.release
+const kernelReleaseSteps = Array.isArray(parsedKernelRelease?.steps) ? parsedKernelRelease.steps : []
+const kernelReleaseStep = (name) => kernelReleaseSteps.find((step) => plainObject(step) && step.name === name)
+const kernelReleaseRunText = kernelReleaseSteps
+  .map((step) => (plainObject(step) && typeof step.run === 'string' ? step.run : ''))
+  .join('\n')
+
 requireContract('source line endings normalize across platforms',
   normalizeSourceText('line one\r\nline two\rline three') === 'line one\nline two\nline three')
-requireContract('dependency audit is read-only, scheduled, and covers every npm lockfile',
+requireContract('locked required checks are exact and run for every reviewable pull request',
+  requiredCheckWorkflowsValid(ciWorkflow, dependencyAuditWorkflow, kernelWorkflow))
+requireContract('required-check contract rejects every pull-request filter form and missing ready events',
+  ['paths', 'paths-ignore', 'branches', 'branches-ignore'].every((key) =>
+    !requiredCheckWorkflowsValid(
+      ciWorkflow.replace(
+        '    types: [opened, synchronize, reopened, ready_for_review]',
+        `    types: [opened, synchronize, reopened, ready_for_review]\n    "${key}" : [main]`,
+      ),
+      dependencyAuditWorkflow,
+      kernelWorkflow,
+    ))
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow.replace(', ready_for_review', ''),
+    kernelWorkflow,
+  ))
+requireContract('required-check contract rejects duplicate keys, aliases, renamed and duplicate contexts',
+  !requiredCheckWorkflowsValid(
+    ciWorkflow.replace('  workflow_dispatch:', '  pull_request:\n    types: [opened]\n  workflow_dispatch:'),
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow.replace('jobs:\n  validate:', 'jobs:\n  &jobkey validate:'),
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow.replace('jobs:\n  validate:', 'jobs:\n  !!str validate:'),
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    kernelWorkflow.replace('    name: Kernel Console - Verify & Owner-Gated Release', '    name: &required-context Kernel Console - Verify & Owner-Gated Release'),
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    kernelWorkflow.replace('    name: Kernel Console - Verify & Owner-Gated Release', '    name: Kernel Verify'),
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow.replace(
+      'jobs:\n  validate:',
+      'jobs:\n  duplicate-context:\n    name: "SuperMega App CI"\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n  validate:',
+    ),
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+    [...otherWorkflowSources, ciWorkflow],
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+    [...otherWorkflowSources, mutateWorkflowSource(ciWorkflow, (value) => {
+      value.name = 'Dynamic duplicate'
+      value.jobs.validate.name = "${{ 'SuperMega App CI' }}"
+    })],
+  ))
+requireContract('required-check contract pins workflow-specific concurrency groups',
+  !requiredCheckWorkflowsValid(
+    mutateWorkflowSource(ciWorkflow, (value) => { value.concurrency = EXPECTED_KERNEL_CONCURRENCY }),
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    mutateWorkflowSource(dependencyAuditWorkflow, (value) => { value.concurrency = EXPECTED_CI_CONCURRENCY }),
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    mutateWorkflowSource(kernelWorkflow, (value) => { value.concurrency = EXPECTED_DEPENDENCY_CONCURRENCY }),
+  ))
+requireContract('required-check contract pins kernel events and complete production authority',
+  !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    mutateWorkflowSource(kernelWorkflow, (value) => { value.on.push = ['main'] }),
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    mutateWorkflowSource(kernelWorkflow, (value) => { value.on.workflow_dispatch = 'invalid' }),
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    mutateWorkflowSource(kernelWorkflow, (value) => { value.jobs.release.if = "${{ github.event_name == 'push' }}" }),
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    mutateWorkflowSource(kernelWorkflow, (value) => { delete value.jobs.release.needs }),
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    mutateWorkflowSource(kernelWorkflow, (value) => { delete value.jobs.release.environment }),
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow,
+    `${mutateWorkflowSource(kernelWorkflow, (value) => {
+      value.jobs.release.if = "${{ github.event_name == 'push' }}"
+      delete value.jobs.release.needs
+      delete value.jobs.release.environment
+    })}\n# needs: verify\n# environment: kernel-production\n# github.event_name == 'workflow_dispatch'`,
+  ))
+requireContract('required-check contract rejects skipped or non-blocking required jobs',
+  !requiredCheckWorkflowsValid(
+    ciWorkflow.replace(`    if: ${REQUIRED_JOB_CONDITION}`, '    if: false'),
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow.replace('    runs-on: ubuntu-latest', '    continue-on-error: true\n    runs-on: ubuntu-latest'),
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow.replace('      - name: Lint app', '      - name: Lint app\n        continue-on-error: true'),
+    dependencyAuditWorkflow,
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow.replace('    runs-on: ubuntu-latest', '    continue-on-error: true\n    runs-on: ubuntu-latest'),
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow.replace('      - name: Audit locked dependencies', '      - name: Audit locked dependencies\n        continue-on-error: true'),
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow.replace('  required-check:\n    name:', '  required-check:\n    continue-on-error: true\n    name:'),
+    kernelWorkflow,
+  ))
+requireContract('required-check contract rejects audit command and matrix bypasses',
+  !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow.replace('run: npm audit --audit-level=low', 'run: npm audit --audit-level=low || true'),
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow.replace('      fail-fast: false', '      fail-fast: false\n      continue-on-error: true'),
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow.replace('            directory: showroom', '            directory: .').replace('            directory: kernel', '            directory: .'),
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow.replace('        run: npm audit --audit-level=low', '        # run: npm audit --audit-level=low\n        run: true'),
+    kernelWorkflow,
+  )
+  && !requiredCheckWorkflowsValid(
+    ciWorkflow,
+    dependencyAuditWorkflow.replace('        run: test "$AUDIT_RESULT" = "success"', '        # run: test "$AUDIT_RESULT" = "success"\n        run: true'),
+    kernelWorkflow,
+  ))
+requireContract('dependency audit is read-only, scheduled, and aggregates every npm lockfile',
   packageJson.scripts?.['security:dependencies'] === 'npm audit --audit-level=low && npm --prefix showroom audit --audit-level=low && npm --prefix kernel audit --audit-level=low'
-  && dependencyAuditWorkflow.includes("- 'package-lock.json'")
-  && dependencyAuditWorkflow.includes("- 'showroom/package-lock.json'")
-  && dependencyAuditWorkflow.includes("- 'kernel/package-lock.json'")
+  && exactDependencyAuditWorkflow(parseWorkflow(dependencyAuditWorkflow))
   && dependencyAuditWorkflow.includes('workflow_dispatch:')
   && dependencyAuditWorkflow.includes("cron: '25 3 * * 1'")
   && dependencyAuditWorkflow.includes('contents: read')
-  && dependencyAuditWorkflow.includes('run: npm audit --audit-level=low')
   && !dependencyAuditWorkflow.includes('pull_request_target:')
   && !dependencyAuditWorkflow.includes('contents: write')
   && !dependencyAuditWorkflow.includes('pull-requests: write'))
@@ -249,35 +758,57 @@ requireContract('canonical API function', config.routes?.[0]?.dest === '/api/app
 requireContract('canonical Python function cold imports from included runtime only', canonicalPythonBundle.status === 0 && canonicalPythonBundle.stdout.includes('canonical-python-bundle-import-ok'))
 requireContract('native Git deployment disabled in config', config.git?.deploymentEnabled === false && /deploymentEnabled:\s*false/.test(generator))
 requireContract('deployment control files trigger non-mutating review gates',
-  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'vercel.json'") && source.includes("- '.vercelignore'")))
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && appWorkflow.includes("- 'vercel.json'")
+  && appWorkflow.includes("- '.vercelignore'"))
 requireContract('remote app build includes kernel release contract', generator.includes("['.github', 'kernel', 'supabase']"))
-requireContract('retired alias control triggers non-mutating review gates', [ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_retired_vercel_alias_state.mjs')))
+requireContract('retired alias control triggers non-mutating review gates',
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && ciWorkflow.includes('npm run app:build:checked')
+  && appWorkflow.includes('tools/verify_retired_vercel_alias_state.mjs'))
 requireContract('app and public changes trigger non-mutating review before manual release',
-  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'showroom/**'") && source.includes('tools/create_public_vercel_output.mjs') && source.includes('tools/verify_coordinated_release_live.mjs')))
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && ciWorkflow.includes('npm run app:build:checked')
+  && appWorkflow.includes("- 'showroom/**'")
+  && appWorkflow.includes('tools/create_public_vercel_output.mjs')
+  && appWorkflow.includes('tools/verify_coordinated_release_live.mjs'))
 requireContract('HQ-only evidence validates without redeploying unchanged products',
   !workflow.includes("- 'hq/**'")
   && !workflow.includes('tools/verify_hq_contract.mjs')
-  && ciWorkflow.includes("- 'hq/**'")
-  && ciWorkflow.includes("- 'tools/verify_hq_contract.mjs'"))
+  && pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && ciWorkflow.includes('npm run app:build:checked'))
 requireContract('all API tests trigger review and execute before manual release',
-  [ciWorkflow, appWorkflow].every((source) => source.includes("- 'tests/**'"))
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && appWorkflow.includes("- 'tests/**'")
+  && ciWorkflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v")
   && workflow.includes("python -m unittest discover -s tests -p 'test_*.py' -v"))
-requireContract('runtime package changes trigger non-mutating review', [ciWorkflow, appWorkflow].every((source) => source.includes("- 'supermega_runtime/**'")))
+requireContract('runtime package changes trigger non-mutating review',
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && appWorkflow.includes("- 'supermega_runtime/**'"))
 requireContract('database activation controls trigger non-mutating review',
-  [ciWorkflow, appWorkflow].every((source) => source.includes('tools/validate_supermega_database_url.py') && source.includes('tools/activate_supermega_database.ps1')))
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && ciWorkflow.includes('tools/validate_supermega_database_url.py')
+  && appWorkflow.includes('tools/validate_supermega_database_url.py')
+  && appWorkflow.includes('tools/activate_supermega_database.ps1'))
 requireContract('rehearsal packet changes trigger both reviews and keep operator files ignored',
-  [ciWorkflow, appWorkflow].every((source) =>
-    source.includes('tools/prepare_supabase_rehearsal_packet.mjs')
-    && source.includes('tools/prepare_supabase_rehearsal_packet.test.mjs'))
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && appWorkflow.includes('tools/prepare_supabase_rehearsal_packet.mjs')
+  && appWorkflow.includes('tools/prepare_supabase_rehearsal_packet.test.mjs')
   && appWorkflow.includes("- '.gitignore'")
   && appWorkflow.includes("- '.github/workflows/showroom-ci.yml'")
   && /^\.tmp\/$/m.test(gitIgnore))
 requireContract('PostgreSQL 17 rehearsal changes trigger every non-mutating database review',
-  [ciWorkflow, appWorkflow].every((source) =>
-    source.includes('tools/rehearse_supermega_postgres17.py')
-    && source.includes('tools/run_postgres17_rehearsal.mjs')))
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && appWorkflow.includes('tools/rehearse_supermega_postgres17.py')
+  && appWorkflow.includes('tools/run_postgres17_rehearsal.mjs'))
 requireContract('migration proof changes trigger every database-aware workflow',
-  [workflow, ciWorkflow, appWorkflow].every((source) => source.includes('tools/verify_private_trial_migrations.mjs') && source.includes('package-lock.json')))
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && ciWorkflow.includes('npm run database:migrations:verify')
+  && appWorkflow.includes('tools/verify_private_trial_migrations.mjs')
+  && appWorkflow.includes('tools/verify_public_legacy_baseline.mjs')
+  && appWorkflow.includes('package-lock.json')
+  && workflow.includes('npm run database:migrations:verify')
+  && packageJson.scripts?.['database:migrations:verify'] === 'node tools/verify_private_trial_migrations.mjs && node tools/verify_public_legacy_baseline.mjs')
 requireContract('real migration proof precedes every production candidate',
   workflow.includes('npm ci --ignore-scripts')
   && workflow.includes('node tools/verify_private_trial_migrations.mjs')
@@ -364,23 +895,25 @@ requireContract('only coordinated workflow can promote app or public', (workflow
 requireContract('failed paired verification rolls back every attempted promotion', workflow.includes("failure() && (steps.promote-app.outputs.attempted == 'true' || steps.promote.outputs.attempted == 'true')") && (workflow.match(/attempted=true/g) || []).length === 2 && workflow.includes('APP_PROMOTION_ATTEMPTED') && workflow.includes('PUBLIC_PROMOTION_ATTEMPTED') && workflow.includes('steps.app-rollback-target.outputs.url') && workflow.includes('steps.rollback-target.outputs.url') && workflow.includes('VERIFY_RELEASE_PAIR_ONLY=1 node tools/verify_coordinated_release_live.mjs'))
 requireContract('kernel native Git deployment is disabled', kernelConfig.git?.deploymentEnabled === false)
 requireContract('kernel release is manual current-main and environment gated',
-  kernelWorkflow.includes("github.event_name == 'workflow_dispatch'")
-  && kernelWorkflow.includes("github.ref == 'refs/heads/main'")
-  && kernelWorkflow.includes("github.repository == 'swanhtet01/swanhtet01.github.io'")
-  && kernelWorkflow.includes('environment: kernel-production')
-  && kernelWorkflow.includes('RELEASE KERNEL $ACTUAL_SHA')
-  && kernelWorkflow.includes('git rev-parse origin/main'))
+  exactKernelProductionAuthority(parsedKernelWorkflow)
+  && parsedKernelRelease?.if === "${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}"
+  && parsedKernelRelease?.needs === 'verify'
+  && parsedKernelRelease?.environment === 'kernel-production'
+  && kernelReleaseStep('Require exact current-main release intent')?.run.includes('RELEASE KERNEL $ACTUAL_SHA')
+  && kernelReleaseStep('Require exact current-main release intent')?.run.includes('git rev-parse origin/main'))
 requireContract('kernel release promotes one exact isolated artifact',
-  (kernelWorkflow.match(/vercel@56\.1\.0 deploy --prebuilt --prod --skip-domain --yes/g) || []).length === 1
-  && (kernelWorkflow.match(/vercel@56\.1\.0 promote "\$CANDIDATE_URL"/g) || []).length === 1
-  && kernelWorkflow.includes('vercel@56.1.0 curl /api/status --deployment "$CANDIDATE_URL"')
-  && kernelWorkflow.indexOf('Reconfirm current main before promotion') < kernelWorkflow.indexOf('Promote the exact verified candidate')
-  && !kernelWorkflow.includes('npx vercel deploy --prod -y'))
+  exactKernelProductionAuthority(parsedKernelWorkflow)
+  && (kernelReleaseRunText.match(/vercel@56\.1\.0 deploy --prebuilt --prod --skip-domain --yes/g) || []).length === 1
+  && (kernelReleaseRunText.match(/vercel@56\.1\.0 promote "\$CANDIDATE_URL"/g) || []).length === 1
+  && kernelReleaseStep('Inspect and smoke the exact candidate')?.run.includes('vercel@56.1.0 curl /api/status --deployment "$CANDIDATE_URL"')
+  && kernelReleaseSteps.indexOf(kernelReleaseStep('Reconfirm current main before promotion')) < kernelReleaseSteps.indexOf(kernelReleaseStep('Promote the exact verified candidate'))
+  && !kernelReleaseRunText.includes('npx vercel deploy --prod -y'))
 requireContract('kernel failed production verification restores the exact prior alias',
-  kernelWorkflow.includes("failure() && steps.promote.outputs.attempted == 'true'")
-  && kernelWorkflow.includes('resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID"')
-  && kernelWorkflow.includes('vercel@56.1.0 rollback "$PREVIOUS_URL" --yes')
-  && kernelWorkflow.includes('[ "$RESTORED_URL" != "$PREVIOUS_URL" ]'))
+  exactKernelProductionAuthority(parsedKernelWorkflow)
+  && kernelReleaseStep('Roll back a failed production verification')?.if === "${{ failure() && steps.promote.outputs.attempted == 'true' }}"
+  && kernelReleaseStep('Capture the exact production rollback target')?.run.includes('resolve_vercel_rollback_target.mjs deployment "$PREVIOUS_URL" "$PREVIOUS_ID"')
+  && kernelReleaseStep('Roll back a failed production verification')?.run.includes('vercel@56.1.0 rollback "$PREVIOUS_URL" --yes')
+  && kernelReleaseStep('Roll back a failed production verification')?.run.includes('[ "$RESTORED_URL" != "$PREVIOUS_URL" ]'))
 requireContract('production environment gate', /environment:\s*production/.test(workflow))
 requireContract('production is main-only in the canonical repository', workflow.includes("if: ${{ github.ref == 'refs/heads/main' && github.repository == 'swanhtet01/swanhtet01.github.io' }}"))
 requireContract('production release requires an exact manual owner instruction before checkout or credentials',
@@ -504,10 +1037,11 @@ requireContract('public live health follows the canonical release workflow',
   publicHealthWorkflow.includes('SuperMega - Coordinated Verified Release')
   && !publicHealthWorkflow.includes('SuperMega Public - Verified Prebuilt Release'))
 requireContract('scheduler authority changes trigger every non-mutating review gate',
-  [appWorkflow, ciWorkflow].every((source) =>
-    source.includes('tools/supermega_scheduler_authority.json')
-    && source.includes('tools/verify_vercel_project_state.mjs')
-    && source.includes('tools/test_vercel_project_state.mjs')))
+  pullRequestRunsForEveryReviewableChange(ciWorkflow)
+  && ciWorkflow.includes('npm run app:build:checked')
+  && appWorkflow.includes('tools/supermega_scheduler_authority.json')
+  && appWorkflow.includes('tools/verify_vercel_project_state.mjs')
+  && appWorkflow.includes('tools/test_vercel_project_state.mjs'))
 
 const combined = `${workflow}\n${appWorkflow}\n${generator}\n${JSON.stringify(config)}`
 requireContract('no POS route', !/\/pos\/login/i.test(combined))

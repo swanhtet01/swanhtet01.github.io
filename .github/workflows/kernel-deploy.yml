@@ -11,12 +11,7 @@ on:
       - 'tools/resolve_vercel_rollback_target.mjs'
       - '.github/workflows/kernel-deploy.yml'
   pull_request:
-    paths:
-      - 'kernel/**'
-      - 'tools/test_connector_resilience.mjs'
-      - 'tools/test_crew_resilience.mjs'
-      - 'tools/resolve_vercel_rollback_target.mjs'
-      - '.github/workflows/kernel-deploy.yml'
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       release_sha:
@@ -37,6 +32,8 @@ concurrency:
 
 jobs:
   verify:
+    name: Kernel Console - Verify & Owner-Gated Release
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

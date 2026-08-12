@@ -1,17 +1,22 @@
 {
-  "contract": "supermega.managed-pilot-readiness.v3",
-  "asOf": "2026-08-14T20:28:07.071Z",
-  "sourceDigest": "sha256:e9958d6dacf733f57e362daaad27492f9e437000627a66c29798e0fe1549dee2",
+  "contract": "supermega.managed-pilot-readiness.v5",
+  "pilotMode": "owner_named",
+  "asOf": "2026-08-12T15:57:27.130Z",
+  "sourceDigest": "sha256:13642aabe124bc6d4635143d914dfd77b2e8337a062b1008b28409b8121ef18e",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
+    "productionSourceParityReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 7,
+    "blockingGateCount": 6,
     "nextAction": {
-      "kind": "founder_decision",
-      "decisionId": "bounded-managed-pilot-rehearsal",
+      "kind": "owner_decision",
+      "decisionId": "replace-failed-preview-and-prepare-owner-named-shop-pilot",
       "requires": [
+        "approve_failed_preview_branch_deletion",
+        "confirm_preview_branch_cost",
         "approve_preview_branch_target",
+        "name_shop_pilot_business",
         "name_shop_pilot_operator"
       ],
       "targetEnvironment": "preview_branch",
@@ -24,7 +29,13 @@
     "authority": "proposal_only",
     "createsAuthority": false,
     "approvalReceipt": null,
-    "decision": "Approve one bounded managed-pilot rehearsal.",
+    "decision": "Approve replacement of the failed rehearsal branch and prepare one owner-named Shop pilot.",
+    "failedBranch": {
+      "name": "security-rehearsal-24h-20260812",
+      "projectRef": "usmpllbckvrucbjptiuq",
+      "observedStatus": "MIGRATIONS_FAILED",
+      "deletionApproved": false
+    },
     "target": {
       "provider": "supabase",
       "environment": "preview_branch",
@@ -41,15 +52,18 @@
     },
     "operator": {
       "productId": "shop",
+      "pilotMode": "owner_named",
       "namedBusinessRequired": true,
       "namedOperatorRequired": true,
       "measuredBaselineRequired": true,
-      "acceptanceEvidenceRequired": true
+      "acceptanceEvidenceRequired": true,
+      "requiredConsecutiveAcceptedRuns": 20
     },
     "proposedActions": [
-      "create_one_preview_branch",
+      "delete_failed_preview_branch",
+      "create_one_empty_preview_branch",
       "apply_reviewed_migrations_to_preview",
-      "create_one_named_preview_operator",
+      "create_one_owner_named_preview_operator",
       "run_hosted_isolation_storage_recovery_proof",
       "delete_preview_branch_after_evidence"
     ],
@@ -64,72 +78,69 @@
     ]
   },
   "securityAudit": {
-    "contract": "supermega.supabase-security-advisor-audit.v1",
-    "asOf": "2026-08-04T10:56:25.412Z",
+    "contract": "supermega.supabase-security-advisor-audit.v2",
+    "asOf": "2026-08-12T15:24:56.127Z",
     "targetClassification": "protected-production",
-    "advisorStatus": "blocked",
+    "advisorStatus": "reviewed_fail_closed",
     "findingCount": 27,
-    "liveSchemaVersion": 7,
+    "liveSchemaVersion": 10,
     "localTargetVersion": 10,
-    "versionDrift": 3,
-    "browserRolesDenied": true,
-    "metadataRlsEnabled": false,
-    "storageBucketCount": 0,
+    "versionDrift": 0,
+    "publicBrowserObjectAccessDenied": true,
+    "quarantineMigrationPresent": true,
+    "futureProviderOwnedDefaultGrantRisk": true,
+    "managedWritesEnabled": false,
     "productionMutationAuthorized": false,
-    "databaseWrites": 0,
-    "previewRehearsal": {
-      "status": "migration_failed",
-      "publicTableCount": 27
-    }
+    "databaseWrites": 0
   },
   "gates": [
     {
-      "id": "local_postgres17",
+      "id": "local_database_rehearsal",
       "status": "ready-local",
-      "evidence": "56 checks, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup and restore.",
-      "nextAction": "Keep the digest-bound rehearsal current."
+      "evidence": "56 local checks prove PostgreSQL 17 compatibility, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup, and restore.",
+      "nextAction": "Keep the digest-bound local rehearsal current after every migration change."
     },
     {
-      "id": "hosted_postgres17",
-      "status": "blocked",
-      "evidence": "Protected production is PostgreSQL 17 at managed schema v7. The isolated preview is MIGRATIONS_FAILED after its public baseline; quarantine lacked default-privilege authority and the managed private schema is absent.",
-      "nextAction": "Keep the failed preview disconnected from Vercel and Auth invites. After PR #412 integration, repair or replace it through the direct-admin rehearsal, then apply v8 through v10 plus quarantine and rerun every hosted proof."
+      "id": "production_source_parity",
+      "status": "ready-metadata",
+      "evidence": "Protected production is PostgreSQL 17 at managed schema v10; source targets v10, current public objects deny browser roles, the quarantine migration is present, and managed writes remain disabled.",
+      "nextAction": "Merge the reviewed R1 source-parity change before any hosted rehearsal or activation proposal."
     },
     {
-      "id": "hosted_storage_privacy",
+      "id": "preview_rehearsal",
       "status": "blocked",
-      "evidence": "The six-request verifier is ready, but hosted proof is absent.",
-      "nextAction": "Run the verifier against an owner-approved isolated private bucket."
-    },
-    {
-      "id": "live_product_contract",
-      "status": "blocked",
-      "evidence": "The exact paired release is verified, but its managed product contract remains isolated_demo.",
-      "nextAction": "Prove managed persistence and security on the approved isolated target before any managed-pilot claim."
+      "evidence": "The existing preview branch ended MIGRATIONS_FAILED and is not acceptable proof; no clean, empty, maximum-24-hour rehearsal has passed.",
+      "nextAction": "After separate deletion and cost approvals, replace it with one empty branch, apply the reviewed source chain, retain metadata-only evidence, and delete it after the proof window."
     },
     {
       "id": "managed_persistence",
       "status": "blocked",
-      "evidence": "Live managed persistence ready is false.",
-      "nextAction": "Prove durable commands, recovery, and tenant isolation on the isolated target."
+      "evidence": "Live managed persistence ready is false and no preview persistence/recovery receipt is accepted.",
+      "nextAction": "Prove durable commands, idempotency, tenant isolation, active-session revocation, backup, and clean restore on the approved preview branch."
     },
     {
-      "id": "security",
+      "id": "hosted_storage_privacy",
       "status": "blocked",
-      "evidence": "Protected production remains fail-closed. The failed isolated preview has 27 public tables without RLS, no managed private schema, and no browser/default-grant quarantine.",
-      "nextAction": "Use PR #412 only through a direct-admin preview connection; prove relation and default grants, RLS, role boundaries, session revocation, Storage privacy, backup, and restore before any invite."
+      "evidence": "The six-request privacy verifier is ready locally, but no isolated private-bucket proof is accepted.",
+      "nextAction": "Run the six-request proof on the approved preview branch without public buckets or browser grants."
     },
     {
-      "id": "named_pilot",
+      "id": "managed_security",
       "status": "blocked",
-      "evidence": "HQ records no named pilot customer or measured baseline.",
-      "nextAction": "Select one Shop design partner, named operator, baseline, and acceptance evidence."
+      "evidence": "Current production objects fail closed with 27 INFO-only RLS-without-policy findings, but provider-owned future-object defaults remain and no accepted isolated tenant, Auth, session-revocation, Storage, backup, or restore proof exists.",
+      "nextAction": "Restore source parity through R1, then run the digest-bound chain on one owner-approved empty preview branch for at most 24 hours; prove tenant isolation, active-session revocation, private Storage, backup and clean restore, and rerun both advisors before proposing any managed activation."
+    },
+    {
+      "id": "owner_named_pilot",
+      "status": "blocked",
+      "evidence": "HQ records no owner-named Shop business, operator, measured baseline, or 20 consecutive accepted runs.",
+      "nextAction": "Name the business and operator privately, observe three manual runs, execute the five-day pilot, and retain aggregate evidence only outside the private workspace."
     },
     {
       "id": "production_activation",
       "status": "blocked",
-      "evidence": "The production Supabase target remains protected-unapproved.",
-      "nextAction": "Keep writes disabled until separate founder approval after every hosted gate passes."
+      "evidence": "The production target remains protected-unapproved and the app remains isolated_demo.",
+      "nextAction": "Require a separate owner activation approval only after every hosted proof and pilot acceptance gate passes."
     }
   ],
   "products": [
@@ -139,9 +150,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "shop-managed-order-close-pilot",
-      "proposedWork": "Shop: prove one named order-to-close and return on an approved tenant.",
-      "blockingReason": "Needs a named operator and approved tenant.",
-      "requiredProof": "Prove one named five-day order-to-close and return on an isolated tenant."
+      "proposedWork": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
+      "blockingReason": "The next Shop proof requires a founder-selected operator and approved isolated tenant, so local automation must not spend a model call pretending it can complete it.",
+      "requiredProof": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
     },
     {
       "productId": "plant",
@@ -149,9 +160,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "plant-managed-oee-pilot",
-      "proposedWork": "Plant: prove one named OEE pilot on an approved tenant.",
-      "blockingReason": "Needs named timing evidence and approved tenant.",
-      "requiredProof": "Prove one isolated order-bound OEE window with named operators, exact downtime, and correction effort."
+      "proposedWork": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
+      "blockingReason": "The Plant evidence gate needs named human timing evidence and an approved managed tenant; automation cannot manufacture either input.",
+      "requiredProof": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
     },
     {
       "productId": "website",
@@ -159,9 +170,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "website-managed-brief-acceptance",
-      "proposedWork": "Website: retain one accepted named brief.",
-      "blockingReason": "Needs named brief and approval.",
-      "requiredProof": "Accept one named brief, retain it, and keep publishing owner-gated."
+      "proposedWork": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
+      "blockingReason": "A real named business brief and accepted owner review are missing, so a generated sample cannot truthfully close the Website gate.",
+      "requiredProof": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
     {
       "productId": "ecommerce",
@@ -169,14 +180,14 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "ecommerce-managed-order-exception-pilot",
-      "proposedWork": "Ecommerce: run one named checkout-to-exception pilot on an approved isolated tenant.",
-      "blockingReason": "Needs a named operator and approved tenant.",
-      "requiredProof": "Prove isolated managed checkout-to-Shop: approval, duplicate-safe recovery, and tax/shipping/payment adapters gated."
+      "proposedWork": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
+      "blockingReason": "ENG-146 completed the local correction boundary. The next proof needs a founder-selected operator and approved isolated managed tenant; automation cannot manufacture those inputs or claim hosted persistence.",
+      "requiredProof": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
   ],
   "controls": {
     "externalWritesPerformed": false,
-    "connectorRequestsPerformed": 0,
+    "connectorRequestsPerformedToBuild": 0,
     "modelCallsRequiredToBuild": 0,
     "productionWritesEnabled": false,
     "ownerApprovalRequired": true,
@@ -197,11 +208,11 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:070d2330ad101ca1d2e812fa05cb341cd5d07f2c4f1fd9f023027a0e1579e52a"
+      "digest": "sha256:35bd90de0ad6c7aacf6f1d6f94e6da0bfd94fdadb02723f7f070eda32db21d3d"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:22d73c3e667484869df6acdbe20e3a31a6ae23d4059692f81103ff7183d80aab"
+      "digest": "sha256:dd11b7ed21e28971aea8a01d1a9ad9065c7a6b96658bc6a68fc0208e5c6fc620"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -209,19 +220,19 @@
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
-      "digest": "sha256:c74d7794ce200a16612a7503be2a9b7e1c4ce02b462d0c9fa7d0806869af55b1"
+      "digest": "sha256:065cfdee70f3e1722de6c332ce2795a20fb1eb4070afb9e5a0b7482849cd954f"
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:75e7a096a28c797bdbd2e2755a12595b31ed0581e4b58f2529a3cf0a9dceb14a"
+      "digest": "sha256:80c66b7f1ace7bb6a1b1c7d30acdaac15b891febf7bbfc50203d4f3750526d35"
     },
     {
       "path": "package.json",
-      "digest": "sha256:32258bf1e3ae259e7e5163b68152c4f2169f11d36a265a214e74317309f5b88d"
+      "digest": "sha256:66ad4eff87ccc830408e0978af92e353307c09a08d1e8f883ad2eabcac27dc08"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:d5bcd9e975083f439e9623af11017c813f67a69acc01f30c53305cf12deffe5e"
+      "digest": "sha256:3fa2fdeed9d0b9ccdac817e8c34c21c6879fb55cb03a345b1efaf56b67164075"
     }
   ]
 }
