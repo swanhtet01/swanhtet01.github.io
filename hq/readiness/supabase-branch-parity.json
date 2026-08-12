@@ -1,0 +1,79 @@
+{
+  "contract": "supermega.supabase-branch-parity.v1",
+  "capturedAt": "2026-08-12T10:12:00.000Z",
+  "purpose": "OPS-001 isolation proof: the reviewed private trial backend migrations were applied to an isolated Supabase branch that replicates the parent project's public surface, and the deployed private schema was fingerprinted against the repository.",
+  "branch": {
+    "name": "security-rehearsal-24h-20260812",
+    "projectRef": "usmpllbckvrucbjptiuq",
+    "parentProjectRef": "zvtzwcimpvvtkowflhda",
+    "createdAt": "2026-08-12T09:26:47.138577+00:00",
+    "withData": false,
+    "postgresVersion": "PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit",
+    "schemaVersion": 10,
+    "schemaAppliedAt": "2026-08-12T09:37:01.094346+00:00",
+    "trackedMigrationCount": 13,
+    "migrationsAppliedManually": true,
+    "manualApplyReason": "Branch creation replays the parent project's tracked migration list, which left the branch at MIGRATIONS_FAILED. The eleven reviewed private trial backend migrations were then applied in order alongside the legacy public surface, so this branch reproduces the parent project's shape rather than a private-only subset."
+  },
+  "observed": {
+    "contract": "supermega.supabase-private-surface-digest.v1",
+    "sections": {
+      "schema_version": "4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5",
+      "relations": "847686466b51417eec6dff1511abcb30487db2b07bd2bc1133b928d91b83e930",
+      "columns": "e9438ec042d9d25e73583963b7010f554429c253da6c55127bc1ad9f98093664",
+      "policies": "f07ea97f794732f4916266c1c0b5a51ae1b0abd1c3871f0c9b5a380ca14e6efb",
+      "functions": "cf2c5faa0ec93a1ec46182b97ed52b007ee3b2e127d168ad104087ad11d680cc",
+      "constraints": "6687f6e8cdd9b83eb24b92b181f81c2ec6b36cb5d0502f75de8a48ffbb9c9a37",
+      "triggers": "1d9ce9b46b6a4cf89b90fd0b24c32913c5d178ccb2cff8545112a8bad8ba15c5",
+      "indexes": "1b8e737fbeb13a6c56fba550bc3dd249eaecf2c7da01021f7e34ca040fbd3a51",
+      "grants": "f109fdb3e0176a3c30d727bab5e877236dd4f217e607e91fa6097ffe20d037af",
+      "backend_role": "3dd2b38a64323014618ca22924835babc6de5e50d93cefaa4b23d4cfc4bca4c4"
+    },
+    "surface": "d22c63442425c41f4cc9eaec0cff5650a117a68d8e687243cc57e2483c716a0f"
+  },
+  "isolation": {
+    "rolesWithSchemaUsage": [
+      "pg_read_all_data",
+      "pg_write_all_data",
+      "postgres",
+      "supabase_etl_admin",
+      "supabase_read_only_user",
+      "supermega_trial_backend"
+    ],
+    "rolesWithSchemaUsageNote": "Every entry other than supermega_trial_backend is a Supabase platform or PostgreSQL predefined role. None is reachable from a browser session, and no browser-facing role is a member of any of them.",
+    "browserRolesDenied": ["anon", "authenticated", "service_role", "authenticator"],
+    "publicPseudoRoleHasUsage": false,
+    "backendRoleMembers": ["postgres"],
+    "backendRoleMembersNote": "No login role holds supermega_trial_backend, so no credential currently reaches the private schema. Provisioning that login user remains a founder-gated hosting step.",
+    "graphqlPublicRelations": 0,
+    "tableRowCounts": {
+      "approval_requests": 0,
+      "workspace_access_controls": 0,
+      "workspace_events": 0,
+      "workspace_memberships": 0,
+      "workspace_state": 0
+    }
+  },
+  "publicSurface": {
+    "tableCount": 27,
+    "tablesWithoutRowLevelSecurity": 0,
+    "tablesWithPolicies": 0,
+    "tablesReachableByBrowserRole": 0,
+    "browserReachableTableNames": [],
+    "note": "The legacy public tables are locked twice over: row level security is enabled on every one, none carries a policy, and neither anon nor authenticated holds any table privilege. A browser session therefore reads nothing even if it reaches PostgREST."
+  },
+  "securityAdvisor": {
+    "errorCount": 0,
+    "warnCount": 0,
+    "infoCount": 27,
+    "infoLintNames": ["rls_enabled_no_policy"],
+    "note": "All 27 notices are the INFO-level rls_enabled_no_policy lint on the legacy public tables. That lint fires precisely because those tables are default-deny with no policy, which is the intended posture, so it is recorded rather than remediated."
+  },
+  "remainingGates": [
+    "Recovery: a backup and exact restore has not been rehearsed on this branch.",
+    "Storage: private bucket denial has not been proven against this branch.",
+    "Credentials: the server-only login role for supermega_trial_backend is not provisioned.",
+    "Tenant separation under load: no seeded multi-tenant read/write rehearsal has run against this branch.",
+    "Managed writes stay off until every gate above passes and the founder authorizes them."
+  ]
+}
