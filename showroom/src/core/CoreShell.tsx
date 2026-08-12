@@ -446,6 +446,13 @@ const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
   Ecommerce: 'ecommerce',
 }
 
+const STEP_SUGGESTIONS: ReadonlyArray<[SetupProductId, string, string]> = [
+  ['commerce', 'Shop', 'build your catalog and complete your first sale'],
+  ['ecommerce', 'Ecommerce', 'receive online orders that flow into Shop'],
+  ['production', 'Plant', 'link production runs to your Shop stock'],
+  ['website', 'Website', 'give your business a public face'],
+]
+
 const customerProducts = [
   ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/'],
   ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/'],
@@ -479,11 +486,17 @@ export function ProductHomePage() {
     }
   }, [])
   const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
+  const nextSetupStep = (() => {
+    if (!productSetups) return null
+    return STEP_SUGGESTIONS.find(([id]) => !productSetups[id]?.startedAt) ?? null
+  })()
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />
       {!anyStarted ? (
         <p className="platform-start-nudge"><strong>New here?</strong> Start with <strong>Shop</strong> — set it up once, and it connects to all other products through one catalog and order flow.</p>
+      ) : nextSetupStep ? (
+        <p className="platform-start-nudge"><strong>Next:</strong> Set up <strong>{nextSetupStep[1]}</strong> to {nextSetupStep[2]}.</p>
       ) : null}
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => {
