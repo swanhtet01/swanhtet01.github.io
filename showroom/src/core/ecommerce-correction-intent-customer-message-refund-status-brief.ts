@@ -3,11 +3,11 @@ import type { EcommerceBuyingState } from '../products/ecommerce/ecommerce-buyin
 export type EcommerceCorrectionIntentCustomerMessageRefundStatusBrief = {
   totalIntents: number
   messageSentNoRefundCount: number
-  messageSentPartialRefundCount: number
-  messageSentFullRefundCount: number
+  messageSentDueCount: number
+  messageSentSettledCount: number
   noMessageNoRefundCount: number
-  noMessagePartialRefundCount: number
-  noMessageFullRefundCount: number
+  noMessageDueCount: number
+  noMessageSettledCount: number
 }
 
 export function projectEcommerceCorrectionIntentCustomerMessageRefundStatusBrief(
@@ -18,40 +18,40 @@ export function projectEcommerceCorrectionIntentCustomerMessageRefundStatusBrief
     return {
       totalIntents: 0,
       messageSentNoRefundCount: 0,
-      messageSentPartialRefundCount: 0,
-      messageSentFullRefundCount: 0,
+      messageSentDueCount: 0,
+      messageSentSettledCount: 0,
       noMessageNoRefundCount: 0,
-      noMessagePartialRefundCount: 0,
-      noMessageFullRefundCount: 0,
+      noMessageDueCount: 0,
+      noMessageSettledCount: 0,
     }
   }
 
   let messageSentNoRefundCount = 0
-  let messageSentPartialRefundCount = 0
-  let messageSentFullRefundCount = 0
+  let messageSentDueCount = 0
+  let messageSentSettledCount = 0
   let noMessageNoRefundCount = 0
-  let noMessagePartialRefundCount = 0
-  let noMessageFullRefundCount = 0
+  let noMessageDueCount = 0
+  let noMessageSettledCount = 0
 
   for (const intent of buying.correctionIntents) {
     if (intent.customerMessageSent) {
       if (intent.refundStatus === 'none') messageSentNoRefundCount++
-      else if (intent.refundStatus === 'partial') messageSentPartialRefundCount++
-      else messageSentFullRefundCount++
+      else if (intent.refundStatus === 'due') messageSentDueCount++
+      else messageSentSettledCount++
     } else {
       if (intent.refundStatus === 'none') noMessageNoRefundCount++
-      else if (intent.refundStatus === 'partial') noMessagePartialRefundCount++
-      else noMessageFullRefundCount++
+      else if (intent.refundStatus === 'due') noMessageDueCount++
+      else noMessageSettledCount++
     }
   }
 
   return {
     totalIntents: total,
     messageSentNoRefundCount,
-    messageSentPartialRefundCount,
-    messageSentFullRefundCount,
+    messageSentDueCount,
+    messageSentSettledCount,
     noMessageNoRefundCount,
-    noMessagePartialRefundCount,
-    noMessageFullRefundCount,
+    noMessageDueCount,
+    noMessageSettledCount,
   }
 }

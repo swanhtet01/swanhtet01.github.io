@@ -30,7 +30,7 @@ function check(condition, label) {
 }
 
 let intentId = 0
-function correctionIntent(customerMessageSent = false, refundStatus = 'none') {
+function correctionIntent(customerMessageSent = false, refundStatus = 'none') {  // refundStatus: none/due/settled
   intentId++
   return {
     schema: 'supermega.ecommerce.correction_intent.v1',
@@ -94,64 +94,64 @@ function state(correctionIntents = []) {
   ]))
   check(r.totalIntents === 1, 'msg-none: totalIntents 1')
   check(r.messageSentNoRefundCount === 1, 'msg-none: messageSentNoRefundCount 1')
-  check(r.messageSentPartialRefundCount === 0, 'msg-none: messageSentPartialRefundCount 0')
+  check(r.messageSentDueCount === 0, 'msg-none: messageSentDueCount 0')
   check(r.noMessageNoRefundCount === 0, 'msg-none: noMessageNoRefundCount 0')
 }
 
-// 3. Message sent + partial refund
+// 3. Message sent + due
 {
   const r = projectEcommerceCorrectionIntentCustomerMessageRefundStatusBrief(state([
-    correctionIntent(true, 'partial'),
+    correctionIntent(true, 'due'),
   ]))
-  check(r.totalIntents === 1, 'msg-partial: totalIntents 1')
-  check(r.messageSentPartialRefundCount === 1, 'msg-partial: messageSentPartialRefundCount 1')
-  check(r.messageSentFullRefundCount === 0, 'msg-partial: messageSentFullRefundCount 0')
-  check(r.messageSentNoRefundCount === 0, 'msg-partial: messageSentNoRefundCount 0')
+  check(r.totalIntents === 1, 'msg-due: totalIntents 1')
+  check(r.messageSentDueCount === 1, 'msg-due: messageSentDueCount 1')
+  check(r.messageSentSettledCount === 0, 'msg-due: messageSentSettledCount 0')
+  check(r.messageSentNoRefundCount === 0, 'msg-due: messageSentNoRefundCount 0')
 }
 
-// 4. Message sent + full refund
+// 4. Message sent + settled
 {
   const r = projectEcommerceCorrectionIntentCustomerMessageRefundStatusBrief(state([
-    correctionIntent(true, 'full'),
+    correctionIntent(true, 'settled'),
   ]))
-  check(r.totalIntents === 1, 'msg-full: totalIntents 1')
-  check(r.messageSentFullRefundCount === 1, 'msg-full: messageSentFullRefundCount 1')
-  check(r.noMessageFullRefundCount === 0, 'msg-full: noMessageFullRefundCount 0')
+  check(r.totalIntents === 1, 'msg-settled: totalIntents 1')
+  check(r.messageSentSettledCount === 1, 'msg-settled: messageSentSettledCount 1')
+  check(r.noMessageSettledCount === 0, 'msg-settled: noMessageSettledCount 0')
 }
 
-// 5. No message + partial refund
+// 5. No message + due
 {
   const r = projectEcommerceCorrectionIntentCustomerMessageRefundStatusBrief(state([
-    correctionIntent(false, 'partial'),
+    correctionIntent(false, 'due'),
   ]))
-  check(r.totalIntents === 1, 'nomsg-partial: totalIntents 1')
-  check(r.noMessagePartialRefundCount === 1, 'nomsg-partial: noMessagePartialRefundCount 1')
-  check(r.messageSentPartialRefundCount === 0, 'nomsg-partial: messageSentPartialRefundCount 0')
+  check(r.totalIntents === 1, 'nomsg-due: totalIntents 1')
+  check(r.noMessageDueCount === 1, 'nomsg-due: noMessageDueCount 1')
+  check(r.messageSentDueCount === 0, 'nomsg-due: messageSentDueCount 0')
 }
 
-// 6. Mixed: 2 msg+none, 1 msg+full, 1 noMsg+partial
+// 6. Mixed: 2 msg+none, 1 msg+settled, 1 noMsg+due
 {
   const r = projectEcommerceCorrectionIntentCustomerMessageRefundStatusBrief(state([
     correctionIntent(true, 'none'),
     correctionIntent(true, 'none'),
-    correctionIntent(true, 'full'),
-    correctionIntent(false, 'partial'),
+    correctionIntent(true, 'settled'),
+    correctionIntent(false, 'due'),
   ]))
   check(r.totalIntents === 4, 'mixed: totalIntents 4')
   check(r.messageSentNoRefundCount === 2, 'mixed: messageSentNoRefundCount 2')
-  check(r.messageSentFullRefundCount === 1, 'mixed: messageSentFullRefundCount 1')
-  check(r.noMessagePartialRefundCount === 1, 'mixed: noMessagePartialRefundCount 1')
+  check(r.messageSentSettledCount === 1, 'mixed: messageSentSettledCount 1')
+  check(r.noMessageDueCount === 1, 'mixed: noMessageDueCount 1')
 }
 
 // 7. Grand total
 {
   const r = projectEcommerceCorrectionIntentCustomerMessageRefundStatusBrief(state([
     correctionIntent(true, 'none'),
-    correctionIntent(false, 'full'),
-    correctionIntent(false, 'full'),
+    correctionIntent(false, 'settled'),
+    correctionIntent(false, 'settled'),
   ]))
   check(r.totalIntents === 3, 'grand-total: totalIntents 3')
-  check(r.noMessageFullRefundCount === 2, 'grand-total: noMessageFullRefundCount 2')
+  check(r.noMessageSettledCount === 2, 'grand-total: noMessageSettledCount 2')
 }
 
 console.log(`ecommerce-correction-intent-customer-message-refund-status-brief: ${checks} checks passed`)
