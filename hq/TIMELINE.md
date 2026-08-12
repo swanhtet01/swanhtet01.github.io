@@ -388,6 +388,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-support-intent-rates-brief (supportIntents rate brief: 7 fields, 3 paired count+rate metrics — customerNotificationRate, externalMessageRate, refundStartedRate); 23 checks; zero bundle cost — DONE (OPS-675)
 - [x] Analytics Codex: ecommerce-amendment-intent-rates-brief (amendmentIntents rate brief: 7 fields, 3 paired count+rate metrics — fulfilmentSwitchRate, customerNotificationRate, multiLineRate); 23 checks; zero bundle cost — DONE (OPS-676)
 - [x] Analytics Codex: ecommerce-reschedule-intent-rates-brief (rescheduleIntents rate brief: 7 fields, 3 paired count+rate metrics — forwardRate, pushedBackRate, customerNotificationRate); 23 checks; zero bundle cost — DONE (OPS-677)
+- [x] Analytics Codex: ecommerce-cancellation-intent-rates-brief (cancellationIntents rate brief: 7 fields, 3 paired count+rate metrics — orderCancelledRate, customerNotificationRate, refundStartedRate); 23 checks; zero bundle cost — DONE (OPS-678)
+- [x] Analytics Codex: ecommerce-cancellation-decision-rates-brief (cancellationDecisions rate brief: 9 fields, 4 paired count+rate metrics — orderCancelledRate, customerNotificationRate, refundStartedRate, providerEscalationRate); 23 checks; zero bundle cost — DONE (OPS-679)
+- [x] Analytics Codex: ecommerce-return-intent-rates-brief (returnIntents rate brief: 5 fields, 2 paired count+rate metrics — restockRate, notRestockedRate; disposition binary); 23 checks; zero bundle cost — DONE (OPS-680)
+- [x] Analytics Codex: ecommerce-request-fulfilment-rates-brief (requests rate brief: 5 fields, 2 paired count+rate metrics — deliveryRate, pickupRate; first non-intent rates brief); 23 checks; zero bundle cost — DONE (OPS-681)
 
 ### Aug 25–31
 
