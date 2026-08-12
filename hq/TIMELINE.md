@@ -373,6 +373,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-correction-intent-tax-filed-requested-kind-brief (correctionIntents taxFiled boolean × requestedKind credit/debit: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-660)
 - [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-refund-status-brief (correctionIntents ledgerPosted boolean × refundStatus none/due/settled: 2×3 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-661)
 - [x] Analytics Codex: ecommerce-correction-intent-tax-filed-refund-status-brief (correctionIntents taxFiled boolean × refundStatus none/due/settled: 2×3 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-662)
+- [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-tax-filed-brief (correctionIntents ledgerPosted boolean × taxFiled boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-663)
+- [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-refund-started-brief (correctionIntents ledgerPosted boolean × refundStarted boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-664)
+- [x] Analytics Codex: ecommerce-correction-intent-tax-filed-refund-started-brief (correctionIntents taxFiled boolean × refundStarted boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-665)
+- [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-order-changed-brief (correctionIntents ledgerPosted boolean × orderChanged boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-666)
 
 ### Aug 25–31
 
