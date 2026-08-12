@@ -36,14 +36,13 @@ function supportIntent({ refundStarted = false } = {}) {
     schema: 'supermega.ecommerce.support_intent.v1',
     state: 'pending_shop_review',
     scope: 'scope-1',
-    id: `ESI-${intentId}`,
-    idempotencyKey: `ik-${intentId}`,
+    id: `ESR-${intentId}`,
+    idempotencyKey: `ESI-${intentId}`,
     createdAt: '2026-08-01T09:00:00Z',
     orderId: `ORD-${intentId}`,
     sourceRequestId: `REQ-${intentId}`,
     category: 'order_status',
-    description: 'Support description',
-    customerMessageSent: false,
+    description: 'Support request description',
     externalMessageSent: false,
     refundStarted,
     evidenceReference: `ev-${intentId}`,
@@ -78,7 +77,7 @@ function state(supportIntents = []) {
   check(r.notRefundStartedRate === 0, 'empty:notRefundStartedRate')
 }
 
-// 2. Single refund started — 3 checks
+// 2. Single started — 3 checks
 {
   const r = projectEcommerceSupportIntentRefundStartedRatesBrief(state([
     supportIntent({ refundStarted: true }),
@@ -96,7 +95,7 @@ function state(supportIntents = []) {
   check(r.notRefundStartedRate === 1, 'notStarted:rate')
 }
 
-// 4. 2 refund started — 3 checks
+// 4. 2 started — 3 checks
 {
   const r = projectEcommerceSupportIntentRefundStartedRatesBrief(state([
     supportIntent({ refundStarted: true }),
