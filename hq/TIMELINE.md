@@ -64,6 +64,8 @@ _No founder decision required. Zero bundle cost._
 - [x] Preview branch security-rehearsal-24h-20260812 created (ref usmpllbckvrucbjptiuq, ~$0.32/24h); hosted migration replay in progress — DONE 2026-08-12
 - [x] Architecture Codex: AI-native architecture + scalability strategy doc with 90-day measured-trigger roadmap — DONE (OPS-740)
 - [x] Onboarding Codex: self-serve onboarding spec; six-proof self_serve_pilot gate proposal; lockstep kernel v4 diff shape — DONE (OPS-741)
+- [x] UX Codex: form UX fixes mobile+desktop — 16px floor enforced, mobile Login door visible + contract-required, error tone, consent flow uninverted, cart draft quantities — DONE (OPS-742)
+- [x] Database Codex: hosted PG17 rehearsal proven on preview branch — 12 migrations + quarantine applied, advisors 0 ERROR/0 WARN; baseline extensions schema-qualified — DONE (OPS-743)
 
 ### Aug 15–25
 
