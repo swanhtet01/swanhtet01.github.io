@@ -262,6 +262,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-cancellation-decision-payment-status-brief (EcommerceCancellationDecision.paymentStatus binary: pending/reconciled); 23 checks; zero bundle cost — DONE (OPS-549)
 - [x] Analytics Codex: ecommerce-correction-intent-refund-status-brief (EcommerceCorrectionIntent.refundStatus ternary: none/due/settled); 23 checks; zero bundle cost — DONE (OPS-550)
 - [x] Analytics Codex: ecommerce-return-intent-sku-brief (EcommerceReturnIntent.sku unique-count + top); 23 checks; zero bundle cost — DONE (OPS-551)
+- [x] Analytics Codex: ecommerce-request-customer-reference-brief (EcommerceOrderRequestV2.customerReference unique-count + top); 23 checks; zero bundle cost — DONE (OPS-552)
+- [x] Analytics Codex: ecommerce-amendment-intent-from-fulfilment-brief (EcommerceOrderAmendmentIntent.fromFulfilment binary: pickup/delivery); 23 checks; zero bundle cost — DONE (OPS-553)
+- [x] Analytics Codex: ecommerce-amendment-intent-to-fulfilment-brief (EcommerceOrderAmendmentIntent.toFulfilment binary: pickup/delivery); 23 checks; zero bundle cost — DONE (OPS-554)
+- [x] Analytics Codex: ecommerce-reschedule-intent-fulfilment-brief (EcommerceOrderRescheduleIntent.fulfilment binary: pickup/delivery); 23 checks; zero bundle cost — DONE (OPS-555)
 
 ### Aug 25–31
 
