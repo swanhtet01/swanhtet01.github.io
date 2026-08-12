@@ -940,6 +940,18 @@ async function sendWebhook(record) {
   return { status: 'ready', channel: 'webhook' }
 }
 
+async function sendCustomerAcknowledgement(record) {
+  const key = env('RESEND_API_KEY')
+  if (!key) return { status: 'skipped' }
+  if (!emailOk(record.email)) return { status: 'skipped' }
+  const from = env('SUPERMEGA_CONTACT_FROM_EMAIL') || 'SuperMega <leads@supermega.dev>'
+  const replyTo = env('SUPERMEGA_CONTACT_NOTIFY_EMAIL') || 'swanhtet@supermega.dev'
+  const body = ['Hi ' + record.name + ',', '', 'Thanks for reaching out to SuperMega. Your request for ' + record.workflow + ' is in.', '', 'What happens next:', '1. A founder reads every request personally.', '2. You get a reply from a real person, usually within one business day.', '3. Your trial keeps working on your device the whole time.', '', 'Your reference: ' + record.lead_id, '', 'Reply to this email any time. It reaches the founder directly.', '', 'SuperMega - https://supermega.dev'].join('\\n')
+  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json', 'idempotency-key': 'supermega-contact-ack/' + record.lead_id }, body: JSON.stringify({ from, to: [record.email], reply_to: replyTo, subject: 'We received your request - SuperMega', text: body }), signal: AbortSignal.timeout(9000) })
+  if (!response.ok) throw new Error('ack_email_' + response.status)
+  return { status: 'ready', channel: 'ack_email' }
+}
+
 module.exports = async function handler(req, res) {
   const method = String(req.method || 'GET').toUpperCase()
   if (method === 'GET') {
@@ -994,6 +1006,7 @@ module.exports = async function handler(req, res) {
   const attempts = await Promise.allSettled([Promise.resolve(storeResult), sendResend(record), sendTelegram(record), sendWebhook(record)])
   const ready = attempts.some((attempt) => attempt.status === 'fulfilled' && attempt.value?.status === 'ready')
   if (!ready) { send(res, 503, { status: 'error', reason: 'contact_channel_unavailable', fallback_email: 'swanhtet@supermega.dev' }); return }
+  try { await sendCustomerAcknowledgement(record) } catch {}
   replayCache.set(cacheKey, { fingerprint, body: acceptedBody, expiresAt: now + IDEMPOTENCY_TTL_MS })
   send(res, 202, acceptedBody)
 }
