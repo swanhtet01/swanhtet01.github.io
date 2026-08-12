@@ -246,6 +246,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-correction-intent-source-request-id-brief (EcommerceCorrectionIntent.sourceRequestId unique-count + top); 23 checks; zero bundle cost — DONE (OPS-533)
 - [x] Analytics Codex: ecommerce-cancellation-intent-source-request-id-brief (EcommerceCancellationIntent.sourceRequestId unique-count + top); 23 checks; zero bundle cost — DONE (OPS-534)
 - [x] Analytics Codex: ecommerce-cancellation-decision-source-request-id-brief (EcommerceCancellationDecision.sourceRequestId unique-count + top); 23 checks; zero bundle cost — DONE (OPS-535)
+- [x] Analytics Codex: ecommerce-amendment-intent-source-request-id-brief (EcommerceOrderAmendmentIntent.sourceRequestId unique-count + top); 23 checks; zero bundle cost — DONE (OPS-536)
+- [x] Analytics Codex: ecommerce-reschedule-intent-source-request-id-brief (EcommerceOrderRescheduleIntent.sourceRequestId unique-count + top); 23 checks; zero bundle cost — DONE (OPS-537)
+- [x] Analytics Codex: ecommerce-cancellation-decision-actor-brief (EcommerceCancellationDecision.actor unique-count + top); 23 checks; zero bundle cost — DONE (OPS-538)
+- [x] Analytics Codex: ecommerce-amendment-intent-replacement-request-id-brief (EcommerceOrderAmendmentIntent.replacementRequestId unique-count + top); 23 checks; zero bundle cost — DONE (OPS-539)
 
 ### Aug 25–31
 
