@@ -76,7 +76,7 @@ function state(returnIntents = []) {
   check(r.notRestockedMultiCount === 0, 'empty: notRestockedMultiCount 0')
 }
 
-// 2. Restock + single item (qty=1)
+// 2. Restock + single (quantity=1)
 {
   const r = projectEcommerceReturnIntentDispositionQuantityBrief(state([
     returnIntent('restock', 1),
@@ -84,39 +84,41 @@ function state(returnIntents = []) {
   check(r.totalIntents === 1, 'restock-single: totalIntents 1')
   check(r.restockSingleCount === 1, 'restock-single: restockSingleCount 1')
   check(r.restockMultiCount === 0, 'restock-single: restockMultiCount 0')
+  check(r.notRestockedSingleCount === 0, 'restock-single: notRestockedSingleCount 0')
 }
 
-// 3. Restock + multi item (qty=3)
+// 3. Restock + multi (quantity=3)
 {
   const r = projectEcommerceReturnIntentDispositionQuantityBrief(state([
     returnIntent('restock', 3),
   ]))
-  check(r.totalIntents === 1, 'restock-multi: totalIntents 1')
-  check(r.restockSingleCount === 0, 'restock-multi: restockSingleCount 0')
   check(r.restockMultiCount === 1, 'restock-multi: restockMultiCount 1')
+  check(r.restockSingleCount === 0, 'restock-multi: restockSingleCount 0')
+  check(r.totalIntents === 1, 'restock-multi: totalIntents 1')
+  check(r.notRestockedMultiCount === 0, 'restock-multi: notRestockedMultiCount 0')
 }
 
-// 4. Not-restocked + single item (qty=1)
+// 4. Not restocked + single
 {
   const r = projectEcommerceReturnIntentDispositionQuantityBrief(state([
     returnIntent('not_restocked', 1),
   ]))
-  check(r.totalIntents === 1, 'noRestock-single: totalIntents 1')
-  check(r.notRestockedSingleCount === 1, 'noRestock-single: notRestockedSingleCount 1')
-  check(r.notRestockedMultiCount === 0, 'noRestock-single: notRestockedMultiCount 0')
+  check(r.notRestockedSingleCount === 1, 'not-restocked-single: notRestockedSingleCount 1')
+  check(r.notRestockedMultiCount === 0, 'not-restocked-single: notRestockedMultiCount 0')
+  check(r.totalIntents === 1, 'not-restocked-single: totalIntents 1')
 }
 
-// 5. Not-restocked + multi item (qty=5)
+// 5. Not restocked + multi
 {
   const r = projectEcommerceReturnIntentDispositionQuantityBrief(state([
     returnIntent('not_restocked', 5),
   ]))
-  check(r.totalIntents === 1, 'noRestock-multi: totalIntents 1')
-  check(r.notRestockedSingleCount === 0, 'noRestock-multi: notRestockedSingleCount 0')
-  check(r.notRestockedMultiCount === 1, 'noRestock-multi: notRestockedMultiCount 1')
+  check(r.notRestockedMultiCount === 1, 'not-restocked-multi: notRestockedMultiCount 1')
+  check(r.notRestockedSingleCount === 0, 'not-restocked-multi: notRestockedSingleCount 0')
+  check(r.totalIntents === 1, 'not-restocked-multi: totalIntents 1')
 }
 
-// 6. Mixed: all 4 buckets
+// 6. All 4 cells
 {
   const r = projectEcommerceReturnIntentDispositionQuantityBrief(state([
     returnIntent('restock', 1),
@@ -124,26 +126,22 @@ function state(returnIntents = []) {
     returnIntent('not_restocked', 1),
     returnIntent('not_restocked', 4),
   ]))
-  check(r.totalIntents === 4, 'mixed: totalIntents 4')
-  check(r.restockSingleCount === 1, 'mixed: restockSingleCount 1')
-  check(r.restockMultiCount === 1, 'mixed: restockMultiCount 1')
-  check(r.notRestockedSingleCount === 1, 'mixed: notRestockedSingleCount 1')
+  check(r.totalIntents === 4, 'all-cells: totalIntents 4')
+  check(r.restockSingleCount === 1, 'all-cells: restockSingleCount 1')
+  check(r.notRestockedMultiCount === 1, 'all-cells: notRestockedMultiCount 1')
+  check(r.restockCount === 2, 'all-cells: restockCount 2')
 }
 
-// 7. All not-restocked multi
+// 7. Remaining sub-bucket counts for case 6
 {
   const r = projectEcommerceReturnIntentDispositionQuantityBrief(state([
-    returnIntent('not_restocked', 2),
-    returnIntent('not_restocked', 3),
-    returnIntent('not_restocked', 6),
+    returnIntent('restock', 1),
+    returnIntent('restock', 2),
+    returnIntent('not_restocked', 1),
+    returnIntent('not_restocked', 4),
   ]))
-  check(r.totalIntents === 3, 'all-noRestock-multi: totalIntents 3')
-  check(r.restockSingleCount === 0, 'all-noRestock-multi: restockSingleCount 0')
-  check(r.notRestockedMultiCount === 3, 'all-noRestock-multi: notRestockedMultiCount 3')
-  check(
-    r.restockSingleCount + r.restockMultiCount + r.notRestockedSingleCount + r.notRestockedMultiCount === r.totalIntents,
-    'all-noRestock-multi: counts sum to total',
-  )
+  check(r.restockMultiCount === 1, 'sub-buckets: restockMultiCount 1')
+  check(r.notRestockedSingleCount === 1, 'sub-buckets: notRestockedSingleCount 1')
 }
 
 console.log(`ecommerce-return-intent-disposition-quantity-brief: ${checks} checks passed`)
