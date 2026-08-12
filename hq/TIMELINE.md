@@ -266,6 +266,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-amendment-intent-from-fulfilment-brief (EcommerceOrderAmendmentIntent.fromFulfilment binary: pickup/delivery); 23 checks; zero bundle cost — DONE (OPS-553)
 - [x] Analytics Codex: ecommerce-amendment-intent-to-fulfilment-brief (EcommerceOrderAmendmentIntent.toFulfilment binary: pickup/delivery); 23 checks; zero bundle cost — DONE (OPS-554)
 - [x] Analytics Codex: ecommerce-reschedule-intent-fulfilment-brief (EcommerceOrderRescheduleIntent.fulfilment binary: pickup/delivery); 23 checks; zero bundle cost — DONE (OPS-555)
+- [x] Analytics Codex: ecommerce-correction-intent-source-correction-count-brief (correctionIntents[].sourceCorrectionCount binary: first/repeat); 23 checks; zero bundle cost — DONE (OPS-556)
+- [x] Analytics Codex: ecommerce-return-intent-quantity-brief (returnIntents[].quantity binary: single/multi item); 23 checks; zero bundle cost — DONE (OPS-557)
+- [x] Analytics Codex: ecommerce-amendment-intent-line-count-brief (amendmentIntents[].lineChanges.length binary: single/multi line); 23 checks; zero bundle cost — DONE (OPS-558)
+- [x] Analytics Codex: ecommerce-amendment-intent-fulfilment-switch-brief (amendmentIntents cross-field: fromFulfilment===toFulfilment same/switch); 23 checks; zero bundle cost — DONE (OPS-559)
 
 ### Aug 25–31
 
