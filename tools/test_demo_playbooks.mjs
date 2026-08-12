@@ -132,12 +132,17 @@ const kitCorpus = kitSourcePaths.map(read).join('\n')
 const kitDerived = new Set(kitSourcePaths)
 const kitTokenOk = (token) => kitDerived.has(token) || kitCorpus.includes(token) || tokenOk(token)
 
-// Pins for the contract facts the kit states in prose: the decision id, its
-// two inputs, the 24-hour preview-branch bound, the five-day duration, the
+// Pins for the contract facts the kit states in prose: the v5 owner-named
+// decision, its five inputs, the 24-hour preview-branch bound, five-day duration,
 // review-date closure rule, and the no-payment commercial draft.
 const readinessKernel = read('kernel/managed-pilot-readiness.mjs')
-check(readinessKernel.includes("const NEXT_ACTION_DECISION_ID = 'bounded-managed-pilot-rehearsal'"), 'kit_kernel_decision_id_pin')
-check(readinessKernel.includes("const NEXT_ACTION_REQUIREMENTS = ['approve_preview_branch_target', 'name_shop_pilot_operator']"), 'kit_kernel_decision_inputs_pin')
+check(readinessKernel.includes("export const MANAGED_PILOT_READINESS_CONTRACT = 'supermega.managed-pilot-readiness.v5'"), 'kit_kernel_contract_pin')
+check(readinessKernel.includes("const NEXT_ACTION_DECISION_ID = 'replace-failed-preview-and-prepare-owner-named-shop-pilot'"), 'kit_kernel_decision_id_pin')
+for (const requirement of ['approve_failed_preview_branch_deletion', 'confirm_preview_branch_cost', 'approve_preview_branch_target', 'name_shop_pilot_business', 'name_shop_pilot_operator']) {
+  check(readinessKernel.includes(`'${requirement}'`), `kit_kernel_decision_input:${requirement}`)
+}
+check(readinessKernel.includes("pilotMode: 'owner_named'"), 'kit_kernel_owner_named_mode_pin')
+check(readinessKernel.includes('requiredConsecutiveAcceptedRuns: 20'), 'kit_kernel_consecutive_runs_pin')
 check(readinessKernel.includes('maximumLifetimeHours: 24'), 'kit_kernel_lifetime_pin')
 check(readinessKernel.includes("environment: 'preview_branch'"), 'kit_kernel_environment_pin')
 const handoffGenerator = read('tools/create_shop_pilot_handoff.mjs')
@@ -157,7 +162,7 @@ for (const file of kitFiles) {
 }
 
 const kitReadme = read(`${kitDir}/README.md`)
-check(kitReadme.includes('bounded-managed-pilot-rehearsal'), 'pilot_kit_readme_names_decision_id')
+check(kitReadme.includes('replace-failed-preview-and-prepare-owner-named-shop-pilot'), 'pilot_kit_readme_names_decision_id')
 for (const name of ['baseline-measurement.md', 'acceptance-checklist.md', 'pilot-agreement-outline.md']) {
   check(kitReadme.includes(name), `pilot_kit_readme_indexes:${name}`)
 }

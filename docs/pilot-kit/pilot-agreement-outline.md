@@ -20,7 +20,7 @@ NOT LEGAL ADVICE. This is an outline of talking points to align on with the desi
 
 - The pilot runs browser-local on the shop's own device. Setup states it directly: `Stays on this device. Nothing is sent or published.` SuperMega's servers receive no customer records, no sales, and no stock data during the pilot.
 - The shop's identity stays private on SuperMega's side. The sales workflow's reporting boundary applies: notes leaving the private workspace carry stage and hashes, never the contact's name, email, or company (`docs/supermega-shop-sales-agent.md`).
-- If the founder later runs the approved hosted rehearsal, it is bounded and disposable: an isolated `preview_branch`, never production, starting with no production data, `maximumLifetimeHours` of 24, and deleted after the evidence is captured (`delete_preview_branch_after_evidence`). That rehearsal needs its own separate founder decision (`bounded-managed-pilot-rehearsal`) and is not part of the five pilot days.
+- If the owner later runs the approved hosted rehearsal, it is bounded and disposable: an isolated `preview_branch`, never production, starting with no production data, `maximumLifetimeHours` of 24, and deleted after the evidence is captured (`delete_preview_branch_after_evidence`). That rehearsal needs its own explicit provider approvals under `replace-failed-preview-and-prepare-owner-named-shop-pilot` and is not part of the five pilot days.
 
 ## Money
 

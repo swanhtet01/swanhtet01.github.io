@@ -2,7 +2,7 @@
 
 Fill this in WITH the shop owner, in person, before day 1 of the five-day pilot. Print it or copy it into a private note; it stays in the founder's private workspace.
 
-Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v3`) requires a named business (`namedBusinessRequired`), a named operator (`namedOperatorRequired`), and a measured baseline (`measuredBaselineRequired`) before the founder decision `bounded-managed-pilot-rehearsal` can be prepared. The four derived numbers in section 4 are exactly the baseline fields the pilot handoff generator (tools/create_shop_pilot_handoff.mjs, npm script `client:pilot:handoff`) refuses to run without.
+Why it exists: the readiness ledger (contract `supermega.managed-pilot-readiness.v5`, pilot mode `owner_named`) requires a named business (`namedBusinessRequired`), a named operator (`namedOperatorRequired`), and a measured baseline (`measuredBaselineRequired`) for the `owner_named_pilot` gate. The private values satisfy `name_shop_pilot_business` and `name_shop_pilot_operator`; Git and HQ receive only stages, counts, and digests. The four derived numbers in section 4 are exactly the baseline fields the pilot handoff generator (tools/create_shop_pilot_handoff.mjs, npm script `client:pilot:handoff`) refuses to run without.
 
 ## Rules of measurement
 

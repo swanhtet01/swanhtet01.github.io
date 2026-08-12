@@ -1,6 +1,6 @@
 # Shop pilot acceptance checklist — the five-day evidence plan
 
-The readiness ledger requires acceptance evidence (`acceptanceEvidenceRequired`) before the founder decision `bounded-managed-pilot-rehearsal` can be prepared, and the Shop work order's required proof names "a named operator, baseline, and five-day evidence plan". This checklist is that plan, day by day. The five days, their proofs, the four start gates, and the five required measurements are taken verbatim from the pilot handoff generator (tools/create_shop_pilot_handoff.mjs), so the paper plan and the generated private handoff can never disagree.
+The readiness ledger requires acceptance evidence (`acceptanceEvidenceRequired`) for the `owner_named_pilot` gate, and the Shop work order's required proof names "a named operator, baseline, and five-day evidence plan". This checklist is that plan, day by day. The five days, their proofs, the four start gates, and the five required measurements are taken verbatim from the pilot handoff generator (tools/create_shop_pilot_handoff.mjs), so the paper plan and the generated private handoff can never disagree.
 
 ## Before day 1 — start gates
 
@@ -92,7 +92,7 @@ The handoff contract requires exactly these, and the daily records above produce
 
 Nothing on the readiness contract's does-not-authorize list ever happens during the pilot: `customer_message`, `payment`, `stock_move`, `production_database_change`, `production_deploy`, `managed_product_activation`, `hosted_scheduler_activation`. The app's own gate states the same boundary: `Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.`
 
-A hosted rehearsal is not part of these five days. If the founder separately approves the decision `bounded-managed-pilot-rehearsal`, that rehearsal runs on an isolated `preview_branch`, is bounded by `maximumLifetimeHours` of 24, starts with no production data, and is deleted after evidence (`delete_preview_branch_after_evidence`).
+A hosted rehearsal is not part of these five days. If the owner separately approves the provider actions in `replace-failed-preview-and-prepare-owner-named-shop-pilot`, that rehearsal runs on an isolated `preview_branch`, is bounded by `maximumLifetimeHours` of 24, starts with no production data, and is deleted after evidence (`delete_preview_branch_after_evidence`).
 
 ## Mapping to the readiness contract
 
@@ -102,5 +102,8 @@ A hosted rehearsal is not part of these five days. If the founder separately app
 | `namedOperatorRequired` | Baseline form section 1 plus the `namedOperatorAuthorized` gate |
 | `measuredBaselineRequired` | Baseline form sections 3 through 5 |
 | `acceptanceEvidenceRequired` | This checklist's daily records, the five required measurements, and the day 5 operator decision |
-| `name_shop_pilot_operator` (decision input) | The founder carries the completed baseline form into the decision |
-| `approve_preview_branch_target` (decision input) | Founder-only; nothing in this kit performs it |
+| `name_shop_pilot_business` (decision input) | The owner carries the completed baseline form into the private decision record |
+| `name_shop_pilot_operator` (decision input) | The owner carries the completed baseline form into the private decision record |
+| `approve_preview_branch_target` (decision input) | Owner-only; nothing in this kit performs it |
+| `approve_failed_preview_branch_deletion` (decision input) | Owner-only; nothing in this kit performs it |
+| `confirm_preview_branch_cost` (decision input) | Owner-only; nothing in this kit performs it |

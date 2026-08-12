@@ -1,12 +1,12 @@
 # SuperMega Shop pilot kit
 
-Everything a Shop design partner needs on day one of the five-day managed pilot, prepared before any partner is named, so recruitment has zero friction the moment the founder names a business.
+Everything a Shop design partner needs on day one of the five-day owner-named pilot, prepared before any partner is named.
 
 ## Why this kit exists
 
-The managed-pilot readiness ledger (contract `supermega.managed-pilot-readiness.v3`, stored at `hq/readiness/managed-pilot-readiness.json`) blocks every managed claim behind one founder decision with the id `bounded-managed-pilot-rehearsal`. That decision requires exactly two inputs: `approve_preview_branch_target` and `name_shop_pilot_operator`. Its operator block requires a named business (`namedBusinessRequired`), a named operator (`namedOperatorRequired`), a measured baseline (`measuredBaselineRequired`), and acceptance evidence (`acceptanceEvidenceRequired`). The Shop work order `shop-managed-order-close-pilot` stays `owner-gated` until those inputs exist.
+The managed-pilot readiness ledger (contract `supermega.managed-pilot-readiness.v5`, stored at `hq/readiness/managed-pilot-readiness.json`) keeps the hosted preview rehearsal and the private owner-named Shop pilot as separate blocking gates. Its next owner decision is `replace-failed-preview-and-prepare-owner-named-shop-pilot`; the decision requires explicit approval of the failed-branch deletion, preview cost, and preview target, plus `name_shop_pilot_business` and `name_shop_pilot_operator`. The operator block requires a named business (`namedBusinessRequired`), a named operator (`namedOperatorRequired`), a measured baseline (`measuredBaselineRequired`), acceptance evidence (`acceptanceEvidenceRequired`), and 20 consecutive accepted runs. The Shop work order `shop-managed-order-close-pilot` stays `owner-gated` until those inputs and proofs exist.
 
-This kit is the paperwork for those inputs. It authorizes nothing: the founder decision remains `required` with `proposal_only` authority, and nothing in this kit touches a hosted service, spends a credential, or performs any network mutation.
+This kit prepares only the private business/operator inputs and pilot evidence. It does not approve `approve_failed_preview_branch_deletion`, `confirm_preview_branch_cost`, or `approve_preview_branch_target`. It authorizes nothing: the owner decision remains `required` with `proposal_only` authority, and nothing in this kit touches a hosted service, uses a credential, or performs any network mutation.
 
 ## The documents, in order of use
 
@@ -22,6 +22,6 @@ This kit is the paperwork for those inputs. It authorizes nothing: the founder d
 
 ## Boundary
 
-The pilot itself runs on the browser-local working sample. The readiness contract's does-not-authorize list holds for the entire pilot: `production_database_change`, `production_deploy`, `customer_message`, `payment`, `stock_move`, `managed_product_activation`, `hosted_scheduler_activation`. Any hosted rehearsal happens only after the founder decision is approved, on an isolated `preview_branch`, bounded by `maximumLifetimeHours` of 24 with `deleteAfterEvidence` set.
+The pilot itself runs on the browser-local working sample. The readiness contract's does-not-authorize list holds for the entire pilot: `production_database_change`, `production_deploy`, `customer_message`, `payment`, `stock_move`, `managed_product_activation`, `hosted_scheduler_activation`. Any hosted rehearsal is separate and happens only after the owner approves the exact provider actions, on an isolated `preview_branch`, bounded by `maximumLifetimeHours` of 24 with `deleteAfterEvidence` set.
 
 Every backticked token in this kit is a verbatim contract checked against the repo sources by the drift guard tools/test_demo_playbooks.mjs (npm script `demo:playbooks:verify`).
