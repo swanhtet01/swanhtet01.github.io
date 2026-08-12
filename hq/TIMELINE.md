@@ -424,6 +424,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-correction-intent-payment-changed-rates-brief (correctionIntents paymentChanged rates: 5 fields, 2 paired — paymentChangedRate, notPaymentChangedRate); 23 checks; zero bundle cost — DONE (OPS-711)
 - [x] Analytics Codex: ecommerce-correction-intent-tax-filed-rates-brief (correctionIntents taxFiled rates: 5 fields, 2 paired — taxFiledRate, notTaxFiledRate); 23 checks; zero bundle cost — DONE (OPS-712)
 - [x] Analytics Codex: ecommerce-correction-intent-customer-message-sent-rates-brief (correctionIntents customerMessageSent rates: 5 fields, 2 paired — customerMessageSentRate, notCustomerMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-713)
+- [x] Analytics Codex: ecommerce-correction-intent-provider-called-rates-brief (correctionIntents providerCalled rates: 5 fields, 2 paired — providerCalledRate, notProviderCalledRate); 23 checks; zero bundle cost — DONE (OPS-714)
+- [x] Analytics Codex: ecommerce-amendment-intent-stock-changed-rates-brief (amendmentIntents stockChanged rates: 5 fields, 2 paired — stockChangedRate, notStockChangedRate); 23 checks; zero bundle cost — DONE (OPS-715)
+- [x] Analytics Codex: ecommerce-amendment-intent-payment-changed-rates-brief (amendmentIntents paymentChanged rates: 5 fields, 2 paired — paymentChangedRate, notPaymentChangedRate); 23 checks; zero bundle cost — DONE (OPS-716)
+- [x] Analytics Codex: ecommerce-amendment-intent-refund-started-rates-brief (amendmentIntents refundStarted rates: 5 fields, 2 paired — refundStartedRate, notRefundStartedRate); 23 checks; zero bundle cost — DONE (OPS-717)
 
 ### Aug 25–31
 
