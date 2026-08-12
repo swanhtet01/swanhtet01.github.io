@@ -294,6 +294,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-support-intent-category-refund-started-brief (supportIntents category 5-value × refundStarted: 5×2 = 10 cells); 23 checks; zero bundle cost — DONE (OPS-581)
 - [x] Analytics Codex: ecommerce-correction-intent-source-count-refund-status-brief (correctionIntents sourceCorrectionCount first/repeat × refundStatus none/due/settled: 2×3 cross-tab); 23 checks; zero bundle cost — DONE (OPS-582)
 - [x] Analytics Codex: ecommerce-amendment-intent-order-status-switch-brief (amendmentIntents orderStatus confirmed/preparing/ready × fromFulfilment===toFulfilment same/switch: 3×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-583)
+- [x] Analytics Codex: ecommerce-reschedule-intent-direction-reason-length-brief (rescheduleIntents direction forward/pushedBack × reason.length short/detailed: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-584)
+- [x] Analytics Codex: ecommerce-return-intent-disposition-quantity-brief (returnIntents disposition restock/not_restocked × quantity single/multi: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-585)
+- [x] Analytics Codex: ecommerce-amendment-intent-line-count-switch-brief (amendmentIntents lineCount single/multi × fromFulfilment===toFulfilment same/switch: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-586)
+- [x] Analytics Codex: ecommerce-correction-intent-kind-source-count-brief (correctionIntents requestedKind credit/debit × sourceCorrectionCount first/repeat: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-587)
 
 ### Aug 25–31
 
