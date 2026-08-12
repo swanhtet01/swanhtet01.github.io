@@ -400,6 +400,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-cancellation-intent-order-status-rates-brief (cancellationIntents orderStatus rates: 7 fields, 3 enum pairs — confirmedRate, preparingRate, readyRate); 23 checks; zero bundle cost — DONE (OPS-687)
 - [x] Analytics Codex: ecommerce-cancellation-decision-order-status-rates-brief (cancellationDecisions orderStatus rates: 7 fields, totalDecisions + 3 enum pairs — confirmedRate, preparingRate, readyRate); 23 checks; zero bundle cost — DONE (OPS-688)
 - [x] Analytics Codex: ecommerce-reschedule-intent-fulfilment-rates-brief (rescheduleIntents fulfilment rates: 5 fields, 2 paired count+rate metrics — deliveryRate, pickupRate); 23 checks; zero bundle cost — DONE (OPS-689)
+- [x] Analytics Codex: ecommerce-cancellation-intent-payment-status-rates-brief (cancellationIntents payment rates: 5 fields, 2 paired — pendingRate, reconciledRate); 23 checks; zero bundle cost — DONE (OPS-690)
+- [x] Analytics Codex: ecommerce-cancellation-intent-refund-status-rates-brief (cancellationIntents refund rates: 7 fields, 3 enum pairs — noneRate, dueRate, settledRate); 23 checks; zero bundle cost — DONE (OPS-691)
+- [x] Analytics Codex: ecommerce-cancellation-decision-payment-status-rates-brief (cancellationDecisions payment rates: 5 fields, totalDecisions + 2 paired — pendingRate, reconciledRate); 23 checks; zero bundle cost — DONE (OPS-692)
+- [x] Analytics Codex: ecommerce-support-intent-category-rates-brief (supportIntents category rates: 11 fields, 5 pairs — orderStatusRate, deliveryIssueRate, paymentQuestionRate, itemIssueRate, otherCategoryRate); 23 checks; zero bundle cost — DONE (OPS-693)
 
 ### Aug 25–31
 
