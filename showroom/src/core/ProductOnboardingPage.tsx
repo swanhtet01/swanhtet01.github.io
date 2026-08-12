@@ -34,6 +34,7 @@ import {
   type ShopBusinessTemplateId,
 } from '../products/shop/business-templates'
 import {
+  PLANT_INDUSTRY_PACK_STORAGE_KEY,
   plantIndustryPack,
   plantIndustryPacks,
   readPlantIndustryPackId,
@@ -118,7 +119,16 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
   const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
-  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => {
+    const storage = typeof window === 'undefined' ? undefined : window.localStorage
+    const hasSavedPack = Boolean(storage?.getItem(PLANT_INDUSTRY_PACK_STORAGE_KEY))
+    const savedPack = readPlantIndustryPackId(storage)
+    if (!hasSavedPack) {
+      const shopPackId = readLocalShopIndustryPackId()
+      if (shopPackId === 'restaurant' || shopPackId === 'cafe') return 'food-beverage'
+    }
+    return savedPack
+  })
   const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
     () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
   )
@@ -126,6 +136,16 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     if (typeof window === 'undefined') return null
     const partnerId = PRIMARY_PARTNER[product]
     return partnerId ? readProductSetup(window.localStorage, partnerId) : null
+  })
+  const [sharedWorkspaceName] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    const others: SetupProductId[] = ['commerce', 'ecommerce', 'production', 'website']
+    for (const id of others) {
+      if (id === product) continue
+      const existing = readProductSetup(window.localStorage, id)
+      if (existing?.workspace) return existing.workspace
+    }
+    return ''
   })
 
   const onboardingProduct = productContracts[product]
@@ -154,10 +174,13 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     const selectionTimer = window.setTimeout(() => {
       rememberProductSetup(window.localStorage, setup)
       const saved = readProductSetup(window.localStorage, product)
-      setSetup(saved ?? seedSetupForProduct(product, template.id))
+      const freshSeed = seedSetupForProduct(product, template.id)
+      setSetup(saved ?? (sharedWorkspaceName ? { ...freshSeed, workspace: sharedWorkspaceName } : freshSeed))
       setNotice(saved
         ? `Continue your saved ${onboardingProduct.name} workspace.`
-        : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
+        : sharedWorkspaceName
+          ? `${onboardingProduct.name} is ready. We matched your business name — change it if this workspace needs a different one.`
+          : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
     }, 0)
     return () => window.clearTimeout(selectionTimer)
   }, [onboardingProduct.name, product, selectedShopIndustryPack.workflowTemplateId, setSetup, setup])
