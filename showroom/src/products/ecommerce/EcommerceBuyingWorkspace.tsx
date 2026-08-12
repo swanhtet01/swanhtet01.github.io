@@ -171,6 +171,7 @@ export function EcommerceBuyingWorkspace({
   const [freshQuoteId, setFreshQuoteId] = useState('')
   const [quoteClock, setQuoteClock] = useState(() => Date.now())
   const [notice, setNotice] = useState('')
+  const [cartDrafts, setCartDrafts] = useState<Record<string, string>>({})
   const [returnDraft, setReturnDraft] = useState<{
     orderId: string
     sku: string
@@ -519,6 +520,22 @@ export function EcommerceBuyingWorkspace({
     if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) return
     onCartChange(cart.map((line) => line.sku === sku ? { ...line, quantity } : line))
     setNotice('Cart changed. Review a new total before Shop review.')
+  }
+
+  // The input holds a draft string so backspace-then-retype works; the cart only ever stores a
+  // valid 1-99 integer, and blur snaps the display back to the real quantity.
+  function draftCartQuantity(sku: string, raw: string) {
+    setCartDrafts((previous) => ({ ...previous, [sku]: raw }))
+    const parsed = Number(raw)
+    if (Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 99) updateCart(sku, parsed)
+  }
+
+  function commitCartQuantity(sku: string) {
+    setCartDrafts((previous) => {
+      const next = { ...previous }
+      delete next[sku]
+      return next
+    })
   }
 
   function removeFromCart(sku: string) {
@@ -1208,7 +1225,7 @@ export function EcommerceBuyingWorkspace({
                   </span>
                   <label>
                     <span className="sr-only">Quantity for {item?.name ?? sku}</span>
-                    <input aria-label={`Quantity for ${item?.name ?? sku}`} max={99} min={1} onChange={(event) => updateCart(sku, Number(event.target.value))} type="number" value={quantity} />
+                    <input aria-label={`Quantity for ${item?.name ?? sku}`} inputMode="numeric" max={99} min={1} onBlur={() => commitCartQuantity(sku)} onChange={(event) => draftCartQuantity(sku, event.target.value)} step={1} type="number" value={cartDrafts[sku] ?? String(quantity)} />
                   </label>
                   <b>{item ? formatMmk(item.unitPriceMmk * quantity) : '—'}</b>
                   <button aria-label={`Remove ${item?.name ?? sku}`} onClick={() => removeFromCart(sku)} type="button">Remove</button>
@@ -1223,14 +1240,14 @@ export function EcommerceBuyingWorkspace({
             </div>
           )}
 
-          <form onSubmit={(event) => void reviewOrder(event)}>
+          <form aria-busy={quoteBusy} onSubmit={(event) => void reviewOrder(event)}>
             <label>
               <span>Name</span>
               <input autoComplete="name" maxLength={80} onChange={(event) => setCustomerName(event.target.value)} placeholder="e.g. Ma Su" required value={customerName} />
             </label>
             <label>
               <span>Phone</span>
-              <input autoComplete="tel" inputMode="tel" maxLength={32} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="e.g. 09 123 456 789" required value={customerPhone} />
+              <input autoComplete="tel" inputMode="tel" maxLength={32} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="e.g. 09 123 456 789" required type="tel" value={customerPhone} />
             </label>
             <label>
               <span>Receive order</span>
@@ -1275,8 +1292,11 @@ export function EcommerceBuyingWorkspace({
               <input maxLength={40} onChange={(event) => setPromotionCode(event.target.value)} placeholder="Optional" value={promotionCode} />
             </label>
             {!quoteCurrent && !latestRequestConfirmed ? <button className="core-button primary" disabled={disabled || quoteBusy || recoveryBlocked || !cart.length || !paymentPolicyReady} type="submit">
-              {quoteBusy ? 'Sending…' : 'Send order request'}
+              {quoteBusy ? 'Sending...' : 'Send order request'}
             </button> : null}
+            <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
+              ? 'Checking saved checkout recovery...'
+              : checkoutNotice}</p>
           </form>
 
           {latestRequest ? latestRequestOrder && latestRequestConfirmed ? (
@@ -1308,7 +1328,7 @@ export function EcommerceBuyingWorkspace({
               <small>Reference {latestRequest.id} · quote valid until {new Date(latestRequest.quote.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
               <p>{onRecordManagedRequest ? 'Company Shop received this request.' : 'This browser demo retained the request.'} Shop still confirms stock, promise, payment, and delivery.</p>
               <button className="core-button secondary" disabled={!quoteCurrent || handoffBusy} onClick={() => void openOperatorReview()} type="button">
-                {handoffBusy ? 'Opening Shop…' : 'Open Shop operator review'}
+                {handoffBusy ? 'Opening Shop...' : 'Open Shop operator review'}
               </button>
             </article>
           ) : (
@@ -1347,9 +1367,6 @@ export function EcommerceBuyingWorkspace({
             ) : <p>Use the same name and phone as checkout to see request, fulfilment, and payment status here.</p>}
           </section>
 
-          <p className="form-notice ecommerce-buying-notice" aria-live="polite">{recoveryStatus === 'checking'
-            ? 'Checking saved checkout recovery…'
-            : checkoutNotice}</p>
         </div>
       </details>
 
@@ -1424,7 +1441,7 @@ export function EcommerceBuyingWorkspace({
             <label>What needs correcting?<select disabled={disabled || amendmentBusy} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, mode: event.target.value as 'details' | 'items' } : current)} value={amendmentDraft.mode}><option value="details">Contact or delivery details</option><option value="items">Item quantities</option></select></label>
             {amendmentDraft.mode === 'details' ? <>
               <label>Name<input autoComplete="name" disabled={disabled || amendmentBusy} maxLength={80} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, customerName: event.target.value } : current)} required value={amendmentDraft.customerName} /></label>
-              <label>Phone<input autoComplete="tel" disabled={disabled || amendmentBusy} inputMode="tel" maxLength={32} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, customerPhone: event.target.value } : current)} required value={amendmentDraft.customerPhone} /></label>
+              <label>Phone<input autoComplete="tel" disabled={disabled || amendmentBusy} inputMode="tel" maxLength={32} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, customerPhone: event.target.value } : current)} required type="tel" value={amendmentDraft.customerPhone} /></label>
               {amendmentDraft.fulfilment === 'delivery' ? <>
                 <label>Delivery address<input autoComplete="street-address" disabled={disabled || amendmentBusy} maxLength={120} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, addressLine1: event.target.value } : current)} required value={amendmentDraft.addressLine1} /></label>
                 <label>Township<input disabled={disabled || amendmentBusy} maxLength={80} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, addressTownship: event.target.value } : current)} required value={amendmentDraft.addressTownship} /></label>
@@ -1433,13 +1450,13 @@ export function EcommerceBuyingWorkspace({
               </> : null}
             </> : amendmentDraft.lines.map((line) => <label key={line.sku}>{line.name}<input disabled={disabled || amendmentBusy} inputMode="numeric" max="99" min="1" onChange={(event) => setAmendmentDraft((current) => current ? { ...current, lines: current.lines.map((candidate) => candidate.sku === line.sku ? { ...candidate, quantity: event.target.value } : candidate) } : current)} required step="1" type="number" value={line.quantity} /></label>)}
             <label className="ecommerce-return-reason">Why change it?<textarea disabled={disabled || amendmentBusy} maxLength={300} onChange={(event) => setAmendmentDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={amendmentDraft.reason} /></label>
-            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || amendmentBusy} type="submit">{amendmentBusy ? 'Saving…' : 'Send correction to Shop'}</button><button className="core-button secondary" disabled={disabled || amendmentBusy} onClick={() => { setAmendmentDraft(null); setNotice('Order correction closed. Nothing changed.') }} type="button">Close</button></div>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || amendmentBusy} type="submit">{amendmentBusy ? 'Saving...' : 'Send correction to Shop'}</button><button className="core-button secondary" disabled={disabled || amendmentBusy} onClick={() => { setAmendmentDraft(null); setNotice('Order correction closed. Nothing changed.') }} type="button">Close</button></div>
           </form> : null}
           {rescheduleDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitRescheduleRequest(event)}>
             <span><strong>Change time for {rescheduleDraft.orderId}</strong><small>Shop checks current delivery and payment policy before cancelling the original. A second confirmation creates the replacement.</small></span>
             <label>Requested date and time<input disabled={disabled || rescheduleBusy} min={localPromiseInput(new Date(quoteClock + 30 * 60 * 1000))} onChange={(event) => setRescheduleDraft((current) => current ? { ...current, requestedPromisedAt: event.target.value } : current)} required type="datetime-local" value={rescheduleDraft.requestedPromisedAt} /></label>
             <label className="ecommerce-return-reason">Why change it?<textarea disabled={disabled || rescheduleBusy} maxLength={300} onChange={(event) => setRescheduleDraft((current) => current ? { ...current, reason: event.target.value } : current)} placeholder="One clear reason for Shop review" required rows={2} value={rescheduleDraft.reason} /></label>
-            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || rescheduleBusy} type="submit">{rescheduleBusy ? 'Saving…' : 'Send time to Shop'}</button><button className="core-button secondary" disabled={disabled || rescheduleBusy} onClick={() => { setRescheduleDraft(null); setNotice('Reschedule closed. The order and promise are unchanged.') }} type="button">Close</button></div>
+            <div className="ecommerce-return-actions"><button className="core-button primary" disabled={disabled || rescheduleBusy} type="submit">{rescheduleBusy ? 'Saving...' : 'Send time to Shop'}</button><button className="core-button secondary" disabled={disabled || rescheduleBusy} onClick={() => { setRescheduleDraft(null); setNotice('Reschedule closed. The order and promise are unchanged.') }} type="button">Close</button></div>
           </form> : null}
           {cancellationDraft ? <form className="ecommerce-return-form" onSubmit={(event) => void submitCancellationRequest(event)}>
             <span><strong>Cancel {cancellationDraft.orderId}</strong><small>Shop must recheck the order, reserved stock, payment, and refund impact.</small></span>

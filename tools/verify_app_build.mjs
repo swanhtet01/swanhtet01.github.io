@@ -1052,7 +1052,11 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   || coreShellSource.includes('aria-label="Company sign in"')
   || !coreCssSource.includes('.sidebar-foot .account-shell-link { min-height: 44px;')
   || !coreCssSource.includes('.topbar-meta > a { min-width: 44px; min-height: 44px;')
-  || !coreCssSource.includes('.core-topbar .mobile-account-link,\n  .core-topbar .runtime-badge { display: none; }')) fail('managed_account_entry_not_discoverable')
+  // The mobile topbar Login link must stay VISIBLE: it inherits the 44px .topbar-meta > a rule, so
+  // no CSS may target .core-topbar .mobile-account-link at all (hiding it left mobile users with no
+  // discoverable door to Company login).
+  || coreCssSource.includes('.core-topbar .mobile-account-link')
+  || !coreCssSource.includes('.core-topbar .runtime-badge { display: none; }')) fail('managed_account_entry_not_discoverable')
 const shellNavigationContract = coreShellSource.slice(
   coreShellSource.indexOf('const productNavigation:'),
   coreShellSource.indexOf('\n}', coreShellSource.indexOf('const productNavigation:')) + 2,

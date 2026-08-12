@@ -56,6 +56,7 @@ export function SignupPage() {
   const [emailConsent, setEmailConsent] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
+  const [noticeTone, setNoticeTone] = useState<'quiet' | 'error'>('quiet')
   const [carriedOver, setCarriedOver] = useState(false)
 
   const managedReady = runtime.status === 'enterprise' && managedTrialAuthConfigured()
@@ -66,6 +67,7 @@ export function SignupPage() {
     event.preventDefault()
     if (busy) return
     setBusy(true)
+    setNoticeTone('quiet')
     setNotice('Preparing your workspace...')
     try {
       const trade = choiceId.startsWith('trade:')
@@ -126,6 +128,7 @@ export function SignupPage() {
       }
       navigate('/shop/')
     } catch (error) {
+      setNoticeTone('error')
       setNotice(error instanceof Error ? error.message : 'The trial could not be started.')
     } finally {
       setBusy(false)
@@ -185,7 +188,7 @@ export function SignupPage() {
   return (
     <div className="workspace-screen managed-login-screen">
       <PageHeading eyebrow="Free trial" title="Start selling today." copy="One form. Your workspace opens with a real starter catalog for your trade." />
-      <form className="managed-login-panel core-form" onSubmit={(event) => void startTrial(event)}>
+      <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void startTrial(event)}>
         <div>
           <span className="core-eyebrow">No card, no waiting</span>
           <h2>Tell us about your business.</h2>
@@ -202,13 +205,13 @@ export function SignupPage() {
           </optgroup>
         </select></label>
         <label>Your name (optional)<input autoComplete="name" maxLength={120} onChange={(event) => setOwnerName(event.target.value)} value={ownerName} /></label>
+        <label>Email (optional)<input autoComplete="email" maxLength={160} onChange={(event) => setEmail(event.target.value)} type="email" value={email} /></label>
         <label className="signup-consent">
-          <input checked={emailConsent} onChange={(event) => { setEmailConsent(event.target.checked); if (!event.target.checked) setEmail('') }} type="checkbox" />
+          <input checked={emailConsent} onChange={(event) => setEmailConsent(event.target.checked)} type="checkbox" />
           <span>Keep my email on this device so SuperMega can contact me about a company account.</span>
         </label>
-        <label>Email (optional)<input autoComplete="email" disabled={!emailConsent} maxLength={160} onChange={(event) => setEmail(event.target.value)} type="email" value={email} /></label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Preparing your workspace...' : 'Start my free trial'}</button>
-        {notice ? <p className="form-notice" role="status">{notice}</p> : null}
+        <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
       </form>
       <section className="managed-login-panel" aria-label="Company account">
         <div>
