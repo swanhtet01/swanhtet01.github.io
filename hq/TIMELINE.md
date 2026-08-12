@@ -432,6 +432,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-amendment-intent-provider-called-rates-brief (amendmentIntents providerCalled rates: 5 fields, 2 paired — providerCalledRate, notProviderCalledRate); 23 checks; zero bundle cost — DONE (OPS-719)
 - [x] Analytics Codex: ecommerce-cancellation-intent-customer-message-sent-rates-brief (cancellationIntents customerMessageSent rates: 5 fields, 2 paired — customerMessageSentRate, notCustomerMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-720)
 - [x] Analytics Codex: ecommerce-cancellation-intent-refund-started-rates-brief (cancellationIntents refundStarted rates: 5 fields, 2 paired — refundStartedRate, notRefundStartedRate); 23 checks; zero bundle cost — DONE (OPS-721)
+- [x] Analytics Codex: ecommerce-cancellation-intent-order-cancelled-rates-brief (cancellationIntents orderCancelled rates: 5 fields, 2 paired — orderCancelledRate, notOrderCancelledRate); 23 checks; zero bundle cost; completes all cancellationIntents booleans — DONE (OPS-722)
+- [x] Analytics Codex: ecommerce-cancellation-decision-customer-message-sent-rates-brief (cancellationDecisions customerMessageSent rates: 5 fields, totalDecisions — customerMessageSentRate, notCustomerMessageSentRate); 23 checks; zero bundle cost — DONE (OPS-723)
+- [x] Analytics Codex: ecommerce-cancellation-decision-order-cancelled-rates-brief (cancellationDecisions orderCancelled rates: 5 fields, totalDecisions — orderCancelledRate, notOrderCancelledRate); 23 checks; zero bundle cost — DONE (OPS-724)
+- [x] Analytics Codex: ecommerce-cancellation-decision-refund-started-rates-brief (cancellationDecisions refundStarted rates: 5 fields, totalDecisions — refundStartedRate, notRefundStartedRate); 23 checks; zero bundle cost — DONE (OPS-725)
 
 ### Aug 25–31
 
