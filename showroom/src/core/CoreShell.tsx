@@ -1,9 +1,10 @@
-import { lazy, Suspense, type ReactNode, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 
 import './core-app.css'
 import { recordBehaviorSignal } from './behavior-trail'
 import type { ClientSolutionId } from './client-onboarding'
+import { readProductSetup, type SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
@@ -438,6 +439,13 @@ export function CoreLayout() {
   )
 }
 
+const PRODUCT_SETUP_KEY: Record<string, SetupProductId> = {
+  Shop: 'commerce',
+  Plant: 'production',
+  Website: 'website',
+  Ecommerce: 'ecommerce',
+}
+
 const customerProducts = [
   ['Shop', 'Sell and manage stock', 'Counter sales, inventory, orders, and daily close.', '/shop/'],
   ['Plant', 'Run production', 'Jobs, materials, output, quality, and traceability.', '/plant/'],
@@ -461,17 +469,34 @@ export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value:
 }
 
 export function ProductHomePage() {
+  const productSetups = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    return {
+      commerce: readProductSetup(window.localStorage, 'commerce'),
+      production: readProductSetup(window.localStorage, 'production'),
+      website: readProductSetup(window.localStorage, 'website'),
+      ecommerce: readProductSetup(window.localStorage, 'ecommerce'),
+    }
+  }, [])
+  const anyStarted = productSetups ? Object.values(productSetups).some((s) => s?.startedAt) : false
   return (
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />
+      {!anyStarted ? (
+        <p className="platform-start-nudge"><strong>New here?</strong> Start with <strong>Shop</strong> — set it up once, and it connects to all other products through one catalog and order flow.</p>
+      ) : null}
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => {
-          return <Link aria-label={`Open ${name} workspace`} className="product-track-card" key={name} to={path}>
+          const setupKey = PRODUCT_SETUP_KEY[name]
+          const setup = productSetups?.[setupKey]
+          const workspaceName = setup?.startedAt ? setup.workspace : null
+          return <Link aria-label={`Open ${name} workspace`} className="product-track-card" data-active={workspaceName ? true : undefined} key={name} to={path}>
               <span aria-hidden="true" className="product-track-number">{String(index + 1).padStart(2, '0')}</span>
               <span className="product-track-copy">
                 <small>{job}</small>
                 <h2>{name}</h2>
                 <p>{outcome}</p>
+                {workspaceName ? <span className="product-track-workspace">{workspaceName}</span> : null}
               </span>
               <strong className="product-track-open">Open {name} <span aria-hidden="true">→</span></strong>
             </Link>
