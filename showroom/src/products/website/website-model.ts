@@ -1,9 +1,9 @@
+import { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY } from '../product-storage-keys.ts'
 import type { WebsiteReleaseState } from './website-release-foundation'
 import { restoreWebsiteLeadLedger, type WebsiteLeadLedger } from './website-leads.ts'
 
+export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }
 export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
-export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v2'
-export const LEGACY_WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v1'
 export const WEBSITE_RECOVERY_INDEX_KEY = 'supermega.website.workspace.recovery.v1.index'
 export const WEBSITE_EDIT_SESSION_KEY = 'supermega.website.edit-session.v1'
 export const MAX_WEBSITE_PAGES = 4

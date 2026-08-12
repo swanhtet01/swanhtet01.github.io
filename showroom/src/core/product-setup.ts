@@ -3,7 +3,7 @@ import {
   LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
-} from '../products/product-handoff'
+} from '../products/product-storage-keys'
 import type { ClientSolutionId } from './client-onboarding'
 
 export type SetupProductId = ClientSolutionId

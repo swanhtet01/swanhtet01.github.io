@@ -1,6 +1,9 @@
 import {
   LEGACY_WEBSITE_STORAGE_KEY,
+  WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
+} from './product-storage-keys.ts'
+import {
   getCurrentApproval,
   getCurrentPublish,
   readinessChecks,
@@ -10,7 +13,7 @@ import {
 } from './website/website-model.ts'
 
 export { LEGACY_WEBSITE_STORAGE_KEY, WEBSITE_STORAGE_KEY }
-export const WEBSITE_ECOMMERCE_HANDOFF_KEY = 'supermega.website-ecommerce-handoff.v1'
+export { WEBSITE_ECOMMERCE_HANDOFF_KEY }
 
 type HandoffSource = {
   fingerprint: string
