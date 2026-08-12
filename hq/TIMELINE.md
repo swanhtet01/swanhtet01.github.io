@@ -286,6 +286,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-return-intent-disposition-reason-length-brief (returnIntents disposition restock/not_restocked × reason.length short/detailed: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-573)
 - [x] Analytics Codex: ecommerce-support-intent-category-description-length-brief (supportIntents category 5-value × description.length short/detailed: 5×2 = 10 cells); 23 checks; zero bundle cost — DONE (OPS-574)
 - [x] Analytics Codex: ecommerce-cancellation-decision-order-status-payment-status-brief (cancellationDecisions orderStatus confirmed/preparing/ready × paymentStatus pending/reconciled: 3×2 cross-tab, 6 cells); 23 checks; zero bundle cost — DONE (OPS-575)
+- [x] Analytics Codex: ecommerce-reschedule-intent-fulfilment-reason-length-brief (rescheduleIntents fulfilment pickup/delivery × reason.length short/detailed: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-576)
+- [x] Analytics Codex: ecommerce-support-intent-category-external-message-brief (supportIntents category 5-value × externalMessageSent: 5×2 = 10 cells); 23 checks; zero bundle cost — DONE (OPS-577)
+- [x] Analytics Codex: ecommerce-amendment-intent-order-status-line-count-brief (amendmentIntents orderStatus confirmed/preparing/ready × lineCount single/multi: 3×2 cross-tab, 6 cells); 23 checks; zero bundle cost — DONE (OPS-578)
+- [x] Analytics Codex: ecommerce-return-intent-quantity-reason-length-brief (returnIntents quantity single/multi × reason.length short/detailed: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-579)
 
 ### Aug 25–31
 
