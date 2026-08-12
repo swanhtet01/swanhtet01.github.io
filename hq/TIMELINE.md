@@ -190,6 +190,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: website-opening-plan-confirmed-at-brief (WebsiteOpeningPlan.confirmedAt: hasPlan + confirmedAt + pageCount); 28 checks; zero bundle cost — DONE (OPS-477)
 - [x] Analytics Codex: website-publish-evidence-reference-length-brief (PublishEvidence.reference citation text short/medium/long + rates); 53 checks; zero bundle cost — DONE (OPS-478)
 - [x] Analytics Codex: ecommerce-delivery-address-revision-brief (EcommerceDeliveryAddressSnapshot.revision first-save vs edited counts + min/max/avg); 36 checks; zero bundle cost — DONE (OPS-479)
+- [x] Analytics Codex: website-publish-approval-approved-at-brief (PublishApproval.approvedAt earliest/latest/spannedDays); 26 checks; zero bundle cost — DONE (OPS-480)
+- [x] Analytics Codex: website-local-publish-recorded-at-brief (LocalPublishRecord.recordedAt earliest/latest/spannedDays); 25 checks; zero bundle cost — DONE (OPS-481)
+- [x] Analytics Codex: ecommerce-amendment-intent-original-total-brief (EcommerceOrderAmendmentIntent.originalTotalMmk total/avg/min/max); 25 checks; zero bundle cost — DONE (OPS-482)
+- [x] Analytics Codex: website-workflow-event-evidence-reference-length-brief (WebsiteWorkflowEvent.evidenceReference short/medium/long + rates); 48 checks; zero bundle cost — DONE (OPS-483)
 
 ### Aug 25–31
 
