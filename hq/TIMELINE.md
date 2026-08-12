@@ -290,6 +290,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-support-intent-category-external-message-brief (supportIntents category 5-value × externalMessageSent: 5×2 = 10 cells); 23 checks; zero bundle cost — DONE (OPS-577)
 - [x] Analytics Codex: ecommerce-amendment-intent-order-status-line-count-brief (amendmentIntents orderStatus confirmed/preparing/ready × lineCount single/multi: 3×2 cross-tab, 6 cells); 23 checks; zero bundle cost — DONE (OPS-578)
 - [x] Analytics Codex: ecommerce-return-intent-quantity-reason-length-brief (returnIntents quantity single/multi × reason.length short/detailed: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-579)
+- [x] Analytics Codex: ecommerce-cancellation-intent-order-status-payment-status-brief (cancellationIntents orderStatus confirmed/preparing/ready × paymentStatus pending/reconciled: 3×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-580)
+- [x] Analytics Codex: ecommerce-support-intent-category-refund-started-brief (supportIntents category 5-value × refundStarted: 5×2 = 10 cells); 23 checks; zero bundle cost — DONE (OPS-581)
+- [x] Analytics Codex: ecommerce-correction-intent-source-count-refund-status-brief (correctionIntents sourceCorrectionCount first/repeat × refundStatus none/due/settled: 2×3 cross-tab); 23 checks; zero bundle cost — DONE (OPS-582)
+- [x] Analytics Codex: ecommerce-amendment-intent-order-status-switch-brief (amendmentIntents orderStatus confirmed/preparing/ready × fromFulfilment===toFulfilment same/switch: 3×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-583)
 
 ### Aug 25–31
 
