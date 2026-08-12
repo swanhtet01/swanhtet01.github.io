@@ -53,6 +53,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-reschedule-intent-rider-booked-rates-brief (EcommerceOrderRescheduleIntent.riderBooked boolean rates; unique field not present in other intent types); 23 checks; zero bundle cost — DONE (OPS-731)
 - [x] Analytics Codex: ecommerce-reschedule-intent-provider-called-rates-brief (EcommerceOrderRescheduleIntent.providerCalled boolean rates; completes all 7 rescheduleIntents booleans); 23 checks; zero bundle cost — DONE (OPS-732)
 - [x] Analytics Codex: ecommerce-support-intent-external-message-sent-rates-brief (EcommerceSupportIntent.externalMessageSent boolean rates; 5-field pattern); 23 checks; zero bundle cost — DONE (OPS-733)
+- [x] Analytics Codex: ecommerce-support-intent-refund-started-rates-brief (EcommerceSupportIntent.refundStarted boolean rates; completes all supportIntents booleans); 23 checks; zero bundle cost — DONE (OPS-734)
 
 ### Aug 15–25
 
