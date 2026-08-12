@@ -60,6 +60,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Growth Codex: customer acknowledgement email — delivered leads get welcome + reference + next steps via Resend, best-effort, founder reply-to — DONE (OPS-738)
 - [x] Growth Codex: trial claim code structured through contact pipeline — claim= fragment, hidden field, validated into record.raw, all founder channels + customer ack — DONE (OPS-739)
 - [ ] FOUNDER DECISIONS RECEIVED 2026-08-12: (1) Supabase preview branch APPROVED; (2) pilot goes SELF-SERVE — no founder-named operator, users name themselves in onboarding; (3) branch push APPROVED
+- [x] Push executed: 891 commits to origin/fix/demo-seed-clock after zero-hit secret scan; CI green (dependency audit, kernel console), app CI running — DONE 2026-08-12
+- [x] Preview branch security-rehearsal-24h-20260812 created (ref usmpllbckvrucbjptiuq, ~$0.32/24h); hosted migration replay in progress — DONE 2026-08-12
+- [x] Architecture Codex: AI-native architecture + scalability strategy doc with 90-day measured-trigger roadmap — DONE (OPS-740)
+- [x] Onboarding Codex: self-serve onboarding spec; six-proof self_serve_pilot gate proposal; lockstep kernel v4 diff shape — DONE (OPS-741)
 
 ### Aug 15–25
 
