@@ -54,6 +54,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-reschedule-intent-provider-called-rates-brief (EcommerceOrderRescheduleIntent.providerCalled boolean rates; completes all 7 rescheduleIntents booleans); 23 checks; zero bundle cost — DONE (OPS-732)
 - [x] Analytics Codex: ecommerce-support-intent-external-message-sent-rates-brief (EcommerceSupportIntent.externalMessageSent boolean rates; 5-field pattern); 23 checks; zero bundle cost — DONE (OPS-733)
 - [x] Analytics Codex: ecommerce-support-intent-refund-started-rates-brief (EcommerceSupportIntent.refundStarted boolean rates; completes all supportIntents booleans); 23 checks; zero bundle cost — DONE (OPS-734)
+- [x] Platform Codex: mobile signup CTA -- mobile-signup-topbar-link class with green 44px tap target; Start free trial visible at 375x812 — DONE (OPS-735)
 
 ### Aug 15–25
 
