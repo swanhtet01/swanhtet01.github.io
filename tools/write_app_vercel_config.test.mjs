@@ -22,6 +22,7 @@ test('app Vercel generator emits zero crons and a bounded Python function', asyn
     const config = JSON.parse(await readFile(join(workspace, 'vercel.json'), 'utf8'))
     const project = JSON.parse(await readFile(join(workspace, '.vercel', 'project.json'), 'utf8'))
     assert.equal(config.functions['api/app.py'].maxDuration, 60)
+    assert.equal(config.functions['api/app.py'].includeFiles, '{supermega_runtime/**,hq/readiness/managed-pilot-readiness.json}')
     assert.deepEqual(config.crons, [])
     assert.equal(config.git.deploymentEnabled, false)
     assert.equal(project.projectName, 'megaos')

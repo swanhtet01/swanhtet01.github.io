@@ -68,7 +68,7 @@ const appConfig = {
   functions: {
     'api/app.py': {
       maxDuration: 60,
-      includeFiles: 'supermega_runtime/**',
+      includeFiles: '{supermega_runtime/**,hq/readiness/managed-pilot-readiness.json}',
       excludeFiles: '{tests/**,showroom/**,api-static/**,tools/**,mark1_pilot/**,pilot-data/**,node_modules/**,assets/**,supabase/**,ytf-dqms/**,hyper_unicorn/**,venv/**,**/__pycache__/**,**/*.pyc}',
     },
   },

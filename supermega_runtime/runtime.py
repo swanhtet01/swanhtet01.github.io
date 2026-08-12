@@ -15,6 +15,7 @@ import hmac
 import ipaddress
 import json
 import os
+from pathlib import Path
 import re
 import time
 from typing import Any
@@ -72,6 +73,7 @@ _DEFAULT_CORS_ORIGINS = "https://app.supermega.dev,https://supermega.dev,https:/
 _MAX_CORS_ORIGINS = 16
 _MAX_CORS_CONFIGURATION_BYTES = 8 * 1024
 _MAX_CORS_ORIGIN_BYTES = 512
+_MAX_MANAGED_READINESS_BYTES = 256 * 1024
 _LOCAL_ORDER_INTAKE_MAX_BODY_BYTES = 256 * 1024
 _LOCAL_ORDER_INTAKE_REVIEW_HEADER = "order-intake-v1"
 _LOCAL_WEBSITE_BRIEF_MAX_BODY_BYTES = 16 * 1024
@@ -79,6 +81,28 @@ _LOCAL_WEBSITE_BRIEF_REVIEW_HEADER = "website-brief-v1"
 _LOCAL_PLANT_JOB_REQUEST_MAX_BODY_BYTES = 16 * 1024
 _LOCAL_PLANT_JOB_REQUEST_REVIEW_HEADER = "plant-job-request-v1"
 _DNS_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+_RELEASE_COMMIT = re.compile(r"^[0-9a-f]{40}$")
+_SHA256_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+_MANAGED_READINESS_GATE_IDS = [
+    "local_database_rehearsal",
+    "production_source_parity",
+    "preview_rehearsal",
+    "managed_persistence",
+    "hosted_storage_privacy",
+    "managed_security",
+    "owner_named_pilot",
+    "production_activation",
+]
+_MANAGED_READINESS_READY_STATUSES = {
+    "local_database_rehearsal": "ready-local",
+    "production_source_parity": "ready-metadata",
+    "preview_rehearsal": "ready-hosted",
+    "managed_persistence": "ready-hosted",
+    "hosted_storage_privacy": "ready-hosted",
+    "managed_security": "ready-hosted",
+    "owner_named_pilot": "accepted",
+    "production_activation": "ready-owner-approved",
+}
 _IDENTITY_SECRET_PLACEHOLDER_MARKERS = frozenset(
     {
         "change-me",
@@ -161,6 +185,109 @@ def _flag(name: str, *, default: bool = False) -> bool:
     if not value:
         return default
     return value.casefold() in {"1", "true", "yes", "on"}
+
+
+def _json_object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate_json_key")
+        result[key] = value
+    return result
+
+
+def _production_activation_authority(readiness_path: Path | None = None) -> dict[str, Any]:
+    """Fail closed unless generated v5 proof and an exact owner approval bind this release."""
+
+    path = readiness_path or Path(__file__).resolve().parents[1] / "hq" / "readiness" / "managed-pilot-readiness.json"
+    ledger: object = None
+    try:
+        raw = path.read_text(encoding="utf-8")
+        if len(raw.encode("utf-8")) <= _MAX_MANAGED_READINESS_BYTES:
+            ledger = json.loads(raw, object_pairs_hook=_json_object_without_duplicate_keys)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+        ledger = None
+
+    readiness_contract: str | None = None
+    readiness_digest: str | None = None
+    hosted_proofs_ready = False
+    if _is_record(ledger):
+        overall = ledger.get("overall")
+        gates = ledger.get("gates")
+        gate_ids = [entry.get("id") for entry in gates] if isinstance(gates, list) and all(_is_record(entry) for entry in gates) else []
+        gate_statuses = {
+            str(entry.get("id")): _text(entry.get("status"))
+            for entry in gates or []
+            if _is_record(entry)
+        }
+        blocked_count = sum(
+            1
+            for entry in gates or []
+            if _is_record(entry) and _text(entry.get("status")).casefold().startswith("blocked")
+        )
+        source_digest = ledger.get("sourceDigest")
+        if (
+            ledger.get("contract") == "supermega.managed-pilot-readiness.v5"
+            and ledger.get("pilotMode") == "owner_named"
+            and gate_ids == _MANAGED_READINESS_GATE_IDS
+            and _is_record(overall)
+            and overall.get("blockingGateCount") == blocked_count
+            and isinstance(source_digest, str)
+            and _SHA256_DIGEST.fullmatch(source_digest)
+        ):
+            readiness_contract = str(ledger["contract"])
+            readiness_digest = source_digest
+            hosted_proofs_ready = bool(
+                blocked_count == 0
+                and overall.get("status") == "ready"
+                and overall.get("hostedActivationReady") is True
+                and gate_statuses == _MANAGED_READINESS_READY_STATUSES
+            )
+
+    release_commit = _text(os.getenv("VERCEL_GIT_COMMIT_SHA")).casefold()
+    production_release = os.getenv("VERCEL_ENV") == "production" and bool(_RELEASE_COMMIT.fullmatch(release_commit))
+    owner_activation_approved = False
+    approval_raw = _text(os.getenv("SUPERMEGA_PRODUCTION_ACTIVATION_APPROVAL"))
+    if 0 < len(approval_raw.encode("utf-8")) <= 4096 and readiness_digest and production_release:
+        try:
+            approval = json.loads(approval_raw, object_pairs_hook=_json_object_without_duplicate_keys)
+        except (ValueError, json.JSONDecodeError):
+            approval = None
+        if _is_record(approval) and _exact_keys(
+            approval,
+            [
+                "contract",
+                "approvalId",
+                "approved",
+                "approvedAt",
+                "decision",
+                "ownerNamed",
+                "readinessDigest",
+                "releaseCommit",
+            ],
+        ):
+            approval_id = approval.get("approvalId")
+            owner_activation_approved = bool(
+                approval.get("contract") == "supermega.production-activation-approval.v1"
+                and isinstance(approval_id, str)
+                and _IDENTIFIER.fullmatch(approval_id)
+                and approval.get("approved") is True
+                and _iso_timestamp(approval.get("approvedAt"))
+                and approval.get("decision") == "activate_production"
+                and approval.get("ownerNamed") is True
+                and approval.get("readinessDigest") == readiness_digest
+                and approval.get("releaseCommit") == release_commit
+            )
+
+    return {
+        "contract": "supermega.production-activation-authority.v1",
+        "readiness_contract": readiness_contract,
+        "hosted_proofs_ready": hosted_proofs_ready,
+        "owner_activation_approved": owner_activation_approved,
+        "release_bound": production_release,
+        "ready": hosted_proofs_ready and owner_activation_approved and production_release,
+        "approval_value_exposed": False,
+    }
 
 
 def _identity_secret_ready(value: object) -> bool:
@@ -464,7 +591,15 @@ def resolve_workspace_discovery_principal(request: Request) -> TrialPrincipal | 
     )
 
 
-def _activation_requirements(*, database_ready: bool, role_ready: bool, schema_ready: bool, audit_ready: bool) -> list[str]:
+def _activation_requirements(
+    *,
+    database_ready: bool,
+    role_ready: bool,
+    schema_ready: bool,
+    audit_ready: bool,
+    hosted_proofs_ready: bool,
+    owner_activation_approved: bool,
+) -> list[str]:
     requirements: list[str] = []
     if not _text(os.getenv("SUPERMEGA_DATABASE_URL")):
         requirements.append("Configure a dedicated, non-BYPASSRLS managed Postgres connection.")
@@ -487,6 +622,10 @@ def _activation_requirements(*, database_ready: bool, role_ready: bool, schema_r
         requirements.append("Verify immutable audit-event insert access through the runtime role.")
     if not _flag("SUPERMEGA_TRIAL_WRITES_ENABLED"):
         requirements.append("Enable trial writes only after RLS, recovery, and acceptance tests pass.")
+    if not hosted_proofs_ready:
+        requirements.append("Accept every generated readiness v5 hosted proof and the owner-named Shop pilot before managed activation.")
+    if hosted_proofs_ready and not owner_activation_approved:
+        requirements.append("Record a separate owner production-activation approval bound to this exact readiness digest and release commit.")
     return requirements
 
 
@@ -498,6 +637,8 @@ def _activation_steps(
     security_ready: bool,
     audit_ready: bool,
     writes_ready: bool,
+    hosted_proofs_ready: bool,
+    owner_activation_approved: bool,
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -536,6 +677,18 @@ def _activation_steps(
             "ready": database_ready and role_ready and schema_ready and security_ready and audit_ready and writes_ready,
             "action": "Enable trial writes only after RLS, recovery, and acceptance tests pass.",
         },
+        {
+            "id": "hosted_proofs",
+            "label": "Hosted proof",
+            "ready": hosted_proofs_ready,
+            "action": "Accept the preview, persistence, Storage, security, recovery, and 20-run Shop pilot gates in generated readiness v5 evidence.",
+        },
+        {
+            "id": "owner_activation",
+            "label": "Owner activation",
+            "ready": hosted_proofs_ready and owner_activation_approved,
+            "action": "Record the separate owner activation approval against this exact readiness digest and release commit.",
+        },
     ]
 
 
@@ -547,6 +700,8 @@ def _activation_evidence_plan(
     security_ready: bool,
     audit_ready: bool,
     writes_ready: bool,
+    hosted_proofs_ready: bool,
+    owner_activation_approved: bool,
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -583,6 +738,20 @@ def _activation_evidence_plan(
             "ready": database_ready and role_ready and schema_ready and security_ready and audit_ready and writes_ready,
             "proof": "Enable writes only after managed Shop, Plant, Website, Ecommerce, recovery, RLS, and human-approval acceptance tests pass.",
             "verifier": "npm run app:verify",
+        },
+        {
+            "id": "managed_readiness_v5",
+            "label": "Managed readiness v5",
+            "ready": hosted_proofs_ready,
+            "proof": "Verify every hosted and owner-named pilot gate from generated source receipts; never accept a handwritten readiness claim.",
+            "verifier": "node tools/manage_managed_pilot_readiness.mjs --verify",
+        },
+        {
+            "id": "owner_production_activation",
+            "label": "Owner production activation",
+            "ready": hosted_proofs_ready and owner_activation_approved,
+            "proof": "Bind one separate owner approval to the exact readiness digest and immutable production release commit.",
+            "verifier": "node tools/manage_managed_pilot_readiness.mjs --verify",
         },
     ]
 
@@ -1073,6 +1242,7 @@ def _ecommerce_order_queue_apply_preflight(
 
 def create_app() -> FastAPI:
     database_url = _text(os.getenv("SUPERMEGA_DATABASE_URL"))
+    production_activation = _production_activation_authority()
     store = PostgresTrialStore(
         database_url,
         reducer=reduce_trial_state,
@@ -1150,6 +1320,8 @@ def create_app() -> FastAPI:
             role_ready=readiness.role_ready,
             schema_ready=readiness.schema_ready,
             audit_ready=readiness.audit_ready,
+            hosted_proofs_ready=production_activation["hosted_proofs_ready"],
+            owner_activation_approved=production_activation["owner_activation_approved"],
         )
         activation_steps = _activation_steps(
             database_ready=readiness.database_ready,
@@ -1158,6 +1330,8 @@ def create_app() -> FastAPI:
             security_ready=security_ready,
             audit_ready=readiness.audit_ready,
             writes_ready=readiness.write_enabled,
+            hosted_proofs_ready=production_activation["hosted_proofs_ready"],
+            owner_activation_approved=production_activation["owner_activation_approved"],
         )
         evidence_plan = _activation_evidence_plan(
             database_ready=readiness.database_ready,
@@ -1166,6 +1340,8 @@ def create_app() -> FastAPI:
             security_ready=security_ready,
             audit_ready=readiness.audit_ready,
             writes_ready=readiness.write_enabled,
+            hosted_proofs_ready=production_activation["hosted_proofs_ready"],
+            owner_activation_approved=production_activation["owner_activation_approved"],
         )
         coverage_score = round(
             sum(1 for step in activation_steps if step["ready"]) / len(activation_steps) * 100
@@ -1193,6 +1369,7 @@ def create_app() -> FastAPI:
             "operating_mode": operating_mode,
             "enterprise_db_ready": enterprise_db_ready,
             "security_ready": security_ready,
+            "managed_readiness": production_activation,
             "authentication": {
                 "trusted_gateway_ready": gateway_ready,
                 "supabase_user_tokens_ready": supabase_auth_ready,

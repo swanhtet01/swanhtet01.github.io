@@ -55,6 +55,7 @@ const publicBrowserQuarantineVerifier = await read('tools/verify_public_browser_
 const managedActivation = await read('supermega_runtime/managed_activation.py')
 const managedEnvironmentValueVerifier = await read('tools/verify_managed_runtime_environment_values.mjs')
 const managedAccountPage = await read('showroom/src/core/ManagedAccountPage.tsx')
+const appVercelConfig = JSON.parse(await read('vercel.json'))
 const productOnboardingPage = await read('showroom/src/core/ProductOnboardingPage.tsx')
 const visionProof = JSON.parse(visionProofRaw)
 const migration = `${rolePreflight}\n${foundationMigration}\n${decisionMigration}\n${websiteMigration}\n${hardeningMigration}\n${readCapabilityMigration}\n${activationMigration}\n${workspaceDiscoveryMigration}\n${rlsInitplanMigration}\n${metadataRlsMigration}\n${sessionRevocationMigration}`
@@ -605,6 +606,18 @@ requireContract('managed Shop appointments are tenant-scoped, human-only, identi
   && /service schedule evidence history is immutable/.test(commerceRuntime)
   && /contains overlapping bookings/.test(commerceRuntime))
 requireContract('runtime exposes bounded health truth', /operating_mode = "managed_trial" if not requirements else "isolated_demo"/.test(runtime) && /"operating_mode": operating_mode/.test(runtime) && /"browser_service_role_exposed": False/.test(runtime))
+requireContract('managed health requires generated hosted proof and an exact owner release approval',
+  /def _production_activation_authority\(/.test(runtime)
+  && /supermega\.managed-pilot-readiness\.v5/.test(runtime)
+  && /supermega\.production-activation-approval\.v1/.test(runtime)
+  && /VERCEL_GIT_COMMIT_SHA/.test(runtime)
+  && /VERCEL_ENV/.test(runtime)
+  && /SUPERMEGA_PRODUCTION_ACTIVATION_APPROVAL/.test(runtime)
+  && /object_pairs_hook=_json_object_without_duplicate_keys/.test(runtime)
+  && /hosted_proofs_ready=production_activation\["hosted_proofs_ready"\]/.test(runtime)
+  && /owner_activation_approved=production_activation\["owner_activation_approved"\]/.test(runtime)
+  && /"managed_readiness": production_activation/.test(runtime)
+  && /hq\/readiness\/managed-pilot-readiness\.json/.test(JSON.stringify(appVercelConfig.functions?.['api/app.py']?.includeFiles)))
 requireContract('managed browser auth is readiness gated and cannot accept a secret key', /runtime\.status === 'enterprise' && managedTrialAuthConfigured\(\)/.test(settingsPage) && /validPublishableKey/.test(managedTrialClient) && !/VITE_SUPABASE_(?:SERVICE_ROLE|SECRET)/.test(managedTrialClient))
 requireContract('managed approval evidence is never persisted in demo storage', /localApprovalsOnly/.test(workspaceRuntime) && /persist \? persist\(normalizedState\)/.test(workspaceRuntime) && /current\.filter\(\(approval\) => !approval\.managed\)/.test(settingsPage))
 requireContract('production CORS is bounded',

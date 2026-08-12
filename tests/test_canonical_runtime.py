@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
+from pathlib import Path
+import tempfile
 import time
 import unittest
 from contextlib import contextmanager
@@ -16,7 +19,11 @@ from supermega_runtime.order_intake import (
     OrderIntakeModelExtraction,
     build_order_intake_draft,
 )
-from supermega_runtime.runtime import create_app, reduce_trial_state
+from supermega_runtime.runtime import (
+    _production_activation_authority,
+    create_app,
+    reduce_trial_state,
+)
 from supermega_runtime.supabase_auth import VerifiedSupabaseUser
 from supermega_runtime.trial_store import (
     ManagedWorkspaceAccess,
@@ -149,6 +156,9 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "SUPERMEGA_AI_PROVIDER_POLICY": "local-only",
             "SUPERMEGA_OLLAMA_ENABLED": "0",
             "SUPERMEGA_OLLAMA_MODEL": "",
+            "SUPERMEGA_PRODUCTION_ACTIVATION_APPROVAL": "",
+            "VERCEL_ENV": "development",
+            "VERCEL_GIT_COMMIT_SHA": "",
             **environment,
         }
         with patch.dict(os.environ, controlled, clear=False):
@@ -169,6 +179,11 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertEqual(body["operating_mode"], "isolated_demo")
         self.assertFalse(body["enterprise_db_ready"])
         self.assertFalse(body["security_ready"])
+        self.assertEqual(body["managed_readiness"]["contract"], "supermega.production-activation-authority.v1")
+        self.assertFalse(body["managed_readiness"]["hosted_proofs_ready"])
+        self.assertFalse(body["managed_readiness"]["owner_activation_approved"])
+        self.assertFalse(body["managed_readiness"]["ready"])
+        self.assertFalse(body["managed_readiness"]["approval_value_exposed"])
         self.assertFalse(body["authentication"]["supabase_user_tokens_ready"])
         self.assertFalse(body["authentication"]["anonymous_users_allowed"])
         self.assertTrue(body["browser_origin_policy"]["strict_exact_origins"])
@@ -188,6 +203,76 @@ class CanonicalRuntimeTests(unittest.TestCase):
         self.assertIn("postgres17_rehearsal", manifest["proof_commands"])
         self.assertFalse(manifest["secret_values_exposed"])
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+
+    def test_production_activation_requires_generated_proof_and_exact_owner_release_binding(self) -> None:
+        digest = f"sha256:{'a' * 64}"
+        release_commit = "b" * 40
+        ledger = {
+            "contract": "supermega.managed-pilot-readiness.v5",
+            "pilotMode": "owner_named",
+            "sourceDigest": digest,
+            "overall": {
+                "status": "ready",
+                "hostedActivationReady": True,
+                "blockingGateCount": 0,
+            },
+            "gates": [
+                {"id": gate_id, "status": status}
+                for gate_id, status in (
+                    ("local_database_rehearsal", "ready-local"),
+                    ("production_source_parity", "ready-metadata"),
+                    ("preview_rehearsal", "ready-hosted"),
+                    ("managed_persistence", "ready-hosted"),
+                    ("hosted_storage_privacy", "ready-hosted"),
+                    ("managed_security", "ready-hosted"),
+                    ("owner_named_pilot", "accepted"),
+                    ("production_activation", "ready-owner-approved"),
+                )
+            ],
+        }
+        approval = json.dumps(
+            {
+                "contract": "supermega.production-activation-approval.v1",
+                "approvalId": "OWNER-ACTIVATION-001",
+                "approved": True,
+                "approvedAt": "2026-08-12T16:30:00.000Z",
+                "decision": "activate_production",
+                "ownerNamed": True,
+                "readinessDigest": digest,
+                "releaseCommit": release_commit,
+            },
+            separators=(",", ":"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "managed-pilot-readiness.json"
+            path.write_text(json.dumps(ledger), encoding="utf-8")
+            environment = {
+                "SUPERMEGA_PRODUCTION_ACTIVATION_APPROVAL": approval,
+                "VERCEL_ENV": "production",
+                "VERCEL_GIT_COMMIT_SHA": release_commit,
+            }
+            with patch.dict(os.environ, environment, clear=False):
+                ready = _production_activation_authority(path)
+                tampered_environment = {**environment, "VERCEL_GIT_COMMIT_SHA": "c" * 40}
+                with patch.dict(os.environ, tampered_environment, clear=False):
+                    wrong_release = _production_activation_authority(path)
+            ledger["gates"][6]["status"] = "blocked"
+            ledger["overall"] = {
+                "status": "blocked",
+                "hostedActivationReady": False,
+                "blockingGateCount": 1,
+            }
+            path.write_text(json.dumps(ledger), encoding="utf-8")
+            with patch.dict(os.environ, environment, clear=False):
+                blocked_proof = _production_activation_authority(path)
+
+        self.assertTrue(ready["ready"])
+        self.assertTrue(ready["hosted_proofs_ready"])
+        self.assertTrue(ready["owner_activation_approved"])
+        self.assertFalse(wrong_release["owner_activation_approved"])
+        self.assertFalse(wrong_release["ready"])
+        self.assertFalse(blocked_proof["hosted_proofs_ready"])
+        self.assertFalse(blocked_proof["ready"])
 
     def test_cors_accepts_only_exact_https_or_explicit_loopback_origins(self) -> None:
         configured = "https://tenant.example.com,http://127.0.0.1:5173"
