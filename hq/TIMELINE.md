@@ -278,6 +278,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-cancellation-decision-payment-actor-brief (cancellationDecisions paymentStatus × top actor per group); 23 checks; zero bundle cost — DONE (OPS-565)
 - [x] Analytics Codex: ecommerce-cancellation-intent-reason-value-brief (cancellationIntents 5 reasonCodes enumerated + totalMmk/averageMmk stats); 23 checks; zero bundle cost — DONE (OPS-566)
 - [x] Analytics Codex: ecommerce-cancellation-decision-payment-value-brief (cancellationDecisions paymentStatus × totalMmk: pending/reconciled value stats); 23 checks; zero bundle cost — DONE (OPS-567)
+- [x] Analytics Codex: ecommerce-cancellation-intent-payment-reason-brief (cancellationIntents paymentStatus × top reasonCode per group: pendingTopReasonCode/Count, reconciledTopReasonCode/Count); 23 checks; zero bundle cost — DONE (OPS-568)
+- [x] Analytics Codex: ecommerce-request-payment-adapter-fulfilment-brief (requests payment.adapter × fulfilment: 3×2 cross-tab, 6 cells); 23 checks; zero bundle cost — DONE (OPS-569)
+- [x] Analytics Codex: ecommerce-correction-intent-source-count-kind-brief (correctionIntents sourceCorrectionCount first/repeat × requestedKind credit/debit: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-570)
+- [x] Analytics Codex: ecommerce-amendment-intent-switch-line-count-brief (amendmentIntents mode-switch × lineChanges.length single/multi: 2×2 cross-tab); 23 checks; zero bundle cost — DONE (OPS-571)
 
 ### Aug 25–31
 
