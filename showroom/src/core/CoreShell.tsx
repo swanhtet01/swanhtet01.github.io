@@ -4,7 +4,7 @@ import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router'
 import './core-app.css'
 import { recordBehaviorSignal } from './behavior-trail'
 import type { ClientSolutionId } from './client-onboarding'
-import { readProductSetup, type SetupProductId } from './product-setup'
+import { clientSetupPath, readProductSetup, type SetupProductId } from './product-setup'
 
 const ProductSystemNavigator = lazy(() => import('./ProductSystemNavigator').then((module) => ({ default: module.ProductSystemNavigator })))
 const WorkspaceStatusPanel = lazy(() => import('./WorkspaceStatusPanel').then((m) => ({ default: m.WorkspaceStatusPanel })))
@@ -494,9 +494,9 @@ export function ProductHomePage() {
     <div className="workspace-screen product-home-screen">
       <PageHeading copy="Each product opens as its own working sample. Setup is optional when you are ready to use your business data." eyebrow="Products" title="Switch product" />
       {!anyStarted ? (
-        <p className="platform-start-nudge"><strong>New here?</strong> Start with <strong>Shop</strong> — set it up once, and it connects to all other products through one catalog and order flow.</p>
+        <p className="platform-start-nudge"><strong>New here?</strong> Start with <Link className="platform-start-link" to={clientSetupPath('commerce')}><strong>Shop</strong></Link> — set it up once, and it connects to all other products through one catalog and order flow.</p>
       ) : nextSetupStep ? (
-        <p className="platform-start-nudge"><strong>Next:</strong> Set up <strong>{nextSetupStep[1]}</strong> to {nextSetupStep[2]}.</p>
+        <p className="platform-start-nudge"><strong>Next:</strong> Set up <Link className="platform-start-link" to={clientSetupPath(nextSetupStep[0])}><strong>{nextSetupStep[1]}</strong></Link> to {nextSetupStep[2]}.</p>
       ) : null}
       <nav aria-label="Choose a SuperMega product" className="product-track-grid">
         {customerProducts.map(([name, job, outcome, path], index) => {
