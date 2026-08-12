@@ -384,6 +384,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-correction-intent-tax-filed-customer-message-brief (correctionIntents taxFiled boolean × customerMessageSent boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-671)
 - [x] Analytics Codex: ecommerce-correction-intent-ledger-posted-provider-called-brief (correctionIntents ledgerPosted boolean × providerCalled boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-672)
 - [x] Analytics Codex: ecommerce-correction-intent-tax-filed-provider-called-brief (correctionIntents taxFiled boolean × providerCalled boolean: 2×2 cross-tab, 7 fields); 23 checks; zero bundle cost — DONE (OPS-673) — completes all ledger/tax × operational-boolean correctionIntent cross-tabs
+- [x] Analytics Codex: ecommerce-correction-intent-rates-brief (correctionIntents rate brief: 13 fields, 6 paired count+rate metrics — complianceRate, customerNotificationRate, providerEscalationRate, refundInitiationRate, refundSettlementRate, pendingRefundRate); 23 checks; zero bundle cost — DONE (OPS-674)
+- [x] Analytics Codex: ecommerce-support-intent-rates-brief (supportIntents rate brief: 7 fields, 3 paired count+rate metrics — customerNotificationRate, externalMessageRate, refundStartedRate); 23 checks; zero bundle cost — DONE (OPS-675)
+- [x] Analytics Codex: ecommerce-amendment-intent-rates-brief (amendmentIntents rate brief: 7 fields, 3 paired count+rate metrics — fulfilmentSwitchRate, customerNotificationRate, multiLineRate); 23 checks; zero bundle cost — DONE (OPS-676)
+- [x] Analytics Codex: ecommerce-reschedule-intent-rates-brief (rescheduleIntents rate brief: 7 fields, 3 paired count+rate metrics — forwardRate, pushedBackRate, customerNotificationRate); 23 checks; zero bundle cost — DONE (OPS-677)
 
 ### Aug 25–31
 
