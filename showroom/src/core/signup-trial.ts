@@ -293,14 +293,15 @@ const CONTACT_PRODUCT_SLUGS: Readonly<Record<TrialSignupProduct, string>> = {
 /**
  * The handoff to the contact form.
  *
- * The published contact page parses the URL FRAGMENT, but it reads an allowlist: `company`, `goal`
- * and a fixed set of `proof_*` names (tools/create_public_vercel_output.mjs). Every other key is
- * ignored and the fragment is then stripped with history.replaceState. So an email put here would
- * be silently discarded -- the owner would think they had sent it. It is therefore NOT included,
- * and the form asks for it directly instead.
+ * The published contact page parses the URL FRAGMENT, but it reads an allowlist: `company`, `goal`,
+ * `claim` and a fixed set of `proof_*` names (tools/create_public_vercel_output.mjs). Every other
+ * key is ignored and the fragment is then stripped with history.replaceState. So an email put here
+ * would be silently discarded -- the owner would think they had sent it. It is therefore NOT
+ * included, and the form asks for it directly instead.
  *
- * The claim code travels in `goal`, which IS read, so the founder can match a conversation to the
- * trial already running on that owner's device.
+ * The claim code travels twice on purpose: in `goal` so the human conversation carries it, and in
+ * `claim` so the lead record carries it structured -- the founder links a managed account to the
+ * exact trial without parsing prose.
  */
 export function trialSignupContactUrl(record: TrialSignupRecord, base = 'https://supermega.dev/contact/') {
   const query = new URLSearchParams({
@@ -315,7 +316,7 @@ export function trialSignupContactUrl(record: TrialSignupRecord, base = 'https:/
     record.shopBusinessTemplateId ? `Trade: ${record.shopBusinessTemplateId}.` : '',
     'Started from the in-app trial.',
   ].filter(Boolean).join(' ')
-  const handoff = new URLSearchParams({ company: record.businessName, goal })
+  const handoff = new URLSearchParams({ company: record.businessName, goal, claim: record.claimCode })
   return `${base}?${query.toString()}#${handoff.toString()}`
 }
 

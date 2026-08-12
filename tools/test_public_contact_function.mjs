@@ -226,6 +226,23 @@ try {
   assert.equal(ecommerceEvent.record.workflow, 'ecommerce')
   assert.equal(ecommerceEvent.record.requested_package, 'social-storefront')
 
+  const claimAccepted = await invoke({
+    body: { ...validSubmission, trial_claim_code: 'sm-7hk2-9mt4' },
+    headers: withKey(17, { 'x-forwarded-for': '203.0.113.25' }),
+  })
+  assert.equal(claimAccepted.status, 202)
+  const claimEvent = JSON.parse(delivered.options.body)
+  assert.equal(claimEvent.record.raw.trial_claim_code, 'SM-7HK2-9MT4')
+
+  // I, L, O and U are not in the claim alphabet: an invalid code is dropped, not stored.
+  const badClaim = await invoke({
+    body: { ...validSubmission, trial_claim_code: 'SM-ILOU-0000' },
+    headers: withKey(18, { 'x-forwarded-for': '203.0.113.26' }),
+  })
+  assert.equal(badClaim.status, 202)
+  const badClaimEvent = JSON.parse(delivered.options.body)
+  assert.equal('trial_claim_code' in badClaimEvent.record.raw, false)
+
   const attachedProof = trialProofFields()
   const attachedContext = approvedContextFields()
   const proofAccepted = await invoke({
@@ -385,17 +402,19 @@ try {
     return { ok: true, status: 200, json: async () => ({ id: 'email-' + resendMail.length }) }
   }
   const resendHandler = loadHandler({ fresh: true })
-  const ackAccepted = await invoke({ body: validSubmission, headers: withKey(400, { 'x-forwarded-for': '203.0.113.40' }), activeHandler: resendHandler })
+  const ackAccepted = await invoke({ body: { ...validSubmission, trial_claim_code: 'SM-2CDE-4FGH' }, headers: withKey(400, { 'x-forwarded-for': '203.0.113.40' }), activeHandler: resendHandler })
   assert.equal(ackAccepted.status, 202)
   assert.equal(resendMail.length, 2)
   const founderNotify = resendMail[0]
   const customerAck = resendMail[1]
   assert.deepEqual(founderNotify.body.to, ['swanhtet@supermega.dev'])
   assert.equal(founderNotify.body.reply_to, validSubmission.email)
+  assert.ok(founderNotify.body.text.includes('Trial claim code: SM-2CDE-4FGH'))
   assert.deepEqual(customerAck.body.to, [validSubmission.email])
   assert.equal(customerAck.body.reply_to, 'swanhtet@supermega.dev')
   assert.equal(customerAck.headers['idempotency-key'], `supermega-contact-ack/${ackAccepted.body.request_id}`)
   assert.ok(customerAck.body.text.includes(ackAccepted.body.request_id))
+  assert.ok(customerAck.body.text.includes('Your trial claim code: SM-2CDE-4FGH'))
   assert.ok(customerAck.body.subject.includes('We received your request'))
 
   // The acknowledgement is best-effort: its failure must never fail a delivered lead.
@@ -548,7 +567,7 @@ try {
   assert.equal(ambiguousReplay.body.reason, 'contact_persistence_unavailable')
   assert.equal(unexpectedDeliveryCalls, 0)
 
-  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 139 }, null, 2))
+  console.log(JSON.stringify({ ok: true, contract: 'supermega_public_contact_behavior', checks: 145 }, null, 2))
 } finally {
   globalThis.fetch = originalFetch
   for (const name of environmentNames) {

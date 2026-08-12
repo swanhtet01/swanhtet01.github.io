@@ -162,12 +162,12 @@ for (const managedReady of [true, false]) {
 
 // --- the contact handoff carries only what the receiving page reads -----------------
 // tools/create_public_vercel_output.mjs parses the fragment against an allowlist -- `company`,
-// `goal` and a fixed set of proof_* names -- then strips it with history.replaceState. Anything
-// else is silently discarded, so putting an email here would look sent and never arrive.
+// `goal`, `claim` and a fixed set of proof_* names -- then strips it with history.replaceState.
+// Anything else is silently discarded, so putting an email here would look sent and never arrive.
 const url = new URL(trialSignupContactUrl(consented))
 const fragmentKeys = [...new URLSearchParams(url.hash.slice(1)).keys()]
 check(
-  fragmentKeys.every((key) => key === 'company' || key === 'goal'),
+  fragmentKeys.every((key) => key === 'company' || key === 'goal' || key === 'claim'),
   `the handoff fragment only uses keys the contact page actually reads, got ${fragmentKeys.join(', ')}`,
 )
 check(
@@ -176,6 +176,10 @@ check(
 )
 const goal = new URLSearchParams(url.hash.slice(1)).get('goal')
 check(goal.includes(consented.claimCode), 'the claim code travels in goal, which the contact page does read')
+check(
+  new URLSearchParams(url.hash.slice(1)).get('claim') === consented.claimCode,
+  'the claim code also travels structured in claim, so the lead record carries it without parsing prose',
+)
 check(url.searchParams.get('product') === 'shop', 'the contact link names the product')
 
 // --- the claim file is the durable copy ---------------------------------------------
