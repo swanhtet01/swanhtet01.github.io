@@ -56,6 +56,8 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-support-intent-refund-started-rates-brief (EcommerceSupportIntent.refundStarted boolean rates; completes all supportIntents booleans); 23 checks; zero bundle cost — DONE (OPS-734)
 - [x] Platform Codex: mobile signup CTA -- mobile-signup-topbar-link class with green 44px tap target; Start free trial visible at 375x812 — DONE (OPS-735)
 - [x] Analytics Codex: fix 4 support-intent test fixtures for externalMessageSent rename; all 600 test files now green — DONE (OPS-736)
+- [x] Platform Codex: app:verify:local runner — full 621-step gate now runnable on Windows, green in 200s; readiness ledger regenerated — DONE (OPS-737)
+- [x] Growth Codex: customer acknowledgement email — delivered leads get welcome + reference + next steps via Resend, best-effort, founder reply-to — DONE (OPS-738)
 
 ### Aug 15–25
 
