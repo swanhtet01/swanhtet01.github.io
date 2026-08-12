@@ -404,6 +404,10 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: ecommerce-cancellation-intent-refund-status-rates-brief (cancellationIntents refund rates: 7 fields, 3 enum pairs — noneRate, dueRate, settledRate); 23 checks; zero bundle cost — DONE (OPS-691)
 - [x] Analytics Codex: ecommerce-cancellation-decision-payment-status-rates-brief (cancellationDecisions payment rates: 5 fields, totalDecisions + 2 paired — pendingRate, reconciledRate); 23 checks; zero bundle cost — DONE (OPS-692)
 - [x] Analytics Codex: ecommerce-support-intent-category-rates-brief (supportIntents category rates: 11 fields, 5 pairs — orderStatusRate, deliveryIssueRate, paymentQuestionRate, itemIssueRate, otherCategoryRate); 23 checks; zero bundle cost — DONE (OPS-693)
+- [x] Analytics Codex: ecommerce-correction-intent-requested-kind-rates-brief (correctionIntents requestedKind rates: 5 fields, 2 paired — creditRate, debitRate); 23 checks; zero bundle cost — DONE (OPS-694)
+- [x] Analytics Codex: ecommerce-cancellation-decision-refund-status-rates-brief (cancellationDecisions refund rates: 7 fields, 3 enum pairs — noneRate, dueRate, settledRate; totalDecisions); 23 checks; zero bundle cost — DONE (OPS-695)
+- [x] Analytics Codex: ecommerce-amendment-intent-from-fulfilment-rates-brief (amendmentIntents fromFulfilment rates: 5 fields, 2 paired — deliveryRate, pickupRate); 23 checks; zero bundle cost — DONE (OPS-696)
+- [x] Analytics Codex: ecommerce-amendment-intent-to-fulfilment-rates-brief (amendmentIntents toFulfilment rates: 5 fields, 2 paired — deliveryRate, pickupRate); 23 checks; zero bundle cost — DONE (OPS-697)
 
 ### Aug 25–31
 
