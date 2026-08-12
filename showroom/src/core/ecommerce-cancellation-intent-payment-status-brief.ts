@@ -1,37 +1,14 @@
 import type { EcommerceBuyingState } from '../products/ecommerce/ecommerce-buying-lifecycle.ts'
-
 export type EcommerceCancellationIntentPaymentStatusBrief = {
-  totalCancellationIntents: number
-  pendingPaymentCount: number
-  reconciledPaymentCount: number
-  pendingPaymentRate: number
-  reconciledPaymentRate: number
+  totalIntents: number; pendingCount: number; reconciledCount: number
 }
-
-export function projectEcommerceCancellationIntentPaymentStatusBrief(
-  buying: EcommerceBuyingState,
-): EcommerceCancellationIntentPaymentStatusBrief {
-  let pendingPaymentCount = 0
-  let reconciledPaymentCount = 0
-
+export function projectEcommerceCancellationIntentPaymentStatusBrief(buying: EcommerceBuyingState): EcommerceCancellationIntentPaymentStatusBrief {
+  const total = buying.cancellationIntents.length
+  if (total === 0) return { totalIntents: 0, pendingCount: 0, reconciledCount: 0 }
+  let pendingCount = 0; let reconciledCount = 0
   for (const intent of buying.cancellationIntents) {
-    if (intent.paymentStatus === 'reconciled') reconciledPaymentCount++
-    else pendingPaymentCount++
+    if (intent.paymentStatus === 'pending') pendingCount++
+    else reconciledCount++
   }
-
-  const totalCancellationIntents = pendingPaymentCount + reconciledPaymentCount
-
-  return {
-    totalCancellationIntents,
-    pendingPaymentCount,
-    reconciledPaymentCount,
-    pendingPaymentRate:
-      totalCancellationIntents > 0
-        ? Math.round((pendingPaymentCount / totalCancellationIntents) * 100)
-        : 0,
-    reconciledPaymentRate:
-      totalCancellationIntents > 0
-        ? Math.round((reconciledPaymentCount / totalCancellationIntents) * 100)
-        : 0,
-  }
+  return { totalIntents: total, pendingCount, reconciledCount }
 }
