@@ -813,6 +813,7 @@ textarea { min-height: 72px; resize: vertical; }
 .product-onboarding-help { margin: 0; color: var(--core-muted); font-size: 10px; }
 .product-onboarding-help a { color: var(--core-ink); font-weight: 780; text-underline-offset: 3px; }
 .product-onboarding-help a:hover { color: var(--core-green); }
+.product-onboarding-peer-name { color: var(--core-green); font-weight: 760; }
 .business-template-picker { display: grid; gap: 10px; }
 .business-template-picker-header { display: grid; gap: 4px; }
 .business-template-picker-header p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.5; }

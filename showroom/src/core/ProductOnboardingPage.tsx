@@ -65,6 +65,13 @@ import {
   useSetupWorkspace,
 } from './workspace-runtime'
 
+const PRIMARY_PARTNER: Partial<Record<SetupProductId, SetupProductId>> = {
+  commerce: 'ecommerce',
+  production: 'commerce',
+  website: 'ecommerce',
+  ecommerce: 'commerce',
+}
+
 type ProductOnboardingPageProps = {
   product: SetupProductId
 }
@@ -115,6 +122,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
     () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
   )
+  const [partnerSetup] = useState(() => {
+    if (typeof window === 'undefined') return null
+    const partnerId = PRIMARY_PARTNER[product]
+    return partnerId ? readProductSetup(window.localStorage, partnerId) : null
+  })
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]
@@ -131,6 +143,8 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const workspaceOwner = setup.owner.trim() || 'Business owner'
   const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
+  const partnerConnected = partnerSetup?.startedAt ? partnerSetup.workspace : null
+  const partnerProductName = PRIMARY_PARTNER[product] ? productContracts[PRIMARY_PARTNER[product]!].name : null
 
   useEffect(() => {
     if (setup.product === product) return undefined
@@ -355,6 +369,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help product-onboarding-connection">{onboardingJourney.connection}</p>
+          {partnerConnected ? <p className="product-onboarding-help product-onboarding-peer-ready"><strong>{partnerProductName}</strong> workspace <strong className="product-onboarding-peer-name">{partnerConnected}</strong> is ready to connect.</p> : null}
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
           <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>
         </form>
