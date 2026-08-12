@@ -58,6 +58,8 @@ _No founder decision required. Zero bundle cost._
 - [x] Analytics Codex: fix 4 support-intent test fixtures for externalMessageSent rename; all 600 test files now green — DONE (OPS-736)
 - [x] Platform Codex: app:verify:local runner — full 621-step gate now runnable on Windows, green in 200s; readiness ledger regenerated — DONE (OPS-737)
 - [x] Growth Codex: customer acknowledgement email — delivered leads get welcome + reference + next steps via Resend, best-effort, founder reply-to — DONE (OPS-738)
+- [x] Growth Codex: trial claim code structured through contact pipeline — claim= fragment, hidden field, validated into record.raw, all founder channels + customer ack — DONE (OPS-739)
+- [ ] FOUNDER DECISIONS RECEIVED 2026-08-12: (1) Supabase preview branch APPROVED; (2) pilot goes SELF-SERVE — no founder-named operator, users name themselves in onboarding; (3) branch push APPROVED
 
 ### Aug 15–25
 
