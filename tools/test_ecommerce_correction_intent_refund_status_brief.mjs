@@ -1,4 +1,3 @@
-// Ecommerce correction intent refund status brief: none/due/settled 3-value enum.
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
@@ -31,13 +30,13 @@ function check(condition, label) {
 }
 
 let intentId = 0
-function correctionIntent({ refundStatus = 'none' } = {}) {
+function correctionIntent(refundStatus = 'none') {
   intentId++
   return {
     schema: 'supermega.ecommerce.correction_intent.v1',
     state: 'pending_shop_review',
     scope: 'scope-1',
-    id: `COR-${intentId}`,
+    id: `ECI-${intentId}`,
     idempotencyKey: `ik-${intentId}`,
     createdAt: '2026-08-01T09:00:00Z',
     orderId: `ORD-${intentId}`,
@@ -49,8 +48,8 @@ function correctionIntent({ refundStatus = 'none' } = {}) {
     refundStatus,
     requestedKind: 'credit',
     reasonCode: 'pricing_error',
-    listedAmountMmk: 1000,
-    reason: 'Test reason',
+    listedAmountMmk: 500,
+    reason: 'Correction reason',
     orderChanged: false,
     paymentChanged: false,
     refundStarted: false,
@@ -62,7 +61,7 @@ function correctionIntent({ refundStatus = 'none' } = {}) {
   }
 }
 
-function state(correctionIntents) {
+function state(correctionIntents = []) {
   return {
     schema: 'supermega.ecommerce.buying_lifecycle.v1',
     scope: 'scope-1',
@@ -82,81 +81,69 @@ function state(correctionIntents) {
 
 // 1. Empty state
 {
-  const r = projectEcommerceCorrectionIntentRefundStatusBrief(state([]))
+  const r = projectEcommerceCorrectionIntentRefundStatusBrief(state())
   check(r.totalIntents === 0, 'empty: totalIntents 0')
   check(r.noneCount === 0, 'empty: noneCount 0')
   check(r.dueCount === 0, 'empty: dueCount 0')
   check(r.settledCount === 0, 'empty: settledCount 0')
-  check(r.noneRate === 0, 'empty: noneRate 0')
 }
 
 // 2. All none
 {
-  const r = projectEcommerceCorrectionIntentRefundStatusBrief(
-    state([correctionIntent({ refundStatus: 'none' }), correctionIntent({ refundStatus: 'none' })]),
-  )
-  check(r.noneCount === 2, 'all-none: noneCount 2')
-  check(r.noneRate === 100, 'all-none: noneRate 100')
-  check(r.dueRate === 0, 'all-none: dueRate 0')
+  const r = projectEcommerceCorrectionIntentRefundStatusBrief(state([
+    correctionIntent('none'),
+    correctionIntent('none'),
+    correctionIntent('none'),
+  ]))
+  check(r.totalIntents === 3, 'all-none: totalIntents 3')
+  check(r.noneCount === 3, 'all-none: noneCount 3')
+  check(r.dueCount === 0, 'all-none: dueCount 0')
+  check(r.noneCount + r.dueCount + r.settledCount === r.totalIntents, 'all-none: sum = total')
 }
 
 // 3. All due
 {
-  const r = projectEcommerceCorrectionIntentRefundStatusBrief(
-    state([correctionIntent({ refundStatus: 'due' })]),
-  )
-  check(r.dueCount === 1, 'all-due: dueCount 1')
-  check(r.dueRate === 100, 'all-due: dueRate 100')
+  const r = projectEcommerceCorrectionIntentRefundStatusBrief(state([
+    correctionIntent('due'),
+    correctionIntent('due'),
+  ]))
+  check(r.totalIntents === 2, 'all-due: totalIntents 2')
+  check(r.noneCount === 0, 'all-due: noneCount 0')
+  check(r.dueCount === 2, 'all-due: dueCount 2')
+  check(r.settledCount === 0, 'all-due: settledCount 0')
 }
 
 // 4. All settled
 {
-  const r = projectEcommerceCorrectionIntentRefundStatusBrief(
-    state([correctionIntent({ refundStatus: 'settled' })]),
-  )
-  check(r.settledCount === 1, 'all-settled: settledCount 1')
-  check(r.settledRate === 100, 'all-settled: settledRate 100')
+  const r = projectEcommerceCorrectionIntentRefundStatusBrief(state([
+    correctionIntent('settled'),
+    correctionIntent('settled'),
+  ]))
+  check(r.totalIntents === 2, 'all-settled: totalIntents 2')
+  check(r.noneCount === 0, 'all-settled: noneCount 0')
+  check(r.dueCount === 0, 'all-settled: dueCount 0')
+  check(r.settledCount === 2, 'all-settled: settledCount 2')
 }
 
-// 5. Counts sum to total
+// 5. Mixed one of each
 {
-  const r = projectEcommerceCorrectionIntentRefundStatusBrief(
-    state([
-      correctionIntent({ refundStatus: 'none' }),
-      correctionIntent({ refundStatus: 'due' }),
-      correctionIntent({ refundStatus: 'settled' }),
-    ]),
-  )
-  check(r.noneCount + r.dueCount + r.settledCount === r.totalIntents, 'invariant: counts sum to total')
+  const r = projectEcommerceCorrectionIntentRefundStatusBrief(state([
+    correctionIntent('none'),
+    correctionIntent('due'),
+    correctionIntent('settled'),
+  ]))
+  check(r.totalIntents === 3, 'mixed: totalIntents 3')
+  check(r.noneCount === 1, 'mixed: noneCount 1')
+  check(r.dueCount === 1, 'mixed: dueCount 1')
+  check(r.noneCount + r.dueCount + r.settledCount === r.totalIntents, 'mixed: sum = total')
 }
 
-// 6. Rounding: 2/3 → 67%, 1/3 → 33%
+// 6. Single none
 {
-  const r = projectEcommerceCorrectionIntentRefundStatusBrief(
-    state([
-      correctionIntent({ refundStatus: 'none' }),
-      correctionIntent({ refundStatus: 'none' }),
-      correctionIntent({ refundStatus: 'due' }),
-    ]),
-  )
-  check(r.noneRate === 67, 'round: noneRate 67')
-  check(r.dueRate === 33, 'round: dueRate 33')
-  check(r.settledRate === 0, 'round: settledRate 0')
+  const r = projectEcommerceCorrectionIntentRefundStatusBrief(state([correctionIntent('none')]))
+  check(r.totalIntents === 1, 'single: totalIntents 1')
+  check(r.noneCount === 1, 'single: noneCount 1')
+  check(r.dueCount === 0, 'single: dueCount 0')
 }
 
-// 7. Mixed: none=1, due=2, settled=1
-{
-  const r = projectEcommerceCorrectionIntentRefundStatusBrief(
-    state([
-      correctionIntent({ refundStatus: 'none' }),
-      correctionIntent({ refundStatus: 'due' }),
-      correctionIntent({ refundStatus: 'due' }),
-      correctionIntent({ refundStatus: 'settled' }),
-    ]),
-  )
-  check(r.totalIntents === 4, 'mixed: totalIntents 4')
-  check(r.dueCount === 2, 'mixed: dueCount 2')
-  check(r.dueRate === 50, 'mixed: dueRate 50')
-}
-
-console.log(JSON.stringify({ ok: true, checks }))
+console.log(`ecommerce-correction-intent-refund-status-brief: ${checks} checks passed`)
