@@ -1,7 +1,8 @@
 """Run the Order Intake golden-set evaluation and write a sanitized results document.
 
-Live mode requires OPENAI_API_KEY (fails closed with zero network calls without
-it), feeds the 20-fixture corpus through the hardened provider, captures the
+Live mode requires ANTHROPIC_API_KEY or OPENAI_API_KEY (fails closed with zero
+network calls without either; set SUPERMEGA_ORDER_INTAKE_PROVIDER to choose
+explicitly), feeds the 20-fixture corpus through the hardened provider, captures the
 bounded metrics contract per fixture, writes the
 supermega.order_intake.results.v1 document, and scores it with the offline
 evaluator. `--self-test` proves the whole pipeline offline: drafts are built
@@ -60,14 +61,17 @@ def estimated_cost_microusd(input_tokens: int, cached_tokens: int, output_tokens
 
 
 def run_live(output_path: Path) -> int:
-    from supermega_runtime.order_intake_provider import OpenAIOrderIntakeProvider
+    from supermega_runtime.order_intake_provider import order_intake_provider_from_environment
 
-    provider = OpenAIOrderIntakeProvider.from_environment()
+    provider = order_intake_provider_from_environment()
     if provider is None:
         print(json.dumps({
             "ok": False,
             "error": "order_intake_api_key_missing",
-            "detail": "Set OPENAI_API_KEY to run the live evaluation; no network call was made.",
+            "detail": (
+                "Set ANTHROPIC_API_KEY or OPENAI_API_KEY to run the live evaluation; "
+                "no network call was made."
+            ),
         }))
         return 2
 
@@ -82,9 +86,14 @@ def run_live(output_path: Path) -> int:
         usage = usage if isinstance(usage, dict) else {}
         details = usage.get("input_tokens_details")
         details = details if isinstance(details, dict) else {}
+        # OpenAI reports cache hits under input_tokens_details.cached_tokens;
+        # Anthropic reports them as a sibling cache_read_input_tokens counter.
+        cached_input_tokens = int(
+            details.get("cached_tokens") or usage.get("cache_read_input_tokens") or 0
+        )
         captured_usage.append({
             "input_tokens": int(usage.get("input_tokens") or 0),
-            "cached_input_tokens": int(details.get("cached_tokens") or 0),
+            "cached_input_tokens": cached_input_tokens,
             "output_tokens": int(usage.get("output_tokens") or 0),
         })
         return response
