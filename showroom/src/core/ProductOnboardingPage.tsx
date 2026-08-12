@@ -69,30 +69,34 @@ type ProductOnboardingPageProps = {
   product: SetupProductId
 }
 
-const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: string; actionLabel: string; firstTaskPath: string }> = {
+const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: string; actionLabel: string; firstTaskPath: string; connection: string }> = {
   commerce: {
     outcome: 'Complete a sample sale',
     detail: 'A realistic catalog and stock are ready. Tap an item, choose payment, then create the order.',
     actionLabel: 'Create Shop and start selling',
     firstTaskPath: '/shop/?tab=counter',
+    connection: 'Shop receives online orders from Ecommerce and shares stock data with Plant.',
   },
   production: {
     outcome: 'Run a sample production job',
     detail: 'A scheduled job, materials, and line are ready. Review the job, then record output.',
     actionLabel: 'Create Plant and open the job',
     firstTaskPath: '/plant/?tab=production',
+    connection: 'Plant draws material plans from Shop stock and returns finished goods to Shop.',
   },
   website: {
     outcome: 'Preview a business website',
     detail: 'A responsive homepage is ready. Check desktop and mobile, then edit the page.',
     actionLabel: 'Create Website and preview it',
     firstTaskPath: '/website/',
+    connection: 'Website showcases your business and can link to Ecommerce for online ordering.',
   },
   ecommerce: {
     outcome: 'Open a working online store',
     detail: 'A storefront and checkout sample are ready. Review the store, then send an order into Shop.',
     actionLabel: 'Create Ecommerce and open the store',
     firstTaskPath: '/ecommerce/',
+    connection: 'Ecommerce customer requests become Shop orders, linking the storefront to fulfilment.',
   },
 }
 
@@ -350,6 +354,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
             <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
+          <p className="product-onboarding-help product-onboarding-connection">{onboardingJourney.connection}</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
           <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>
         </form>
