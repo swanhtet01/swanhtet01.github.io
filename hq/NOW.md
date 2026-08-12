@@ -66,7 +66,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Read-only hosted audit: `supermegabase` is PostgreSQL 17.6, private schema v7, 14 private policies, and zero workspace data; its 27 Security Advisor notices are INFO-only default-deny legacy public tables. v8-v10 and the digest-bound public browser quarantine remain code-only, and writes stay off pending isolated backup/restore, target binding, tenant/Auth/Storage proof, and owner authorization.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
 - Live HQ and both domains agree on `25cac2f5`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
-- No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
+- No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
 ## Decisions in force

@@ -1063,14 +1063,14 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.safety?.vercelMutated === false)
 
 requireContract('managed pilot readiness is derived and fail closed',
-  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v3'
+  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v4'
   && managedPilotReadiness.overall?.status === 'blocked'
   && managedPilotReadiness.overall?.localDatabaseProofReady === true
   && managedPilotReadiness.overall?.hostedActivationReady === false
-  && managedPilotReadiness.overall?.blockingGateCount === 7
+  && managedPilotReadiness.overall?.blockingGateCount === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').length
   && managedPilotReadiness.overall?.nextAction?.kind === 'founder_decision'
   && managedPilotReadiness.overall?.nextAction?.decisionId === 'bounded-managed-pilot-rehearsal'
-  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_preview_branch_target,name_shop_pilot_operator'
+  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_preview_branch_target,approve_self_serve_activation_window'
   && managedPilotReadiness.overall?.nextAction?.targetEnvironment === 'preview_branch'
   && managedPilotReadiness.overall?.nextAction?.operatorProductId === 'shop'
   && managedPilotReadiness.overall?.nextAction?.maximumLifetimeHours === 24

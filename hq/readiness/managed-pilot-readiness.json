@@ -1,7 +1,7 @@
 {
-  "contract": "supermega.managed-pilot-readiness.v3",
+  "contract": "supermega.managed-pilot-readiness.v4",
   "asOf": "2026-08-11T01:55:09.297Z",
-  "sourceDigest": "sha256:a6f9a3782276b460931bee0823c01788274cf3554d5dc07cc0dab3d7394a2959",
+  "sourceDigest": "sha256:c96f1982368efe5137a02aa751642b52cdc0130426953af77413ec68bb73a1c3",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -12,7 +12,7 @@
       "decisionId": "bounded-managed-pilot-rehearsal",
       "requires": [
         "approve_preview_branch_target",
-        "name_shop_pilot_operator"
+        "approve_self_serve_activation_window"
       ],
       "targetEnvironment": "preview_branch",
       "operatorProductId": "shop",
@@ -41,15 +41,17 @@
     },
     "operator": {
       "productId": "shop",
-      "namedBusinessRequired": true,
-      "namedOperatorRequired": true,
+      "selfServeAllowed": true,
+      "verifiedEmailRequired": true,
+      "termsAcceptanceRequired": true,
+      "tenantIsolationProofRequired": true,
       "measuredBaselineRequired": true,
       "acceptanceEvidenceRequired": true
     },
     "proposedActions": [
       "create_one_preview_branch",
       "apply_reviewed_migrations_to_preview",
-      "create_one_named_preview_operator",
+      "provision_one_self_serve_preview_tenant",
       "run_hosted_isolation_storage_recovery_proof",
       "delete_preview_branch_after_evidence"
     ],
@@ -116,10 +118,10 @@
       "nextAction": "Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal."
     },
     {
-      "id": "named_pilot",
+      "id": "self_serve_pilot",
       "status": "blocked",
-      "evidence": "HQ records no named pilot customer or measured baseline.",
-      "nextAction": "Select one Shop design partner, named operator, baseline, and acceptance evidence."
+      "evidence": "HQ records no completed self-serve pilot setup or measured baseline.",
+      "nextAction": "Open the self-serve activation window on the approved isolated target."
     },
     {
       "id": "production_activation",
@@ -209,7 +211,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:111c2a24724fa97150510da54d6fff3c8caa1d8e14151d2e1f182477f9b46aef"
+      "digest": "sha256:db72352366a5ed43ef48d8f0d81e430ff0c7bc31524d647ccd1dda63a3aebae3"
     },
     {
       "path": "package.json",
@@ -217,7 +219,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:0ba0ac92c48fcc43ebd6418f7559291228f4692a03aedac93ec5264126c21b77"
+      "digest": "sha256:dd8f587e14846ae70751e3b9c1e578d7d385c84034b70d65f4cd0b5d2381efb4"
     }
   ]
 }
