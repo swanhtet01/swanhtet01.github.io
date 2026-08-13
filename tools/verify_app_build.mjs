@@ -336,6 +336,8 @@ const serviceCommitSource = serviceCommitStart >= 0 && serviceCommitEnd > servic
 const localPersistenceIndex = serviceCommitSource.indexOf('persistLocal(next)')
 const localStateIndex = serviceCommitSource.indexOf('setSchedule(next)')
 if (!shopServiceScheduleSource.includes("SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v4'")
+  || !shopServiceScheduleSource.includes("SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA = 'supermega.shop.service-first-day-review.v1'")
+  || !shopServiceScheduleSource.includes('projectShopServiceFirstDayReview')
   || !shopServiceScheduleSource.includes("type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'")
   || !shopServiceScheduleSource.includes('provisionEmptyShopServiceSchedule')
   || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA')
@@ -371,6 +373,8 @@ if (!shopServiceScheduleSource.includes("SHOP_SERVICE_SCHEDULE_SCHEMA = 'superme
   || !shopServiceScheduleUiSource.includes('loadManagedServiceSchedule(identity)')
   || !shopServiceScheduleUiSource.includes('Services and resources')
   || !shopServiceScheduleUiSource.includes('Nothing is sent to the customer or an external calendar.')
+  || !shopServiceScheduleUiSource.includes('aria-label="First day operating review"')
+  || !shopServiceScheduleUiSource.includes('Review only. No invite, customer message, calendar entry, payment, or daily close is automatic.')
   || !shopServiceScheduleUiSource.includes('const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)')
   || !shopServiceScheduleUiSource.includes('initiallyOpen = false')
   || !shopServiceScheduleUiSource.includes('id="shop-service-schedule"')
@@ -410,6 +414,8 @@ if (!managedTrialSource.includes('loadManagedServiceSchedule')
   || !managedCommerceRuntime.includes('contains overlapping bookings')
   || !managedCommerceRuntime.includes('service schedule evidence history is immutable')
   || !managedCommerceRuntime.includes('booking_checkout_linked')
+  || !managedCommerceRuntime.includes('project_shop_service_first_day_review')
+  || !managedCommerceRuntime.includes('"invitationSent": False')
   || !managedCommerceRuntime.includes('_service_client_export_csv')
   || !managedCommerceRuntime.includes('expected_digest')
   || !managedCommerceRuntime.includes('financial_records_closed')
@@ -8951,6 +8957,18 @@ async function verifyShopServiceScheduleRuntime() {
     let state = model.createShopServiceSchedule()
     assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
     assert(state.services.length === 5 && state.resources.length === 3 && state.clients.length === 0 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
+    const firstDayStart = '2026-07-29T00:00:00.000Z'
+    const firstDayEnd = '2026-07-30T00:00:00.000Z'
+    const readyFirstDay = model.projectShopServiceFirstDayReview(state, firstDayStart, firstDayEnd, 'local-operator', [])
+    assert(readyFirstDay.contract === model.SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA
+      && readyFirstDay.status === 'ready_to_book'
+      && readyFirstDay.nextAction.stage === 'hold_appointment'
+      && readyFirstDay.nextAction.allowedForCurrentAccess
+      && readyFirstDay.ownerAttention.map((item) => item.id).join(',') === 'set_client_retention'
+      && Object.values(readyFirstDay.authority).every((allowed) => allowed === false), 'shop_service_first_day_seed_review_wrong')
+    assertThrows(() => model.projectShopServiceFirstDayReview(state, firstDayStart, '2026-07-30T01:00:00.000Z', 'owner', []), 'shop_service_first_day_long_window_accepted')
+    assertThrows(() => model.projectShopServiceFirstDayReview(state, firstDayStart, firstDayEnd, 'admin', []), 'shop_service_first_day_unknown_access_accepted')
+    assertThrows(() => model.projectShopServiceFirstDayReview(state, '2026-07-29T00:00:00+00:00', '2026-07-30T00:00:00+00:00', 'owner', []), 'shop_service_first_day_noncanonical_window_accepted')
     assert(model.shopIndustryPacks.map((pack) => pack.id).join(',') === 'retail,cafe,restaurant,spa,gym,school' && new Set(model.shopIndustryPacks.map((pack) => pack.id)).size === 6, 'shop_industry_pack_catalog_wrong')
     assert(model.shopIndustryPacks.map((pack) => `${pack.id}:${pack.workflowTemplateId}:${pack.entryPoint}`).join(',') === 'retail:retail-wholesale:Walk-in,cafe:restaurant-ordering:Walk-in,restaurant:restaurant-ordering:Walk-in,spa:social-commerce:Phone,gym:social-commerce:Phone,school:social-commerce:Phone', 'shop_industry_pack_workflow_binding_wrong')
     for (const pack of model.shopIndustryPacks) {
@@ -8980,6 +8998,21 @@ async function verifyShopServiceScheduleRuntime() {
     state = model.scheduleShopServiceBooking(state, { customerName: 'Client A', contact: '09-000-000', appointmentUpdates: 'allowed', serviceId, resourceId, startsAt: '2026-07-29T04:00:00.000Z', note: 'First visit' }, proof(3, 'Reviewed booking request'))
     const bookingId = state.bookings[0].id
     assert(state.bookings[0].endsAt === '2026-07-29T05:30:00.000Z' && state.bookings[0].status === 'held' && state.clients[0].appointmentUpdates === 'allowed' && state.bookings[0].clientId === state.clients[0].id, 'shop_service_booking_duration_or_initial_state_wrong')
+    const heldSource = JSON.stringify(state)
+    const heldFirstDay = model.projectShopServiceFirstDayReview(state, firstDayStart, firstDayEnd, 'spa-front-desk', [])
+    const heldTherapistFirstDay = model.projectShopServiceFirstDayReview(state, firstDayStart, firstDayEnd, 'spa-therapist', [])
+    const heldFirstDaySerialized = JSON.stringify(heldFirstDay)
+    assert(heldFirstDay.status === 'work_to_do'
+      && heldFirstDay.nextAction.stage === 'confirm_appointment'
+      && heldFirstDay.nextAction.requiredAccess === 'front_desk'
+      && heldFirstDay.nextAction.allowedForCurrentAccess
+      && !heldTherapistFirstDay.nextAction.allowedForCurrentAccess
+      && heldFirstDay.counts.awaitingConfirmation === 1
+      && heldSource === JSON.stringify(state), 'shop_service_first_day_held_review_wrong_or_mutated_source')
+    assert(!heldFirstDaySerialized.includes('Client A')
+      && !heldFirstDaySerialized.includes('09-000-000')
+      && !heldFirstDaySerialized.includes('First visit'), 'shop_service_first_day_review_leaked_client_identity')
+    assertThrows(() => model.projectShopServiceFirstDayReview(state, firstDayStart, firstDayEnd, 'owner', ['ORD-SPA-BOOKING-0003', 'ORD-SPA-BOOKING-0003']), 'shop_service_first_day_duplicate_closed_checkout_accepted')
     assertThrows(() => model.scheduleShopServiceBooking(state, { customerName: 'Client B', contact: '09-444-444', appointmentUpdates: 'not_recorded', serviceId, resourceId, startsAt: '2026-07-29T10:00:00.000Z' }, proof(4, 'Missing permission choice')), 'shop_service_booking_without_permission_choice_accepted')
     const clientExport = model.shopServiceClientExportRows(state)
     assert(clientExport.length === 1 && clientExport[0].appointments === 1 && clientExport[0].completedVisits === 0 && Object.keys(clientExport[0]).sort().join(',') === 'appointmentUpdates,appointments,completedVisits,consentRecordedAt,contact,name', 'shop_service_client_export_not_minimal')
@@ -9028,8 +9061,16 @@ async function verifyShopServiceScheduleRuntime() {
     assert(state.bookings[0].status === 'confirmed', 'shop_service_booking_confirmation_failed')
     state = model.advanceShopServiceBooking(state, bookingId, proof(6, 'Customer arrived'))
     assert(state.bookings[0].status === 'checked_in', 'shop_service_booking_check_in_failed')
+    const treatmentFirstDay = model.projectShopServiceFirstDayReview(state, firstDayStart, firstDayEnd, 'spa-therapist', [])
+    assert(treatmentFirstDay.nextAction.stage === 'complete_treatment'
+      && treatmentFirstDay.nextAction.allowedForCurrentAccess
+      && treatmentFirstDay.counts.inTreatment === 1, 'shop_service_first_day_treatment_review_wrong')
     state = model.advanceShopServiceBooking(state, bookingId, proof(7, 'Service completed'))
     assert(state.bookings[0].status === 'completed' && state.events.length === state.revision, 'shop_service_booking_completion_or_evidence_failed')
+    const checkoutFirstDay = model.projectShopServiceFirstDayReview(state, firstDayStart, firstDayEnd, 'spa-front-desk', [])
+    assert(checkoutFirstDay.nextAction.stage === 'review_checkout'
+      && checkoutFirstDay.nextAction.allowedForCurrentAccess
+      && checkoutFirstDay.counts.awaitingCheckout === 1, 'shop_service_first_day_checkout_review_wrong')
     const completedPrivacySchedule = model.setShopServiceClientRetention(state, 30, proof(10, 'Owner approved client retention'))
     const unpaidAnonymization = model.shopServiceClientAnonymizationReadiness(completedPrivacySchedule, completedPrivacySchedule.clients[0].id, [], new Date('2026-09-01T00:00:00.000Z'))
     assert(!unpaidAnonymization.allowed && unpaidAnonymization.reason.includes('payment'), 'shop_service_unpaid_visit_anonymization_allowed')
@@ -9146,6 +9187,14 @@ async function verifyShopServiceScheduleRuntime() {
     assert(state.bookings[0].checkoutOrderId === checkedOut.orders[0].id
       && state.events.at(-1).type === 'booking_checkout_linked'
       && model.shopServiceCheckoutRequest(state, bookingId) === null, 'shop_service_checkout_link_failed')
+    const paymentFirstDay = model.projectShopServiceFirstDayReview(state, firstDayStart, firstDayEnd, 'spa-front-desk', [])
+    const closeFirstDay = model.projectShopServiceFirstDayReview(state, firstDayStart, firstDayEnd, 'owner', [checkedOut.orders[0].id])
+    assert(paymentFirstDay.nextAction.stage === 'reconcile_payment'
+      && paymentFirstDay.counts.awaitingPaymentClose === 1
+      && closeFirstDay.status === 'owner_close_review'
+      && closeFirstDay.nextAction.stage === 'review_daily_close'
+      && closeFirstDay.nextAction.allowedForCurrentAccess
+      && closeFirstDay.counts.completed === 1, 'shop_service_first_day_payment_or_close_review_wrong')
     const linkedReplay = model.linkShopServiceBookingCheckout(state, bookingId, checkedOut.orders[0].id, proof(15, 'Recovered existing checkout link'))
     assert(linkedReplay === state, 'shop_service_checkout_link_retry_appended_duplicate_evidence')
     const linkedPrivacySchedule = model.setShopServiceClientRetention(state, 30, proof(17, 'Owner approved client retention'))

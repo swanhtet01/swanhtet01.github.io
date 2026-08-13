@@ -226,6 +226,7 @@ _MAX_CORRECTIONS_PER_ORDER = 100
 _MAX_COLLECTION_ACTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
 _SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v4"
+SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA = "supermega.shop.service-first-day-review.v1"
 _LEGACY_SERVICE_SCHEDULE_SCHEMA_V2 = "supermega.shop.service_schedule.v2"
 _LEGACY_SERVICE_SCHEDULE_SCHEMA_V3 = "supermega.shop.service_schedule.v3"
 _SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
@@ -1457,6 +1458,214 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
         _text(event.get("reason"), f"{field}.reason", maximum=240)
         _timestamp(event.get("happenedAt"), f"{field}.happenedAt")
     return schedule
+
+
+def project_shop_service_first_day_review(
+    value: object,
+    window_start_at: object,
+    window_end_at: object,
+    access: object,
+    closed_checkout_order_ids: object,
+) -> dict[str, Any]:
+    """Project one Spa operating day without sending, charging, inviting, or closing it."""
+
+    schedule = _validate_service_schedule(value)
+    window_start = _timestamp(window_start_at, "first-day window start")
+    window_end = _timestamp(window_end_at, "first-day window end")
+    start_time = datetime.fromisoformat(window_start.replace("Z", "+00:00"))
+    end_time = datetime.fromisoformat(window_end.replace("Z", "+00:00"))
+    if (
+        start_time.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        != window_start
+        or end_time.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        != window_end
+    ):
+        raise TrialValidationError("first-day window timestamps must use canonical UTC milliseconds.")
+    if end_time <= start_time or end_time - start_time > timedelta(days=1):
+        raise TrialValidationError(
+            "first-day window must end after its start and span no more than 24 hours."
+        )
+    access_value = _text(access, "first-day access", maximum=40)
+    if access_value not in {
+        "local-operator", "owner", "operator", "spa-front-desk", "spa-therapist", "viewer",
+    }:
+        raise TrialValidationError("first-day access is unsupported.")
+    closed_candidates = _list(closed_checkout_order_ids, "closed checkout order IDs")
+    if len(closed_candidates) > 500:
+        raise TrialValidationError("closed checkout order IDs exceed the supported limit.")
+    closed_ids = [
+        _text(candidate, f"closed checkout order IDs[{index}]", maximum=120)
+        for index, candidate in enumerate(closed_candidates)
+    ]
+    _unique(closed_ids, "closed checkout order ID")
+    closed_id_set = set(closed_ids)
+
+    active_services = sum(service["active"] for service in schedule["services"])
+    active_staff_resources = sum(
+        resource["active"] and resource["kind"] == "staff"
+        for resource in schedule["resources"]
+    )
+    appointments = [
+        booking
+        for booking in schedule["bookings"]
+        if booking["status"] != "cancelled"
+        and start_time
+        <= datetime.fromisoformat(booking["startsAt"].replace("Z", "+00:00"))
+        < end_time
+    ]
+
+    stage_priority = {
+        "setup_service": 0,
+        "setup_staff": 1,
+        "complete_treatment": 2,
+        "review_checkout": 3,
+        "reconcile_payment": 4,
+        "check_in": 5,
+        "confirm_appointment": 6,
+        "hold_appointment": 7,
+        "review_daily_close": 8,
+    }
+    action_labels = {
+        "setup_service": "Add one active service",
+        "setup_staff": "Add one active staff member",
+        "hold_appointment": "Hold the first appointment",
+        "confirm_appointment": "Confirm the held appointment",
+        "check_in": "Check in the confirmed appointment",
+        "complete_treatment": "Complete the checked-in treatment",
+        "review_checkout": "Review the treatment checkout",
+        "reconcile_payment": "Reconcile payment and close the checkout",
+        "review_daily_close": "Review the daily close",
+    }
+
+    def action(stage: str, booking: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        required_access = (
+            "therapist"
+            if stage == "complete_treatment"
+            else "front_desk"
+            if stage
+            in {
+                "hold_appointment", "confirm_appointment", "check_in",
+                "review_checkout", "reconcile_payment",
+            }
+            else "owner"
+        )
+        allowed = (
+            access_value in {"local-operator", "owner", "operator"}
+            or (required_access == "front_desk" and access_value == "spa-front-desk")
+            or (required_access == "therapist" and access_value == "spa-therapist")
+        )
+        return {
+            "stage": stage,
+            "label": action_labels[stage],
+            "requiredAccess": required_access,
+            "allowedForCurrentAccess": allowed,
+            **(
+                {"bookingId": booking["id"], "startsAt": booking["startsAt"]}
+                if booking is not None
+                else {}
+            ),
+        }
+
+    queue: list[dict[str, Any]] = []
+    for booking in appointments:
+        stage = (
+            "confirm_appointment"
+            if booking["status"] == "held"
+            else "check_in"
+            if booking["status"] == "confirmed"
+            else "complete_treatment"
+            if booking["status"] == "checked_in"
+            else "review_checkout"
+            if "checkoutOrderId" not in booking
+            else "reconcile_payment"
+            if booking["checkoutOrderId"] not in closed_id_set
+            else None
+        )
+        if stage is not None:
+            queue.append(action(stage, booking))
+    queue.sort(key=lambda item: (stage_priority[item["stage"]], item["startsAt"], item["bookingId"]))
+
+    owner_attention = [
+        *(
+            []
+            if active_services
+            else [{"id": "activate_service", "label": "Activate at least one service in Services and resources."}]
+        ),
+        *(
+            []
+            if active_staff_resources
+            else [{"id": "activate_staff", "label": "Activate at least one staff resource in Services and resources."}]
+        ),
+        *(
+            []
+            if schedule["privacyPolicy"]["clientRetentionDays"] is not None
+            else [{"id": "set_client_retention", "label": "Choose the client retention period in Clients and privacy."}]
+        ),
+    ]
+    setup_stage = (
+        "setup_service" if not active_services else "setup_staff" if not active_staff_resources else None
+    )
+    status = (
+        "setup_required"
+        if setup_stage is not None
+        else "work_to_do"
+        if queue
+        else "owner_close_review"
+        if appointments
+        else "ready_to_book"
+    )
+    next_action = (
+        action(setup_stage)
+        if setup_stage is not None
+        else queue[0]
+        if queue
+        else action("review_daily_close" if appointments else "hold_appointment")
+    )
+    return {
+        "contract": SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA,
+        "windowStartAt": window_start,
+        "windowEndAt": window_end,
+        "access": access_value,
+        "status": status,
+        "setup": {
+            "activeServices": active_services,
+            "activeStaffResources": active_staff_resources,
+            "retentionRecorded": schedule["privacyPolicy"]["clientRetentionDays"] is not None,
+        },
+        "counts": {
+            "appointments": len(appointments),
+            "awaitingConfirmation": sum(booking["status"] == "held" for booking in appointments),
+            "awaitingArrival": sum(booking["status"] == "confirmed" for booking in appointments),
+            "inTreatment": sum(booking["status"] == "checked_in" for booking in appointments),
+            "awaitingCheckout": sum(
+                booking["status"] == "completed" and "checkoutOrderId" not in booking
+                for booking in appointments
+            ),
+            "awaitingPaymentClose": sum(
+                booking["status"] == "completed"
+                and "checkoutOrderId" in booking
+                and booking["checkoutOrderId"] not in closed_id_set
+                for booking in appointments
+            ),
+            "completed": sum(
+                booking["status"] == "completed"
+                and "checkoutOrderId" in booking
+                and booking["checkoutOrderId"] in closed_id_set
+                for booking in appointments
+            ),
+        },
+        "ownerAttention": owner_attention,
+        "queue": queue,
+        "nextAction": next_action,
+        "authority": {
+            "invitationSent": False,
+            "customerMessageSent": False,
+            "calendarWritten": False,
+            "paymentReconciled": False,
+            "dailyCloseRecorded": False,
+            "membershipWritten": False,
+        },
+    }
 
 
 def validate_commerce_state(value: object) -> dict[str, Any]:
@@ -12237,6 +12446,7 @@ __all__ = [
     "COMMERCE_HUMAN_EVENTS",
     "COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA",
     "COMMERCE_SCHEMA",
+    "SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA",
     "COMMERCE_CLOSE_SETTLEMENT_SCHEMA",
     "commerce_catalog_baseline_digest",
     "commerce_catalog_digest",
@@ -12254,6 +12464,7 @@ __all__ = [
     "commerce_supplier_payables_handoff_csv",
     "commerce_supplier_payables_aging",
     "commerce_website_intake_snapshot_digest",
+    "project_shop_service_first_day_review",
     "reduce_commerce_state",
     "validate_commerce_state",
 ]

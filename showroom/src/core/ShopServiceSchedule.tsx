@@ -16,6 +16,7 @@ import {
   anonymizeShopServiceClient,
   cancelShopServiceBooking,
   linkShopServiceBookingCheckout,
+  projectShopServiceFirstDayReview,
   projectShopServiceSchedule,
   readShopServiceSchedule,
   recordShopServiceClientExport,
@@ -28,6 +29,8 @@ import {
   shopServiceCheckoutRequest,
   type ShopServiceBookingStatus,
   type ShopServiceCheckoutRequest,
+  type ShopServiceFirstDayAccess,
+  type ShopServiceFirstDayRequiredAccess,
   type ShopServiceSchedule,
 } from './shop-service-scheduling'
 
@@ -55,6 +58,20 @@ function nextLocalStart() {
 
 function formatMmk(value: number) {
   return `${value.toLocaleString()} MMK`
+}
+
+function localDayWindow(now = new Date()) {
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  return { windowStartAt: start.toISOString(), windowEndAt: end.toISOString() }
+}
+
+const firstDayRoleLabels: Record<ShopServiceFirstDayRequiredAccess, string> = {
+  owner: 'Owner',
+  front_desk: 'Front desk',
+  therapist: 'Therapist',
 }
 
 function initialSchedule() {
@@ -119,6 +136,17 @@ export function ShopServiceSchedule({
         : managedAccess === 'viewer'
           ? 'Read only'
           : 'Shop operator'
+  const firstDayWindow = useMemo(() => localDayWindow(), [])
+  const firstDayAccess: ShopServiceFirstDayAccess = managedRoleActive
+    ? managedAccess ?? 'operator'
+    : 'local-operator'
+  const firstDayReview = useMemo(() => schedule ? projectShopServiceFirstDayReview(
+    schedule,
+    firstDayWindow.windowStartAt,
+    firstDayWindow.windowEndAt,
+    firstDayAccess,
+    closedCheckoutOrderIds,
+  ) : null, [closedCheckoutOrderIds, firstDayAccess, firstDayWindow, schedule])
 
   useEffect(() => {
     scheduleRef.current = schedule
@@ -481,6 +509,12 @@ export function ShopServiceSchedule({
           : managedAccess === 'viewer'
             ? 'View only.'
             : 'Full Spa controls.'}</p> : null}
+      {firstDayReview ? <section aria-label="First day operating review" className="core-panel service-first-day-review" data-first-day-status={firstDayReview.status}>
+        <div className="panel-head"><div><span className="core-eyebrow">First day</span><h2>{firstDayReview.nextAction.label}</h2></div><span className={`status-pill ${firstDayReview.nextAction.allowedForCurrentAccess ? 'ready' : 'pending'}`}>{firstDayRoleLabels[firstDayReview.nextAction.requiredAccess]} next</span></div>
+        <p className="panel-copy">{firstDayReview.counts.appointments} {firstDayReview.counts.appointments === 1 ? 'appointment' : 'appointments'} · {firstDayReview.queue.length} open {firstDayReview.queue.length === 1 ? 'step' : 'steps'}. {firstDayReview.nextAction.allowedForCurrentAccess ? 'Use the matching control below.' : `${firstDayRoleLabels[firstDayReview.nextAction.requiredAccess]} access is required for this step.`}</p>
+        {firstDayReview.ownerAttention.length ? <p className="panel-copy"><strong>Owner setup:</strong> {firstDayReview.ownerAttention.map((item) => item.label).join(' ')}</p> : null}
+        <p className="authority-note">Review only. No invite, customer message, calendar entry, payment, or daily close is automatic.</p>
+      </section> : null}
       {canRunFrontDesk ? <form className="service-booking-form" onSubmit={createBooking}>
         <div><span className="core-eyebrow">New appointment</span><h3>Hold a time</h3><p>A matching contact reuses one client record. Only name, contact, and appointment-update choice are kept.</p></div>
         <label>Customer<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer name" required value={bookingDraft.customerName} /></label>

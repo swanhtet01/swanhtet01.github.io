@@ -1,5 +1,6 @@
 export const SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v4' as const
 export const SHOP_SERVICE_SCHEDULE_STORAGE_KEY = 'supermega.shop.service-schedule.v1'
+export const SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA = 'supermega.shop.service-first-day-review.v1' as const
 const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V1 = 'supermega.shop.service_schedule.v1' as const
 const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V2 = 'supermega.shop.service_schedule.v2' as const
 const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V3 = 'supermega.shop.service_schedule.v3' as const
@@ -108,6 +109,55 @@ export type ShopServiceScheduleProjection = {
   inService: number
   completedToday: number
   expectedRevenueMmk: number
+}
+
+export type ShopServiceFirstDayAccess = 'local-operator' | 'owner' | 'operator' | 'spa-front-desk' | 'spa-therapist' | 'viewer'
+export type ShopServiceFirstDayStage = 'setup_service' | 'setup_staff' | 'hold_appointment' | 'confirm_appointment' | 'check_in' | 'complete_treatment' | 'review_checkout' | 'reconcile_payment' | 'review_daily_close'
+export type ShopServiceFirstDayRequiredAccess = 'owner' | 'front_desk' | 'therapist'
+
+export type ShopServiceFirstDayAction = {
+  stage: ShopServiceFirstDayStage
+  label: string
+  requiredAccess: ShopServiceFirstDayRequiredAccess
+  allowedForCurrentAccess: boolean
+  bookingId?: string
+  startsAt?: string
+}
+
+export type ShopServiceFirstDayReview = {
+  contract: typeof SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA
+  windowStartAt: string
+  windowEndAt: string
+  access: ShopServiceFirstDayAccess
+  status: 'setup_required' | 'ready_to_book' | 'work_to_do' | 'owner_close_review'
+  setup: {
+    activeServices: number
+    activeStaffResources: number
+    retentionRecorded: boolean
+  }
+  counts: {
+    appointments: number
+    awaitingConfirmation: number
+    awaitingArrival: number
+    inTreatment: number
+    awaitingCheckout: number
+    awaitingPaymentClose: number
+    completed: number
+  }
+  ownerAttention: Array<{
+    id: 'activate_service' | 'activate_staff' | 'set_client_retention'
+    label: string
+  }>
+  queue: ShopServiceFirstDayAction[]
+  nextAction: ShopServiceFirstDayAction
+  authority: {
+    invitationSent: false
+    customerMessageSent: false
+    calendarWritten: false
+    paymentReconciled: false
+    dailyCloseRecorded: false
+    membershipWritten: false
+  }
 }
 
 export type ShopServiceCheckoutRequest = {
@@ -640,6 +690,145 @@ export function projectShopServiceSchedule(state: ShopServiceSchedule, now = new
     inService: today.filter((booking) => booking.status === 'checked_in').length,
     completedToday: today.filter((booking) => booking.status === 'completed').length,
     expectedRevenueMmk: today.filter((booking) => booking.status !== 'cancelled').reduce((total, booking) => total + (serviceById.get(booking.serviceId)?.priceMmk ?? 0), 0),
+  }
+}
+
+const firstDayStagePriority: Record<ShopServiceFirstDayStage, number> = {
+  setup_service: 0,
+  setup_staff: 1,
+  complete_treatment: 2,
+  review_checkout: 3,
+  reconcile_payment: 4,
+  check_in: 5,
+  confirm_appointment: 6,
+  hold_appointment: 7,
+  review_daily_close: 8,
+}
+
+const firstDayActionLabels: Record<ShopServiceFirstDayStage, string> = {
+  setup_service: 'Add one active service',
+  setup_staff: 'Add one active staff member',
+  hold_appointment: 'Hold the first appointment',
+  confirm_appointment: 'Confirm the held appointment',
+  check_in: 'Check in the confirmed appointment',
+  complete_treatment: 'Complete the checked-in treatment',
+  review_checkout: 'Review the treatment checkout',
+  reconcile_payment: 'Reconcile payment and close the checkout',
+  review_daily_close: 'Review the daily close',
+}
+
+function firstDayRequiredAccess(stage: ShopServiceFirstDayStage): ShopServiceFirstDayRequiredAccess {
+  if (stage === 'complete_treatment') return 'therapist'
+  if (['hold_appointment', 'confirm_appointment', 'check_in', 'review_checkout', 'reconcile_payment'].includes(stage)) return 'front_desk'
+  return 'owner'
+}
+
+function firstDayAccessAllowed(access: ShopServiceFirstDayAccess, requiredAccess: ShopServiceFirstDayRequiredAccess) {
+  if (access === 'local-operator' || access === 'owner' || access === 'operator') return true
+  if (requiredAccess === 'front_desk') return access === 'spa-front-desk'
+  if (requiredAccess === 'therapist') return access === 'spa-therapist'
+  return false
+}
+
+function firstDayAction(
+  stage: ShopServiceFirstDayStage,
+  access: ShopServiceFirstDayAccess,
+  booking?: Pick<ShopServiceBooking, 'id' | 'startsAt'>,
+): ShopServiceFirstDayAction {
+  const requiredAccess = firstDayRequiredAccess(stage)
+  return {
+    stage,
+    label: firstDayActionLabels[stage],
+    requiredAccess,
+    allowedForCurrentAccess: firstDayAccessAllowed(access, requiredAccess),
+    ...(booking ? { bookingId: booking.id, startsAt: booking.startsAt } : {}),
+  }
+}
+
+export function projectShopServiceFirstDayReview(
+  state: ShopServiceSchedule,
+  windowStartAt: string,
+  windowEndAt: string,
+  access: ShopServiceFirstDayAccess,
+  closedCheckoutOrderIds: readonly string[],
+): ShopServiceFirstDayReview {
+  validateShopServiceSchedule(state)
+  const start = validIso(windowStartAt, 'First-day window start')
+  const end = validIso(windowEndAt, 'First-day window end')
+  if (end <= start || end - start > 86_400_000) throw new Error('First-day window must end after its start and span no more than 24 hours.')
+  if (!['local-operator', 'owner', 'operator', 'spa-front-desk', 'spa-therapist', 'viewer'].includes(access)) throw new Error('First-day access is unsupported.')
+  if (!Array.isArray(closedCheckoutOrderIds) || closedCheckoutOrderIds.length > 500) throw new Error('Closed checkout order IDs must be a bounded array.')
+  const closedIds = closedCheckoutOrderIds.map((orderId) => boundedText(orderId, 'Closed checkout order ID', 120))
+  if (new Set(closedIds).size !== closedIds.length) throw new Error('Closed checkout order IDs must be unique.')
+  const closedCheckoutIds = new Set(closedIds)
+  const activeServices = state.services.filter((service) => service.active).length
+  const activeStaffResources = state.resources.filter((resource) => resource.active && resource.kind === 'staff').length
+  const appointments = state.bookings.filter((booking) => booking.status !== 'cancelled'
+    && Date.parse(booking.startsAt) >= start
+    && Date.parse(booking.startsAt) < end)
+  const queue = appointments.flatMap((booking): ShopServiceFirstDayAction[] => {
+    const stage: ShopServiceFirstDayStage | null = booking.status === 'held'
+      ? 'confirm_appointment'
+      : booking.status === 'confirmed'
+        ? 'check_in'
+        : booking.status === 'checked_in'
+          ? 'complete_treatment'
+          : !booking.checkoutOrderId
+            ? 'review_checkout'
+            : !closedCheckoutIds.has(booking.checkoutOrderId)
+              ? 'reconcile_payment'
+              : null
+    return stage ? [firstDayAction(stage, access, booking)] : []
+  }).sort((left, right) => firstDayStagePriority[left.stage] - firstDayStagePriority[right.stage]
+    || (String(left.startsAt) < String(right.startsAt) ? -1 : String(left.startsAt) > String(right.startsAt) ? 1 : 0)
+    || (String(left.bookingId) < String(right.bookingId) ? -1 : String(left.bookingId) > String(right.bookingId) ? 1 : 0))
+  const ownerAttention: ShopServiceFirstDayReview['ownerAttention'] = [
+    ...(activeServices ? [] : [{ id: 'activate_service' as const, label: 'Activate at least one service in Services and resources.' }]),
+    ...(activeStaffResources ? [] : [{ id: 'activate_staff' as const, label: 'Activate at least one staff resource in Services and resources.' }]),
+    ...(state.privacyPolicy.clientRetentionDays === null ? [{ id: 'set_client_retention' as const, label: 'Choose the client retention period in Clients and privacy.' }] : []),
+  ]
+  const setupStage: ShopServiceFirstDayStage | null = !activeServices ? 'setup_service' : !activeStaffResources ? 'setup_staff' : null
+  const status: ShopServiceFirstDayReview['status'] = setupStage
+    ? 'setup_required'
+    : queue.length
+      ? 'work_to_do'
+      : appointments.length
+        ? 'owner_close_review'
+        : 'ready_to_book'
+  const nextAction = setupStage
+    ? firstDayAction(setupStage, access)
+    : queue[0] ?? firstDayAction(appointments.length ? 'review_daily_close' : 'hold_appointment', access)
+  return {
+    contract: SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA,
+    windowStartAt,
+    windowEndAt,
+    access,
+    status,
+    setup: {
+      activeServices,
+      activeStaffResources,
+      retentionRecorded: state.privacyPolicy.clientRetentionDays !== null,
+    },
+    counts: {
+      appointments: appointments.length,
+      awaitingConfirmation: appointments.filter((booking) => booking.status === 'held').length,
+      awaitingArrival: appointments.filter((booking) => booking.status === 'confirmed').length,
+      inTreatment: appointments.filter((booking) => booking.status === 'checked_in').length,
+      awaitingCheckout: appointments.filter((booking) => booking.status === 'completed' && !booking.checkoutOrderId).length,
+      awaitingPaymentClose: appointments.filter((booking) => booking.status === 'completed' && Boolean(booking.checkoutOrderId) && !closedCheckoutIds.has(booking.checkoutOrderId as string)).length,
+      completed: appointments.filter((booking) => booking.status === 'completed' && Boolean(booking.checkoutOrderId) && closedCheckoutIds.has(booking.checkoutOrderId as string)).length,
+    },
+    ownerAttention,
+    queue,
+    nextAction,
+    authority: {
+      invitationSent: false,
+      customerMessageSent: false,
+      calendarWritten: false,
+      paymentReconciled: false,
+      dailyCloseRecorded: false,
+      membershipWritten: false,
+    },
   }
 }
 

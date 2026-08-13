@@ -12,6 +12,7 @@ from uuid import uuid4
 from supermega_runtime.commerce_runtime import (
     COMMERCE_EVENTS,
     COMMERCE_HUMAN_EVENTS,
+    SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA,
     commerce_catalog_baseline_digest,
     commerce_catalog_digest,
     commerce_accounting_handoff,
@@ -30,6 +31,7 @@ from supermega_runtime.commerce_runtime import (
     commerce_supplier_payables_aging,
     commerce_website_intake_snapshot_digest,
     create_commerce_storefront_request_from_intent,
+    project_shop_service_first_day_review,
     validate_commerce_state,
 )
 from supermega_runtime.client_import_runtime import (
@@ -9775,6 +9777,195 @@ class CommerceRuntimeTests(unittest.TestCase):
         orphaned_link["orders"] = linked["orders"][1:]
         with self.assertRaises(TrialValidationError):
             validate_commerce_state(orphaned_link)
+
+    def test_spa_first_day_review_is_role_aware_private_and_side_effect_free(self) -> None:
+        services = [{
+            "id": "service-session",
+            "name": "Standard treatment",
+            "durationMinutes": 60,
+            "priceMmk": 45000,
+            "active": True,
+        }]
+        resources = [{
+            "id": "resource-therapist-1",
+            "name": "Therapist 1",
+            "kind": "staff",
+            "active": True,
+        }]
+        statuses = ["held", "confirmed", "checked_in", "completed", "completed", "completed"]
+        clients = []
+        bookings = []
+        for index, status in enumerate(statuses, start=1):
+            client_id = f"client-{index:04d}"
+            booking_id = f"booking-{index:04d}"
+            starts_at = f"2026-07-29T{index:02d}:00:00.000Z"
+            ends_at = f"2026-07-29T{index + 1:02d}:00:00.000Z"
+            contact = f"09-111-{index:04d}"
+            clients.append({
+                "id": client_id,
+                "name": f"Client {index}",
+                "contact": contact,
+                "appointmentUpdates": "declined",
+                "consentRecordedAt": "2026-07-29T00:00:00.000Z",
+                "createdAt": "2026-07-29T00:00:00.000Z",
+                "updatedAt": "2026-07-29T00:00:00.000Z",
+            })
+            bookings.append({
+                "id": booking_id,
+                "clientId": client_id,
+                "customerName": f"Client {index}",
+                "contact": contact,
+                "appointmentUpdates": "declined",
+                "serviceId": "service-session",
+                "resourceId": "resource-therapist-1",
+                "startsAt": starts_at,
+                "endsAt": ends_at,
+                "status": status,
+                "note": f"Private note {index}",
+                "createdAt": "2026-07-29T00:00:00.000Z",
+                "updatedAt": "2026-07-29T00:00:00.000Z",
+                **(
+                    {"checkoutOrderId": f"ORD-SPA-{booking_id.upper()}"}
+                    if index in {5, 6}
+                    else {}
+                ),
+            })
+        schedule = {
+            "schema": "supermega.shop.service_schedule.v4",
+            "industryPackId": "spa",
+            "revision": 0,
+            "services": services,
+            "resources": resources,
+            "privacyPolicy": {"clientRetentionDays": None},
+            "clients": clients,
+            "bookings": bookings,
+            "events": [],
+        }
+        source = deepcopy(schedule)
+        review = project_shop_service_first_day_review(
+            schedule,
+            "2026-07-29T00:00:00.000Z",
+            "2026-07-30T00:00:00.000Z",
+            "spa-therapist",
+            ["ORD-SPA-BOOKING-0006"],
+        )
+        self.assertEqual(review["contract"], SHOP_SERVICE_FIRST_DAY_REVIEW_SCHEMA)
+        self.assertEqual(review["status"], "work_to_do")
+        self.assertEqual(
+            [item["stage"] for item in review["queue"]],
+            [
+                "complete_treatment", "review_checkout", "reconcile_payment",
+                "check_in", "confirm_appointment",
+            ],
+        )
+        self.assertEqual(
+            review["counts"],
+            {
+                "appointments": 6,
+                "awaitingConfirmation": 1,
+                "awaitingArrival": 1,
+                "inTreatment": 1,
+                "awaitingCheckout": 1,
+                "awaitingPaymentClose": 1,
+                "completed": 1,
+            },
+        )
+        self.assertEqual(review["nextAction"]["requiredAccess"], "therapist")
+        self.assertTrue(review["nextAction"]["allowedForCurrentAccess"])
+        self.assertEqual(review["ownerAttention"][0]["id"], "set_client_retention")
+        self.assertTrue(all(value is False for value in review["authority"].values()))
+        serialized = json.dumps(review)
+        self.assertNotIn("Client 1", serialized)
+        self.assertNotIn("09-111-0001", serialized)
+        self.assertNotIn("Private note", serialized)
+        self.assertEqual(schedule, source)
+
+        front_desk_review = project_shop_service_first_day_review(
+            schedule,
+            "2026-07-29T00:00:00.000Z",
+            "2026-07-30T00:00:00.000Z",
+            "spa-front-desk",
+            ["ORD-SPA-BOOKING-0006"],
+        )
+        self.assertFalse(front_desk_review["nextAction"]["allowedForCurrentAccess"])
+
+        closed_only = {
+            **deepcopy(schedule),
+            "clients": [deepcopy(schedule["clients"][5])],
+            "bookings": [deepcopy(schedule["bookings"][5])],
+        }
+        close_review = project_shop_service_first_day_review(
+            closed_only,
+            "2026-07-29T00:00:00.000Z",
+            "2026-07-30T00:00:00.000Z",
+            "owner",
+            ["ORD-SPA-BOOKING-0006"],
+        )
+        self.assertEqual(close_review["status"], "owner_close_review")
+        self.assertEqual(close_review["nextAction"]["stage"], "review_daily_close")
+        self.assertTrue(close_review["nextAction"]["allowedForCurrentAccess"])
+
+        empty_schedule = {
+            **deepcopy(schedule),
+            "clients": [],
+            "bookings": [],
+        }
+        ready = project_shop_service_first_day_review(
+            empty_schedule,
+            "2026-07-29T00:00:00.000Z",
+            "2026-07-30T00:00:00.000Z",
+            "viewer",
+            [],
+        )
+        self.assertEqual(ready["status"], "ready_to_book")
+        self.assertEqual(ready["nextAction"]["stage"], "hold_appointment")
+        self.assertFalse(ready["nextAction"]["allowedForCurrentAccess"])
+
+        setup_required = deepcopy(empty_schedule)
+        setup_required["services"][0]["active"] = False
+        setup_required["resources"][0]["active"] = False
+        setup = project_shop_service_first_day_review(
+            setup_required,
+            "2026-07-29T00:00:00.000Z",
+            "2026-07-30T00:00:00.000Z",
+            "owner",
+            [],
+        )
+        self.assertEqual(setup["status"], "setup_required")
+        self.assertEqual(setup["nextAction"]["stage"], "setup_service")
+
+        with self.assertRaises(TrialValidationError):
+            project_shop_service_first_day_review(
+                schedule,
+                "2026-07-29T00:00:00.000Z",
+                "2026-07-30T00:00:00.000Z",
+                "spa-front-desk",
+                ["ORD-SPA-BOOKING-0006", "ORD-SPA-BOOKING-0006"],
+            )
+        with self.assertRaises(TrialValidationError):
+            project_shop_service_first_day_review(
+                schedule,
+                "2026-07-29T00:00:00.000Z",
+                "2026-07-30T01:00:00.000Z",
+                "spa-front-desk",
+                [],
+            )
+        with self.assertRaises(TrialValidationError):
+            project_shop_service_first_day_review(
+                schedule,
+                "2026-07-29T00:00:00.000Z",
+                "2026-07-30T00:00:00.000Z",
+                "admin",
+                [],
+            )
+        with self.assertRaises(TrialValidationError):
+            project_shop_service_first_day_review(
+                schedule,
+                "2026-07-29T00:00:00+00:00",
+                "2026-07-30T00:00:00+00:00",
+                "owner",
+                [],
+            )
 
 
 if __name__ == "__main__":
