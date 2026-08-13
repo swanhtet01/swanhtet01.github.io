@@ -31,6 +31,7 @@ from supermega_runtime.plant_order_foundation import (
 from supermega_runtime.production_runtime import (
     PRODUCTION_EVENTS,
     PRODUCTION_HUMAN_EVENTS,
+    project_production_quality_capa_trend,
     validate_production_state,
 )
 from supermega_runtime.production_material_handoff import (
@@ -3455,6 +3456,29 @@ class ProductionRuntimeTests(unittest.TestCase):
             resolved["issues"][0]["resolution"]["qualityCorrectiveAction"]["contract"],
             "supermega.production.quality-capa.v2",
         )
+        resolved_before_trend = deepcopy(resolved)
+        pre_due_trend = project_production_quality_capa_trend(
+            resolved,
+            "2026-07-24T09:34:59.999999Z",
+        )
+        self.assertEqual(pre_due_trend["contract"], "supermega.production.quality-capa-trend.v1")
+        self.assertEqual(pre_due_trend["groups"][0]["status"], "monitor")
+        self.assertEqual(pre_due_trend["groups"][0]["pendingReviewCount"], 1)
+        self.assertEqual(pre_due_trend["groups"][0]["dueReviewCount"], 0)
+        self.assertEqual(pre_due_trend["totals"]["classifiedCapaCount"], 1)
+        self.assertEqual(resolved, resolved_before_trend)
+        due_trend = project_production_quality_capa_trend(
+            resolved,
+            "2026-07-24T09:35:00.000Z",
+        )
+        self.assertEqual(due_trend["groups"][0]["status"], "review_due")
+        self.assertEqual(due_trend["groups"][0]["dueReviewCount"], 1)
+        self.assertEqual(
+            due_trend["groups"][0]["nextReviewDueAt"],
+            "2026-07-24T09:35:00.000Z",
+        )
+        with self.assertRaisesRegex(TrialValidationError, "canonical ISO-8601"):
+            project_production_quality_capa_trend(resolved, "not-a-time")
 
         early_evidence = action_evidence(
             "ACT-CAPA-V2-EARLY",
@@ -3545,6 +3569,19 @@ class ProductionRuntimeTests(unittest.TestCase):
             ),
             repeat_resolve_evidence,
         )
+        recurring_trend = project_production_quality_capa_trend(
+            recurring,
+            "2026-07-24T09:40:00.000Z",
+        )
+        recurring_group = recurring_trend["groups"][0]
+        self.assertEqual(recurring_group["status"], "escalate")
+        self.assertEqual(recurring_group["occurrenceCount"], 2)
+        self.assertEqual(recurring_group["issueIds"], ["ISSUE-REAL-001", "ISSUE-REAL-002"])
+        self.assertEqual(recurring_group["pendingReviewCount"], 2)
+        self.assertEqual(recurring_group["dueReviewCount"], 1)
+        self.assertEqual(recurring_group["controlReasons"], ["classified_recurrence"])
+        self.assertEqual(recurring_trend["totals"]["recurrenceGroupCount"], 1)
+        self.assertEqual(recurring_trend["totals"]["escalationGroupCount"], 1)
         recurring_review_evidence = action_evidence(
             "ACT-CAPA-V2-RECURRING-REVIEW",
             captured_at="2026-07-24T09:40:00.000Z",
@@ -3580,6 +3617,18 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertEqual(recurring_review["recurrenceIssueIds"], ["ISSUE-REAL-002"])
         self.assertEqual(recurring_review["outcome"], "ineffective")
         self.assertEqual(recurring_review["escalation"], "required")
+        ineffective_trend = project_production_quality_capa_trend(
+            escalated,
+            "2026-07-24T09:40:00.000Z",
+        )
+        self.assertEqual(ineffective_trend["groups"][0]["status"], "escalate")
+        self.assertEqual(ineffective_trend["groups"][0]["ineffectiveReviewCount"], 1)
+        self.assertEqual(ineffective_trend["groups"][0]["pendingReviewCount"], 1)
+        self.assertEqual(ineffective_trend["groups"][0]["dueReviewCount"], 0)
+        self.assertEqual(
+            ineffective_trend["groups"][0]["controlReasons"],
+            ["classified_recurrence", "ineffective_review"],
+        )
 
         forged = deepcopy(escalated)
         forged_review = next(
@@ -3589,6 +3638,59 @@ class ProductionRuntimeTests(unittest.TestCase):
         forged["events"][0]["qualityEffectivenessReview"]["recurrenceIssueIds"] = []
         with self.assertRaisesRegex(TrialValidationError, "recurrence evidence"):
             validate_production_state(forged)
+
+        legacy_current = starting_workspace()
+        legacy_open_evidence = action_evidence("ACT-CAPA-TREND-LEGACY-OPEN")
+        legacy_opened = apply_event(
+            legacy_current,
+            "production.issue.opened",
+            opened_issue_state(legacy_current, legacy_open_evidence),
+            legacy_open_evidence,
+        )
+        legacy_resolve_evidence = action_evidence(
+            "ACT-CAPA-TREND-LEGACY-RESOLVE",
+            captured_at="2026-07-24T09:30:00.000Z",
+        )
+        legacy_resolved = apply_event(
+            legacy_opened,
+            "production.issue.resolved",
+            resolved_issue_state(legacy_opened, legacy_resolve_evidence),
+            legacy_resolve_evidence,
+        )
+        legacy_trend = project_production_quality_capa_trend(
+            legacy_resolved,
+            "2026-07-24T09:40:00.000Z",
+        )
+        self.assertEqual(legacy_trend["groups"][0]["status"], "evidence_gap")
+        self.assertEqual(legacy_trend["groups"][0]["legacyCapaCount"], 1)
+        self.assertEqual(legacy_trend["totals"]["evidenceGapCount"], 1)
+
+        unclassified_current = starting_workspace()
+        unclassified_open_evidence = action_evidence("ACT-CAPA-TREND-UNCLASSIFIED-OPEN")
+        unclassified_opened = validate_production_state(
+            opened_issue_state(
+                unclassified_current,
+                unclassified_open_evidence,
+                actionable=False,
+            )
+        )
+        unclassified_resolve_evidence = action_evidence(
+            "ACT-CAPA-TREND-UNCLASSIFIED-RESOLVE",
+            captured_at="2026-07-24T09:30:00.000Z",
+        )
+        unclassified_resolved = apply_event(
+            unclassified_opened,
+            "production.issue.resolved",
+            resolved_issue_state(unclassified_opened, unclassified_resolve_evidence),
+            unclassified_resolve_evidence,
+        )
+        unclassified_trend = project_production_quality_capa_trend(
+            unclassified_resolved,
+            "2026-07-24T09:40:00.000Z",
+        )
+        self.assertEqual(unclassified_trend["groups"], [])
+        self.assertEqual(unclassified_trend["unclassifiedIssueIds"], ["ISSUE-REAL-001"])
+        self.assertEqual(unclassified_trend["totals"]["evidenceGapCount"], 1)
 
     def test_new_issue_requires_actionable_ownership_and_due_time(self) -> None:
         current = starting_workspace()

@@ -2418,12 +2418,16 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !productionSource.includes("PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v2'")
   || !productionSource.includes("PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA = 'supermega.production.quality-capa.v1'")
   || !productionSource.includes("PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA = 'supermega.production.quality-capa-effectiveness.v1'")
+  || !productionSource.includes("PRODUCTION_QUALITY_CAPA_TREND_SCHEMA = 'supermega.production.quality-capa-trend.v1'")
   || !productionSource.includes('export function buildProductionQualityCorrectiveAction')
+  || !productionSource.includes('export function productionQualityCapaTrend')
   || !productionSource.includes('export function reviewProductionQualityEffectiveness')
   || !productionSource.includes('actionable quality resolution requires structured CAPA evidence')
   || !productionSource.includes('quality recurrence links do not match prior CAPA evidence')
   || !managedProductionRuntime.includes('supermega.production.quality-capa.v2')
   || !managedProductionRuntime.includes('supermega.production.quality-capa-effectiveness.v1')
+  || !managedProductionRuntime.includes('supermega.production.quality-capa-trend.v1')
+  || !managedProductionRuntime.includes('def project_production_quality_capa_trend(')
   || !managedProductionRuntime.includes('production.quality_effectiveness.reviewed')
   || !managedProductionRuntime.includes('an actionable quality issue requires structured CAPA evidence before resolution.')
   || !managedProductionRuntime.includes('quality CAPA recurrence links must match prior resolved evidence.')
@@ -2431,6 +2435,8 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes('Review implementation close')
   || !coreSource.includes('Review effectiveness')
   || !coreSource.includes('EFFECTIVENESS REVIEW DUE')
+  || !coreSource.includes('aria-label="CAPA trend and escalation"')
+  || !coreSource.includes('Read-only control; it does not reopen problems, release stock, or change production.')
   || !coreSource.includes('Matching prior CAPA records are linked automatically from the failure mode and cause category.')
   || !coreSource.includes("issue.kind === 'quality' ? 'Review CAPA' : 'Review close'")
   || !coreSource.includes("'Restore inspection readiness'")
@@ -7697,7 +7703,7 @@ if (!productionPageContract.includes('className="plant-today"')
   || !productionPageContract.includes('Records operator observations only.')
   || !productionPageContract.includes('disabled={!productionCanWrite')
   || !productionPageContract.includes('<IssueList disabled={!productionCanWrite')
-  || !productionPageContract.includes('<ResolvedIssueHistory disabled={!productionCanWrite || Boolean(pendingAction)} issues={resolvedIssues} now={issueClock} onReviewEffectiveness={startQualityEffectivenessReview} />')
+  || !productionPageContract.includes('<ResolvedIssueHistory disabled={!productionCanWrite || Boolean(pendingAction)} issues={resolvedIssues} now={issueClock} onReviewEffectiveness={startQualityEffectivenessReview} trend={qualityCapaTrend} />')
   || !productionPageContract.includes('className="production-issue-dialog"')
   || !productionPageContract.includes("dialog.querySelector('textarea')?.focus()")
   || !productionPageContract.includes('}, [issueDialogOpen, tab])')
@@ -21190,6 +21196,24 @@ async function verifyProductionRuntime() {
       && resolved.events[0].kind === 'issue_resolved'
       && resolved.events[0].qualityCorrectiveAction?.priorIssueIds.length === 0,
     'production_issue_resolution_lost_capa_or_proof')
+    const resolvedBeforeTrend = JSON.stringify(resolved)
+    const preDueTrend = model.productionQualityCapaTrend(resolved, '2026-07-23T10:00:02.499Z')
+    assert(preDueTrend.contract === 'supermega.production.quality-capa-trend.v1'
+      && preDueTrend.groups.length === 1
+      && preDueTrend.groups[0].status === 'monitor'
+      && preDueTrend.groups[0].pendingReviewCount === 1
+      && preDueTrend.groups[0].dueReviewCount === 0
+      && preDueTrend.totals.classifiedCapaCount === 1
+      && preDueTrend.totals.escalationGroupCount === 0
+      && JSON.stringify(resolved) === resolvedBeforeTrend,
+    'production_capa_trend_before_due_or_read_only_boundary_failed')
+    const dueTrend = model.productionQualityCapaTrend(resolved, '2026-07-23T10:00:02.500Z')
+    assert(dueTrend.groups[0].status === 'review_due'
+      && dueTrend.groups[0].dueReviewCount === 1
+      && dueTrend.groups[0].nextReviewDueAt === qualityCorrectiveAction.effectivenessReviewDueAt
+      && dueTrend.totals.dueReviewCount === 1,
+    'production_capa_trend_exact_due_boundary_failed')
+    assertThrows(() => model.productionQualityCapaTrend(resolved, 'not-a-time'), 'production_capa_trend_invalid_observation_time_accepted')
     assert(model.resolveProductionIssue(resolved, issue.id, resolutionProof, undefined, qualityCorrectiveAction) === resolved, 'production_resolution_retry_not_idempotent')
     assert(model.resolveProductionIssue(resolved, issue.id, { ...resolutionProof, reason: 'Changed' }, undefined, qualityCorrectiveAction) === null, 'production_resolution_conflicting_retry_succeeded')
     assert(model.resolveProductionIssue(resolved, issue.id, proof('ACT-RESOLVE-AGAIN')) === null, 'production_second_resolution_succeeded')
@@ -21229,6 +21253,12 @@ async function verifyProductionRuntime() {
       && resolvedLegacyIssue.issues[0].severity === undefined
       && resolvedLegacyIssue.issues[0].resolution?.resolvedBy === legacyResolutionProof.actor,
     'production_legacy_issue_not_readable_or_resolvable')
+    const unclassifiedTrend = model.productionQualityCapaTrend(resolvedLegacyIssue, '2026-07-23T10:00:03.000Z')
+    assert(unclassifiedTrend.groups.length === 0
+      && unclassifiedTrend.unclassifiedIssueIds.join(',') === duplicateIssue.id
+      && unclassifiedTrend.totals.resolvedQualityIssueCount === 1
+      && unclassifiedTrend.totals.evidenceGapCount === 1,
+    'production_capa_trend_unclassified_evidence_gap_missing')
 
     const recurringIssue = {
       ...issue,
@@ -21252,6 +21282,17 @@ async function verifyProductionRuntime() {
     const recurringResolutionProof = proof('ACT-ISSUE-RECURRING-RESOLVE', 4_000)
     const recurringResolved = model.resolveProductionIssue(recurringOpen, recurringIssue.id, recurringResolutionProof, undefined, recurringCapa)
     assert(recurringResolved?.issues[0].resolution?.qualityCorrectiveAction?.priorIssueIds.join(',') === issue.id, 'production_recurrence_resolution_lost_prior_link')
+    const recurringTrend = model.productionQualityCapaTrend(recurringResolved, '2026-07-23T10:00:05.000Z')
+    assert(recurringTrend.groups.length === 1
+      && recurringTrend.groups[0].status === 'escalate'
+      && recurringTrend.groups[0].occurrenceCount === 2
+      && recurringTrend.groups[0].issueIds.join(',') === `${issue.id},${recurringIssue.id}`
+      && recurringTrend.groups[0].pendingReviewCount === 2
+      && recurringTrend.groups[0].dueReviewCount === 1
+      && recurringTrend.groups[0].controlReasons.join(',') === 'classified_recurrence'
+      && recurringTrend.totals.recurrenceGroupCount === 1
+      && recurringTrend.totals.escalationGroupCount === 1,
+    'production_capa_trend_recurrence_not_ranked_for_escalation')
     const forgedRecurringCapa = { ...recurringCapa, priorIssueIds: [] }
     assert(model.resolveProductionIssue(recurringOpen, recurringIssue.id, recurringResolutionProof, undefined, forgedRecurringCapa) === null, 'production_forged_recurrence_links_succeeded')
     assertThrows(() => model.validateProductionState({
@@ -21267,6 +21308,13 @@ async function verifyProductionRuntime() {
       && recurringEffectiveness.escalation === 'required'
       && recurringEffectiveness.recurrenceIssueIds.join(',') === recurringIssue.id,
     'production_recurring_capa_did_not_force_escalation')
+    const ineffectiveTrend = model.productionQualityCapaTrend(recurringEffectivenessReviewed, '2026-07-23T10:00:05.000Z')
+    assert(ineffectiveTrend.groups[0].status === 'escalate'
+      && ineffectiveTrend.groups[0].ineffectiveReviewCount === 1
+      && ineffectiveTrend.groups[0].pendingReviewCount === 1
+      && ineffectiveTrend.groups[0].dueReviewCount === 0
+      && ineffectiveTrend.groups[0].controlReasons.join(',') === 'classified_recurrence,ineffective_review',
+    'production_capa_trend_ineffective_review_not_retained')
     const forgedEffectiveness = { ...recurringEffectiveness, recurrenceIssueIds: [] }
     assertThrows(() => model.validateProductionState({
       ...recurringEffectivenessReviewed,
@@ -22636,8 +22684,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// The bounded cumulative allowance includes reviewed Plant CAPA effectiveness follow-up plus the realistic Spa workflow, client privacy, and staff-role controls; initial-load and 500 kB chunk budgets remain unchanged.
-if (bytes > 2_972_000) fail(`artifact_budget:${bytes}`)
+// The bounded cumulative allowance includes reviewed Plant CAPA effectiveness and trend controls plus the realistic Spa workflow, client privacy, and staff-role controls; initial-load and 500 kB chunk budgets remain unchanged.
+if (bytes > 2_978_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

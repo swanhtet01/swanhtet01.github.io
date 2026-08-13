@@ -24,6 +24,7 @@ from supermega_runtime.trial_store import TrialValidationError
 
 
 PRODUCTION_SCHEMA = "supermega.production.workspace.v2"
+PRODUCTION_QUALITY_CAPA_TREND_SCHEMA = "supermega.production.quality-capa-trend.v1"
 PRODUCTION_EVENTS = frozenset(
     {
         "production.workspace.initialized",
@@ -3305,6 +3306,181 @@ def project_production_maintenance_due_queue(
         "contract": "supermega.production.maintenance-due-queue.v1",
         "asOf": as_of_value,
         "items": items,
+    }
+
+
+def project_production_quality_capa_trend(
+    value: object,
+    observed_at: object,
+) -> dict[str, Any]:
+    """Project a ranked CAPA control queue without changing Production state."""
+
+    state = validate_production_state(value)
+    observed_at_value, observed_time = _parsed_timestamp(
+        observed_at,
+        "CAPA trend observedAt",
+    )
+    text_key = lambda item: item.encode("utf-16-be")
+    resolved_quality = [
+        issue
+        for issue in state["issues"]
+        if issue["kind"] == "quality" and issue["status"] == "resolved"
+    ]
+    unclassified = [
+        issue
+        for issue in resolved_quality
+        if not isinstance(issue.get("resolution"), Mapping)
+        or not isinstance(issue["resolution"].get("qualityCorrectiveAction"), Mapping)
+    ]
+    unclassified.sort(
+        key=lambda issue: (
+            _parsed_timestamp(
+                issue.get("resolution", {}).get("resolvedAt", issue["createdAt"]),
+                f"CAPA trend {issue['id']} resolvedAt",
+            )[1],
+            text_key(issue["id"]),
+        )
+    )
+    entries_by_key: dict[str, list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]] = {}
+    for issue in resolved_quality:
+        resolution = issue.get("resolution")
+        action = (
+            resolution.get("qualityCorrectiveAction")
+            if isinstance(resolution, Mapping)
+            else None
+        )
+        if not isinstance(resolution, dict) or not isinstance(action, dict):
+            continue
+        entries_by_key.setdefault(action["recurrenceKey"], []).append(
+            (issue, resolution, action)
+        )
+
+    groups: list[dict[str, Any]] = []
+    for recurrence_key, entries in entries_by_key.items():
+        entries.sort(
+            key=lambda entry: (
+                _parsed_timestamp(
+                    entry[1]["resolvedAt"],
+                    f"CAPA trend {entry[0]['id']} resolvedAt",
+                )[1],
+                text_key(entry[0]["id"]),
+            )
+        )
+        latest = entries[-1]
+        pending = [
+            entry
+            for entry in entries
+            if entry[2]["contract"] == "supermega.production.quality-capa.v2"
+            and "qualityEffectivenessReview" not in entry[1]
+        ]
+        due = [
+            entry
+            for entry in pending
+            if _parsed_timestamp(
+                entry[2]["effectivenessReviewDueAt"],
+                f"CAPA trend {entry[0]['id']} effectivenessReviewDueAt",
+            )[1]
+            <= observed_time
+        ]
+        effective_review_count = sum(
+            entry[1].get("qualityEffectivenessReview", {}).get("outcome") == "effective"
+            for entry in entries
+        )
+        ineffective_review_count = sum(
+            entry[1].get("qualityEffectivenessReview", {}).get("outcome") == "ineffective"
+            for entry in entries
+        )
+        legacy_capa_count = sum(
+            entry[2]["contract"] == "supermega.production.quality-capa.v1"
+            for entry in entries
+        )
+        reasons = []
+        if len(entries) > 1:
+            reasons.append("classified_recurrence")
+        if ineffective_review_count:
+            reasons.append("ineffective_review")
+        if legacy_capa_count:
+            reasons.append("legacy_review_plan_missing")
+        status = (
+            "escalate"
+            if len(entries) > 1 or ineffective_review_count
+            else "review_due"
+            if due
+            else "evidence_gap"
+            if legacy_capa_count
+            else "monitor"
+        )
+        pending_due_at = sorted(
+            (entry[2]["effectivenessReviewDueAt"] for entry in pending),
+            key=lambda timestamp: _parsed_timestamp(
+                timestamp,
+                "CAPA trend effectivenessReviewDueAt",
+            )[1],
+        )
+        group = {
+            "recurrenceKey": recurrence_key,
+            "failureMode": latest[2]["failureMode"],
+            "causeCategory": latest[2]["causeCategory"],
+            "issueIds": [entry[0]["id"] for entry in entries],
+            "areas": sorted({entry[0]["area"] for entry in entries}, key=text_key),
+            "effectivenessOwners": sorted(
+                {entry[2]["effectivenessOwner"] for entry in entries},
+                key=text_key,
+            ),
+            "occurrenceCount": len(entries),
+            "legacyCapaCount": legacy_capa_count,
+            "pendingReviewCount": len(pending),
+            "dueReviewCount": len(due),
+            "effectiveReviewCount": effective_review_count,
+            "ineffectiveReviewCount": ineffective_review_count,
+            "latestResolvedAt": latest[1]["resolvedAt"],
+            "status": status,
+            "controlReasons": reasons,
+        }
+        if pending_due_at:
+            group["nextReviewDueAt"] = pending_due_at[0]
+        groups.append(group)
+
+    status_rank = {"escalate": 0, "review_due": 1, "evidence_gap": 2, "monitor": 3}
+    groups.sort(key=lambda group: text_key(group["recurrenceKey"]))
+    groups.sort(
+        key=lambda group: _parsed_timestamp(
+            group["latestResolvedAt"],
+            f"CAPA trend {group['recurrenceKey']} latestResolvedAt",
+        )[1],
+        reverse=True,
+    )
+    groups.sort(key=lambda group: group["occurrenceCount"], reverse=True)
+    groups.sort(
+        key=lambda group: (
+            0,
+            _parsed_timestamp(
+                group["nextReviewDueAt"],
+                f"CAPA trend {group['recurrenceKey']} nextReviewDueAt",
+            )[1],
+        )
+        if "nextReviewDueAt" in group
+        else (1, observed_time)
+    )
+    groups.sort(key=lambda group: status_rank[group["status"]])
+    totals = {
+        "resolvedQualityIssueCount": len(resolved_quality),
+        "classifiedCapaCount": sum(group["occurrenceCount"] for group in groups),
+        "classificationGroupCount": len(groups),
+        "recurrenceGroupCount": sum(group["occurrenceCount"] > 1 for group in groups),
+        "pendingReviewCount": sum(group["pendingReviewCount"] for group in groups),
+        "dueReviewCount": sum(group["dueReviewCount"] for group in groups),
+        "effectiveReviewCount": sum(group["effectiveReviewCount"] for group in groups),
+        "ineffectiveReviewCount": sum(group["ineffectiveReviewCount"] for group in groups),
+        "evidenceGapCount": len(unclassified) + sum(group["legacyCapaCount"] for group in groups),
+        "escalationGroupCount": sum(group["status"] == "escalate" for group in groups),
+    }
+    return {
+        "contract": PRODUCTION_QUALITY_CAPA_TREND_SCHEMA,
+        "observedAt": observed_at_value,
+        "groups": groups,
+        "unclassifiedIssueIds": [issue["id"] for issue in unclassified],
+        "totals": totals,
     }
 
 

@@ -228,6 +228,7 @@ import {
   productionMaintenanceRecords,
   productionMaterialUnits,
   productionQualityCauseCategories,
+  productionQualityCapaTrend,
   productionQualityEffectivenessRecurrenceIssueIds,
   productionQualityEffectivenessReviewDueAt,
   productionMachineStates,
@@ -267,6 +268,7 @@ import {
   type ProductionMachineState,
   type ProductionOutputKind,
   type ProductionQualityCauseCategory,
+  type ProductionQualityCapaTrendReport,
   type ProductionQualityCorrectiveAction,
   type ProductionQualityEffectivenessOutcome,
   type ProductionShiftHandoff,
@@ -8415,6 +8417,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       if (leftPending && rightPending) return Date.parse(leftDue ?? '') - Date.parse(rightDue ?? '')
       return Date.parse(right.resolution?.resolvedAt ?? right.createdAt) - Date.parse(left.resolution?.resolvedAt ?? left.createdAt)
     })
+  const qualityCapaTrend = productionQualityCapaTrend(production, new Date(issueClock).toISOString())
   const urgentIssueCount = openIssues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high').length
   const heldJobs = production.jobs.filter((job) => Boolean(job.qualityHold))
   const holdableJobs = production.jobs.filter((job) => !job.qualityHold && !job.closure)
@@ -10949,7 +10952,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <section className="core-panel production-issue-launcher">
           <div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Open problems</h2></div><span className="panel-note">{urgentIssueCount ? `${urgentIssueCount} urgent · ` : ''}{openIssues.length} open</span></div>
           <IssueList disabled={!productionCanWrite || Boolean(pendingAction)} issues={openIssues} now={issueClock} onResolve={resolveIssue} />
-          <ResolvedIssueHistory disabled={!productionCanWrite || Boolean(pendingAction)} issues={resolvedIssues} now={issueClock} onReviewEffectiveness={startQualityEffectivenessReview} />
+          <ResolvedIssueHistory disabled={!productionCanWrite || Boolean(pendingAction)} issues={resolvedIssues} now={issueClock} onReviewEffectiveness={startQualityEffectivenessReview} trend={qualityCapaTrend} />
           <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={openManualIssueDialog} ref={issueTriggerRef} type="button">Record problem</button>
           <details className="compact-disclosure production-history" open={heldJobs.length ? true : undefined}>
             <summary>Quality holds <span>{heldJobs.length}</span></summary>
@@ -11180,12 +11183,29 @@ function IssueList({ disabled = false, issues, now, onResolve, onReviewEffective
   })}</div>
 }
 
-function ResolvedIssueHistory({ disabled = false, issues, now, onReviewEffectiveness }: { disabled?: boolean; issues: ProductionIssue[]; now: number; onReviewEffectiveness: (id: string) => void }) {
+function ResolvedIssueHistory({ disabled = false, issues, now, onReviewEffectiveness, trend }: { disabled?: boolean; issues: ProductionIssue[]; now: number; onReviewEffectiveness: (id: string) => void; trend: ProductionQualityCapaTrendReport }) {
   if (!issues.length) return null
-  const pendingFollowUps = issues.filter((issue) => productionQualityEffectivenessReviewDueAt(issue.resolution?.qualityCorrectiveAction) && !issue.resolution?.qualityEffectivenessReview)
-  const dueFollowUps = pendingFollowUps.filter((issue) => Date.parse(productionQualityEffectivenessReviewDueAt(issue.resolution?.qualityCorrectiveAction) ?? '') <= now).length
-  return <details className="compact-disclosure production-history resolved-issue-history" open={dueFollowUps > 0}>
-    <summary>{pendingFollowUps.length ? 'CAPA follow-up' : 'Resolved problems'} <span>{pendingFollowUps.length ? `${dueFollowUps} due · ${pendingFollowUps.length} pending` : issues.length}</span></summary>
+  const attentionCount = trend.totals.escalationGroupCount + trend.totals.dueReviewCount + trend.totals.evidenceGapCount
+  const statusLabels = { escalate: 'Escalate', review_due: 'Review due', evidence_gap: 'Evidence gap', monitor: 'Monitor' } as const
+  const reasonLabels = { classified_recurrence: 'Repeated classification', ineffective_review: 'Effectiveness failed', legacy_review_plan_missing: 'Legacy review plan missing' } as const
+  return <details className="compact-disclosure production-history resolved-issue-history" open={attentionCount > 0}>
+    <summary>{trend.groups.length ? 'CAPA control' : 'Resolved problems'} <span>{trend.groups.length ? attentionCount ? `${trend.totals.escalationGroupCount} escalate · ${trend.totals.dueReviewCount} due · ${trend.totals.evidenceGapCount} gaps` : `${trend.groups.length} monitored` : issues.length}</span></summary>
+    {trend.groups.length || trend.unclassifiedIssueIds.length ? <section aria-label="CAPA trend and escalation" data-capa-trend={trend.contract}>
+      <p className="panel-copy"><strong>Quality trend</strong> · {trend.totals.classifiedCapaCount} classified CAPA {trend.totals.classifiedCapaCount === 1 ? 'record' : 'records'} across {trend.totals.classificationGroupCount} failure {trend.totals.classificationGroupCount === 1 ? 'mode' : 'modes'}. Read-only control; it does not reopen problems, release stock, or change production.</p>
+      <div className="issue-list">{trend.groups.slice(0, 4).map((group) => <article key={group.recurrenceKey}>
+        <span aria-hidden="true" className={`issue-mark ${group.status === 'monitor' ? 'resolved' : 'open'}`}>{group.status === 'escalate' ? '!' : group.status === 'review_due' ? 'D' : group.status === 'evidence_gap' ? '?' : '✓'}</span>
+        <div>
+          <strong>{group.failureMode}</strong>
+          <small style={wrappedIssueDetail}>{productionQualityCauseLabels[group.causeCategory]} · {group.areas.join(', ')} · {group.occurrenceCount} {group.occurrenceCount === 1 ? 'occurrence' : 'occurrences'}</small>
+          <small style={wrappedIssueDetail}>{group.pendingReviewCount ? `${group.pendingReviewCount} pending · ${group.dueReviewCount} due` : 'No pending review'}{group.effectiveReviewCount ? ` · ${group.effectiveReviewCount} effective` : ''}{group.ineffectiveReviewCount ? ` · ${group.ineffectiveReviewCount} ineffective` : ''}</small>
+          <small style={wrappedIssueDetail}>Owner {group.effectivenessOwners.join(', ')}{group.nextReviewDueAt ? ` · Next review ${formatIssueDue(group.nextReviewDueAt)}` : ''} · {group.issueIds.length} linked {group.issueIds.length === 1 ? 'record' : 'records'}</small>
+          {group.controlReasons.length ? <small style={wrappedIssueDetail}>Control: {group.controlReasons.map((reason) => reasonLabels[reason]).join(' · ')}</small> : null}
+        </div>
+        <b>{statusLabels[group.status]}</b>
+      </article>)}</div>
+      {trend.groups.length > 4 ? <p className="panel-copy">Showing the 4 highest-priority classifications of {trend.groups.length}.</p> : null}
+      {trend.unclassifiedIssueIds.length ? <p className="form-notice" role="status">Evidence gap · {trend.unclassifiedIssueIds.slice(0, 4).join(', ')}{trend.unclassifiedIssueIds.length > 4 ? ` and ${trend.unclassifiedIssueIds.length - 4} more` : ''} have no structured CAPA classification.</p> : null}
+    </section> : null}
     <IssueList disabled={disabled} issues={issues.slice(0, 8)} now={now} onResolve={() => undefined} onReviewEffectiveness={onReviewEffectiveness} />
     {issues.length > 8 ? <p>Showing the latest 8 resolved problems.</p> : null}
   </details>

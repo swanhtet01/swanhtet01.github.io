@@ -14,6 +14,7 @@ export const PRODUCTION_RECALL_TRACE_SCHEMA = 'supermega.production.recall-trace
 export const PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v2' as const
 export const PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA = 'supermega.production.quality-capa.v1' as const
 export const PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA = 'supermega.production.quality-capa-effectiveness.v1' as const
+export const PRODUCTION_QUALITY_CAPA_TREND_SCHEMA = 'supermega.production.quality-capa-trend.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -114,6 +115,47 @@ export type ProductionQualityEffectivenessReview = {
   evidenceReference: string
   recurrenceIssueIds: string[]
   escalation: ProductionQualityEffectivenessEscalation
+}
+
+export type ProductionQualityCapaTrendStatus = 'escalate' | 'review_due' | 'evidence_gap' | 'monitor'
+export type ProductionQualityCapaTrendReason = 'classified_recurrence' | 'ineffective_review' | 'legacy_review_plan_missing'
+
+export type ProductionQualityCapaTrendGroup = {
+  recurrenceKey: string
+  failureMode: string
+  causeCategory: ProductionQualityCauseCategory
+  issueIds: string[]
+  areas: string[]
+  effectivenessOwners: string[]
+  occurrenceCount: number
+  legacyCapaCount: number
+  pendingReviewCount: number
+  dueReviewCount: number
+  effectiveReviewCount: number
+  ineffectiveReviewCount: number
+  nextReviewDueAt?: string
+  latestResolvedAt: string
+  status: ProductionQualityCapaTrendStatus
+  controlReasons: ProductionQualityCapaTrendReason[]
+}
+
+export type ProductionQualityCapaTrendReport = {
+  contract: typeof PRODUCTION_QUALITY_CAPA_TREND_SCHEMA
+  observedAt: string
+  groups: ProductionQualityCapaTrendGroup[]
+  unclassifiedIssueIds: string[]
+  totals: {
+    resolvedQualityIssueCount: number
+    classifiedCapaCount: number
+    classificationGroupCount: number
+    recurrenceGroupCount: number
+    pendingReviewCount: number
+    dueReviewCount: number
+    effectiveReviewCount: number
+    ineffectiveReviewCount: number
+    evidenceGapCount: number
+    escalationGroupCount: number
+  }
 }
 
 export type ProductionMaintenanceCorrectiveAction = {
@@ -917,6 +959,87 @@ export function productionQualityEffectivenessRecurrenceIssueIds(state: Producti
   const action = issue?.resolution?.qualityCorrectiveAction
   if (!issue?.resolution || action?.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA || !validTimestamp(reviewedAt)) return []
   return productionQualityRecurrenceIssueIdsAtReview(state.issues, state.events, issueId, action.recurrenceKey, issue.resolution.resolvedAt, reviewedAt)
+}
+
+export function productionQualityCapaTrend(state: ProductionState, observedAt: string): ProductionQualityCapaTrendReport {
+  const current = validateProductionState(state)
+  if (!validTimestamp(observedAt)) throw new Error('CAPA trend requires a canonical ISO-8601 observation time.')
+  const resolvedQualityIssues = current.issues.filter((issue) => issue.kind === 'quality' && issue.status === 'resolved')
+  const compareText = (left: string, right: string) => left < right ? -1 : left > right ? 1 : 0
+  const unclassifiedIssueIds = resolvedQualityIssues
+    .filter((issue) => !issue.resolution?.qualityCorrectiveAction)
+    .sort((left, right) => compareTimestamps(left.resolution?.resolvedAt ?? left.createdAt, right.resolution?.resolvedAt ?? right.createdAt) || compareText(left.id, right.id))
+    .map((issue) => issue.id)
+  const entriesByKey = new Map<string, Array<{
+    issue: ProductionIssue
+    resolution: ProductionIssueResolution
+    action: ProductionQualityCorrectiveAction
+  }>>()
+  for (const issue of resolvedQualityIssues) {
+    const resolution = issue.resolution
+    const action = resolution?.qualityCorrectiveAction
+    if (!resolution || !action) continue
+    const entries = entriesByKey.get(action.recurrenceKey) ?? []
+    entries.push({ issue, resolution, action })
+    entriesByKey.set(action.recurrenceKey, entries)
+  }
+  const statusRank: Record<ProductionQualityCapaTrendStatus, number> = { escalate: 0, review_due: 1, evidence_gap: 2, monitor: 3 }
+  const groups = [...entriesByKey.entries()].map(([recurrenceKey, entries]): ProductionQualityCapaTrendGroup => {
+    entries.sort((left, right) => compareTimestamps(left.resolution.resolvedAt, right.resolution.resolvedAt) || compareText(left.issue.id, right.issue.id))
+    const latest = entries.at(-1) as typeof entries[number]
+    const pending = entries.filter(({ action, resolution }) => action.contract === PRODUCTION_QUALITY_CAPA_SCHEMA && !resolution.qualityEffectivenessReview)
+    const due = pending.filter(({ action }) => timestampAtOrBefore(action.effectivenessReviewDueAt as string, observedAt))
+    const effectiveReviewCount = entries.filter(({ resolution }) => resolution.qualityEffectivenessReview?.outcome === 'effective').length
+    const ineffectiveReviewCount = entries.filter(({ resolution }) => resolution.qualityEffectivenessReview?.outcome === 'ineffective').length
+    const legacyCapaCount = entries.filter(({ action }) => action.contract === PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA).length
+    const controlReasons: ProductionQualityCapaTrendReason[] = []
+    if (entries.length > 1) controlReasons.push('classified_recurrence')
+    if (ineffectiveReviewCount) controlReasons.push('ineffective_review')
+    if (legacyCapaCount) controlReasons.push('legacy_review_plan_missing')
+    const status: ProductionQualityCapaTrendStatus = entries.length > 1 || ineffectiveReviewCount
+      ? 'escalate'
+      : due.length
+        ? 'review_due'
+        : legacyCapaCount
+          ? 'evidence_gap'
+          : 'monitor'
+    const pendingDueAt = pending.map(({ action }) => action.effectivenessReviewDueAt as string).sort(compareTimestamps)
+    return {
+      recurrenceKey,
+      failureMode: latest.action.failureMode,
+      causeCategory: latest.action.causeCategory,
+      issueIds: entries.map(({ issue }) => issue.id),
+      areas: [...new Set(entries.map(({ issue }) => issue.area))].sort(compareText),
+      effectivenessOwners: [...new Set(entries.map(({ action }) => action.effectivenessOwner))].sort(compareText),
+      occurrenceCount: entries.length,
+      legacyCapaCount,
+      pendingReviewCount: pending.length,
+      dueReviewCount: due.length,
+      effectiveReviewCount,
+      ineffectiveReviewCount,
+      ...(pendingDueAt[0] === undefined ? {} : { nextReviewDueAt: pendingDueAt[0] }),
+      latestResolvedAt: latest.resolution.resolvedAt,
+      status,
+      controlReasons,
+    }
+  }).sort((left, right) => statusRank[left.status] - statusRank[right.status]
+    || (left.nextReviewDueAt && right.nextReviewDueAt ? compareTimestamps(left.nextReviewDueAt, right.nextReviewDueAt) : left.nextReviewDueAt ? -1 : right.nextReviewDueAt ? 1 : 0)
+    || right.occurrenceCount - left.occurrenceCount
+    || compareTimestamps(right.latestResolvedAt, left.latestResolvedAt)
+    || compareText(left.recurrenceKey, right.recurrenceKey))
+  const totals = {
+    resolvedQualityIssueCount: resolvedQualityIssues.length,
+    classifiedCapaCount: groups.reduce((total, group) => total + group.occurrenceCount, 0),
+    classificationGroupCount: groups.length,
+    recurrenceGroupCount: groups.filter((group) => group.occurrenceCount > 1).length,
+    pendingReviewCount: groups.reduce((total, group) => total + group.pendingReviewCount, 0),
+    dueReviewCount: groups.reduce((total, group) => total + group.dueReviewCount, 0),
+    effectiveReviewCount: groups.reduce((total, group) => total + group.effectiveReviewCount, 0),
+    ineffectiveReviewCount: groups.reduce((total, group) => total + group.ineffectiveReviewCount, 0),
+    evidenceGapCount: unclassifiedIssueIds.length + groups.reduce((total, group) => total + group.legacyCapaCount, 0),
+    escalationGroupCount: groups.filter((group) => group.status === 'escalate').length,
+  }
+  return { contract: PRODUCTION_QUALITY_CAPA_TREND_SCHEMA, observedAt, groups, unclassifiedIssueIds, totals }
 }
 
 function validateProductionShopDemandSource(value: unknown, field: string): ProductionShopDemandSource {
