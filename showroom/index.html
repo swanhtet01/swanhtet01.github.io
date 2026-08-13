@@ -30,7 +30,9 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))</script>
-    <!-- Vercel Web Analytics: cookieless aggregate pageviews, no PII; no-ops until the project toggle is enabled and the script exists on the deployment host. -->
-    <script defer src="/_vercel/insights/script.js"></script>
+    <!-- Vercel Web Analytics: cookieless aggregate pageviews, no PII. Loaded dynamically because
+         /_vercel/insights/ exists only on the deployment edge, never in dist/, and only on the
+         production host so local/dev stays beacon-free. -->
+    <script>if (/(^|\.)supermega\.dev$/.test(location.hostname)) { const insights = document.createElement('script'); insights.defer = true; insights.src = '/_vercel/insights/script.js'; document.head.append(insights) }</script>
   </body>
 </html>
