@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 
 export const MANAGED_PILOT_READINESS_CONTRACT = 'supermega.managed-pilot-readiness.v4'
-export const SECURITY_AUDIT_CONTRACT = 'supermega.supabase-security-advisor-audit.v1'
+export const SECURITY_AUDIT_CONTRACT = 'supermega.supabase-security-advisor-audit.v2'
 
 const PRODUCT_IDS = ['shop', 'plant', 'website', 'ecommerce']
 const GATE_IDS = [

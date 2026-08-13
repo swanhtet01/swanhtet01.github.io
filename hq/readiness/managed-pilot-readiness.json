@@ -1,12 +1,12 @@
 {
   "contract": "supermega.managed-pilot-readiness.v4",
-  "asOf": "2026-08-11T01:55:09.297Z",
-  "sourceDigest": "sha256:2d8235d95197191596c618a6ac01d248d28729131334c77f78153f94fd689c81",
+  "asOf": "2026-08-13T06:40:00.000Z",
+  "sourceDigest": "sha256:e435993cce990c5026317e17bb16f717f321f107fed7b88fc7fca443551ee8e4",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 7,
+    "blockingGateCount": 5,
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "bounded-managed-pilot-rehearsal",
@@ -66,16 +66,16 @@
     ]
   },
   "securityAudit": {
-    "contract": "supermega.supabase-security-advisor-audit.v1",
-    "asOf": "2026-08-04T10:56:25.412Z",
+    "contract": "supermega.supabase-security-advisor-audit.v2",
+    "asOf": "2026-08-13T06:40:00.000Z",
     "targetClassification": "protected-production",
-    "advisorStatus": "blocked",
-    "findingCount": 27,
-    "liveSchemaVersion": 7,
+    "advisorStatus": "clear",
+    "findingCount": 0,
+    "liveSchemaVersion": 10,
     "localTargetVersion": 10,
-    "versionDrift": 3,
+    "versionDrift": 0,
     "browserRolesDenied": true,
-    "metadataRlsEnabled": false,
+    "metadataRlsEnabled": true,
     "storageBucketCount": 0,
     "productionMutationAuthorized": false,
     "databaseWrites": 0
@@ -89,9 +89,9 @@
     },
     {
       "id": "hosted_postgres17",
-      "status": "blocked",
-      "evidence": "Protected production is PostgreSQL 17 at managed schema v7; no owner-approved isolated hosted rehearsal exists.",
-      "nextAction": "Apply v8 through v10 plus the digest-bound public browser quarantine on an approved isolated Supabase target, then rerun the hosted validator and session-revocation proof."
+      "status": "ready-hosted",
+      "evidence": "Protected production is PostgreSQL 17 at managed schema v10 with zero drift from local target v10.",
+      "nextAction": "Keep the hosted schema at the local target and the audit current."
     },
     {
       "id": "hosted_storage_privacy",
@@ -113,9 +113,9 @@
     },
     {
       "id": "security",
-      "status": "blocked",
-      "evidence": "27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v10.",
-      "nextAction": "Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal."
+      "status": "ready-hosted",
+      "evidence": "Advisor is clear on protected managed schema v10 with metadata RLS enabled and zero drift from local target v10.",
+      "nextAction": "Schema v10 and the public browser quarantine are live with a clear advisor; complete hosted storage-privacy, recovery, and self-serve pilot proofs before any managed activation proposal."
     },
     {
       "id": "self_serve_pilot",
@@ -207,11 +207,11 @@
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
-      "digest": "sha256:c74d7794ce200a16612a7503be2a9b7e1c4ce02b462d0c9fa7d0806869af55b1"
+      "digest": "sha256:a3fe4fdf06e0a1bd0b4e0be1a63a1f91bb0fda03d1ccd085eab85935157e98c3"
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:db72352366a5ed43ef48d8f0d81e430ff0c7bc31524d647ccd1dda63a3aebae3"
+      "digest": "sha256:35694d8d011898b7f42f525213ffa19335798eca95d256988824e8b8706e3f59"
     },
     {
       "path": "package.json",
@@ -219,7 +219,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:7f98f5d898785ff8616c5f376fbf15718a91de6775b6c4310a687202fe57a4bd"
+      "digest": "sha256:8b5c91f78c12e196f5586a1a8d8cdb45cba59e99508290ec5e2c9140320cd2a3"
     }
   ]
 }

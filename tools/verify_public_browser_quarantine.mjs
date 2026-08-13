@@ -77,14 +77,21 @@ async function privilege(database, kind, role, objectName, privilegeName) {
 const sql = await readFile(sqlPath, 'utf8')
 const { audit, database, expectedTables } = await fixture()
 
-if (audit.managedBackend?.liveSchemaVersion !== 7) fail('public_quarantine_live_schema_drifted')
+// The audit describes the live catalog on the approved v7 -> v10 path. Before the quarantine it
+// records the legacy browser grants; after it (browserGrantHardeningRequired false) it records
+// them empty. The local rehearsal below seeds its own grants either way, so this stays a valid
+// regression proof that the packet re-quarantines a database that regained grants.
+if (!Number.isInteger(audit.managedBackend?.liveSchemaVersion)
+  || audit.managedBackend.liveSchemaVersion < 7
+  || audit.managedBackend.liveSchemaVersion > 10) fail('public_quarantine_live_schema_drifted')
 if (audit.catalog?.businessRowsRead !== 0) fail('public_quarantine_business_data_boundary_invalid')
+const expectedAuditPrivileges = audit.conclusion?.browserGrantHardeningRequired === false ? '' : tablePrivileges.join(',')
 if (audit.catalog?.tables?.some((table) => (
   table.schema !== 'public'
   || table.rlsEnabled !== true
   || table.policyCount !== 0
-  || table.anonPrivileges?.join(',') !== tablePrivileges.join(',')
-  || table.authenticatedPrivileges?.join(',') !== tablePrivileges.join(',')
+  || table.anonPrivileges?.join(',') !== expectedAuditPrivileges
+  || table.authenticatedPrivileges?.join(',') !== expectedAuditPrivileges
 ))) fail('public_quarantine_source_grants_invalid')
 
 await database.exec(sql)

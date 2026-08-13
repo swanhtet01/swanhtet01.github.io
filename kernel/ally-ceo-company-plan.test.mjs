@@ -81,7 +81,7 @@ function managedReadiness() {
     },
     storageAudit: 'Status: local verifier ready; hosted proof blocked',
     securityAudit: {
-      contract: 'supermega.supabase-security-advisor-audit.v1',
+      contract: 'supermega.supabase-security-advisor-audit.v2',
       asOf: '2026-07-31T10:00:00.000Z',
       projectRef: 'abcdefghijklmnopqrst',
       targetClassification: 'protected-production',

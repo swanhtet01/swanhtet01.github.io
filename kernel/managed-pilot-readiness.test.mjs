@@ -33,7 +33,7 @@ const input = {
   },
   storageAudit: 'Status: local verifier ready; hosted proof blocked',
   securityAudit: {
-    contract: 'supermega.supabase-security-advisor-audit.v1',
+    contract: 'supermega.supabase-security-advisor-audit.v2',
     asOf: '2026-08-04T05:28:37.850Z',
     projectRef: 'abcdefghijklmnopqrst',
     targetClassification: 'protected-production',

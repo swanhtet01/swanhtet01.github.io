@@ -49,7 +49,11 @@ async function browserQuarantineInventory(repositoryRoot) {
     readFile(resolve(repositoryRoot, securityAuditPath), 'utf8'),
   ])
   const audit = JSON.parse(auditRaw)
-  if (audit?.managedBackend?.liveSchemaVersion !== 7) fail('supabase_rehearsal_quarantine_audit_schema_invalid')
+  // The audit records the live schema anywhere on the approved v7 -> v10 path (v10 + quarantine
+  // are applied to production as of 2026-08-12); the packet stays valid as an idempotent rehearsal.
+  if (!Number.isInteger(audit?.managedBackend?.liveSchemaVersion)
+    || audit.managedBackend.liveSchemaVersion < 7
+    || audit.managedBackend.liveSchemaVersion > 10) fail('supabase_rehearsal_quarantine_audit_schema_invalid')
   if (audit?.catalog?.businessRowsRead !== 0) fail('supabase_rehearsal_quarantine_audit_boundary_invalid')
   if (!Array.isArray(audit?.catalog?.tables) || audit.catalog.tables.length !== 27) {
     fail('supabase_rehearsal_quarantine_audit_inventory_invalid')
