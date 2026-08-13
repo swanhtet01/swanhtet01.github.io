@@ -4425,6 +4425,10 @@ if (!commerceSource.includes('registerCommerceItem')
   || !settingsPageSource.includes('demoWorkspace?.blueprint.client.shopIndustryPackId ?? readLocalShopIndustryPackId()')
   || !productOnboardingRuntimeSource.includes("clientImportTemplate('commerce', workflowTemplateId, { shopIndustryPackId: industryPackId })")
   || !productOnboardingRuntimeSource.includes('installCommerceWorkingSampleActivity')
+  || !productOnboardingRuntimeSource.includes('rebaseWorkingSampleActivity(template, provisionedAt)')
+  || !productOnboardingRuntimeSource.includes('counterSales: activity.counterSales')
+  || !productOnboardingRuntimeSource.includes('pendingOrder: activity.pendingOrder')
+  || !shopBusinessTemplatesSource.includes('export function rebaseWorkingSampleActivity(')
   || !coreSource.includes('Add catalog item')
   || !coreSource.includes('Review catalog item')
   || !coreSource.includes('The opening balance may be zero.')
@@ -18883,8 +18887,12 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, and workspace status panel.
-if (bytes > 2_815_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, workspace status panel,
+// and rebasing sample activity onto provisioning time. Raised deliberately for that last item: unlike the initial-JavaScript
+// budget, which was breached by a defect that had pulled an unrelated model into the entry chunk and was fixed by removing it,
+// nothing here is misplaced — the cost is the feature itself, so there is no edge to break and hiding it would mean shipping
+// demos that open on overdue promises.
+if (bytes > 2_816_500) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

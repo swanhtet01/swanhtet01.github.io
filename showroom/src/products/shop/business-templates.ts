@@ -67,6 +67,34 @@ export type ShopBusinessTemplate = {
   pendingOrder: ShopBusinessSampleOrder
 }
 
+// Sample activity is authored at fixed instants so the intervals between the
+// records are reviewable. Installing those instants verbatim means a workspace
+// created later opens on a promise that is already overdue and takings that are
+// days old. Shift the whole set so the newest sale lands at provisioning time,
+// which keeps every authored interval and leaves the promise ahead of the
+// client rather than behind them.
+export function rebaseWorkingSampleActivity(
+  activity: Pick<ShopBusinessTemplate, 'counterSales' | 'pendingOrder'>,
+  provisionedAt: string,
+): Pick<ShopBusinessTemplate, 'counterSales' | 'pendingOrder'> {
+  const provisioned = Date.parse(provisionedAt)
+  const latest = Math.max(...activity.counterSales.map((sale) => Date.parse(sale.recordedAt)))
+  if (!Number.isFinite(provisioned) || !Number.isFinite(latest)) return activity
+  const shift = (value: string) => {
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? new Date(parsed + provisioned - latest).toISOString() : value
+  }
+  const { pendingOrder } = activity
+  return {
+    counterSales: activity.counterSales.map((sale) => ({ ...sale, recordedAt: shift(sale.recordedAt) })),
+    pendingOrder: {
+      ...pendingOrder,
+      requestedAt: shift(pendingOrder.requestedAt),
+      promisedFor: shift(pendingOrder.promisedFor),
+    },
+  }
+}
+
 type ItemRow = readonly [sku: string, name: string, unit: ShopBusinessTemplateUnit, costMmk: number, priceMmk: number, openingStock: number, reorderAt: number]
 
 const rows = (source: readonly ItemRow[]): readonly ShopBusinessTemplateItem[] =>

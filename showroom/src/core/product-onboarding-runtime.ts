@@ -34,6 +34,7 @@ import {
 } from './shop-service-scheduling'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs'
 import {
+  rebaseWorkingSampleActivity,
   shopBusinessTemplate,
   shopBusinessTemplateCatalogCsv,
   type ShopBusinessTemplateId,
@@ -123,19 +124,21 @@ export async function provisionLocalShopBusinessTemplateSample(businessTemplateI
   const commerceWorkspace = loadCommerceWorkspace()
   if (commerceWorkspace.error) throw new Error(commerceWorkspace.error)
   let disposition: 'installed' | 'current' | 'preserved' = 'preserved'
+  const provisionedAt = new Date().toISOString()
+  const activity = rebaseWorkingSampleActivity(template, provisionedAt)
   const result = await mutateCommerceWorkspace((current) => {
     const withCatalog = installCommerceWorkingSampleCatalog(current, {
       sampleId: template.id,
       sampleName: template.name.en,
       items,
-      capturedAt: new Date().toISOString(),
+      capturedAt: provisionedAt,
     })
     if (!withCatalog) return current
     const next = installCommerceWorkingSampleActivity(withCatalog, {
       sampleId: template.id,
       sampleName: template.name.en,
-      counterSales: template.counterSales,
-      pendingOrder: template.pendingOrder,
+      counterSales: activity.counterSales,
+      pendingOrder: activity.pendingOrder,
     }) ?? withCatalog
     disposition = next === current ? 'current' : 'installed'
     return next
