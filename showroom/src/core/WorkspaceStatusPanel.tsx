@@ -27,7 +27,7 @@ function snapshotReport() {
 }
 
 export function WorkspaceStatusPanel() {
-  const report = useMemo(snapshotReport, [])
+  const report = useMemo(() => snapshotReport(), [])
   const attention = report.entries.filter((entry) => entry.severity !== 'ready').slice(0, MAX_SHOWN)
   if (!attention.length) return null
   return (

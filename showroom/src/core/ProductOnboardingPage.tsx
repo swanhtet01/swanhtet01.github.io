@@ -144,12 +144,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const sharedCompanyIdentity = useMemo(() => {
     if (typeof window === 'undefined') return { workspace: '', owner: '' }
     const others: SetupProductId[] = ['commerce', 'ecommerce', 'production', 'website']
-    for (const id of others) {
-      if (id === product) continue
-      const existing = readProductSetup(window.localStorage, id)
-      if (existing?.workspace) return { workspace: existing.workspace, owner: existing.owner }
-    }
-    return { workspace: '', owner: '' }
+    const existing = others
+      .filter((id) => id !== product)
+      .map((id) => readProductSetup(window.localStorage, id))
+      .find((entry) => entry?.workspace)
+    return existing ? { workspace: existing.workspace, owner: existing.owner } : { workspace: '', owner: '' }
   }, [product])
   const sharedWorkspaceName = sharedCompanyIdentity.workspace
   const sharedOwnerName = sharedCompanyIdentity.owner
