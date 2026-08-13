@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
   "asOf": "2026-08-13T18:34:25.755Z",
-  "sourceDigest": "sha256:51f395dc3a93dc7144c61541e8dce487edc40d76713dd55eb734274a9155a396",
+  "sourceDigest": "sha256:d329eb1bbce2a8a377bcfa00e0c5b23c704b3f78e4ad4644902cfd2b24a51f69",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -161,7 +161,7 @@
       "workOrderId": "website-managed-brief-acceptance",
       "proposedWork": "Website: accept one named brief and retain its managed artifact.",
       "blockingReason": "Needs a named brief and owner acceptance.",
-      "requiredProof": "Accept one named-business brief in responsive preview, retain its artifact, and keep domain/publish owner-gated."
+      "requiredProof": "Accept one named brief, retain its artifact, and keep domain/publish owner-gated."
     },
     {
       "productId": "ecommerce",
@@ -197,7 +197,7 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:cd4d74809ade7e53428077119c42b14dca917b9b3f91fe89f37c3bd29890556e"
+      "digest": "sha256:dccbbe2c35286d6ef703c3fef73b77617f84d894046cc271d90cf871fa2ed7ab"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
@@ -213,7 +213,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:47dba5fe48d6fbba7bd3360d26f1b49df692d7573b89b5c489edc2ddec2564cd"
+      "digest": "sha256:6426c9dd761e35936525975e49c36ae70a6d18b729deea9d64a3a5d0e14af7fa"
     },
     {
       "path": "package.json",

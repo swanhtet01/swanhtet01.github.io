@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 55
+  && portfolioSource.completedLocalAutomations.length === 56
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 128
+  && portfolio.completedLocalAutomations.length === 129
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -684,6 +684,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[127]?.workOrderId === 'shop-spa-first-day-review'
   && portfolio.completedLocalAutomations[127]?.checkpoint === 'OPS-280'
   && workboard.includes('| OPS-280 | Product Platform + Shop Spa Codex | done-local |')
+  && portfolio.completedLocalAutomations[128]?.productId === 'website'
+  && portfolio.completedLocalAutomations[128]?.workOrderId === 'website-one-start'
+  && portfolio.completedLocalAutomations[128]?.checkpoint === 'OPS-281'
+  && workboard.includes('| OPS-281 | Product Platform + Website Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1255,6 +1259,12 @@ requireContract('Shop Spa first-day review is private, role-aware, and non-autho
   && now.includes('OPS-280 (`714b897d`, UI `271ddea4`) adds a private, role-aware Spa first-day contract')
   && enterpriseRoadmap.includes('Checkpoint `714b897d` adds `supermega.shop.service-first-day-review.v1`')
   && enterpriseRoadmap.includes('The next Spa gate is one owner-approved isolated managed invitation'))
+requireContract('Website has one truthful start action after working-sample review',
+  workboard.includes('| OPS-281 | Product Platform + Website Codex | done-local |')
+  && workboard.includes('Product checkpoint `a6901bf0` removes the duplicate toolbar **Start website** action')
+  && workboard.includes('Completion history preserves 73 archived plus 56 current receipts, 129 unique entries')
+  && now.includes('OPS-281 (`a6901bf0`) removes Website\'s duplicate working-sample start action')
+  && enterpriseRoadmap.includes('Checkpoint `a6901bf0` removes the duplicate Website start control'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')
@@ -1352,7 +1362,7 @@ requireContract('Website remains truthful',
   product('website')?.status === 'release-candidate-local'
   && product('website')?.surfaces?.join(',') === 'Preview,Edit,Download'
   && product('website')?.templateContract?.productId === 'website'
-  && product('website')?.nextGate?.includes('named-business brief'))
+  && product('website')?.nextGate?.includes('named brief'))
 requireContract('Ecommerce is separate and truthfully limited after cart-to-Shop completion and before hosted or payment proof',
   product('ecommerce')?.status === 'release-candidate-local'
   && product('ecommerce')?.job?.includes('read-only Shop catalogue')

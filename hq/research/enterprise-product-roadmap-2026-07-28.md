@@ -163,6 +163,8 @@ Brief -> information architecture -> content and assets -> responsive edit -> re
 
 - Business presence, lead generation, catalog showcase, services, restaurant, school, real estate, professional firm, and campaign landing.
 
+Checkpoint `a6901bf0` removes the duplicate Website start control found in rendered first-use QA. The priority card is the only setup entry; after setup, the same toolbar position becomes the honest Edit page or Preview surface switch. This reduces choice without changing Website state, adding a page, or granting publish authority.
+
 ## Ecommerce
 
 ### Operating lifecycle
