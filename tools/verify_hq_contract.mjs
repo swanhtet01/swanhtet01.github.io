@@ -274,9 +274,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-224'
   && completedAutomationArchive.entries?.length === 72
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 44
+  && portfolioSource.completedLocalAutomations.length === 45
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 116
+  && portfolio.completedLocalAutomations.length === 117
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -633,10 +633,14 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[115]?.productId === 'shop'
   && portfolio.completedLocalAutomations[115]?.workOrderId === 'shop-spa-server-field-privacy-and-therapist-action'
   && portfolio.completedLocalAutomations[115]?.checkpoint === 'OPS-268'
+  && portfolio.completedLocalAutomations[116]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[116]?.workOrderId === 'shop-spa-client-retention-export-and-anonymization'
+  && portfolio.completedLocalAutomations[116]?.checkpoint === 'OPS-269'
+  && workboard.includes('| OPS-269 | CEO + Shop Spa Client Lifecycle / Agent Operations Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
-  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-spa-client-retention-export-and-anonymization'
+  && portfolio.localImprovementQueue.find((entry) => entry.status === 'ready-local')?.workOrderId === 'shop-spa-managed-invitation-and-first-day-rehearsal'
   && portfolio.agentOperatingModel?.fixedReadOnlyEvidencePlan === true
   && portfolio.agentOperatingModel?.blockedOrDuplicateOutcomesConsumeModelCalls === false
   && portfolio.agentOperatingModel?.ceoClientIdentityRequiredBeforeClaims === true
@@ -2071,7 +2075,10 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-role-access-and-staff-handoff' && entry.checkpoint === 'OPS-266')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-client-record-and-consent-boundary' && entry.checkpoint === 'OPS-267')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-server-field-privacy-and-therapist-action' && entry.checkpoint === 'OPS-268')
-  && portfolio.localImprovementQueue[0].workOrderId === 'shop-spa-client-retention-export-and-anonymization')
+  && workboard.includes('| OPS-269 | CEO + Shop Spa Client Lifecycle / Agent Operations Codex | done-local |')
+  && workboard.includes('The receipt advances `shop-spa-managed-invitation-and-first-day-rehearsal`')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-client-retention-export-and-anonymization' && entry.checkpoint === 'OPS-269')
+  && portfolio.localImprovementQueue[0].workOrderId === 'shop-spa-managed-invitation-and-first-day-rehearsal')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
   allyCeoPlannerText.includes("ALLY_CEO_COMPANY_PLAN_CONTRACT = 'supermega.ally-ceo-company-plan.v1'")

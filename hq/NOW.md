@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-11
+Updated: 2026-08-13
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-268 (`1ec35f0c`) removes client records, contact, and update permission from therapist/viewer API responses while front desk and owners retain service fields. Therapist completion is one human-only checked-in action, and managed schedules no longer enter device storage. Retention, export receipts, and anonymization remain open. Next: `shop-spa-client-retention-export-and-anonymization`.
+- OPS-269 (`f28c063d`) adds Spa retention, pre-download export receipts, and anonymization gated by visit/payment closure, elapsed retention, and identity-free immutable evidence. The server owns privacy actors/timestamps and returns canonical v4 data. Completion history is 117 unique entries. Next: `shop-spa-managed-invitation-and-first-day-rehearsal`.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-268 adds server-projected Spa field privacy, a restricted client parser, a narrow therapist completion action, identity-first schedule loading, and updated `SuperMega/Spa Starter/` guidance. Hosted sign-in and activation remain owner-gated; CLAUDE-009 remains owner-controlled at `0fc5cf7d`.
+- Codex is sole integrator. OPS-269 closes the local Spa client lifecycle and updates `SuperMega/Spa Starter/`. The 56-check PostgreSQL 17 rehearsal passes at `f28c063d`; hosted sign-in/activation remain owner-gated. CLAUDE-009 stays owner-controlled at `0fc5cf7d`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-spa-client-retention-export-and-anonymization`: add retention configuration, attributable owner export receipts, and reviewed anonymization after open visits and required financial records close.
+1. Complete `shop-spa-managed-invitation-and-first-day-rehearsal`: add a no-send owner review for one named role per Spa staff member, then prove mobile sign-in and denied actions on an isolated managed workspace without activating a real account.
 2. Use CLAUDE-009 only as an optional owner-controlled review of checkpoint `0fc5cf7d`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
