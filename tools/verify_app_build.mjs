@@ -7369,10 +7369,13 @@ if (!productionSource.includes('startProductionMaintenance')
   || !productionSource.includes('Equipment maintenance completion next due does not match its strategy interval.')
   || !productionSource.includes('supermega.production.maintenance-due-queue.v1')
   || !productionSource.includes('productionMaintenanceDueQueue')
+  || !productionSource.includes("PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA = 'supermega.production.maintenance-capacity-review.v1'")
+  || !productionSource.includes('productionMaintenanceCapacityReview')
   || !productionSource.includes("PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA = 'supermega.production.maintenance-finding-source.v2'")
   || !productionSource.includes('productionMaintenanceAffectedOrders')
   || !productionSource.includes('validateProductionMaintenanceImpactEvidence')
   || !managedProductionRuntime.includes('project_production_maintenance_due_queue')
+  || !managedProductionRuntime.includes('project_production_maintenance_capacity_review')
   || !managedProductionRuntime.includes('_maintenance_finding_source_for_completion')
   || !managedProductionRuntime.includes('_validate_maintenance_finding_impact_history')
   || (productionSource.match(/const next = structuredClone\(state\)/g) || []).length < 2
@@ -7388,9 +7391,10 @@ if (!productionSource.includes('startProductionMaintenance')
   || !coreSource.includes('Review complete')
   || !coreSource.includes('Completion result')
   || !coreSource.includes('Order impact')
+  || !coreSource.includes('Controlled load')
   || !coreSource.includes('No unreleased controlled orders')
   || !coreSource.includes('Reviewed procedure completed')
-  || !coreSource.includes('Maintenance evidence only; no machine, inventory, or job change.')) fail('production_bounded_maintenance_contract_missing')
+  || !coreSource.includes('Maintenance evidence and controlled-load estimate only; no scheduling, order reschedule, machine, inventory, or job change.')) fail('production_bounded_maintenance_contract_missing')
 const managedProductionCommandContract = managedTrialSource.slice(managedTrialSource.indexOf('export async function saveManagedProductionCommand'), managedTrialSource.indexOf('export async function saveManagedWebsiteCommand'))
 if (!managedProductionCommandContract.includes("surface: 'production'")
   || !managedProductionCommandContract.includes('eventType: ManagedProductionEvent')
@@ -12374,6 +12378,43 @@ async function verifyPlantEquipmentImportRuntime() {
     const emptyImpactOrder = plantOrder.createEmptyPlantOrderState()
     const impactExecution = plantOrder.applyPlantOrderPlan(emptyImpactOrder, impactPlan, impactOrderProof, emptyImpactOrder.headDigest).state
     const impactState = production.validateProductionState(orderPortfolio.upsertProductionOrderExecution(strategyState, impactExecution))
+    const capacitySource = JSON.stringify(impactState)
+    const capacityReview = production.productionMaintenanceCapacityReview(impactState, '2026-08-10T09:00:00.000Z')
+    const capacityItem = capacityReview.items[0]
+    const capacityOrder = capacityItem?.orders[0]
+    assert(capacityReview.contract === 'supermega.production.maintenance-capacity-review.v1'
+      && capacityReview.authority.maintenanceScheduled === false
+      && capacityReview.authority.ordersRescheduled === false
+      && capacityReview.authority.machineStatusChanged === false
+      && capacityReview.authority.equipmentCommanded === false
+      && capacityItem?.workCentreId === commissionedAsset.workCentreId
+      && capacityItem.loadStatus === 'due_soon_with_load'
+      && capacityItem.totalRemainingMinutesMilli === 100_000,
+    'plant_maintenance_capacity_review_summary_wrong')
+    assert(capacityOrder?.jobId === 'JOB-OPEN-1'
+      && capacityOrder.jobOwner === 'Plant owner'
+      && capacityOrder.jobPriority === 'normal'
+      && capacityOrder.jobDueAt === '2099-08-15T17:29:59.999Z'
+      && capacityOrder.planId === impactPlan.planId
+      && capacityOrder.planPackageDigest === impactPlan.packageDigest
+      && capacityOrder.orderRevision === impactExecution.revision
+      && capacityOrder.orderHeadDigest === impactExecution.headDigest
+      && capacityOrder.status === 'planned'
+      && capacityOrder.totalRemainingMinutesMilli === 100_000
+      && capacityOrder.operations.length === 1
+      && capacityOrder.operations[0].operationId === 'OP-MAINTENANCE-10'
+      && capacityOrder.operations[0].status === 'ready'
+      && capacityOrder.operations[0].remainingQuantity === 100
+      && capacityOrder.operations[0].remainingMinutesMilli === 100_000,
+    'plant_maintenance_capacity_review_order_wrong')
+    assert(JSON.stringify(impactState) === capacitySource, 'plant_maintenance_capacity_review_mutated_source')
+    const noLoadState = structuredClone(impactState)
+    delete noLoadState.orderPortfolio
+    const noLoadReview = production.productionMaintenanceCapacityReview(noLoadState, '2026-08-10T09:00:00.000Z')
+    assert(noLoadReview.items[0]?.loadStatus === 'due_soon_no_load'
+      && noLoadReview.items[0].orders.length === 0
+      && noLoadReview.items[0].totalRemainingMinutesMilli === 0,
+    'plant_maintenance_capacity_review_no_load_wrong')
     const maintenanceStartProof = { actionId: 'ACT-MAINTENANCE-IMPACT-START', capturedAt: '2026-07-30T10:00:00.000Z', actor: identity.userId, reason: 'Performed planned inspection.', evidenceReference: 'MAINTENANCE-START-001' }
     const maintenanceStarted = production.startProductionMaintenance(impactState, commissionedAsset.id, strategyInput.maintenanceOwner, maintenanceStartProof)
     assert(Boolean(maintenanceStarted), 'plant_maintenance_impact_start_failed')

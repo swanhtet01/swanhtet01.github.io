@@ -224,7 +224,7 @@ import {
   productionDowntimeIntervals,
   productionIssueSeverities,
   productionJobPriorities,
-  productionMaintenanceDueQueue,
+  productionMaintenanceCapacityReview,
   productionMaintenanceFindingSource,
   productionMaintenanceRecords,
   productionMaterialUnits,
@@ -259,6 +259,7 @@ import {
   type ProductionIssueSeverity,
   type ProductionJob,
   type ProductionJobPriority,
+  type ProductionMaintenanceCapacityReview,
   type ProductionMaintenanceOutcome,
   type ProductionMaintenanceCorrectiveAction,
   type ProductionMaintenanceFindingSource,
@@ -838,6 +839,19 @@ function formatProductionMaintenanceOrderImpact(source: ProductionMaintenanceFin
     .map((order) => `${order.jobId} (${order.operations.map((operation) => operation.operationId).join(', ')})`)
   const remaining = source.affectedOrders.length - visible.length
   return `${source.workCentreId} · ${visible.join(' · ')}${remaining ? ` · +${remaining} more` : ''}`
+}
+
+function formatProductionCapacityMinutes(value: number) {
+  const minutes = value / 1_000
+  if (minutes < 60) return `${new Intl.NumberFormat('en', { maximumFractionDigits: 1 }).format(minutes)} min`
+  return `${new Intl.NumberFormat('en', { maximumFractionDigits: 1 }).format(minutes / 60)} h`
+}
+
+function formatProductionMaintenanceCapacityLoad(item: ProductionMaintenanceCapacityReview['items'][number]) {
+  if (!item.totalRemainingMinutesMilli) return `No unfinished controlled-order load · ${item.workCentreId}`
+  const visibleJobIds = item.orders.slice(0, 2).map((order) => order.jobId)
+  const hiddenOrderCount = item.orders.length - visibleJobIds.length
+  return `Controlled load · ${item.orders.length} ${item.orders.length === 1 ? 'order' : 'orders'} · ${formatProductionCapacityMinutes(item.totalRemainingMinutesMilli)} · ${visibleJobIds.join(', ')}${hiddenOrderCount ? ` +${hiddenOrderCount}` : ''} · ${item.workCentreId}`
 }
 
 function uid(prefix: string) {
@@ -8719,9 +8733,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     && maintenanceCompletionDraft.procedureCompleted
     && (maintenanceCompletionDraft.outcome !== 'completed' || maintenanceCompletionDraft.returnToService === 'recommended'))
   const maintenanceMachineIds = new Set(openMaintenanceRecords.map((record) => record.machineId))
-  const maintenanceDueQueue = productionMaintenanceDueQueue(production, new Date(issueClock).toISOString())
-  const readyMaintenanceDueItems = maintenanceDueQueue.items.filter((item) => !maintenanceMachineIds.has(item.assetId)).slice(0, 6)
+  const maintenanceCapacityReview = productionMaintenanceCapacityReview(production, new Date(issueClock).toISOString())
+  const readyMaintenanceDueItems = maintenanceCapacityReview.items.filter((item) => !maintenanceMachineIds.has(item.assetId)).slice(0, 6)
   const overdueMaintenanceCount = readyMaintenanceDueItems.filter((item) => item.status === 'overdue').length
+  const maintenanceControlledLoadCount = readyMaintenanceDueItems.filter((item) => item.totalRemainingMinutesMilli > 0).length
   const availableMaintenanceMachines = production.machines.filter((machine) => !maintenanceMachineIds.has(machine.id))
   const selectedMaintenanceMachineId = availableMaintenanceMachines.some((machine) => machine.id === maintenanceMachineId)
     ? maintenanceMachineId
@@ -11040,7 +11055,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </dialog>
     <dialog aria-labelledby="maintenance-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMaintenanceDialog() }} ref={maintenanceDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
-      {readyMaintenanceDueItems.length ? <><p className="panel-copy"><strong>Preventive work</strong> · {overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : `${readyMaintenanceDueItems.length} planned`}</p><div className="action-history-list">{readyMaintenanceDueItems.map((item, index) => <article key={item.assetId}><div><strong>{item.assetName} · {item.status === 'overdue' ? (item.daysUntilDue === 0 ? 'Due now' : `${Math.abs(item.daysUntilDue)}d overdue`) : item.status === 'due_soon' ? `Due in ${item.daysUntilDue}d` : formatIssueDue(item.dueAt)}</strong><small style={wrappedIssueDetail}>{item.criticality} · {item.owner} · Strategy R{item.strategyRevision}</small><small style={wrappedIssueDetail}>{item.procedureReference}</small></div>{index === 0 ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => { setMaintenanceCompletionDraft(null); setMaintenanceMachineId(item.assetId); requestAnimationFrame(() => maintenanceMachineSelectRef.current?.focus()) }} type="button">Review next</button> : null}</article>)}</div></> : null}
+      {readyMaintenanceDueItems.length ? <><p className="panel-copy"><strong>Preventive work</strong> · {overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : `${readyMaintenanceDueItems.length} planned`} · {maintenanceControlledLoadCount ? `${maintenanceControlledLoadCount} with controlled load` : 'No controlled load'}</p><div className="action-history-list">{readyMaintenanceDueItems.map((item, index) => <article key={item.assetId}><div><strong>{item.assetName} · {item.status === 'overdue' ? (item.daysUntilDue === 0 ? 'Due now' : `${Math.abs(item.daysUntilDue)}d overdue`) : item.status === 'due_soon' ? `Due in ${item.daysUntilDue}d` : formatIssueDue(item.dueAt)}</strong><small style={wrappedIssueDetail}>{item.criticality} · {item.owner} · Strategy R{item.strategyRevision}</small><small style={wrappedIssueDetail}>{item.procedureReference}</small><small style={wrappedIssueDetail}>{formatProductionMaintenanceCapacityLoad(item)}</small></div>{index === 0 ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => { setMaintenanceCompletionDraft(null); setMaintenanceMachineId(item.assetId); requestAnimationFrame(() => maintenanceMachineSelectRef.current?.focus()) }} type="button">Review next</button> : null}</article>)}</div></> : null}
       {openMaintenanceRecords.length ? <div className="issue-list">{openMaintenanceRecords.map((record, index) => <article key={record.startActionId}>
         <span aria-hidden="true" className="issue-mark">MX</span>
         <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started {formatTime(record.startedAt)} by {record.startedBy}</small>{record.strategy ? <small style={wrappedIssueDetail}>Strategy R{record.strategy.revision} · Due {formatIssueDue(record.strategy.plannedDueAt)} · {record.strategy.procedureReference}</small> : null}<small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
@@ -11064,7 +11079,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         const findingSource = record.completion ? maintenanceFindingSources.get(record.completion.actionId) : undefined
         return <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.result ? <small style={wrappedIssueDetail}>{record.completion.result.outcome.replaceAll('_', ' ')} · Return: {record.completion.result.returnToService.replaceAll('_', ' ')} · {record.completion.result.findings}</small> : null}{findingSource?.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA ? <small style={wrappedIssueDetail}>Order impact · {findingSource.workCentreId} · {findingSource.affectedOrders.length} controlled {findingSource.affectedOrders.length === 1 ? 'order' : 'orders'}</small> : null}{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div>{findingSource ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => startMaintenanceFindingProblem(record)} type="button">Review problem</button> : null}</article>
       })}</div></> : null}
-      <p className="panel-copy">Maintenance evidence only; no machine, inventory, or job change.</p>
+      <p className="panel-copy">Maintenance evidence and controlled-load estimate only; no scheduling, order reschedule, machine, inventory, or job change.</p>
     </dialog>
     <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
       {observedMachine && machineObservation ? <>

@@ -25,6 +25,9 @@ from supermega_runtime.trial_store import TrialValidationError
 
 PRODUCTION_SCHEMA = "supermega.production.workspace.v2"
 PRODUCTION_QUALITY_CAPA_TREND_SCHEMA = "supermega.production.quality-capa-trend.v1"
+PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA = (
+    "supermega.production.maintenance-capacity-review.v1"
+)
 PRODUCTION_EVENTS = frozenset(
     {
         "production.workspace.initialized",
@@ -3593,6 +3596,138 @@ def project_production_maintenance_due_queue(
         "contract": "supermega.production.maintenance-due-queue.v1",
         "asOf": as_of_value,
         "items": items,
+    }
+
+
+def _maintenance_capacity_order(
+    state: Mapping[str, Any],
+    job_id: str,
+    execution: Mapping[str, Any],
+    work_centre_id: str,
+) -> dict[str, Any] | None:
+    projection = project_plant_order(execution)
+    plan = projection.get("plan")
+    if (
+        not isinstance(plan, Mapping)
+        or projection["status"] in {"unplanned", "released_to_stock"}
+    ):
+        return None
+    job = next((row for row in state["jobs"] if row["id"] == job_id), None)
+    if job is None:
+        raise TrialValidationError(
+            f"Maintenance capacity review cannot find Production job {job_id}."
+        )
+    operations: list[dict[str, Any]] = []
+    total_remaining_minutes_milli = 0
+    for operation in projection["operations"]:
+        if (
+            operation["workCentreId"] != work_centre_id
+            or operation["remainingQuantity"] <= 0
+        ):
+            continue
+        remaining_minutes_milli = (
+            operation["remainingQuantity"] * operation["minutesPerUnitMilli"]
+        )
+        if remaining_minutes_milli > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(
+                f"Maintenance capacity review {job_id} {operation['operationId']} remaining minutes exceed the supported range."
+            )
+        total_remaining_minutes_milli += remaining_minutes_milli
+        if total_remaining_minutes_milli > _MAX_SAFE_INTEGER:
+            raise TrialValidationError(
+                f"Maintenance capacity review {job_id} total remaining minutes exceed the supported range."
+            )
+        operations.append(
+            {
+                "operationId": operation["operationId"],
+                "sequence": operation["sequence"],
+                "name": operation["name"],
+                "status": operation["status"],
+                "remainingQuantity": operation["remainingQuantity"],
+                "remainingMinutesMilli": remaining_minutes_milli,
+            }
+        )
+    if not operations:
+        return None
+    return {
+        "jobId": job_id,
+        "product": plan["job"]["product"],
+        "jobOwner": job.get("owner"),
+        "jobPriority": job.get("priority"),
+        "jobDueAt": job.get("dueAt"),
+        "planId": plan["planId"],
+        "planPackageDigest": plan["packageDigest"],
+        "orderRevision": projection["revision"],
+        "orderHeadDigest": projection["headDigest"],
+        "status": projection["status"],
+        "operations": operations,
+        "totalRemainingMinutesMilli": total_remaining_minutes_milli,
+    }
+
+
+def project_production_maintenance_capacity_review(
+    value: object,
+    as_of: object,
+) -> dict[str, Any]:
+    """Expose due maintenance beside unfinished controlled-order load without scheduling it."""
+
+    state = validate_production_state(value)
+    due_queue = project_production_maintenance_due_queue(state, as_of)
+    order_entries = _production_order_entries(state)
+    items: list[dict[str, Any]] = []
+    equipment_assets = state.get("equipmentMaster", {}).get("assets", [])
+    for due_item in due_queue["items"]:
+        asset = next(
+            (
+                candidate
+                for candidate in equipment_assets
+                if candidate["id"] == due_item["assetId"]
+            ),
+            None,
+        )
+        if asset is None:
+            raise TrialValidationError(
+                f"Maintenance capacity review cannot find equipment {due_item['assetId']}."
+            )
+        orders = []
+        for entry in order_entries:
+            order = _maintenance_capacity_order(
+                state,
+                entry["jobId"],
+                entry["execution"],
+                asset["workCentreId"],
+            )
+            if order is not None:
+                orders.append(order)
+        orders.sort(key=lambda row: row["jobId"])
+        total_remaining_minutes_milli = 0
+        for order in orders:
+            total_remaining_minutes_milli += order["totalRemainingMinutesMilli"]
+            if total_remaining_minutes_milli > _MAX_SAFE_INTEGER:
+                raise TrialValidationError(
+                    f"Maintenance capacity review {due_item['assetId']} total remaining minutes exceed the supported range."
+                )
+        items.append(
+            {
+                **due_item,
+                "workCentreId": asset["workCentreId"],
+                "loadStatus": (
+                    f"{due_item['status']}_{'with_load' if orders else 'no_load'}"
+                ),
+                "orders": orders,
+                "totalRemainingMinutesMilli": total_remaining_minutes_milli,
+            }
+        )
+    return {
+        "contract": PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA,
+        "asOf": due_queue["asOf"],
+        "items": items,
+        "authority": {
+            "maintenanceScheduled": False,
+            "ordersRescheduled": False,
+            "machineStatusChanged": False,
+            "equipmentCommanded": False,
+        },
     }
 
 

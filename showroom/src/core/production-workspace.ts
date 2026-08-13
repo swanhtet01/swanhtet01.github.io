@@ -17,6 +17,7 @@ export const PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA = 'supermega.production.qua
 export const PRODUCTION_QUALITY_CAPA_TREND_SCHEMA = 'supermega.production.quality-capa-trend.v1' as const
 export const PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA = 'supermega.production.maintenance-finding-source.v2' as const
 export const PRODUCTION_MAINTENANCE_FINDING_SOURCE_LEGACY_SCHEMA = 'supermega.production.maintenance-finding-source.v1' as const
+export const PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA = 'supermega.production.maintenance-capacity-review.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -607,6 +608,45 @@ export type ProductionMaintenanceDueQueue = {
   contract: 'supermega.production.maintenance-due-queue.v1'
   asOf: string
   items: ProductionMaintenanceDueItem[]
+}
+
+export type ProductionMaintenanceCapacityOrder = {
+  jobId: string
+  product: string
+  jobOwner: string | null
+  jobPriority: ProductionJobPriority | null
+  jobDueAt: string | null
+  planId: string
+  planPackageDigest: string
+  orderRevision: number
+  orderHeadDigest: string
+  status: ProductionMaintenanceAffectedOrder['status']
+  operations: Array<{
+    operationId: string
+    sequence: number
+    name: string
+    status: PlantOrderProjection['operations'][number]['status']
+    remainingQuantity: number
+    remainingMinutesMilli: number
+  }>
+  totalRemainingMinutesMilli: number
+}
+
+export type ProductionMaintenanceCapacityReview = {
+  contract: typeof PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA
+  asOf: string
+  items: Array<ProductionMaintenanceDueItem & {
+    workCentreId: string
+    loadStatus: 'overdue_with_load' | 'overdue_no_load' | 'due_soon_with_load' | 'due_soon_no_load' | 'planned_with_load' | 'planned_no_load'
+    orders: ProductionMaintenanceCapacityOrder[]
+    totalRemainingMinutesMilli: number
+  }>
+  authority: {
+    maintenanceScheduled: false
+    ordersRescheduled: false
+    machineStatusChanged: false
+    equipmentCommanded: false
+  }
 }
 
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
@@ -2664,6 +2704,92 @@ export function productionMaintenanceDueQueue(
       || left.assetId.localeCompare(right.assetId)
   })
   return { contract: 'supermega.production.maintenance-due-queue.v1', asOf, items }
+}
+
+function productionMaintenanceCapacityOrder(
+  state: ProductionState,
+  jobId: string,
+  execution: PlantOrderState,
+  workCentreId: string,
+): ProductionMaintenanceCapacityOrder | null {
+  const projection = projectPlantOrder(execution)
+  const plan = projection.plan
+  if (!plan || projection.status === 'unplanned' || projection.status === 'released_to_stock') return null
+  const job = state.jobs.find((candidate) => candidate.id === jobId)
+  if (!job) throw new Error(`Maintenance capacity review cannot find Production job ${jobId}.`)
+  let totalRemainingMinutesMilli = 0
+  const operations = projection.operations.flatMap((operation): ProductionMaintenanceCapacityOrder['operations'] => {
+    if (operation.workCentreId !== workCentreId || operation.remainingQuantity <= 0) return []
+    const remainingMinutesMilli = operation.remainingQuantity * operation.minutesPerUnitMilli
+    assertSafeInteger(remainingMinutesMilli, `Maintenance capacity review ${jobId} ${operation.operationId} remaining minutes`)
+    const nextTotal = totalRemainingMinutesMilli + remainingMinutesMilli
+    assertSafeInteger(nextTotal, `Maintenance capacity review ${jobId} total remaining minutes`)
+    totalRemainingMinutesMilli = nextTotal
+    return [{
+      operationId: operation.operationId,
+      sequence: operation.sequence,
+      name: operation.name,
+      status: operation.status,
+      remainingQuantity: operation.remainingQuantity,
+      remainingMinutesMilli,
+    }]
+  })
+  if (!operations.length) return null
+  return {
+    jobId,
+    product: plan.job.product,
+    jobOwner: job.owner ?? null,
+    jobPriority: job.priority ?? null,
+    jobDueAt: job.dueAt ?? null,
+    planId: plan.planId,
+    planPackageDigest: plan.packageDigest,
+    orderRevision: projection.revision,
+    orderHeadDigest: projection.headDigest,
+    status: projection.status,
+    operations,
+    totalRemainingMinutesMilli,
+  }
+}
+
+export function productionMaintenanceCapacityReview(
+  state: ProductionState,
+  asOf: string,
+): ProductionMaintenanceCapacityReview {
+  const current = validateProductionState(state)
+  const dueQueue = productionMaintenanceDueQueue(current, asOf)
+  const orderEntries = productionOrderPortfolioEntries(current)
+  const items = dueQueue.items.map((item) => {
+    const asset = current.equipmentMaster?.assets.find((candidate) => candidate.id === item.assetId)
+    if (!asset) throw new Error(`Maintenance capacity review cannot find equipment ${item.assetId}.`)
+    const orders = orderEntries.flatMap(({ jobId, execution }) => {
+      const order = productionMaintenanceCapacityOrder(current, jobId, execution, asset.workCentreId)
+      return order ? [order] : []
+    }).sort((left, right) => left.jobId < right.jobId ? -1 : left.jobId > right.jobId ? 1 : 0)
+    let totalRemainingMinutesMilli = 0
+    for (const order of orders) {
+      const nextTotal = totalRemainingMinutesMilli + order.totalRemainingMinutesMilli
+      assertSafeInteger(nextTotal, `Maintenance capacity review ${item.assetId} total remaining minutes`)
+      totalRemainingMinutesMilli = nextTotal
+    }
+    return {
+      ...item,
+      workCentreId: asset.workCentreId,
+      loadStatus: `${item.status}_${orders.length ? 'with_load' : 'no_load'}` as ProductionMaintenanceCapacityReview['items'][number]['loadStatus'],
+      orders,
+      totalRemainingMinutesMilli,
+    }
+  })
+  return {
+    contract: PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA,
+    asOf,
+    items,
+    authority: {
+      maintenanceScheduled: false,
+      ordersRescheduled: false,
+      machineStatusChanged: false,
+      equipmentCommanded: false,
+    },
+  }
 }
 
 export function buildProductionShiftHandoff(state: ProductionState, shiftRef: string, plantOrderScope = 'plant:local-sample'): ProductionShiftHandoff | null {

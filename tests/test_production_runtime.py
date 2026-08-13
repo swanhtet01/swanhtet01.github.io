@@ -31,6 +31,7 @@ from supermega_runtime.plant_order_foundation import (
 from supermega_runtime.production_runtime import (
     PRODUCTION_EVENTS,
     PRODUCTION_HUMAN_EVENTS,
+    project_production_maintenance_capacity_review,
     project_production_quality_capa_trend,
     validate_production_state,
 )
@@ -4322,6 +4323,82 @@ class ProductionRuntimeTests(unittest.TestCase):
             )
         )
         strategy_record = strategy["equipmentMaster"]["assets"][0]["maintenanceStrategy"]
+        capacity_source = deepcopy(strategy)
+        capacity_review = project_production_maintenance_capacity_review(
+            strategy,
+            "2026-08-20T12:00:00.000Z",
+        )
+        self.assertEqual(strategy, capacity_source)
+        self.assertEqual(
+            capacity_review["contract"],
+            "supermega.production.maintenance-capacity-review.v1",
+        )
+        self.assertEqual(
+            capacity_review["authority"],
+            {
+                "maintenanceScheduled": False,
+                "ordersRescheduled": False,
+                "machineStatusChanged": False,
+                "equipmentCommanded": False,
+            },
+        )
+        capacity_item = capacity_review["items"][0]
+        self.assertEqual(capacity_item["workCentreId"], "WC-MANAGED-001")
+        self.assertEqual(capacity_item["loadStatus"], "due_soon_with_load")
+        self.assertEqual(capacity_item["daysUntilDue"], 3)
+        self.assertEqual(capacity_item["totalRemainingMinutesMilli"], 100_000)
+        capacity_order = capacity_item["orders"][0]
+        self.assertEqual(
+            {
+                "jobId": capacity_order["jobId"],
+                "jobOwner": capacity_order["jobOwner"],
+                "jobPriority": capacity_order["jobPriority"],
+                "jobDueAt": capacity_order["jobDueAt"],
+                "planId": capacity_order["planId"],
+                "orderRevision": capacity_order["orderRevision"],
+                "orderHeadDigest": capacity_order["orderHeadDigest"],
+                "status": capacity_order["status"],
+                "totalRemainingMinutesMilli": capacity_order[
+                    "totalRemainingMinutesMilli"
+                ],
+            },
+            {
+                "jobId": "JOB-REAL-001",
+                "jobOwner": "Shift lead",
+                "jobPriority": "normal",
+                "jobDueAt": "2026-07-25T09:00:00.000Z",
+                "planId": "PLN-MANAGED-001",
+                "orderRevision": 1,
+                "orderHeadDigest": order_execution["headDigest"],
+                "status": "planned",
+                "totalRemainingMinutesMilli": 100_000,
+            },
+        )
+        self.assertEqual(
+            capacity_order["operations"],
+            [{
+                "operationId": "OP-MANAGED-10",
+                "sequence": 1,
+                "name": "Managed operation",
+                "status": "ready",
+                "remainingQuantity": 100,
+                "remainingMinutesMilli": 100_000,
+            }],
+        )
+        no_load_state = deepcopy(strategy)
+        del no_load_state["orderPortfolio"]
+        no_load_review = project_production_maintenance_capacity_review(
+            no_load_state,
+            "2026-08-20T12:00:00.000Z",
+        )
+        self.assertEqual(no_load_review["items"][0]["loadStatus"], "due_soon_no_load")
+        self.assertEqual(no_load_review["items"][0]["orders"], [])
+        self.assertEqual(no_load_review["items"][0]["totalRemainingMinutesMilli"], 0)
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "maintenance due queue asOf must be a canonical ISO-8601 timestamp",
+        ):
+            project_production_maintenance_capacity_review(strategy, "not-a-time")
         start_evidence = action_evidence(
             "ACT-MAINTENANCE-IMPACT-START",
             captured_at="2026-07-24T13:00:00.000Z",
