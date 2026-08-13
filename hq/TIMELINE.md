@@ -24,7 +24,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Live**: Both domains serve `25cac2f5`. Live scheduler is `degraded`, managed persistence is not proven, security writes are off.
 
-**Blockers**: Seven hosted-readiness gates, two unresolved founder decisions (approve_preview_branch_target, name_shop_pilot_operator). No named pilot customer or operator.
+**Blockers**: Seven hosted-readiness gates; founder decisions now (approve_preview_branch_target — GIVEN 2026-08-12, approve_self_serve_activation_window — pending). Pilots are self-serve; users name themselves (decision 2026-08-12).
 
 ---
 
@@ -584,7 +584,7 @@ Each is shipped as a reviewed, human-confirmed workflow — not autonomous actio
 | Gate | Type | Who | What |
 |------|------|-----|------|
 | `approve_preview_branch_target` | Founder | Swan Htet | Approve the branch to deploy to preview domain |
-| `name_shop_pilot_operator` | Founder | Swan Htet | Name one operator for the isolated Shop pilot |
+| `approve_self_serve_activation_window` | Founder | Swan Htet | Open the self-serve activation window on the approved isolated target (replaced name_shop_pilot_operator, decision 2026-08-12) |
 | `approve_isolated_tenant` | Founder | Swan Htet | Approve one named Supabase tenant for the pilot |
 | `approve_plant_oee_pilot` | Founder | Swan Htet | Approve Plant OEE pilot after Shop evidence passes |
 | `approve_website_brief_pilot` | Founder | Swan Htet | Approve Website brief pilot after Storage is proven |
