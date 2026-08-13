@@ -1,14 +1,16 @@
 {
   "schemaVersion": "supermega.hq.database-rehearsal.v2",
-  "recordedAt": "2026-08-13T07:42:41.205Z",
+  "recordedAt": "2026-08-13T08:19:16.503Z",
   "runner": "tools/rehearse_supermega_postgres17.py",
-  "implementationCommit": "79165981038537dba8c63c8cda6da3146ad7c660",
+  "implementationCommit": "98f72ce8d175aa1c228381fafa49f9151f5b2ce6",
   "implementation": {
-    "digest": "sha256:8c144545b3cc169a4e6e85b8dd06f02b4dd6b93e5670d9818336efb486303b7f",
+    "digest": "sha256:06d1c4c91c4564911568e3fa8aa43d352675a8a40e2bf0f502352a300dd0a94c",
     "paths": [
       "supermega_runtime/managed_context.py",
       "supermega_runtime/managed_activation.py",
       "supermega_runtime/runtime.py",
+      "supermega_runtime/spa_staff_access.py",
+      "supermega_runtime/supabase_auth.py",
       "supermega_runtime/trial_runtime.py",
       "supermega_runtime/trial_store.py",
       "supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql",
@@ -24,8 +26,8 @@
       "tools/verify_managed_runtime_environment_values.mjs"
     ]
   },
-  "implementationDigest": "sha256:8c144545b3cc169a4e6e85b8dd06f02b4dd6b93e5670d9818336efb486303b7f",
-  "implementationFileCount": 16,
+  "implementationDigest": "sha256:06d1c4c91c4564911568e3fa8aa43d352675a8a40e2bf0f502352a300dd0a94c",
+  "implementationFileCount": 18,
   "localVerification": {
     "command": "npm run database:postgres17:record",
     "conclusion": "success",

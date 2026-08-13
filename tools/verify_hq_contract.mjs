@@ -276,9 +276,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-224'
   && completedAutomationArchive.entries?.length === 72
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 46
+  && portfolioSource.completedLocalAutomations.length === 47
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 118
+  && portfolio.completedLocalAutomations.length === 119
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -643,6 +643,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[117]?.workOrderId === 'shop-spa-no-send-staff-access-review'
   && portfolio.completedLocalAutomations[117]?.checkpoint === 'OPS-270'
   && workboard.includes('| OPS-270 | CEO + Shop Spa Staff Review / Agent Operations Codex | done-local |')
+  && portfolio.completedLocalAutomations[118]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[118]?.workOrderId === 'shop-spa-verified-staff-membership-activation'
+  && portfolio.completedLocalAutomations[118]?.checkpoint === 'OPS-271'
+  && workboard.includes('| OPS-271 | CEO + Shop Spa Identity Activation / Agent Operations Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -2086,6 +2090,8 @@ requireContract('local product improvement stays separate from managed-pilot aut
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-client-retention-export-and-anonymization' && entry.checkpoint === 'OPS-269')
   && workboard.includes('| OPS-270 | CEO + Shop Spa Staff Review / Agent Operations Codex | done-local |')
   && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-no-send-staff-access-review' && entry.checkpoint === 'OPS-270')
+  && workboard.includes('| OPS-271 | CEO + Shop Spa Identity Activation / Agent Operations Codex | done-local |')
+  && portfolio.completedLocalAutomations.some((entry) => entry.workOrderId === 'shop-spa-verified-staff-membership-activation' && entry.checkpoint === 'OPS-271')
   && portfolio.localImprovementQueue[0].workOrderId === 'shop-spa-managed-invitation-and-first-day-rehearsal')
 
 requireContract('Ally CEO planning is exact, bounded, temporary, and side-effect free',
