@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 56
+  && portfolioSource.completedLocalAutomations.length === 57
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 129
+  && portfolio.completedLocalAutomations.length === 130
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -688,6 +688,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[128]?.workOrderId === 'website-one-start'
   && portfolio.completedLocalAutomations[128]?.checkpoint === 'OPS-281'
   && workboard.includes('| OPS-281 | Product Platform + Website Codex | done-local |')
+  && portfolio.completedLocalAutomations[129]?.productId === 'ecommerce'
+  && portfolio.completedLocalAutomations[129]?.workOrderId === 'ecommerce-order-lock'
+  && portfolio.completedLocalAutomations[129]?.checkpoint === 'OPS-282'
+  && workboard.includes('| OPS-282 | Product Platform + Ecommerce Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1256,15 +1260,19 @@ requireContract('Shop Spa first-day review is private, role-aware, and non-autho
   && workboard.includes('UI checkpoint `271ddea4` folds the nested review card into one compact Appointments status line')
   && workboard.includes('The app is 2,983,865 bytes with a 451,644-byte largest JavaScript chunk under the unchanged artifact cap')
   && workboard.includes('Completion history preserves 73 archived plus 55 current receipts, 128 unique entries')
-  && now.includes('OPS-280 (`714b897d`, UI `271ddea4`) adds a private, role-aware Spa first-day contract')
   && enterpriseRoadmap.includes('Checkpoint `714b897d` adds `supermega.shop.service-first-day-review.v1`')
   && enterpriseRoadmap.includes('The next Spa gate is one owner-approved isolated managed invitation'))
 requireContract('Website has one truthful start action after working-sample review',
   workboard.includes('| OPS-281 | Product Platform + Website Codex | done-local |')
   && workboard.includes('Product checkpoint `a6901bf0` removes the duplicate toolbar **Start website** action')
   && workboard.includes('Completion history preserves 73 archived plus 56 current receipts, 129 unique entries')
-  && now.includes('OPS-281 (`a6901bf0`) removes Website\'s duplicate working-sample start action')
   && enterpriseRoadmap.includes('Checkpoint `a6901bf0` removes the duplicate Website start control'))
+requireContract('Ecommerce confirmed requests require explicit new-order reset after quote expiry',
+  workboard.includes('| OPS-282 | Product Platform + Ecommerce Codex | done-local |')
+  && workboard.includes('Product checkpoint `de0e7690` makes a Shop-linked latest request confirmed regardless of its quote timer')
+  && workboard.includes('Completion history preserves 73 archived plus 57 current receipts, 130 unique entries')
+  && now.includes('OPS-282 (`de0e7690`) keeps a Shop-confirmed Ecommerce request locked after quote expiry')
+  && enterpriseRoadmap.includes('Checkpoint `de0e7690` closes a duplicate-request UI gap'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')

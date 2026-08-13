@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
   "asOf": "2026-08-13T18:34:25.755Z",
-  "sourceDigest": "sha256:d329eb1bbce2a8a377bcfa00e0c5b23c704b3f78e4ad4644902cfd2b24a51f69",
+  "sourceDigest": "sha256:53268789a4544e202e3e34f07a26c8d0e38461fedd1d09230b9c1f7e8cfbf5a3",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -171,7 +171,7 @@
       "workOrderId": "ecommerce-managed-order-exception-pilot",
       "proposedWork": "Ecommerce: run one named checkout-to-exception pilot on an approved isolated tenant.",
       "blockingReason": "Needs a named operator and approved tenant.",
-      "requiredProof": "Prove protected preview cart-to-Shop on an isolated managed tenant; tax, shipping, and payment adapters require accountable approval and duplicate-safe recovery."
+      "requiredProof": "Prove protected preview on an isolated managed tenant; tax, shipping, and payment adapters need accountable approval and duplicate-safe recovery."
     }
   ],
   "controls": {
@@ -197,7 +197,7 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:dccbbe2c35286d6ef703c3fef73b77617f84d894046cc271d90cf871fa2ed7ab"
+      "digest": "sha256:b2204437e68b2a5704f81f0856dcfb0fc87b3f7c94e54decadceb5cd242c6fd0"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
@@ -213,7 +213,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:6426c9dd761e35936525975e49c36ae70a6d18b729deea9d64a3a5d0e14af7fa"
+      "digest": "sha256:473d44cb03c9018e1dc4963ca5304e82979e8c89ae603c193a3deb22ee59ed25"
     },
     {
       "path": "package.json",

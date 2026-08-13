@@ -191,6 +191,8 @@ The current local candidate closes the first return loop inside that same buying
 
 The current identity candidate replaces the overloaded free-text checkout reference with separate customer name, Myanmar phone, address line, township, city, and optional delivery instructions. Immutable versioned profile and address snapshots are digest-bound to the quote, request, browser recovery, managed Shop inbox, and Shop draft; address changes retain their prior revision while exact retries reuse it. Delivery requires a complete address, pickup forbids one, and nested identity tampering fails closed. This is workflow evidence, not a login, consent record, deduplicated customer master, hosted address book, or provider call.
 
+Checkpoint `de0e7690` closes a duplicate-request UI gap: once Shop links the latest request to an order, quote expiry cannot make the unchanged checkout sendable again. The retained receipt offers Continue in Shop or the explicit Start another order reset. Shop history and authority remain unchanged.
+
 ### Template packs
 
 - Social storefront, pickup/preorder, wholesale request, standard retail, subscription/replenishment, and limited campaign drop.
