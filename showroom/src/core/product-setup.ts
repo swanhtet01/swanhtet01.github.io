@@ -175,6 +175,20 @@ export function readProductSetup(storage: Pick<ProductSetupStorage, 'getItem'>, 
   return readProductSetupRegistry(storage)[product] ?? null
 }
 
+export type StartedProductOwner = { product: SetupProductId; owner: string }
+
+// A client who changes who is accountable in one product leaves the others
+// naming someone else. Report the first such product so the difference can be
+// shown; correcting it is the client's decision, not an automatic rewrite.
+export function conflictingOwnerRecord(
+  startedElsewhere: StartedProductOwner[],
+  accountableOwner: string,
+): StartedProductOwner | null {
+  const owner = accountableOwner.trim()
+  if (!owner) return null
+  return startedElsewhere.find((entry) => entry.owner.trim() && entry.owner.trim() !== owner) ?? null
+}
+
 export function rememberProductSetup(storage: ProductSetupStorage, setup: SetupState) {
   try {
     const normalized = normalizeSetup(setup)

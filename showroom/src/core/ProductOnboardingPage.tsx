@@ -11,6 +11,7 @@ import {
 } from './pilot-outcome'
 import { currentProductionShiftClose } from './production-workspace'
 import {
+  conflictingOwnerRecord,
   productContracts,
   managedTrialRequestUrl,
   readProductSetup,
@@ -152,6 +153,19 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   })
   const sharedWorkspaceName = sharedCompanyIdentity.workspace
   const sharedOwnerName = sharedCompanyIdentity.owner
+  // Prefilling the owner only helps at first setup. If a client later changes
+  // who is accountable in one product, the others keep the old name, so the
+  // difference is surfaced here rather than corrected silently.
+  const [startedOwnersElsewhere] = useState(() => {
+    if (typeof window === 'undefined') return [] as { product: SetupProductId; owner: string }[]
+    const others: SetupProductId[] = ['commerce', 'ecommerce', 'production', 'website']
+    return others.flatMap((id) => {
+      if (id === product) return []
+      const existing = readProductSetup(window.localStorage, id)
+      const owner = existing?.owner.trim() ?? ''
+      return existing?.startedAt && owner ? [{ product: id, owner }] : []
+    })
+  })
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]
@@ -168,6 +182,8 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const workspaceOwner = setup.owner.trim() || 'Business owner'
   const workflowReady = setup.product === product && Boolean(setup.workspace.trim())
   const workspaceStarted = workflowReady && Boolean(setup.startedAt)
+  const accountableOwner = setup.owner.trim()
+  const ownerRecordedElsewhere = conflictingOwnerRecord(startedOwnersElsewhere, accountableOwner)
   const partnerConnected = partnerSetup?.startedAt ? partnerSetup.workspace : null
   const partnerProductName = PRIMARY_PARTNER[product] ? productContracts[PRIMARY_PARTNER[product]!].name : null
 
@@ -402,6 +418,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help product-onboarding-connection">{onboardingJourney.connection}</p>
           {partnerConnected ? <p className="product-onboarding-help product-onboarding-peer-ready"><strong>{partnerProductName}</strong> workspace <strong className="product-onboarding-peer-name">{partnerConnected}</strong> is ready to connect.</p> : null}
+          {ownerRecordedElsewhere ? <p className="product-onboarding-help product-onboarding-owner-drift"><strong>{productContracts[ownerRecordedElsewhere.product].name}</strong> records <strong className="product-onboarding-peer-name">{ownerRecordedElsewhere.owner}</strong> as accountable, not {accountableOwner}. Update whichever is out of date — each product keeps its own record.</p> : null}
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>
           <p aria-live="polite" className="form-notice">{notice || 'Stays on this device. Nothing is sent or published.'}</p>
         </form>

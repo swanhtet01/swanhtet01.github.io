@@ -7,6 +7,7 @@ const root = resolve(import.meta.dirname, '..')
 const moduleUrl = `${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'product-setup.ts')).href}?product-setup-registry-test`
 const {
   PRODUCT_SETUP_REGISTRY_KEY,
+  conflictingOwnerRecord,
   normalizeSetup,
   readProductSetup,
   rememberProductSetup,
@@ -130,4 +131,34 @@ test('normalizeSetup falls back to a known entry point', () => {
 test('normalizeSetup drops a blank startedAt rather than storing it', () => {
   const normalized = normalizeSetup({ ...seedSetupForProduct('commerce'), startedAt: '' })
   assert.equal('startedAt' in normalized, false)
+})
+
+test('a different accountable owner in another product is reported', () => {
+  const conflict = conflictingOwnerRecord([{ product: 'production', owner: 'Dara Okonkwo' }], 'Sam Reyes')
+  assert.deepEqual(conflict, { product: 'production', owner: 'Dara Okonkwo' })
+})
+
+test('a matching accountable owner reports no conflict', () => {
+  assert.equal(conflictingOwnerRecord([{ product: 'production', owner: 'Dara Okonkwo' }], 'Dara Okonkwo'), null)
+})
+
+test('surrounding whitespace does not count as a different owner', () => {
+  assert.equal(conflictingOwnerRecord([{ product: 'production', owner: '  Dara Okonkwo  ' }], 'Dara Okonkwo'), null)
+})
+
+test('no conflict is reported until this product names someone', () => {
+  assert.equal(conflictingOwnerRecord([{ product: 'production', owner: 'Dara Okonkwo' }], ''), null)
+  assert.equal(conflictingOwnerRecord([{ product: 'production', owner: 'Dara Okonkwo' }], '   '), null)
+})
+
+test('a blank owner elsewhere is not treated as a conflict', () => {
+  assert.equal(conflictingOwnerRecord([{ product: 'production', owner: '   ' }], 'Sam Reyes'), null)
+})
+
+test('the first differing product is reported when several disagree', () => {
+  const conflict = conflictingOwnerRecord([
+    { product: 'production', owner: 'Sam Reyes' },
+    { product: 'website', owner: 'Dara Okonkwo' },
+  ], 'Sam Reyes')
+  assert.deepEqual(conflict, { product: 'website', owner: 'Dara Okonkwo' })
 })
