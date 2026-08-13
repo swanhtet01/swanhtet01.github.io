@@ -3345,9 +3345,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const localBusinessWorkspace = !managedIdentity && commerceBusinessCatalogItems(commerce).length > 0
   const realOrderSetupRequired = Boolean((managedIdentity || localBusinessWorkspace) && (!commerce.inventoryFoundation || !currentAccountingScopeConfiguration?.inventoryLocationId))
   const realOrderSetupLabel = realOrderSetupRequired ? commerce.inventoryFoundation ? 'Review business location' : 'Set up stock locations' : null
+  const firstActionOrderId = actionOrders[0]?.id
   useLayoutEffect(() => {
     if (tab === 'counter' && realOrderSetupRequired) {
-      navigate(commerce.inventoryFoundation ? '/shop/?tab=orders#shop-business-location' : '/shop/?tab=inventory#shop-location-foundation', { replace: true })
+      navigate(commerce.inventoryFoundation ? '/shop/?tab=orders#shop-business-location' : firstActionOrderId ? `/shop/?tab=orders&return=location-setup#${commerceOrderTargetId(firstActionOrderId)}` : '/shop/?tab=inventory#shop-location-foundation', { replace: true })
       return
     }
     if (tab !== 'orders' || !resumeEntryMode || realOrderSetupRequired || pendingAction || !commerceCanWrite || !orderDraftInitialized || orderDraftRead.status !== 'empty') return
@@ -3358,7 +3359,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       orderComposerTriggerRef.current?.click()
       setOrderEntryMode(resumeEntryMode)
     })
-  }, [commerce.inventoryFoundation, commerceCanWrite, navigate, orderDraftInitialized, orderDraftRead.status, pendingAction, realOrderSetupRequired, resumeEntryMode, tab])
+  }, [commerce.inventoryFoundation, commerceCanWrite, firstActionOrderId, navigate, orderDraftInitialized, orderDraftRead.status, pendingAction, realOrderSetupRequired, resumeEntryMode, tab])
   const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : localBusinessWorkspace ? 'Local workspace' : 'Sample data'}</span>
     <p>{commerceStorageError
@@ -7581,10 +7582,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
       </form> : null}
       <details className="inventory-tools-disclosure" id="shop-location-foundation" open={!commerce.inventoryFoundation || undefined}>
-        <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
+        <summary><span><strong>Purchasing &amp; locations</strong><small>Suppliers, locations, and available stock</small></span></summary>
         <div className="inventory-tools-content">
-          {supplierControl}
           {commerce.items.length ? <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} onSetupBlocked={(orderId) => navigate(`/shop/?tab=orders&return=location-setup#${commerceOrderTargetId(orderId)}`)} onSetupComplete={continueFromInventorySetup} production={relatedProduction} scope={orderDraftScope} /></Suspense> : <p className="empty-state">Add products before enabling locations, lots, available-to-promise, or supplier policies.</p>}
+          {supplierControl}
         </div>
       </details>
       {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierSourcing}>
