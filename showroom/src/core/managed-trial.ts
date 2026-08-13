@@ -75,11 +75,31 @@ export type ManagedAccountSetup = {
 export type SpaStaffAccessRole = 'front-desk' | 'therapist'
 
 export type ManagedSpaStaffAccessReview = {
+  contract: 'supermega.commerce.spa_staff_access_review.v1'
+  status: 'review_only'
+  workspace_id: string
+  requested_by: string
+  requested_at: string
+  expires_at: string
   candidate: {
     display_name: string
     email: string
     role: SpaStaffAccessRole
+    access: 'spa-front-desk' | 'spa-therapist'
+    capabilities: string[]
   }
+  activation: {
+    status: 'blocked_until_separate_owner_confirmation'
+    authorization_source: 'app_private.workspace_memberships'
+    target_identity_binding: 'supabase_user_id_after_invite'
+    required_checks: string[]
+    forbidden_until_confirmed: string[]
+  }
+  invitation_sent: false
+  auth_user_created: false
+  membership_written: false
+  external_writes_performed: false
+  secret_values_exposed: false
   review_digest: string
 }
 
@@ -3455,21 +3475,38 @@ function assertManagedSpaStaffAccessReview(
     })
   }
   const candidate = value.candidate
+  const activation = value.activation
+  const expectedAccess = expected.role === 'front-desk' ? 'spa-front-desk' : 'spa-therapist'
+  const expectedCapabilities = expected.role === 'front-desk'
+    ? 'commerce.spa.front_desk,commerce.write'
+    : 'commerce.spa.therapist,commerce.write'
+  const requestedAt = typeof value.requested_at === 'string' ? Date.parse(value.requested_at) : Number.NaN
+  const expiresAt = typeof value.expires_at === 'string' ? Date.parse(value.expires_at) : Number.NaN
   if (candidate.display_name !== expected.displayName
     || candidate.email !== expected.email
-    || candidate.role !== expected.role) {
+    || candidate.role !== expected.role
+    || candidate.access !== expectedAccess
+    || !Array.isArray(candidate.capabilities)
+    || !candidate.capabilities.every((capability) => typeof capability === 'string')
+    || candidate.capabilities.join(',') !== expectedCapabilities
+    || !isRecord(activation)
+    || activation.status !== 'blocked_until_separate_owner_confirmation'
+    || activation.authorization_source !== 'app_private.workspace_memberships'
+    || activation.target_identity_binding !== 'supabase_user_id_after_invite'
+    || !Array.isArray(activation.required_checks)
+    || !activation.required_checks.length
+    || !activation.required_checks.every((check) => typeof check === 'string')
+    || !Array.isArray(activation.forbidden_until_confirmed)
+    || !activation.forbidden_until_confirmed.length
+    || !activation.forbidden_until_confirmed.every((action) => typeof action === 'string')
+    || !Number.isFinite(requestedAt)
+    || !Number.isFinite(expiresAt)
+    || expiresAt - requestedAt !== 15 * 60 * 1000) {
     throw new ManagedTrialError('The Spa staff access review changed its target or role boundary.', {
       code: 'spa_staff_access_review_response_invalid',
     })
   }
-  return {
-    candidate: {
-      display_name: candidate.display_name as string,
-      email: candidate.email as string,
-      role: candidate.role as SpaStaffAccessRole,
-    },
-    review_digest: value.review_digest as string,
-  }
+  return value as ManagedSpaStaffAccessReview
 }
 
 export async function reviewManagedSpaStaffAccess(request: {

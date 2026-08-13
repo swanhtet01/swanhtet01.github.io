@@ -349,6 +349,20 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     }
   }
 
+  function downloadSpaStaffReview() {
+    if (!spaStaffReview) return
+    const blob = new Blob([`${JSON.stringify(spaStaffReview, null, 2)}\n`], { type: 'application/json' })
+    const href = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.download = `supermega-spa-staff-review-${spaStaffReview.review_digest.slice(7, 19)}.json`
+    anchor.href = href
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    window.setTimeout(() => URL.revokeObjectURL(href), 0)
+    setNotice('Private staff setup file downloaded. Nothing was sent or activated.')
+  }
+
   return (
     <div className="workspace-screen settings-screen product-onboarding-screen" data-product={product}>
       <PageHeading
@@ -376,7 +390,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
               </select>
             </label>
             <button className="core-button primary" disabled={workspaceBusy || spaStaffName.trim().length < 2 || !spaStaffEmail.trim()} onClick={() => void reviewSpaStaffAccess()} type="button">{workspaceBusy ? 'Checking access...' : 'Review staff access'}</button>
-            {spaStaffReview ? <p aria-label="Reviewed Spa staff access" className="product-onboarding-boundary"><strong>{spaStaffReview.candidate.display_name} · {spaStaffReview.candidate.role === 'front-desk' ? 'Front desk' : 'Therapist'}.</strong> Nothing was sent or activated. Mobile access checks remain. <small title={spaStaffReview.review_digest}>Review {spaStaffReview.review_digest.slice(7, 23)}…</small></p> : null}
+            {spaStaffReview ? <div aria-label="Reviewed Spa staff access" className="product-onboarding-boundary"><p><strong>{spaStaffReview.candidate.display_name} · {spaStaffReview.candidate.role === 'front-desk' ? 'Front desk' : 'Therapist'}.</strong> Nothing was sent or activated. Mobile access checks remain. <small title={spaStaffReview.review_digest}>Review {spaStaffReview.review_digest.slice(7, 23)}…</small></p><div className="form-actions"><button className="core-button" onClick={downloadSpaStaffReview} type="button">Download private setup file</button></div><small>Contains this staff name and work email. Keep it private and share it only with SuperMega operations.</small></div> : null}
           </details> : null}
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={spaOnboardingSelected ? 'Example: Thiri Wellness Spa' : 'Example: Golden Valley Trading'} required value={setup.workspace} /></label>
           {(product === 'commerce' || product === 'ecommerce') && !reviewedShopCatalogReady ? <Suspense fallback={<p className="form-notice" role="status">Loading the Shop import...</p>}><ClientDataOnboarding allowSample={false} managedIdentity={managedIdentity} onProgress={recordBusinessDataProgress} owner={workspaceOwner} product="commerce" productName="Shop" productSlug="shop" replacePristineCommerceDemo requiredFor={product === 'commerce' ? 'Shop' : 'Ecommerce'} shopIndustryPackId={selectedShopIndustryPack.id} workflowTemplateId={selectedShopIndustryPack.workflowTemplateId} workspace={setup.workspace} /></Suspense> : null}
