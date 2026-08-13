@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { RELEASE_HANDOFF_CONTRACT, verifyCurrentReleaseHandoff } from './prepare_release_handoff.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-export const SUPABASE_REHEARSAL_CONTRACT = 'supermega.supabase-rehearsal-packet.v3'
+export const SUPABASE_REHEARSAL_CONTRACT = 'supermega.supabase-rehearsal-packet.v4'
 const projectRefPattern = /^[a-z0-9]{20}$/
 const commitPattern = /^[0-9a-f]{40}$/
 const digestPattern = /^sha256:[0-9a-f]{64}$/
@@ -29,6 +29,7 @@ export const EXPECTED_SUPABASE_REHEARSAL_MIGRATIONS = Object.freeze([
 ])
 const expectedMigrationCount = EXPECTED_SUPABASE_REHEARSAL_MIGRATIONS.length
 const browserQuarantinePath = 'supabase/rehearsal/20260804_public_browser_quarantine.sql'
+const sessionRevocationProbePath = 'supabase/rehearsal/20260807_preview_session_revocation_probe.sql'
 const securityAuditPath = 'hq/readiness/supabase-security-advisor-audit.json'
 
 function fail(code) {
@@ -37,6 +38,28 @@ function fail(code) {
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function strictUtcTimestamp(value) {
+  if (typeof value !== 'string') return null
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{3})Z$/.exec(value)
+  if (!match) return null
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, millisecondText] = match
+  const [year, month, day, hour, minute, second, millisecond] = [
+    yearText, monthText, dayText, hourText, minuteText, secondText, millisecondText,
+  ].map(Number)
+  const instant = new Date(0)
+  instant.setUTCFullYear(year, month - 1, day)
+  instant.setUTCHours(hour, minute, second, millisecond)
+  if (instant.getUTCFullYear() !== year
+    || instant.getUTCMonth() !== month - 1
+    || instant.getUTCDate() !== day
+    || instant.getUTCHours() !== hour
+    || instant.getUTCMinutes() !== minute
+    || instant.getUTCSeconds() !== second
+    || instant.getUTCMilliseconds() !== millisecond
+    || instant.toISOString() !== value) return null
+  return instant
 }
 
 async function readManifest(repositoryRoot) {
@@ -102,6 +125,15 @@ async function browserQuarantineInventory(repositoryRoot) {
     },
     browserRolesDenied: ['anon', 'authenticated'],
     serviceRolePreserved: true,
+  }
+}
+
+async function sessionRevocationProbeInventory(repositoryRoot) {
+  const sql = await readFile(resolve(repositoryRoot, sessionRevocationProbePath))
+  return {
+    path: sessionRevocationProbePath,
+    sha256: sha256(sql),
+    mutationScope: 'single-transaction-rollback-only',
   }
 }
 
@@ -228,7 +260,7 @@ export async function buildSupabaseRehearsalPacket({
 } = {}) {
   if (!projectRefPattern.test(targetProjectRef || '')) fail('supabase_rehearsal_target_ref_invalid')
   if (!commitPattern.test(releaseCommit || '')) fail('supabase_rehearsal_release_commit_invalid')
-  if (!Number.isFinite(Date.parse(generatedAt))) fail('supabase_rehearsal_generated_at_invalid')
+  if (!strictUtcTimestamp(generatedAt)) fail('supabase_rehearsal_generated_at_invalid')
 
   const manifest = await readManifest(repositoryRoot)
   const productionProjectRef = manifest?.supermega?.productionSupabaseProjectRef
@@ -238,9 +270,10 @@ export async function buildSupabaseRehearsalPacket({
   if (targetProjectRef === productionProjectRef) fail('supabase_rehearsal_target_is_production')
 
   const reviewedRelease = validateReleaseReview(releaseReview, releaseCommit)
-  const [migrations, browserQuarantine] = await Promise.all([
+  const [migrations, browserQuarantine, sessionRevocationProbe] = await Promise.all([
     migrationInventory(repositoryRoot),
     browserQuarantineInventory(repositoryRoot),
+    sessionRevocationProbeInventory(repositoryRoot),
   ])
   const payload = {
     contract: SUPABASE_REHEARSAL_CONTRACT,
@@ -253,6 +286,7 @@ export async function buildSupabaseRehearsalPacket({
       migrationCount: migrations.length,
       migrations,
       browserQuarantine,
+      sessionRevocationProbe,
     },
     authority: {
       protectedProductionProjectRef: productionProjectRef,
@@ -339,7 +373,17 @@ export async function validateSupabaseRehearsalPacket(packet, {
 }
 
 function git(repositoryRoot, ...args) {
-  return execFileSync('git', ['-C', repositoryRoot, ...args], { encoding: 'utf8' }).trim()
+  const env = Object.fromEntries([
+    'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
+    'TEMP', 'TMP', 'TMPDIR', 'USERPROFILE', 'HOME',
+  ].filter((key) => typeof process.env[key] === 'string').map((key) => [key, process.env[key]]))
+  env.GIT_NO_LAZY_FETCH = '1'
+  return execFileSync('git', ['-C', repositoryRoot, ...args], {
+    encoding: 'utf8',
+    env,
+    timeout: 15_000,
+    windowsHide: true,
+  }).trim()
 }
 
 function reviewedMainRelease(repositoryRoot) {

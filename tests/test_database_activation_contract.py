@@ -26,7 +26,7 @@ ACTIVATION_RUNBOOK = ROOT / "docs" / "supermega-enterprise-activation.md"
 PACKAGE_JSON = ROOT / "package.json"
 POWERSHELL = shutil.which("powershell") if os.name == "nt" else None
 SUPABASE_PREFLIGHT_QUERY_SHA256 = (
-    "3223b21f0976711b95fcdab2f054716143a3ad3737853a4b62fda89a5afe40a3"
+    "4eac7cee6fd8522a0061e1779a169f515494bfdb7aedf844735000247242775c"
 )
 TRIAL_STORE = ROOT / "supermega_runtime" / "trial_store.py"
 MIGRATION_PREFLIGHT = (
@@ -835,6 +835,7 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
             "private_schema_absent": True,
             "backend_role_absent": True,
             "public_user_relations_absent": True,
+            "unexpected_user_schemas_absent": True,
             "auth_users_absent": True,
             "auth_sessions_absent": True,
             "storage_buckets_absent": True,
@@ -918,6 +919,17 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
         self.assertEqual(report["target_project_ref"], self.TARGET_REF)
         self.assertEqual(report["tls_mode"], "verify-full")
         self.assertNotIn(self.PRODUCTION_REF, serialized)
+
+        shadow_schema_report = self.validator.evaluate_supabase_rehearsal_target_snapshot(
+            {**snapshot, "unexpected_user_schemas_absent": False},
+            connection_mode="direct",
+            target_project_ref=self.TARGET_REF,
+        )
+        self.assertFalse(shadow_schema_report["ready"])
+        self.assertIn(
+            "unexpected_user_schemas_absent",
+            shadow_schema_report["failed_checks"],
+        )
 
     def test_connection_options_preserve_and_enforce_verify_full(self) -> None:
         calls: list[tuple[tuple[object, ...], dict[str, object]]] = []

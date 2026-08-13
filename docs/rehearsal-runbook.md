@@ -8,7 +8,7 @@ resource.
 The executable orchestrator is `tools/run_preview_branch_rehearsal.mjs`. It
 applies the reviewed public legacy baseline followed by all eleven private
 migrations through schema v10, then the public-browser quarantine. Every byte
-is bound to `supermega.supabase-rehearsal-packet.v3` and the exact reviewed
+is bound to `supermega.supabase-rehearsal-packet.v4` and the exact reviewed
 `origin/main` commit.
 
 ## Authority boundary
@@ -79,7 +79,8 @@ digest. The token is never printed or retained.
 The read-only preflight requires PostgreSQL 17, hostname-verified TLS, the
 `postgres` database, permission to create the reviewed runtime role and schema,
 absence of both `app_private` and `supermega_trial_backend`, no user relation in
-`public`, and zero Auth users/sessions and Storage buckets/objects. It reads
+`public`, no unreviewed user schema, and zero Auth users/sessions and Storage
+buckets/objects. It reads
 only booleans and zero/nonzero existence, never row contents. A production
 schema or data mirror fails closed.
 
@@ -92,7 +93,8 @@ node tools/prepare_supabase_rehearsal_packet.mjs --target-project-ref <PREVIEW_R
 node tools/prepare_supabase_rehearsal_packet.mjs --verify .tmp/rehearsal-packet.json
 ```
 
-The packet pins twelve migrations in filename order:
+The packet pins twelve migrations in filename order, the quarantine script,
+and the rollback-only session-revocation probe:
 
 1. `20260711081300_public_legacy_baseline.sql`
 2. the eleven `private_trial_backend` migrations from role preflight through
@@ -203,28 +205,34 @@ node tools/run_preview_branch_rehearsal.mjs
 
 Before the first branch mutation, the tool verifies:
 
-- clean exact `origin/main` and the v3 packet;
+- clean exact `origin/main` and the v4 packet;
 - a digest-pinned owner key, distinct digest-pinned reviewer key, both exact
   signatures, and exact URL digests;
 - a fresh authenticated Management API branch receipt, absolute deletion
   deadline, non-production ref, and clean-target preflight;
-- dedicated runtime and Storage-audit identities proven read-only before the
+- dedicated runtime and Storage-audit identities proven non-privileged before the
   first migration: exact login, stable session role, TLS, no superuser,
-  `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, replication, or elevated membership;
+  `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, replication, membership or `SET ROLE`
+  path, persistent write privilege, object ownership, dangerous default ACL,
+  security-definer execution, or role setting;
 - local quarantine behavior, full migration digests, PostgreSQL 17 tooling,
   and Storage privacy configuration.
 
-It then applies the twelve packet-bound migration files, applies quarantine,
-runs the read-only v10 hosted validator, and runs the session-revocation probe
-inside a transaction that ends in `ROLLBACK`. Evidence is sanitized and stored
-under `.tmp/preview-branch-rehearsal/<fingerprint>/`.
+It rechecks the clean commit before every SQL action, hashes each exact reviewed
+file, and passes those already-hashed bytes to `psql` through standard input;
+`psql` never reopens a mutable source pathname. After DDL, it proves the
+Storage-audit login still has no persistent write path, then runs the read-only
+v10 hosted validator and the packet-bound session-revocation probe inside a
+transaction that ends in `ROLLBACK`. Child processes receive a purpose-built
+environment containing only operating-system basics and the credential needed
+for that exact step; the Management API token is never inherited. Evidence is
+sanitized and stored under `.tmp/preview-branch-rehearsal/<fingerprint>/`.
 
-Resume is allowed only while the same packet, approval, authenticated branch
-receipt, URL digests, commit, target, and file bytes remain current. The tool
-rechecks the absolute branch/approval deadline before and after every provider
-step and bounds each subprocess by the remaining window. It also reruns both
-credential privilege checks on every resume. `--reset-state` discards local
-resume state; it does not undo hosted changes.
+No hosted mutation can resume from local state. The tool rechecks the absolute
+branch/approval deadline before and after every provider step, bounds every
+subprocess, and exclusively creates one evidence directory. A prior or failed
+attempt requires a new empty branch, a fresh authenticated branch receipt, and
+a new exact approval; deleting or editing local evidence grants no authority.
 
 ## 6. Complete owner-gated hosted proof
 
@@ -254,6 +262,7 @@ drop an index.
 | `rehearsal_signing_authority_unconfigured` or `rehearsal_authority_*` | Stop. Register and separately pin distinct owner/reviewer public keys through review; never supply an ad hoc key. |
 | `rehearsal_authenticated_branch_*` | Stop. Refresh the environment-read receipt; never substitute local branch metadata. |
 | `rehearsal_branch_or_approval_deadline_reached` | Stop all work and obtain separate deletion approval; an expired branch is never reusable. |
+| `rehearsal_prior_attempt_requires_new_empty_branch` | Stop. Preserve the evidence, delete only with approval, and start later with a new empty branch and fresh approval. |
 | `runtime_*privileged*` or `storage_audit_*privileged*` | Replace with dedicated least-privilege logins. |
 | `rehearsal_clean_target_required` | Delete only with approval, then create a new empty branch. |
 | `step_failed_apply_migration_*` or `step_failed_apply_quarantine` | Stop the branch; do not patch SQL interactively. |

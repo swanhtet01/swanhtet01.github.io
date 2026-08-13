@@ -32,7 +32,7 @@ test('builds an exact non-mutating v10 rehearsal packet', async () => {
   })
   await validateSupabaseRehearsalPacket(packet, { repositoryRoot, expectedReleaseCommit: releaseCommit })
 
-  assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v3')
+  assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v4')
   assert.equal(packet.state, 'prepared-not-executed')
   assert.equal(packet.release.schemaVersion, 10)
   assert.equal(packet.release.migrationCount, 12)
@@ -42,6 +42,13 @@ test('builds an exact non-mutating v10 rehearsal packet', async () => {
   assert.equal(packet.release.browserQuarantine.scope, 'isolated-rehearsal-only')
   assert.equal(packet.release.browserQuarantine.sourceAudit.publicTableCount, 27)
   assert.equal(packet.release.browserQuarantine.sourceAudit.publicSequenceCount, 2)
+  assert.equal(packet.release.browserQuarantine.sourceAudit.futureProviderOwnedDefaultGrantRisk, true)
+  assert.deepEqual(packet.release.sessionRevocationProbe, {
+    path: 'supabase/rehearsal/20260807_preview_session_revocation_probe.sql',
+    sha256: packet.release.sessionRevocationProbe.sha256,
+    mutationScope: 'single-transaction-rollback-only',
+  })
+  assert.match(packet.release.sessionRevocationProbe.sha256, /^[0-9a-f]{64}$/)
   assert.match(packet.release.browserQuarantine.script.sha256, /^[0-9a-f]{64}$/)
   assert.deepEqual(packet.release.browserQuarantine.browserRolesDenied, ['anon', 'authenticated'])
   assert.equal(packet.release.browserQuarantine.serviceRolePreserved, true)
@@ -75,6 +82,16 @@ test('rejects the protected production project', async () => {
 })
 
 test('rejects malformed target refs and stale evidence', async () => {
+  await assert.rejects(
+    buildSupabaseRehearsalPacket({
+      repositoryRoot,
+      targetProjectRef,
+      releaseCommit,
+      releaseReview: originMainReleaseReview(releaseCommit),
+      generatedAt: '2026-02-31T00:00:00.000Z',
+    }),
+    /supabase_rehearsal_generated_at_invalid/,
+  )
   await assert.rejects(
     buildSupabaseRehearsalPacket({ repositoryRoot, targetProjectRef: 'not-a-ref', releaseCommit, releaseReview, generatedAt }),
     /supabase_rehearsal_target_ref_invalid/,
@@ -158,7 +175,7 @@ test('gates the preview-branch rehearsal orchestrator with its fail-closed self-
   assert.deepEqual(report, {
     ok: true,
     contract: 'supermega.preview-branch-rehearsal.v2.self-test',
-    cases: 26,
+    cases: 28,
     networkRequestsPerformed: 0,
     childProcessesSpawned: 0,
     productionMutated: false,

@@ -1,6 +1,6 @@
 import { createHash, createPublicKey, generateKeyPairSync, sign as signBytes, verify as verifyBytes } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -33,8 +33,8 @@ import {
 //     20260807_preview_session_revocation_probe.sql (rollback-only probe).
 //
 // The tool performs zero action when SUPERMEGA_REHEARSAL_DATABASE_URL is
-// absent, is resumable through a state file, fail-closes on the first
-// failing step, and never accepts or prints credential values.
+// absent, fail-closes on the first failing step, never resumes hosted writes
+// from local state, and never accepts or prints credential values.
 
 export const PREVIEW_REHEARSAL_CONTRACT = 'supermega.preview-branch-rehearsal.v2'
 export const PREVIEW_REHEARSAL_APPROVAL_CONTRACT = 'supermega.preview-rehearsal-approval.v2'
@@ -43,6 +43,7 @@ export const PREVIEW_REHEARSAL_AUTHORITY_CONTRACT = 'supermega.preview-rehearsal
 const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..')
 const WINDOW_HOURS = 24
 const MINIMUM_EXECUTION_WINDOW_MINUTES = 180
+const LOCAL_SUBPROCESS_TIMEOUT_MS = 15_000
 const projectRefPattern = /^[a-z0-9]{20}$/
 const commitPattern = /^[0-9a-f]{40}$/
 const digestPattern = /^sha256:[0-9a-f]{64}$/
@@ -104,10 +105,15 @@ const REQUIRED_CLEAN_TARGET_CHECKS = [
   'private_schema_absent',
   'backend_role_absent',
   'public_user_relations_absent',
+  'unexpected_user_schemas_absent',
   'auth_users_absent',
   'auth_sessions_absent',
   'storage_buckets_absent',
   'storage_objects_absent',
+]
+const SAFE_CHILD_ENV_KEYS = [
+  'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
+  'TEMP', 'TMP', 'TMPDIR', 'USERPROFILE', 'HOME', 'LANG', 'LC_ALL',
 ]
 const OWNER_CONSOLE_SEGMENTS = [
   { id: 'owner_branch_creation', estimateMinutes: 45, description: 'Create one empty preview branch without production data and capture ref, connection string, and CA file (docs/rehearsal-runbook.md step 2).' },
@@ -617,7 +623,7 @@ export function buildPlan() {
     kind: 'branch-mutation',
     estimateMinutes: 8,
     covers: ['ordered-migration-application-through-v10'],
-    command: `psql --set ON_ERROR_STOP=1 --file ${MIGRATION_DIRECTORY}/${name}`,
+    command: `recheck clean reviewed checkout; verify ${MIGRATION_DIRECTORY}/${name}; pass those exact bytes to psql --file -`,
   }))
   const steps = [
     { id: 'release_pin', kind: 'local', estimateMinutes: 1, covers: [], command: 'git status --porcelain && git rev-parse HEAD == origin/main' },
@@ -629,9 +635,10 @@ export function buildPlan() {
     { id: 'runtime_credential_boundary', kind: 'network-read', estimateMinutes: 3, covers: ['dedicated-unprivileged-runtime-and-storage-audit-logins'], command: `connect read-only with ${RUNTIME_URL_ENV} and ${STORAGE_AUDIT_URL_ENV}; prove exact identities, role attributes, memberships, TLS, and transaction mode without printing credentials` },
     { id: 'storage_privacy_preflight', kind: 'local', estimateMinutes: 2, covers: ['private-storage-isolation-proof (offline configuration preflight; live audit stays owner-gated)'], command: 'node tools/run_python_tool.mjs tools/verify_private_storage_privacy.py --preflight' },
     ...migrationSteps,
-    { id: 'apply_quarantine', kind: 'branch-mutation', estimateMinutes: 10, covers: ['public-browser-table-and-sequence-denial', 'public-default-privilege-denial-for-postgres-and-supabase-admin', 'service-role-contact-path-retained'], command: `psql --set ON_ERROR_STOP=1 --file ${QUARANTINE_PATH}` },
+    { id: 'apply_quarantine', kind: 'branch-mutation', estimateMinutes: 10, covers: ['public-browser-table-and-sequence-denial', 'public-default-privilege-denial-for-postgres-and-supabase-admin', 'service-role-contact-path-retained'], command: `recheck clean reviewed checkout; verify ${QUARANTINE_PATH}; pass those exact bytes to psql --file -` },
+    { id: 'storage_audit_postmigration_boundary', kind: 'network-read', estimateMinutes: 3, covers: ['storage-audit-credential-remains-without-persistent-write-authority'], command: `recheck ${STORAGE_AUDIT_URL_ENV} role attributes, membership paths, ownership, default ACLs, and effective write privileges after DDL` },
     { id: 'hosted_validator', kind: 'network-read', estimateMinutes: 10, covers: ['read-only-v10-runtime-validator'], command: `node tools/run_python_tool.mjs tools/validate_supermega_database_url.py --env-key ${RUNTIME_URL_ENV} --storage-audit-env-key ${STORAGE_AUDIT_URL_ENV} --ensure-schema --require-ready` },
-    { id: 'session_revocation_probe', kind: 'network-read', estimateMinutes: 5, covers: ['active-session-acceptance-and-revoked-session-denial'], command: `psql --set ON_ERROR_STOP=1 --file ${PROBE_PATH} (single transaction, ends in ROLLBACK)` },
+    { id: 'session_revocation_probe', kind: 'network-read', estimateMinutes: 5, covers: ['active-session-acceptance-and-revoked-session-denial'], command: `recheck clean reviewed checkout; verify ${PROBE_PATH}; pass exact bytes to psql --file - (single transaction, ends in ROLLBACK)` },
     { id: 'evidence_packet', kind: 'local', estimateMinutes: 2, covers: [], command: 'assemble sanitized evidence packet under .tmp/' },
   ]
   const toolMinutes = steps.reduce((total, step) => total + step.estimateMinutes, 0)
@@ -652,14 +659,23 @@ export function buildPlan() {
   }
 }
 
-function defaultExec({ argv, envOverrides, cwd, timeoutMs }) {
+function safeChildEnvironment(source) {
+  const output = {}
+  for (const key of SAFE_CHILD_ENV_KEYS) {
+    if (typeof source?.[key] === 'string' && source[key]) output[key] = source[key]
+  }
+  return output
+}
+
+function defaultExec({ argv, envOverrides, cwd, timeoutMs, input, baseEnv }) {
   const result = spawnSync(argv[0], argv.slice(1), {
     cwd,
-    env: { ...process.env, ...envOverrides },
+    env: { ...safeChildEnvironment(baseEnv ?? process.env), ...envOverrides },
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 16 * 1024 * 1024,
     timeout: timeoutMs,
+    input,
     shell: false,
   })
   if (result.error) {
@@ -680,10 +696,16 @@ function lastJsonLine(stdout) {
   return null
 }
 
-function resolvePsql(env, exec, rootDir) {
+function resolvePsql(env, exec, rootDir, timeoutMs) {
   const configured = String(env[POSTGRES_BIN_ENV] || '').trim()
   const psql = configured ? join(configured, process.platform === 'win32' ? 'psql.exe' : 'psql') : 'psql'
-  const result = exec({ stepId: 'toolchain', argv: [psql, '--version'], envOverrides: {}, cwd: rootDir })
+  const result = exec({
+    stepId: 'toolchain',
+    argv: [psql, '--version'],
+    envOverrides: {},
+    cwd: rootDir,
+    timeoutMs,
+  })
   if (result.status !== 0) fail('psql_unavailable')
   const match = /\s(\d+)(?:\.\d+)?/.exec(result.stdout || '')
   if (!match || Number(match[1]) !== 17) fail('psql_major_17_required')
@@ -704,8 +726,16 @@ function psqlEnv(connection, caFile) {
 }
 
 const CREDENTIAL_PREFLIGHT_SQL = `begin read only;
-with login_role as (
+with recursive login_role as (
   select * from pg_roles where rolname = current_user
+), role_membership(roleid) as (
+  select membership.roleid
+  from pg_auth_members membership
+  join login_role on login_role.oid = membership.member
+  union
+  select membership.roleid
+  from pg_auth_members membership
+  join role_membership parent on parent.roleid = membership.member
 ), elevated as (
   select * from pg_roles
   where rolsuper or rolbypassrls or rolcreaterole or rolcreatedb or rolreplication
@@ -719,7 +749,7 @@ select json_build_object(
   'contract', 'supermega.preview-rehearsal-credential-preflight.v1',
   'loginRole', current_user,
   'sessionRoleStable', current_user = session_user,
-  'transactionReadOnly', current_setting('transaction_read_only') = 'on',
+  'probeTransactionReadOnly', current_setting('transaction_read_only') = 'on',
   'tlsActive', coalesce((select ssl from pg_stat_ssl where pid = pg_backend_pid()), false),
   'canLogin', coalesce((select rolcanlogin from login_role), false),
   'noSuperuser', coalesce((select not rolsuper from login_role), false),
@@ -727,19 +757,107 @@ select json_build_object(
   'noCreateRole', coalesce((select not rolcreaterole from login_role), false),
   'noCreateDb', coalesce((select not rolcreatedb from login_role), false),
   'noReplication', coalesce((select not rolreplication from login_role), false),
-  'noElevatedMembership', not exists (
-    select 1 from login_role cross join elevated
-    where login_role.oid <> elevated.oid
-      and pg_has_role(login_role.oid, elevated.oid, 'USAGE')
+  'noRoleMemberships', not exists (select 1 from role_membership),
+  'noElevatedMembershipPath', not exists (
+    select 1
+    from role_membership
+    join elevated on elevated.oid = role_membership.roleid
+  ),
+  'noDatabaseCreatePrivilege', not has_database_privilege(current_user, current_database(), 'CREATE'),
+  'noSchemaCreatePrivilege', not exists (
+    select 1
+    from pg_namespace schema_record
+    where schema_record.nspname !~ '^pg_(catalog|toast|temp|toasted|internal)'
+      and schema_record.nspname <> 'information_schema'
+      and has_schema_privilege(current_user, schema_record.oid, 'CREATE')
+  ),
+  'noTableWritePrivilege', not exists (
+    select 1
+    from pg_class relation_record
+    join pg_namespace schema_record on schema_record.oid = relation_record.relnamespace
+    where relation_record.relkind in ('r', 'p', 'v', 'm', 'f')
+      and schema_record.nspname !~ '^pg_(catalog|toast|temp|toasted|internal)'
+      and schema_record.nspname <> 'information_schema'
+      and (
+        has_table_privilege(current_user, relation_record.oid, 'INSERT')
+        or has_table_privilege(current_user, relation_record.oid, 'UPDATE')
+        or has_table_privilege(current_user, relation_record.oid, 'DELETE')
+        or has_table_privilege(current_user, relation_record.oid, 'TRUNCATE')
+        or has_table_privilege(current_user, relation_record.oid, 'REFERENCES')
+        or has_table_privilege(current_user, relation_record.oid, 'TRIGGER')
+        or has_any_column_privilege(current_user, relation_record.oid, 'INSERT')
+        or has_any_column_privilege(current_user, relation_record.oid, 'UPDATE')
+        or has_any_column_privilege(current_user, relation_record.oid, 'REFERENCES')
+      )
+  ),
+  'noSequenceMutationPrivilege', not exists (
+    select 1
+    from pg_class sequence_record
+    join pg_namespace schema_record on schema_record.oid = sequence_record.relnamespace
+    where sequence_record.relkind = 'S'
+      and schema_record.nspname !~ '^pg_(catalog|toast|temp|toasted|internal)'
+      and schema_record.nspname <> 'information_schema'
+      and (
+        has_sequence_privilege(current_user, sequence_record.oid, 'USAGE')
+        or has_sequence_privilege(current_user, sequence_record.oid, 'UPDATE')
+      )
+  ),
+  'noLargeObjectWritePrivilege', not exists (
+    select 1
+    from pg_largeobject_metadata large_object
+    where has_largeobject_privilege(current_user, large_object.oid, 'UPDATE')
+  ),
+  'noSecurityDefinerExecutePrivilege', not exists (
+    select 1
+    from pg_proc function_record
+    join pg_namespace schema_record on schema_record.oid = function_record.pronamespace
+    where function_record.prosecdef
+      and schema_record.nspname !~ '^pg_(catalog|toast|temp|toasted|internal)'
+      and schema_record.nspname <> 'information_schema'
+      and has_function_privilege(current_user, function_record.oid, 'EXECUTE')
+  ),
+  'noObjectOwnership', not exists (
+    select 1
+    from login_role
+    join pg_shdepend dependency
+      on dependency.refclassid = 'pg_authid'::regclass
+     and dependency.refobjid = login_role.oid
+     and dependency.deptype = 'o'
+  ),
+  'noDefaultWritePrivileges', not exists (
+    select 1
+    from pg_default_acl default_acl
+    cross join login_role
+    cross join lateral aclexplode(coalesce(
+      default_acl.defaclacl,
+      acldefault(default_acl.defaclobjtype, default_acl.defaclrole)
+    )) privilege
+    where privilege.grantee in (0, login_role.oid)
+      and (
+        (default_acl.defaclobjtype = 'r' and privilege.privilege_type in (
+          'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'
+        ))
+        or (default_acl.defaclobjtype = 'S' and privilege.privilege_type in ('USAGE', 'UPDATE'))
+        or (default_acl.defaclobjtype = 'n' and privilege.privilege_type = 'CREATE')
+      )
+  ),
+  'noRoleSettings', not exists (
+    select 1
+    from login_role
+    join pg_db_role_setting role_setting on role_setting.setrole = login_role.oid
   )
 )::text;
 rollback;`
 
 function validateCredentialPreflightReport(report, expectedRole, purpose) {
   if (!exactKeys(report, [
-    'contract', 'loginRole', 'sessionRoleStable', 'transactionReadOnly', 'tlsActive',
+    'contract', 'loginRole', 'sessionRoleStable', 'probeTransactionReadOnly', 'tlsActive',
     'canLogin', 'noSuperuser', 'noBypassRls', 'noCreateRole', 'noCreateDb',
-    'noReplication', 'noElevatedMembership',
+    'noReplication', 'noRoleMemberships', 'noElevatedMembershipPath',
+    'noDatabaseCreatePrivilege', 'noSchemaCreatePrivilege', 'noTableWritePrivilege',
+    'noSequenceMutationPrivilege', 'noLargeObjectWritePrivilege',
+    'noSecurityDefinerExecutePrivilege',
+    'noObjectOwnership', 'noDefaultWritePrivileges', 'noRoleSettings',
   ])
     || report.contract !== 'supermega.preview-rehearsal-credential-preflight.v1'
     || report.loginRole !== expectedRole
@@ -749,7 +867,7 @@ function validateCredentialPreflightReport(report, expectedRole, purpose) {
   return {
     loginRole: report.loginRole,
     sessionRoleStable: true,
-    transactionReadOnly: true,
+    probeTransactionReadOnly: true,
     tlsActive: true,
     canLogin: true,
     noSuperuser: true,
@@ -757,15 +875,17 @@ function validateCredentialPreflightReport(report, expectedRole, purpose) {
     noCreateRole: true,
     noCreateDb: true,
     noReplication: true,
-    noElevatedMembership: true,
-  }
-}
-
-function readState(statePath, readFile) {
-  try {
-    return JSON.parse(readFile(statePath))
-  } catch {
-    return null
+    noRoleMemberships: true,
+    noElevatedMembershipPath: true,
+    noDatabaseCreatePrivilege: true,
+    noSchemaCreatePrivilege: true,
+    noTableWritePrivilege: true,
+    noSequenceMutationPrivilege: true,
+    noLargeObjectWritePrivilege: true,
+    noSecurityDefinerExecutePrivilege: true,
+    noObjectOwnership: true,
+    noDefaultWritePrivileges: true,
+    noRoleSettings: true,
   }
 }
 
@@ -786,8 +906,10 @@ async function runRehearsalWithAuthority({
 } = {}) {
   const flags = new Set(argv)
   for (const flag of flags) {
-    if (!['--dry-run', '--reset-state', '--self-test', '--capture-branch-receipt'].includes(flag)) fail('rehearsal_arguments_invalid')
+    if (!['--dry-run', '--self-test', '--capture-branch-receipt'].includes(flag)) fail('rehearsal_arguments_invalid')
   }
+  const childBaseEnv = safeChildEnvironment(env)
+  const invoke = (call) => exec({ ...call, baseEnv: childBaseEnv })
 
   if (flags.has('--capture-branch-receipt')) {
     if (flags.size !== 1) fail('rehearsal_arguments_invalid')
@@ -838,14 +960,6 @@ async function runRehearsalWithAuthority({
 
   const stepResults = []
   let runRoot = ''
-  let statePath = ''
-  let state = null
-  const saveState = () => {
-    if (!state || !statePath) return
-    const staged = `${statePath}.tmp`
-    writeFileSync(staged, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
-    renameSync(staged, statePath)
-  }
   try {
   const expectedProjectRef = String(env[REF_ENV] || '').trim().toLowerCase()
   if (!projectRefPattern.test(expectedProjectRef)) fail('rehearsal_expected_project_ref_invalid')
@@ -884,7 +998,13 @@ async function runRehearsalWithAuthority({
     .filter(Boolean)
 
   const startedAt = now()
-  const releaseHead = exec({ stepId: 'release_pin', argv: ['git', '-C', rootDir, 'rev-parse', 'HEAD'], envOverrides: {}, cwd: rootDir })
+  const releaseHead = invoke({
+    stepId: 'release_pin',
+    argv: ['git', '-C', rootDir, 'rev-parse', 'HEAD'],
+    envOverrides: { GIT_NO_LAZY_FETCH: '1' },
+    cwd: rootDir,
+    timeoutMs: LOCAL_SUBPROCESS_TIMEOUT_MS,
+  })
   if (releaseHead.status !== 0) fail('rehearsal_release_commit_unavailable')
   const releaseCommit = releaseHead.stdout.trim()
   if (!commitPattern.test(releaseCommit)) fail('rehearsal_release_commit_invalid')
@@ -932,7 +1052,14 @@ async function runRehearsalWithAuthority({
     fail('rehearsal_packet_quarantine_digest_mismatch')
   }
   inventory[QUARANTINE_PATH] = quarantineDigest
-  inventory[PROBE_PATH] = `sha256:${sha256(readFileBytes(resolve(rootDir, PROBE_PATH)))}`
+  const probeDigest = `sha256:${sha256(readFileBytes(resolve(rootDir, PROBE_PATH)))}`
+  if (!exactKeys(packet.release?.sessionRevocationProbe, ['path', 'sha256', 'mutationScope'])
+    || packet.release.sessionRevocationProbe.path !== PROBE_PATH
+    || packet.release.sessionRevocationProbe.sha256 !== probeDigest.slice(7)
+    || packet.release.sessionRevocationProbe.mutationScope !== 'single-transaction-rollback-only') {
+    fail('rehearsal_packet_session_revocation_probe_invalid')
+  }
+  inventory[PROBE_PATH] = probeDigest
 
   const connectionDigests = {
     administrative: `sha256:${sha256(databaseUrl)}`,
@@ -992,12 +1119,9 @@ async function runRehearsalWithAuthority({
     fail('rehearsal_evidence_root_must_be_temporary')
   }
   runRoot = join(resolvedEvidenceRoot, fingerprint.slice(7, 19))
-  statePath = join(runRoot, 'state.json')
-  mkdirSync(runRoot, { recursive: true })
-  if (flags.has('--reset-state')) rmSync(statePath, { force: true })
-  state = readState(statePath, readFile)
-  if (state && state.fingerprint !== fingerprint) fail('rehearsal_state_fingerprint_mismatch')
-  if (!state) state = { contract: PREVIEW_REHEARSAL_CONTRACT, fingerprint, releaseCommit, targetProjectRef: expectedProjectRef, steps: {} }
+  mkdirSync(resolvedEvidenceRoot, { recursive: true })
+  if (existsSync(runRoot)) fail('rehearsal_prior_attempt_requires_new_empty_branch')
+  mkdirSync(runRoot)
 
   let stepIndex = 0
   const record = (id, outcome, detail) => {
@@ -1012,23 +1136,15 @@ async function runRehearsalWithAuthority({
     }
     const serialized = JSON.stringify(payload, null, 2)
     assertNoCredential(serialized, 'rehearsal_evidence_credential_detected')
-    writeFileSync(evidenceFile, `${serialized}\n`, 'utf8')
+    writeFileSync(evidenceFile, `${serialized}\n`, { encoding: 'utf8', flag: 'wx' })
     stepResults.push({ id, outcome, evidenceFile })
-    if (outcome === 'ok') {
-      state.steps[id] = { ok: true, completedAt: payload.recordedAt, digest: `sha256:${sha256(serialized)}` }
-      saveState()
-    }
     return payload
   }
 
-  const runCommandStep = (id, argv, envOverrides, { requireExitZero = true } = {}) => {
-    if (state.steps[id]?.ok) {
-      stepResults.push({ id, outcome: 'skipped_already_complete' })
-      return null
-    }
+  const runCommandStep = (id, argv, envOverrides, { requireExitZero = true, input } = {}) => {
     const remainingMs = assertActionWindow()
     const started = now()
-    const result = exec({ stepId: id, argv, envOverrides, cwd: rootDir, timeoutMs: remainingMs })
+    const result = invoke({ stepId: id, argv, envOverrides, cwd: rootDir, timeoutMs: remainingMs, input })
     assertActionWindow()
     const stdout = sanitizeText(result.stdout, secrets)
     const stderr = sanitizeText(result.stderr, secrets)
@@ -1047,129 +1163,139 @@ async function runRehearsalWithAuthority({
     return { ...result, stdout, stderr }
   }
 
-    // release_pin: every invocation, including a resume, must use the clean
-    // reviewed bytes. Local resume state never waives this source check.
-    const status = exec({ stepId: 'release_pin', argv: ['git', '-C', rootDir, 'status', '--porcelain'], envOverrides: {}, cwd: rootDir })
-    if (status.status !== 0 || status.stdout.trim()) {
-      if (!state.steps.release_pin?.ok) record('release_pin', 'failed', { reason: 'rehearsal_checkout_dirty' })
-      fail('rehearsal_checkout_dirty')
-    }
-    const originMain = exec({ stepId: 'release_pin', argv: ['git', '-C', rootDir, 'rev-parse', 'origin/main'], envOverrides: {}, cwd: rootDir })
-    if (originMain.status !== 0 || originMain.stdout.trim() !== releaseCommit) {
-      if (!state.steps.release_pin?.ok) record('release_pin', 'failed', { reason: 'rehearsal_head_not_origin_main_fetch_first' })
-      fail('rehearsal_head_not_origin_main_fetch_first')
-    }
-    if (!state.steps.release_pin?.ok) {
-      record('release_pin', 'ok', { releaseCommit, targetProjectRef: expectedProjectRef })
-    } else {
-      stepResults.push({ id: 'release_pin', outcome: 'skipped_already_complete' })
+    const assertReviewedCheckout = (stepId) => {
+      const runGit = (args) => {
+        const timeoutMs = Math.min(assertActionWindow(), LOCAL_SUBPROCESS_TIMEOUT_MS)
+        const result = invoke({
+          stepId: `${stepId}_source_guard`,
+          argv: ['git', '-C', rootDir, ...args],
+          envOverrides: { GIT_NO_LAZY_FETCH: '1' },
+          cwd: rootDir,
+          timeoutMs,
+        })
+        assertActionWindow()
+        return result
+      }
+      const status = runGit(['status', '--porcelain'])
+      if (status.status !== 0 || status.stdout.trim()) fail('rehearsal_checkout_dirty')
+      const currentHead = runGit(['rev-parse', 'HEAD'])
+      if (currentHead.status !== 0 || currentHead.stdout.trim() !== releaseCommit) {
+        fail('rehearsal_release_commit_changed')
+      }
+      const originMain = runGit(['rev-parse', 'origin/main'])
+      if (originMain.status !== 0 || originMain.stdout.trim() !== releaseCommit) {
+        fail('rehearsal_head_not_origin_main_fetch_first')
+      }
     }
 
-    if (!state.steps.release_authority?.ok) {
-      record('release_authority', 'ok', {
-        releaseCommit,
-        targetProjectRef: expectedProjectRef,
-        rehearsalPacketContract: packet.contract,
-        rehearsalPacketDigest: packet.packetDigest,
-        approvalContract: PREVIEW_REHEARSAL_APPROVAL_CONTRACT,
-        ...approvalEvidence,
-        authenticatedBranchReceipt: branchReceipt,
-        authenticatedBranchReceiptDigest: objectDigest(branchReceipt),
-        providerAuthenticated: true,
-        providerReadsPerformed: 1,
-        providerWritesPerformed: 0,
-        connectionReviewDigest: `sha256:${sha256(JSON.stringify(connectionDigests))}`,
-        maximumLifetimeHours: WINDOW_HOURS,
-        startsWithProductionData: false,
-      })
-    } else {
-      stepResults.push({ id: 'release_authority', outcome: 'skipped_already_complete' })
-    }
+    // Local evidence is append-only and cannot authorize a resume. Every SQL
+    // execution rechecks the clean reviewed checkout and executes only the
+    // already-hashed bytes supplied on stdin.
+    assertReviewedCheckout('release_pin')
+    record('release_pin', 'ok', { releaseCommit, targetProjectRef: expectedProjectRef })
+
+    record('release_authority', 'ok', {
+      releaseCommit,
+      targetProjectRef: expectedProjectRef,
+      rehearsalPacketContract: packet.contract,
+      rehearsalPacketDigest: packet.packetDigest,
+      approvalContract: PREVIEW_REHEARSAL_APPROVAL_CONTRACT,
+      ...approvalEvidence,
+      authenticatedBranchReceipt: branchReceipt,
+      authenticatedBranchReceiptDigest: objectDigest(branchReceipt),
+      providerAuthenticated: true,
+      providerReadsPerformed: 1,
+      providerWritesPerformed: 0,
+      connectionReviewDigest: `sha256:${sha256(JSON.stringify(connectionDigests))}`,
+      maximumLifetimeHours: WINDOW_HOURS,
+      startsWithProductionData: false,
+    })
 
     runCommandStep('local_quarantine_guard', ['node', 'tools/verify_public_browser_quarantine.mjs'], {})
 
     // migration_inventory: bind every migration byte to the reviewed packet
     // before any hosted mutation. The chain starts with the public baseline,
     // then applies all eleven private migrations through v10.
-    if (!state.steps.migration_inventory?.ok) {
-      record('migration_inventory', 'ok', {
-        migrationCount: EXPECTED_MIGRATION_COUNT,
-        migrations: migrations.map((migration) => ({
-          name: migration.name,
-          packetDigest: `sha256:${migration.sha256}`,
-        })),
-        quarantineDigest: inventory[QUARANTINE_PATH],
-        sessionRevocationProbeDigest: inventory[PROBE_PATH],
-      })
-    } else {
-      stepResults.push({ id: 'migration_inventory', outcome: 'skipped_already_complete' })
-    }
+    record('migration_inventory', 'ok', {
+      migrationCount: EXPECTED_MIGRATION_COUNT,
+      migrations: migrations.map((migration) => ({
+        name: migration.name,
+        packetDigest: `sha256:${migration.sha256}`,
+      })),
+      quarantineDigest: inventory[QUARANTINE_PATH],
+      sessionRevocationProbeDigest: inventory[PROBE_PATH],
+    })
 
     assertActionWindow()
-    const toolchain = resolvePsql(env, exec, rootDir)
+    const toolchain = resolvePsql(
+      env,
+      invoke,
+      rootDir,
+      Math.min(assertActionWindow(), LOCAL_SUBPROCESS_TIMEOUT_MS),
+    )
     assertActionWindow()
-    if (!state.steps.toolchain?.ok) record('toolchain', 'ok', { psqlVersion: sanitizeText(toolchain.versionOutput, secrets) })
-    else stepResults.push({ id: 'toolchain', outcome: 'skipped_already_complete' })
+    record('toolchain', 'ok', { psqlVersion: sanitizeText(toolchain.versionOutput, secrets) })
 
     // url_preflight: require the clean target described by the reviewed packet.
     // A production schema mirror, existing private schema, or existing backend
     // role is rejected before any migration is handed to psql.
-    if (!state.steps.url_preflight?.ok) {
-      const preflightArgv = [
-        'node', 'tools/run_python_tool.mjs', 'tools/validate_supermega_database_url.py',
-        '--env-key', URL_ENV,
-        '--rehearsal-preflight',
-        '--expected-project-ref-env-key', REF_ENV,
-        '--production-project-ref-env-key', PRODUCTION_REF_ENV,
-        '--ssl-root-cert-env-key', CA_ENV,
-      ]
-      const started = now()
-      const remainingMs = assertActionWindow()
-      const result = exec({
-        stepId: 'url_preflight',
-        argv: preflightArgv,
-        envOverrides: { [PRODUCTION_REF_ENV]: productionProjectRef, [REF_ENV]: expectedProjectRef },
-        cwd: rootDir,
-        timeoutMs: remainingMs,
-      })
-      assertActionWindow()
-      const report = lastJsonLine(sanitizeText(result.stdout, secrets))
-      const detail = {
-        argv: preflightArgv,
-        exitCode: result.status,
-        durationMs: now().getTime() - started.getTime(),
-        report,
-        stderr: sanitizeText(result.stderr, secrets).slice(0, 20000),
-      }
-      if (!report || report.contract !== 'supermega_supabase_rehearsal_preflight_v1') {
-        record('url_preflight', 'failed', detail)
-        fail('url_preflight_report_invalid')
-      }
-      const failed = Array.isArray(report.failed_checks) ? report.failed_checks : null
-      if (report.ready !== true
-        || report.status !== 'clean_target'
-        || !failed
-        || failed.length !== 0
-        || REQUIRED_CLEAN_TARGET_CHECKS.some((check) => report.checks?.[check] !== true)
-        || report.production_mutated !== false
-        || report.supabase_mutated !== false) {
-        record('url_preflight', 'failed', detail)
-        fail('rehearsal_clean_target_required')
-      }
-      record('url_preflight', 'ok', { ...detail, baseline: 'clean-target-without-production-data' })
-    } else {
-      stepResults.push({ id: 'url_preflight', outcome: 'skipped_already_complete' })
+    const preflightArgv = [
+      'node', 'tools/run_python_tool.mjs', 'tools/validate_supermega_database_url.py',
+      '--env-key', URL_ENV,
+      '--rehearsal-preflight',
+      '--expected-project-ref-env-key', REF_ENV,
+      '--production-project-ref-env-key', PRODUCTION_REF_ENV,
+      '--ssl-root-cert-env-key', CA_ENV,
+    ]
+    const preflightStarted = now()
+    const result = invoke({
+      stepId: 'url_preflight',
+      argv: preflightArgv,
+      envOverrides: {
+        [URL_ENV]: databaseUrl,
+        [PRODUCTION_REF_ENV]: productionProjectRef,
+        [REF_ENV]: expectedProjectRef,
+        [CA_ENV]: caFile,
+      },
+      cwd: rootDir,
+      timeoutMs: assertActionWindow(),
+    })
+    assertActionWindow()
+    const report = lastJsonLine(sanitizeText(result.stdout, secrets))
+    const detail = {
+      argv: preflightArgv,
+      exitCode: result.status,
+      durationMs: now().getTime() - preflightStarted.getTime(),
+      report,
+      stderr: sanitizeText(result.stderr, secrets).slice(0, 20000),
     }
+    if (!report || report.contract !== 'supermega_supabase_rehearsal_preflight_v1') {
+      record('url_preflight', 'failed', detail)
+      fail('url_preflight_report_invalid')
+    }
+    const failed = Array.isArray(report.failed_checks) ? report.failed_checks : null
+    if (result.status !== 0
+      || report.ready !== true
+      || report.status !== 'clean_target'
+      || !failed
+      || failed.length !== 0
+      || REQUIRED_CLEAN_TARGET_CHECKS.some((check) => report.checks?.[check] !== true)
+      || report.production_mutated !== false
+      || report.supabase_mutated !== false) {
+      record('url_preflight', 'failed', detail)
+      fail('rehearsal_clean_target_required')
+    }
+    record('url_preflight', 'ok', { ...detail, baseline: 'clean-target-without-production-data' })
 
-    // Re-run these authenticated read-only identity checks on every invocation,
-    // including a resume. A role can be altered after local state was recorded.
+    // Prove both fresh logins have no persistent write/ownership/default
+    // authority or SET-role path before the first migration.
     const credentialReports = {}
     for (const [purpose, boundedConnection] of [
       ['runtime', runtimeConnection],
       ['storage_audit', storageAuditConnection],
     ]) {
       const remainingMs = assertActionWindow()
-      const result = exec({
+      const result = invoke({
         stepId: `${purpose}_credential_preflight`,
         argv: [
           toolchain.psql, '--no-psqlrc', '--no-password', '--tuples-only', '--no-align',
@@ -1205,17 +1331,14 @@ async function runRehearsalWithAuthority({
     // read-only owner action documented in the runbook.
     runCommandStep('storage_privacy_preflight', [
       'node', 'tools/run_python_tool.mjs', 'tools/verify_private_storage_privacy.py', '--preflight',
-    ], {})
+    ], Object.fromEntries(STORAGE_PRIVACY_ENV.map((key) => [key, env[key]])))
 
     // Apply the reviewed public baseline and all private migrations through
     // v10. Recheck the exact packet digest immediately before every psql call.
     const branchEnv = psqlEnv(connection, caFile)
     for (const [index, migration] of migrations.entries()) {
       const id = `apply_migration_${String(index + 1).padStart(2, '0')}`
-      if (state.steps[id]?.ok) {
-        stepResults.push({ id, outcome: 'skipped_already_complete' })
-        continue
-      }
+      assertReviewedCheckout(id)
       const bytes = readFileBytes(resolve(rootDir, MIGRATION_DIRECTORY, migration.name))
       if (sha256(bytes) !== migration.sha256) {
         fail(`migration_digest_mismatch_${String(index + 1).padStart(2, '0')}`)
@@ -1223,34 +1346,75 @@ async function runRehearsalWithAuthority({
       runCommandStep(id, [
         toolchain.psql, '--no-psqlrc', '--no-password',
         '--set', 'ON_ERROR_STOP=1',
-        '--file', resolve(rootDir, MIGRATION_DIRECTORY, migration.name),
-      ], branchEnv)
+        '--file', '-',
+      ], branchEnv, { input: bytes })
     }
 
+    assertReviewedCheckout('apply_quarantine')
+    const quarantineBytes = readFileBytes(resolve(rootDir, QUARANTINE_PATH))
+    if (`sha256:${sha256(quarantineBytes)}` !== inventory[QUARANTINE_PATH]) {
+      fail('rehearsal_quarantine_digest_mismatch')
+    }
     runCommandStep('apply_quarantine', [
       toolchain.psql, '--no-psqlrc', '--no-password',
       '--set', 'ON_ERROR_STOP=1',
-      '--file', resolve(rootDir, QUARANTINE_PATH),
-    ], branchEnv)
+      '--file', '-',
+    ], branchEnv, { input: quarantineBytes })
+
+    // The dedicated Storage auditor must still have no persistent write path
+    // after reviewed DDL/default privileges have been installed.
+    const postStorageResult = invoke({
+      stepId: 'storage_audit_postmigration_credential_preflight',
+      argv: [
+        toolchain.psql, '--no-psqlrc', '--no-password', '--tuples-only', '--no-align',
+        '--set', 'ON_ERROR_STOP=1', '--command', CREDENTIAL_PREFLIGHT_SQL,
+      ],
+      envOverrides: psqlEnv(storageAuditConnection, caFile),
+      cwd: rootDir,
+      timeoutMs: assertActionWindow(),
+    })
+    assertActionWindow()
+    const postStorageReport = lastJsonLine(sanitizeText(postStorageResult.stdout, secrets))
+    if (postStorageResult.status !== 0 || !postStorageReport) {
+      record('storage_audit_postmigration_boundary', 'failed', {
+        exitCode: postStorageResult.status,
+        stderr: sanitizeText(postStorageResult.stderr, secrets).slice(0, 20000),
+        credentialsIncluded: false,
+      })
+      fail('storage_audit_postmigration_preflight_failed')
+    }
+    record('storage_audit_postmigration_boundary', 'ok', {
+      storageAudit: validateCredentialPreflightReport(
+        postStorageReport,
+        storageAuditConnection.loginRole,
+        'storage_audit_postmigration',
+      ),
+      persistentWriteAuthorityAbsent: true,
+      credentialsIncluded: false,
+    })
 
     // hosted_validator: read-only v10 contract via the prevalidated dedicated
     // runtime and Storage-audit logins.
-    if (!state.steps.hosted_validator?.ok) {
-      runCommandStep('hosted_validator', [
-        'node', 'tools/run_python_tool.mjs', 'tools/validate_supermega_database_url.py',
-        '--env-key', RUNTIME_URL_ENV,
-        '--storage-audit-env-key', STORAGE_AUDIT_URL_ENV,
-        '--ensure-schema', '--require-ready',
-      ], {})
-    } else {
-      stepResults.push({ id: 'hosted_validator', outcome: 'skipped_already_complete' })
-    }
+    runCommandStep('hosted_validator', [
+      'node', 'tools/run_python_tool.mjs', 'tools/validate_supermega_database_url.py',
+      '--env-key', RUNTIME_URL_ENV,
+      '--storage-audit-env-key', STORAGE_AUDIT_URL_ENV,
+      '--ensure-schema', '--require-ready',
+    ], {
+      [RUNTIME_URL_ENV]: runtimeUrl,
+      [STORAGE_AUDIT_URL_ENV]: storageAuditUrl,
+    })
 
+    assertReviewedCheckout('session_revocation_probe')
+    const probeBytes = readFileBytes(resolve(rootDir, PROBE_PATH))
+    if (`sha256:${sha256(probeBytes)}` !== inventory[PROBE_PATH]) {
+      fail('rehearsal_session_revocation_probe_digest_mismatch')
+    }
     runCommandStep('session_revocation_probe', [
       toolchain.psql, '--no-psqlrc', '--no-password',
       '--set', 'ON_ERROR_STOP=1',
-      '--file', resolve(rootDir, PROBE_PATH),
-    ], branchEnv)
+      '--file', '-',
+    ], branchEnv, { input: probeBytes })
 
     assertActionWindow()
     const finishedAt = now()
@@ -1307,16 +1471,14 @@ async function runRehearsalWithAuthority({
     const serialized = JSON.stringify(evidencePacket, null, 2)
     assertNoCredential(serialized, 'rehearsal_evidence_credential_detected')
     const evidencePacketPath = join(runRoot, `evidence-packet-${finishedAt.toISOString().replaceAll(':', '').replace(/\..+$/, 'Z')}.json`)
-    writeFileSync(evidencePacketPath, `${serialized}\n`, 'utf8')
-    state.steps.evidence_packet = { ok: true, completedAt: evidencePacket.generatedAt, digest: `sha256:${sha256(serialized)}` }
-    saveState()
+    writeFileSync(evidencePacketPath, `${serialized}\n`, { encoding: 'utf8', flag: 'wx' })
     const summary = {
       ok: true,
       contract: PREVIEW_REHEARSAL_CONTRACT,
       status: 'rehearsal_evidence_captured',
       evidencePacket: evidencePacketPath,
       stepsExecuted: stepResults.filter((step) => step.outcome === 'ok').length,
-      stepsSkipped: stepResults.filter((step) => step.outcome === 'skipped_already_complete').length,
+      stepsSkipped: 0,
       productionMutated: false,
       nextAction: 'Founder evidence review, then preview-branch deletion (docs/rehearsal-runbook.md steps 8-9).',
     }
@@ -1324,17 +1486,17 @@ async function runRehearsalWithAuthority({
     return { ...summary, packet: evidencePacket, runRoot, exitCode: 0 }
   } catch (error) {
     const code = error?.rehearsalCode || 'rehearsal_failed'
-    saveState()
     const summary = {
       ok: false,
       contract: PREVIEW_REHEARSAL_CONTRACT,
       status: 'attention',
       error: code,
       failedAfterSteps: stepResults.filter((step) => step.outcome === 'ok').length,
-      resumable: true,
+      resumable: false,
+      requiresNewEmptyBranch: true,
       evidenceRoot: runRoot,
       productionMutated: false,
-      hint: 'Fix the named failure and re-run; completed steps are skipped through the state file. Do not improvise: docs/rehearsal-runbook.md maps every failure code to its action.',
+      hint: 'Stop this branch. Fix source locally, obtain a new empty branch and fresh exact approval, then start a new run. Local evidence never authorizes resuming hosted mutations.',
     }
     log(JSON.stringify(summary))
     return { ...summary, exitCode: 1 }
@@ -1502,10 +1664,41 @@ async function selfTestFixtures(testRoot) {
     production_mutated: false,
     supabase_mutated: false,
   })
+  const safeCredentialReport = (loginRole, overrides = {}) => ({
+    contract: 'supermega.preview-rehearsal-credential-preflight.v1',
+    loginRole,
+    sessionRoleStable: true,
+    probeTransactionReadOnly: true,
+    tlsActive: true,
+    canLogin: true,
+    noSuperuser: true,
+    noBypassRls: true,
+    noCreateRole: true,
+    noCreateDb: true,
+    noReplication: true,
+    noRoleMemberships: true,
+    noElevatedMembershipPath: true,
+    noDatabaseCreatePrivilege: true,
+    noSchemaCreatePrivilege: true,
+    noTableWritePrivilege: true,
+    noSequenceMutationPrivilege: true,
+    noLargeObjectWritePrivilege: true,
+    noSecurityDefinerExecutePrivilege: true,
+    noObjectOwnership: true,
+    noDefaultWritePrivileges: true,
+    noRoleSettings: true,
+    ...overrides,
+  })
   const makeExec = (overrides = {}, calls = []) => ({
     calls,
     exec(call) {
-      calls.push({ stepId: call.stepId, argv: call.argv })
+      calls.push({
+        stepId: call.stepId,
+        argv: call.argv,
+        envKeys: Object.keys(call.envOverrides || {}).sort(),
+        baseEnvKeys: Object.keys(call.baseEnv || {}).sort(),
+        inputDigest: call.input === undefined ? null : `sha256:${sha256(call.input)}`,
+      })
       if (overrides[call.stepId]) {
         const override = overrides[call.stepId]
         return typeof override === 'function' ? override(call) : override
@@ -1517,20 +1710,7 @@ async function selfTestFixtures(testRoot) {
         const loginRole = call.stepId.startsWith('runtime') ? 'supermega_trial_runtime' : 'supermega_storage_audit'
         return {
           status: 0,
-          stdout: JSON.stringify({
-            contract: 'supermega.preview-rehearsal-credential-preflight.v1',
-            loginRole,
-            sessionRoleStable: true,
-            transactionReadOnly: true,
-            tlsActive: true,
-            canLogin: true,
-            noSuperuser: true,
-            noBypassRls: true,
-            noCreateRole: true,
-            noCreateDb: true,
-            noReplication: true,
-            noElevatedMembership: true,
-          }),
+          stdout: JSON.stringify(safeCredentialReport(loginRole)),
           stderr: '',
         }
       }
@@ -1549,6 +1729,7 @@ async function selfTestFixtures(testRoot) {
     policy,
     trustedRegisteredAuthorityDigest: policy.sourceDigest,
     branchReceipt,
+    safeCredentialReport,
     fetchBranchObservation: async () => structuredClone(branchReceipt),
   }
 }
@@ -1557,7 +1738,7 @@ export async function runSelfTest() {
   const silent = () => {}
   const testRoot = resolve(root, '.tmp', 'preview-branch-rehearsal-self-test', `${process.pid}-${Date.now()}`)
   const fixture = await selfTestFixtures(testRoot)
-  const { env, makeExec, approvalPath } = fixture
+  const { env, makeExec, approvalPath, safeCredentialReport } = fixture
   const fixedNow = () => new Date('2026-08-12T16:00:00.000Z')
   const authorityContext = {
     authorityPolicy: fixture.policy,
@@ -1595,7 +1776,7 @@ export async function runSelfTest() {
     const result = await run({ argv: ['--dry-run'], env: {}, exec: stub.exec })
     if (result.exitCode !== 0 || stub.calls.length !== 0) throw new Error('self_test_dry_run_failed')
     const plan = result.plan
-    if (plan.steps.length !== 24 || plan.totals.bufferMinutes <= 0 || plan.totals.plannedMinutes >= plan.totals.windowMinutes) {
+    if (plan.steps.length !== 25 || plan.totals.bufferMinutes <= 0 || plan.totals.plannedMinutes >= plan.totals.windowMinutes) {
       throw new Error('self_test_dry_run_budget_failed')
     }
     if (plan.ownerConsoleSegments.length !== OWNER_CONSOLE_SEGMENTS.length) throw new Error('self_test_dry_run_owner_segments_failed')
@@ -1637,37 +1818,43 @@ export async function runSelfTest() {
     const packetText = readFileSync(result.evidencePacket, 'utf8')
     assertNoCredential(packetText, 'self_test_packet_leaked_credential')
     if (packetText.includes('stub-password')) throw new Error('self_test_packet_leaked_password')
-    const psqlFiles = stub.calls
-      .filter((call) => call.argv.includes('--file'))
-      .map((call) => call.argv[call.argv.indexOf('--file') + 1])
+    const sqlCalls = stub.calls.filter((call) => call.argv.includes('--file'))
     const expectedOrder = [
-      ...EXPECTED_MIGRATIONS.map((name) => resolve(root, MIGRATION_DIRECTORY, name)),
-      resolve(root, QUARANTINE_PATH),
-      resolve(root, PROBE_PATH),
+      ...EXPECTED_MIGRATIONS.map((name, index) => ({
+        stepId: `apply_migration_${String(index + 1).padStart(2, '0')}`,
+        inputDigest: `sha256:${sha256(readFileSync(resolve(root, MIGRATION_DIRECTORY, name)))}`,
+      })),
+      { stepId: 'apply_quarantine', inputDigest: `sha256:${sha256(readFileSync(resolve(root, QUARANTINE_PATH)))}` },
+      { stepId: 'session_revocation_probe', inputDigest: `sha256:${sha256(readFileSync(resolve(root, PROBE_PATH)))}` },
     ]
-    if (JSON.stringify(psqlFiles) !== JSON.stringify(expectedOrder)) throw new Error('self_test_step_order_failed')
+    if (sqlCalls.some((call) => call.argv[call.argv.indexOf('--file') + 1] !== '-')
+      || JSON.stringify(sqlCalls.map(({ stepId, inputDigest }) => ({ stepId, inputDigest }))) !== JSON.stringify(expectedOrder)) {
+      throw new Error('self_test_step_order_or_byte_binding_failed')
+    }
+    if (stub.calls.some((call) => call.envKeys.includes(MANAGEMENT_TOKEN_ENV)
+      || call.baseEnvKeys.some((key) => !SAFE_CHILD_ENV_KEYS.includes(key)))) {
+      throw new Error('self_test_child_environment_not_scrubbed')
+    }
 
-    // 4. Resume skips every completed step: no psql or validator re-runs.
-    cases += 1
+    // 4. Local evidence cannot authorize a resume or skip hosted work.
     const resumeStub = makeExec()
-    const resumed = await run({
+    const resumed = await expectFailure('rehearsal_prior_attempt_requires_new_empty_branch', {
       env, exec: resumeStub.exec, evidenceRoot: join(testRoot, 'happy'),
     })
-    if (resumed.ok !== true || resumed.stepsSkipped < 22) throw new Error('self_test_resume_failed')
-    if (!resumeStub.calls.some((call) => call.stepId === 'runtime_credential_preflight')
-      || !resumeStub.calls.some((call) => call.stepId === 'storage_audit_credential_preflight')) {
-      throw new Error('self_test_resume_skipped_fresh_credential_preflight')
+    if (resumed.resumable !== false
+      || !resumed.requiresNewEmptyBranch
+      || resumeStub.calls.some((call) => call.argv.includes('--file'))) {
+      throw new Error('self_test_local_state_authorized_resume')
     }
-    if (resumeStub.calls.some((call) => call.argv.includes('--file'))) throw new Error('self_test_resume_reapplied_migration')
 
-    // Resume state never waives the clean-checkout guard.
+    // The clean-checkout guard also runs on a first attempt.
     const dirtyResumeStub = makeExec({
-      release_pin: (call) => call.argv.includes('status')
+      release_pin_source_guard: (call) => call.argv.includes('status')
         ? { status: 0, stdout: ' M tools/run_preview_branch_rehearsal.mjs', stderr: '' }
         : { status: 0, stdout: fixture.releaseCommit, stderr: '' },
     })
     const dirtyResume = await expectFailure('rehearsal_checkout_dirty', {
-      env, exec: dirtyResumeStub.exec, evidenceRoot: join(testRoot, 'happy'),
+      env, exec: dirtyResumeStub.exec, evidenceRoot: join(testRoot, 'dirty-checkout'),
     })
     if (dirtyResume.productionMutated !== false
       || dirtyResumeStub.calls.some((call) => call.argv.includes('--file'))) {
@@ -1711,7 +1898,7 @@ export async function runSelfTest() {
     if (stub.calls.some((call) => call.argv.includes('--file'))) throw new Error('self_test_tampered_digest_applied_migration')
   }
 
-  // 7. A mid-run failure stops the sequence and resumes after the fix.
+  // 7. A mid-run failure stops the sequence and cannot be resumed locally.
   {
     let v9Attempts = 0
     const failingV9 = () => {
@@ -1727,12 +1914,12 @@ export async function runSelfTest() {
     if (stub.calls.some((call) => call.stepId === 'apply_migration_12' || call.stepId === 'apply_quarantine')) {
       throw new Error('self_test_failure_did_not_stop_sequence')
     }
-    cases += 1
     const resumeStub = makeExec({ apply_migration_11: failingV9 })
-    const resumed = await run({ env, exec: resumeStub.exec, evidenceRoot: join(testRoot, 'midrun') })
-    if (resumed.ok !== true) throw new Error('self_test_midrun_resume_failed')
-    if (resumeStub.calls.some((call) => call.stepId === 'apply_migration_10' && call.argv.includes('--file'))) {
-      throw new Error('self_test_midrun_resume_reapplied_prior_migration')
+    const resumed = await expectFailure('rehearsal_prior_attempt_requires_new_empty_branch', {
+      env, exec: resumeStub.exec, evidenceRoot: join(testRoot, 'midrun'),
+    })
+    if (resumed.resumable !== false || resumeStub.calls.some((call) => call.argv.includes('--file'))) {
+      throw new Error('self_test_midrun_resume_failed_closed')
     }
   }
 
@@ -1948,20 +2135,7 @@ export async function runSelfTest() {
   {
     const privilegedReport = {
       status: 0,
-      stdout: JSON.stringify({
-        contract: 'supermega.preview-rehearsal-credential-preflight.v1',
-        loginRole: 'supermega_trial_runtime',
-        sessionRoleStable: true,
-        transactionReadOnly: true,
-        tlsActive: true,
-        canLogin: true,
-        noSuperuser: false,
-        noBypassRls: true,
-        noCreateRole: true,
-        noCreateDb: true,
-        noReplication: true,
-        noElevatedMembership: true,
-      }),
+      stdout: JSON.stringify(safeCredentialReport('supermega_trial_runtime', { noSuperuser: false })),
       stderr: '',
     }
     const stub = makeExec({ runtime_credential_preflight: privilegedReport })
@@ -1969,6 +2143,41 @@ export async function runSelfTest() {
       env, exec: stub.exec, evidenceRoot: join(testRoot, 'runtime-role-attributes'),
     })
     if (stub.calls.some((call) => call.argv.includes('--file'))) throw new Error('self_test_role_attributes_reached_migration')
+  }
+
+  // A NOINHERIT/SET-only membership is still authority and fails closed.
+  {
+    const setRoleReport = {
+      status: 0,
+      stdout: JSON.stringify(safeCredentialReport('supermega_trial_runtime', {
+        noRoleMemberships: false,
+        noElevatedMembershipPath: false,
+      })),
+      stderr: '',
+    }
+    const stub = makeExec({ runtime_credential_preflight: setRoleReport })
+    await expectFailure('runtime_privileged_credentials_rejected', {
+      env, exec: stub.exec, evidenceRoot: join(testRoot, 'runtime-set-role-path'),
+    })
+    if (stub.calls.some((call) => call.argv.includes('--file'))) throw new Error('self_test_set_role_path_reached_migration')
+  }
+
+  // Reviewed DDL cannot leave the Storage auditor with effective writes.
+  {
+    const postWriteReport = {
+      status: 0,
+      stdout: JSON.stringify(safeCredentialReport('supermega_storage_audit', {
+        noTableWritePrivilege: false,
+      })),
+      stderr: '',
+    }
+    const stub = makeExec({ storage_audit_postmigration_credential_preflight: postWriteReport })
+    await expectFailure('storage_audit_postmigration_privileged_credentials_rejected', {
+      env, exec: stub.exec, evidenceRoot: join(testRoot, 'storage-postmigration-write'),
+    })
+    if (stub.calls.some((call) => call.stepId === 'hosted_validator')) {
+      throw new Error('self_test_storage_postmigration_write_reached_validator')
+    }
   }
 
   // 21. The absolute branch deadline is rechecked after each provider action.

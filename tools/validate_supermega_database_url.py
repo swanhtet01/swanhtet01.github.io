@@ -1051,6 +1051,18 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                 where schema_record.nspname = 'public'
                   and relation_record.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
               ) as public_user_relations_absent,
+              not exists (
+                select 1
+                from pg_namespace schema_record
+                where schema_record.nspname !~ '^pg_'
+                  and schema_record.nspname not in (
+                    'information_schema', 'public', 'auth', 'storage',
+                    'extensions', 'graphql', 'graphql_public', 'realtime',
+                    'supabase_functions', 'supabase_migrations', 'vault',
+                    'net', 'cron', 'pgmq', '_analytics', '_realtime',
+                    'pgbouncer', 'pgsodium', 'pgsodium_masks'
+                  )
+              ) as unexpected_user_schemas_absent,
               not exists (select 1 from auth.users limit 1) as auth_users_absent,
               not exists (select 1 from auth.sessions limit 1) as auth_sessions_absent,
               not exists (select 1 from storage.buckets limit 1) as storage_buckets_absent,
@@ -1084,6 +1096,9 @@ def evaluate_supabase_rehearsal_target_snapshot(
         "backend_role_absent": _bool(snapshot.get("backend_role_absent")),
         "public_user_relations_absent": _bool(
             snapshot.get("public_user_relations_absent")
+        ),
+        "unexpected_user_schemas_absent": _bool(
+            snapshot.get("unexpected_user_schemas_absent")
         ),
         "auth_users_absent": _bool(snapshot.get("auth_users_absent")),
         "auth_sessions_absent": _bool(snapshot.get("auth_sessions_absent")),
