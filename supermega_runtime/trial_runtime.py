@@ -101,6 +101,10 @@ _YANGON_TIME_ZONE = timezone(timedelta(hours=6, minutes=30))
 def _current_yangon_date() -> date:
     return datetime.now(_YANGON_TIME_ZONE).date()
 
+
+def _current_utc_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
 _CLIENT_IDENTITY_FIELDS = frozenset(
     {
         "actor_id",
@@ -606,6 +610,38 @@ def _spa_schedule_allowed_roles(
     }:
         return frozenset({"front-desk"})
     return None
+
+
+_SPA_OWNER_SCHEDULE_EVENTS = frozenset(
+    {"client_retention_set", "client_exported", "client_anonymized"}
+)
+
+
+def _spa_owner_schedule_event(candidate: Mapping[str, Any]) -> str | None:
+    schedule = candidate.get("serviceSchedule")
+    events = schedule.get("events") if isinstance(schedule, Mapping) else None
+    latest = events[-1] if isinstance(events, list) and events else None
+    event_type = latest.get("type") if isinstance(latest, Mapping) else None
+    return str(event_type) if event_type in _SPA_OWNER_SCHEDULE_EVENTS else None
+
+
+def _require_spa_owner_schedule_action(
+    readiness: TrialReadiness,
+    candidate: Mapping[str, Any],
+) -> None:
+    event_type = _spa_owner_schedule_event(candidate)
+    if (
+        event_type in _SPA_OWNER_SCHEDULE_EVENTS
+        and not readiness.capabilities.intersection(
+            {"company.control.approve", "company.write"}
+        )
+    ):
+        raise _error(
+            403,
+            "spa_owner_action_required",
+            action=f"service_schedule:{event_type}",
+            required_capability="company.write",
+        )
 
 
 def _reject_client_identity(value: Any, *, path: str) -> None:
@@ -1728,7 +1764,46 @@ def create_trial_router(
         else:
             latest_event = dict(events[-1])
             latest_event["actor"] = principal.actor_id
+            if latest_event.get("type") in _SPA_OWNER_SCHEDULE_EVENTS:
+                latest_event["happenedAt"] = _current_utc_timestamp()
             events[-1] = latest_event
+            if latest_event.get("type") == "client_retention_set":
+                privacy_policy = schedule.get("privacyPolicy")
+                if isinstance(privacy_policy, Mapping):
+                    schedule["privacyPolicy"] = {
+                        **dict(privacy_policy),
+                        "updatedAt": latest_event["happenedAt"],
+                        "updatedBy": principal.actor_id,
+                    }
+            elif latest_event.get("type") == "client_anonymized":
+                subject_id = latest_event.get("subjectId")
+                clients = schedule.get("clients")
+                if isinstance(clients, list):
+                    schedule["clients"] = [
+                        {
+                            **dict(client),
+                            "updatedAt": latest_event["happenedAt"],
+                            "anonymizedAt": latest_event["happenedAt"],
+                            "anonymizedBy": principal.actor_id,
+                        }
+                        if isinstance(client, Mapping)
+                        and client.get("id") == subject_id
+                        and "anonymizedAt" in client
+                        else client
+                        for client in clients
+                    ]
+                bookings = schedule.get("bookings")
+                if isinstance(bookings, list):
+                    schedule["bookings"] = [
+                        {
+                            **dict(booking),
+                            "updatedAt": latest_event["happenedAt"],
+                        }
+                        if isinstance(booking, Mapping)
+                        and booking.get("clientId") == subject_id
+                        else booking
+                        for booking in bookings
+                    ]
             event_type = "commerce.service_schedule.saved"
             evidence = {
                 "actionId": f"ACT-SERVICE-SCHEDULE-R{revision}",
@@ -1738,6 +1813,7 @@ def create_trial_router(
                 "evidenceReference": f"SHOP-SERVICE-SCHEDULE:R{revision}",
             }
         next_state = {**current_state, "serviceSchedule": schedule}
+        _require_spa_owner_schedule_action(readiness, next_state)
         _require_spa_role_write_ready(
             readiness,
             _spa_schedule_allowed_roles(current_state, next_state),
@@ -2264,6 +2340,17 @@ def create_trial_router(
             if body.event_type in WEBSITE_HUMAN_EVENTS and principal.actor_kind != "human":
                 raise _error(403, "trial_human_approval_required")
         readiness = _readiness(store, principal)
+        if body.surface == "commerce" and body.event_type == "commerce.service_schedule.saved":
+            candidate = body.payload.get("state")
+            schedule_candidate = candidate if isinstance(candidate, Mapping) else {}
+            _require_spa_owner_schedule_action(readiness, schedule_candidate)
+            privacy_event = _spa_owner_schedule_event(schedule_candidate)
+            if privacy_event is not None:
+                raise _error(
+                    422,
+                    "spa_privacy_action_route_required",
+                    action=f"service_schedule:{privacy_event}",
+                )
         if body.surface == "commerce" and _restricted_spa_role(readiness) is not None:
             _require_read_ready(readiness)
             current_commerce = _invoke(lambda: store.get_state(principal, "commerce"))

@@ -2091,6 +2091,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const supplierPayablesAging = commerceSupplierPayablesAging(commerce, purchaseOrderClock)
   const actionOrders = commerce.orders.filter(commerceOrderNeedsAction).sort(compareCommerceOrderPromise)
   const spaServiceActionOrders = actionOrders.filter(commerceOrderIsServiceCheckout)
+  const closedSpaCheckoutOrderIds = commerce.orders
+    .filter((order) => commerceOrderIsServiceCheckout(order)
+      && order.status === 'completed'
+      && order.paymentStatus === 'reconciled'
+      && order.refundStatus !== 'due')
+    .map((order) => order.id)
   const supportWorkQueue = commerceSupportQueue(commerce.orders, purchaseOrderClock)
   const nextSupportWork = supportWorkQueue[0] ?? null
   const nextSupportActionLabel = !nextSupportWork
@@ -6981,7 +6987,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   if (spaStaffAccess) return <div className="operation-module spa-staff-module">
     {commerceBoundary}
-    <Suspense fallback={<p className="form-notice" role="status">Loading appointments…</p>}><ShopServiceSchedule access={managedIdentity?.access} actor={managedIdentity?.email ?? 'Spa staff'} disabled={commerceControlsDisabled} initiallyOpen onReviewCheckout={spaFrontDesk ? reviewShopServiceCheckout : undefined} /></Suspense>
+    <Suspense fallback={<p className="form-notice" role="status">Loading appointments…</p>}><ShopServiceSchedule access={managedIdentity?.access} actor={managedIdentity?.email ?? 'Spa staff'} closedCheckoutOrderIds={closedSpaCheckoutOrderIds} disabled={commerceControlsDisabled} initiallyOpen onReviewCheckout={spaFrontDesk ? reviewShopServiceCheckout : undefined} /></Suspense>
     {spaFrontDesk ? <section className="core-panel order-queue-panel order-workspace" id="spa-payment-queue">
       <div className="panel-head"><div><span className="core-eyebrow">Visit payment</span><h2>{spaServiceActionOrders.length ? `${spaServiceActionOrders.length} ${spaServiceActionOrders.length === 1 ? 'visit needs' : 'visits need'} action` : 'No visit payment waiting'}</h2></div><span className="panel-note">Check the real receipt or cash</span></div>
       <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={() => false} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={spaServiceActionOrders} />
@@ -7121,7 +7127,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule access={managedIdentity?.access} actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} onReviewCheckout={reviewShopServiceCheckout} /></Suspense>
+    <Suspense fallback={null}><ShopServiceSchedule access={managedIdentity?.access} actor={managedIdentity?.email ?? 'Local Shop operator'} closedCheckoutOrderIds={closedSpaCheckoutOrderIds} disabled={commerceControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} onReviewCheckout={reviewShopServiceCheckout} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)

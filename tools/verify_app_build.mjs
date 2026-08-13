@@ -327,7 +327,14 @@ if (!coreCssSource.includes('.orders-module { overflow-y: auto; padding: 0 2px 1
   || !coreCssSource.includes('.orders-module > .order-workspace { flex: 0 0 auto; }')) fail('shop_orders_workspace_can_shrink_out_of_view')
 if (!coreCssSource.includes('details:not([open]) > :not(summary) { display: none; }')) fail('closed_details_visibility_contract_missing')
 if (['fetch(', 'localStorage', 'sessionStorage', 'supabase', 'openai', 'anthropic'].some((marker) => shopTodayUiSource.toLowerCase().includes(marker.toLowerCase()))) fail('shop_today_side_effect_added')
-if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v3")
+const serviceCommitStart = shopServiceScheduleUiSource.indexOf('async function commit(')
+const serviceCommitEnd = shopServiceScheduleUiSource.indexOf('\n  function proof(', serviceCommitStart)
+const serviceCommitSource = serviceCommitStart >= 0 && serviceCommitEnd > serviceCommitStart
+  ? shopServiceScheduleUiSource.slice(serviceCommitStart, serviceCommitEnd)
+  : ''
+const localPersistenceIndex = serviceCommitSource.indexOf('persistLocal(next)')
+const localStateIndex = serviceCommitSource.indexOf('setSchedule(next)')
+if (!shopServiceScheduleSource.includes("SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v4'")
   || !shopServiceScheduleSource.includes("type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'")
   || !shopServiceScheduleSource.includes('provisionEmptyShopServiceSchedule')
   || !shopServiceScheduleSource.includes('LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA')
@@ -336,6 +343,11 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v3")
   || !shopServiceScheduleSource.includes('A customer contact can belong to only one client record.')
   || !shopServiceScheduleSource.includes('does not match its client record.')
   || !shopServiceScheduleSource.includes('shopServiceClientExportRows')
+  || !shopServiceScheduleSource.includes('shopServiceClientCsv')
+  || !shopServiceScheduleSource.includes('recordShopServiceClientExport')
+  || !shopServiceScheduleSource.includes('setShopServiceClientRetention')
+  || !shopServiceScheduleSource.includes('shopServiceClientAnonymizationReadiness')
+  || !shopServiceScheduleSource.includes('anonymizeShopServiceClient')
   || !shopServiceScheduleSource.includes('advanceShopServiceBooking')
   || !shopServiceScheduleSource.includes('shopServiceCheckoutRequest')
   || !shopServiceScheduleSource.includes('linkShopServiceBookingCheckout')
@@ -346,6 +358,12 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v3")
   || !shopServiceScheduleUiSource.includes('Customer allowed updates')
   || !shopServiceScheduleUiSource.includes('Do not message')
   || !shopServiceScheduleUiSource.includes('Download client list')
+  || !shopServiceScheduleUiSource.includes('Save retention rule')
+  || !shopServiceScheduleUiSource.includes('Review permanent anonymization')
+  || !shopServiceScheduleUiSource.includes('Every download is recorded before the file is created.')
+  || !shopServiceScheduleUiSource.includes('Local storage is unavailable. Nothing changed;')
+  || localPersistenceIndex < 0
+  || localStateIndex <= localPersistenceIndex
   || !shopServiceScheduleUiSource.includes('No health, identity-document, or payment data.')
   || !shopServiceScheduleUiSource.includes('Review checkout')
   || !shopServiceScheduleUiSource.includes('No payment or message is automatic.')
@@ -363,6 +381,7 @@ if (!shopServiceScheduleSource.includes("supermega.shop.service_schedule.v3")
   || !coreSource.includes("'Ready for payment'")
   || !coreSource.includes("'Close visit'")
   || !coreSource.includes("'treatment complete'")
+  || !coreSource.includes('closedSpaCheckoutOrderIds')
   || !coreSource.includes('no payment provider called')
   || !commerceSource.includes("kind?: 'service'")
   || !commerceSource.includes('creation?: CommerceActionProof')
@@ -390,6 +409,10 @@ if (!managedTrialSource.includes('loadManagedServiceSchedule')
   || !managedCommerceRuntime.includes('contains overlapping bookings')
   || !managedCommerceRuntime.includes('service schedule evidence history is immutable')
   || !managedCommerceRuntime.includes('booking_checkout_linked')
+  || !managedCommerceRuntime.includes('_service_client_export_csv')
+  || !managedCommerceRuntime.includes('expected_digest')
+  || !managedCommerceRuntime.includes('financial_records_closed')
+  || !managedCommerceRuntime.includes('retention_elapsed')
   || !managedCommerceRuntime.includes('a stock-free order must be one evidence-bound Spa service checkout')
   || !managedCommerceRuntime.includes('a new Spa service checkout must start ready for payment with no refund exception')
   || !managedCommerceRuntime.includes('a completed Spa appointment checkout cannot invent a future fulfilment promise')
@@ -411,6 +434,8 @@ if (!managedTrialSource.includes("'spa-front-desk' | 'spa-therapist'")
   || !managedTrialRuntimeSource.includes('_project_spa_schedule_for_read')
   || !managedTrialRuntimeSource.includes('_project_state_record_for_read')
   || !managedTrialRuntimeSource.includes('/commerce/service-schedule/actions/complete-treatment')
+  || !managedTrialRuntimeSource.includes('_require_spa_owner_schedule_action')
+  || !managedTrialRuntimeSource.includes('spa_owner_action_required')
   || !managedTrialStoreRuntime.includes('return "spa-front-desk"')
   || !managedTrialStoreRuntime.includes('return "spa-therapist"')) fail('spa_staff_role_boundary_missing')
 if (!managedTrialSource.includes('readRestrictedShopServiceSchedule')
@@ -419,14 +444,20 @@ if (!managedTrialSource.includes('readRestrictedShopServiceSchedule')
   || !managedTrialSource.includes('/api/trial/v1/commerce/service-schedule/actions/complete-treatment')
   || !shopServiceScheduleSource.includes('readRestrictedShopServiceSchedule')
   || !shopServiceScheduleSource.includes("contact: `private:${clientId}`")) fail('spa_server_field_privacy_boundary_missing')
+const clientExportReceiptIndex = shopServiceScheduleUiSource.indexOf("if (!await commit(next, 'Client export receipt recorded.')) return")
+const clientExportBlobIndex = shopServiceScheduleUiSource.indexOf('URL.createObjectURL(new Blob([csv]')
 if (!shopServiceScheduleUiSource.includes("booking.contact}` : ''")
   || !shopServiceScheduleUiSource.includes("canRunFrontDesk ? <small>{booking.appointmentUpdates === 'allowed'")
   || !shopServiceScheduleUiSource.includes("const canExportClients = !managedRoleActive || managedAccess === 'owner'")
   || !shopServiceScheduleUiSource.includes('if (!schedule || !canExportClients) return')
+  || !shopServiceScheduleUiSource.includes('const canManageClientPrivacy = canExportClients')
   || !shopServiceScheduleUiSource.includes('useState<ShopServiceSchedule | null>(null)')
   || !shopServiceScheduleUiSource.includes("if (!identity) {\n        const local = initialSchedule()")
   || shopServiceScheduleUiSource.includes('JSON.stringify(managed.schedule)')
-  || !shopServiceScheduleUiSource.includes("/^[=+\\-@\\t\\r]/.test(text)")
+  || !shopServiceScheduleSource.includes("/^[=+\\-@\\t\\r]/.test(text)")
+  || !shopServiceScheduleUiSource.includes("globalThis.crypto.subtle.digest('SHA-256'")
+  || clientExportReceiptIndex < 0
+  || clientExportBlobIndex <= clientExportReceiptIndex
   || !shopServiceScheduleUiSource.includes("link.download = 'spa-clients.csv'")) fail('spa_client_privacy_ui_boundary_missing')
 if (!clientOnboardingUiSource.includes('loadManagedServiceSchedule')
   || !clientOnboardingUiSource.includes('saveManagedServiceSchedule')
@@ -8832,6 +8863,11 @@ async function verifyShopServiceScheduleRuntime() {
     delete legacySchedule.industryPackId
     const migratedSchedule = model.readShopServiceSchedule(JSON.stringify(legacySchedule))
     assert(migratedSchedule.schema === model.SHOP_SERVICE_SCHEDULE_SCHEMA && migratedSchedule.industryPackId === 'spa', 'shop_service_schedule_v1_migration_failed')
+    const legacyV3Schedule = structuredClone(state)
+    legacyV3Schedule.schema = 'supermega.shop.service_schedule.v3'
+    delete legacyV3Schedule.privacyPolicy
+    const migratedV3Schedule = model.readShopServiceSchedule(JSON.stringify(legacyV3Schedule))
+    assert(migratedV3Schedule.schema === model.SHOP_SERVICE_SCHEDULE_SCHEMA && migratedV3Schedule.privacyPolicy.clientRetentionDays === null, 'shop_service_schedule_v3_privacy_migration_failed')
     assertThrows(() => model.shopIndustryPack('unknown'), 'shop_industry_unknown_pack_accepted')
     state = model.registerShopService(state, { name: 'Premium treatment', durationMinutes: 90, priceMmk: 75_000 }, proof(1, 'Reviewed service setup'))
     assert(state.services.at(-1).name === 'Premium treatment' && state.revision === 1, 'shop_service_registration_failed')
@@ -8846,6 +8882,24 @@ async function verifyShopServiceScheduleRuntime() {
     assertThrows(() => model.scheduleShopServiceBooking(state, { customerName: 'Client B', contact: '09-444-444', appointmentUpdates: 'not_recorded', serviceId, resourceId, startsAt: '2026-07-29T10:00:00.000Z' }, proof(4, 'Missing permission choice')), 'shop_service_booking_without_permission_choice_accepted')
     const clientExport = model.shopServiceClientExportRows(state)
     assert(clientExport.length === 1 && clientExport[0].appointments === 1 && clientExport[0].completedVisits === 0 && Object.keys(clientExport[0]).sort().join(',') === 'appointmentUpdates,appointments,completedVisits,consentRecordedAt,contact,name', 'shop_service_client_export_not_minimal')
+    const formulaSchedule = structuredClone(state)
+    formulaSchedule.clients[0].name = '=Client A'
+    formulaSchedule.bookings[0].customerName = '=Client A'
+    const formulaCsv = model.shopServiceClientCsv(model.validateShopServiceSchedule(formulaSchedule))
+    assert(formulaCsv.includes('"\'=Client A"') && !formulaCsv.includes('\r\n"=Client A"'), 'shop_service_client_csv_formula_not_neutralized')
+    const retainedOpenSchedule = model.setShopServiceClientRetention(state, 30, proof(4, 'Owner approved client retention'))
+    assert(retainedOpenSchedule.privacyPolicy.clientRetentionDays === 30
+      && retainedOpenSchedule.privacyPolicy.updatedBy === 'Shop owner'
+      && retainedOpenSchedule.events.at(-1).type === 'client_retention_set', 'shop_service_client_retention_not_evidenced')
+    const openAnonymization = model.shopServiceClientAnonymizationReadiness(retainedOpenSchedule, retainedOpenSchedule.clients[0].id, [], new Date('2026-09-01T00:00:00.000Z'))
+    assert(!openAnonymization.allowed && openAnonymization.reason.includes('open visit'), 'shop_service_open_visit_anonymization_allowed')
+    const clientCsv = model.shopServiceClientCsv(retainedOpenSchedule)
+    const clientDigest = `sha256:${createHash('sha256').update(clientCsv, 'utf8').digest('hex')}`
+    const exportReceiptSchedule = model.recordShopServiceClientExport(retainedOpenSchedule, clientDigest, proof(5, 'Owner exported the privacy-minimal client list'))
+    assert(exportReceiptSchedule.events.at(-1).type === 'client_exported'
+      && exportReceiptSchedule.events.at(-1).subjectId === clientDigest
+      && exportReceiptSchedule.clients.length === retainedOpenSchedule.clients.length, 'shop_service_client_export_receipt_not_bound')
+    assertThrows(() => model.recordShopServiceClientExport(retainedOpenSchedule, 'sha256:not-a-digest', proof(5, 'Invalid export')), 'shop_service_invalid_client_export_digest_accepted')
     const v2Schedule = structuredClone(state)
     v2Schedule.schema = 'supermega.shop.service_schedule.v2'
     delete v2Schedule.clients
@@ -8858,6 +8912,7 @@ async function verifyShopServiceScheduleRuntime() {
       revision: state.revision,
       services: state.services,
       resources: state.resources,
+      privacyPolicy: state.privacyPolicy,
       bookings: state.bookings.map(({ contact: _contact, appointmentUpdates: _appointmentUpdates, ...booking }) => booking),
       events: state.events,
     }
@@ -8874,6 +8929,9 @@ async function verifyShopServiceScheduleRuntime() {
     assert(state.bookings[0].status === 'checked_in', 'shop_service_booking_check_in_failed')
     state = model.advanceShopServiceBooking(state, bookingId, proof(7, 'Service completed'))
     assert(state.bookings[0].status === 'completed' && state.events.length === state.revision, 'shop_service_booking_completion_or_evidence_failed')
+    const completedPrivacySchedule = model.setShopServiceClientRetention(state, 30, proof(10, 'Owner approved client retention'))
+    const unpaidAnonymization = model.shopServiceClientAnonymizationReadiness(completedPrivacySchedule, completedPrivacySchedule.clients[0].id, [], new Date('2026-09-01T00:00:00.000Z'))
+    assert(!unpaidAnonymization.allowed && unpaidAnonymization.reason.includes('payment'), 'shop_service_unpaid_visit_anonymization_allowed')
     const checkoutRequest = model.shopServiceCheckoutRequest(state, bookingId)
     assert(checkoutRequest?.sourceRecordId === 'SPA-BOOKING-0003'
       && checkoutRequest.serviceSku === `SPA-SVC-${serviceId.toUpperCase()}`
@@ -8989,6 +9047,33 @@ async function verifyShopServiceScheduleRuntime() {
       && model.shopServiceCheckoutRequest(state, bookingId) === null, 'shop_service_checkout_link_failed')
     const linkedReplay = model.linkShopServiceBookingCheckout(state, bookingId, checkedOut.orders[0].id, proof(15, 'Recovered existing checkout link'))
     assert(linkedReplay === state, 'shop_service_checkout_link_retry_appended_duplicate_evidence')
+    const linkedPrivacySchedule = model.setShopServiceClientRetention(state, 30, proof(17, 'Owner approved client retention'))
+    const eligibleAnonymization = model.shopServiceClientAnonymizationReadiness(linkedPrivacySchedule, linkedPrivacySchedule.clients[0].id, [checkedOut.orders[0].id], new Date('2026-08-29T03:14:00.000Z'))
+    assert(eligibleAnonymization.allowed && eligibleAnonymization.dueAt, 'shop_service_closed_visit_anonymization_not_ready')
+    const anonymizedSchedule = model.anonymizeShopServiceClient(linkedPrivacySchedule, linkedPrivacySchedule.clients[0].id, [checkedOut.orders[0].id], {
+      actor: 'Shop owner',
+      reason: 'Owner reviewed permanent anonymization after retention and payment closure.',
+      happenedAt: '2026-08-29T03:14:00.000Z',
+    })
+    const anonymizedSerialized = JSON.stringify(anonymizedSchedule)
+    assert(anonymizedSchedule.events.at(-1).type === 'client_anonymized'
+      && anonymizedSchedule.clients[0].contact === `anonymized:${anonymizedSchedule.clients[0].id}`
+      && model.shopServiceClientExportRows(anonymizedSchedule).length === 0
+      && !anonymizedSerialized.includes('Client A')
+      && !anonymizedSerialized.includes('09-000-000')
+      && !anonymizedSerialized.includes('First visit'), 'shop_service_client_anonymization_did_not_scrub_identity')
+    const evidenceLeakSchedule = structuredClone(linkedPrivacySchedule)
+    evidenceLeakSchedule.events[0].reason = 'Scheduled for Client A at 09-000-000.'
+    const evidenceLeakReadiness = model.shopServiceClientAnonymizationReadiness(evidenceLeakSchedule, evidenceLeakSchedule.clients[0].id, [checkedOut.orders[0].id], new Date('2026-08-29T03:14:00.000Z'))
+    assert(!evidenceLeakReadiness.allowed && evidenceLeakReadiness.reason.includes('immutable appointment evidence'), 'shop_service_identity_in_evidence_anonymization_allowed')
+    assertThrows(() => model.scheduleShopServiceBooking(anonymizedSchedule, {
+      customerName: anonymizedSchedule.clients[0].name,
+      contact: anonymizedSchedule.clients[0].contact,
+      appointmentUpdates: 'declined',
+      serviceId,
+      resourceId,
+      startsAt: '2026-08-30T03:14:00.000Z',
+    }, { actor: 'Shop owner', reason: 'Invalid anonymized placeholder reuse', happenedAt: '2026-08-29T03:15:00.000Z' }), 'shop_service_anonymized_placeholder_reused')
     assertThrows(() => model.linkShopServiceBookingCheckout(state, bookingId, 'ORD-SPA-BOOKING-9999', proof(16, 'Invalid checkout link')), 'shop_service_checkout_wrong_order_linked')
     assertThrows(() => model.advanceShopServiceBooking(state, bookingId, proof(8, 'Invalid extra advance')), 'shop_service_completed_booking_advanced')
     assertThrows(() => model.cancelShopServiceBooking(state, bookingId, proof(9, 'Invalid cancellation')), 'shop_service_completed_booking_cancelled')
@@ -22440,7 +22525,7 @@ await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
 // The bounded cumulative allowance includes reviewed Plant evidence alignment plus the realistic Spa workflow, client privacy, and staff-role controls; initial-load and core-app chunk budgets remain unchanged.
-if (bytes > 2_948_000) fail(`artifact_budget:${bytes}`)
+if (bytes > 2_958_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

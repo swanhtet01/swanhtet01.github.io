@@ -678,6 +678,14 @@ class TrialRuntimeTests(unittest.TestCase):
 
         store = InMemoryTrialStore(reducer=state_reducer)
         self._provision(store)
+        spa_owner = TrialPrincipal("workspace-a", "actor-spa-owner", "human")
+        self.sessions["spa-owner-session"] = spa_owner
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-spa-owner",
+            actor_kind="human",
+            capabilities=("commerce.write", "company.write"),
+        )
         client = self._client(store)
         endpoint = "/api/trial/v1/commerce/service-schedule"
         commerce = {
@@ -709,7 +717,7 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(owner_workspace.status_code, 200, owner_workspace.text)
         schedule: dict[str, object] = {
-            "schema": "supermega.shop.service_schedule.v3",
+            "schema": "supermega.shop.service_schedule.v4",
             "industryPackId": "spa",
             "revision": 0,
             "services": [{
@@ -725,6 +733,7 @@ class TrialRuntimeTests(unittest.TestCase):
                 "kind": "staff",
                 "active": True,
             }],
+            "privacyPolicy": {"clientRetentionDays": None},
             "clients": [],
             "bookings": [],
             "events": [],
@@ -943,6 +952,124 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(therapist_booking_attempt.status_code, 403, therapist_booking_attempt.text)
 
+        privacy_schedule = deepcopy(current_state["serviceSchedule"])
+        privacy_schedule["revision"] = 5
+        privacy_schedule["privacyPolicy"] = {
+            "clientRetentionDays": 365,
+            "updatedAt": "2026-08-11T03:20:00.000Z",
+            "updatedBy": "client-asserted-actor",
+        }
+        privacy_schedule["events"].append({
+            "revision": 5,
+            "type": "client_retention_set",
+            "subjectId": "retention-365-days",
+            "actor": "client-asserted-actor",
+            "reason": "Owner approved one year of client retention.",
+            "happenedAt": "2026-08-11T03:20:00.000Z",
+        })
+        privacy_state = {
+            **deepcopy(current_state),
+            "serviceSchedule": privacy_schedule,
+        }
+        generic_operator_attempt = client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.service_schedule.saved",
+                "expected_version": 6,
+                "payload": {
+                    "state": privacy_state,
+                    "evidence": {
+                        "actionId": f"ACT-{uuid4()}",
+                        "capturedAt": "2026-08-11T03:20:00.000Z",
+                        "actor": "actor-operator",
+                        "reason": "Attempt a client-retention change without owner authority.",
+                        "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
+                    },
+                },
+            },
+        )
+        self.assertEqual(generic_operator_attempt.status_code, 403, generic_operator_attempt.text)
+        self.assertEqual(
+            generic_operator_attempt.json()["detail"]["code"],
+            "spa_owner_action_required",
+        )
+        owner_generic_privacy_state = deepcopy(privacy_state)
+        owner_generic_privacy_state["serviceSchedule"]["events"][-1]["actor"] = "actor-spa-owner"
+        owner_generic_privacy_state["serviceSchedule"]["privacyPolicy"]["updatedBy"] = "actor-spa-owner"
+        generic_owner_attempt = client.post(
+            "/api/trial/v1/commands",
+            headers=self._headers("spa-owner-session"),
+            json={
+                "command_id": str(uuid4()),
+                "surface": "commerce",
+                "event_type": "commerce.service_schedule.saved",
+                "expected_version": 6,
+                "payload": {
+                    "state": owner_generic_privacy_state,
+                    "evidence": {
+                        "actionId": f"ACT-{uuid4()}",
+                        "capturedAt": "2099-08-11T03:20:00.000Z",
+                        "actor": "actor-spa-owner",
+                        "reason": "Attempt to bypass the server-owned Spa privacy clock.",
+                        "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
+                    },
+                },
+            },
+        )
+        self.assertEqual(generic_owner_attempt.status_code, 422, generic_owner_attempt.text)
+        self.assertEqual(
+            generic_owner_attempt.json()["detail"]["code"],
+            "spa_privacy_action_route_required",
+        )
+        front_desk_privacy_attempt = client.post(
+            endpoint,
+            headers=self._headers("spa-front-desk-session"),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 6,
+                "captured_at": "2026-08-11T03:20:00.000Z",
+                "schedule": privacy_schedule,
+            },
+        )
+        self.assertEqual(front_desk_privacy_attempt.status_code, 403, front_desk_privacy_attempt.text)
+        self.assertEqual(
+            front_desk_privacy_attempt.json()["detail"]["code"],
+            "spa_owner_action_required",
+        )
+        owner_privacy_change = client.post(
+            endpoint,
+            headers=self._headers("spa-owner-session"),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 6,
+                "captured_at": "2026-08-11T03:20:00.000Z",
+                "schedule": privacy_schedule,
+            },
+        )
+        self.assertEqual(owner_privacy_change.status_code, 200, owner_privacy_change.text)
+        self.assertEqual(
+            owner_privacy_change.json()["result"]["state"]["serviceSchedule"]["events"][-1]["actor"],
+            "actor-spa-owner",
+        )
+        self.assertEqual(
+            owner_privacy_change.json()["result"]["state"]["serviceSchedule"]["privacyPolicy"]["clientRetentionDays"],
+            365,
+        )
+        self.assertEqual(
+            owner_privacy_change.json()["result"]["state"]["serviceSchedule"]["privacyPolicy"]["updatedBy"],
+            "actor-spa-owner",
+        )
+        privacy_event = owner_privacy_change.json()["result"]["state"]["serviceSchedule"]["events"][-1]
+        self.assertNotEqual(privacy_event["happenedAt"], "2026-08-11T03:20:00.000Z")
+        self.assertEqual(
+            owner_privacy_change.json()["result"]["state"]["serviceSchedule"]["privacyPolicy"]["updatedAt"],
+            privacy_event["happenedAt"],
+        )
+        current_state = owner_privacy_change.json()["result"]["state"]
+
         service_order = {
             "id": "ORD-SPA-BOOKING-0001",
             "sourceRecordId": "SPA-BOOKING-0001",
@@ -957,7 +1084,7 @@ class TrialRuntimeTests(unittest.TestCase):
                 "command_id": str(uuid4()),
                 "surface": "commerce",
                 "event_type": "commerce.order.created",
-                "expected_version": 6,
+                "expected_version": 7,
                 "payload": {
                     "state": service_checkout_state,
                     "evidence": {
@@ -984,7 +1111,7 @@ class TrialRuntimeTests(unittest.TestCase):
                         "command_id": str(uuid4()),
                         "surface": "commerce",
                         "event_type": event_type,
-                        "expected_version": 7,
+                        "expected_version": 8,
                         "payload": {
                             "state": candidate_state,
                             "evidence": {
@@ -999,6 +1126,7 @@ class TrialRuntimeTests(unittest.TestCase):
                 )
                 self.assertEqual(denied.status_code, 403, denied.text)
                 self.assertEqual(denied.json()["detail"]["code"], "spa_role_action_denied")
+
         client.close()
 
     def test_runtime_checks_membership_and_capability(self) -> None:
