@@ -1,5 +1,5 @@
 import { sha256Hex } from './managed-trial-proof.ts'
-import { createEmptyPlantOrderState, plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderState } from './plant-order-foundation.ts'
+import { createEmptyPlantOrderState, plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderProjection, type PlantOrderState } from './plant-order-foundation.ts'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
 import { productionOrderPortfolioEntries, validateProductionOrderPortfolio, type ProductionOrderPortfolio } from './production-order-portfolio.ts'
 import type { ShopProductionDemandSourceSnapshot } from './shop-production-demand.ts'
@@ -15,6 +15,8 @@ export const PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa
 export const PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA = 'supermega.production.quality-capa.v1' as const
 export const PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA = 'supermega.production.quality-capa-effectiveness.v1' as const
 export const PRODUCTION_QUALITY_CAPA_TREND_SCHEMA = 'supermega.production.quality-capa-trend.v1' as const
+export const PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA = 'supermega.production.maintenance-finding-source.v2' as const
+export const PRODUCTION_MAINTENANCE_FINDING_SOURCE_LEGACY_SCHEMA = 'supermega.production.maintenance-finding-source.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -165,8 +167,7 @@ export type ProductionMaintenanceCorrectiveAction = {
   finalDisposition: ProductionMaintenanceReturnToService
 }
 
-export type ProductionMaintenanceFindingSource = {
-  contract: 'supermega.production.maintenance-finding-source.v1'
+type ProductionMaintenanceFindingSourceBase = {
   equipmentId: string
   equipmentName: string
   maintenanceOwner: string
@@ -178,6 +179,26 @@ export type ProductionMaintenanceFindingSource = {
   findings: string
   evidenceReference: string
 }
+
+export type ProductionMaintenanceAffectedOrder = {
+  jobId: string
+  product: string
+  planId: string
+  planPackageDigest: string
+  orderRevision: number
+  orderHeadDigest: string
+  status: Exclude<PlantOrderProjection['status'], 'unplanned' | 'released_to_stock'>
+  operations: Array<{ operationId: string; sequence: number; name: string }>
+}
+
+export type ProductionMaintenanceFindingSource = ProductionMaintenanceFindingSourceBase & (
+  | { contract: typeof PRODUCTION_MAINTENANCE_FINDING_SOURCE_LEGACY_SCHEMA }
+  | {
+    contract: typeof PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA
+    workCentreId: string
+    affectedOrders: ProductionMaintenanceAffectedOrder[]
+  }
+)
 
 export type ProductionIssue = {
   id: string
@@ -618,7 +639,10 @@ const productionJobFields = ['id', 'line', 'product', 'target', 'output', 'owner
 const productionShopDemandSourceFields = ['contract', 'sourceDigest', 'evidenceReference', 'snapshot']
 const productionShopDemandSnapshotFields = ['schema', 'operatingUnitLocationId', 'sku', 'productName', 'sourceOrderIds', 'activeDemandUnits', 'uncoveredDemandUnits', 'availableToPromiseUnits', 'reorderAtUnits', 'replenishmentGapUnits', 'recommendedBatchUnits']
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'maintenanceFindingSource', 'resolution']
-const productionMaintenanceFindingSourceFields = ['contract', 'equipmentId', 'equipmentName', 'maintenanceOwner', 'completionActionId', 'completedAt', 'strategyActionId', 'strategyRevision', 'returnToService', 'findings', 'evidenceReference']
+const productionMaintenanceFindingSourceBaseFields = ['contract', 'equipmentId', 'equipmentName', 'maintenanceOwner', 'completionActionId', 'completedAt', 'strategyActionId', 'strategyRevision', 'returnToService', 'findings', 'evidenceReference']
+const productionMaintenanceFindingSourceFields = [...productionMaintenanceFindingSourceBaseFields, 'workCentreId', 'affectedOrders']
+const productionMaintenanceAffectedOrderFields = ['jobId', 'product', 'planId', 'planPackageDigest', 'orderRevision', 'orderHeadDigest', 'status', 'operations']
+const productionMaintenanceAffectedOperationFields = ['operationId', 'sequence', 'name']
 const productionMaintenanceCorrectiveActionFields = ['contract', 'correctiveAction', 'verificationResult', 'finalDisposition']
 const productionQualityCorrectiveActionLegacyFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'recurrenceKey', 'priorIssueIds']
 const productionQualityCorrectiveActionFields = [...productionQualityCorrectiveActionLegacyFields, 'effectivenessReviewDueAt']
@@ -632,6 +656,7 @@ const productionEquipmentMaintenanceStrategyFields = ['revision', 'actionId', 's
 const productionEquipmentCriticalities: ProductionEquipmentCriticality[] = ['critical', 'high', 'medium', 'low']
 const productionMaintenanceOutcomes: ProductionMaintenanceOutcome[] = ['completed', 'completed_with_findings']
 const productionMaintenanceReturnToServiceValues: ProductionMaintenanceReturnToService[] = ['recommended', 'restricted', 'not_recommended']
+const productionMaintenanceAffectedOrderStatuses: ProductionMaintenanceAffectedOrder['status'][] = ['planned', 'shortfall', 'ready', 'released', 'in_process', 'inspection_due', 'quality_hold', 'ready_to_release']
 const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   job_created: jobCreatedEventFields,
   job_schedule_updated: jobScheduleUpdateEventFields,
@@ -791,8 +816,12 @@ function assertUnique(values: string[], field: string) {
 
 function validateProductionMaintenanceFindingSource(value: unknown, field: string): ProductionMaintenanceFindingSource {
   if (!isRecord(value)) throw new Error(`${field} is invalid.`)
-  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionMaintenanceFindingSourceFields].sort())) throw new Error(`${field} fields are invalid.`)
-  if (value.contract !== 'supermega.production.maintenance-finding-source.v1') throw new Error(`${field}.contract is invalid.`)
+  const expectedFields = value.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA
+    ? productionMaintenanceFindingSourceFields
+    : value.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_LEGACY_SCHEMA
+      ? productionMaintenanceFindingSourceBaseFields
+      : null
+  if (!expectedFields || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`${field} fields are invalid.`)
   canonicalText(value.equipmentId, `${field}.equipmentId`, 80)
   canonicalText(value.equipmentName, `${field}.equipmentName`, 120)
   canonicalText(value.maintenanceOwner, `${field}.maintenanceOwner`, 120)
@@ -803,7 +832,102 @@ function validateProductionMaintenanceFindingSource(value: unknown, field: strin
   if (value.returnToService !== 'restricted' && value.returnToService !== 'not_recommended') throw new Error(`${field}.returnToService is invalid.`)
   canonicalText(value.findings, `${field}.findings`, 360)
   canonicalText(value.evidenceReference, `${field}.evidenceReference`)
+  if (value.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA) {
+    const workCentreId = canonicalText(value.workCentreId, `${field}.workCentreId`, 80)
+    if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`${field}.workCentreId is invalid.`)
+    if (!Array.isArray(value.affectedOrders) || value.affectedOrders.length > 20) throw new Error(`${field}.affectedOrders is invalid.`)
+    let previousJobId = ''
+    for (const [orderIndex, candidate] of value.affectedOrders.entries()) {
+      const orderField = `${field}.affectedOrders[${orderIndex}]`
+      if (!isRecord(candidate) || JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...productionMaintenanceAffectedOrderFields].sort())) throw new Error(`${orderField} fields are invalid.`)
+      const jobId = canonicalText(candidate.jobId, `${orderField}.jobId`, 80)
+      const planId = canonicalText(candidate.planId, `${orderField}.planId`, 80)
+      if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(jobId) || !/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(planId)) throw new Error(`${orderField} identifiers are invalid.`)
+      if (previousJobId && jobId <= previousJobId) throw new Error(`${field}.affectedOrders must be uniquely sorted by job ID.`)
+      previousJobId = jobId
+      canonicalText(candidate.product, `${orderField}.product`)
+      if (typeof candidate.planPackageDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.planPackageDigest)) throw new Error(`${orderField}.planPackageDigest is invalid.`)
+      assertSafeInteger(candidate.orderRevision, `${orderField}.orderRevision`, 1)
+      if (typeof candidate.orderHeadDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.orderHeadDigest)) throw new Error(`${orderField}.orderHeadDigest is invalid.`)
+      if (!productionMaintenanceAffectedOrderStatuses.includes(candidate.status as ProductionMaintenanceAffectedOrder['status'])) throw new Error(`${orderField}.status is invalid.`)
+      if (!Array.isArray(candidate.operations) || !candidate.operations.length || candidate.operations.length > 100) throw new Error(`${orderField}.operations is invalid.`)
+      const operationIds: string[] = []
+      let previousSequence = 0
+      for (const [operationIndex, operation] of candidate.operations.entries()) {
+        const operationField = `${orderField}.operations[${operationIndex}]`
+        if (!isRecord(operation) || JSON.stringify(Object.keys(operation).sort()) !== JSON.stringify([...productionMaintenanceAffectedOperationFields].sort())) throw new Error(`${operationField} fields are invalid.`)
+        const operationId = canonicalText(operation.operationId, `${operationField}.operationId`, 80)
+        if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(operationId)) throw new Error(`${operationField}.operationId is invalid.`)
+        const sequence = Number(operation.sequence)
+        assertSafeInteger(sequence, `${operationField}.sequence`, 1)
+        if (sequence <= previousSequence) throw new Error(`${orderField}.operations must follow reviewed routing sequence.`)
+        previousSequence = sequence
+        canonicalText(operation.name, `${operationField}.name`)
+        operationIds.push(operationId)
+      }
+      assertUnique(operationIds, `${orderField} operation ID`)
+    }
+  }
   return value as unknown as ProductionMaintenanceFindingSource
+}
+
+function productionMaintenanceAffectedOrderForExecution(
+  jobId: string,
+  execution: PlantOrderState,
+  workCentreId: string,
+): ProductionMaintenanceAffectedOrder | null {
+  const projection = projectPlantOrder(execution)
+  const plan = projection.plan
+  if (!plan || projection.status === 'unplanned' || projection.status === 'released_to_stock') return null
+  const operations = plan.routing
+    .filter((operation) => operation.workCentreId === workCentreId)
+    .map(({ operationId, sequence, name }) => ({ operationId, sequence, name }))
+  if (!operations.length) return null
+  return {
+    jobId,
+    product: plan.job.product,
+    planId: plan.planId,
+    planPackageDigest: plan.packageDigest,
+    orderRevision: projection.revision,
+    orderHeadDigest: projection.headDigest,
+    status: projection.status,
+    operations,
+  }
+}
+
+function productionMaintenanceAffectedOrders(state: ProductionState, workCentreId: string) {
+  return productionOrderPortfolioEntries(state)
+    .flatMap(({ jobId, execution }) => {
+      const affected = productionMaintenanceAffectedOrderForExecution(jobId, execution, workCentreId)
+      return affected ? [affected] : []
+    })
+    .sort((left, right) => left.jobId < right.jobId ? -1 : left.jobId > right.jobId ? 1 : 0)
+}
+
+function validateProductionMaintenanceImpactEvidence(
+  state: ProductionState,
+  source: ProductionMaintenanceFindingSource,
+  field: string,
+) {
+  if (source.contract !== PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA) return
+  const asset = state.equipmentMaster?.assets.find((candidate) => candidate.id === source.equipmentId)
+  if (!asset || asset.workCentreId !== source.workCentreId) throw new Error(`${field} work centre does not match its equipment master evidence.`)
+  const entries = new Map(productionOrderPortfolioEntries(state).map((entry) => [entry.jobId, entry.execution]))
+  for (const [index, affected] of source.affectedOrders.entries()) {
+    const orderField = `${field}.affectedOrders[${index}]`
+    const retained = entries.get(affected.jobId)
+    if (!retained || affected.orderRevision > retained.revision) throw new Error(`${orderField} is not retained in controlled order history.`)
+    const commands = retained.commands.slice(0, affected.orderRevision)
+    if (commands.length !== affected.orderRevision || commands.at(-1)?.digest !== affected.orderHeadDigest) throw new Error(`${orderField} head digest is not retained in controlled order history.`)
+    const historical: PlantOrderState = {
+      schema: retained.schema,
+      revision: affected.orderRevision,
+      headDigest: affected.orderHeadDigest,
+      commands,
+    }
+    const expected = productionMaintenanceAffectedOrderForExecution(affected.jobId, historical, source.workCentreId)
+    if (!expected || JSON.stringify(expected) !== JSON.stringify(affected)) throw new Error(`${orderField} does not match its retained reviewed routing.`)
+  }
 }
 
 function validateProductionMaintenanceCorrectiveAction(value: unknown, field: string): ProductionMaintenanceCorrectiveAction {
@@ -1840,6 +1964,7 @@ export function validateProductionState(value: unknown): ProductionState {
           || completionEvent.maintenanceReturnToService !== issueSource.returnToService
           || completionEvent.maintenanceFindings !== issueSource.findings
           || completionEvent.evidenceReference !== issueSource.evidenceReference) throw new Error(`issues[${index}] maintenance finding source does not match reviewed completion evidence.`)
+        validateProductionMaintenanceImpactEvidence(value as unknown as ProductionState, issueSource, `issues[${index}].maintenanceFindingSource`)
         if (events.indexOf(openingEvent) >= events.indexOf(completionEvent)) throw new Error(`issues[${index}] maintenance finding problem must follow its reviewed completion.`)
         if (issues.filter((entry): entry is Record<string, unknown> => isRecord(entry) && isRecord(entry.maintenanceFindingSource) && entry.maintenanceFindingSource.completionActionId === issueSource.completionActionId).length !== 1) throw new Error(`issues[${index}] duplicates a maintenance finding problem.`)
       }
@@ -2478,10 +2603,12 @@ export function productionMaintenanceFindingSource(
   const completion = record?.completion
   const result = completion?.result
   const strategy = record?.strategy
+  const asset = current.equipmentMaster?.assets.find((candidate) => candidate.id === record?.machineId)
   if (!record || !completion || !result || !strategy
+    || !asset
     || (result.returnToService !== 'restricted' && result.returnToService !== 'not_recommended')) return null
   return {
-    contract: 'supermega.production.maintenance-finding-source.v1',
+    contract: PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA,
     equipmentId: record.machineId,
     equipmentName: record.machineName,
     maintenanceOwner: record.owner,
@@ -2492,6 +2619,8 @@ export function productionMaintenanceFindingSource(
     returnToService: result.returnToService,
     findings: result.findings,
     evidenceReference: completion.evidenceReference,
+    workCentreId: asset.workCentreId,
+    affectedOrders: productionMaintenanceAffectedOrders(current, asset.workCentreId),
   }
 }
 
@@ -3792,6 +3921,10 @@ export function openProductionIssue(state: ProductionState, issue: ProductionIss
     return existing.kind === 'issue_opened' && existing.subjectId === issue.id && sameProof(existing, proof) && JSON.stringify(storedIssue) === JSON.stringify(issue) ? state : null
   }
   if (actionIdIsUsed(state, proof.actionId) || state.issues.some((candidate) => candidate.id === issue.id) || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  if (issue.maintenanceFindingSource !== undefined) {
+    const expectedSource = productionMaintenanceFindingSource(state, issue.maintenanceFindingSource.completionActionId)
+    if (!expectedSource || JSON.stringify(expectedSource) !== JSON.stringify(issue.maintenanceFindingSource)) return null
+  }
   const event = eventFor(proof, {
     kind: 'issue_opened',
     subjectId: issue.id,

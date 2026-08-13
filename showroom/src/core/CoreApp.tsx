@@ -220,6 +220,7 @@ import {
   openProductionIssue,
   parseProductionMaterialQuantity,
   placeProductionQualityHold,
+  PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA,
   productionDowntimeIntervals,
   productionIssueSeverities,
   productionJobPriorities,
@@ -828,6 +829,15 @@ function shiftReferencePlaceholder() {
 
 function formatIssueDue(value: string) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+}
+
+function formatProductionMaintenanceOrderImpact(source: ProductionMaintenanceFindingSource) {
+  if (source.contract !== PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA) return ''
+  if (!source.affectedOrders.length) return `${source.workCentreId} · No unreleased controlled orders`
+  const visible = source.affectedOrders.slice(0, 3)
+    .map((order) => `${order.jobId} (${order.operations.map((operation) => operation.operationId).join(', ')})`)
+  const remaining = source.affectedOrders.length - visible.length
+  return `${source.workCentreId} · ${visible.join(' · ')}${remaining ? ` · +${remaining} more` : ''}`
 }
 
 function uid(prefix: string) {
@@ -10264,9 +10274,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     setSeverity(source.returnToService === 'not_recommended' ? 'high' : 'medium')
     setIssueOwner(source.maintenanceOwner)
     setSummary(`Maintenance finding: ${source.findings}`.slice(0, 240).trim())
+    const affectedOrderCount = source.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA ? source.affectedOrders.length : 0
+    const affectedOrderReview = affectedOrderCount
+      ? ` Review ${affectedOrderCount} linked controlled ${affectedOrderCount === 1 ? 'order' : 'orders'} before normal operation.`
+      : ''
     setContainment(source.returnToService === 'not_recommended'
-      ? 'Keep the asset out of service pending reviewed corrective action.'
-      : 'Define restricted-service controls and corrective action before normal operation.')
+      ? `Keep the asset out of service pending reviewed corrective action.${affectedOrderReview}`.slice(0, 240)
+      : `Define restricted-service controls and corrective action before normal operation.${affectedOrderReview}`.slice(0, 240))
     setIssueDueInput(defaultIssueDueInput())
     maintenanceDialogRef.current?.close()
     setMaintenanceDialogOpen(false)
@@ -11048,7 +11062,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </form> : <p className="panel-copy">Every recorded machine already has open maintenance work.</p>}
       {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => {
         const findingSource = record.completion ? maintenanceFindingSources.get(record.completion.actionId) : undefined
-        return <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.result ? <small style={wrappedIssueDetail}>{record.completion.result.outcome.replaceAll('_', ' ')} · Return: {record.completion.result.returnToService.replaceAll('_', ' ')} · {record.completion.result.findings}</small> : null}{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div>{findingSource ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => startMaintenanceFindingProblem(record)} type="button">Review problem</button> : null}</article>
+        return <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.result ? <small style={wrappedIssueDetail}>{record.completion.result.outcome.replaceAll('_', ' ')} · Return: {record.completion.result.returnToService.replaceAll('_', ' ')} · {record.completion.result.findings}</small> : null}{findingSource?.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA ? <small style={wrappedIssueDetail}>Order impact · {findingSource.workCentreId} · {findingSource.affectedOrders.length} controlled {findingSource.affectedOrders.length === 1 ? 'order' : 'orders'}</small> : null}{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div>{findingSource ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => startMaintenanceFindingProblem(record)} type="button">Review problem</button> : null}</article>
       })}</div></> : null}
       <p className="panel-copy">Maintenance evidence only; no machine, inventory, or job change.</p>
     </dialog>
@@ -11066,7 +11080,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeIssueDialog() }} ref={issueDialogRef}>
       <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">{issueMaintenanceFindingSource ? 'Review maintenance finding' : 'Record an observation'}</h2></div><button aria-label="Close problem form" className="text-link" onClick={closeIssueDialog} type="button">Close</button></div>
       <form autoComplete="off" className="core-form" onSubmit={createIssue}>
-        {issueMaintenanceFindingSource ? <p className="form-notice" role="status"><strong>Linked completion</strong><br />{issueMaintenanceFindingSource.equipmentName} · Strategy R{issueMaintenanceFindingSource.strategyRevision} · {issueMaintenanceFindingSource.returnToService.replaceAll('_', ' ')}<br />Owner: {issueMaintenanceFindingSource.maintenanceOwner} · Evidence: {issueMaintenanceFindingSource.evidenceReference}</p> : null}
+        {issueMaintenanceFindingSource ? <p className="form-notice" role="status"><strong>Linked completion</strong><br />{issueMaintenanceFindingSource.equipmentName} · Strategy R{issueMaintenanceFindingSource.strategyRevision} · {issueMaintenanceFindingSource.returnToService.replaceAll('_', ' ')}<br />Owner: {issueMaintenanceFindingSource.maintenanceOwner} · Evidence: {issueMaintenanceFindingSource.evidenceReference}{issueMaintenanceFindingSource.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA ? <><br />Order impact: {formatProductionMaintenanceOrderImpact(issueMaintenanceFindingSource)}</> : null}</p> : null}
         <div className="form-row"><label>Type<select disabled={Boolean(issueMaintenanceFindingSource)} value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<input maxLength={120} onChange={(event) => setArea(event.target.value)} placeholder="Line, machine, or work centre" required value={area} /></label></div>
         <label>Observation<textarea autoFocus maxLength={240} required value={summary} onChange={(event) => setSummary(event.target.value)} placeholder="Describe what happened, not the assumption." /></label>
         <div className="form-row"><label>Priority<select value={severity} onChange={(event) => setSeverity(event.target.value as ProductionIssueSeverity)}>{productionIssueSeverities.map((candidate) => <option key={candidate} value={candidate}>{productionIssueSeverityLabels[candidate]}</option>)}</select></label><label>Owner<input autoComplete="off" maxLength={120} name="plant-issue-owner" onChange={(event) => setIssueOwner(event.target.value)} placeholder="Named person or role" required value={issueOwner} /></label></div>
@@ -11167,7 +11181,7 @@ function IssueList({ disabled = false, issues, now, onResolve, onReviewEffective
           <small style={wrappedIssueDetail}>{overdue ? 'OVERDUE' : `Due ${formatIssueDue(issue.dueAt ?? '')}`} · Owner {issue.owner}</small>
           <small style={wrappedIssueDetail}>Next: {issue.containment}</small>
         </> : <small style={wrappedIssueDetail}>Legacy problem · owner, due time, and containment were not recorded</small>}
-        {issue.maintenanceFindingSource ? <small style={wrappedIssueDetail}>Maintenance finding · {issue.maintenanceFindingSource.equipmentName} · Strategy R{issue.maintenanceFindingSource.strategyRevision} · Source {issue.maintenanceFindingSource.completionActionId}</small> : null}
+        {issue.maintenanceFindingSource ? <><small style={wrappedIssueDetail}>Maintenance finding · {issue.maintenanceFindingSource.equipmentName} · Strategy R{issue.maintenanceFindingSource.strategyRevision} · Source {issue.maintenanceFindingSource.completionActionId}</small>{issue.maintenanceFindingSource.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA ? <small style={wrappedIssueDetail}>Order impact · {formatProductionMaintenanceOrderImpact(issue.maintenanceFindingSource)}</small> : null}</> : null}
         {issue.status === 'resolved' ? <small style={wrappedIssueDetail}>{issue.resolution ? `Resolved by ${issue.resolution.resolvedBy} · Evidence: ${issue.resolution.evidenceReference}` : 'Legacy resolution · no attributed proof was available'}</small> : null}
         {issue.resolution?.maintenanceCorrectiveAction ? <small style={wrappedIssueDetail}>Corrective action: {issue.resolution.maintenanceCorrectiveAction.correctiveAction} · Verified: {issue.resolution.maintenanceCorrectiveAction.verificationResult} · Final disposition: {issue.resolution.maintenanceCorrectiveAction.finalDisposition.replaceAll('_', ' ')}</small> : null}
         {qualityAction ? <><small style={wrappedIssueDetail}>CAPA: {productionQualityCauseLabels[qualityAction.causeCategory]} · {qualityAction.failureMode} · Owner {qualityAction.effectivenessOwner}</small><small style={wrappedIssueDetail}>{qualityAction.priorIssueIds.length ? `Repeat · linked to ${qualityAction.priorIssueIds.join(', ')}` : 'First classified occurrence'} · Implementation: {qualityAction.verificationResult}</small></> : null}

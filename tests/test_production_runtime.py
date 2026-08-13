@@ -4244,6 +4244,285 @@ class ProductionRuntimeTests(unittest.TestCase):
             ["maintenance_completed", "maintenance_started"],
         )
 
+    def test_restrictive_maintenance_finding_binds_controlled_order_impact(self) -> None:
+        current = starting_workspace()
+        order_evidence = action_evidence(
+            "ACT-MAINTENANCE-ORDER",
+            captured_at="2026-07-24T09:30:00.000Z",
+        )
+        order_execution = planned_order_execution(current, order_evidence)
+        current["orderPortfolio"] = {
+            "contract": "supermega.production.order_portfolio.v1",
+            "entries": [{"jobId": "JOB-REAL-001", "execution": order_execution}],
+        }
+
+        import_evidence = action_evidence(
+            "ACT-MAINTENANCE-EQUIPMENT-IMPORT",
+            captured_at="2026-07-24T10:00:00.000Z",
+            evidence_reference=f"sha256:{'b' * 64}",
+        )
+        import_evidence["reason"] = "Imported reviewed Plant equipment master"
+        imported = dict(
+            reduce_trial_state(
+                "production",
+                "production.equipment_master.imported",
+                current,
+                {
+                    "equipment": [{
+                        "id": "MACHINE-MAINT-001",
+                        "name": "Managed line drive",
+                        "workCentreId": "WC-MANAGED-001",
+                        "criticality": "critical",
+                        "owner": "Plant engineering owner",
+                    }],
+                    "evidence": import_evidence,
+                },
+            )
+        )
+        commission_evidence = action_evidence(
+            "ACT-MAINTENANCE-EQUIPMENT-COMMISSION",
+            captured_at="2026-07-24T11:00:00.000Z",
+            evidence_reference="SAFETY-MAINT-001",
+        )
+        commission_evidence["reason"] = "Commissioned reviewed Plant equipment"
+        commissioned = dict(
+            reduce_trial_state(
+                "production",
+                "production.equipment.commissioned",
+                imported,
+                {
+                    "equipmentId": "MACHINE-MAINT-001",
+                    "installedAt": "2026-07-24T10:30:00.000Z",
+                    "initialState": "running",
+                    "safetyBaselineReference": "SAFETY-MAINT-001",
+                    "evidence": commission_evidence,
+                },
+            )
+        )
+        strategy_evidence = action_evidence(
+            "ACT-MAINTENANCE-STRATEGY",
+            captured_at="2026-07-24T12:00:00.000Z",
+            evidence_reference="SAFETY-STRATEGY-001",
+        )
+        strategy_evidence["reason"] = "Saved reviewed preventive maintenance strategy"
+        strategy = dict(
+            reduce_trial_state(
+                "production",
+                "production.equipment_maintenance_strategy.saved",
+                commissioned,
+                {
+                    "equipmentId": "MACHINE-MAINT-001",
+                    "maintenanceOwner": "Maintenance lead",
+                    "intervalDays": 30,
+                    "nextDueAt": "2026-08-23T12:00:00.000Z",
+                    "procedureReference": "SOP-MAINT-001-R1",
+                    "safetyBaselineReference": "SAFETY-STRATEGY-001",
+                    "evidence": strategy_evidence,
+                },
+            )
+        )
+        strategy_record = strategy["equipmentMaster"]["assets"][0]["maintenanceStrategy"]
+        start_evidence = action_evidence(
+            "ACT-MAINTENANCE-IMPACT-START",
+            captured_at="2026-07-24T13:00:00.000Z",
+        )
+        started = deepcopy(strategy)
+        started["revision"] += 1
+        started["events"] = [
+            production_event(
+                start_evidence,
+                kind="maintenance_started",
+                subject_id="MACHINE-MAINT-001",
+                summary="Started maintenance for Managed line drive",
+                maintenanceOwner="Maintenance lead",
+                maintenanceStrategyActionId=strategy_record["actionId"],
+                maintenanceStrategyRevision=strategy_record["revision"],
+                maintenanceProcedureReference=strategy_record["procedureReference"],
+                maintenancePlannedDueAt=strategy_record["nextDueAt"],
+            ),
+            *strategy["events"],
+        ]
+        started = apply_event(
+            strategy,
+            "production.maintenance.started",
+            started,
+            start_evidence,
+        )
+
+        completion_evidence = action_evidence(
+            "ACT-MAINTENANCE-IMPACT-COMPLETE",
+            captured_at="2026-07-24T14:00:00.000Z",
+        )
+        completed = deepcopy(started)
+        completed["revision"] += 1
+        completed["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"] = "2026-08-23T14:00:00.000Z"
+        completed["events"] = [
+            production_event(
+                completion_evidence,
+                kind="maintenance_completed",
+                subject_id="MACHINE-MAINT-001",
+                summary="Completed maintenance for Managed line drive",
+                maintenanceStartActionId=start_evidence["actionId"],
+                maintenanceStrategyActionId=strategy_record["actionId"],
+                maintenanceStrategyRevision=strategy_record["revision"],
+                maintenanceProcedureReference=strategy_record["procedureReference"],
+                maintenancePlannedDueAt=strategy_record["nextDueAt"],
+                maintenanceOutcome="completed_with_findings",
+                maintenanceFindings="Drive vibration exceeds the reviewed operating band.",
+                maintenanceProcedureCompleted=True,
+                maintenanceReturnToService="restricted",
+                nextDueAt="2026-08-23T14:00:00.000Z",
+            ),
+            *started["events"],
+        ]
+        completed = apply_event(
+            started,
+            "production.maintenance.completed",
+            completed,
+            completion_evidence,
+        )
+        order_projection = project_plant_order(order_execution)
+        plan = order_projection["plan"]
+        source = {
+            "contract": "supermega.production.maintenance-finding-source.v2",
+            "equipmentId": "MACHINE-MAINT-001",
+            "equipmentName": "Managed line drive",
+            "maintenanceOwner": "Maintenance lead",
+            "completionActionId": completion_evidence["actionId"],
+            "completedAt": completion_evidence["capturedAt"],
+            "strategyActionId": strategy_record["actionId"],
+            "strategyRevision": strategy_record["revision"],
+            "returnToService": "restricted",
+            "findings": "Drive vibration exceeds the reviewed operating band.",
+            "evidenceReference": completion_evidence["evidenceReference"],
+            "workCentreId": "WC-MANAGED-001",
+            "affectedOrders": [{
+                "jobId": "JOB-REAL-001",
+                "product": plan["job"]["product"],
+                "planId": plan["planId"],
+                "planPackageDigest": plan["packageDigest"],
+                "orderRevision": order_projection["revision"],
+                "orderHeadDigest": order_projection["headDigest"],
+                "status": order_projection["status"],
+                "operations": [{
+                    "operationId": "OP-MANAGED-10",
+                    "sequence": 1,
+                    "name": "Managed operation",
+                }],
+            }],
+        }
+        issue_evidence = action_evidence(
+            "ACT-MAINTENANCE-IMPACT-ISSUE",
+            captured_at="2026-07-24T15:00:00.000Z",
+        )
+        issue = {
+            "id": "ISS-MAINTENANCE-IMPACT-001",
+            "createdAt": issue_evidence["capturedAt"],
+            "area": "Managed line drive",
+            "kind": "maintenance",
+            "summary": "Maintenance finding requires controlled-order review.",
+            "status": "open",
+            "severity": "medium",
+            "owner": "Maintenance lead",
+            "dueAt": "2026-07-25T15:00:00.000Z",
+            "containment": "Review the linked controlled order before normal operation.",
+            "maintenanceFindingSource": deepcopy(source),
+        }
+        opened = deepcopy(completed)
+        opened["revision"] += 1
+        opened["issues"] = [issue, *completed["issues"]]
+        opened["events"] = [
+            production_event(
+                issue_evidence,
+                kind="issue_opened",
+                subject_id=issue["id"],
+                summary="Opened maintenance issue for Managed line drive",
+                issueSeverity=issue["severity"],
+                issueOwner=issue["owner"],
+                issueDueAt=issue["dueAt"],
+                issueContainment=issue["containment"],
+                maintenanceFindingSource=deepcopy(source),
+            ),
+            *completed["events"],
+        ]
+        opened = apply_event(
+            completed,
+            "production.issue.opened",
+            opened,
+            issue_evidence,
+        )
+        self.assertEqual(
+            opened["issues"][0]["maintenanceFindingSource"]["affectedOrders"][0]["operations"][0]["operationId"],
+            "OP-MANAGED-10",
+        )
+        self.assertEqual(opened["orderPortfolio"], completed["orderPortfolio"])
+        self.assertEqual(opened["jobs"], completed["jobs"])
+        self.assertEqual(opened["machines"], completed["machines"])
+
+        omitted = deepcopy(opened)
+        omitted["issues"][0]["maintenanceFindingSource"]["affectedOrders"] = []
+        omitted["events"][0]["maintenanceFindingSource"]["affectedOrders"] = []
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "must match current equipment and controlled-order evidence",
+        ):
+            apply_event(
+                completed,
+                "production.issue.opened",
+                omitted,
+                issue_evidence,
+            )
+
+        forged_history = deepcopy(opened)
+        forged_history["issues"][0]["maintenanceFindingSource"]["affectedOrders"][0]["operations"][0]["name"] = "Forged operation"
+        forged_history["events"][0]["maintenanceFindingSource"] = deepcopy(
+            forged_history["issues"][0]["maintenanceFindingSource"]
+        )
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "does not match its retained reviewed routing",
+        ):
+            validate_production_state(forged_history)
+
+        advanced_execution = check_plant_order_availability(
+            order_execution,
+            check_id="CHK-MAINTENANCE-IMPACT-001",
+            source_digest=plant_order_evidence_digest({"check": "maintenance-impact"}),
+            materials=[{
+                "materialId": "MAT-MANAGED-001",
+                "inputLotId": "LOT-MAINTENANCE-001",
+                "availableQuantityMilli": 100_000,
+            }],
+            work_centres=[{
+                "workCentreId": "WC-MANAGED-001",
+                "availableMinutes": 100,
+            }],
+            proof=action_evidence(
+                "ACT-MAINTENANCE-ORDER-ADVANCE",
+                captured_at="2026-07-24T15:30:00.000Z",
+            ),
+            expected_head_digest=order_execution["headDigest"],
+        )["state"]
+        advanced = deepcopy(opened)
+        advanced["orderPortfolio"]["entries"][0]["execution"] = advanced_execution
+        self.assertEqual(
+            validate_production_state(advanced)["issues"][0]["maintenanceFindingSource"]["affectedOrders"][0]["orderRevision"],
+            1,
+        )
+
+        legacy = deepcopy(opened)
+        for legacy_source in (
+            legacy["issues"][0]["maintenanceFindingSource"],
+            legacy["events"][0]["maintenanceFindingSource"],
+        ):
+            legacy_source["contract"] = "supermega.production.maintenance-finding-source.v1"
+            legacy_source.pop("workCentreId")
+            legacy_source.pop("affectedOrders")
+        self.assertEqual(
+            validate_production_state(legacy)["issues"][0]["maintenanceFindingSource"]["contract"],
+            "supermega.production.maintenance-finding-source.v1",
+        )
+
     def test_maintenance_lifecycle_rejects_invalid_transitions_and_history(
         self,
     ) -> None:

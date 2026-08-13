@@ -149,7 +149,7 @@ _JOB_CLOSURE_FIELDS = frozenset(
 _ISSUE_REQUIRED_FIELDS = frozenset({"id", "createdAt", "area", "kind", "summary", "status"})
 _ISSUE_ACTION_FIELDS = frozenset({"severity", "owner", "dueAt", "containment"})
 _ISSUE_OPTIONAL_FIELDS = _ISSUE_ACTION_FIELDS | {"maintenanceFindingSource", "resolution"}
-_MAINTENANCE_FINDING_SOURCE_FIELDS = frozenset(
+_MAINTENANCE_FINDING_SOURCE_BASE_FIELDS = frozenset(
     {
         "contract",
         "equipmentId",
@@ -162,6 +162,37 @@ _MAINTENANCE_FINDING_SOURCE_FIELDS = frozenset(
         "returnToService",
         "findings",
         "evidenceReference",
+    }
+)
+_MAINTENANCE_FINDING_SOURCE_FIELDS = _MAINTENANCE_FINDING_SOURCE_BASE_FIELDS | {
+    "workCentreId",
+    "affectedOrders",
+}
+_MAINTENANCE_AFFECTED_ORDER_FIELDS = frozenset(
+    {
+        "jobId",
+        "product",
+        "planId",
+        "planPackageDigest",
+        "orderRevision",
+        "orderHeadDigest",
+        "status",
+        "operations",
+    }
+)
+_MAINTENANCE_AFFECTED_OPERATION_FIELDS = frozenset(
+    {"operationId", "sequence", "name"}
+)
+_MAINTENANCE_AFFECTED_ORDER_STATUSES = frozenset(
+    {
+        "planned",
+        "shortfall",
+        "ready",
+        "released",
+        "in_process",
+        "inspection_due",
+        "quality_hold",
+        "ready_to_release",
     }
 )
 _MACHINE_FIELDS = frozenset({"id", "name", "state"})
@@ -799,9 +830,14 @@ def _validate_job(candidate: object, index: int) -> dict[str, Any]:
 
 def _maintenance_finding_source(candidate: object, field: str) -> dict[str, Any]:
     source = _object(candidate, field)
-    _exact_fields(source, field, required=_MAINTENANCE_FINDING_SOURCE_FIELDS)
-    if source["contract"] != "supermega.production.maintenance-finding-source.v1":
+    contract = source.get("contract")
+    if contract == "supermega.production.maintenance-finding-source.v2":
+        expected_fields = _MAINTENANCE_FINDING_SOURCE_FIELDS
+    elif contract == "supermega.production.maintenance-finding-source.v1":
+        expected_fields = _MAINTENANCE_FINDING_SOURCE_BASE_FIELDS
+    else:
         raise TrialValidationError(f"{field}.contract is unsupported.")
+    _exact_fields(source, field, required=expected_fields)
     _text(source["equipmentId"], f"{field}.equipmentId", maximum=80)
     _text(source["equipmentName"], f"{field}.equipmentName", maximum=120)
     _text(source["maintenanceOwner"], f"{field}.maintenanceOwner", maximum=120)
@@ -813,6 +849,77 @@ def _maintenance_finding_source(candidate: object, field: str) -> dict[str, Any]
         raise TrialValidationError(f"{field}.returnToService is unsupported.")
     _text(source["findings"], f"{field}.findings", maximum=360)
     _text(source["evidenceReference"], f"{field}.evidenceReference")
+    if contract == "supermega.production.maintenance-finding-source.v2":
+        work_centre_id = _text(
+            source["workCentreId"], f"{field}.workCentreId", maximum=80
+        )
+        if _EQUIPMENT_ID_PATTERN.fullmatch(work_centre_id) is None:
+            raise TrialValidationError(f"{field}.workCentreId is unsupported.")
+        affected_orders = _list(
+            source["affectedOrders"], f"{field}.affectedOrders", maximum=20
+        )
+        previous_job_id = ""
+        for order_index, candidate_order in enumerate(affected_orders):
+            order_field = f"{field}.affectedOrders[{order_index}]"
+            order = _object(candidate_order, order_field)
+            _exact_fields(order, order_field, required=_MAINTENANCE_AFFECTED_ORDER_FIELDS)
+            job_id = _text(order["jobId"], f"{order_field}.jobId", maximum=80)
+            plan_id = _text(order["planId"], f"{order_field}.planId", maximum=80)
+            if (
+                _EQUIPMENT_ID_PATTERN.fullmatch(job_id) is None
+                or _EQUIPMENT_ID_PATTERN.fullmatch(plan_id) is None
+            ):
+                raise TrialValidationError(f"{order_field} identifiers are unsupported.")
+            if previous_job_id and job_id <= previous_job_id:
+                raise TrialValidationError(
+                    f"{field}.affectedOrders must be uniquely sorted by job ID."
+                )
+            previous_job_id = job_id
+            _text(order["product"], f"{order_field}.product")
+            for digest_field in ("planPackageDigest", "orderHeadDigest"):
+                digest = _text(order[digest_field], f"{order_field}.{digest_field}")
+                if _DIGEST_PATTERN.fullmatch(digest) is None:
+                    raise TrialValidationError(
+                        f"{order_field}.{digest_field} is unsupported."
+                    )
+            _integer(order["orderRevision"], f"{order_field}.orderRevision", minimum=1)
+            if order["status"] not in _MAINTENANCE_AFFECTED_ORDER_STATUSES:
+                raise TrialValidationError(f"{order_field}.status is unsupported.")
+            operations = _list(
+                order["operations"], f"{order_field}.operations", maximum=100
+            )
+            if not operations:
+                raise TrialValidationError(f"{order_field}.operations cannot be empty.")
+            operation_ids: list[str] = []
+            previous_sequence = 0
+            for operation_index, candidate_operation in enumerate(operations):
+                operation_field = f"{order_field}.operations[{operation_index}]"
+                operation = _object(candidate_operation, operation_field)
+                _exact_fields(
+                    operation,
+                    operation_field,
+                    required=_MAINTENANCE_AFFECTED_OPERATION_FIELDS,
+                )
+                operation_id = _text(
+                    operation["operationId"],
+                    f"{operation_field}.operationId",
+                    maximum=80,
+                )
+                if _EQUIPMENT_ID_PATTERN.fullmatch(operation_id) is None:
+                    raise TrialValidationError(
+                        f"{operation_field}.operationId is unsupported."
+                    )
+                sequence = _integer(
+                    operation["sequence"], f"{operation_field}.sequence", minimum=1
+                )
+                if sequence <= previous_sequence:
+                    raise TrialValidationError(
+                        f"{order_field}.operations must follow reviewed routing sequence."
+                    )
+                previous_sequence = sequence
+                _text(operation["name"], f"{operation_field}.name")
+                operation_ids.append(operation_id)
+            _unique(operation_ids, f"{order_field} operation ID")
     return source
 
 
@@ -1254,6 +1361,185 @@ def _production_order_entries(state: Mapping[str, Any]) -> list[dict[str, Any]]:
     execution = _validate_order_execution(state["orderExecution"])
     plan = project_plant_order(execution).get("plan")
     return [{"jobId": plan["job"]["jobId"], "execution": execution}] if isinstance(plan, Mapping) else []
+
+
+def _maintenance_affected_order(
+    job_id: str,
+    execution: Mapping[str, Any],
+    work_centre_id: str,
+) -> dict[str, Any] | None:
+    projection = project_plant_order(execution)
+    plan = projection.get("plan")
+    if (
+        not isinstance(plan, Mapping)
+        or projection["status"] in {"unplanned", "released_to_stock"}
+    ):
+        return None
+    operations = [
+        {
+            "operationId": operation["operationId"],
+            "sequence": operation["sequence"],
+            "name": operation["name"],
+        }
+        for operation in plan["routing"]
+        if operation["workCentreId"] == work_centre_id
+    ]
+    if not operations:
+        return None
+    return {
+        "jobId": job_id,
+        "product": plan["job"]["product"],
+        "planId": plan["planId"],
+        "planPackageDigest": plan["packageDigest"],
+        "orderRevision": projection["revision"],
+        "orderHeadDigest": projection["headDigest"],
+        "status": projection["status"],
+        "operations": operations,
+    }
+
+
+def _maintenance_affected_orders(
+    state: Mapping[str, Any], work_centre_id: str
+) -> list[dict[str, Any]]:
+    affected: list[dict[str, Any]] = []
+    for entry in _production_order_entries(state):
+        row = _maintenance_affected_order(
+            entry["jobId"], entry["execution"], work_centre_id
+        )
+        if row is not None:
+            affected.append(row)
+    return sorted(affected, key=lambda row: row["jobId"])
+
+
+def _maintenance_finding_source_for_completion(
+    state: Mapping[str, Any], completion_action_id: str
+) -> dict[str, Any] | None:
+    if any(
+        issue.get("maintenanceFindingSource", {}).get("completionActionId")
+        == completion_action_id
+        for issue in state["issues"]
+    ):
+        return None
+    completion = next(
+        (
+            event
+            for event in state["events"]
+            if event["kind"] == "maintenance_completed"
+            and event["actionId"] == completion_action_id
+        ),
+        None,
+    )
+    if (
+        completion is None
+        or completion.get("maintenanceReturnToService")
+        not in {"restricted", "not_recommended"}
+        or "maintenanceStrategyActionId" not in completion
+    ):
+        return None
+    start = next(
+        (
+            event
+            for event in state["events"]
+            if event["kind"] == "maintenance_started"
+            and event["actionId"] == completion["maintenanceStartActionId"]
+        ),
+        None,
+    )
+    machine = next(
+        (
+            candidate
+            for candidate in state["machines"]
+            if candidate["id"] == completion["subjectId"]
+        ),
+        None,
+    )
+    asset = next(
+        (
+            candidate
+            for candidate in state.get("equipmentMaster", {}).get("assets", [])
+            if candidate["id"] == completion["subjectId"]
+        ),
+        None,
+    )
+    if start is None or machine is None or asset is None:
+        return None
+    work_centre_id = asset["workCentreId"]
+    return {
+        "contract": "supermega.production.maintenance-finding-source.v2",
+        "equipmentId": machine["id"],
+        "equipmentName": machine["name"],
+        "maintenanceOwner": start["maintenanceOwner"],
+        "completionActionId": completion["actionId"],
+        "completedAt": completion["createdAt"],
+        "strategyActionId": completion["maintenanceStrategyActionId"],
+        "strategyRevision": completion["maintenanceStrategyRevision"],
+        "returnToService": completion["maintenanceReturnToService"],
+        "findings": completion["maintenanceFindings"],
+        "evidenceReference": completion["evidenceReference"],
+        "workCentreId": work_centre_id,
+        "affectedOrders": _maintenance_affected_orders(state, work_centre_id),
+    }
+
+
+def _validate_maintenance_finding_impact_history(
+    state: Mapping[str, Any], issues: Sequence[dict[str, Any]]
+) -> None:
+    entries = {
+        entry["jobId"]: entry["execution"]
+        for entry in _production_order_entries(state)
+    }
+    assets = {
+        asset["id"]: asset
+        for asset in state.get("equipmentMaster", {}).get("assets", [])
+    }
+    for issue_index, issue in enumerate(issues):
+        source = issue.get("maintenanceFindingSource")
+        if (
+            not isinstance(source, Mapping)
+            or source.get("contract")
+            != "supermega.production.maintenance-finding-source.v2"
+        ):
+            continue
+        field = f"issues[{issue_index}].maintenanceFindingSource"
+        asset = assets.get(source["equipmentId"])
+        if asset is None or asset["workCentreId"] != source["workCentreId"]:
+            raise TrialValidationError(
+                f"{field} work centre does not match its equipment master evidence."
+            )
+        for order_index, affected in enumerate(source["affectedOrders"]):
+            order_field = f"{field}.affectedOrders[{order_index}]"
+            retained = entries.get(affected["jobId"])
+            revision = affected["orderRevision"]
+            if retained is None or revision > retained["revision"]:
+                raise TrialValidationError(
+                    f"{order_field} is not retained in controlled order history."
+                )
+            commands = retained["commands"][:revision]
+            if (
+                len(commands) != revision
+                or commands[-1]["digest"] != affected["orderHeadDigest"]
+            ):
+                raise TrialValidationError(
+                    f"{order_field} head digest is not retained in controlled order history."
+                )
+            historical = {
+                "schema": retained["schema"],
+                "revision": revision,
+                "headDigest": affected["orderHeadDigest"],
+                "commands": commands,
+            }
+            try:
+                expected = _maintenance_affected_order(
+                    affected["jobId"], historical, source["workCentreId"]
+                )
+            except PlantOrderValidationError as exc:
+                raise TrialValidationError(
+                    f"{order_field} retained routing is invalid: {exc}"
+                ) from exc
+            if expected != affected:
+                raise TrialValidationError(
+                    f"{order_field} does not match its retained reviewed routing."
+                )
 
 
 def _validate_event(
@@ -3229,6 +3515,7 @@ def validate_production_state(value: object) -> dict[str, Any]:
     _validate_material_history(jobs, events)
     _validate_quality_hold_history(jobs, events)
     _validate_issue_history(issues, events, machines)
+    _validate_maintenance_finding_impact_history(state, issues)
     _validate_machine_history(machines, events)
     _validate_downtime_history(machines, events)
     _validate_maintenance_history(machines, events)
@@ -3834,6 +4121,13 @@ def _validate_issue_opened(
             "opening a Production issue cannot change the equipment master."
         )
     if (
+        current.get("orderExecution") != next_state.get("orderExecution")
+        or current.get("orderPortfolio") != next_state.get("orderPortfolio")
+    ):
+        raise TrialValidationError(
+            "opening a Production issue cannot change controlled orders."
+        )
+    if (
         len(next_state["issues"]) != len(current["issues"]) + 1
         or next_state["issues"][1:] != current["issues"]
     ):
@@ -3861,6 +4155,15 @@ def _validate_issue_opened(
         raise TrialValidationError(
             "new Production issue maintenance source must match the opening event."
         )
+    if "maintenanceFindingSource" in issue:
+        expected_source = _maintenance_finding_source_for_completion(
+            current,
+            issue["maintenanceFindingSource"]["completionActionId"],
+        )
+        if expected_source != issue["maintenanceFindingSource"]:
+            raise TrialValidationError(
+                "new maintenance finding source must match current equipment and controlled-order evidence."
+            )
     if datetime.fromisoformat(event["createdAt"].replace("Z", "+00:00")) < datetime.fromisoformat(
         issue["createdAt"].replace("Z", "+00:00")
     ):

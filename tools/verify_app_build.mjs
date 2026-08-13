@@ -7369,7 +7369,12 @@ if (!productionSource.includes('startProductionMaintenance')
   || !productionSource.includes('Equipment maintenance completion next due does not match its strategy interval.')
   || !productionSource.includes('supermega.production.maintenance-due-queue.v1')
   || !productionSource.includes('productionMaintenanceDueQueue')
+  || !productionSource.includes("PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA = 'supermega.production.maintenance-finding-source.v2'")
+  || !productionSource.includes('productionMaintenanceAffectedOrders')
+  || !productionSource.includes('validateProductionMaintenanceImpactEvidence')
   || !managedProductionRuntime.includes('project_production_maintenance_due_queue')
+  || !managedProductionRuntime.includes('_maintenance_finding_source_for_completion')
+  || !managedProductionRuntime.includes('_validate_maintenance_finding_impact_history')
   || (productionSource.match(/const next = structuredClone\(state\)/g) || []).length < 2
   || !productionSource.includes('Maintenance timestamps for ${machine.id} contradict lifecycle order.')
   || !managedProductionRuntime.includes('_validate_maintenance_history')
@@ -7382,6 +7387,8 @@ if (!productionSource.includes('startProductionMaintenance')
   || !coreSource.includes('Review next')
   || !coreSource.includes('Review complete')
   || !coreSource.includes('Completion result')
+  || !coreSource.includes('Order impact')
+  || !coreSource.includes('No unreleased controlled orders')
   || !coreSource.includes('Reviewed procedure completed')
   || !coreSource.includes('Maintenance evidence only; no machine, inventory, or job change.')) fail('production_bounded_maintenance_contract_missing')
 const managedProductionCommandContract = managedTrialSource.slice(managedTrialSource.indexOf('export async function saveManagedProductionCommand'), managedTrialSource.indexOf('export async function saveManagedWebsiteCommand'))
@@ -12112,15 +12119,17 @@ async function verifyPlantEquipmentImportRuntime() {
   }
   try {
     const nonce = Date.now()
-    const [equipmentModel, managedTrial, production] = await Promise.all([
+    const [equipmentModel, managedTrial, production, plantOrder, orderPortfolio] = await Promise.all([
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-equipment-import.ts')).href}?plant-equipment-import=${nonce}`),
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'managed-trial.ts')).href}?plant-equipment-managed=${nonce}`),
       import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-workspace.ts')).href}?plant-equipment-production=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'plant-order-foundation.ts')).href}?plant-equipment-order=${nonce}`),
+      import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'production-order-portfolio.ts')).href}?plant-equipment-portfolio=${nonce}`),
     ])
     const identity = { userId: 'plant-owner', email: 'plant@example.test', workspaceId: 'workspace-plant' }
     const preview = await equipmentModel.createPlantEquipmentImportPreview({
       sourceName: 'equipment.csv',
-      sourceText: equipmentModel.plantEquipmentSampleCsv(),
+      sourceText: 'equipment_id,name,work_centre_id,criticality\nMIX-01,Primary mixer,WC-MIXING,critical\nPACK-01,Packing line,WC-PACKING,high\n',
       workspace: 'Golden Manufacturing',
       owner: 'Plant engineering owner',
     })
@@ -12352,6 +12361,59 @@ async function verifyPlantEquipmentImportRuntime() {
       ['bulk', { ...strategyResponse, maintenance_strategy: { ...strategyResponse.maintenance_strategy, bulk_strategy_created: true } }],
       ['evidence', { ...strategyResponse, result: { ...strategyResponse.result, state: { ...strategyState, events: [{ ...strategyState.events[0], evidenceReference: 'SAFETY-OTHER-R1' }, ...strategyState.events.slice(1)] } } }],
     ]) rejects(() => managedTrial.assertManagedPlantEquipmentMaintenanceStrategy(response, strategyInput, identity, strategyCommandId, 3, commissionedState), `plant_equipment_maintenance_strategy_${label}_tamper_accepted`)
+
+    const impactPlan = plantOrder.buildPlantOrderPlan({
+      planId: 'PLN-MAINTENANCE-IMPACT-001',
+      sourceDigest: plantOrder.plantOrderEvidenceDigest({ job: 'JOB-OPEN-1', source: 'maintenance-impact' }),
+      job: { jobId: 'JOB-OPEN-1', product: 'Opening batch', targetQuantity: 100, outputBatchId: 'BATCH-MAINTENANCE-IMPACT-001' },
+      materials: [{ materialId: 'MAT-MAINTENANCE-001', name: 'Reviewed input', unit: 'kg', quantityPerUnitMilli: 1_000 }],
+      workCentres: [{ workCentreId: commissionedAsset.workCentreId, name: 'Affected production centre' }],
+      routing: [{ operationId: 'OP-MAINTENANCE-10', sequence: 1, name: 'Mix reviewed batch', workCentreId: commissionedAsset.workCentreId, minutesPerUnitMilli: 1_000 }],
+    })
+    const impactOrderProof = { actionId: 'ACT-MAINTENANCE-ORDER-001', capturedAt: '2026-07-30T09:30:00.000Z', actor: identity.userId, reason: 'Imported reviewed controlled order.', evidenceReference: 'ORDER-REVIEW-001' }
+    const emptyImpactOrder = plantOrder.createEmptyPlantOrderState()
+    const impactExecution = plantOrder.applyPlantOrderPlan(emptyImpactOrder, impactPlan, impactOrderProof, emptyImpactOrder.headDigest).state
+    const impactState = production.validateProductionState(orderPortfolio.upsertProductionOrderExecution(strategyState, impactExecution))
+    const maintenanceStartProof = { actionId: 'ACT-MAINTENANCE-IMPACT-START', capturedAt: '2026-07-30T10:00:00.000Z', actor: identity.userId, reason: 'Performed planned inspection.', evidenceReference: 'MAINTENANCE-START-001' }
+    const maintenanceStarted = production.startProductionMaintenance(impactState, commissionedAsset.id, strategyInput.maintenanceOwner, maintenanceStartProof)
+    assert(Boolean(maintenanceStarted), 'plant_maintenance_impact_start_failed')
+    const maintenanceCompleteProof = { actionId: 'ACT-MAINTENANCE-IMPACT-COMPLETE', capturedAt: '2026-07-30T11:00:00.000Z', actor: identity.userId, reason: 'Reviewed restrictive maintenance result.', evidenceReference: 'MAINTENANCE-COMPLETE-001' }
+    const maintenanceCompleted = production.completeProductionMaintenance(
+      maintenanceStarted,
+      commissionedAsset.id,
+      maintenanceStartProof.actionId,
+      maintenanceCompleteProof,
+      { outcome: 'completed_with_findings', findings: 'Drive vibration exceeds the reviewed operating band.', procedureCompleted: true, returnToService: 'restricted' },
+    )
+    assert(Boolean(maintenanceCompleted), 'plant_maintenance_impact_completion_failed')
+    const findingSource = production.productionMaintenanceFindingSource(maintenanceCompleted, maintenanceCompleteProof.actionId)
+    assert(findingSource?.contract === 'supermega.production.maintenance-finding-source.v2'
+      && findingSource.workCentreId === commissionedAsset.workCentreId
+      && findingSource.affectedOrders.length === 1
+      && findingSource.affectedOrders[0].jobId === 'JOB-OPEN-1'
+      && findingSource.affectedOrders[0].planId === impactPlan.planId
+      && findingSource.affectedOrders[0].orderHeadDigest === impactExecution.headDigest
+      && findingSource.affectedOrders[0].status === 'planned'
+      && findingSource.affectedOrders[0].operations.map((operation) => operation.operationId).join(',') === 'OP-MAINTENANCE-10',
+    'plant_maintenance_controlled_order_impact_not_exact')
+    const issueProof = { actionId: 'ACT-MAINTENANCE-IMPACT-ISSUE', capturedAt: '2026-07-30T12:00:00.000Z', actor: identity.userId, reason: 'Opened reviewed maintenance problem.', evidenceReference: 'MAINTENANCE-ISSUE-001' }
+    const maintenanceIssue = {
+      id: 'ISS-MAINTENANCE-IMPACT-001', createdAt: issueProof.capturedAt, area: commissionedAsset.name, kind: 'maintenance',
+      summary: 'Maintenance finding: drive vibration exceeds the reviewed operating band.', status: 'open', severity: 'medium', owner: strategyInput.maintenanceOwner,
+      dueAt: '2026-07-31T12:00:00.000Z', containment: 'Review the linked controlled order before normal operation.', maintenanceFindingSource: findingSource,
+    }
+    const issueOpened = production.openProductionIssue(maintenanceCompleted, maintenanceIssue, issueProof)
+    assert(issueOpened
+      && JSON.stringify(issueOpened.orderPortfolio) === JSON.stringify(maintenanceCompleted.orderPortfolio)
+      && JSON.stringify(issueOpened.jobs) === JSON.stringify(maintenanceCompleted.jobs)
+      && JSON.stringify(issueOpened.machines) === JSON.stringify(maintenanceCompleted.machines),
+    'plant_maintenance_impact_issue_changed_orders_or_equipment')
+    const forgedSource = { ...findingSource, affectedOrders: [] }
+    assert(production.openProductionIssue(maintenanceCompleted, { ...maintenanceIssue, id: 'ISS-MAINTENANCE-IMPACT-FORGED', maintenanceFindingSource: forgedSource }, { ...issueProof, actionId: 'ACT-MAINTENANCE-IMPACT-FORGED' }) === null, 'plant_maintenance_impact_omission_accepted')
+    const tamperedHistory = structuredClone(issueOpened)
+    tamperedHistory.issues[0].maintenanceFindingSource.affectedOrders[0].operations[0].name = 'Forged routing operation'
+    tamperedHistory.events[0].maintenanceFindingSource = structuredClone(tamperedHistory.issues[0].maintenanceFindingSource)
+    rejects(() => production.validateProductionState(tamperedHistory), 'plant_maintenance_impact_history_tamper_accepted')
   } catch (error) {
     fail(`plant_equipment_import_runtime:${error instanceof Error ? error.message : 'unknown'}`)
   }
@@ -22684,8 +22746,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// The bounded cumulative allowance includes reviewed Plant CAPA effectiveness and trend controls plus the realistic Spa workflow, client privacy, and staff-role controls; initial-load and 500 kB chunk budgets remain unchanged.
-if (bytes > 2_978_000) fail(`artifact_budget:${bytes}`)
+// The bounded cumulative allowance includes reviewed Plant CAPA and maintenance-to-order evidence plus the realistic Spa workflow, client privacy, and staff-role controls; initial-load and 500 kB chunk budgets remain unchanged.
+if (bytes > 2_984_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
