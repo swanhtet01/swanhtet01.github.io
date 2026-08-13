@@ -1,9 +1,12 @@
-import siteManifest from '../../../site-manifest.json'
+// The explicit JSON attribute and file extension let Node load this module
+// directly, so the client setup registry can be exercised by a test rather
+// than only pinned as source text.
+import siteManifest from '../../../site-manifest.json' with { type: 'json' }
 import {
   LEGACY_WEBSITE_STORAGE_KEY,
   WEBSITE_ECOMMERCE_HANDOFF_KEY,
   WEBSITE_STORAGE_KEY,
-} from '../products/product-storage-keys'
+} from '../products/product-storage-keys.ts'
 import type { ClientSolutionId } from './client-onboarding'
 
 export type SetupProductId = ClientSolutionId
