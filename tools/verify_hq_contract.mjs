@@ -276,9 +276,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-224'
   && completedAutomationArchive.entries?.length === 72
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 49
+  && portfolioSource.completedLocalAutomations.length === 50
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 121
+  && portfolio.completedLocalAutomations.length === 122
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -655,6 +655,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[120]?.workOrderId === 'shop-spa-one-attempt-invitation-authorization'
   && portfolio.completedLocalAutomations[120]?.checkpoint === 'OPS-273'
   && workboard.includes('| OPS-273 | CEO + Shop Spa Invitation Authority / Agent Operations Codex | done-local |')
+  && portfolio.completedLocalAutomations[121]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[121]?.workOrderId === 'shop-spa-single-use-invitation-attempt'
+  && portfolio.completedLocalAutomations[121]?.checkpoint === 'OPS-274'
+  && workboard.includes('| OPS-274 | CEO + Shop Spa Invitation Attempt / Agent Operations Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
