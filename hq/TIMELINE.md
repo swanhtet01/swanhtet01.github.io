@@ -68,6 +68,8 @@ _No founder decision required. Zero bundle cost._
 - [x] Database Codex: hosted PG17 rehearsal proven on preview branch — 12 migrations + quarantine applied, advisors 0 ERROR/0 WARN; baseline extensions schema-qualified — DONE (OPS-743)
 - [x] Governance Codex: readiness kernel v4 — self_serve_pilot, evidence-derived gates, derived blocking count; full gate green — DONE (OPS-744)
 - [x] Database Codex: PRODUCTION v8-v10 + browser quarantine applied (founder-approved); schema v10 zero drift, advisors 0 ERROR/0 WARN/27 INFO, 73 leads intact, writes still OFF — DONE (OPS-745)
+- [x] Platform Codex: Web Analytics beacon on app + public site, cookieless/no-PII; awaiting founder dashboard toggles — DONE (OPS-746)
+- [x] PR #414 MERGED to main (4ce500c2) by founder; paired release dispatch still pending (founder: Actions -> SuperMega Coordinated Verified Release, commit 4ce500c29b1cca9617eeba83528293bc1af6c83e, typed confirmation) — 2026-08-13
 
 ### Aug 15–25
 
