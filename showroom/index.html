@@ -30,5 +30,7 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'))</script>
+    <!-- Vercel Web Analytics: cookieless aggregate pageviews, no PII; no-ops until the project toggle is enabled and the script exists on the deployment host. -->
+    <script defer src="/_vercel/insights/script.js"></script>
   </body>
 </html>
