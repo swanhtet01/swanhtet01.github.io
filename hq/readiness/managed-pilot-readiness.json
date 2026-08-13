@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
-  "asOf": "2026-08-13T17:29:12.214Z",
-  "sourceDigest": "sha256:ac9e6fad84ba745d340a80d4667e13ad9aebae13ad8f1ffed7fb03f4cc3ae14b",
+  "asOf": "2026-08-13T18:34:25.755Z",
+  "sourceDigest": "sha256:51f395dc3a93dc7144c61541e8dce487edc40d76713dd55eb734274a9155a396",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -197,11 +197,11 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:45b06f8ebc258d9d5f897667e6d0f63a5cdccb2f1aecc1549db1b4526e8a65cc"
+      "digest": "sha256:cd4d74809ade7e53428077119c42b14dca917b9b3f91fe89f37c3bd29890556e"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:51051076ce81631e1ede993eeebf33b1e5d03426c21f8b9a6df444570ce18da8"
+      "digest": "sha256:67b9ae8afff2c3406f3276977f24eab4ece118436c0f3f3821c4063b8cac332c"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -213,7 +213,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:e51a08b119ba5a62ff182b13878bbf9bf6fa407eb7587ac636adb9ef6c56b7ae"
+      "digest": "sha256:47dba5fe48d6fbba7bd3360d26f1b49df692d7573b89b5c489edc2ddec2564cd"
     },
     {
       "path": "package.json",

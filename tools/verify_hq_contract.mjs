@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 54
+  && portfolioSource.completedLocalAutomations.length === 55
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 127
+  && portfolio.completedLocalAutomations.length === 128
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -680,6 +680,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[126]?.workOrderId === 'plant-maintenance-capacity-review'
   && portfolio.completedLocalAutomations[126]?.checkpoint === 'OPS-279'
   && workboard.includes('| OPS-279 | Product Platform + Plant Maintenance Codex | done-local |')
+  && portfolio.completedLocalAutomations[127]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[127]?.workOrderId === 'shop-spa-first-day-review'
+  && portfolio.completedLocalAutomations[127]?.checkpoint === 'OPS-280'
+  && workboard.includes('| OPS-280 | Product Platform + Shop Spa Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1240,9 +1244,17 @@ requireContract('Plant maintenance capacity review retains exact current load wi
   && workboard.includes('read-only `supermega.production.maintenance-capacity-review.v1`')
   && workboard.includes('Completion history preserves 73 archived plus 54 current receipts, 127 unique entries')
   && now.includes('Maintenance review now shows exact unfinished order load and job IDs by work centre')
-  && now.includes('OPS-279 (`b8867924`) adds browser/managed maintenance-capacity parity')
   && enterpriseRoadmap.includes('Checkpoint `b8867924` adds read-only `supermega.production.maintenance-capacity-review.v1` parity')
   && enterpriseRoadmap.includes('Planned duration/window optimization remains unimplemented'))
+requireContract('Shop Spa first-day review is private, role-aware, and non-authoritative',
+  workboard.includes('| OPS-280 | Product Platform + Shop Spa Codex | done-local |')
+  && workboard.includes('read-only `supermega.shop.service-first-day-review.v1`')
+  && workboard.includes('UI checkpoint `271ddea4` folds the nested review card into one compact Appointments status line')
+  && workboard.includes('The app is 2,983,865 bytes with a 451,644-byte largest JavaScript chunk under the unchanged artifact cap')
+  && workboard.includes('Completion history preserves 73 archived plus 55 current receipts, 128 unique entries')
+  && now.includes('OPS-280 (`714b897d`, UI `271ddea4`) adds a private, role-aware Spa first-day contract')
+  && enterpriseRoadmap.includes('Checkpoint `714b897d` adds `supermega.shop.service-first-day-review.v1`')
+  && enterpriseRoadmap.includes('The next Spa gate is one owner-approved isolated managed invitation'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')

@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-279 (`b8867924`) adds browser/managed maintenance-capacity parity: exact plans, orders, routed unfinished operations, quantities, reviewed minutes, and job IDs. It is read-only. Completion history: 127. Hosted activation remains unproven.
+- OPS-280 (`714b897d`, UI `271ddea4`) adds a private, role-aware Spa first-day contract for Appointments and one compact visible status line. It points to the next existing control from booking through checkout, exposes no client identity, and grants no invite, message, calendar, payment, close, or membership authority. Completion history: 128. Hosted activation remains unproven.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. `b8867924` passes 29 Python, 400 Plant (43 equipment-import), 107 security, 56 PostgreSQL, and the complete serial app gate. Rendered 1280 px Maintenance QA has no overflow or error overlay; exact with-load rendering remains unclaimed because the sample has no strategy. Hosted activation is unproven.
+- Codex is sole integrator. `714b897d` plus UI simplification `271ddea4` pass 82 Commerce tests, 69 Shop schedule checks, strict TypeScript, focused lint, the 237-module build, 107 security checks, 56 PostgreSQL checks, and the complete serial app gate. A 1280 px local Spa run reached payment reconciliation with no overflow or error overlay. Separate 390 px rendering and hosted invitation/role acceptance remain open; hosted activation is unproven.
 - Local company inference remains Ollama-only and scale-to-zero. This Codex task does not dispatch Claude or Gemini; owner Claude/Bionic sessions were untouched.
 - Real leads remain blocked. Production schema v7 is healthy, but preview lacks v8-v10 and direct-admin proof. Keep it disconnected from Vercel/Auth until PR #412's rehearsal and every managed gate pass.
 

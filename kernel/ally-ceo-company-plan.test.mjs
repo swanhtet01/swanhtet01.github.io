@@ -69,7 +69,7 @@ function portfolio(overrides = {}, automationOverrides = {}) {
   }
   return JSON.stringify({
     schemaVersion: 'supermega.hq.portfolio.v3',
-    northStar: 'One real workflow reaches a measurable outcome through an accountable operating record.',
+    northStar: 'One real workflow, one accountable outcome.',
     completedLocalAutomations: [],
     localImprovementQueue: ['shop', 'plant', 'website', 'ecommerce']
       .map((id) => ({

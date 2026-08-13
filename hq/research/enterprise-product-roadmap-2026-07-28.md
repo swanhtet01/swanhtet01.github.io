@@ -89,6 +89,10 @@ This follows the enterprise pattern in current SAP guidance: tax codes are confi
 
 Primary references: [SAP Configuration: Tax Codes](https://help.sap.com/docs/SAP_BUSINESS_BYDESIGN/0635ec3491974ad988be05d6b1dcf734/2d0f85c6722d101492eddec9ab33f6ec.html?locale=en-US), [SAP Configure Account Determination](https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/f63dd39a28bb4b90adbf9e608aff58ea/f709ce5243afff25e10000000a4450e5.html), [SAP Revenue Account Determination](https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/7b24a64d9d0941bda1afa753263d9e39/a270b6535fe6b74ce10000000a174cb4.html?locale=en-us), and [SAP S/4HANA Tax Codes](https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/238f821691174c1d9df721487e44deb0/3d7ec2531bb9b44ce10000000a174cb4.html).
 
+### Implemented Spa first-day boundary
+
+Checkpoint `714b897d` adds `supermega.shop.service-first-day-review.v1` for the existing Appointments workflow. It turns the current service schedule and accountable checkout state into one role-aware next step across hold, confirm, check-in, treatment completion, checkout review, payment reconciliation, and close review. UI checkpoint `271ddea4` keeps the visible guidance to one compact status line instead of another nested card. The projection is deterministic, excludes client name, contact, consent, and notes, preserves source state, and grants no invitation, customer-message, calendar, payment, daily-close, or membership authority. The next Spa gate is one owner-approved isolated managed invitation and mobile allowed/denied role acceptance, not another page or local planning artifact.
+
 ### Template packs
 
 - Retail and wholesale: POS, price tiers, purchasing, warehouse, returns, branch close.

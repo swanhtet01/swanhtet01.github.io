@@ -176,7 +176,7 @@ export const SUPERMEGA_HQ_AUTHORITY = Object.freeze({
   contract: CEO_OUTCOME_AUTHORITY_CONTRACT,
   authorityId: 'supermega-hq-2026-07-28',
   company: 'supermega',
-  northStar: 'One real workflow reaches a measurable outcome through an accountable operating record.',
+  northStar: 'One real workflow, one accountable outcome.',
   selectionPolicy: 'priority_then_id',
   maxSelectedOutcomes: 1,
   controls: Object.freeze({
