@@ -15,6 +15,13 @@
     "migrationsAppliedManually": true,
     "manualApplyReason": "Branch creation replays the parent project's tracked migration list, which left the branch at MIGRATIONS_FAILED. The eleven reviewed private trial backend migrations were then applied in order alongside the legacy public surface, so this branch reproduces the parent project's shape rather than a private-only subset."
   },
+  "branchLifecycle": {
+    "status": "retired",
+    "observedAbsentAt": "2026-08-13T05:48:00.000Z",
+    "observation": "The branch stopped answering queries and no longer appears in the parent project's branch list; the project ref returns NotFoundException. It was created 2026-08-12T09:26Z and its name declared a 24 hour window, so this is the expected end of that window rather than a fault.",
+    "consequence": "Everything below records what was proven while the branch existed and stays a valid point-in-time result. It is not a statement that an isolated target is available now. The parity verifier compares the recorded digest against the digest computed locally from the reviewed migrations and never contacts the branch, so it keeps passing and cannot detect this.",
+    "toResume": "The remaining OPS-001 gates — recovery and restore, private Storage denial, the server-only login role, and seeded tenant separation — need a new isolated branch, which costs money and is the founder's call."
+  },
   "observed": {
     "contract": "supermega.supabase-private-surface-digest.v1",
     "sections": {
