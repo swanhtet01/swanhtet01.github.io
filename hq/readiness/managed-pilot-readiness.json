@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
   "asOf": "2026-08-13T18:34:25.755Z",
-  "sourceDigest": "sha256:53268789a4544e202e3e34f07a26c8d0e38461fedd1d09230b9c1f7e8cfbf5a3",
+  "sourceDigest": "sha256:e2cad0fc2586ac247f23ab461ed52218d98fa57bcdf0837c1896cbf4082d19dd",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -139,9 +139,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "shop-managed-order-close-pilot",
-      "proposedWork": "Shop: run one named order-to-close and return pilot on an approved isolated tenant.",
+      "proposedWork": "Shop: prove one named order-to-close and return on an approved tenant.",
       "blockingReason": "Needs a named operator and approved tenant.",
-      "requiredProof": "Prove one isolated authenticated order-to-close and return pilot with a named operator and five-day baseline."
+      "requiredProof": "Prove one isolated order-to-close and return with a named operator and five-day baseline."
     },
     {
       "productId": "plant",
@@ -149,9 +149,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "plant-managed-oee-pilot",
-      "proposedWork": "Plant: run one named OEE pilot on an approved isolated tenant.",
+      "proposedWork": "Plant: prove one named OEE pilot on an approved tenant.",
       "blockingReason": "Needs named timing evidence and approved tenant.",
-      "requiredProof": "Prove one isolated order-bound OEE window with named operators, exact downtime, and measured correction effort."
+      "requiredProof": "Prove one isolated order-bound OEE window with named operators, exact downtime, and correction effort."
     },
     {
       "productId": "website",
@@ -159,9 +159,9 @@
       "managedPilotStatus": "blocked",
       "automationStatus": "owner-gated",
       "workOrderId": "website-managed-brief-acceptance",
-      "proposedWork": "Website: accept one named brief and retain its managed artifact.",
-      "blockingReason": "Needs a named brief and owner acceptance.",
-      "requiredProof": "Accept one named brief, retain its artifact, and keep domain/publish owner-gated."
+      "proposedWork": "Website: retain one accepted named brief.",
+      "blockingReason": "Needs named brief and approval.",
+      "requiredProof": "Accept one named brief, retain it, and keep publishing owner-gated."
     },
     {
       "productId": "ecommerce",
@@ -197,7 +197,7 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:b2204437e68b2a5704f81f0856dcfb0fc87b3f7c94e54decadceb5cd242c6fd0"
+      "digest": "sha256:acfd9249bbece5263965e664a1d5eed0f796572a64d200d489aac1f6caaf6445"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
@@ -213,7 +213,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:473d44cb03c9018e1dc4963ca5304e82979e8c89ae603c193a3deb22ee59ed25"
+      "digest": "sha256:a5ddeb43fbb9b5e4729aefb74cd3d8d7bcc90bfc836fa686cfaba2607afe9ceb"
     },
     {
       "path": "package.json",

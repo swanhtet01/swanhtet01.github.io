@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 57
+  && portfolioSource.completedLocalAutomations.length === 58
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 130
+  && portfolio.completedLocalAutomations.length === 131
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -692,6 +692,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[129]?.workOrderId === 'ecommerce-order-lock'
   && portfolio.completedLocalAutomations[129]?.checkpoint === 'OPS-282'
   && workboard.includes('| OPS-282 | Product Platform + Ecommerce Codex | done-local |')
+  && portfolio.completedLocalAutomations[130]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[130]?.workOrderId === 'shop-sell-stock-setup-handoff'
+  && portfolio.completedLocalAutomations[130]?.checkpoint === 'OPS-283'
+  && workboard.includes('| OPS-283 | Product Platform + Shop Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1273,6 +1277,11 @@ requireContract('Ecommerce confirmed requests require explicit new-order reset a
   && workboard.includes('Completion history preserves 73 archived plus 57 current receipts, 130 unique entries')
   && now.includes('OPS-282 (`de0e7690`) keeps a Shop-confirmed Ecommerce request locked after quote expiry')
   && enterpriseRoadmap.includes('Checkpoint `de0e7690` closes a duplicate-request UI gap'))
+requireContract('Shop Sell opens the first missing stock setup step',
+  workboard.includes('| OPS-283 | Product Platform + Shop Codex | done-local |')
+  && workboard.includes('routes Sell directly to `/shop/?tab=inventory#shop-location-foundation` when inventory locations are missing')
+  && workboard.includes('Completion history preserves 73 archived plus 58 current receipts, 131 unique entries')
+  && now.includes('OPS-283 (`7b97476f`) sends blocked Sell directly to Stock setup instead of Orders'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')
