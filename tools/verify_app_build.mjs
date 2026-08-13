@@ -374,7 +374,7 @@ if (!shopServiceScheduleSource.includes("SHOP_SERVICE_SCHEDULE_SCHEMA = 'superme
   || !shopServiceScheduleUiSource.includes('Services and resources')
   || !shopServiceScheduleUiSource.includes('Nothing is sent to the customer or an external calendar.')
   || !shopServiceScheduleUiSource.includes('aria-label="First day operating review"')
-  || !shopServiceScheduleUiSource.includes('Review only. No invite, customer message, calendar entry, payment, or daily close is automatic.')
+  || !shopServiceScheduleUiSource.includes('Review only: no invite, message, calendar, payment, or close is automatic.')
   || !shopServiceScheduleUiSource.includes('const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)')
   || !shopServiceScheduleUiSource.includes('initiallyOpen = false')
   || !shopServiceScheduleUiSource.includes('id="shop-service-schedule"')
