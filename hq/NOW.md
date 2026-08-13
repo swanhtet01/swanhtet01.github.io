@@ -40,20 +40,20 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Shop Stock has one Commerce authority. New location-managed orders reserve only from the canonical `LOC-*` bound to their reviewed scope; cancellation releases, completion consumes, and sellable returns restore exact lots.
 - Shop's correction-aware accounting CSV retains reviewed scope and `LOC-*` through close/export, separates same-day books, rejects mixed scopes, and never posts.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
-- Plant quality problems now require structured CAPA evidence before an actionable record can close. Recurrence is Unicode-safe; release, stock blocks, customer contact, certificates, and effectiveness follow-up stay separate.
+- Plant quality problems require structured CAPA evidence before close. New CAPAs retain one due-dated human effectiveness review; it cannot run early or twice. Classified recurrence blocks `effective`; recurrence or ineffectiveness requires escalation. Consequential authority stays separate.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
 ## Verified baseline
 
-- Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
+- Product: four-product setup handoff, recovery, and Plant CAPA close/effectiveness release gates pass locally.
 - The deterministic 12-profile rehearsal passes 24 rows. All desktop missions are overflow-free. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: fresh setup is `0 proven`; a counter sale alone remains unproven; completed/reconciled Shop is `1 proven` across reload; reset returns to zero.
 - Both domains serve deployed `4ce500c29b1cca9617eeba83528293bc1af6c83e`; paired brand, context, and catalog identities match; scheduler ceiling is one job, and exact live verification passes.
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-275 (`8db82623`) gives the managed Spa owner one private local download of the complete, expiring staff review packet. The browser validates its exact role, capabilities, checks, and forbidden actions; nothing is uploaded, sent, or activated. Completion history: 123. Next: isolated server transport and mobile proof.
+- OPS-276 (`79112bcc`) adds one due-dated immutable Plant CAPA review with browser/managed parity and recurrence escalation. It automates no consequential action. Completion history: 124. Next: portfolio trend escalation and rendered due-review acceptance.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. Product checkpoint `8db82623` passes focused tests, build, and 107 security checks. The unchanged 18-file PostgreSQL evidence remains current with 56 checks at `611f7b65`; hosted invitation, activation, and mobile acceptance remain owner-gated. CLAUDE-009 remains owner-controlled.
+- Codex is sole integrator. Product checkpoint `79112bcc` passes TypeScript, focused lint, 28 Python production tests, the production build with 394 Plant checks, and 107 security checks. The refreshed 19-file PostgreSQL evidence passes 56 checks at `9b4fbacb`; hosted activation and mobile acceptance remain owner-gated. CLAUDE-009 remains owner-controlled.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 

@@ -99,6 +99,7 @@ const databaseRehearsal = JSON.parse(databaseRehearsalText)
 const databaseImplementationPaths = [
   'supermega_runtime/managed_context.py',
   'supermega_runtime/managed_activation.py',
+  'supermega_runtime/production_runtime.py',
   'supermega_runtime/runtime.py',
   'supermega_runtime/spa_staff_access.py',
   'supermega_runtime/supabase_auth.py',
@@ -276,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 50
+  && portfolioSource.completedLocalAutomations.length === 51
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 123
+  && portfolio.completedLocalAutomations.length === 124
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -663,6 +664,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[122]?.workOrderId === 'shop-spa-private-review-download'
   && portfolio.completedLocalAutomations[122]?.checkpoint === 'OPS-275'
   && workboard.includes('| OPS-275 | CEO + Shop Spa Private Staff Handoff / Agent Operations Codex | done-local |')
+  && portfolio.completedLocalAutomations[123]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[123]?.workOrderId === 'plant-capa-effectiveness-review'
+  && portfolio.completedLocalAutomations[123]?.checkpoint === 'OPS-276'
+  && workboard.includes('| OPS-276 | Product Platform + Plant Quality Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -983,7 +988,7 @@ requireContract('agent roster consolidation is recorded',
   && workboard.includes('| OPS-043 | CEO + Agent Operations / Delivery Security Codex | done-local |')
   && workboard.includes('Checkpoints `cafdafe` and `f626ee7` add `supermega.ceo-outcome-delivery.v1`')
   && workboard.includes('Current accepted agent-operations checkpoint: `a2e1b89`')
-  && now.includes('Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.')
+  && now.includes('Product: four-product setup handoff, recovery, and Plant CAPA close/effectiveness release gates pass locally.')
   && now.includes('HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle')
   && now.includes('`multi_agent = false`; one lease blocks duplicates')
   && now.includes('unloaded roles/models consume no idle compute')
@@ -1152,7 +1157,7 @@ requireContract('accepted core checkpoints lead directly to real work',
   && workboard.includes('Checkpoints `0831ad7` and `920c13d` add an immutable reviewed BOM/routing package')
   && workboard.includes('Checkpoints `0f3dc09` and `03e1f1b` add tenant-bound')
   && workboard.includes('Retain the completed Shop, Plant, Website, and Ecommerce checkpoints')
-  && now.includes('Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.')
+  && now.includes('Product: four-product setup handoff, recovery, and Plant CAPA close/effectiveness release gates pass locally.')
   && now.includes('The deterministic 12-profile rehearsal passes 24 rows')
   && now.includes('The active delivery focus is:')
   && now.includes(`Live HQ and both domains agree on \`${hqLiveReleaseCommit.slice(0, 8)}\`; no release drift is present.`)
@@ -1198,13 +1203,16 @@ requireContract('workboard release authority and active execution order are curr
   && workboardExecutionOrder.includes('Keep hosted scheduling and AI provider execution dormant')
   && !workboardExecutionOrder.includes('PR #258')
   && !workboardExecutionOrder.includes('fast-forward only the existing draft'))
-requireContract('live Plant quality CAPA release is retained without overstated authority',
+requireContract('Plant quality CAPA close and local effectiveness review are retained without overstated authority',
   workboard.includes('| OPS-151 | Product Platform + Plant Quality Codex | done-live |')
   && workboard.includes('NFKC-normalized recurrence keys preserve Unicode letters, marks, and numbers for Myanmar text')
   && workboard.includes('No fresh rendered-mobile claim is made')
-  && now.includes('Plant quality problems now require structured CAPA evidence before an actionable record can close')
+  && workboard.includes('| OPS-276 | Product Platform + Plant Quality Codex | done-local |')
+  && workboard.includes('Classified recurrence after close is derived from immutable history')
+  && now.includes('New CAPAs retain one due-dated human effectiveness review')
   && enterpriseRoadmap.includes('Checkpoint `8155e4b3` adds `supermega.production.quality-capa.v1`')
-  && enterpriseRoadmap.includes('not a due-dated post-close effectiveness review')
+  && enterpriseRoadmap.includes('Checkpoint `79112bcc` adds the backward-compatible `supermega.production.quality-capa.v2`')
+  && enterpriseRoadmap.includes('portfolio-level CAPA trend aggregation and cross-CAPA escalation')
   && !workboard.includes('OPS-151 | Product Platform + Plant Quality Codex | done-live | Automate'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
