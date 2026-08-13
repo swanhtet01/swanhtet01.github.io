@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-269 (`f28c063d`) adds Spa retention, pre-download export receipts, and anonymization gated by visit/payment closure, elapsed retention, and identity-free immutable evidence. The server owns privacy actors/timestamps and returns canonical v4 data. Completion history is 117 unique entries. Next: `shop-spa-managed-invitation-and-first-day-rehearsal`.
+- OPS-270 (`79165981`) gives a managed owner a 15-minute digest for one named Spa staff member and one exact role. It sends and writes nothing. Completion history is 118 entries. Next: finish `shop-spa-managed-invitation-and-first-day-rehearsal` on an isolated managed workspace.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. OPS-269 closes the local Spa client lifecycle and updates `SuperMega/Spa Starter/`. The 56-check PostgreSQL 17 rehearsal passes at `f28c063d`; hosted sign-in/activation remain owner-gated. CLAUDE-009 stays owner-controlled at `0fc5cf7d`.
+- Codex is sole integrator. OPS-270 simplifies Spa first day and updates `SuperMega/Spa Starter/`. The 56-check PostgreSQL 17 rehearsal passes at `79165981`; hosted sign-in, invitation, membership, and activation stay owner-gated. CLAUDE-009 stays owner-controlled at `0fc5cf7d`.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 
@@ -87,5 +87,5 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Complete `shop-spa-managed-invitation-and-first-day-rehearsal`: add a no-send owner review for one named role per Spa staff member, then prove mobile sign-in and denied actions on an isolated managed workspace without activating a real account.
+1. Finish `shop-spa-managed-invitation-and-first-day-rehearsal`: after the isolated hosted foundation passes, invite one approved fictional user, bind its returned Auth ID to one exact role, and prove mobile allowed and denied actions. Do not activate real staff.
 2. Use CLAUDE-009 only as an optional owner-controlled review of checkpoint `0fc5cf7d`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
