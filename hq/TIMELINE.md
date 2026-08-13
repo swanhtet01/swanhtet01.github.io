@@ -66,6 +66,8 @@ _No founder decision required. Zero bundle cost._
 - [x] Onboarding Codex: self-serve onboarding spec; six-proof self_serve_pilot gate proposal; lockstep kernel v4 diff shape — DONE (OPS-741)
 - [x] UX Codex: form UX fixes mobile+desktop — 16px floor enforced, mobile Login door visible + contract-required, error tone, consent flow uninverted, cart draft quantities — DONE (OPS-742)
 - [x] Database Codex: hosted PG17 rehearsal proven on preview branch — 12 migrations + quarantine applied, advisors 0 ERROR/0 WARN; baseline extensions schema-qualified — DONE (OPS-743)
+- [x] Governance Codex: readiness kernel v4 — self_serve_pilot, evidence-derived gates, derived blocking count; full gate green — DONE (OPS-744)
+- [x] Database Codex: PRODUCTION v8-v10 + browser quarantine applied (founder-approved); schema v10 zero drift, advisors 0 ERROR/0 WARN/27 INFO, 73 leads intact, writes still OFF — DONE (OPS-745)
 
 ### Aug 15–25
 

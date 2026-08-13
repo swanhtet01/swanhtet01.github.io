@@ -267,8 +267,7 @@ export function validateManagedPilotReadiness(value) {
   if (!isRecord(value) || value.contract !== MANAGED_PILOT_READINESS_CONTRACT || !Number.isFinite(Date.parse(value.asOf))) fail('managed_pilot_readiness_contract_invalid')
   if (!Array.isArray(value.sourceReceipts) || value.sourceReceipts.length !== REQUIRED_SOURCE_RECEIPT_COUNT) fail('managed_pilot_readiness_sources_invalid')
   if (!/^sha256:[0-9a-f]{64}$/.test(value.sourceDigest || '') || value.sourceDigest !== readinessDigest(value.sourceReceipts)) fail('managed_pilot_readiness_digest_invalid')
-  const blockedGateCount = Array.isArray(value.gates) ? value.gates.filter((entry) => entry?.status === 'blocked').length : -1
-  if (value.overall?.status !== 'blocked' || value.overall?.hostedActivationReady !== false || value.overall?.localDatabaseProofReady !== true || value.overall?.blockingGateCount !== blockedGateCount || blockedGateCount < 1) fail('managed_pilot_readiness_overall_invalid')
+  if (value.overall?.status !== 'blocked' || value.overall?.hostedActivationReady !== false || value.overall?.localDatabaseProofReady !== true || !Number.isInteger(value.overall?.blockingGateCount) || value.overall.blockingGateCount < 1) fail('managed_pilot_readiness_overall_invalid')
   const decision = value.founderDecision
   if (decision?.status !== 'required'
     || decision.authority !== 'proposal_only'
@@ -320,13 +319,15 @@ export function validateManagedPilotReadiness(value) {
     || audit.storageBucketCount < 0
     || audit.productionMutationAuthorized !== false
     || audit.databaseWrites !== 0) fail('managed_pilot_readiness_security_audit_invalid')
-  // Only the two hosted-evidence gates may leave 'blocked', and only for their computed reason.
+  // Only the two hosted-evidence gates may leave 'blocked', and only for their computed reason;
+  // the stored blocking count must equal the count derived from the gates themselves.
   if (!Array.isArray(value.gates)
     || value.gates.map((entry) => entry.id).join(',') !== GATE_IDS.join(',')
     || value.gates[0]?.status !== 'ready-local'
     || value.gates.slice(1).some((entry) => entry.status !== 'blocked' && !(entry.status === 'ready-hosted' && ['hosted_postgres17', 'security'].includes(entry.id)))
     || value.gates.find((entry) => entry.id === 'hosted_postgres17')?.status !== (hostedGateReady(audit) ? 'ready-hosted' : 'blocked')
     || value.gates.find((entry) => entry.id === 'security')?.status !== (securityGateReady(audit) ? 'ready-hosted' : 'blocked')
+    || value.overall.blockingGateCount !== value.gates.filter((entry) => entry.status === 'blocked').length
     || value.gates.some((entry) => !String(entry?.evidence || '').trim() || !String(entry?.nextAction || '').trim())) fail('managed_pilot_readiness_gates_invalid')
   if (value.gates[0].evidence !== LOCAL_GATE_EVIDENCE
     || value.gates.find((entry) => entry.id === 'hosted_postgres17')?.evidence !== hostedGateEvidence(audit)
