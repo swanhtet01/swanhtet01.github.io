@@ -15,8 +15,13 @@ is bound to `supermega.supabase-rehearsal-packet.v3` and the exact reviewed
 
 - The owner separately approves failed-branch deletion, preview cost, creation
   of one empty branch, migration application, and final branch deletion.
-- The operator may run the committed tool only after receiving the private
-  `supermega.preview-rehearsal-approval.v1` receipt described below.
+- The operator may run the committed tool only after receiving an Ed25519 owner
+  signature and a distinct Ed25519 risk-reviewer acceptance in the private
+  `supermega.preview-rehearsal-approval.v2` receipt described below.
+- The checked-in `supermega.preview-rehearsal-authority.v1` policy is
+  intentionally `unconfigured`. Execution stays blocked until a separate
+  owner-reviewed source change registers two distinct public keys and pins the
+  exact complete policy digest in the verifier. Private keys never enter Git.
 - The tool rejects the protected production ref, a dirty or non-`origin/main`
   checkout, a branch with the managed schema already present, production-data
   approval, stale approval, changed URL digests, and privileged runtime URLs.
@@ -39,8 +44,9 @@ node tools/run_preview_branch_rehearsal.mjs --dry-run
 ```
 
 The source checkout must already contain the reviewed R1–R4 sequence. GitHub
-`main` must require a pull request, resolved conversations, and the three
-release checks named in `hq/stewardship/owner-action-packet-20260812.md`.
+`main` must require a pull request, resolved conversations, and these exact
+checks: `SuperMega App CI`, `Dependency Security Audit`, and
+`Kernel Console - Verify & Owner-Gated Release`.
 
 Capture metadata-only forensics for the failed
 `security-rehearsal-24h-20260812` branch before asking to delete it. Do not read
@@ -57,6 +63,18 @@ Only after cost and creation approval:
 3. Set a hard operational deadline no more than 24 hours later.
 4. Enable only Database, Auth, and Storage needed by this proof.
 5. Confirm the branch is not the protected production ref in `package.json`.
+
+With a fine-grained Management API token limited to `environment:read`, capture
+the authenticated, secret-free creation receipt:
+
+```powershell
+node tools/run_preview_branch_rehearsal.mjs --capture-branch-receipt
+```
+
+The command performs one GET and zero provider writes. It accepts exactly one
+ephemeral, no-data branch whose project state is healthy, and returns its
+parent ref, preview ref, name, provider creation time, and canonical receipt
+digest. The token is never printed or retained.
 
 The read-only preflight requires PostgreSQL 17, hostname-verified TLS, the
 `postgres` database, permission to create the reviewed runtime role and schema,
@@ -91,23 +109,26 @@ Set these only in the operator's process environment:
 | Variable | Required boundary |
 | --- | --- |
 | `SUPERMEGA_REHEARSAL_PROJECT_REF` | exact approved preview ref |
+| `SUPERMEGA_REHEARSAL_MANAGEMENT_API_TOKEN` | fine-grained `environment:read` only; used for a fresh authenticated branch receipt on every run |
 | `SUPERMEGA_REHEARSAL_DATABASE_URL` | preview administrative migration URL, port 5432, `sslmode=verify-full` |
 | `SUPERMEGA_SUPABASE_CA_FILE` | reviewed CA certificate path |
 | `SUPERMEGA_REHEARSAL_RUNTIME_DATABASE_URL` | dedicated `supermega_trial_runtime` login; never `postgres`, `supabase_admin`, service/browser, or elevated role |
-| `SUPERMEGA_REHEARSAL_STORAGE_AUDIT_DATABASE_URL` | distinct dedicated read-only login; never the runtime or a provider/elevated role |
+| `SUPERMEGA_REHEARSAL_STORAGE_AUDIT_DATABASE_URL` | distinct dedicated `supermega_storage_audit` login; never the runtime or a provider/elevated role |
 | `SUPERMEGA_REHEARSAL_PACKET_FILE` | `.tmp/rehearsal-packet.json` |
 | `SUPERMEGA_REHEARSAL_APPROVAL_FILE` | private receipt below |
 | `SUPERMEGA_STORAGE_PRIVACY_*` | all twelve values required by `verify_private_storage_privacy.py --preflight` |
 
 Create SHA-256 digests of the exact three URL strings without printing the URL
-values. Put only the digests in a private `.tmp/rehearsal-approval.json`:
+values. The owner signs the exact domain-separated canonical approval below;
+the independent reviewer then signs the digest of that signed owner approval.
+Put only public-key fingerprints, signatures, receipt and URL digests in a
+private `.tmp/rehearsal-approval.json`:
 
 ```json
 {
-  "contract": "supermega.preview-rehearsal-approval.v1",
+  "contract": "supermega.preview-rehearsal-approval.v2",
   "decision": "approved",
   "approvalId": "<OWNER_APPROVAL_UUID>",
-  "approvedBy": "<NAMED_OWNER>",
   "approvedAt": "<UTC_ISO_TIMESTAMP>",
   "expiresAt": "<UTC_ISO_TIMESTAMP_NO_MORE_THAN_24_HOURS_LATER>",
   "releaseCommit": "<EXACT_40_CHARACTER_ORIGIN_MAIN_SHA>",
@@ -119,6 +140,12 @@ values. Put only the digests in a private `.tmp/rehearsal-approval.json`:
     "storageAudit": "sha256:<STORAGE_AUDIT_URL_SHA256>"
   },
   "branch": {
+    "parentProjectRef": "<PROTECTED_PRODUCTION_PARENT_REF>",
+    "name": "<EXACT_PREVIEW_BRANCH_NAME>",
+    "projectRef": "<PREVIEW_REF>",
+    "createdAt": "<PROVIDER_CREATED_AT>",
+    "deleteBy": "<ABSOLUTE_UTC_DEADLINE_NO_MORE_THAN_24_HOURS_AFTER_CREATED_AT>",
+    "creationReceiptDigest": "sha256:<AUTHENTICATED_BRANCH_RECEIPT_DIGEST>",
     "startsWithProductionData": false,
     "maximumLifetimeHours": 24,
     "providerUsageChargesAcknowledged": true,
@@ -135,12 +162,35 @@ values. Put only the digests in a private `.tmp/rehearsal-approval.json`:
     "productionDataApproved": false,
     "productionMutationApproved": false,
     "managedActivationApproved": false
+  },
+  "ownerKeyFingerprint": "sha256:<REGISTERED_OWNER_PUBLIC_KEY_FINGERPRINT>",
+  "ownerSignature": {
+    "algorithm": "Ed25519",
+    "keyId": "<REGISTERED_OWNER_KEY_ID>",
+    "value": "<BASE64_SIGNATURE>"
+  },
+  "independentReview": {
+    "contract": "supermega.preview-rehearsal-independent-review.v1",
+    "decision": "accepted",
+    "approvalDigest": "sha256:<SIGNED_OWNER_APPROVAL_DIGEST>",
+    "reviewedAt": "<UTC_ISO_TIMESTAMP>",
+    "expiresAt": "<EXACT_SAME_EXPIRY_AS_OWNER_APPROVAL>",
+    "reviewerKeyFingerprint": "sha256:<REGISTERED_REVIEWER_PUBLIC_KEY_FINGERPRINT>",
+    "signature": {
+      "algorithm": "Ed25519",
+      "keyId": "<REGISTERED_REVIEWER_KEY_ID>",
+      "value": "<BASE64_SIGNATURE>"
+    }
   }
 }
 ```
 
-The receipt is execution authority for this one preview only. It is not branch
-deletion authority, production authority, or managed-activation authority.
+The owner signature uses domain `supermega.preview-rehearsal-approval.v2` and
+stable JSON with `ownerSignature` and `independentReview` omitted. The reviewer
+signature uses domain `supermega.preview-rehearsal-independent-review.v1` and
+stable JSON with only its own signature omitted. The receipt is execution
+authority for this one preview only. It is not branch deletion authority,
+production authority, or managed-activation authority.
 
 ## 5. Execute the bounded orchestrator
 
@@ -154,9 +204,13 @@ node tools/run_preview_branch_rehearsal.mjs
 Before the first branch mutation, the tool verifies:
 
 - clean exact `origin/main` and the v3 packet;
-- fresh owner approval and exact URL digests;
-- non-production ref and clean-target preflight;
-- dedicated, non-privileged runtime and Storage-audit logins;
+- a digest-pinned owner key, distinct digest-pinned reviewer key, both exact
+  signatures, and exact URL digests;
+- a fresh authenticated Management API branch receipt, absolute deletion
+  deadline, non-production ref, and clean-target preflight;
+- dedicated runtime and Storage-audit identities proven read-only before the
+  first migration: exact login, stable session role, TLS, no superuser,
+  `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, replication, or elevated membership;
 - local quarantine behavior, full migration digests, PostgreSQL 17 tooling,
   and Storage privacy configuration.
 
@@ -165,9 +219,12 @@ runs the read-only v10 hosted validator, and runs the session-revocation probe
 inside a transaction that ends in `ROLLBACK`. Evidence is sanitized and stored
 under `.tmp/preview-branch-rehearsal/<fingerprint>/`.
 
-Resume is allowed only while the same packet, approval, URL digests, commit,
-target, and file bytes remain current. `--reset-state` discards local resume
-state; it does not undo hosted changes.
+Resume is allowed only while the same packet, approval, authenticated branch
+receipt, URL digests, commit, target, and file bytes remain current. The tool
+rechecks the absolute branch/approval deadline before and after every provider
+step and bounds each subprocess by the remaining window. It also reruns both
+credential privilege checks on every resume. `--reset-state` discards local
+resume state; it does not undo hosted changes.
 
 ## 6. Complete owner-gated hosted proof
 
@@ -194,6 +251,9 @@ drop an index.
 | `rehearsal_release_not_reviewed_main` | Fetch and use the exact reviewed `origin/main`. |
 | `rehearsal_packet_invalid_or_stale` or a digest mismatch | Discard the packet; repair and review source locally. |
 | `rehearsal_approval_*` | Obtain a fresh exact owner receipt; never weaken validation. |
+| `rehearsal_signing_authority_unconfigured` or `rehearsal_authority_*` | Stop. Register and separately pin distinct owner/reviewer public keys through review; never supply an ad hoc key. |
+| `rehearsal_authenticated_branch_*` | Stop. Refresh the environment-read receipt; never substitute local branch metadata. |
+| `rehearsal_branch_or_approval_deadline_reached` | Stop all work and obtain separate deletion approval; an expired branch is never reusable. |
 | `runtime_*privileged*` or `storage_audit_*privileged*` | Replace with dedicated least-privilege logins. |
 | `rehearsal_clean_target_required` | Delete only with approval, then create a new empty branch. |
 | `step_failed_apply_migration_*` or `step_failed_apply_quarantine` | Stop the branch; do not patch SQL interactively. |

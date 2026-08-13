@@ -13,9 +13,21 @@ const commitPattern = /^[0-9a-f]{40}$/
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const branchPattern = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
 const expectedSchemaVersion = 10
-const expectedMigrationCount = 12
-const expectedFirstMigration = '20260711081300_public_legacy_baseline.sql'
-const expectedFinalMigration = '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql'
+export const EXPECTED_SUPABASE_REHEARSAL_MIGRATIONS = Object.freeze([
+  '20260711081300_public_legacy_baseline.sql',
+  '20260722004500_private_trial_backend_role_preflight.sql',
+  '20260722005134_private_trial_backend_foundation.sql',
+  '20260722142801_private_trial_backend_v2.sql',
+  '20260723094500_private_trial_backend_v3_website.sql',
+  '20260723144500_private_trial_backend_v4_hardening.sql',
+  '20260724204920_private_trial_backend_v5_read_capabilities.sql',
+  '20260730113000_private_trial_backend_v6_managed_activation.sql',
+  '20260730123000_private_trial_backend_v7_workspace_discovery.sql',
+  '20260802161500_private_trial_backend_v8_rls_initplan.sql',
+  '20260803063822_private_trial_backend_v9_metadata_rls.sql',
+  '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+])
+const expectedMigrationCount = EXPECTED_SUPABASE_REHEARSAL_MIGRATIONS.length
 const browserQuarantinePath = 'supabase/rehearsal/20260804_public_browser_quarantine.sql'
 const securityAuditPath = 'hq/readiness/supabase-security-advisor-audit.json'
 
@@ -31,14 +43,21 @@ async function readManifest(repositoryRoot) {
   return JSON.parse(await readFile(resolve(repositoryRoot, 'package.json'), 'utf8'))
 }
 
+export function validateSupabaseRehearsalMigrationNames(names) {
+  if (!Array.isArray(names)
+    || names.length !== expectedMigrationCount
+    || JSON.stringify(names) !== JSON.stringify(EXPECTED_SUPABASE_REHEARSAL_MIGRATIONS)) {
+    fail('supabase_rehearsal_migration_chain_mismatch')
+  }
+  return [...names]
+}
+
 async function migrationInventory(repositoryRoot) {
   const directory = resolve(repositoryRoot, 'supabase', 'migrations')
   const names = (await readdir(directory))
     .filter((name) => /^\d{14}_(?:public_legacy_baseline|private_trial_backend.*)\.sql$/.test(name))
     .sort()
-  if (names.length !== expectedMigrationCount) fail('supabase_rehearsal_migration_count_mismatch')
-  if (names[0] !== expectedFirstMigration) fail('supabase_rehearsal_first_migration_mismatch')
-  if (names.at(-1) !== expectedFinalMigration) fail('supabase_rehearsal_final_migration_mismatch')
+  validateSupabaseRehearsalMigrationNames(names)
   return Promise.all(names.map(async (name) => ({
     name,
     sha256: sha256(await readFile(resolve(directory, name))),

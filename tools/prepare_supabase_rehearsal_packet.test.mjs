@@ -6,7 +6,9 @@ import test from 'node:test'
 import {
   buildSupabaseRehearsalPacket,
   candidateReleaseReviewFromReceipt,
+  EXPECTED_SUPABASE_REHEARSAL_MIGRATIONS,
   originMainReleaseReview,
+  validateSupabaseRehearsalMigrationNames,
   validateSupabaseRehearsalPacket,
 } from './prepare_supabase_rehearsal_packet.mjs'
 import { runSelfTest as runPreviewBranchRehearsalSelfTest } from './run_preview_branch_rehearsal.mjs'
@@ -34,9 +36,8 @@ test('builds an exact non-mutating v10 rehearsal packet', async () => {
   assert.equal(packet.state, 'prepared-not-executed')
   assert.equal(packet.release.schemaVersion, 10)
   assert.equal(packet.release.migrationCount, 12)
-  assert.equal(packet.release.migrations[0].name, '20260711081300_public_legacy_baseline.sql')
+  assert.deepEqual(packet.release.migrations.map(({ name }) => name), EXPECTED_SUPABASE_REHEARSAL_MIGRATIONS)
   assert.deepEqual(packet.release.review, releaseReview)
-  assert.equal(packet.release.migrations.at(-1).name, '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql')
   assert.equal(packet.release.browserQuarantine.contract, 'supermega.public-browser-quarantine.v1')
   assert.equal(packet.release.browserQuarantine.scope, 'isolated-rehearsal-only')
   assert.equal(packet.release.browserQuarantine.sourceAudit.publicTableCount, 27)
@@ -90,6 +91,13 @@ test('rejects malformed target refs and stale evidence', async () => {
   await assert.rejects(
     validateSupabaseRehearsalPacket(packet, { repositoryRoot, expectedReleaseCommit: releaseCommit }),
     /supabase_rehearsal_packet_evidence_stale/,
+  )
+
+  const substituted = [...EXPECTED_SUPABASE_REHEARSAL_MIGRATIONS]
+  substituted[6] = '20260724204920_private_trial_backend_v5_substituted.sql'
+  assert.throws(
+    () => validateSupabaseRehearsalMigrationNames(substituted),
+    /supabase_rehearsal_migration_chain_mismatch/,
   )
 })
 
@@ -150,7 +158,7 @@ test('gates the preview-branch rehearsal orchestrator with its fail-closed self-
   assert.deepEqual(report, {
     ok: true,
     contract: 'supermega.preview-branch-rehearsal.v2.self-test',
-    cases: 16,
+    cases: 26,
     networkRequestsPerformed: 0,
     childProcessesSpawned: 0,
     productionMutated: false,

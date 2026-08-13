@@ -1,0 +1,37 @@
+{
+  "contract": "supermega.preview-rehearsal-authority.v1",
+  "state": "unconfigured",
+  "signaturePolicy": {
+    "algorithm": "Ed25519",
+    "canonicalization": "supermega.stable-json.v1",
+    "approvalDomain": "supermega.preview-rehearsal-approval.v2",
+    "reviewDomain": "supermega.preview-rehearsal-independent-review.v1",
+    "maximumApprovalValidityHours": 24,
+    "distinctRoleKeysRequired": true
+  },
+  "signers": {
+    "owner": {
+      "role": "owner",
+      "status": "unconfigured",
+      "keyId": null,
+      "publicKeyPem": null,
+      "publicKeyFingerprint": null,
+      "registeredAt": null
+    },
+    "independentReviewer": {
+      "role": "independent_reviewer",
+      "status": "unconfigured",
+      "keyId": null,
+      "publicKeyPem": null,
+      "publicKeyFingerprint": null,
+      "registeredAt": null
+    }
+  },
+  "controls": {
+    "executionVerificationEnabled": false,
+    "privateKeysStored": false,
+    "providerWritesAuthorized": false,
+    "registrationOwnerGated": true
+  },
+  "sourceDigest": "sha256:dc7675868e047ce9cdbf4bacabde3a44c8358cb059bc10d2402a401617c26841"
+}
