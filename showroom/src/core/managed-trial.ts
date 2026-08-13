@@ -72,6 +72,17 @@ export type ManagedAccountSetup = {
   email: string
 }
 
+export type SpaStaffAccessRole = 'front-desk' | 'therapist'
+
+export type ManagedSpaStaffAccessReview = {
+  candidate: {
+    display_name: string
+    email: string
+    role: SpaStaffAccessRole
+  }
+  review_digest: string
+}
+
 export type ManagedApprovalRecord = {
   approval_id: string
   command_id: string
@@ -3416,6 +3427,84 @@ export async function retainManagedContextProfile(request: {
     request.validation,
     request.identity,
   )
+}
+
+function assertManagedSpaStaffAccessReview(
+  value: unknown,
+  expected: {
+    identity: ManagedIdentity
+    displayName: string
+    email: string
+    role: SpaStaffAccessRole
+  },
+): ManagedSpaStaffAccessReview {
+  if (!isRecord(value)
+    || value.contract !== 'supermega.commerce.spa_staff_access_review.v1'
+    || value.status !== 'review_only'
+    || value.workspace_id !== expected.identity.workspaceId
+    || value.requested_by !== expected.identity.userId
+    || !SHA256_DIGEST.test(String(value.review_digest))
+    || value.invitation_sent !== false
+    || value.auth_user_created !== false
+    || value.membership_written !== false
+    || value.external_writes_performed !== false
+    || value.secret_values_exposed !== false
+    || !isRecord(value.candidate)) {
+    throw new ManagedTrialError('The Spa staff access review returned an invalid response.', {
+      code: 'spa_staff_access_review_response_invalid',
+    })
+  }
+  const candidate = value.candidate
+  if (candidate.display_name !== expected.displayName
+    || candidate.email !== expected.email
+    || candidate.role !== expected.role) {
+    throw new ManagedTrialError('The Spa staff access review changed its target or role boundary.', {
+      code: 'spa_staff_access_review_response_invalid',
+    })
+  }
+  return {
+    candidate: {
+      display_name: candidate.display_name as string,
+      email: candidate.email as string,
+      role: candidate.role as SpaStaffAccessRole,
+    },
+    review_digest: value.review_digest as string,
+  }
+}
+
+export async function reviewManagedSpaStaffAccess(request: {
+  identity: ManagedIdentity
+  displayName: string
+  email: string
+  role: SpaStaffAccessRole
+}): Promise<ManagedSpaStaffAccessReview> {
+  if (request.identity.access !== 'owner') {
+    throw new ManagedTrialError('Only the company owner can review staff access.', {
+      code: 'spa_staff_access_owner_required',
+    })
+  }
+  const displayName = request.displayName.trim().replace(/\s+/g, ' ')
+  const email = normalizeAuthEmail(request.email)
+  if (email === request.identity.email.trim().toLowerCase()) {
+    throw new ManagedTrialError('Use the staff member’s own work email, not the owner account.', {
+      code: 'spa_staff_access_email_reused',
+    })
+  }
+  const response = await authorizedRequest<unknown>(
+    '/api/trial/v1/commerce/spa/staff-access/review',
+    {
+      method: 'POST',
+      body: JSON.stringify({ display_name: displayName, email, role: request.role }),
+    },
+    true,
+    request.identity,
+  )
+  return assertManagedSpaStaffAccessReview(response, {
+    identity: request.identity,
+    displayName,
+    email,
+    role: request.role,
+  })
 }
 
 function managedServiceSchedule(value: unknown, privacyScope: 'full' | 'restricted') {

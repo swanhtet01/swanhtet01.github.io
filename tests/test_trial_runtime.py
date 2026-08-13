@@ -71,6 +71,7 @@ class TrialRuntimeTests(unittest.TestCase):
         self.operator = TrialPrincipal("workspace-a", "actor-operator", "human")
         self.manager = TrialPrincipal("workspace-a", "actor-manager", "human")
         self.agent_manager = TrialPrincipal("workspace-a", "actor-agent-manager", "agent")
+        self.spa_owner = TrialPrincipal("workspace-a", "actor-spa-owner", "human")
         self.spa_front_desk = TrialPrincipal("workspace-a", "actor-spa-front-desk", "human")
         self.spa_therapist = TrialPrincipal("workspace-a", "actor-spa-therapist", "human")
         self.spa_viewer = TrialPrincipal("workspace-a", "actor-spa-viewer", "human")
@@ -81,6 +82,7 @@ class TrialRuntimeTests(unittest.TestCase):
             "operator-session": self.operator,
             "manager-session": self.manager,
             "agent-manager-session": self.agent_manager,
+            "spa-owner-session": self.spa_owner,
             "spa-front-desk-session": self.spa_front_desk,
             "spa-therapist-session": self.spa_therapist,
             "spa-viewer-session": self.spa_viewer,
@@ -113,6 +115,16 @@ class TrialRuntimeTests(unittest.TestCase):
             actor_id="actor-agent-manager",
             actor_kind="agent",
             capabilities=("website.write", "approvals.decide"),
+        )
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-spa-owner",
+            actor_kind="human",
+            capabilities=(
+                "company.control.approve",
+                "company.write",
+                "commerce.write",
+            ),
         )
         store.provision_membership(
             workspace_id="workspace-a",
@@ -665,6 +677,96 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(forbidden_identity.status_code, 422)
         self.assertEqual(forbidden_identity.json()["detail"]["code"], "client_identity_forbidden")
         client.close()
+
+    def test_spa_staff_access_review_is_owner_only_exact_and_no_send(self) -> None:
+        endpoint = "/api/trial/v1/commerce/spa/staff-access/review"
+        cases = {
+            "front-desk": {
+                "access": "spa-front-desk",
+                "capabilities": ["commerce.spa.front_desk", "commerce.write"],
+            },
+            "therapist": {
+                "access": "spa-therapist",
+                "capabilities": ["commerce.spa.therapist", "commerce.write"],
+            },
+        }
+        for role, expected in cases.items():
+            with self.subTest(role=role):
+                response = self.client.post(
+                    endpoint,
+                    headers=self._headers("spa-owner-session"),
+                    json={
+                        "display_name": "  Su   Su  ",
+                        "email": "STAFF@EXAMPLE.COM",
+                        "role": role,
+                    },
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                review = response.json()
+                self.assertEqual(review["contract"], "supermega.commerce.spa_staff_access_review.v1")
+                self.assertEqual(review["status"], "review_only")
+                self.assertEqual(review["workspace_id"], "workspace-a")
+                self.assertEqual(review["requested_by"], "actor-spa-owner")
+                self.assertEqual(review["candidate"]["display_name"], "Su Su")
+                self.assertEqual(review["candidate"]["email"], "staff@example.com")
+                self.assertEqual(review["candidate"]["role"], role)
+                self.assertEqual(review["candidate"]["access"], expected["access"])
+                self.assertEqual(review["candidate"]["capabilities"], expected["capabilities"])
+                self.assertEqual(
+                    review["activation"]["authorization_source"],
+                    "app_private.workspace_memberships",
+                )
+                self.assertEqual(
+                    review["activation"]["target_identity_binding"],
+                    "supabase_user_id_after_invite",
+                )
+                self.assertIn("mobile_sign_in_verified", review["activation"]["required_checks"])
+                self.assertIn("role_denials_verified", review["activation"]["required_checks"])
+                self.assertFalse(review["invitation_sent"])
+                self.assertFalse(review["auth_user_created"])
+                self.assertFalse(review["membership_written"])
+                self.assertFalse(review["external_writes_performed"])
+                self.assertFalse(review["secret_values_exposed"])
+                self.assertTrue(review["review_digest"].startswith("sha256:"))
+                self.assertEqual(len(review["review_digest"]), 71)
+
+        self.assertEqual(self.reducer.calls, 0)
+        for session in ("operator-session", "spa-front-desk-session", "spa-therapist-session"):
+            with self.subTest(rejected_session=session):
+                denied = self.client.post(
+                    endpoint,
+                    headers=self._headers(session),
+                    json={
+                        "display_name": "Su Su",
+                        "email": "staff@example.com",
+                        "role": "front-desk",
+                    },
+                )
+                self.assertEqual(denied.status_code, 403, denied.text)
+                self.assertEqual(denied.json()["detail"]["code"], "spa_staff_access_owner_required")
+        agent_denied = self.client.post(
+            endpoint,
+            headers=self._headers("agent-manager-session"),
+            json={
+                "display_name": "Su Su",
+                "email": "staff@example.com",
+                "role": "front-desk",
+            },
+        )
+        self.assertEqual(agent_denied.status_code, 403, agent_denied.text)
+        self.assertEqual(agent_denied.json()["detail"]["code"], "trial_human_approval_required")
+        invalid = self.client.post(
+            endpoint,
+            headers=self._headers("spa-owner-session"),
+            json={
+                "display_name": "Su Su",
+                "email": "staff@example.com",
+                "role": "owner",
+                "send_now": True,
+            },
+        )
+        self.assertEqual(invalid.status_code, 422, invalid.text)
+        self.assertEqual(invalid.json()["detail"]["code"], "spa_staff_access_review_invalid")
 
     def test_spa_staff_roles_are_server_enforced_by_exact_workflow_step(self) -> None:
         def state_reducer(

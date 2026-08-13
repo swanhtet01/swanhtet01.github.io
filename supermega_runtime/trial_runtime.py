@@ -273,6 +273,38 @@ class TrialSpaTreatmentCompleteRequest(_StrictRequest):
     captured_at: str = Field(min_length=20, max_length=40)
 
 
+class TrialSpaStaffAccessReviewRequest(_StrictRequest):
+    display_name: str = Field(min_length=2, max_length=80)
+    email: str = Field(
+        min_length=5,
+        max_length=160,
+        pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$",
+    )
+    role: Literal["front-desk", "therapist"]
+
+    @field_validator("display_name", mode="before")
+    @classmethod
+    def normalize_display_name(cls, value: object) -> object:
+        if not isinstance(value, str):
+            raise ValueError("display name must be a string")
+        name = " ".join(value.strip().split())
+        if (
+            not name
+            or any(ord(character) < 32 or ord(character) == 127 for character in name)
+            or "<" in name
+            or ">" in name
+        ):
+            raise ValueError("display name is invalid")
+        return name
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: object) -> object:
+        if not isinstance(value, str):
+            raise ValueError("email must be a string")
+        return value.strip().casefold()
+
+
 class TrialDecisionSubject(_StrictRequest):
     kind: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9._-]+$")
     id: str = Field(min_length=1, max_length=160)
@@ -615,6 +647,79 @@ def _spa_schedule_allowed_roles(
 _SPA_OWNER_SCHEDULE_EVENTS = frozenset(
     {"client_retention_set", "client_exported", "client_anonymized"}
 )
+
+_SPA_STAFF_ACCESS_REVIEW_CONTRACT = "supermega.commerce.spa_staff_access_review.v1"
+_SPA_STAFF_ACCESS_REVIEW_TTL = timedelta(minutes=15)
+_SPA_STAFF_ACCESS_PROFILES: dict[str, dict[str, tuple[str, ...] | str]] = {
+    "front-desk": {
+        "access": "spa-front-desk",
+        "capabilities": ("commerce.spa.front_desk", "commerce.write"),
+    },
+    "therapist": {
+        "access": "spa-therapist",
+        "capabilities": ("commerce.spa.therapist", "commerce.write"),
+    },
+}
+
+
+def _spa_staff_access_review(
+    request: TrialSpaStaffAccessReviewRequest,
+    *,
+    principal: TrialPrincipal,
+) -> dict[str, Any]:
+    profile = _SPA_STAFF_ACCESS_PROFILES[request.role]
+    requested_at = datetime.now(timezone.utc)
+    review: dict[str, Any] = {
+        "contract": _SPA_STAFF_ACCESS_REVIEW_CONTRACT,
+        "status": "review_only",
+        "workspace_id": principal.workspace_id,
+        "requested_by": principal.actor_id,
+        "requested_at": requested_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "expires_at": (requested_at + _SPA_STAFF_ACCESS_REVIEW_TTL)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z"),
+        "candidate": {
+            "display_name": request.display_name,
+            "email": request.email,
+            "role": request.role,
+            "access": profile["access"],
+            "capabilities": list(profile["capabilities"]),
+        },
+        "activation": {
+            "status": "blocked_until_separate_owner_confirmation",
+            "authorization_source": "app_private.workspace_memberships",
+            "target_identity_binding": "supabase_user_id_after_invite",
+            "required_checks": [
+                "hosted_auth_ready",
+                "invite_redirect_allowlisted",
+                "smtp_delivery_ready",
+                "auth_user_id_returned",
+                "exact_membership_inserted",
+                "mobile_sign_in_verified",
+                "role_denials_verified",
+            ],
+            "forbidden_until_confirmed": [
+                "create_auth_user",
+                "send_invitation_email",
+                "insert_workspace_membership",
+                "enter_real_client_data",
+            ],
+        },
+        "invitation_sent": False,
+        "auth_user_created": False,
+        "membership_written": False,
+        "external_writes_performed": False,
+        "secret_values_exposed": False,
+    }
+    review["review_digest"] = "sha256:" + sha256(
+        json.dumps(
+            review,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return review
 
 
 def _spa_owner_schedule_event(candidate: Mapping[str, Any]) -> str | None:
@@ -1692,6 +1797,26 @@ def create_trial_router(
                 f"sha256:{sha256(body.source_label.encode('utf-8')).hexdigest()}"
             ),
         }
+
+    @router.post("/commerce/spa/staff-access/review")
+    async def trial_spa_staff_access_review(request: Request) -> dict[str, Any]:
+        principal = _resolve_principal(request, resolve_principal)
+        readiness = _readiness(store, principal)
+        _require_read_ready(readiness)
+        if principal.actor_kind != "human":
+            raise _error(403, "trial_human_approval_required")
+        if "company.control.approve" not in readiness.capabilities:
+            raise _error(
+                403,
+                "spa_staff_access_owner_required",
+                required_capability="company.control.approve",
+            )
+        raw_body = await _bounded_json_body(request, maximum_bytes=1024)
+        try:
+            body = TrialSpaStaffAccessReviewRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "spa_staff_access_review_invalid") from exc
+        return _spa_staff_access_review(body, principal=principal)
 
     @router.get("/commerce/service-schedule")
     def trial_service_schedule(request: Request) -> dict[str, Any]:

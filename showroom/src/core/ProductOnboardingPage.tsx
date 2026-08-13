@@ -47,6 +47,11 @@ import {
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
 import {
+  reviewManagedSpaStaffAccess,
+  type ManagedSpaStaffAccessReview,
+  type SpaStaffAccessRole,
+} from './managed-trial'
+import {
   useAccountableActions,
   useManagedIdentity,
   useCommerceWorkspace,
@@ -87,47 +92,12 @@ const onboardingJourneys: Record<SetupProductId, { outcome: string; detail: stri
   },
 }
 
-type SpaGuideRole = 'owner' | 'front-desk' | 'therapist'
-
 const spaOnboardingJourney = {
   outcome: 'Book and complete the first spa appointment',
   detail: 'Realistic services and therapist-room stations are ready. Hold the time, confirm the client, check in, complete the treatment, then review checkout.',
   actionLabel: 'Open Spa appointments',
   firstTaskPath: '/shop/?tab=orders#shop-service-schedule',
 } as const
-
-const spaRoleGuides: Record<SpaGuideRole, { label: string; result: string; tasks: readonly string[]; boundary: string }> = {
-  owner: {
-    label: 'Owner / manager',
-    result: 'You review setup, money, stock, and the daily close.',
-    tasks: [
-      'Check service names, prices, durations, therapist stations, and opening stock.',
-      'Run one appointment from held to completed and review its checkout.',
-      'Review payment exceptions, the low-stock item, and the daily close before staff use.',
-    ],
-    boundary: 'Publishing, real payment capture, reminders, and staff access stay off until their managed services are approved.',
-  },
-  'front-desk': {
-    label: 'Front desk',
-    result: 'You keep the calendar and checkout queue moving.',
-    tasks: [
-      'Hold a time with the client name, contact, service, and therapist station.',
-      'Confirm the booking when agreed; check the client in only after arrival.',
-      'After the therapist marks treatment complete, review the checkout, verify the real receipt or cash, and close the visit.',
-    ],
-    boundary: 'Do not change prices, stock counts, refunds, or daily-close evidence without the owner.',
-  },
-  therapist: {
-    label: 'Therapist',
-    result: 'You see the assigned visit and finish only the service step.',
-    tasks: [
-      'Open the appointment list and confirm the client, service, time, and station.',
-      'After the treatment, mark the visit completed for front-desk checkout.',
-      'Keep notes to service preferences only; do not enter diagnoses, medical history, IDs, or payment details.',
-    ],
-    boundary: 'Payments, refunds, price changes, stock changes, and daily close belong to front desk or the owner.',
-  },
-}
 
 export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const runtime = useOutletContext<RuntimeHealth>()
@@ -148,14 +118,16 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
   )
   const [businessTypeOpen, setBusinessTypeOpen] = useState(() => businessTemplateId !== null)
-  const [spaGuideRole, setSpaGuideRole] = useState<SpaGuideRole>('owner')
+  const [spaStaffName, setSpaStaffName] = useState('')
+  const [spaStaffEmail, setSpaStaffEmail] = useState('')
+  const [spaStaffAccessRole, setSpaStaffAccessRole] = useState<SpaStaffAccessRole>('front-desk')
+  const [spaStaffReview, setSpaStaffReview] = useState<ManagedSpaStaffAccessReview | null>(null)
 
   const onboardingProduct = productContracts[product]
   const selectedBusinessTemplate = product === 'commerce' && businessTemplateId ? shopBusinessTemplate(businessTemplateId) : null
   const selectedShopIndustryPack = shopIndustryPack(selectedBusinessTemplate?.industryPackId ?? shopIndustryPackId)
   const spaOnboardingSelected = product === 'commerce' && selectedShopIndustryPack.id === 'spa'
   const onboardingJourney = spaOnboardingSelected ? spaOnboardingJourney : onboardingJourneys[product]
-  const spaRoleGuide = spaRoleGuides[spaGuideRole]
   const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
   const onboardingTemplate = setup.product === product
     ? templateFor(product, setup.templateId)
@@ -353,6 +325,30 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     })
   }
 
+  async function reviewSpaStaffAccess() {
+    if (!managedIdentity || managedIdentity.access !== 'owner') {
+      setNotice('Sign in as the company owner to review staff access.')
+      return
+    }
+    setWorkspaceBusy(true)
+    setSpaStaffReview(null)
+    setNotice('')
+    try {
+      const review = await reviewManagedSpaStaffAccess({
+        identity: managedIdentity,
+        displayName: spaStaffName,
+        email: spaStaffEmail,
+        role: spaStaffAccessRole,
+      })
+      setSpaStaffReview(review)
+      setNotice('Review ready. No invitation or access was created.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Staff access could not be reviewed.')
+    } finally {
+      setWorkspaceBusy(false)
+    }
+  }
+
   return (
     <div className="workspace-screen settings-screen product-onboarding-screen" data-product={product}>
       <PageHeading
@@ -364,16 +360,24 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         <form className="core-panel product-onboarding-card product-onboarding-form" onSubmit={startGuidedWorkspace}>
           <div className="product-onboarding-intro"><span className="core-eyebrow">{product === 'website' ? 'One step' : spaOnboardingSelected ? 'Guided Spa setup' : 'Quick setup'}</span><h2>{spaOnboardingSelected ? 'Name the spa' : 'Name your workspace'}</h2><p>{spaOnboardingSelected ? 'Start with a realistic working day, then replace the sample services, staff, products, and clients with the spa’s own records.' : product === 'commerce' ? 'Bring the products you actually sell. Business-template demo records stay optional.' : product === 'ecommerce' ? 'Use the products already reviewed in Shop, or import them below. Demo products stay optional.' : product === 'production' ? 'Bring the production jobs you actually plan to run. Industry demo records stay optional.' : 'We will add a realistic website draft now; replace it with your content whenever you are ready.'}</p></div>
           <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
-          {spaOnboardingSelected ? <section aria-label="Spa role guide" className="spa-onboarding-brief" data-spa-role={spaGuideRole}>
-            <div><span className="core-eyebrow">First workday</span><h3>Show only the steps this role needs</h3><p>Appointments → treatment → checkout → close. This choice changes the guide only; it does not grant access.</p></div>
-            <label className="spa-onboarding-role">Show instructions for
-              <select aria-label="Spa guide role" onChange={(event) => setSpaGuideRole(event.target.value as SpaGuideRole)} value={spaGuideRole}>
-                {Object.entries(spaRoleGuides).map(([id, guide]) => <option key={id} value={id}>{guide.label}</option>)}
+          {spaOnboardingSelected ? <section aria-label="Spa first-day roles" className="spa-onboarding-brief">
+            <div><span className="core-eyebrow">First workday</span><h3>One simple handoff</h3><p>Front desk books and collects payment. The therapist completes the checked-in treatment. The owner reviews setup, refunds, stock, and Daily close.</p></div>
+            <p className="spa-onboarding-result">Keep notes to service preferences only; do not enter diagnoses, medical history, IDs, or payment details.</p>
+          </section> : null}
+          {spaOnboardingSelected && managedIdentity?.access === 'owner' ? <details className="compact-disclosure spa-staff-access-review">
+            <summary><span>Staff access</span><small>One role · nothing sent</small></summary>
+            <p>Review one account. Sending needs owner confirmation.</p>
+            <label>Staff name<input autoComplete="name" maxLength={80} onChange={(event) => { setSpaStaffName(event.target.value); setSpaStaffReview(null) }} placeholder="Example: Su Su" value={spaStaffName} /></label>
+            <label>Staff work email<input autoComplete="email" inputMode="email" maxLength={160} onChange={(event) => { setSpaStaffEmail(event.target.value); setSpaStaffReview(null) }} placeholder="staff@example.com" type="email" value={spaStaffEmail} /></label>
+            <label>One role
+              <select onChange={(event) => { setSpaStaffAccessRole(event.target.value as SpaStaffAccessRole); setSpaStaffReview(null) }} value={spaStaffAccessRole}>
+                <option value="front-desk">Front desk</option>
+                <option value="therapist">Therapist</option>
               </select>
             </label>
-            <ol className="spa-onboarding-route">{spaRoleGuide.tasks.map((task, index) => <li key={task}><span>{index + 1}</span><p>{task}</p></li>)}</ol>
-            <p className="spa-onboarding-result"><strong>{spaRoleGuide.result}</strong><br />{spaRoleGuide.boundary}</p>
-          </section> : null}
+            <button className="core-button primary" disabled={workspaceBusy || spaStaffName.trim().length < 2 || !spaStaffEmail.trim()} onClick={() => void reviewSpaStaffAccess()} type="button">{workspaceBusy ? 'Checking access...' : 'Review staff access'}</button>
+            {spaStaffReview ? <p aria-label="Reviewed Spa staff access" className="product-onboarding-boundary"><strong>{spaStaffReview.candidate.display_name} · {spaStaffReview.candidate.role === 'front-desk' ? 'Front desk' : 'Therapist'}.</strong> Nothing was sent or activated. Mobile access checks remain. <small title={spaStaffReview.review_digest}>Review {spaStaffReview.review_digest.slice(7, 23)}…</small></p> : null}
+          </details> : null}
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder={spaOnboardingSelected ? 'Example: Thiri Wellness Spa' : 'Example: Golden Valley Trading'} required value={setup.workspace} /></label>
           {(product === 'commerce' || product === 'ecommerce') && !reviewedShopCatalogReady ? <Suspense fallback={<p className="form-notice" role="status">Loading the Shop import...</p>}><ClientDataOnboarding allowSample={false} managedIdentity={managedIdentity} onProgress={recordBusinessDataProgress} owner={workspaceOwner} product="commerce" productName="Shop" productSlug="shop" replacePristineCommerceDemo requiredFor={product === 'commerce' ? 'Shop' : 'Ecommerce'} shopIndustryPackId={selectedShopIndustryPack.id} workflowTemplateId={selectedShopIndustryPack.workflowTemplateId} workspace={setup.workspace} /></Suspense> : null}
           {product === 'production' && !reviewedPlantJobsReady ? <Suspense fallback={<p className="form-notice" role="status">Loading the Plant import...</p>}><ClientDataOnboarding allowSample={false} managedIdentity={managedIdentity} onProgress={recordBusinessDataProgress} owner={workspaceOwner} plantIndustryPackId={plantIndustryPackId} product="production" productName="Plant" productSlug="plant" requiredFor="Plant" workflowTemplateId={onboardingTemplate.id} workspace={setup.workspace} /></Suspense> : null}

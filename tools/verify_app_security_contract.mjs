@@ -78,6 +78,10 @@ const orderIntakeRoute = trialRuntime.slice(
   trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")'),
   trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
 )
+const spaStaffAccessReviewRoute = trialRuntime.slice(
+  trialRuntime.indexOf('@router.post("/commerce/spa/staff-access/review")'),
+  trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
+)
 const serviceScheduleRoute = trialRuntime.slice(
   trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
   trialRuntime.indexOf('@router.post("/imports/validate")'),
@@ -625,6 +629,23 @@ requireContract('approval decisions require a trimmed nonblank note', /note: str
 requireContract('managed schema contract advances through additive v2 through v10 migrations', /TRIAL_SCHEMA_VERSION = 10/.test(trialStore) && /set schema_version = 2/.test(decisionMigration) && /schema_version = 1/.test(decisionMigration) && /set schema_version = 3/.test(websiteMigration) && /schema_version = 2/.test(websiteMigration) && /set schema_version = 4/.test(hardeningMigration) && /schema version 3/.test(hardeningMigration) && /set schema_version = 5/.test(readCapabilityMigration) && /schema version 4/.test(readCapabilityMigration) && /set schema_version = 6/.test(activationMigration) && /schema version 5/.test(activationMigration) && /set schema_version = 7/.test(workspaceDiscoveryMigration) && /schema version 6/.test(workspaceDiscoveryMigration) && /set schema_version = 8/.test(rlsInitplanMigration) && /schema version 7/.test(rlsInitplanMigration) && /set schema_version = 9/.test(metadataRlsMigration) && /schema version 8/.test(metadataRlsMigration) && /set schema_version = 10/.test(sessionRevocationMigration) && /schema version 9/.test(sessionRevocationMigration) && /alter table app_private\.trial_schema_meta enable row level security/.test(metadataRlsMigration) && /to supermega_trial_backend/.test(metadataRlsMigration) && /using \(component = 'private_trial_backend'\)/.test(metadataRlsMigration) && !/force row level security/.test(metadataRlsMigration) && (rlsInitplanMigration.match(/drop policy/g) || []).length === 10 && !rlsInitplanMigration.replace(/\(\s*select\s+current_setting\(/g, '').includes('current_setting(') && /workspace_state\.surface \|\| '\.read'/.test(readCapabilityMigration) && /'approvals\.read'/.test(readCapabilityMigration))
 requireContract('managed runtime keeps operational workspace gates and caller-only discovery', /workspace_access_controls/.test(activationMigration) && /workspace access can only transition from active to suspended/.test(activationMigration) && /create function app_private\.workspace_is_active/.test(activationMigration) && /workspace_memberships_access_gate/.test(activationMigration) && /workspace_state_access_gate/.test(activationMigration) && /workspace_events_access_gate/.test(activationMigration) && /approval_requests_access_gate/.test(activationMigration) && /create function app_private\.actor_workspace_directory\(\)/.test(workspaceDiscoveryMigration) && /security definer/.test(workspaceDiscoveryMigration) && /revoke all on function app_private\.actor_workspace_directory\(\)/.test(workspaceDiscoveryMigration) && /actor_id = current_setting\('app\.actor_id'/.test(workspaceDiscoveryMigration) && /access_control\.status = 'active'/.test(workspaceDiscoveryMigration) && /set transaction read only/.test(trialStore) && /from app_private\.actor_workspace_directory\(\)/.test(trialStore))
 requireContract('managed workspace directory requires verified named-user bearer auth and bounded redacted output', /resolve_workspace_discovery_principal/.test(runtime) && /verify_supabase_user_identity/.test(runtime) && /@app\.get\("\/api\/trial\/v1\/workspaces"\)/.test(runtime) && /list_actor_workspaces\(principal, limit=50\)/.test(runtime) && /supermega\.managed_workspace_directory\.v1/.test(runtime) && /external_writes_performed": False/.test(runtime) && /secret_values_exposed": False/.test(runtime) && /signInAndDiscoverManagedWorkspaces/.test(managedTrialClient) && /completeManagedWorkspaceSignIn/.test(managedTrialClient))
+requireContract('Spa staff review is named-owner only, digest-bound, and cannot send or grant access',
+  spaStaffAccessReviewRoute.includes('_resolve_principal(request, resolve_principal)')
+  && spaStaffAccessReviewRoute.includes('_require_read_ready(readiness)')
+  && spaStaffAccessReviewRoute.includes('principal.actor_kind != "human"')
+  && spaStaffAccessReviewRoute.includes('"company.control.approve" not in readiness.capabilities')
+  && spaStaffAccessReviewRoute.includes('spa_staff_access_owner_required')
+  && !spaStaffAccessReviewRoute.includes('store.apply_command')
+  && !spaStaffAccessReviewRoute.includes('inviteUserByEmail')
+  && trialRuntime.includes('"authorization_source": "app_private.workspace_memberships"')
+  && trialRuntime.includes('"target_identity_binding": "supabase_user_id_after_invite"')
+  && trialRuntime.includes('"invitation_sent": False')
+  && trialRuntime.includes('"auth_user_created": False')
+  && trialRuntime.includes('"membership_written": False')
+  && trialRuntime.includes('"external_writes_performed": False')
+  && trialRuntime.includes('review["review_digest"] = "sha256:" + sha256(')
+  && managedTrialClient.includes("request.identity.access !== 'owner'")
+  && managedTrialClient.includes('SHA256_DIGEST.test(String(value.review_digest))'))
 requireContract('managed Supabase sessions are database-checked before membership, discovery, and activation', /session_id=identity\.session_id/.test(runtime) && /identity_provider="supabase"/.test(runtime) && /_assert_active_identity_session\(cursor, normalized\)/.test(trialStore) && /supabase_session_is_active/.test(trialStore) && /from auth\.sessions as session_record/.test(sessionRevocationMigration) && /security definer/.test(sessionRevocationMigration) && /set search_path = ''/.test(sessionRevocationMigration) && /from public, anon, authenticated, service_role/.test(sessionRevocationMigration) && /to supermega_trial_backend/.test(sessionRevocationMigration) && /verified_owner_session_id/.test(managedActivation))
 requireContract('legacy public Data API access has an exact fail-closed browser quarantine',
   /^begin;/m.test(publicBrowserQuarantine)
