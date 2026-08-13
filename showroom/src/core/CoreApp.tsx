@@ -3347,7 +3347,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const realOrderSetupLabel = realOrderSetupRequired ? commerce.inventoryFoundation ? 'Review business location' : 'Set up stock locations' : null
   useLayoutEffect(() => {
     if (tab === 'counter' && realOrderSetupRequired) {
-      navigate('/shop/?tab=orders#shop-business-location', { replace: true })
+      navigate(commerce.inventoryFoundation ? '/shop/?tab=orders#shop-business-location' : '/shop/?tab=inventory#shop-location-foundation', { replace: true })
       return
     }
     if (tab !== 'orders' || !resumeEntryMode || realOrderSetupRequired || pendingAction || !commerceCanWrite || !orderDraftInitialized || orderDraftRead.status !== 'empty') return
@@ -3358,7 +3358,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       orderComposerTriggerRef.current?.click()
       setOrderEntryMode(resumeEntryMode)
     })
-  }, [commerceCanWrite, navigate, orderDraftInitialized, orderDraftRead.status, pendingAction, realOrderSetupRequired, resumeEntryMode, tab])
+  }, [commerce.inventoryFoundation, commerceCanWrite, navigate, orderDraftInitialized, orderDraftRead.status, pendingAction, realOrderSetupRequired, resumeEntryMode, tab])
   const commerceBoundary = <div className="production-mode-banner commerce-mode-banner" data-sync={commerceSync.status} data-write={commerceCanWrite ? 'ready' : 'blocked'} role={commerceCanWrite ? 'status' : 'alert'}>
     <span className={`status-pill ${commerceCanWrite ? 'bounded' : 'pending'}`}>{managedIdentity ? 'Managed records' : localBusinessWorkspace ? 'Local workspace' : 'Sample data'}</span>
     <p>{commerceStorageError
