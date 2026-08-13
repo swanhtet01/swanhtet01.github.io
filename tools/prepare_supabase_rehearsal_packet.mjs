@@ -1,7 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
-import { dirname, extname, relative, resolve, sep } from 'node:path'
+import { lstat, open, readFile, readdir, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { RELEASE_HANDOFF_CONTRACT, verifyCurrentReleaseHandoff } from './prepare_release_handoff.mjs'
@@ -62,8 +62,13 @@ function strictUtcTimestamp(value) {
   return instant
 }
 
-async function readManifest(repositoryRoot) {
-  return JSON.parse(await readFile(resolve(repositoryRoot, 'package.json'), 'utf8'))
+async function readSource(repositoryRoot, sourcePath, sourceReader = null) {
+  if (sourceReader) return Buffer.from(await sourceReader(sourcePath))
+  return readFile(resolve(repositoryRoot, ...sourcePath.split('/')))
+}
+
+async function readManifest(repositoryRoot, sourceReader) {
+  return JSON.parse((await readSource(repositoryRoot, 'package.json', sourceReader)).toString('utf8'))
 }
 
 export function validateSupabaseRehearsalMigrationNames(names) {
@@ -75,25 +80,35 @@ export function validateSupabaseRehearsalMigrationNames(names) {
   return [...names]
 }
 
-async function migrationInventory(repositoryRoot) {
-  const directory = resolve(repositoryRoot, 'supabase', 'migrations')
-  const names = (await readdir(directory))
-    .filter((name) => /^\d{14}_(?:public_legacy_baseline|private_trial_backend.*)\.sql$/.test(name))
-    .sort()
+async function migrationInventory(repositoryRoot, sourceReader, suppliedNames) {
+  const names = suppliedNames
+    ? [...suppliedNames].sort()
+    : (await readdir(resolve(repositoryRoot, 'supabase', 'migrations')))
+      .filter((name) => /^\d{14}_(?:public_legacy_baseline|private_trial_backend.*)\.sql$/.test(name))
+      .sort()
   validateSupabaseRehearsalMigrationNames(names)
   return Promise.all(names.map(async (name) => ({
     name,
-    sha256: sha256(await readFile(resolve(directory, name))),
+    sha256: sha256(await readSource(repositoryRoot, `supabase/migrations/${name}`, sourceReader)),
   })))
 }
 
-async function browserQuarantineInventory(repositoryRoot) {
+async function browserQuarantineInventory(repositoryRoot, sourceReader) {
   const [sql, auditRaw] = await Promise.all([
-    readFile(resolve(repositoryRoot, browserQuarantinePath)),
-    readFile(resolve(repositoryRoot, securityAuditPath), 'utf8'),
+    readSource(repositoryRoot, browserQuarantinePath, sourceReader),
+    readSource(repositoryRoot, securityAuditPath, sourceReader),
   ])
-  const audit = JSON.parse(auditRaw)
-  if (audit?.managedBackend?.liveSchemaVersion !== 7) fail('supabase_rehearsal_quarantine_audit_schema_invalid')
+  const auditText = auditRaw.toString('utf8')
+  const audit = JSON.parse(auditText)
+  if (audit?.contract !== 'supermega.supabase-security-advisor-audit.v2'
+    || audit?.productionMigrations?.liveManagedSchemaVersion !== expectedSchemaVersion
+    || audit?.productionMigrations?.sourceTargetVersion !== expectedSchemaVersion
+    || audit?.productionMigrations?.versionDrift !== 0
+    || audit?.productionMigrations?.publicBrowserQuarantine?.present !== true
+    || audit?.productionMigrations?.managedWritesEnabled !== false
+    || audit?.managedBackend?.liveSchemaVersion !== expectedSchemaVersion) {
+    fail('supabase_rehearsal_quarantine_audit_schema_invalid')
+  }
   if (audit?.catalog?.businessRowsRead !== 0) fail('supabase_rehearsal_quarantine_audit_boundary_invalid')
   if (!Array.isArray(audit?.catalog?.tables) || audit.catalog.tables.length !== 27) {
     fail('supabase_rehearsal_quarantine_audit_inventory_invalid')
@@ -128,8 +143,8 @@ async function browserQuarantineInventory(repositoryRoot) {
   }
 }
 
-async function sessionRevocationProbeInventory(repositoryRoot) {
-  const sql = await readFile(resolve(repositoryRoot, sessionRevocationProbePath))
+async function sessionRevocationProbeInventory(repositoryRoot, sourceReader) {
+  const sql = await readSource(repositoryRoot, sessionRevocationProbePath, sourceReader)
   return {
     path: sessionRevocationProbePath,
     sha256: sha256(sql),
@@ -257,12 +272,14 @@ export async function buildSupabaseRehearsalPacket({
   releaseCommit,
   releaseReview,
   generatedAt = new Date().toISOString(),
+  sourceReader = null,
+  migrationNames = null,
 } = {}) {
   if (!projectRefPattern.test(targetProjectRef || '')) fail('supabase_rehearsal_target_ref_invalid')
   if (!commitPattern.test(releaseCommit || '')) fail('supabase_rehearsal_release_commit_invalid')
   if (!strictUtcTimestamp(generatedAt)) fail('supabase_rehearsal_generated_at_invalid')
 
-  const manifest = await readManifest(repositoryRoot)
+  const manifest = await readManifest(repositoryRoot, sourceReader)
   const productionProjectRef = manifest?.supermega?.productionSupabaseProjectRef
   const productionTargetStatus = manifest?.supermega?.productionSupabaseTargetStatus
   if (!projectRefPattern.test(productionProjectRef || '')) fail('supabase_rehearsal_production_ref_unconfigured')
@@ -271,9 +288,9 @@ export async function buildSupabaseRehearsalPacket({
 
   const reviewedRelease = validateReleaseReview(releaseReview, releaseCommit)
   const [migrations, browserQuarantine, sessionRevocationProbe] = await Promise.all([
-    migrationInventory(repositoryRoot),
-    browserQuarantineInventory(repositoryRoot),
-    sessionRevocationProbeInventory(repositoryRoot),
+    migrationInventory(repositoryRoot, sourceReader, migrationNames),
+    browserQuarantineInventory(repositoryRoot, sourceReader),
+    sessionRevocationProbeInventory(repositoryRoot, sourceReader),
   ])
   const payload = {
     contract: SUPABASE_REHEARSAL_CONTRACT,
@@ -347,6 +364,8 @@ export async function validateSupabaseRehearsalPacket(packet, {
   repositoryRoot = root,
   expectedReleaseCommit,
   expectedReleaseReview,
+  sourceReader = null,
+  migrationNames = null,
 } = {}) {
   if (!packet || packet.contract !== SUPABASE_REHEARSAL_CONTRACT) fail('supabase_rehearsal_packet_contract_invalid')
   if (packet.state !== 'prepared-not-executed') fail('supabase_rehearsal_packet_state_invalid')
@@ -357,6 +376,8 @@ export async function validateSupabaseRehearsalPacket(packet, {
     releaseCommit: packet.release?.commit,
     releaseReview: packet.release?.review,
     generatedAt: packet.generatedAt,
+    sourceReader,
+    migrationNames,
   })
   if (JSON.stringify(packet) !== JSON.stringify(expected)) fail('supabase_rehearsal_packet_evidence_stale')
   if (expectedReleaseReview && JSON.stringify(packet.release.review) !== JSON.stringify(expectedReleaseReview)) {
@@ -384,6 +405,57 @@ function git(repositoryRoot, ...args) {
     timeout: 15_000,
     windowsHide: true,
   }).trim()
+}
+
+function gitBlob(repositoryRoot, commit, sourcePath) {
+  const env = Object.fromEntries([
+    'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
+    'TEMP', 'TMP', 'TMPDIR', 'USERPROFILE', 'HOME',
+  ].filter((key) => typeof process.env[key] === 'string').map((key) => [key, process.env[key]]))
+  env.GIT_NO_LAZY_FETCH = '1'
+  try {
+    return execFileSync('git', ['-C', repositoryRoot, 'cat-file', 'blob', `${commit}:${sourcePath}`], {
+      encoding: 'buffer',
+      env,
+      timeout: 15_000,
+      windowsHide: true,
+      maxBuffer: 4 * 1024 * 1024,
+    })
+  } catch {
+    fail('supabase_rehearsal_reviewed_blob_unavailable')
+  }
+}
+
+function gitMigrationNames(repositoryRoot, commit) {
+  const output = git(repositoryRoot, 'ls-tree', '--name-only', `${commit}:supabase/migrations`)
+  return output.split(/\r?\n/)
+    .filter((name) => /^\d{14}_(?:public_legacy_baseline|private_trial_backend.*)\.sql$/.test(name))
+    .sort()
+}
+
+export function validateSupabaseRehearsalPacketSourcesAtCommit(repositoryRoot, packet, commit) {
+  const packetMigrations = packet.release?.migrations
+  if (!Array.isArray(packetMigrations)) fail('supabase_rehearsal_packet_source_binding_invalid')
+  for (const migration of packetMigrations) {
+    const path = `supabase/migrations/${migration.name}`
+    if (sha256(gitBlob(repositoryRoot, commit, path)) !== migration.sha256) {
+      fail('supabase_rehearsal_reviewed_migration_blob_mismatch')
+    }
+  }
+  for (const [path, digest] of [
+    [browserQuarantinePath, packet.release?.browserQuarantine?.script?.sha256],
+    [securityAuditPath, packet.release?.browserQuarantine?.sourceAudit?.sha256],
+    [sessionRevocationProbePath, packet.release?.sessionRevocationProbe?.sha256],
+  ]) {
+    if (sha256(gitBlob(repositoryRoot, commit, path)) !== digest) {
+      fail('supabase_rehearsal_reviewed_source_blob_mismatch')
+    }
+  }
+  const manifest = JSON.parse(gitBlob(repositoryRoot, commit, 'package.json').toString('utf8'))
+  if (manifest?.supermega?.productionSupabaseProjectRef !== packet.authority?.protectedProductionProjectRef
+    || manifest?.supermega?.productionSupabaseTargetStatus !== packet.authority?.productionTargetStatus) {
+    fail('supabase_rehearsal_reviewed_manifest_blob_mismatch')
+  }
 }
 
 function reviewedMainRelease(repositoryRoot) {
@@ -430,12 +502,75 @@ function parseArguments(args) {
   }
 }
 
-function resolveOutput(repositoryRoot, output) {
+export function resolveSupabaseRehearsalArtifactPath(repositoryRoot, output) {
   const destination = resolve(repositoryRoot, output)
   const temporaryRoot = resolve(repositoryRoot, '.tmp')
-  if (destination !== temporaryRoot && !destination.startsWith(`${temporaryRoot}${sep}`)) fail('supabase_rehearsal_output_must_be_temporary')
-  if (extname(destination).toLowerCase() !== '.json') fail('supabase_rehearsal_output_must_be_json')
+  if (dirname(destination) !== temporaryRoot
+    || extname(destination).toLowerCase() !== '.json'
+    || !/^[A-Za-z0-9][A-Za-z0-9._-]{1,119}\.json$/.test(basename(destination))) {
+    fail('supabase_rehearsal_output_must_be_temporary_direct_child')
+  }
   return destination
+}
+
+async function requirePlainTemporaryRoot(repositoryRoot) {
+  const temporaryRoot = resolve(repositoryRoot, '.tmp')
+  let metadata
+  let canonical
+  try {
+    metadata = await lstat(temporaryRoot)
+    canonical = await realpath(temporaryRoot)
+  } catch {
+    fail('supabase_rehearsal_temporary_root_invalid')
+  }
+  if (!metadata.isDirectory()
+    || metadata.isSymbolicLink()
+    || resolve(canonical) !== temporaryRoot) fail('supabase_rehearsal_temporary_root_invalid')
+  return temporaryRoot
+}
+
+async function readBoundedPrivateJson(repositoryRoot, path) {
+  const temporaryRoot = await requirePlainTemporaryRoot(repositoryRoot)
+  let before
+  let canonical
+  try {
+    before = await lstat(path)
+    canonical = await realpath(path)
+  } catch {
+    fail('supabase_rehearsal_input_invalid')
+  }
+  if (!before.isFile()
+    || before.isSymbolicLink()
+    || before.size <= 0
+    || before.size > 1024 * 1024
+    || dirname(canonical) !== temporaryRoot
+    || resolve(canonical) !== path) fail('supabase_rehearsal_input_invalid')
+  let handle
+  let bytes
+  try {
+    handle = await open(path, 'r')
+    const descriptorMetadata = await handle.stat()
+    if (!descriptorMetadata.isFile()
+      || descriptorMetadata.size !== before.size
+      || descriptorMetadata.dev !== before.dev
+      || descriptorMetadata.ino !== before.ino) fail('supabase_rehearsal_input_changed')
+    bytes = await handle.readFile()
+  } catch (error) {
+    if (error?.message === 'supabase_rehearsal_input_changed') throw error
+    fail('supabase_rehearsal_input_changed')
+  } finally {
+    await handle?.close()
+  }
+  const after = await lstat(path)
+  if (!after.isFile()
+    || after.isSymbolicLink()
+    || after.size !== before.size
+    || after.size !== bytes.length
+    || after.mtimeMs !== before.mtimeMs
+    || after.dev !== before.dev
+    || after.ino !== before.ino
+    || resolve(await realpath(path)) !== path) fail('supabase_rehearsal_input_changed')
+  try { return JSON.parse(bytes.toString('utf8')) } catch { fail('supabase_rehearsal_input_invalid') }
 }
 
 function requireIgnoredOutput(repositoryRoot, destination) {
@@ -451,9 +586,10 @@ function requireIgnoredOutput(repositoryRoot, destination) {
 async function main() {
   const command = parseArguments(process.argv.slice(2))
   if (command.mode === 'verify') {
-    const input = resolveOutput(root, command.input)
+    const input = resolveSupabaseRehearsalArtifactPath(root, command.input)
+    await requirePlainTemporaryRoot(root)
     requireIgnoredOutput(root, input)
-    const source = JSON.parse(await readFile(input, 'utf8'))
+    const source = await readBoundedPrivateJson(root, input)
     if (source?.release?.review?.mode === 'owner_review_handoff' && !command.releaseHandoff) {
       fail('supabase_rehearsal_release_handoff_required')
     }
@@ -461,7 +597,12 @@ async function main() {
     const packet = await validateSupabaseRehearsalPacket(source, {
       expectedReleaseCommit: release.commit,
       expectedReleaseReview: release.review,
+      sourceReader: (sourcePath) => gitBlob(root, release.commit, sourcePath),
+      migrationNames: gitMigrationNames(root, release.commit),
     })
+    validateSupabaseRehearsalPacketSourcesAtCommit(root, packet, release.commit)
+    const releaseAfterRead = await reviewedRelease(root, command.releaseHandoff)
+    if (JSON.stringify(releaseAfterRead) !== JSON.stringify(release)) fail('supabase_rehearsal_release_changed_during_verify')
     console.log(JSON.stringify({
       ok: true,
       contract: packet.contract,
@@ -477,19 +618,38 @@ async function main() {
     return
   }
 
-  const destination = resolveOutput(root, command.output)
+  const destination = resolveSupabaseRehearsalArtifactPath(root, command.output)
+  await requirePlainTemporaryRoot(root)
   requireIgnoredOutput(root, destination)
+  try {
+    await lstat(destination)
+    fail('supabase_rehearsal_output_already_exists')
+  } catch (error) {
+    if (error?.message === 'supabase_rehearsal_output_already_exists') throw error
+    if (error?.code !== 'ENOENT') throw error
+  }
   const release = await reviewedRelease(root, command.releaseHandoff)
   const packet = await buildSupabaseRehearsalPacket({
     targetProjectRef: command.targetProjectRef,
     releaseCommit: release.commit,
     releaseReview: release.review,
+    sourceReader: (sourcePath) => gitBlob(root, release.commit, sourcePath),
+    migrationNames: gitMigrationNames(root, release.commit),
   })
-  await validateSupabaseRehearsalPacket(packet, { expectedReleaseCommit: release.commit, expectedReleaseReview: release.review })
-  await mkdir(dirname(destination), { recursive: true })
-  const staged = resolve(dirname(destination), `.${randomUUID()}.tmp`)
-  await writeFile(staged, `${JSON.stringify(packet, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' })
-  await rename(staged, destination)
+  await validateSupabaseRehearsalPacket(packet, {
+    expectedReleaseCommit: release.commit,
+    expectedReleaseReview: release.review,
+    sourceReader: (sourcePath) => gitBlob(root, release.commit, sourcePath),
+    migrationNames: gitMigrationNames(root, release.commit),
+  })
+  validateSupabaseRehearsalPacketSourcesAtCommit(root, packet, release.commit)
+  const releaseAfterRead = await reviewedRelease(root, command.releaseHandoff)
+  if (JSON.stringify(releaseAfterRead) !== JSON.stringify(release)) fail('supabase_rehearsal_release_changed_during_prepare')
+  await writeFile(destination, `${JSON.stringify(packet, null, 2)}\n`, {
+    encoding: 'utf8',
+    flag: 'wx',
+    mode: 0o600,
+  })
   console.log(JSON.stringify({
     ok: true,
     contract: packet.contract,

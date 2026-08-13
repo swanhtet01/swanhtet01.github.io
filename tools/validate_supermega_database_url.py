@@ -1053,6 +1053,16 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
               ) as public_user_relations_absent,
               not exists (
                 select 1
+                from pg_proc function_record
+                join pg_namespace schema_record
+                  on schema_record.oid = function_record.pronamespace
+                where schema_record.nspname = 'public'
+              ) as public_routines_absent,
+              not exists (
+                select 1 from pg_event_trigger
+              ) as event_triggers_absent,
+              not exists (
+                select 1
                 from pg_namespace schema_record
                 where schema_record.nspname !~ '^pg_'
                   and schema_record.nspname not in (
@@ -1063,6 +1073,93 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                     'pgbouncer', 'pgsodium', 'pgsodium_masks'
                   )
               ) as unexpected_user_schemas_absent,
+              jsonb_build_object(
+                'schemas', coalesce((
+                  select jsonb_agg(schema_record.nspname order by schema_record.nspname)
+                  from pg_namespace schema_record
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                ), '[]'::jsonb),
+                'extensions', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    extension_record.extname,
+                    extension_record.extversion,
+                    schema_record.nspname
+                  ) order by extension_record.extname)
+                  from pg_extension extension_record
+                  join pg_namespace schema_record
+                    on schema_record.oid = extension_record.extnamespace
+                ), '[]'::jsonb),
+                'relations', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    relation_record.relname,
+                    relation_record.relkind,
+                    relation_record.relpersistence,
+                    pg_get_userbyid(relation_record.relowner)
+                  ) order by schema_record.nspname, relation_record.relname)
+                  from pg_class relation_record
+                  join pg_namespace schema_record
+                    on schema_record.oid = relation_record.relnamespace
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                ), '[]'::jsonb),
+                'routines', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    function_record.proname,
+                    pg_get_function_identity_arguments(function_record.oid),
+                    function_record.prokind,
+                    function_record.prosecdef,
+                    pg_get_userbyid(function_record.proowner),
+                    language_record.lanname
+                  ) order by schema_record.nspname, function_record.proname,
+                             pg_get_function_identity_arguments(function_record.oid))
+                  from pg_proc function_record
+                  join pg_namespace schema_record
+                    on schema_record.oid = function_record.pronamespace
+                  join pg_language language_record
+                    on language_record.oid = function_record.prolang
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                ), '[]'::jsonb),
+                'types', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    type_record.typname,
+                    type_record.typtype,
+                    pg_get_userbyid(type_record.typowner)
+                  ) order by schema_record.nspname, type_record.typname)
+                  from pg_type type_record
+                  join pg_namespace schema_record
+                    on schema_record.oid = type_record.typnamespace
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                    and type_record.typtype in ('d', 'e', 'm', 'r')
+                ), '[]'::jsonb),
+                'event_triggers', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    event_trigger.evtname,
+                    event_trigger.evtevent,
+                    event_trigger.evtenabled,
+                    event_trigger.evtfoid::regprocedure::text
+                  ) order by event_trigger.evtname)
+                  from pg_event_trigger event_trigger
+                ), '[]'::jsonb),
+                'default_acls', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    pg_get_userbyid(default_acl.defaclrole),
+                    coalesce(schema_record.nspname, ''),
+                    default_acl.defaclobjtype,
+                    default_acl.defaclacl::text
+                  ) order by pg_get_userbyid(default_acl.defaclrole),
+                             coalesce(schema_record.nspname, ''),
+                             default_acl.defaclobjtype)
+                  from pg_default_acl default_acl
+                  left join pg_namespace schema_record
+                    on schema_record.oid = default_acl.defaclnamespace
+                ), '[]'::jsonb)
+              ) as metadata_inventory,
               not exists (select 1 from auth.users limit 1) as auth_users_absent,
               not exists (select 1 from auth.sessions limit 1) as auth_sessions_absent,
               not exists (select 1 from storage.buckets limit 1) as storage_buckets_absent,
@@ -1082,6 +1179,25 @@ def evaluate_supabase_rehearsal_target_snapshot(
         server_version_num = int(snapshot.get("server_version_num", 0))
     except (TypeError, ValueError):
         server_version_num = 0
+    metadata_inventory = snapshot.get("metadata_inventory")
+    if isinstance(metadata_inventory, str):
+        try:
+            metadata_inventory = json.loads(metadata_inventory)
+        except json.JSONDecodeError:
+            metadata_inventory = None
+    metadata_fingerprint_digest = (
+        "sha256:"
+        + sha256(
+            json.dumps(
+                metadata_inventory,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        if isinstance(metadata_inventory, Mapping)
+        else None
+    )
     checks = {
         "postgres_major_17": server_version_num // 10_000 == EXPECTED_POSTGRES_MAJOR,
         "read_only_encrypted_connection": (
@@ -1097,8 +1213,13 @@ def evaluate_supabase_rehearsal_target_snapshot(
         "public_user_relations_absent": _bool(
             snapshot.get("public_user_relations_absent")
         ),
+        "public_routines_absent": _bool(snapshot.get("public_routines_absent")),
+        "event_triggers_absent": _bool(snapshot.get("event_triggers_absent")),
         "unexpected_user_schemas_absent": _bool(
             snapshot.get("unexpected_user_schemas_absent")
+        ),
+        "provider_metadata_fingerprint_captured": bool(
+            re.fullmatch(r"sha256:[0-9a-f]{64}", metadata_fingerprint_digest or "")
         ),
         "auth_users_absent": _bool(snapshot.get("auth_users_absent")),
         "auth_sessions_absent": _bool(snapshot.get("auth_sessions_absent")),
@@ -1116,6 +1237,8 @@ def evaluate_supabase_rehearsal_target_snapshot(
         "tls_mode": "verify-full",
         "checks": checks,
         "failed_checks": failed,
+        "metadata_inventory": metadata_inventory,
+        "metadata_fingerprint_digest": metadata_fingerprint_digest,
         "mutation_statements_executed": 0,
         "secret_values_exposed": False,
         "production_mutated": False,

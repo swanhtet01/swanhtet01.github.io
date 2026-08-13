@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import test from 'node:test'
@@ -8,8 +9,10 @@ import {
   candidateReleaseReviewFromReceipt,
   EXPECTED_SUPABASE_REHEARSAL_MIGRATIONS,
   originMainReleaseReview,
+  resolveSupabaseRehearsalArtifactPath,
   validateSupabaseRehearsalMigrationNames,
   validateSupabaseRehearsalPacket,
+  validateSupabaseRehearsalPacketSourcesAtCommit,
 } from './prepare_supabase_rehearsal_packet.mjs'
 import { runSelfTest as runPreviewBranchRehearsalSelfTest } from './run_preview_branch_rehearsal.mjs'
 
@@ -175,9 +178,55 @@ test('gates the preview-branch rehearsal orchestrator with its fail-closed self-
   assert.deepEqual(report, {
     ok: true,
     contract: 'supermega.preview-branch-rehearsal.v2.self-test',
-    cases: 28,
+    cases: 40,
     networkRequestsPerformed: 0,
     childProcessesSpawned: 0,
     productionMutated: false,
   })
+})
+
+test('binds packet bytes to the reviewed commit and direct-child private paths', async () => {
+  const gitEnvironment = Object.fromEntries([
+    'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
+    'TEMP', 'TMP', 'TMPDIR', 'USERPROFILE', 'HOME',
+  ].filter((key) => typeof process.env[key] === 'string').map((key) => [key, process.env[key]]))
+  gitEnvironment.GIT_NO_LAZY_FETCH = '1'
+  const head = execFileSync('git', ['-C', repositoryRoot, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+    env: gitEnvironment,
+  }).trim()
+  const sourceReader = (sourcePath) => execFileSync(
+    'git',
+    ['-C', repositoryRoot, 'cat-file', 'blob', `${head}:${sourcePath}`],
+    { encoding: 'buffer', env: gitEnvironment },
+  )
+  const migrationNames = execFileSync(
+    'git',
+    ['-C', repositoryRoot, 'ls-tree', '--name-only', `${head}:supabase/migrations`],
+    { encoding: 'utf8', env: gitEnvironment },
+  ).split(/\r?\n/).filter((name) => /^\d{14}_(?:public_legacy_baseline|private_trial_backend.*)\.sql$/.test(name))
+  const packet = await buildSupabaseRehearsalPacket({
+    repositoryRoot,
+    targetProjectRef,
+    releaseCommit: head,
+    releaseReview: originMainReleaseReview(head),
+    generatedAt,
+    sourceReader,
+    migrationNames,
+  })
+  validateSupabaseRehearsalPacketSourcesAtCommit(repositoryRoot, packet, head)
+  assert.equal(
+    resolveSupabaseRehearsalArtifactPath(repositoryRoot, '.tmp/direct-packet.json'),
+    resolve(repositoryRoot, '.tmp', 'direct-packet.json'),
+  )
+  for (const invalid of [
+    '.tmp/nested/packet.json',
+    '../packet.json',
+    '.tmp/packet.txt',
+  ]) {
+    assert.throws(
+      () => resolveSupabaseRehearsalArtifactPath(repositoryRoot, invalid),
+      /supabase_rehearsal_output_must_be_temporary_direct_child/,
+    )
+  }
 })

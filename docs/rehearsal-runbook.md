@@ -17,7 +17,7 @@ is bound to `supermega.supabase-rehearsal-packet.v4` and the exact reviewed
   of one empty branch, migration application, and final branch deletion.
 - The operator may run the committed tool only after receiving an Ed25519 owner
   signature and a distinct Ed25519 risk-reviewer acceptance in the private
-  `supermega.preview-rehearsal-approval.v2` receipt described below.
+  `supermega.preview-rehearsal-approval.v3` receipt described below.
 - The checked-in `supermega.preview-rehearsal-authority.v1` policy is
   intentionally `unconfigured`. Execution stays blocked until a separate
   owner-reviewed source change registers two distinct public keys and pins the
@@ -79,10 +79,13 @@ digest. The token is never printed or retained.
 The read-only preflight requires PostgreSQL 17, hostname-verified TLS, the
 `postgres` database, permission to create the reviewed runtime role and schema,
 absence of both `app_private` and `supermega_trial_backend`, no user relation in
-`public`, no unreviewed user schema, and zero Auth users/sessions and Storage
-buckets/objects. It reads
-only booleans and zero/nonzero existence, never row contents. A production
-schema or data mirror fails closed.
+`public`, no public routine or event trigger, no unreviewed user schema, and
+zero Auth users/sessions and Storage buckets/objects. It also returns a
+metadata-only inventory of provider schemas, extensions, relations, routines,
+types, event triggers, and default ACLs. The owner and independent reviewer
+inspect that private inventory and sign its canonical digest. It never reads
+business-row contents. A production schema, executable-object addition,
+metadata-fingerprint change, or data mirror fails closed.
 
 ## 3. Bind the reviewed release
 
@@ -116,19 +119,33 @@ Set these only in the operator's process environment:
 | `SUPERMEGA_SUPABASE_CA_FILE` | reviewed CA certificate path |
 | `SUPERMEGA_REHEARSAL_RUNTIME_DATABASE_URL` | dedicated `supermega_trial_runtime` login; never `postgres`, `supabase_admin`, service/browser, or elevated role |
 | `SUPERMEGA_REHEARSAL_STORAGE_AUDIT_DATABASE_URL` | distinct dedicated `supermega_storage_audit` login; never the runtime or a provider/elevated role |
+| `SUPERMEGA_GIT_BIN` | absolute canonical path to the reviewed Git executable |
+| `SUPERMEGA_PYTHON_BIN` | absolute canonical path to the reviewed Python executable from the exact `uv.lock` environment |
+| `SUPERMEGA_POSTGRES17_BIN` | absolute directory containing the reviewed PostgreSQL 17 `psql` executable |
 | `SUPERMEGA_REHEARSAL_PACKET_FILE` | `.tmp/rehearsal-packet.json` |
 | `SUPERMEGA_REHEARSAL_APPROVAL_FILE` | private receipt below |
 | `SUPERMEGA_STORAGE_PRIVACY_*` | all twelve values required by `verify_private_storage_privacy.py --preflight` |
 
-Create SHA-256 digests of the exact three URL strings without printing the URL
-values. The owner signs the exact domain-separated canonical approval below;
-the independent reviewer then signs the digest of that signed owner approval.
+The separately owner-approved role-provisioning step must leave both dedicated
+logins without direct, inherited, `SET ROLE`, ownership, default-ACL, or
+function-based persistent write authority. In particular, explicitly deny the
+PostgreSQL large-object creation/import functions to these logins; an empty
+large-object catalog is not proof that they cannot create one.
+
+Run the exact reviewed database validator once in read-only rehearsal-preflight
+mode, retain its private metadata inventory, and independently review its
+`metadata_fingerprint_digest`. Create SHA-256 digests of the exact three URL
+strings without printing the URL values. Also digest the CA bytes, the absolute
+Node/Git/Python/psql executable files, and the exact reviewed source/lock files
+listed in `trust.sources`. The owner signs the exact domain-separated canonical
+approval below; the independent reviewer then signs the digest of that signed
+owner approval.
 Put only public-key fingerprints, signatures, receipt and URL digests in a
 private `.tmp/rehearsal-approval.json`:
 
 ```json
 {
-  "contract": "supermega.preview-rehearsal-approval.v2",
+  "contract": "supermega.preview-rehearsal-approval.v3",
   "decision": "approved",
   "approvalId": "<OWNER_APPROVAL_UUID>",
   "approvedAt": "<UTC_ISO_TIMESTAMP>",
@@ -141,6 +158,26 @@ private `.tmp/rehearsal-approval.json`:
     "runtime": "sha256:<RUNTIME_URL_SHA256>",
     "storageAudit": "sha256:<STORAGE_AUDIT_URL_SHA256>"
   },
+  "trust": {
+    "certificateAuthorityDigest": "sha256:<CA_FILE_SHA256>",
+    "executables": {
+      "node": { "path": "<ABSOLUTE_NODE_PATH>", "digest": "sha256:<NODE_SHA256>" },
+      "git": { "path": "<ABSOLUTE_GIT_PATH>", "digest": "sha256:<GIT_SHA256>" },
+      "python": { "path": "<ABSOLUTE_PYTHON_PATH>", "digest": "sha256:<PYTHON_SHA256>" },
+      "psql": { "path": "<ABSOLUTE_PSQL17_PATH>", "digest": "sha256:<PSQL_SHA256>" }
+    },
+    "sources": {
+      "runner": "sha256:<RUNNER_SHA256>",
+      "packetBuilder": "sha256:<PACKET_BUILDER_SHA256>",
+      "databaseValidator": "sha256:<DATABASE_VALIDATOR_SHA256>",
+      "storagePrivacyVerifier": "sha256:<STORAGE_VERIFIER_SHA256>",
+      "publicQuarantineVerifier": "sha256:<QUARANTINE_VERIFIER_SHA256>",
+      "packageManifest": "sha256:<PACKAGE_JSON_SHA256>",
+      "packageLock": "sha256:<PACKAGE_LOCK_SHA256>",
+      "pythonProject": "sha256:<PYPROJECT_SHA256>",
+      "pythonLock": "sha256:<UV_LOCK_SHA256>"
+    }
+  },
   "branch": {
     "parentProjectRef": "<PROTECTED_PRODUCTION_PARENT_REF>",
     "name": "<EXACT_PREVIEW_BRANCH_NAME>",
@@ -148,6 +185,7 @@ private `.tmp/rehearsal-approval.json`:
     "createdAt": "<PROVIDER_CREATED_AT>",
     "deleteBy": "<ABSOLUTE_UTC_DEADLINE_NO_MORE_THAN_24_HOURS_AFTER_CREATED_AT>",
     "creationReceiptDigest": "sha256:<AUTHENTICATED_BRANCH_RECEIPT_DIGEST>",
+    "cleanTargetMetadataDigest": "sha256:<REVIEWED_METADATA_INVENTORY_DIGEST>",
     "startsWithProductionData": false,
     "maximumLifetimeHours": 24,
     "providerUsageChargesAcknowledged": true,
@@ -157,6 +195,7 @@ private `.tmp/rehearsal-approval.json`:
   },
   "authorizedActions": [
     "apply_complete_source_migration_chain_to_preview",
+    "apply_packet_bound_public_browser_quarantine_to_preview",
     "run_preview_validation_and_rollback_only_probes"
   ],
   "controls": {
@@ -187,7 +226,7 @@ private `.tmp/rehearsal-approval.json`:
 }
 ```
 
-The owner signature uses domain `supermega.preview-rehearsal-approval.v2` and
+The owner signature uses domain `supermega.preview-rehearsal-approval.v3` and
 stable JSON with `ownerSignature` and `independentReview` omitted. The reviewer
 signature uses domain `supermega.preview-rehearsal-independent-review.v1` and
 stable JSON with only its own signature omitted. The receipt is execution
@@ -207,26 +246,34 @@ Before the first branch mutation, the tool verifies:
 
 - clean exact `origin/main` and the v4 packet;
 - a digest-pinned owner key, distinct digest-pinned reviewer key, both exact
-  signatures, and exact URL digests;
+  signatures, exact URL digests, CA bytes, canonical executable identities,
+  and reviewed source plus dependency-lock digests;
 - a fresh authenticated Management API branch receipt, absolute deletion
   deadline, non-production ref, and clean-target preflight;
 - dedicated runtime and Storage-audit identities proven non-privileged before the
   first migration: exact login, stable session role, TLS, no superuser,
   `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, replication, membership or `SET ROLE`
-  path, persistent write privilege, object ownership, dangerous default ACL,
-  security-definer execution, or role setting;
+  path, persistent write privilege (including PostgreSQL 17 `MAINTAIN`), large
+  object creation, object ownership, dangerous default ACL, security-definer
+  execution, or role setting;
 - local quarantine behavior, full migration digests, PostgreSQL 17 tooling,
   and Storage privacy configuration.
 
-It rechecks the clean commit before every SQL action, hashes each exact reviewed
-file, and passes those already-hashed bytes to `psql` through standard input;
-`psql` never reopens a mutable source pathname. After DDL, it proves the
+It reads every authoritative source from the exact reviewed Git blob, stages
+the signed CA and validator bytes inside a new non-reparse evidence directory,
+rechecks the clean commit before every SQL action, and passes already-hashed SQL
+bytes to `psql` through standard input; `psql` never reopens a mutable source
+pathname. After DDL, it proves the
 Storage-audit login still has no persistent write path, then runs the read-only
 v10 hosted validator and the packet-bound session-revocation probe inside a
 transaction that ends in `ROLLBACK`. Child processes receive a purpose-built
 environment containing only operating-system basics and the credential needed
-for that exact step; the Management API token is never inherited. Evidence is
-sanitized and stored under `.tmp/preview-branch-rehearsal/<fingerprint>/`.
+for that exact step; the Management API token is never inherited. Every exact
+decoded password, token, JWT, key, and URL is rejected if it appears in child
+output before evidence is written. Private packet/approval files and the
+evidence root must be direct children of a plain, non-reparse `.tmp`; evidence
+is exclusively created under
+`.tmp/preview-branch-rehearsal/<fingerprint>/`.
 
 No hosted mutation can resume from local state. The tool rechecks the absolute
 branch/approval deadline before and after every provider step, bounds every

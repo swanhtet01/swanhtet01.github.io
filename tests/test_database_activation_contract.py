@@ -26,7 +26,7 @@ ACTIVATION_RUNBOOK = ROOT / "docs" / "supermega-enterprise-activation.md"
 PACKAGE_JSON = ROOT / "package.json"
 POWERSHELL = shutil.which("powershell") if os.name == "nt" else None
 SUPABASE_PREFLIGHT_QUERY_SHA256 = (
-    "4eac7cee6fd8522a0061e1779a169f515494bfdb7aedf844735000247242775c"
+    "502fa90d0b6e87481bc11312b3eea7e448ac8e9c9ee630a17dbe3fe2b398a0e1"
 )
 TRIAL_STORE = ROOT / "supermega_runtime" / "trial_store.py"
 MIGRATION_PREFLIGHT = (
@@ -835,7 +835,18 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
             "private_schema_absent": True,
             "backend_role_absent": True,
             "public_user_relations_absent": True,
+            "public_routines_absent": True,
+            "event_triggers_absent": True,
             "unexpected_user_schemas_absent": True,
+            "metadata_inventory": {
+                "schemas": ["auth", "extensions", "public", "storage"],
+                "extensions": [["pgcrypto", "1.3", "extensions"]],
+                "relations": [],
+                "routines": [],
+                "types": [],
+                "event_triggers": [],
+                "default_acls": [],
+            },
             "auth_users_absent": True,
             "auth_sessions_absent": True,
             "storage_buckets_absent": True,
@@ -919,6 +930,23 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
         self.assertEqual(report["target_project_ref"], self.TARGET_REF)
         self.assertEqual(report["tls_mode"], "verify-full")
         self.assertNotIn(self.PRODUCTION_REF, serialized)
+        self.assertRegex(
+            report["metadata_fingerprint_digest"],
+            r"^sha256:[0-9a-f]{64}$",
+        )
+        self.assertEqual(report["metadata_inventory"], snapshot["metadata_inventory"])
+        self.assertEqual(
+            report["metadata_fingerprint_digest"],
+            "sha256:"
+            + sha256(
+                json.dumps(
+                    snapshot["metadata_inventory"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
+        )
 
         shadow_schema_report = self.validator.evaluate_supabase_rehearsal_target_snapshot(
             {**snapshot, "unexpected_user_schemas_absent": False},
@@ -930,6 +958,18 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
             "unexpected_user_schemas_absent",
             shadow_schema_report["failed_checks"],
         )
+        executable_object_report = self.validator.evaluate_supabase_rehearsal_target_snapshot(
+            {
+                **snapshot,
+                "public_routines_absent": False,
+                "event_triggers_absent": False,
+            },
+            connection_mode="direct",
+            target_project_ref=self.TARGET_REF,
+        )
+        self.assertFalse(executable_object_report["ready"])
+        self.assertIn("public_routines_absent", executable_object_report["failed_checks"])
+        self.assertIn("event_triggers_absent", executable_object_report["failed_checks"])
 
     def test_connection_options_preserve_and_enforce_verify_full(self) -> None:
         calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
