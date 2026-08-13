@@ -6,7 +6,7 @@ const root = resolve(import.meta.dirname, '..')
 const normalizeSourceText = (value) => value.replace(/\r\n?/g, '\n')
 const read = async (path) => normalizeSourceText(await readRawFile(resolve(root, path), 'utf8'))
 const commerceWorkspace = await import(pathToFileURL(resolve(root, 'showroom/src/core/commerce-workspace.ts')).href)
-const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, workspaceRuntime, settingsPage, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier, appRouter, coreShell, visionProduct, visionStyles, visionProofRaw] = await Promise.all([
+const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance, vercelEntry, portableEntry, trialRuntime, spaStaffAccess, trialStore, commerceRuntime, productionRuntime, websiteRuntime, managedTrialClient, coreApp, workspaceRuntime, settingsPage, websiteWorkspaceHook, rolePreflight, foundationMigration, decisionMigration, websiteMigration, hardeningMigration, readCapabilityMigration, databaseValidator, databaseActivator, liveVerifier, workflow, requirements, dockerfile, appEnvironment, storagePrivacyVerifier, appRouter, coreShell, visionProduct, visionStyles, visionProofRaw] = await Promise.all([
   read('supermega_runtime/runtime.py'),
   read('supermega_runtime/supabase_auth.py'),
   read('supermega_runtime/cloud_runtime.py'),
@@ -15,6 +15,7 @@ const [runtime, supabaseAuth, cloudRuntime, schedulerActivation, agentGovernance
   read('api/app.py'),
   read('api_app.py'),
   read('supermega_runtime/trial_runtime.py'),
+  read('supermega_runtime/spa_staff_access.py'),
   read('supermega_runtime/trial_store.py'),
   read('supermega_runtime/commerce_runtime.py'),
   read('supermega_runtime/production_runtime.py'),
@@ -637,15 +638,32 @@ requireContract('Spa staff review is named-owner only, digest-bound, and cannot 
   && spaStaffAccessReviewRoute.includes('spa_staff_access_owner_required')
   && !spaStaffAccessReviewRoute.includes('store.apply_command')
   && !spaStaffAccessReviewRoute.includes('inviteUserByEmail')
-  && trialRuntime.includes('"authorization_source": "app_private.workspace_memberships"')
-  && trialRuntime.includes('"target_identity_binding": "supabase_user_id_after_invite"')
-  && trialRuntime.includes('"invitation_sent": False')
-  && trialRuntime.includes('"auth_user_created": False')
-  && trialRuntime.includes('"membership_written": False')
-  && trialRuntime.includes('"external_writes_performed": False')
-  && trialRuntime.includes('review["review_digest"] = "sha256:" + sha256(')
+  && spaStaffAccess.includes('"authorization_source": "app_private.workspace_memberships"')
+  && spaStaffAccess.includes('"target_identity_binding": "supabase_user_id_after_invite"')
+  && spaStaffAccess.includes('"invitation_sent": False')
+  && spaStaffAccess.includes('"auth_user_created": False')
+  && spaStaffAccess.includes('"membership_written": False')
+  && spaStaffAccess.includes('"external_writes_performed": False')
+  && spaStaffAccess.includes('review["review_digest"] = _digest(review)')
   && managedTrialClient.includes("request.identity.access !== 'owner'")
   && managedTrialClient.includes('SHA256_DIGEST.test(String(value.review_digest))'))
+requireContract('Spa staff activation binds reviewed email to a fresh named Auth session and one exact idempotent membership',
+  /email: str = ""/.test(supabaseAuth)
+  && /email=_normalized_email\(user\.get\("email"\)\)/.test(supabaseAuth)
+  && /SPA_STAFF_ACCESS_PLAN_CONTRACT = "supermega\.managed_spa_staff_access_plan\.v1"/.test(spaStaffAccess)
+  && /Verified Supabase email does not match the reviewed staff email\./.test(spaStaffAccess)
+  && /"displayNameDigest": _digest\(review\["candidate"\]\["display_name"\]\)/.test(spaStaffAccess)
+  && /"emailDigest": spa_staff_email_digest\(staff_email\)/.test(spaStaffAccess)
+  && /"externalProviderRequestsPerformed": False/.test(spaStaffAccess)
+  && /def authorize_spa_staff_access\(/.test(managedActivation)
+  && /def apply_spa_staff_access\(/.test(managedActivation)
+  && /spa_staff_email_digest\(verified_staff_email\)/.test(managedActivation)
+  && /supabase_session_is_active/.test(managedActivation)
+  && /_owner_controls_staff_access/.test(managedActivation)
+  && /insert into app_private\.workspace_memberships/.test(managedActivation)
+  && /company\.spa_staff_access\.activated/.test(managedActivation)
+  && /Durable owner staff-access authorization is missing or changed\./.test(managedActivation)
+  && !/inviteUserByEmail/.test(managedActivation))
 requireContract('managed Supabase sessions are database-checked before membership, discovery, and activation', /session_id=identity\.session_id/.test(runtime) && /identity_provider="supabase"/.test(runtime) && /_assert_active_identity_session\(cursor, normalized\)/.test(trialStore) && /supabase_session_is_active/.test(trialStore) && /from auth\.sessions as session_record/.test(sessionRevocationMigration) && /security definer/.test(sessionRevocationMigration) && /set search_path = ''/.test(sessionRevocationMigration) && /from public, anon, authenticated, service_role/.test(sessionRevocationMigration) && /to supermega_trial_backend/.test(sessionRevocationMigration) && /verified_owner_session_id/.test(managedActivation))
 requireContract('legacy public Data API access has an exact fail-closed browser quarantine',
   /^begin;/m.test(publicBrowserQuarantine)

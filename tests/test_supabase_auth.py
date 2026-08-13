@@ -93,7 +93,7 @@ class SupabaseAuthTests(unittest.TestCase):
         )
         response = MagicMock()
         response.read.return_value = json.dumps(
-            {"id": USER_ID, "is_anonymous": False}
+            {"id": USER_ID, "email": "STAFF@EXAMPLE.COM", "is_anonymous": False}
         ).encode()
         response.__enter__.return_value = response
         opener = MagicMock()
@@ -102,7 +102,7 @@ class SupabaseAuthTests(unittest.TestCase):
         with patch("supermega_runtime.supabase_auth.build_opener", return_value=opener):
             identity = verify_supabase_user_identity(token, config)
 
-        self.assertEqual(identity, VerifiedSupabaseUser(USER_ID, SESSION_ID))
+        self.assertEqual(identity, VerifiedSupabaseUser(USER_ID, SESSION_ID, "staff@example.com"))
         request = opener.open.call_args.args[0]
         self.assertEqual(request.full_url, "https://example.supabase.co/auth/v1/user")
         self.assertEqual(request.get_header("Authorization"), f"Bearer {token}")

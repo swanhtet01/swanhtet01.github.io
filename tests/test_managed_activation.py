@@ -29,6 +29,12 @@ from supermega_runtime.managed_activation import (
     validate_activation_plan,
     _validate_admin_target,
 )
+from supermega_runtime.spa_staff_access import (
+    SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT,
+    SPA_STAFF_ACCESS_RECEIPT_CONTRACT,
+    compile_spa_staff_access_plan,
+    compile_spa_staff_access_review,
+)
 
 
 NOW = datetime.now(timezone.utc).replace(microsecond=0)
@@ -43,6 +49,9 @@ APPROVAL_ID = "7f201a3b-d6d9-4c1a-b6c6-3d0d1e123731"
 PROJECT_REF = "zvtzwcimpvvtkowflhda"
 RELEASE_COMMIT = "a" * 40
 ADMIN_CA_SHA256 = "sha256:" + "1" * 64
+STAFF_ID = "2f8d24d8-308c-4dc8-a352-7b61df756728"
+STAFF_SESSION_ID = "d8aaab28-a5a7-4a0d-9d75-7a6265a969c3"
+STAFF_APPROVAL_ID = "dc7dfb5a-0385-4684-b722-3ad4cf94a108"
 
 
 def pilot_outcome_report(product: str = "commerce") -> dict[str, object]:
@@ -246,6 +255,28 @@ def activation_plan(product_slug: str = "shop") -> dict[str, object]:
         approval_id=APPROVAL_ID,
         approved_by="Swan Htet",
         approved_at=_fixture_timestamp(5),
+        project_ref=PROJECT_REF,
+        release_commit=RELEASE_COMMIT,
+        admin_ca_sha256=ADMIN_CA_SHA256,
+        now=NOW,
+    )
+
+
+def staff_access_plan(role: str = "front-desk") -> dict[str, object]:
+    review = compile_spa_staff_access_review(
+        display_name="Su Su",
+        email="staff@example.com",
+        role=role,
+        workspace_id="mingalar-fresh-mart",
+        requested_by=OWNER_ID,
+        now=NOW - timedelta(minutes=2),
+    )
+    return compile_spa_staff_access_plan(
+        review,
+        verified_staff_actor_id=STAFF_ID,
+        verified_staff_email="staff@example.com",
+        approval_id=STAFF_APPROVAL_ID,
+        approved_at=NOW.isoformat(),
         project_ref=PROJECT_REF,
         release_commit=RELEASE_COMMIT,
         admin_ca_sha256=ADMIN_CA_SHA256,
@@ -745,6 +776,141 @@ class ManagedWorkspaceProvisionerTests(unittest.TestCase):
         self.assertIn("pg_advisory_xact_lock", statements)
         self.assertIn("insert into app_private.approval_requests", statements)
         self.assertIn("insert into app_private.workspace_access_controls", statements)
+        self.assertIn("insert into app_private.workspace_memberships", statements)
+        self.assertIn("insert into app_private.workspace_events", statements)
+
+
+class ManagedSpaStaffAccessProvisionerTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.database = FakeDatabase()
+        self.provisioner = ManagedWorkspaceProvisioner(
+            "postgresql://ignored",
+            connection_factory=self.database.connect,
+        )
+        owner_plan = activation_plan()
+        self.provisioner.authorize(
+            owner_plan,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+            decision_note="Owner reviewed the exact workspace, release, and plan digest.",
+        )
+        self.provisioner.apply(owner_plan)
+        self.plan = staff_access_plan()
+
+    def authorize(self) -> dict[str, object]:
+        return self.provisioner.authorize_spa_staff_access(
+            self.plan,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+            decision_note="Owner approved one named front-desk account and no other access.",
+        )
+
+    def test_authorize_apply_and_replay_bind_one_exact_membership(self) -> None:
+        self.assertEqual(self.provisioner.inspect_spa_staff_access(self.plan)["status"], "authorization_required")
+        authorization = self.authorize()
+        self.assertEqual(authorization["contract"], SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT)
+        self.assertFalse(authorization["replayed"])
+        proposal = self.database.approvals[-1]["proposal_json"]
+        serialized_proposal = json.dumps(proposal, sort_keys=True)
+        self.assertNotIn("Su Su", serialized_proposal)
+        self.assertNotIn("staff@example.com", serialized_proposal)
+        self.assertEqual(proposal["subject"]["kind"], "managed_spa_staff_access")
+        self.assertTrue(self.authorize()["replayed"])
+        self.assertEqual(self.provisioner.inspect_spa_staff_access(self.plan)["status"], "ready_to_apply")
+
+        receipt = self.provisioner.apply_spa_staff_access(
+            self.plan,
+            verified_staff_actor_id=STAFF_ID,
+            verified_staff_session_id=STAFF_SESSION_ID,
+            verified_staff_email="staff@example.com",
+        )
+        self.assertEqual(receipt["contract"], SPA_STAFF_ACCESS_RECEIPT_CONTRACT)
+        self.assertFalse(receipt["replayed"])
+        self.assertEqual(receipt["role"], "front-desk")
+        self.assertEqual(len(self.database.memberships), 2)
+        staff_membership = next(row for row in self.database.memberships if row["actor_id"] == STAFF_ID)
+        self.assertEqual(staff_membership["capabilities"], ["commerce.spa.front_desk", "commerce.write"])
+        self.assertNotIn("company.control.approve", staff_membership["capabilities"])
+        self.assertEqual(self.provisioner.inspect_spa_staff_access(self.plan)["status"], "active_replay")
+
+        replay = self.provisioner.apply_spa_staff_access(
+            self.plan,
+            verified_staff_actor_id=STAFF_ID,
+            verified_staff_session_id=STAFF_SESSION_ID,
+            verified_staff_email="staff@example.com",
+        )
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(replay["activatedAt"], receipt["activatedAt"])
+        self.assertEqual(len(self.database.memberships), 2)
+        self.assertEqual(len(self.database.events), 2)
+
+    def test_owner_and_target_sessions_are_both_required(self) -> None:
+        with self.assertRaisesRegex(ManagedActivationError, "does not match the staff-access owner"):
+            self.provisioner.authorize_spa_staff_access(
+                self.plan,
+                verified_owner_actor_id=STAFF_ID,
+                verified_owner_session_id=OWNER_SESSION_ID,
+                decision_note="Wrong owner.",
+            )
+        self.database.session_active = False
+        with self.assertRaisesRegex(ManagedActivationError, "owner session is no longer active"):
+            self.authorize()
+        self.database.session_active = True
+        self.authorize()
+        with self.assertRaisesRegex(ManagedActivationError, "does not match the staff-access target"):
+            self.provisioner.apply_spa_staff_access(
+                self.plan,
+                verified_staff_actor_id=OWNER_ID,
+                verified_staff_session_id=STAFF_SESSION_ID,
+                verified_staff_email="staff@example.com",
+            )
+        self.database.session_active = False
+        with self.assertRaisesRegex(ManagedActivationError, "staff session is no longer active"):
+            self.provisioner.apply_spa_staff_access(
+                self.plan,
+                verified_staff_actor_id=STAFF_ID,
+                verified_staff_session_id=STAFF_SESSION_ID,
+                verified_staff_email="staff@example.com",
+            )
+        self.assertEqual(len(self.database.memberships), 1)
+
+    def test_owner_capability_or_existing_target_conflict_fails_before_write(self) -> None:
+        owner_membership = next(row for row in self.database.memberships if row["actor_id"] == OWNER_ID)
+        owner_membership["capabilities"] = [
+            capability
+            for capability in owner_membership["capabilities"]
+            if capability != "company.control.approve"
+        ]
+        with self.assertRaises(ManagedActivationConflict):
+            self.authorize()
+        self.assertEqual(len(self.database.approvals), 1)
+
+        owner_membership["capabilities"].append("company.control.approve")
+        self.database.memberships.append(
+            {
+                "workspace_id": self.plan["workspaceId"],
+                "actor_id": STAFF_ID,
+                "actor_kind": "human",
+                "status": "active",
+                "capabilities": ["company.control.approve"],
+            }
+        )
+        with self.assertRaises(ManagedActivationConflict):
+            self.authorize()
+        self.assertEqual(len(self.database.events), 1)
+
+    def test_staff_sql_is_static_and_contains_no_review_pii(self) -> None:
+        self.authorize()
+        self.provisioner.apply_spa_staff_access(
+            self.plan,
+            verified_staff_actor_id=STAFF_ID,
+            verified_staff_session_id=STAFF_SESSION_ID,
+            verified_staff_email="staff@example.com",
+        )
+        statements = "\n".join(statement for statement, _params in self.database.statements)
+        self.assertNotIn("staff@example.com", statements)
+        self.assertNotIn("Su Su", statements)
+        self.assertIn("insert into app_private.approval_requests", statements)
         self.assertIn("insert into app_private.workspace_memberships", statements)
         self.assertIn("insert into app_private.workspace_events", statements)
 

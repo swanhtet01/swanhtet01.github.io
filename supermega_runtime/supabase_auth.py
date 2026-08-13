@@ -7,6 +7,7 @@ import base64
 import binascii
 import json
 import os
+import re
 from typing import Any
 from uuid import UUID
 from urllib.error import HTTPError, URLError
@@ -17,6 +18,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request as UrlRequ
 _MAX_AUTH_RESPONSE_BYTES = 64 * 1024
 _MAX_TOKEN_LENGTH = 16 * 1024
 _LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+_EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 class SupabaseAuthUnavailable(RuntimeError):
@@ -65,6 +67,7 @@ class VerifiedSupabaseUser:
 
     user_id: str
     session_id: str
+    email: str = ""
 
 
 def _normalize_base_url(value: str) -> str:
@@ -111,6 +114,11 @@ def _canonical_uuid(value: object) -> str:
     except (ValueError, AttributeError, TypeError):
         return ""
     return str(parsed) if str(parsed) == candidate.casefold() else ""
+
+
+def _normalized_email(value: object) -> str:
+    candidate = str(value or "").strip().casefold()
+    return candidate if len(candidate) <= 160 and _EMAIL.fullmatch(candidate) else ""
 
 
 def _authenticated_token_identity(
@@ -201,7 +209,13 @@ def verify_supabase_user_identity(
     if not isinstance(user, dict) or user.get("is_anonymous") is not False:
         return None
     user_id = _canonical_uuid(user.get("id"))
-    return token_identity if user_id == token_identity.user_id else None
+    if user_id != token_identity.user_id:
+        return None
+    return VerifiedSupabaseUser(
+        user_id=token_identity.user_id,
+        session_id=token_identity.session_id,
+        email=_normalized_email(user.get("email")),
+    )
 
 
 def verify_supabase_user_token(

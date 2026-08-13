@@ -19,6 +19,13 @@ from urllib.request import Request, urlopen
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from supermega_runtime.managed_context import validate_managed_ai_context_export
+from supermega_runtime.spa_staff_access import (
+    SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT,
+    SPA_STAFF_ACCESS_EVENT_CONTRACT,
+    SPA_STAFF_ACCESS_RECEIPT_CONTRACT,
+    spa_staff_email_digest,
+    validate_spa_staff_access_plan,
+)
 from supermega_runtime.trial_store import TrialValidationError
 
 
@@ -1165,6 +1172,471 @@ class ManagedWorkspaceProvisioner:
             and result.get("status") == status
             and _row_value(row, "command_fingerprint", 2) == fingerprint
         )
+
+    @staticmethod
+    def _staff_authorization_projection(plan: Mapping[str, Any]) -> dict[str, Any]:
+        plan_digest = plan["planDigest"]
+        review_digest = plan["sourceReviewDigest"]
+        captured_at = plan["approval"]["approvedAt"]
+        return {
+            "contract": "decision_packet.v1",
+            "subject": {
+                "kind": "managed_spa_staff_access",
+                "id": plan["staffAccessId"],
+                "version": 1,
+            },
+            "decision": (
+                f"Activate one {plan['role']} membership for verified Supabase actor "
+                f"{plan['identity']['actorId']} in workspace {plan['workspaceId']}."
+            ),
+            "claims": [
+                {
+                    "id": "owner-authorized-exact-staff-plan",
+                    "claim_type": "fact",
+                    "statement": "The workspace owner authorized this exact staff-access plan.",
+                    "source_reference": plan_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": plan_digest,
+                },
+                {
+                    "id": "no-send-review-bound",
+                    "claim_type": "fact",
+                    "statement": "The plan derives from the exact no-send Spa staff review.",
+                    "source_reference": review_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": review_digest,
+                },
+                {
+                    "id": "verified-identity-and-role-bound",
+                    "claim_type": "fact",
+                    "statement": (
+                        f"Supabase actor {plan['identity']['actorId']} is limited to "
+                        f"the exact {plan['access']} membership."
+                    ),
+                    "source_reference": plan_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": plan_digest,
+                },
+            ],
+            "baseline": "The verified staff actor has no membership in this workspace.",
+            "target": f"Create one exact {plan['access']} membership without owner capabilities.",
+            "result": "The owner authorized one identity-bound, idempotent staff activation.",
+            "acceptance": (
+                "Apply once after a fresh target session check, then verify mobile allowed and denied actions."
+            ),
+            "artifact_reference": (
+                f"managed-spa-staff-access://{plan['workspaceId']}/{plan['staffAccessId']}"
+            ),
+        }
+
+    @classmethod
+    def _staff_authorization_row(cls, cursor: Any, plan: Mapping[str, Any]) -> Any:
+        cursor.execute(
+            """
+            select approval_id, workspace_id, command_id, command_fingerprint,
+                   proposal_json, evidence_refs_json, status, requested_by,
+                   requested_actor_kind, requested_at, decided_by,
+                   decided_actor_kind, decided_at, decision_note,
+                   decision_contract_version, version
+            from app_private.approval_requests
+            where approval_id = %s
+               or (workspace_id = %s and command_id = %s)
+            order by (approval_id = %s) desc
+            limit 1
+            """,
+            (
+                plan["approval"]["approvalId"],
+                plan["workspaceId"],
+                plan["staffAccessId"],
+                plan["approval"]["approvalId"],
+            ),
+        )
+        return cursor.fetchone()
+
+    @classmethod
+    def _staff_authorization_matches(cls, row: Any, plan: Mapping[str, Any]) -> bool:
+        if row is None:
+            return False
+        proposal = _row_value(row, "proposal_json", 4)
+        evidence = _row_value(row, "evidence_refs_json", 5)
+        if isinstance(proposal, str):
+            try:
+                proposal = json.loads(proposal)
+            except json.JSONDecodeError:
+                return False
+        if isinstance(evidence, str):
+            try:
+                evidence = json.loads(evidence)
+            except json.JSONDecodeError:
+                return False
+        return bool(
+            str(_row_value(row, "approval_id", 0)) == plan["approval"]["approvalId"]
+            and _row_value(row, "workspace_id", 1) == plan["workspaceId"]
+            and str(_row_value(row, "command_id", 2)) == plan["staffAccessId"]
+            and _row_value(row, "command_fingerprint", 3) == str(plan["planDigest"])[7:]
+            and proposal == cls._staff_authorization_projection(plan)
+            and evidence == [plan["sourceReviewDigest"], plan["planDigest"]]
+            and _row_value(row, "status", 6) == "approved"
+            and _row_value(row, "requested_by", 7) == plan["ownerActorId"]
+            and _row_value(row, "requested_actor_kind", 8) == "human"
+            and _row_value(row, "decided_by", 10) == plan["ownerActorId"]
+            and _row_value(row, "decided_actor_kind", 11) == "human"
+            and isinstance(_row_value(row, "requested_at", 9), datetime)
+            and isinstance(_row_value(row, "decided_at", 12), datetime)
+            and _row_value(row, "decision_contract_version", 14) == 2
+            and _row_value(row, "version", 15) == 1
+        )
+
+    @staticmethod
+    def _staff_workspace_matches(row: Any, plan: Mapping[str, Any]) -> bool:
+        return bool(
+            row is not None
+            and _row_value(row, "owner_actor_id", 4) == plan["ownerActorId"]
+            and _row_value(row, "project_ref", 5) == plan["target"]["projectRef"]
+            and _row_value(row, "status", 7) == "active"
+        )
+
+    @staticmethod
+    def _owner_controls_staff_access(rows: list[Any], plan: Mapping[str, Any]) -> bool:
+        matching = [row for row in rows if _row_value(row, "actor_id", 0) == plan["ownerActorId"]]
+        return bool(
+            len(matching) == 1
+            and _row_value(matching[0], "actor_kind", 1) == "human"
+            and _row_value(matching[0], "status", 2) == "active"
+            and "company.control.approve" in set(_row_value(matching[0], "capabilities", 3) or [])
+        )
+
+    @staticmethod
+    def _staff_membership_matches(rows: list[Any], plan: Mapping[str, Any]) -> bool:
+        matching = [row for row in rows if _row_value(row, "actor_id", 0) == plan["identity"]["actorId"]]
+        return bool(
+            len(matching) == 1
+            and _row_value(matching[0], "actor_kind", 1) == "human"
+            and _row_value(matching[0], "status", 2) == "active"
+            and sorted(_row_value(matching[0], "capabilities", 3) or []) == plan["capabilities"]
+        )
+
+    @staticmethod
+    def _staff_target_exists(rows: list[Any], plan: Mapping[str, Any]) -> bool:
+        return any(_row_value(row, "actor_id", 0) == plan["identity"]["actorId"] for row in rows)
+
+    @staticmethod
+    def _staff_access_receipt(plan: Mapping[str, Any], created_at: datetime, *, replayed: bool) -> dict[str, Any]:
+        receipt: dict[str, Any] = {
+            "contract": SPA_STAFF_ACCESS_RECEIPT_CONTRACT,
+            "version": 1,
+            "status": "active",
+            "replayed": replayed,
+            "staffAccessId": plan["staffAccessId"],
+            "planDigest": plan["planDigest"],
+            "sourceReviewDigest": plan["sourceReviewDigest"],
+            "workspaceId": plan["workspaceId"],
+            "ownerActorId": plan["ownerActorId"],
+            "staffActorId": plan["identity"]["actorId"],
+            "role": plan["role"],
+            "access": plan["access"],
+            "capabilities": plan["capabilities"],
+            "activatedAt": _timestamp_text(created_at),
+            "authority": {
+                "system": "postgresql",
+                "table": "app_private.workspace_events",
+                "commandId": plan["staffAccessId"],
+                "verification": "requery_required",
+            },
+            "localProjectionTrusted": False,
+            "secretValuesExposed": False,
+            "externalProviderRequestsPerformed": False,
+            "databaseActionsPerformed": [
+                "workspace_membership_insert",
+                "immutable_staff_access_event_insert",
+            ],
+        }
+        receipt["projectionDigest"] = _projection_digest(receipt)
+        return receipt
+
+    def authorize_spa_staff_access(
+        self,
+        plan_value: object,
+        *,
+        verified_owner_actor_id: str,
+        verified_owner_session_id: str,
+        decision_note: str,
+    ) -> dict[str, Any]:
+        plan = validate_spa_staff_access_plan(plan_value, require_current=True)
+        verified_owner = _uuid(verified_owner_actor_id, "Verified owner actor ID")
+        verified_session = _uuid(verified_owner_session_id, "Verified owner session ID")
+        note = _visible_text(decision_note, "Staff access authorization note", 500)
+        if verified_owner != plan["ownerActorId"]:
+            raise ManagedActivationError("Supabase Auth user does not match the staff-access owner.")
+        connection = self._connect()
+        try:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.execute("set transaction isolation level serializable")
+                    self._assert_schema(cursor, require_write_privilege=True)
+                    cursor.execute(
+                        "select app_private.supabase_session_is_active(%s::uuid, %s::uuid) as active",
+                        (verified_owner, verified_session),
+                    )
+                    if not bool(_row_value(cursor.fetchone(), "active", 0)):
+                        raise ManagedActivationError("Supabase owner session is no longer active.")
+                    self._lock(cursor, plan["workspaceId"])
+                    authorization = self._staff_authorization_row(cursor, plan)
+                    access = self._access_row(cursor, plan["workspaceId"])
+                    rows = self._membership_rows(cursor, plan["workspaceId"])
+                    event = self._event_row(cursor, plan["workspaceId"], plan["staffAccessId"])
+                    if self._staff_authorization_matches(authorization, plan):
+                        active_replay = self._staff_membership_matches(rows, plan) and self._event_matches(
+                            event,
+                            contract=SPA_STAFF_ACCESS_EVENT_CONTRACT,
+                            plan_digest=plan["planDigest"],
+                            status="active",
+                            fingerprint=str(plan["planDigest"])[7:],
+                        )
+                        if (
+                            not self._staff_workspace_matches(access, plan)
+                            or not self._owner_controls_staff_access(rows, plan)
+                            or ((self._staff_target_exists(rows, plan) or event is not None) and not active_replay)
+                        ):
+                            raise ManagedActivationConflict("Workspace or staff authority changed after approval.")
+                        return {
+                            "contract": SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT,
+                            "status": "approved",
+                            "replayed": True,
+                            "staffAccessId": plan["staffAccessId"],
+                            "approvalId": plan["approval"]["approvalId"],
+                            "planDigest": plan["planDigest"],
+                            "ownerActorId": plan["ownerActorId"],
+                            "staffActorId": plan["identity"]["actorId"],
+                            "secretValuesExposed": False,
+                            "externalProviderRequestsPerformed": False,
+                        }
+                    if (
+                        authorization is not None
+                        or event is not None
+                        or self._staff_target_exists(rows, plan)
+                        or not self._staff_workspace_matches(access, plan)
+                        or not self._owner_controls_staff_access(rows, plan)
+                    ):
+                        raise ManagedActivationConflict("Workspace has conflicting staff-access authority or state.")
+                    cursor.execute(
+                        """
+                        insert into app_private.approval_requests (
+                          approval_id, workspace_id, command_id, command_fingerprint,
+                          title, proposal_json, evidence_refs_json, status,
+                          requested_by, requested_actor_kind, decided_by,
+                          decided_actor_kind, decided_at, decision_note,
+                          decision_contract_version, version
+                        ) values (
+                          %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, 'approved',
+                          %s, 'human', %s, 'human', transaction_timestamp(), %s, 2, 1
+                        )
+                        returning requested_at, decided_at
+                        """,
+                        (
+                            plan["approval"]["approvalId"],
+                            plan["workspaceId"],
+                            plan["staffAccessId"],
+                            str(plan["planDigest"])[7:],
+                            "Activate one Spa staff role",
+                            _canonical_json(self._staff_authorization_projection(plan)),
+                            _canonical_json([plan["sourceReviewDigest"], plan["planDigest"]]),
+                            plan["ownerActorId"],
+                            plan["ownerActorId"],
+                            note,
+                        ),
+                    )
+                    inserted = cursor.fetchone()
+                    if not isinstance(_row_value(inserted, "decided_at", 1), datetime):
+                        raise ManagedActivationError("Staff access authorization timestamp was not returned by PostgreSQL.")
+            return {
+                "contract": SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT,
+                "status": "approved",
+                "replayed": False,
+                "staffAccessId": plan["staffAccessId"],
+                "approvalId": plan["approval"]["approvalId"],
+                "planDigest": plan["planDigest"],
+                "ownerActorId": plan["ownerActorId"],
+                "staffActorId": plan["identity"]["actorId"],
+                "secretValuesExposed": False,
+                "externalProviderRequestsPerformed": False,
+            }
+        finally:
+            connection.close()
+
+    def inspect_spa_staff_access(self, plan_value: object) -> dict[str, Any]:
+        plan = validate_spa_staff_access_plan(plan_value)
+        connection = self._connect()
+        try:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.execute("set transaction read only")
+                    schema = self._assert_schema(cursor, require_write_privilege=False)
+                    authorization = self._staff_authorization_row(cursor, plan)
+                    access = self._access_row(cursor, plan["workspaceId"])
+                    rows = self._membership_rows(cursor, plan["workspaceId"])
+                    event = self._event_row(cursor, plan["workspaceId"], plan["staffAccessId"])
+            authorization_ready = self._staff_authorization_matches(authorization, plan)
+            workspace_ready = self._staff_workspace_matches(access, plan) and self._owner_controls_staff_access(rows, plan)
+            target_exists = self._staff_target_exists(rows, plan)
+            if workspace_ready and authorization is None and not target_exists and event is None:
+                status = "authorization_required"
+            elif workspace_ready and authorization_ready and not target_exists and event is None:
+                status = "ready_to_apply"
+            elif (
+                workspace_ready
+                and authorization_ready
+                and self._staff_membership_matches(rows, plan)
+                and self._event_matches(
+                    event,
+                    contract=SPA_STAFF_ACCESS_EVENT_CONTRACT,
+                    plan_digest=plan["planDigest"],
+                    status="active",
+                    fingerprint=str(plan["planDigest"])[7:],
+                )
+            ):
+                status = "active_replay"
+            else:
+                status = "conflict"
+            return {
+                "contract": "supermega.managed_spa_staff_access_preflight.v1",
+                "status": status,
+                "ready": status in {"ready_to_apply", "active_replay"},
+                "authorizationReady": authorization_ready,
+                "workspaceReady": workspace_ready,
+                "workspaceId": plan["workspaceId"],
+                "staffActorId": plan["identity"]["actorId"],
+                "role": plan["role"],
+                "postgresMajor": schema["postgresMajor"],
+                "schemaVersion": schema["schemaVersion"],
+                "secretValuesExposed": False,
+                "mutationStatementsExecuted": 0,
+            }
+        finally:
+            connection.close()
+
+    def apply_spa_staff_access(
+        self,
+        plan_value: object,
+        *,
+        verified_staff_actor_id: str,
+        verified_staff_session_id: str,
+        verified_staff_email: str,
+    ) -> dict[str, Any]:
+        plan = validate_spa_staff_access_plan(plan_value, require_current=True)
+        verified_staff = _uuid(verified_staff_actor_id, "Verified staff actor ID")
+        verified_session = _uuid(verified_staff_session_id, "Verified staff session ID")
+        if (
+            verified_staff != plan["identity"]["actorId"]
+            or spa_staff_email_digest(verified_staff_email) != plan["identity"]["emailDigest"]
+        ):
+            raise ManagedActivationError("Supabase Auth user does not match the staff-access target.")
+        connection = self._connect()
+        try:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.execute("set transaction isolation level serializable")
+                    self._assert_schema(cursor, require_write_privilege=True)
+                    cursor.execute(
+                        "select app_private.supabase_session_is_active(%s::uuid, %s::uuid) as active",
+                        (verified_staff, verified_session),
+                    )
+                    if not bool(_row_value(cursor.fetchone(), "active", 0)):
+                        raise ManagedActivationError("Supabase staff session is no longer active.")
+                    self._lock(cursor, plan["workspaceId"])
+                    authorization = self._staff_authorization_row(cursor, plan)
+                    access = self._access_row(cursor, plan["workspaceId"])
+                    rows = self._membership_rows(cursor, plan["workspaceId"])
+                    event = self._event_row(cursor, plan["workspaceId"], plan["staffAccessId"])
+                    if (
+                        self._staff_authorization_matches(authorization, plan)
+                        and self._staff_workspace_matches(access, plan)
+                        and self._owner_controls_staff_access(rows, plan)
+                        and self._staff_membership_matches(rows, plan)
+                        and self._event_matches(
+                            event,
+                            contract=SPA_STAFF_ACCESS_EVENT_CONTRACT,
+                            plan_digest=plan["planDigest"],
+                            status="active",
+                            fingerprint=str(plan["planDigest"])[7:],
+                        )
+                    ):
+                        created_at = _row_value(event, "created_at", 1)
+                        if not isinstance(created_at, datetime):
+                            raise ManagedActivationConflict("Staff access replay timestamp is invalid.")
+                        return self._staff_access_receipt(plan, created_at, replayed=True)
+                    if not self._staff_authorization_matches(authorization, plan):
+                        raise ManagedActivationConflict("Durable owner staff-access authorization is missing or changed.")
+                    if not self._staff_workspace_matches(access, plan) or not self._owner_controls_staff_access(rows, plan):
+                        raise ManagedActivationConflict("Workspace or owner staff-access authority changed.")
+                    if self._staff_target_exists(rows, plan) or event is not None:
+                        raise ManagedActivationConflict("Staff identity already has conflicting activation state.")
+                    cursor.execute(
+                        """
+                        insert into app_private.workspace_memberships (
+                          workspace_id, actor_id, actor_kind, status, capabilities
+                        ) values (%s, %s, 'human', 'active', %s)
+                        """,
+                        (plan["workspaceId"], plan["identity"]["actorId"], plan["capabilities"]),
+                    )
+                    result = {
+                        "contract": SPA_STAFF_ACCESS_EVENT_CONTRACT,
+                        "status": "active",
+                        "planDigest": plan["planDigest"],
+                        "staffActorId": plan["identity"]["actorId"],
+                        "role": plan["role"],
+                        "access": plan["access"],
+                        "secretValuesExposed": False,
+                        "externalProviderRequestsPerformed": False,
+                    }
+                    payload = {
+                        "staffAccessId": plan["staffAccessId"],
+                        "sourceReviewDigest": plan["sourceReviewDigest"],
+                        "approval": plan["approval"],
+                        "target": plan["target"],
+                        "identity": plan["identity"],
+                        "role": plan["role"],
+                        "access": plan["access"],
+                        "capabilities": plan["capabilities"],
+                    }
+                    cursor.execute(
+                        """
+                        insert into app_private.workspace_events (
+                          event_id, workspace_id, command_id, command_fingerprint,
+                          surface, event_type, actor_id, actor_kind, expected_version,
+                          resulting_version, payload_json, result_json
+                        ) values (
+                          %s, %s, %s, %s, 'company', 'company.spa_staff_access.activated',
+                          %s, 'human', null, null, %s::jsonb, %s::jsonb
+                        )
+                        returning created_at
+                        """,
+                        (
+                            plan["staffAccessId"],
+                            plan["workspaceId"],
+                            plan["staffAccessId"],
+                            str(plan["planDigest"])[7:],
+                            plan["ownerActorId"],
+                            _canonical_json(payload),
+                            _canonical_json(result),
+                        ),
+                    )
+                    inserted = cursor.fetchone()
+                    created_at = _row_value(inserted, "created_at", 0)
+                    if not isinstance(created_at, datetime):
+                        raise ManagedActivationError("Staff access event timestamp was not returned by PostgreSQL.")
+            return self._staff_access_receipt(plan, created_at, replayed=False)
+        finally:
+            connection.close()
 
     def authorize(
         self,

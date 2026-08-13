@@ -59,6 +59,7 @@ from supermega_runtime.production_material_handoff import (
     require_shop_issue_before_plant_progress,
     require_shop_issue_matches_plant,
 )
+from supermega_runtime.spa_staff_access import compile_spa_staff_access_review
 from supermega_runtime.trial_store import (
     APPROVAL_DECIDE_CAPABILITY,
     APPROVAL_REQUEST_CAPABILITY,
@@ -647,80 +648,6 @@ def _spa_schedule_allowed_roles(
 _SPA_OWNER_SCHEDULE_EVENTS = frozenset(
     {"client_retention_set", "client_exported", "client_anonymized"}
 )
-
-_SPA_STAFF_ACCESS_REVIEW_CONTRACT = "supermega.commerce.spa_staff_access_review.v1"
-_SPA_STAFF_ACCESS_REVIEW_TTL = timedelta(minutes=15)
-_SPA_STAFF_ACCESS_PROFILES: dict[str, dict[str, tuple[str, ...] | str]] = {
-    "front-desk": {
-        "access": "spa-front-desk",
-        "capabilities": ("commerce.spa.front_desk", "commerce.write"),
-    },
-    "therapist": {
-        "access": "spa-therapist",
-        "capabilities": ("commerce.spa.therapist", "commerce.write"),
-    },
-}
-
-
-def _spa_staff_access_review(
-    request: TrialSpaStaffAccessReviewRequest,
-    *,
-    principal: TrialPrincipal,
-) -> dict[str, Any]:
-    profile = _SPA_STAFF_ACCESS_PROFILES[request.role]
-    requested_at = datetime.now(timezone.utc)
-    review: dict[str, Any] = {
-        "contract": _SPA_STAFF_ACCESS_REVIEW_CONTRACT,
-        "status": "review_only",
-        "workspace_id": principal.workspace_id,
-        "requested_by": principal.actor_id,
-        "requested_at": requested_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-        "expires_at": (requested_at + _SPA_STAFF_ACCESS_REVIEW_TTL)
-        .isoformat(timespec="milliseconds")
-        .replace("+00:00", "Z"),
-        "candidate": {
-            "display_name": request.display_name,
-            "email": request.email,
-            "role": request.role,
-            "access": profile["access"],
-            "capabilities": list(profile["capabilities"]),
-        },
-        "activation": {
-            "status": "blocked_until_separate_owner_confirmation",
-            "authorization_source": "app_private.workspace_memberships",
-            "target_identity_binding": "supabase_user_id_after_invite",
-            "required_checks": [
-                "hosted_auth_ready",
-                "invite_redirect_allowlisted",
-                "smtp_delivery_ready",
-                "auth_user_id_returned",
-                "exact_membership_inserted",
-                "mobile_sign_in_verified",
-                "role_denials_verified",
-            ],
-            "forbidden_until_confirmed": [
-                "create_auth_user",
-                "send_invitation_email",
-                "insert_workspace_membership",
-                "enter_real_client_data",
-            ],
-        },
-        "invitation_sent": False,
-        "auth_user_created": False,
-        "membership_written": False,
-        "external_writes_performed": False,
-        "secret_values_exposed": False,
-    }
-    review["review_digest"] = "sha256:" + sha256(
-        json.dumps(
-            review,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
-    return review
-
 
 def _spa_owner_schedule_event(candidate: Mapping[str, Any]) -> str | None:
     schedule = candidate.get("serviceSchedule")
@@ -1816,7 +1743,13 @@ def create_trial_router(
             body = TrialSpaStaffAccessReviewRequest.model_validate(raw_body)
         except ValidationError as exc:
             raise _error(422, "spa_staff_access_review_invalid") from exc
-        return _spa_staff_access_review(body, principal=principal)
+        return compile_spa_staff_access_review(
+            display_name=body.display_name,
+            email=body.email,
+            role=body.role,
+            workspace_id=principal.workspace_id,
+            requested_by=principal.actor_id,
+        )
 
     @router.get("/commerce/service-schedule")
     def trial_service_schedule(request: Request) -> dict[str, Any]:

@@ -31,6 +31,8 @@ const implementationPaths = [
   'supermega_runtime/managed_context.py',
   'supermega_runtime/managed_activation.py',
   'supermega_runtime/runtime.py',
+  'supermega_runtime/spa_staff_access.py',
+  'supermega_runtime/supabase_auth.py',
   'supermega_runtime/trial_runtime.py',
   'supermega_runtime/trial_store.py',
   'supabase/migrations/20260730113000_private_trial_backend_v6_managed_activation.sql',
