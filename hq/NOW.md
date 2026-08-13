@@ -40,7 +40,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Shop Stock has one Commerce authority. New location-managed orders reserve only from the canonical `LOC-*` bound to their reviewed scope; cancellation releases, completion consumes, and sellable returns restore exact lots.
 - Shop's correction-aware accounting CSV retains reviewed scope and `LOC-*` through close/export, separates same-day books, rejects mixed scopes, and never posts.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
-- Plant quality problems require structured CAPA evidence before close. New CAPAs retain one due-dated human effectiveness review; it cannot run early or twice. Classified recurrence blocks `effective`; recurrence or ineffectiveness requires escalation. Consequential authority stays separate.
+- Plant CAPA now requires structured close evidence and one due-dated human effectiveness review. A read-only trend control ranks recurrence, ineffective or due reviews, legacy gaps, and monitoring; it changes no production record.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-276 (`79112bcc`) adds one due-dated immutable Plant CAPA review with browser/managed parity and recurrence escalation. It automates no consequential action. Completion history: 124. Next: portfolio trend escalation and rendered due-review acceptance.
+- OPS-277 (`4419e427`) adds browser/managed CAPA trend parity. Desktop QA completed problem-to-CAPA and showed one monitored review; due-time and narrow-mobile rendering remain open. Completion history: 125. Next: maintenance-to-order linkage without equipment authority.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. Product checkpoint `79112bcc` passes TypeScript, focused lint, 28 Python production tests, the production build with 394 Plant checks, and 107 security checks. The refreshed 19-file PostgreSQL evidence passes 56 checks at `9b4fbacb`; hosted activation and mobile acceptance remain owner-gated. CLAUDE-009 remains owner-controlled.
+- Codex is sole integrator. `4419e427` passes 28 Python tests, 400 Plant checks, 107 security checks, the complete app gate, and 56 PostgreSQL checks across 19 files. Hosted activation and narrow-mobile CAPA acceptance remain unproven; CLAUDE-009 stays owner-controlled.
 - Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
 - Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
 

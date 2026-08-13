@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 51
+  && portfolioSource.completedLocalAutomations.length === 52
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 124
+  && portfolio.completedLocalAutomations.length === 125
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -668,6 +668,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[123]?.workOrderId === 'plant-capa-effectiveness-review'
   && portfolio.completedLocalAutomations[123]?.checkpoint === 'OPS-276'
   && workboard.includes('| OPS-276 | Product Platform + Plant Quality Codex | done-local |')
+  && portfolio.completedLocalAutomations[124]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[124]?.workOrderId === 'plant-capa-portfolio-trend-control'
+  && portfolio.completedLocalAutomations[124]?.checkpoint === 'OPS-277'
+  && workboard.includes('| OPS-277 | Product Platform + Plant Quality Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1203,16 +1207,18 @@ requireContract('workboard release authority and active execution order are curr
   && workboardExecutionOrder.includes('Keep hosted scheduling and AI provider execution dormant')
   && !workboardExecutionOrder.includes('PR #258')
   && !workboardExecutionOrder.includes('fast-forward only the existing draft'))
-requireContract('Plant quality CAPA close and local effectiveness review are retained without overstated authority',
+requireContract('Plant quality CAPA close, effectiveness review, and trend control are retained without overstated authority',
   workboard.includes('| OPS-151 | Product Platform + Plant Quality Codex | done-live |')
   && workboard.includes('NFKC-normalized recurrence keys preserve Unicode letters, marks, and numbers for Myanmar text')
   && workboard.includes('No fresh rendered-mobile claim is made')
   && workboard.includes('| OPS-276 | Product Platform + Plant Quality Codex | done-local |')
   && workboard.includes('Classified recurrence after close is derived from immutable history')
-  && now.includes('New CAPAs retain one due-dated human effectiveness review')
+  && workboard.includes('| OPS-277 | Product Platform + Plant Quality Codex | done-local |')
+  && workboard.includes('read-only `supermega.production.quality-capa-trend.v1` parity')
+  && now.includes('Plant CAPA now requires structured close evidence and one due-dated human effectiveness review')
   && enterpriseRoadmap.includes('Checkpoint `8155e4b3` adds `supermega.production.quality-capa.v1`')
   && enterpriseRoadmap.includes('Checkpoint `79112bcc` adds the backward-compatible `supermega.production.quality-capa.v2`')
-  && enterpriseRoadmap.includes('portfolio-level CAPA trend aggregation and cross-CAPA escalation')
+  && enterpriseRoadmap.includes('Checkpoint `4419e427` adds read-only `supermega.production.quality-capa-trend.v1` parity')
   && !workboard.includes('OPS-151 | Product Platform + Plant Quality Codex | done-live | Automate'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
