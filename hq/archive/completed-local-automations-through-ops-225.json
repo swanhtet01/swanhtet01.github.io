@@ -1,6 +1,6 @@
 {
   "contract":"supermega.completed-local-automation-archive.v1",
-  "throughCheckpoint":"OPS-224",
+  "throughCheckpoint":"OPS-225",
   "entries":[
     {"productId":"ecommerce","workOrderId":"ecommerce-today-surface","checkpoint":"ENG-130"},
     {"productId":"ecommerce","workOrderId":"ecommerce-promotion-review","checkpoint":"ENG-134"},
@@ -73,6 +73,7 @@
     {"productId":"plant","workOrderId":"plant-job-import-field-length-parity","checkpoint":"OPS-221"},
     {"productId":"plant","workOrderId":"plant-job-import-all-row-repeat-detection","checkpoint":"OPS-222"},
     {"productId":"plant","workOrderId":"plant-job-import-priority-repair","checkpoint":"OPS-223"},
-    {"productId":"plant","workOrderId":"plant-job-import-template-download","checkpoint":"OPS-224"}
+    {"productId":"plant","workOrderId":"plant-job-import-template-download","checkpoint":"OPS-224"},
+    {"productId":"plant","workOrderId":"plant-job-import-next-ready-focus","checkpoint":"OPS-225"}
   ]
 }

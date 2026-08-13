@@ -46,7 +46,7 @@ function completedAutomationArchive(entries, throughCheckpoint = entries.at(-1)?
     text: JSON.stringify(archive),
     reference: {
       contract: 'supermega.completed-local-automation-archive-ref.v1',
-      path: 'archive/completed-local-automations-through-ops-224.json',
+      path: 'archive/completed-local-automations-through-ops-225.json',
       count: entries.length,
       throughCheckpoint,
       digest: `sha256:${createHash('sha256').update(stableStringify(archive)).digest('hex')}`,
@@ -304,7 +304,7 @@ test('archived completion receipts remain counted, source-bound, and duplicate-p
     completedOutcomeIds: ['daily-company-control'],
   })
   assert.equal(result.manifest.evidence['proof-builder'].portfolio.completedLocalAutomationSummary.count, 1)
-  assert.ok(result.manifest.evidence['proof-builder'].sourceReceipts.some((receipt) => receipt.path === 'hq/archive/completed-local-automations-through-ops-224.json'
+  assert.ok(result.manifest.evidence['proof-builder'].sourceReceipts.some((receipt) => receipt.path === 'hq/archive/completed-local-automations-through-ops-225.json'
     && receipt.digest === archived.reference.digest))
 
   await assert.rejects(
