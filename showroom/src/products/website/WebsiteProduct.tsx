@@ -362,9 +362,7 @@ export function WebsiteProduct() {
         : storageMode === 'browser-local'
           ? 'Saved on this device'
           : 'Session only'
-  const websiteSurfaceActionLabel = surface === 'preview'
-    ? starterAvailable ? 'Start website' : 'Edit page'
-    : 'Preview'
+  const websiteSurfaceActionLabel = surface === 'preview' ? 'Edit page' : 'Preview'
   const visiblePageCount = editorWorkspace.pages.filter((page) => page.navigation.visible).length
   const statusNotice = editConflict
     ? 'The saved site changed. Discard this preserved preview before editing.'
@@ -1717,16 +1715,14 @@ export function WebsiteProduct() {
                     </div>
                   </details>
                 ) : null}
-                <button
-                  className={`website-button ${surface === 'preview' && !starterAvailable ? 'is-primary' : 'is-secondary'}`}
+                {!starterAvailable ? <button
+                  className={`website-button ${surface === 'preview' ? 'is-primary' : 'is-secondary'}`}
                   onClick={() => {
                     if (surface === 'preview') openContentSurface('work')
                     else previewPage()
                   }}
                   type="button"
-                >
-                  {websiteSurfaceActionLabel}
-                </button>
+                >{websiteSurfaceActionLabel}</button> : null}
                 {hasUnsavedChanges ? (
                   <>
                     <button
