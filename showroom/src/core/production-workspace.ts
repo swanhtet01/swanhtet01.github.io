@@ -11,7 +11,9 @@ export const PRODUCTION_LOCK = 'supermega-production-workspace-v2'
 export const PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop-demand-source.v1' as const
 export const PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1' as const
 export const PRODUCTION_RECALL_TRACE_SCHEMA = 'supermega.production.recall-trace.v1' as const
-export const PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v1' as const
+export const PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v2' as const
+export const PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA = 'supermega.production.quality-capa.v1' as const
+export const PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA = 'supermega.production.quality-capa-effectiveness.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -83,10 +85,11 @@ export type ProductionIssueResolution = {
   evidenceReference: string
   maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction
   qualityCorrectiveAction?: ProductionQualityCorrectiveAction
+  qualityEffectivenessReview?: ProductionQualityEffectivenessReview
 }
 
 export type ProductionQualityCorrectiveAction = {
-  contract: typeof PRODUCTION_QUALITY_CAPA_SCHEMA
+  contract: typeof PRODUCTION_QUALITY_CAPA_SCHEMA | typeof PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA
   failureMode: string
   causeCategory: ProductionQualityCauseCategory
   rootCause: string
@@ -95,6 +98,22 @@ export type ProductionQualityCorrectiveAction = {
   effectivenessOwner: string
   recurrenceKey: string
   priorIssueIds: string[]
+  effectivenessReviewDueAt?: string
+}
+
+export type ProductionQualityEffectivenessOutcome = 'effective' | 'ineffective'
+export type ProductionQualityEffectivenessEscalation = 'none' | 'required'
+
+export type ProductionQualityEffectivenessReview = {
+  contract: typeof PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA
+  actionId: string
+  reviewedAt: string
+  reviewedBy: string
+  outcome: ProductionQualityEffectivenessOutcome
+  evidenceSummary: string
+  evidenceReference: string
+  recurrenceIssueIds: string[]
+  escalation: ProductionQualityEffectivenessEscalation
 }
 
 export type ProductionMaintenanceCorrectiveAction = {
@@ -190,7 +209,7 @@ export type ProductionOpeningPlan = {
   machineIds: string[]
 }
 
-export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'equipment_commissioned' | 'equipment_maintenance_strategy_saved' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed' | 'shift_closed'
+export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_effectiveness_reviewed' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'equipment_commissioned' | 'equipment_maintenance_strategy_saved' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed' | 'shift_closed'
 export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
@@ -242,6 +261,7 @@ export type ProductionEvent = {
   maintenanceFindingSource?: ProductionMaintenanceFindingSource
   maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction
   qualityCorrectiveAction?: ProductionQualityCorrectiveAction
+  qualityEffectivenessReview?: ProductionQualityEffectivenessReview
   equipmentIds?: string[]
   installedAt?: string
   workCentreId?: string
@@ -532,7 +552,7 @@ export const productionJobPriorities: ProductionJobPriority[] = ['urgent', 'norm
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
 export const productionQualityCauseCategories: ProductionQualityCauseCategory[] = ['material', 'method', 'machine', 'measurement', 'people', 'environment']
-const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'equipment_maintenance_strategy_saved', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'shift_closed']
+const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_effectiveness_reviewed', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'equipment_maintenance_strategy_saved', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'shift_closed']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
 const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt', 'jobOwner']
 const jobScheduleUpdateEventFields = [...jobCreatedEventFields, 'fromJobPriority', 'fromJobDueAt', 'fromJobOwner']
@@ -558,8 +578,10 @@ const productionShopDemandSnapshotFields = ['schema', 'operatingUnitLocationId',
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'maintenanceFindingSource', 'resolution']
 const productionMaintenanceFindingSourceFields = ['contract', 'equipmentId', 'equipmentName', 'maintenanceOwner', 'completionActionId', 'completedAt', 'strategyActionId', 'strategyRevision', 'returnToService', 'findings', 'evidenceReference']
 const productionMaintenanceCorrectiveActionFields = ['contract', 'correctiveAction', 'verificationResult', 'finalDisposition']
-const productionQualityCorrectiveActionFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'recurrenceKey', 'priorIssueIds']
-const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference', 'maintenanceCorrectiveAction', 'qualityCorrectiveAction']
+const productionQualityCorrectiveActionLegacyFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'recurrenceKey', 'priorIssueIds']
+const productionQualityCorrectiveActionFields = [...productionQualityCorrectiveActionLegacyFields, 'effectivenessReviewDueAt']
+const productionQualityEffectivenessReviewFields = ['contract', 'actionId', 'reviewedAt', 'reviewedBy', 'outcome', 'evidenceSummary', 'evidenceReference', 'recurrenceIssueIds', 'escalation']
+const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference', 'maintenanceCorrectiveAction', 'qualityCorrectiveAction', 'qualityEffectivenessReview']
 const productionMachineFields = ['id', 'name', 'state']
 const productionEquipmentMasterFields = ['contract', 'assets']
 const productionEquipmentAssetFields = ['id', 'name', 'workCentreId', 'criticality', 'owner', 'commissioningStatus', 'sourceActionId', 'sourcePackageDigest', 'importedAt']
@@ -576,6 +598,7 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   material_consumed: [...materialEventFields, ...materialOptionalEventFields],
   issue_opened: [...baseEventFields, 'issueSeverity', 'issueOwner', 'issueDueAt', 'issueContainment', 'maintenanceFindingSource'],
   issue_resolved: [...baseEventFields, 'maintenanceCorrectiveAction', 'qualityCorrectiveAction'],
+  quality_effectiveness_reviewed: [...baseEventFields, 'qualityEffectivenessReview'],
   quality_hold_placed: qualityHoldEventFields,
   quality_hold_released: qualityHoldEventFields,
   machine_state_changed: [...baseEventFields, 'fromState', 'toState'],
@@ -765,8 +788,12 @@ function productionQualityRecurrenceKey(failureMode: string, causeCategory: Prod
 
 function validateProductionQualityCorrectiveAction(value: unknown, field: string): ProductionQualityCorrectiveAction {
   if (!isRecord(value)) throw new Error(`${field} is invalid.`)
-  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionQualityCorrectiveActionFields].sort())) throw new Error(`${field} fields are invalid.`)
-  if (value.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA) throw new Error(`${field}.contract is invalid.`)
+  const expectedFields = value.contract === PRODUCTION_QUALITY_CAPA_SCHEMA
+    ? productionQualityCorrectiveActionFields
+    : value.contract === PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA
+      ? productionQualityCorrectiveActionLegacyFields
+      : null
+  if (!expectedFields || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`${field} fields are invalid.`)
   const failureMode = canonicalText(value.failureMode, `${field}.failureMode`, 120)
   if (!productionQualityCauseCategories.includes(value.causeCategory as ProductionQualityCauseCategory)) throw new Error(`${field}.causeCategory is invalid.`)
   canonicalText(value.rootCause, `${field}.rootCause`, 360)
@@ -778,7 +805,27 @@ function validateProductionQualityCorrectiveAction(value: unknown, field: string
   if (!Array.isArray(value.priorIssueIds) || value.priorIssueIds.length > 500) throw new Error(`${field}.priorIssueIds is invalid.`)
   const priorIssueIds = value.priorIssueIds.map((issueId, index) => canonicalText(issueId, `${field}.priorIssueIds[${index}]`, 80))
   assertUnique(priorIssueIds, `${field}.priorIssueIds`)
+  if (value.contract === PRODUCTION_QUALITY_CAPA_SCHEMA && !validTimestamp(value.effectivenessReviewDueAt)) throw new Error(`${field}.effectivenessReviewDueAt is invalid.`)
   return value as unknown as ProductionQualityCorrectiveAction
+}
+
+function validateProductionQualityEffectivenessReview(value: unknown, field: string): ProductionQualityEffectivenessReview {
+  if (!isRecord(value)) throw new Error(`${field} is invalid.`)
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify([...productionQualityEffectivenessReviewFields].sort())) throw new Error(`${field} fields are invalid.`)
+  if (value.contract !== PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA) throw new Error(`${field}.contract is invalid.`)
+  canonicalText(value.actionId, `${field}.actionId`, 160)
+  if (!validTimestamp(value.reviewedAt)) throw new Error(`${field}.reviewedAt is invalid.`)
+  canonicalText(value.reviewedBy, `${field}.reviewedBy`)
+  if (value.outcome !== 'effective' && value.outcome !== 'ineffective') throw new Error(`${field}.outcome is invalid.`)
+  canonicalText(value.evidenceSummary, `${field}.evidenceSummary`, 360)
+  canonicalText(value.evidenceReference, `${field}.evidenceReference`)
+  if (!Array.isArray(value.recurrenceIssueIds) || value.recurrenceIssueIds.length > 500) throw new Error(`${field}.recurrenceIssueIds is invalid.`)
+  const recurrenceIssueIds = value.recurrenceIssueIds.map((issueId, index) => canonicalText(issueId, `${field}.recurrenceIssueIds[${index}]`, 80))
+  assertUnique(recurrenceIssueIds, `${field}.recurrenceIssueIds`)
+  if (value.escalation !== 'none' && value.escalation !== 'required') throw new Error(`${field}.escalation is invalid.`)
+  if (value.outcome === 'effective' && (recurrenceIssueIds.length || value.escalation !== 'none')) throw new Error(`${field} effective outcome cannot retain recurrence or escalation.`)
+  if (value.outcome === 'ineffective' && value.escalation !== 'required') throw new Error(`${field} ineffective outcome requires escalation.`)
+  return value as unknown as ProductionQualityEffectivenessReview
 }
 
 function productionQualityPriorIssueIds(issues: ProductionIssue[], issueId: string, recurrenceKey: string, resolvedBefore?: string) {
@@ -800,6 +847,7 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
   correctiveAction: string
   verificationResult: string
   effectivenessOwner: string
+  effectivenessReviewDueAt: string
 }) {
   const issue = state.issues.find((candidate) => candidate.id === issueId)
   if (!issue || issue.kind !== 'quality' || issue.status !== 'open'
@@ -808,7 +856,8 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
     || !validCanonicalText(input.rootCause, 360)
     || !validCanonicalText(input.correctiveAction, 360)
     || !validCanonicalText(input.verificationResult, 360)
-    || !validCanonicalText(input.effectivenessOwner, 120)) return null
+    || !validCanonicalText(input.effectivenessOwner, 120)
+    || !validTimestamp(input.effectivenessReviewDueAt)) return null
   const recurrenceToken = productionQualityRecurrenceToken(input.failureMode)
   if (!recurrenceToken) return null
   const recurrenceKey = `${input.causeCategory}:${recurrenceToken}`
@@ -820,6 +869,54 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
     priorIssueIds: productionQualityPriorIssueIds(state.issues, issueId, recurrenceKey),
   }
   try { return validateProductionQualityCorrectiveAction(result, 'qualityCorrectiveAction') } catch { return null }
+}
+
+function productionQualityRecurrenceIssueIdsAtReview(
+  issues: ProductionIssue[],
+  events: ProductionEvent[],
+  issueId: string,
+  recurrenceKey: string,
+  resolvedAt: string,
+  reviewedAt: string,
+  reviewActionId?: string,
+) {
+  const categorySeparator = recurrenceKey.indexOf(':')
+  const causeCategory = categorySeparator > 0 ? recurrenceKey.slice(0, categorySeparator) as ProductionQualityCauseCategory : null
+  if (!causeCategory || !productionQualityCauseCategories.includes(causeCategory)) return []
+  const reviewEventIndex = reviewActionId === undefined ? -1 : events.findIndex((event) => event.actionId === reviewActionId)
+  return issues
+    .filter((candidate) => {
+      if (candidate.id === issueId
+        || candidate.kind !== 'quality'
+        || !timestampBefore(resolvedAt, candidate.createdAt)
+        || !timestampAtOrBefore(candidate.createdAt, reviewedAt)) return false
+      if (reviewEventIndex >= 0) {
+        const openingIndex = events.findIndex((event) => event.kind === 'issue_opened' && event.subjectId === candidate.id)
+        if (openingIndex >= 0 && openingIndex <= reviewEventIndex) return false
+      }
+      const candidateResolution = candidate.resolution
+      const candidateResolutionIndex = candidateResolution === undefined
+        ? -1
+        : events.findIndex((event) => event.kind === 'issue_resolved' && event.actionId === candidateResolution.actionId)
+      const classifiedBeforeReview = candidateResolution?.qualityCorrectiveAction !== undefined
+        && timestampAtOrBefore(candidateResolution.resolvedAt, reviewedAt)
+        && (reviewEventIndex < 0 || candidateResolutionIndex < 0 || candidateResolutionIndex > reviewEventIndex)
+      return classifiedBeforeReview && candidateResolution.qualityCorrectiveAction?.recurrenceKey === recurrenceKey
+    })
+    .sort((left, right) => compareTimestamps(left.createdAt, right.createdAt)
+      || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))
+    .map((candidate) => candidate.id)
+}
+
+export function productionQualityEffectivenessReviewDueAt(action: ProductionQualityCorrectiveAction | undefined) {
+  return action?.contract === PRODUCTION_QUALITY_CAPA_SCHEMA ? action.effectivenessReviewDueAt ?? null : null
+}
+
+export function productionQualityEffectivenessRecurrenceIssueIds(state: ProductionState, issueId: string, reviewedAt: string) {
+  const issue = state.issues.find((candidate) => candidate.id === issueId)
+  const action = issue?.resolution?.qualityCorrectiveAction
+  if (!issue?.resolution || action?.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA || !validTimestamp(reviewedAt)) return []
+  return productionQualityRecurrenceIssueIdsAtReview(state.issues, state.events, issueId, action.recurrenceKey, issue.resolution.resolvedAt, reviewedAt)
 }
 
 function validateProductionShopDemandSource(value: unknown, field: string): ProductionShopDemandSource {
@@ -1064,10 +1161,17 @@ export function validateProductionState(value: unknown): ProductionState {
       canonicalText(resolution.evidenceReference, `issues[${index}].resolution.evidenceReference`)
       const correctiveAction = resolution.maintenanceCorrectiveAction === undefined ? undefined : validateProductionMaintenanceCorrectiveAction(resolution.maintenanceCorrectiveAction, `issues[${index}].resolution.maintenanceCorrectiveAction`)
       const qualityCorrectiveAction = resolution.qualityCorrectiveAction === undefined ? undefined : validateProductionQualityCorrectiveAction(resolution.qualityCorrectiveAction, `issues[${index}].resolution.qualityCorrectiveAction`)
+      const qualityEffectivenessReview = resolution.qualityEffectivenessReview === undefined ? undefined : validateProductionQualityEffectivenessReview(resolution.qualityEffectivenessReview, `issues[${index}].resolution.qualityEffectivenessReview`)
       if (Boolean(candidate.maintenanceFindingSource) !== Boolean(correctiveAction)) throw new Error(`issues[${index}] maintenance finding resolution requires one structured corrective action only.`)
       if (candidate.kind === 'quality' && candidate.status === 'resolved' && actionFieldCount === actionFields.length && !qualityCorrectiveAction) throw new Error(`issues[${index}] actionable quality resolution requires structured CAPA evidence.`)
       if (qualityCorrectiveAction && candidate.kind !== 'quality') throw new Error(`issues[${index}] quality corrective action requires a quality issue.`)
       if (correctiveAction && qualityCorrectiveAction) throw new Error(`issues[${index}] cannot carry maintenance and quality corrective actions together.`)
+      if (qualityCorrectiveAction?.contract === PRODUCTION_QUALITY_CAPA_SCHEMA
+        && !timestampBefore(resolution.resolvedAt as string, qualityCorrectiveAction.effectivenessReviewDueAt as string)) throw new Error(`issues[${index}] CAPA effectiveness review must be due after resolution.`)
+      if (qualityEffectivenessReview) {
+        if (qualityCorrectiveAction?.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA) throw new Error(`issues[${index}] effectiveness review requires a v2 quality CAPA.`)
+        if (timestampBefore(qualityEffectivenessReview.reviewedAt, qualityCorrectiveAction.effectivenessReviewDueAt as string)) throw new Error(`issues[${index}] effectiveness review cannot predate its due time.`)
+      }
     }
   }
   assertUnique(issueIds, 'Production issue ID')
@@ -1363,6 +1467,13 @@ export function validateProductionState(value: unknown): ProductionState {
       if (candidate.maintenanceCorrectiveAction !== undefined) validateProductionMaintenanceCorrectiveAction(candidate.maintenanceCorrectiveAction, `events[${index}].maintenanceCorrectiveAction`)
       if (candidate.qualityCorrectiveAction !== undefined) validateProductionQualityCorrectiveAction(candidate.qualityCorrectiveAction, `events[${index}].qualityCorrectiveAction`)
       if (candidate.maintenanceCorrectiveAction !== undefined && candidate.qualityCorrectiveAction !== undefined) throw new Error(`events[${index}] cannot carry maintenance and quality corrective actions together.`)
+    } else if (candidate.kind === 'quality_effectiveness_reviewed') {
+      if (!issueIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown issue.`)
+      const review = validateProductionQualityEffectivenessReview(candidate.qualityEffectivenessReview, `events[${index}].qualityEffectivenessReview`)
+      if (review.actionId !== candidate.actionId
+        || review.reviewedAt !== candidate.createdAt
+        || review.reviewedBy !== candidate.actor
+        || review.evidenceReference !== candidate.evidenceReference) throw new Error(`events[${index}] effectiveness review proof is detached from its event.`)
     }
   }
   assertUnique(eventIds, 'Production event ID')
@@ -1569,6 +1680,7 @@ export function validateProductionState(value: unknown): ProductionState {
     if (!isRecord(candidate)) continue
     const openingEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'issue_opened' && event.subjectId === candidate.id)
     const resolutionEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'issue_resolved' && event.subjectId === candidate.id)
+    const effectivenessEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'quality_effectiveness_reviewed' && event.subjectId === candidate.id)
     if (openingEvents.length > 1) throw new Error(`issues[${index}] has duplicate opening events.`)
     const openingEvent = openingEvents[0]
     const actionFieldCount = ['severity', 'owner', 'dueAt', 'containment'].filter((field) => candidate[field] !== undefined).length
@@ -1613,11 +1725,11 @@ export function validateProductionState(value: unknown): ProductionState {
     }
 
     if (candidate.status === 'open') {
-      if (resolutionEvents.length) throw new Error(`issues[${index}] is open but has a resolution event.`)
+      if (resolutionEvents.length || effectivenessEvents.length) throw new Error(`issues[${index}] is open but has closeout history.`)
       continue
     }
     if (!isRecord(candidate.resolution)) {
-      if (openingEvent || resolutionEvents.length) throw new Error(`issues[${index}] is resolved without matching proof.`)
+      if (openingEvent || resolutionEvents.length || effectivenessEvents.length) throw new Error(`issues[${index}] is resolved without matching proof.`)
       continue
     }
     const resolution = candidate.resolution
@@ -1637,6 +1749,31 @@ export function validateProductionState(value: unknown): ProductionState {
     if (qualityCorrectiveAction) {
       const expectedPriorIssueIds = productionQualityPriorIssueIds(issues as ProductionIssue[], candidate.id as string, qualityCorrectiveAction.recurrenceKey, resolution.resolvedAt as string)
       if (JSON.stringify(qualityCorrectiveAction.priorIssueIds) !== JSON.stringify(expectedPriorIssueIds)) throw new Error(`issues[${index}] quality recurrence links do not match prior CAPA evidence.`)
+    }
+    const effectivenessReview = resolution.qualityEffectivenessReview === undefined ? undefined : validateProductionQualityEffectivenessReview(resolution.qualityEffectivenessReview, `issues[${index}].resolution.qualityEffectivenessReview`)
+    if (!effectivenessReview) {
+      if (effectivenessEvents.length) throw new Error(`issues[${index}] has effectiveness history without a stored review.`)
+    } else {
+      const matchingEffectivenessEvents = effectivenessEvents.filter((event) => event.actionId === effectivenessReview.actionId)
+      if (effectivenessEvents.length !== 1 || matchingEffectivenessEvents.length !== 1) throw new Error(`issues[${index}] effectiveness review is not backed by exactly one event.`)
+      const effectivenessEvent = matchingEffectivenessEvents[0]
+      if (effectivenessEvent.createdAt !== effectivenessReview.reviewedAt
+        || effectivenessEvent.actor !== effectivenessReview.reviewedBy
+        || effectivenessEvent.evidenceReference !== effectivenessReview.evidenceReference
+        || JSON.stringify(effectivenessEvent.qualityEffectivenessReview) !== JSON.stringify(effectivenessReview)) throw new Error(`issues[${index}] effectiveness review does not match its immutable event.`)
+      if (!qualityCorrectiveAction || qualityCorrectiveAction.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA) throw new Error(`issues[${index}] effectiveness review requires a v2 quality CAPA.`)
+      const expectedRecurrenceIssueIds = productionQualityRecurrenceIssueIdsAtReview(
+        issues as ProductionIssue[],
+        events as ProductionEvent[],
+        candidate.id as string,
+        qualityCorrectiveAction.recurrenceKey,
+        resolution.resolvedAt as string,
+        effectivenessReview.reviewedAt,
+        effectivenessReview.actionId,
+      )
+      if (JSON.stringify(effectivenessReview.recurrenceIssueIds) !== JSON.stringify(expectedRecurrenceIssueIds)) throw new Error(`issues[${index}] effectiveness review recurrence evidence is invalid.`)
+      if (effectivenessEvent.summary !== `Reviewed ${String(candidate.id)} CAPA as ${effectivenessReview.outcome}`) throw new Error(`issues[${index}] effectiveness review summary is not canonical.`)
+      if (events.indexOf(effectivenessEvent) >= events.indexOf(resolutionEvent)) throw new Error(`issues[${index}] effectiveness review must follow CAPA resolution.`)
     }
     if (openingEvent && events.indexOf(resolutionEvent) >= events.indexOf(openingEvent)) {
       throw new Error(`issues[${index}] resolution must follow its opening event.`)
@@ -3583,6 +3720,8 @@ export function resolveProductionIssue(
     || Boolean(issue.maintenanceFindingSource) !== Boolean(maintenanceCorrectiveAction)
     || (issue.kind === 'quality' && Boolean(issue.severity && issue.owner && issue.dueAt && issue.containment) && qualityCorrectiveAction === undefined)
     || (issue.kind !== 'quality' && qualityCorrectiveAction !== undefined)
+    || (qualityCorrectiveAction?.contract === PRODUCTION_QUALITY_CAPA_SCHEMA
+      && !timestampBefore(proof.capturedAt, qualityCorrectiveAction.effectivenessReviewDueAt as string))
     || (qualityCorrectiveAction !== undefined && JSON.stringify(qualityCorrectiveAction.priorIssueIds) !== JSON.stringify(productionQualityPriorIssueIds(state.issues, issueId, qualityCorrectiveAction.recurrenceKey)))
     || state.revision >= Number.MAX_SAFE_INTEGER) return null
   const resolution: ProductionIssueResolution = {
@@ -3605,6 +3744,77 @@ export function resolveProductionIssue(
     ...state,
     revision: state.revision + 1,
     issues: state.issues.map((candidate) => candidate.id === issueId ? { ...candidate, status: 'resolved' as const, resolution } : candidate),
+    events: [event, ...state.events],
+  })
+}
+
+export function reviewProductionQualityEffectiveness(
+  state: ProductionState,
+  issueId: string,
+  proof: ProductionActionProof,
+  outcome: ProductionQualityEffectivenessOutcome,
+  evidenceSummary: string,
+) {
+  if (!validProof(proof)
+    || (outcome !== 'effective' && outcome !== 'ineffective')
+    || !validCanonicalText(evidenceSummary, 360)) return null
+  const canonicalEvidenceSummary = evidenceSummary.trim()
+  const issue = state.issues.find((candidate) => candidate.id === issueId)
+  const action = issue?.resolution?.qualityCorrectiveAction
+  const existingReview = issue?.resolution?.qualityEffectivenessReview
+  const existingEvent = state.events.find((event) => event.actionId === proof.actionId)
+  if (existingEvent) {
+    return existingEvent.kind === 'quality_effectiveness_reviewed'
+      && existingEvent.subjectId === issueId
+      && sameProof(existingEvent, proof)
+      && existingReview?.actionId === proof.actionId
+      && existingReview.outcome === outcome
+      && existingReview.evidenceSummary === canonicalEvidenceSummary
+      && JSON.stringify(existingEvent.qualityEffectivenessReview) === JSON.stringify(existingReview) ? state : null
+  }
+  if (!issue?.resolution
+    || issue.kind !== 'quality'
+    || issue.status !== 'resolved'
+    || action?.contract !== PRODUCTION_QUALITY_CAPA_SCHEMA
+    || existingReview
+    || actionIdIsUsed(state, proof.actionId)
+    || timestampBefore(proof.capturedAt, action.effectivenessReviewDueAt as string)
+    || state.revision >= Number.MAX_SAFE_INTEGER) return null
+  const latestIssueEvent = state.events.find((event) => event.subjectId === issueId)
+  if (latestIssueEvent && timestampBefore(proof.capturedAt, latestIssueEvent.createdAt)) return null
+  const recurrenceIssueIds = productionQualityRecurrenceIssueIdsAtReview(
+    state.issues,
+    state.events,
+    issueId,
+    action.recurrenceKey,
+    issue.resolution.resolvedAt,
+    proof.capturedAt,
+  )
+  if (outcome === 'effective' && recurrenceIssueIds.length) return null
+  const review: ProductionQualityEffectivenessReview = {
+    contract: PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA,
+    actionId: proof.actionId,
+    reviewedAt: proof.capturedAt,
+    reviewedBy: proof.actor,
+    outcome,
+    evidenceSummary: canonicalEvidenceSummary,
+    evidenceReference: proof.evidenceReference,
+    recurrenceIssueIds,
+    escalation: outcome === 'effective' ? 'none' : 'required',
+  }
+  try { validateProductionQualityEffectivenessReview(review, 'qualityEffectivenessReview') } catch { return null }
+  const event = eventFor(proof, {
+    kind: 'quality_effectiveness_reviewed',
+    subjectId: issueId,
+    summary: `Reviewed ${issueId} CAPA as ${outcome}`,
+    qualityEffectivenessReview: review,
+  })
+  return validateProductionState({
+    ...state,
+    revision: state.revision + 1,
+    issues: state.issues.map((candidate) => candidate.id === issueId
+      ? { ...candidate, resolution: { ...candidate.resolution as ProductionIssueResolution, qualityEffectivenessReview: review } }
+      : candidate),
     events: [event, ...state.events],
   })
 }

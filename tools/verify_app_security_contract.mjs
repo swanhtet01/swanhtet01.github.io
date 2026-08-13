@@ -372,6 +372,7 @@ const expectedHumanProductionEvents = [
   'production.material.consumed',
   'production.order_execution.recorded',
   'production.output.recorded',
+  'production.quality_effectiveness.reviewed',
   'production.quality_hold.placed',
   'production.quality_hold.released',
   'production.shift.closed',

@@ -83,6 +83,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "production.material.consumed",
         "production.issue.opened",
         "production.issue.resolved",
+        "production.quality_effectiveness.reviewed",
         "production.quality_hold.placed",
         "production.quality_hold.released",
         "production.machine_state.changed",

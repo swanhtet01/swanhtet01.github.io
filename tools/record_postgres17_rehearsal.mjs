@@ -30,6 +30,7 @@ const migrations = [
 const implementationPaths = [
   'supermega_runtime/managed_context.py',
   'supermega_runtime/managed_activation.py',
+  'supermega_runtime/production_runtime.py',
   'supermega_runtime/runtime.py',
   'supermega_runtime/spa_staff_access.py',
   'supermega_runtime/supabase_auth.py',

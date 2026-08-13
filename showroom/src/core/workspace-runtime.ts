@@ -161,6 +161,7 @@ export type ActionKind =
   | 'production_material'
   | 'issue_create'
   | 'issue_resolution'
+  | 'quality_effectiveness'
   | 'quality_hold'
   | 'quality_release'
   | 'machine_state'

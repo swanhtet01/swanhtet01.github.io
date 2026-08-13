@@ -34,6 +34,7 @@ PRODUCTION_EVENTS = frozenset(
         "production.material.consumed",
         "production.issue.opened",
         "production.issue.resolved",
+        "production.quality_effectiveness.reviewed",
         "production.quality_hold.placed",
         "production.quality_hold.released",
         "production.machine_state.changed",
@@ -69,6 +70,7 @@ _EVENT_KIND_BY_TYPE = {
     "production.material.consumed": "material_consumed",
     "production.issue.opened": "issue_opened",
     "production.issue.resolved": "issue_resolved",
+    "production.quality_effectiveness.reviewed": "quality_effectiveness_reviewed",
     "production.quality_hold.placed": "quality_hold_placed",
     "production.quality_hold.released": "quality_hold_released",
     "production.machine_state.changed": "machine_state_changed",
@@ -222,12 +224,16 @@ _EQUIPMENT_ID_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9._/-]{0,79}$")
 _EVIDENCE_FIELDS = frozenset({"actionId", "capturedAt", "actor", "reason", "evidenceReference"})
 _RESOLUTION_FIELDS = frozenset({"actionId", "resolvedAt", "resolvedBy", "reason", "evidenceReference"})
 _RESOLUTION_OPTIONAL_FIELDS = frozenset(
-    {"maintenanceCorrectiveAction", "qualityCorrectiveAction"}
+    {
+        "maintenanceCorrectiveAction",
+        "qualityCorrectiveAction",
+        "qualityEffectivenessReview",
+    }
 )
 _MAINTENANCE_CORRECTIVE_ACTION_FIELDS = frozenset(
     {"contract", "correctiveAction", "verificationResult", "finalDisposition"}
 )
-_QUALITY_CORRECTIVE_ACTION_FIELDS = frozenset(
+_QUALITY_CORRECTIVE_ACTION_LEGACY_FIELDS = frozenset(
     {
         "contract",
         "failureMode",
@@ -238,6 +244,22 @@ _QUALITY_CORRECTIVE_ACTION_FIELDS = frozenset(
         "effectivenessOwner",
         "recurrenceKey",
         "priorIssueIds",
+    }
+)
+_QUALITY_CORRECTIVE_ACTION_FIELDS = (
+    _QUALITY_CORRECTIVE_ACTION_LEGACY_FIELDS | {"effectivenessReviewDueAt"}
+)
+_QUALITY_EFFECTIVENESS_REVIEW_FIELDS = frozenset(
+    {
+        "contract",
+        "actionId",
+        "reviewedAt",
+        "reviewedBy",
+        "outcome",
+        "evidenceSummary",
+        "evidenceReference",
+        "recurrenceIssueIds",
+        "escalation",
     }
 )
 _EVENT_FIELDS = frozenset(
@@ -518,9 +540,14 @@ def _quality_recurrence_token(value: str) -> str:
 
 def _quality_corrective_action(candidate: object, field: str) -> dict[str, Any]:
     action = _object(candidate, field)
-    _exact_fields(action, field, required=_QUALITY_CORRECTIVE_ACTION_FIELDS)
-    if action["contract"] != "supermega.production.quality-capa.v1":
+    contract = action.get("contract")
+    if contract == "supermega.production.quality-capa.v2":
+        required = _QUALITY_CORRECTIVE_ACTION_FIELDS
+    elif contract == "supermega.production.quality-capa.v1":
+        required = _QUALITY_CORRECTIVE_ACTION_LEGACY_FIELDS
+    else:
         raise TrialValidationError(f"{field}.contract is unsupported.")
+    _exact_fields(action, field, required=required)
     failure_mode = _text(action["failureMode"], f"{field}.failureMode", maximum=120)
     cause_category = action["causeCategory"]
     if cause_category not in _QUALITY_CAUSE_CATEGORIES:
@@ -542,7 +569,48 @@ def _quality_corrective_action(candidate: object, field: str) -> dict[str, Any]:
     ]
     if len(set(normalized_issue_ids)) != len(normalized_issue_ids):
         raise TrialValidationError(f"{field}.priorIssueIds must be unique.")
+    if contract == "supermega.production.quality-capa.v2":
+        _timestamp(
+            action["effectivenessReviewDueAt"],
+            f"{field}.effectivenessReviewDueAt",
+        )
     return action
+
+
+def _quality_effectiveness_review(candidate: object, field: str) -> dict[str, Any]:
+    review = _object(candidate, field)
+    _exact_fields(review, field, required=_QUALITY_EFFECTIVENESS_REVIEW_FIELDS)
+    if review["contract"] != "supermega.production.quality-capa-effectiveness.v1":
+        raise TrialValidationError(f"{field}.contract is unsupported.")
+    _text(review["actionId"], f"{field}.actionId", maximum=160)
+    _timestamp(review["reviewedAt"], f"{field}.reviewedAt")
+    _text(review["reviewedBy"], f"{field}.reviewedBy")
+    if review["outcome"] not in {"effective", "ineffective"}:
+        raise TrialValidationError(f"{field}.outcome is unsupported.")
+    _text(review["evidenceSummary"], f"{field}.evidenceSummary", maximum=360)
+    _text(review["evidenceReference"], f"{field}.evidenceReference")
+    recurrence_ids = review["recurrenceIssueIds"]
+    if not isinstance(recurrence_ids, list) or len(recurrence_ids) > _MAX_ISSUES:
+        raise TrialValidationError(f"{field}.recurrenceIssueIds is invalid.")
+    normalized_ids = [
+        _text(issue_id, f"{field}.recurrenceIssueIds[{index}]", maximum=80)
+        for index, issue_id in enumerate(recurrence_ids)
+    ]
+    if len(set(normalized_ids)) != len(normalized_ids):
+        raise TrialValidationError(f"{field}.recurrenceIssueIds must be unique.")
+    if review["escalation"] not in {"none", "required"}:
+        raise TrialValidationError(f"{field}.escalation is unsupported.")
+    if review["outcome"] == "effective" and (
+        normalized_ids or review["escalation"] != "none"
+    ):
+        raise TrialValidationError(
+            f"{field} effective outcome cannot retain recurrence or escalation."
+        )
+    if review["outcome"] == "ineffective" and review["escalation"] != "required":
+        raise TrialValidationError(
+            f"{field} ineffective outcome requires escalation."
+        )
+    return review
 
 
 def _resolution(value: object, field: str) -> dict[str, Any]:
@@ -567,6 +635,11 @@ def _resolution(value: object, field: str) -> dict[str, Any]:
         _quality_corrective_action(
             resolution["qualityCorrectiveAction"],
             f"{field}.qualityCorrectiveAction",
+        )
+    if "qualityEffectivenessReview" in resolution:
+        _quality_effectiveness_review(
+            resolution["qualityEffectivenessReview"],
+            f"{field}.qualityEffectivenessReview",
         )
     if {
         "maintenanceCorrectiveAction",
@@ -820,6 +893,40 @@ def _validate_issue(candidate: object, index: int) -> dict[str, Any]:
             raise TrialValidationError(
                 f"{field} quality corrective action requires a quality issue."
             )
+        quality_action = resolution.get("qualityCorrectiveAction")
+        if (
+            isinstance(quality_action, Mapping)
+            and quality_action.get("contract") == "supermega.production.quality-capa.v2"
+            and _parsed_timestamp(
+                quality_action["effectivenessReviewDueAt"],
+                f"{field}.resolution.qualityCorrectiveAction.effectivenessReviewDueAt",
+            )[1]
+            <= _parsed_timestamp(
+                resolution["resolvedAt"],
+                f"{field}.resolution.resolvedAt",
+            )[1]
+        ):
+            raise TrialValidationError(
+                f"{field} CAPA effectiveness review must be due after resolution."
+            )
+        review = resolution.get("qualityEffectivenessReview")
+        if review is not None:
+            if not isinstance(quality_action, Mapping) or quality_action.get(
+                "contract"
+            ) != "supermega.production.quality-capa.v2":
+                raise TrialValidationError(
+                    f"{field} effectiveness review requires a v2 quality CAPA."
+                )
+            if _parsed_timestamp(
+                review["reviewedAt"],
+                f"{field}.resolution.qualityEffectivenessReview.reviewedAt",
+            )[1] < _parsed_timestamp(
+                quality_action["effectivenessReviewDueAt"],
+                f"{field}.resolution.qualityCorrectiveAction.effectivenessReviewDueAt",
+            )[1]:
+                raise TrialValidationError(
+                    f"{field} effectiveness review cannot predate its due time."
+                )
     return issue
 
 
@@ -1186,6 +1293,8 @@ def _validate_event(
         required = _EVENT_FIELDS | _EQUIPMENT_COMMISSION_EVENT_FIELDS
     elif kind == "equipment_maintenance_strategy_saved":
         required = _EVENT_FIELDS | _EQUIPMENT_MAINTENANCE_STRATEGY_EVENT_FIELDS
+    elif kind == "quality_effectiveness_reviewed":
+        required = _EVENT_FIELDS | {"qualityEffectivenessReview"}
     elif kind in {
         "job_created",
         "issue_opened",
@@ -1620,6 +1729,22 @@ def _validate_event(
             raise TrialValidationError(
                 f"{field} cannot carry maintenance and quality corrective actions together."
             )
+    elif kind == "quality_effectiveness_reviewed":
+        if subject_id not in issue_ids:
+            raise TrialValidationError(f"{field} references an unknown issue.")
+        review = _quality_effectiveness_review(
+            event["qualityEffectivenessReview"],
+            f"{field}.qualityEffectivenessReview",
+        )
+        if (
+            review["actionId"] != event["actionId"]
+            or review["reviewedAt"] != event["createdAt"]
+            or review["reviewedBy"] != event["actor"]
+            or review["evidenceReference"] != event["evidenceReference"]
+        ):
+            raise TrialValidationError(
+                f"{field} effectiveness review proof is detached from its event."
+            )
     elif subject_id not in issue_ids:
         raise TrialValidationError(f"{field} references an unknown issue.")
     return event
@@ -1662,6 +1787,86 @@ def _quality_prior_issue_ids(
     return [issue_id for _, issue_id in matches]
 
 
+def _quality_recurrence_issue_ids_at_review(
+    issues: Sequence[dict[str, Any]],
+    events: Sequence[dict[str, Any]],
+    issue_id: str,
+    recurrence_key: str,
+    resolved_at: str,
+    reviewed_at: str,
+    *,
+    review_action_id: str | None = None,
+) -> list[str]:
+    resolved_time = _parsed_timestamp(resolved_at, "quality CAPA resolvedAt")[1]
+    reviewed_time = _parsed_timestamp(reviewed_at, "quality CAPA reviewedAt")[1]
+    review_index = next(
+        (
+            index
+            for index, event in enumerate(events)
+            if event["actionId"] == review_action_id
+        ),
+        None,
+    )
+    matches: list[tuple[datetime, str]] = []
+    for candidate in issues:
+        if candidate["id"] == issue_id or candidate["kind"] != "quality":
+            continue
+        created_time = _parsed_timestamp(
+            candidate["createdAt"],
+            f"quality recurrence {candidate['id']} createdAt",
+        )[1]
+        if created_time <= resolved_time or created_time > reviewed_time:
+            continue
+        opening_index = next(
+            (
+                index
+                for index, event in enumerate(events)
+                if event["kind"] == "issue_opened"
+                and event["subjectId"] == candidate["id"]
+            ),
+            None,
+        )
+        if (
+            review_index is not None
+            and opening_index is not None
+            and opening_index <= review_index
+        ):
+            continue
+        resolution = candidate.get("resolution")
+        quality_action = (
+            resolution.get("qualityCorrectiveAction")
+            if isinstance(resolution, Mapping)
+            else None
+        )
+        if (
+            not isinstance(quality_action, Mapping)
+            or quality_action.get("recurrenceKey") != recurrence_key
+        ):
+            continue
+        candidate_resolved_time = _parsed_timestamp(
+            resolution["resolvedAt"],
+            f"quality recurrence {candidate['id']} resolvedAt",
+        )[1]
+        resolution_index = next(
+            (
+                index
+                for index, event in enumerate(events)
+                if event["kind"] == "issue_resolved"
+                and event["actionId"] == resolution["actionId"]
+            ),
+            None,
+        )
+        if candidate_resolved_time > reviewed_time or (
+            review_index is not None
+            and resolution_index is not None
+            and resolution_index <= review_index
+        ):
+            continue
+        matches.append((created_time, candidate["id"]))
+    matches.sort(key=lambda item: (item[0], item[1]))
+    return [candidate_id for _, candidate_id in matches]
+
+
 def _validate_issue_history(
     issues: Sequence[dict[str, Any]],
     events: Sequence[dict[str, Any]],
@@ -1677,6 +1882,12 @@ def _validate_issue_history(
             event
             for event in events
             if event["kind"] == "issue_resolved" and event["subjectId"] == issue["id"]
+        ]
+        effectiveness_events = [
+            event
+            for event in events
+            if event["kind"] == "quality_effectiveness_reviewed"
+            and event["subjectId"] == issue["id"]
         ]
         if len(opened) != 1:
             raise TrialValidationError(
@@ -1793,9 +2004,9 @@ def _validate_issue_history(
                     f"issues[{index}] duplicates a maintenance finding problem."
                 )
         if issue["status"] == "open":
-            if resolved:
+            if resolved or effectiveness_events:
                 raise TrialValidationError(
-                    f"issues[{index}] is open but has a resolution event."
+                    f"issues[{index}] is open but has closeout history."
                 )
             continue
         if len(resolved) != 1:
@@ -1829,6 +2040,65 @@ def _validate_issue_history(
             if quality_action["priorIssueIds"] != expected_prior_issue_ids:
                 raise TrialValidationError(
                     f"issues[{index}] quality recurrence links do not match prior CAPA evidence."
+                )
+        effectiveness_review = resolution.get("qualityEffectivenessReview")
+        if effectiveness_review is None:
+            if effectiveness_events:
+                raise TrialValidationError(
+                    f"issues[{index}] has effectiveness history without a stored review."
+                )
+        else:
+            matches = [
+                event
+                for event in effectiveness_events
+                if event["actionId"] == effectiveness_review["actionId"]
+            ]
+            if len(effectiveness_events) != 1 or len(matches) != 1:
+                raise TrialValidationError(
+                    f"issues[{index}] effectiveness review must be backed by exactly one event."
+                )
+            effectiveness_event = matches[0]
+            if (
+                effectiveness_event["createdAt"]
+                != effectiveness_review["reviewedAt"]
+                or effectiveness_event["actor"]
+                != effectiveness_review["reviewedBy"]
+                or effectiveness_event["evidenceReference"]
+                != effectiveness_review["evidenceReference"]
+                or effectiveness_event.get("qualityEffectivenessReview")
+                != effectiveness_review
+            ):
+                raise TrialValidationError(
+                    f"issues[{index}] effectiveness review does not match its immutable event."
+                )
+            if not isinstance(quality_action, Mapping) or quality_action.get(
+                "contract"
+            ) != "supermega.production.quality-capa.v2":
+                raise TrialValidationError(
+                    f"issues[{index}] effectiveness review requires a v2 quality CAPA."
+                )
+            expected_recurrence_ids = _quality_recurrence_issue_ids_at_review(
+                issues,
+                events,
+                issue["id"],
+                quality_action["recurrenceKey"],
+                resolution["resolvedAt"],
+                effectiveness_review["reviewedAt"],
+                review_action_id=effectiveness_review["actionId"],
+            )
+            if effectiveness_review["recurrenceIssueIds"] != expected_recurrence_ids:
+                raise TrialValidationError(
+                    f"issues[{index}] effectiveness review recurrence evidence is invalid."
+                )
+            if effectiveness_event["summary"] != (
+                f"Reviewed {issue['id']} CAPA as {effectiveness_review['outcome']}"
+            ):
+                raise TrialValidationError(
+                    f"issues[{index}] effectiveness review summary is not canonical."
+                )
+            if events.index(effectiveness_event) >= events.index(event):
+                raise TrialValidationError(
+                    f"issues[{index}] effectiveness review must follow CAPA resolution."
                 )
         if events.index(event) >= events.index(opened[0]):
             raise TrialValidationError(
@@ -3513,6 +3783,87 @@ def _validate_issue_resolved(
         raise TrialValidationError("issue resolution summary is not canonical.")
 
 
+def _validate_quality_effectiveness_reviewed(
+    current: Mapping[str, Any],
+    next_state: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require_unchanged(current, next_state, "jobs", "machines")
+    if current.get("equipmentMaster") != next_state.get("equipmentMaster"):
+        raise TrialValidationError(
+            "reviewing CAPA effectiveness cannot change the equipment master."
+        )
+    before, after = _one_changed(
+        current["issues"],
+        next_state["issues"],
+        "issues",
+    )
+    resolution = before.get("resolution")
+    quality_action = (
+        resolution.get("qualityCorrectiveAction")
+        if isinstance(resolution, Mapping)
+        else None
+    )
+    if (
+        before["kind"] != "quality"
+        or before["status"] != "resolved"
+        or not isinstance(resolution, Mapping)
+        or not isinstance(quality_action, Mapping)
+        or quality_action.get("contract") != "supermega.production.quality-capa.v2"
+        or "qualityEffectivenessReview" in resolution
+    ):
+        raise TrialValidationError(
+            "only one unresolved v2 CAPA effectiveness review can be recorded."
+        )
+    review = _quality_effectiveness_review(
+        event["qualityEffectivenessReview"],
+        "event.qualityEffectivenessReview",
+    )
+    if _parsed_timestamp(
+        review["reviewedAt"],
+        "event.qualityEffectivenessReview.reviewedAt",
+    )[1] < _parsed_timestamp(
+        quality_action["effectivenessReviewDueAt"],
+        "qualityCorrectiveAction.effectivenessReviewDueAt",
+    )[1]:
+        raise TrialValidationError(
+            "CAPA effectiveness review cannot be recorded before its due time."
+        )
+    expected_recurrence_ids = _quality_recurrence_issue_ids_at_review(
+        current["issues"],
+        current["events"],
+        before["id"],
+        quality_action["recurrenceKey"],
+        resolution["resolvedAt"],
+        review["reviewedAt"],
+    )
+    if review["recurrenceIssueIds"] != expected_recurrence_ids:
+        raise TrialValidationError(
+            "CAPA effectiveness recurrence evidence must match classified history."
+        )
+    if review["outcome"] == "effective" and expected_recurrence_ids:
+        raise TrialValidationError(
+            "a recurring CAPA cannot be reviewed as effective."
+        )
+    expected_after = {
+        **before,
+        "resolution": {
+            **resolution,
+            "qualityEffectivenessReview": review,
+        },
+    }
+    if after != expected_after:
+        raise TrialValidationError(
+            "CAPA effectiveness review may append only exact review evidence."
+        )
+    if event["subjectId"] != before["id"]:
+        raise TrialValidationError(
+            "CAPA effectiveness event must reference the one reviewed issue."
+        )
+    if event["summary"] != f"Reviewed {before['id']} CAPA as {review['outcome']}":
+        raise TrialValidationError("CAPA effectiveness summary is not canonical.")
+
+
 def _validate_quality_hold_placed(
     current: Mapping[str, Any],
     next_state: Mapping[str, Any],
@@ -4348,6 +4699,7 @@ _TRANSITION_VALIDATORS: dict[
     "production.material.consumed": _validate_material_consumed,
     "production.issue.opened": _validate_issue_opened,
     "production.issue.resolved": _validate_issue_resolved,
+    "production.quality_effectiveness.reviewed": _validate_quality_effectiveness_reviewed,
     "production.quality_hold.placed": _validate_quality_hold_placed,
     "production.quality_hold.released": _validate_quality_hold_released,
     "production.machine_state.changed": _validate_machine_state_changed,

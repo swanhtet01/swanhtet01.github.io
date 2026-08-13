@@ -2415,15 +2415,22 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes('Inspection + CAPA')
   || !coreSource.includes('Sampling, containment, corrective action, evidence, and release in one queue. Cannot close CAPA, certify, contact customers, block stock, cost, or write production.')
   || coreSource.includes('AI turns sampling, NCR containment, corrective action, evidence, and release review into one quality queue.')
-  || !productionSource.includes("PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v1'")
+  || !productionSource.includes("PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v2'")
+  || !productionSource.includes("PRODUCTION_QUALITY_CAPA_LEGACY_SCHEMA = 'supermega.production.quality-capa.v1'")
+  || !productionSource.includes("PRODUCTION_QUALITY_EFFECTIVENESS_SCHEMA = 'supermega.production.quality-capa-effectiveness.v1'")
   || !productionSource.includes('export function buildProductionQualityCorrectiveAction')
+  || !productionSource.includes('export function reviewProductionQualityEffectiveness')
   || !productionSource.includes('actionable quality resolution requires structured CAPA evidence')
   || !productionSource.includes('quality recurrence links do not match prior CAPA evidence')
-  || !managedProductionRuntime.includes('supermega.production.quality-capa.v1')
+  || !managedProductionRuntime.includes('supermega.production.quality-capa.v2')
+  || !managedProductionRuntime.includes('supermega.production.quality-capa-effectiveness.v1')
+  || !managedProductionRuntime.includes('production.quality_effectiveness.reviewed')
   || !managedProductionRuntime.includes('an actionable quality issue requires structured CAPA evidence before resolution.')
   || !managedProductionRuntime.includes('quality CAPA recurrence links must match prior resolved evidence.')
-  || !coreSource.includes('Verify corrective action')
-  || !coreSource.includes('Review CAPA closeout')
+  || !coreSource.includes('Close implementation')
+  || !coreSource.includes('Review implementation close')
+  || !coreSource.includes('Review effectiveness')
+  || !coreSource.includes('EFFECTIVENESS REVIEW DUE')
   || !coreSource.includes('Matching prior CAPA records are linked automatically from the failure mode and cause category.')
   || !coreSource.includes("issue.kind === 'quality' ? 'Review CAPA' : 'Review close'")
   || !coreSource.includes("'Restore inspection readiness'")
@@ -6566,6 +6573,7 @@ const expectedPlantActionSubmitLabels = {
   production_material: 'Record material use',
   issue_create: 'Open problem',
   issue_resolution: 'Resolve problem',
+  quality_effectiveness: 'Review CAPA effectiveness',
   quality_hold: 'Place quality hold',
   quality_release: 'Release quality hold',
   machine_state: 'Record machine status',
@@ -6589,8 +6597,8 @@ const expectedPlantActionKinds = Object.keys(expectedPlantActionSubmitLabels).so
 const expectedActionKinds = Object.keys(expectedActionSubmitLabels).sort()
 const actualActionKinds = Object.keys(actionSubmitLabels).sort()
 const actionSubmitLabelsComplete = expectedShopActionKinds.length === 33
-  && expectedPlantActionKinds.length === 16
-  && expectedActionKinds.length === 49
+  && expectedPlantActionKinds.length === 17
+  && expectedActionKinds.length === 50
   && declaredShopActionKinds.join(',') === expectedShopActionKinds.join(',')
   && declaredPlantActionKinds.join(',') === expectedPlantActionKinds.join(',')
   && declaredActionKinds.join(',') === expectedActionKinds.join(',')
@@ -7084,7 +7092,7 @@ if (!productionSource.includes('export type ProductionOpeningPlan')
   || !productionSource.includes('Every job after the Production opening plan requires one creation event.')
   || !managedProductionRuntime.includes('supermega.production.opening-plan.v1')
   || !managedProductionRuntime.includes('Production opening plan evidence is immutable after initialization.')) fail('production_opening_plan_contract_missing')
-if (!productionSource.includes("'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
+if (!productionSource.includes("'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_effectiveness_reviewed' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed'") || !productionSource.includes('events: [event, ...state.events]') || !productionSource.includes('Production revision must equal the append-only event count.')) fail('production_append_only_record_missing')
 if (!productionSource.includes('productionShiftOutput')
   || !productionSource.includes('existing.shiftRef === shiftRef')
   || !productionSource.includes('shiftRef?: string')
@@ -7242,7 +7250,7 @@ if (!productionSource.includes('buildProductionShiftHandoff')
   || !coreSource.includes('setMaterialGuideOpen(false)')
   || !coreSource.includes('}, outputTriggerRef.current)')
   || !coreSource.includes('reasonSuggestion: qualityCorrectiveAction')
-  || !coreSource.includes('CAPA evidence reviewed and effectiveness verified for ${issueId}.')
+  || !coreSource.includes('CAPA implementation evidence reviewed for ${issueId}; effectiveness remains due for follow-up.')
   || !coreSource.includes('Copy close file')
   || coreSource.includes('Copy handoff')
   || !coreSource.includes('shiftHandoff.sourceCanonical === currentProductionCanonical')
@@ -7689,7 +7697,7 @@ if (!productionPageContract.includes('className="plant-today"')
   || !productionPageContract.includes('Records operator observations only.')
   || !productionPageContract.includes('disabled={!productionCanWrite')
   || !productionPageContract.includes('<IssueList disabled={!productionCanWrite')
-  || !productionPageContract.includes('<ResolvedIssueHistory issues={resolvedIssues} now={issueClock} />')
+  || !productionPageContract.includes('<ResolvedIssueHistory disabled={!productionCanWrite || Boolean(pendingAction)} issues={resolvedIssues} now={issueClock} onReviewEffectiveness={startQualityEffectivenessReview} />')
   || !productionPageContract.includes('className="production-issue-dialog"')
   || !productionPageContract.includes("dialog.querySelector('textarea')?.focus()")
   || !productionPageContract.includes('}, [issueDialogOpen, tab])')
@@ -21157,10 +21165,12 @@ async function verifyProductionRuntime() {
       correctiveAction: 'Recalibrated the feedback loop and added a first-piece check.',
       verificationResult: 'Three consecutive samples remained inside the approved range.',
       effectivenessOwner: 'Quality supervisor',
+      effectivenessReviewDueAt: '2026-07-23T10:00:02.500Z',
     })
-    assert(qualityCorrectiveAction?.contract === 'supermega.production.quality-capa.v1'
+    assert(qualityCorrectiveAction?.contract === 'supermega.production.quality-capa.v2'
       && qualityCorrectiveAction.recurrenceKey === 'machine:temperature-drift'
-      && qualityCorrectiveAction.priorIssueIds.length === 0,
+      && qualityCorrectiveAction.priorIssueIds.length === 0
+      && qualityCorrectiveAction.effectivenessReviewDueAt === '2026-07-23T10:00:02.500Z',
     'production_first_quality_capa_not_built')
     const myanmarQualityCorrectiveAction = model.buildProductionQualityCorrectiveAction(opened, issue.id, {
       failureMode: 'အပူချိန် လွဲ',
@@ -21169,6 +21179,7 @@ async function verifyProductionRuntime() {
       correctiveAction: 'Recalibrated the feedback loop and added a first-piece check.',
       verificationResult: 'Three consecutive samples remained inside the approved range.',
       effectivenessOwner: 'Quality supervisor',
+      effectivenessReviewDueAt: '2026-07-23T10:00:02.500Z',
     })
     assert(myanmarQualityCorrectiveAction?.recurrenceKey === 'machine:အပူချိန်-လွဲ', 'production_myanmar_quality_capa_token_lost_marks')
     const resolved = model.resolveProductionIssue(opened, issue.id, resolutionProof, undefined, qualityCorrectiveAction)
@@ -21183,6 +21194,16 @@ async function verifyProductionRuntime() {
     assert(model.resolveProductionIssue(resolved, issue.id, { ...resolutionProof, reason: 'Changed' }, undefined, qualityCorrectiveAction) === null, 'production_resolution_conflicting_retry_succeeded')
     assert(model.resolveProductionIssue(resolved, issue.id, proof('ACT-RESOLVE-AGAIN')) === null, 'production_second_resolution_succeeded')
     assert(model.resolveProductionIssue(resolved, 'ISS-MISSING', proof('ACT-RESOLVE-MISSING')) === null, 'production_missing_issue_resolution_succeeded')
+    assert(model.reviewProductionQualityEffectiveness(resolved, issue.id, proof('ACT-CAPA-REVIEW-EARLY', 2_400), 'effective', 'Reviewed the planned sample window.') === null, 'production_early_capa_effectiveness_review_succeeded')
+    const effectivenessProof = proof('ACT-CAPA-REVIEW', 2_600)
+    const effectivenessReviewed = model.reviewProductionQualityEffectiveness(resolved, issue.id, effectivenessProof, 'effective', 'Reviewed the planned sample window and classified recurrence history.')
+    assert(effectivenessReviewed?.issues[0].resolution?.qualityEffectivenessReview?.outcome === 'effective'
+      && effectivenessReviewed.issues[0].resolution.qualityEffectivenessReview.recurrenceIssueIds.length === 0
+      && effectivenessReviewed.issues[0].resolution.qualityEffectivenessReview.escalation === 'none'
+      && effectivenessReviewed.events[0].kind === 'quality_effectiveness_reviewed',
+    'production_capa_effectiveness_review_not_recorded')
+    assert(model.reviewProductionQualityEffectiveness(effectivenessReviewed, issue.id, effectivenessProof, 'effective', 'Reviewed the planned sample window and classified recurrence history.') === effectivenessReviewed, 'production_capa_effectiveness_retry_not_idempotent')
+    assert(model.reviewProductionQualityEffectiveness(effectivenessReviewed, issue.id, proof('ACT-CAPA-REVIEW-AGAIN', 2_700), 'effective', 'Second review.') === null, 'production_second_capa_effectiveness_review_succeeded')
     const changedResolutionProof = {
       ...resolved,
       issues: [{
@@ -21225,6 +21246,7 @@ async function verifyProductionRuntime() {
       correctiveAction: 'Added the controlled fixture to the station release checklist.',
       verificationResult: 'The next three controlled batches passed the same sample check.',
       effectivenessOwner: 'Quality supervisor',
+      effectivenessReviewDueAt: '2026-07-23T10:00:06.000Z',
     })
     assert(recurringCapa?.priorIssueIds.join(',') === issue.id, 'production_recurrence_did_not_link_prior_capa')
     const recurringResolutionProof = proof('ACT-ISSUE-RECURRING-RESOLVE', 4_000)
@@ -21237,6 +21259,20 @@ async function verifyProductionRuntime() {
       issues: recurringResolved.issues.map((candidate) => candidate.id === recurringIssue.id ? { ...candidate, resolution: { ...candidate.resolution, qualityCorrectiveAction: forgedRecurringCapa } } : candidate),
       events: recurringResolved.events.map((event) => event.actionId === recurringResolutionProof.actionId ? { ...event, qualityCorrectiveAction: forgedRecurringCapa } : event),
     }), 'production_stored_recurrence_links_were_mutable')
+    const recurringEffectivenessProof = proof('ACT-CAPA-RECURRING-REVIEW', 5_000)
+    assert(model.reviewProductionQualityEffectiveness(recurringResolved, issue.id, recurringEffectivenessProof, 'effective', 'Reviewed recurrence history.') === null, 'production_recurring_capa_marked_effective')
+    const recurringEffectivenessReviewed = model.reviewProductionQualityEffectiveness(recurringResolved, issue.id, recurringEffectivenessProof, 'ineffective', 'The same classified failure recurred inside the review period.')
+    const recurringEffectiveness = recurringEffectivenessReviewed?.issues.find((candidate) => candidate.id === issue.id)?.resolution?.qualityEffectivenessReview
+    assert(recurringEffectiveness?.outcome === 'ineffective'
+      && recurringEffectiveness.escalation === 'required'
+      && recurringEffectiveness.recurrenceIssueIds.join(',') === recurringIssue.id,
+    'production_recurring_capa_did_not_force_escalation')
+    const forgedEffectiveness = { ...recurringEffectiveness, recurrenceIssueIds: [] }
+    assertThrows(() => model.validateProductionState({
+      ...recurringEffectivenessReviewed,
+      issues: recurringEffectivenessReviewed.issues.map((candidate) => candidate.id === issue.id ? { ...candidate, resolution: { ...candidate.resolution, qualityEffectivenessReview: forgedEffectiveness } } : candidate),
+      events: recurringEffectivenessReviewed.events.map((event) => event.actionId === recurringEffectivenessProof.actionId ? { ...event, qualityEffectivenessReview: forgedEffectiveness } : event),
+    }), 'production_capa_effectiveness_recurrence_evidence_was_mutable')
 
     const holdProof = proof('ACT-QUALITY-HOLD', 2_600)
     const held = model.placeProductionQualityHold(base, 'JOB-1', holdProof)
@@ -22600,8 +22636,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// The bounded cumulative allowance includes reviewed Plant evidence alignment plus the realistic Spa workflow, client privacy, and staff-role controls; initial-load and core-app chunk budgets remain unchanged.
-if (bytes > 2_958_000) fail(`artifact_budget:${bytes}`)
+// The bounded cumulative allowance includes reviewed Plant CAPA effectiveness follow-up plus the realistic Spa workflow, client privacy, and staff-role controls; initial-load and 500 kB chunk budgets remain unchanged.
+if (bytes > 2_972_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

@@ -666,6 +666,25 @@ def quality_corrective_action(
     }
 
 
+def quality_corrective_action_v2(
+    current: dict[str, object],
+    *,
+    issue_id: str,
+    effectiveness_review_due_at: str,
+    failure_mode: str = "Seal temperature drift",
+    cause_category: str = "machine",
+) -> dict[str, object]:
+    action = quality_corrective_action(
+        current,
+        issue_id=issue_id,
+        failure_mode=failure_mode,
+        cause_category=cause_category,
+    )
+    action["contract"] = "supermega.production.quality-capa.v2"
+    action["effectivenessReviewDueAt"] = effectiveness_review_due_at
+    return action
+
+
 def resolved_issue_state(
     current: dict[str, object],
     evidence: dict[str, str],
@@ -712,6 +731,86 @@ def resolved_issue_state(
                 if quality_action is not None
                 else {}
             ),
+        ),
+        *state["events"],
+    ]
+    return state
+
+
+def resolved_issue_state_with_quality_action(
+    current: dict[str, object],
+    evidence: dict[str, str],
+    quality_action: dict[str, object],
+    *,
+    issue_id: str = "ISSUE-REAL-001",
+) -> dict[str, object]:
+    state = resolved_issue_state(current, evidence, issue_id=issue_id)
+    issue = next(issue for issue in state["issues"] if issue["id"] == issue_id)
+    issue["resolution"]["qualityCorrectiveAction"] = deepcopy(quality_action)
+    state["events"][0]["qualityCorrectiveAction"] = deepcopy(quality_action)
+    return state
+
+
+def quality_effectiveness_reviewed_state(
+    current: dict[str, object],
+    evidence: dict[str, str],
+    *,
+    issue_id: str,
+    outcome: str,
+    evidence_summary: str = "Reviewed the planned sample window and the classified problem history.",
+) -> dict[str, object]:
+    state = deepcopy(current)
+    issue_index = next(
+        index for index, issue in enumerate(state["issues"]) if issue["id"] == issue_id
+    )
+    issue = state["issues"][issue_index]
+    resolution = issue["resolution"]
+    quality_action = resolution["qualityCorrectiveAction"]
+    reviewed_at = datetime.fromisoformat(evidence["capturedAt"].replace("Z", "+00:00"))
+    resolved_at = datetime.fromisoformat(resolution["resolvedAt"].replace("Z", "+00:00"))
+    recurrence_ids = sorted(
+        (
+            candidate
+            for candidate in current["issues"]
+            if candidate["id"] != issue_id
+            and candidate["kind"] == "quality"
+            and candidate["status"] == "resolved"
+            and datetime.fromisoformat(candidate["createdAt"].replace("Z", "+00:00"))
+            > resolved_at
+            and datetime.fromisoformat(candidate["createdAt"].replace("Z", "+00:00"))
+            <= reviewed_at
+            and datetime.fromisoformat(
+                candidate["resolution"]["resolvedAt"].replace("Z", "+00:00")
+            )
+            <= reviewed_at
+            and candidate["resolution"]["qualityCorrectiveAction"]["recurrenceKey"]
+            == quality_action["recurrenceKey"]
+        ),
+        key=lambda candidate: (candidate["createdAt"], candidate["id"]),
+    )
+    review = {
+        "contract": "supermega.production.quality-capa-effectiveness.v1",
+        "actionId": evidence["actionId"],
+        "reviewedAt": evidence["capturedAt"],
+        "reviewedBy": evidence["actor"],
+        "outcome": outcome,
+        "evidenceSummary": evidence_summary,
+        "evidenceReference": evidence["evidenceReference"],
+        "recurrenceIssueIds": [candidate["id"] for candidate in recurrence_ids],
+        "escalation": "none" if outcome == "effective" else "required",
+    }
+    state["issues"][issue_index] = {
+        **issue,
+        "resolution": {**resolution, "qualityEffectivenessReview": review},
+    }
+    state["revision"] += 1
+    state["events"] = [
+        production_event(
+            evidence,
+            kind="quality_effectiveness_reviewed",
+            subject_id=issue_id,
+            summary=f"Reviewed {issue_id} CAPA as {outcome}",
+            qualityEffectivenessReview=deepcopy(review),
         ),
         *state["events"],
     ]
@@ -1026,6 +1125,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.material.consumed",
             "production.issue.opened",
             "production.issue.resolved",
+            "production.quality_effectiveness.reviewed",
             "production.quality_hold.placed",
             "production.quality_hold.released",
             "production.machine_state.changed",
@@ -3322,6 +3422,173 @@ class ProductionRuntimeTests(unittest.TestCase):
                 unrelated,
                 resolve_evidence,
             )
+
+    def test_quality_capa_effectiveness_review_is_due_dated_and_recurrence_aware(self) -> None:
+        current = starting_workspace()
+        open_evidence = action_evidence("ACT-CAPA-V2-OPEN")
+        opened = apply_event(
+            current,
+            "production.issue.opened",
+            opened_issue_state(current, open_evidence),
+            open_evidence,
+        )
+        resolve_evidence = action_evidence(
+            "ACT-CAPA-V2-RESOLVE",
+            captured_at="2026-07-24T09:30:00.000Z",
+        )
+        quality_action = quality_corrective_action_v2(
+            opened,
+            issue_id="ISSUE-REAL-001",
+            effectiveness_review_due_at="2026-07-24T09:35:00.000Z",
+        )
+        resolved = apply_event(
+            opened,
+            "production.issue.resolved",
+            resolved_issue_state_with_quality_action(
+                opened,
+                resolve_evidence,
+                quality_action,
+            ),
+            resolve_evidence,
+        )
+        self.assertEqual(
+            resolved["issues"][0]["resolution"]["qualityCorrectiveAction"]["contract"],
+            "supermega.production.quality-capa.v2",
+        )
+
+        early_evidence = action_evidence(
+            "ACT-CAPA-V2-EARLY",
+            captured_at="2026-07-24T09:34:00.000Z",
+        )
+        with self.assertRaisesRegex(TrialValidationError, "predate its due time"):
+            apply_event(
+                resolved,
+                "production.quality_effectiveness.reviewed",
+                quality_effectiveness_reviewed_state(
+                    resolved,
+                    early_evidence,
+                    issue_id="ISSUE-REAL-001",
+                    outcome="effective",
+                ),
+                early_evidence,
+            )
+
+        review_evidence = action_evidence(
+            "ACT-CAPA-V2-REVIEW",
+            captured_at="2026-07-24T09:40:00.000Z",
+        )
+        reviewed = apply_event(
+            resolved,
+            "production.quality_effectiveness.reviewed",
+            quality_effectiveness_reviewed_state(
+                resolved,
+                review_evidence,
+                issue_id="ISSUE-REAL-001",
+                outcome="effective",
+            ),
+            review_evidence,
+        )
+        review = reviewed["issues"][0]["resolution"]["qualityEffectivenessReview"]
+        self.assertEqual(review["outcome"], "effective")
+        self.assertEqual(review["recurrenceIssueIds"], [])
+        self.assertEqual(review["escalation"], "none")
+        self.assertEqual(reviewed["events"][0]["kind"], "quality_effectiveness_reviewed")
+
+        second_review_evidence = action_evidence(
+            "ACT-CAPA-V2-REVIEW-AGAIN",
+            captured_at="2026-07-24T09:45:00.000Z",
+        )
+        with self.assertRaisesRegex(TrialValidationError, "exactly one event"):
+            apply_event(
+                reviewed,
+                "production.quality_effectiveness.reviewed",
+                quality_effectiveness_reviewed_state(
+                    reviewed,
+                    second_review_evidence,
+                    issue_id="ISSUE-REAL-001",
+                    outcome="effective",
+                ),
+                second_review_evidence,
+            )
+
+        repeat_open_evidence = action_evidence(
+            "ACT-CAPA-V2-REPEAT-OPEN",
+            captured_at="2026-07-24T09:36:00.000Z",
+        )
+        repeat_open = apply_event(
+            resolved,
+            "production.issue.opened",
+            opened_issue_state(
+                resolved,
+                repeat_open_evidence,
+                issue_id="ISSUE-REAL-002",
+            ),
+            repeat_open_evidence,
+        )
+        repeat_resolve_evidence = action_evidence(
+            "ACT-CAPA-V2-REPEAT-RESOLVE",
+            captured_at="2026-07-24T09:38:00.000Z",
+        )
+        repeat_action = quality_corrective_action_v2(
+            repeat_open,
+            issue_id="ISSUE-REAL-002",
+            effectiveness_review_due_at="2026-07-24T10:00:00.000Z",
+        )
+        recurring = apply_event(
+            repeat_open,
+            "production.issue.resolved",
+            resolved_issue_state_with_quality_action(
+                repeat_open,
+                repeat_resolve_evidence,
+                repeat_action,
+                issue_id="ISSUE-REAL-002",
+            ),
+            repeat_resolve_evidence,
+        )
+        recurring_review_evidence = action_evidence(
+            "ACT-CAPA-V2-RECURRING-REVIEW",
+            captured_at="2026-07-24T09:40:00.000Z",
+        )
+        effective_candidate = quality_effectiveness_reviewed_state(
+            recurring,
+            recurring_review_evidence,
+            issue_id="ISSUE-REAL-001",
+            outcome="effective",
+        )
+        with self.assertRaisesRegex(TrialValidationError, "effective outcome"):
+            apply_event(
+                recurring,
+                "production.quality_effectiveness.reviewed",
+                effective_candidate,
+                recurring_review_evidence,
+            )
+
+        ineffective_candidate = quality_effectiveness_reviewed_state(
+            recurring,
+            recurring_review_evidence,
+            issue_id="ISSUE-REAL-001",
+            outcome="ineffective",
+        )
+        escalated = apply_event(
+            recurring,
+            "production.quality_effectiveness.reviewed",
+            ineffective_candidate,
+            recurring_review_evidence,
+        )
+        original = next(issue for issue in escalated["issues"] if issue["id"] == "ISSUE-REAL-001")
+        recurring_review = original["resolution"]["qualityEffectivenessReview"]
+        self.assertEqual(recurring_review["recurrenceIssueIds"], ["ISSUE-REAL-002"])
+        self.assertEqual(recurring_review["outcome"], "ineffective")
+        self.assertEqual(recurring_review["escalation"], "required")
+
+        forged = deepcopy(escalated)
+        forged_review = next(
+            issue for issue in forged["issues"] if issue["id"] == "ISSUE-REAL-001"
+        )["resolution"]["qualityEffectivenessReview"]
+        forged_review["recurrenceIssueIds"] = []
+        forged["events"][0]["qualityEffectivenessReview"]["recurrenceIssueIds"] = []
+        with self.assertRaisesRegex(TrialValidationError, "recurrence evidence"):
+            validate_production_state(forged)
 
     def test_new_issue_requires_actionable_ownership_and_due_time(self) -> None:
         current = starting_workspace()

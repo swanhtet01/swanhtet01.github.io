@@ -228,6 +228,8 @@ import {
   productionMaintenanceRecords,
   productionMaterialUnits,
   productionQualityCauseCategories,
+  productionQualityEffectivenessRecurrenceIssueIds,
+  productionQualityEffectivenessReviewDueAt,
   productionMachineStates,
   productionBusinessJobs,
   productionShopDemandSource,
@@ -242,6 +244,7 @@ import {
   recordProductionShiftClose,
   registerProductionJob,
   releaseProductionQualityHold,
+  reviewProductionQualityEffectiveness,
   resolveProductionIssue,
   startProductionDowntime,
   startProductionMaintenance,
@@ -265,6 +268,7 @@ import {
   type ProductionOutputKind,
   type ProductionQualityCauseCategory,
   type ProductionQualityCorrectiveAction,
+  type ProductionQualityEffectivenessOutcome,
   type ProductionShiftHandoff,
 } from './production-workspace'
 import {
@@ -700,6 +704,10 @@ function defaultIssueDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 4 * 60 * 60 * 1000))
 }
 
+function defaultQualityEffectivenessDueInput() {
+  return localDateTimeInputValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000))
+}
+
 function defaultOrderPromiseInput() {
   return localDateTimeInputValue(new Date(Date.now() + 2 * 60 * 60 * 1000))
 }
@@ -962,6 +970,7 @@ type PlantActionKind =
   | 'production_material'
   | 'issue_create'
   | 'issue_resolution'
+  | 'quality_effectiveness'
   | 'quality_hold'
   | 'quality_release'
   | 'machine_state'
@@ -1015,6 +1024,7 @@ const accountableActionSubmitLabels: Record<ShopActionKind | PlantActionKind, st
   production_material: 'Record material use',
   issue_create: 'Open problem',
   issue_resolution: 'Resolve problem',
+  quality_effectiveness: 'Review CAPA effectiveness',
   quality_hold: 'Place quality hold',
   quality_release: 'Release quality hold',
   machine_state: 'Record machine status',
@@ -8136,6 +8146,7 @@ const productionEventLabels: Record<ProductionEvent['kind'], string> = {
   material_consumed: 'Material used',
   issue_opened: 'Issue opened',
   issue_resolved: 'Issue resolved',
+  quality_effectiveness_reviewed: 'CAPA effectiveness reviewed',
   quality_hold_placed: 'Quality hold placed',
   quality_hold_released: 'Quality hold released',
   machine_state_changed: 'Machine state changed',
@@ -8299,6 +8310,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     correctiveAction: string
     verificationResult: string
     effectivenessOwner: string
+    effectivenessReviewDueAt: string
+  } | null>(null)
+  const [qualityEffectivenessDraft, setQualityEffectivenessDraft] = useState<{
+    issueId: string
+    outcome: ProductionQualityEffectivenessOutcome
+    evidenceSummary: string
+    recurrenceIssueIds: string[]
   } | null>(null)
   const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
   const [downtimeDialogOpen, setDowntimeDialogOpen] = useState(false)
@@ -8345,6 +8363,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const issueDialogRef = useRef<HTMLDialogElement>(null)
   const maintenanceCorrectiveDialogRef = useRef<HTMLDialogElement>(null)
   const qualityCorrectiveDialogRef = useRef<HTMLDialogElement>(null)
+  const qualityEffectivenessDialogRef = useRef<HTMLDialogElement>(null)
   const issueTriggerRef = useRef<HTMLButtonElement>(null)
   const machineDialogRef = useRef<HTMLDialogElement>(null)
   const machineTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -8385,7 +8404,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       return (left.dueAt ? Date.parse(left.dueAt) : Number.POSITIVE_INFINITY)
         - (right.dueAt ? Date.parse(right.dueAt) : Number.POSITIVE_INFINITY)
     })
-  const resolvedIssues = production.issues.filter((issue) => issue.status === 'resolved')
+  const resolvedIssues = production.issues
+    .filter((issue) => issue.status === 'resolved')
+    .sort((left, right) => {
+      const leftDue = productionQualityEffectivenessReviewDueAt(left.resolution?.qualityCorrectiveAction)
+      const rightDue = productionQualityEffectivenessReviewDueAt(right.resolution?.qualityCorrectiveAction)
+      const leftPending = Boolean(leftDue && !left.resolution?.qualityEffectivenessReview)
+      const rightPending = Boolean(rightDue && !right.resolution?.qualityEffectivenessReview)
+      if (leftPending !== rightPending) return leftPending ? -1 : 1
+      if (leftPending && rightPending) return Date.parse(leftDue ?? '') - Date.parse(rightDue ?? '')
+      return Date.parse(right.resolution?.resolvedAt ?? right.createdAt) - Date.parse(left.resolution?.resolvedAt ?? left.createdAt)
+    })
   const urgentIssueCount = openIssues.filter((issue) => issue.severity === 'critical' || issue.severity === 'high').length
   const heldJobs = production.jobs.filter((job) => Boolean(job.qualityHold))
   const holdableJobs = production.jobs.filter((job) => !job.qualityHold && !job.closure)
@@ -9113,6 +9142,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     if (qualityCorrectiveDraft && !dialog.open) dialog.showModal()
     if (!qualityCorrectiveDraft && dialog.open) dialog.close()
   }, [qualityCorrectiveDraft, tab])
+
+  useEffect(() => {
+    const dialog = qualityEffectivenessDialogRef.current
+    if (!dialog) return
+    if (qualityEffectivenessDraft && !dialog.open) dialog.showModal()
+    if (!qualityEffectivenessDraft && dialog.open) dialog.close()
+  }, [qualityEffectivenessDraft, tab])
 
   useEffect(() => {
     const dialog = machineDialogRef.current
@@ -10247,6 +10283,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         correctiveAction: '',
         verificationResult: '',
         effectivenessOwner: issue.owner ?? managedIdentity?.userId ?? 'Quality owner',
+        effectivenessReviewDueAt: defaultQualityEffectivenessDueInput(),
       })
       return
     }
@@ -10291,6 +10328,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       setNotice('This quality problem is no longer open for CAPA review.')
       return
     }
+    const effectivenessReviewDue = new Date(qualityCorrectiveDraft.effectivenessReviewDueAt)
+    if (Number.isNaN(effectivenessReviewDue.getTime()) || effectivenessReviewDue.getTime() <= Date.now()) {
+      setNotice('Choose a future effectiveness review time.')
+      return
+    }
     const result = buildProductionQualityCorrectiveAction(production, issue.id, {
       failureMode: qualityCorrectiveDraft.failureMode.trim(),
       causeCategory: qualityCorrectiveDraft.causeCategory,
@@ -10298,9 +10340,10 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       correctiveAction: qualityCorrectiveDraft.correctiveAction.trim(),
       verificationResult: qualityCorrectiveDraft.verificationResult.trim(),
       effectivenessOwner: qualityCorrectiveDraft.effectivenessOwner.trim(),
+      effectivenessReviewDueAt: effectivenessReviewDue.toISOString(),
     })
     if (!result) {
-      setNotice('Record a stable failure mode, cause, corrective action, effectiveness evidence, and owner before review.')
+      setNotice('Record a stable failure mode, cause, corrective action, implementation evidence, owner, and future review time.')
       return
     }
     qualityCorrectiveDialogRef.current?.close()
@@ -10316,19 +10359,73 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       summary: `Resolve ${issueId}`,
       before: issue.owner && issue.containment ? `${issue.status} · owner ${issue.owner} · containment: ${issue.containment}` : `${issue.status} · legacy issue without assigned owner`,
       after: qualityCorrectiveAction
-        ? `resolved with effective CAPA · ${qualityCorrectiveAction.priorIssueIds.length ? `${qualityCorrectiveAction.priorIssueIds.length} prior matching problem${qualityCorrectiveAction.priorIssueIds.length === 1 ? '' : 's'} linked` : 'first classified occurrence'} · no inventory or customer action`
+        ? `implementation closed · effectiveness review due ${formatIssueDue(qualityCorrectiveAction.effectivenessReviewDueAt ?? '')} · ${qualityCorrectiveAction.priorIssueIds.length ? `${qualityCorrectiveAction.priorIssueIds.length} prior matching problem${qualityCorrectiveAction.priorIssueIds.length === 1 ? '' : 's'} linked` : 'first classified occurrence'} · no inventory or customer action`
         : maintenanceCorrectiveAction
           ? `resolved with corrective action and ${maintenanceCorrectiveAction.finalDisposition.replaceAll('_', ' ')} disposition; machine status unchanged`
           : 'resolved with operator evidence',
       actorSuggestion: managedIdentity ? undefined : qualityCorrectiveAction?.effectivenessOwner || issue.owner || 'Plant supervisor',
       reasonSuggestion: qualityCorrectiveAction
-        ? `CAPA evidence reviewed and effectiveness verified for ${issueId}.`
+        ? `CAPA implementation evidence reviewed for ${issueId}; effectiveness remains due for follow-up.`
         : `Resolution evidence reviewed for ${issueId}.`,
       evidenceReferenceSuggestion: (qualityCorrectiveAction
         ? `CAPA ${issueId} · ${qualityCorrectiveAction.failureMode}`
         : `Plant issue ${issueId}`).slice(0, 180),
       apply: async (record) => {
         await mutateProduction('production.issue.resolved', record.commandId, productionActionProof(record), (current) => resolveProductionIssue(current, issueId, productionActionProof(record), maintenanceCorrectiveAction, qualityCorrectiveAction))
+      },
+    })
+  }
+
+  function startQualityEffectivenessReview(issueId: string) {
+    const issue = production.issues.find((candidate) => candidate.id === issueId)
+    const action = issue?.resolution?.qualityCorrectiveAction
+    const dueAt = productionQualityEffectivenessReviewDueAt(action)
+    if (!issue?.resolution || issue.status !== 'resolved' || !dueAt || issue.resolution.qualityEffectivenessReview) {
+      setNotice('This problem has no pending CAPA effectiveness review.')
+      return
+    }
+    const reviewedAt = new Date().toISOString()
+    if (Date.parse(reviewedAt) < Date.parse(dueAt)) {
+      setNotice(`Effectiveness review is due ${formatIssueDue(dueAt)}.`)
+      return
+    }
+    const recurrenceIssueIds = productionQualityEffectivenessRecurrenceIssueIds(production, issueId, reviewedAt)
+    setQualityEffectivenessDraft({
+      issueId,
+      outcome: recurrenceIssueIds.length ? 'ineffective' : 'effective',
+      evidenceSummary: '',
+      recurrenceIssueIds,
+    })
+  }
+
+  function reviewQualityEffectiveness(event: FormEvent) {
+    event.preventDefault()
+    if (!qualityEffectivenessDraft) return
+    const issue = production.issues.find((candidate) => candidate.id === qualityEffectivenessDraft.issueId)
+    const action = issue?.resolution?.qualityCorrectiveAction
+    const dueAt = productionQualityEffectivenessReviewDueAt(action)
+    const evidenceSummary = qualityEffectivenessDraft.evidenceSummary.trim()
+    if (!issue?.resolution || issue.status !== 'resolved' || !dueAt || issue.resolution.qualityEffectivenessReview || !evidenceSummary) {
+      setNotice('Record review evidence for one pending CAPA effectiveness check.')
+      return
+    }
+    const recurrenceIssueIds = productionQualityEffectivenessRecurrenceIssueIds(production, issue.id, new Date().toISOString())
+    const outcome = recurrenceIssueIds.length ? 'ineffective' : qualityEffectivenessDraft.outcome
+    qualityEffectivenessDialogRef.current?.close()
+    setQualityEffectivenessDraft(null)
+    queueAction({
+      kind: 'quality_effectiveness',
+      subjectId: issue.id,
+      summary: `Review ${issue.id} CAPA effectiveness`,
+      before: `implementation closed · review due ${formatIssueDue(dueAt)} · owner ${action?.effectivenessOwner ?? issue.owner ?? 'unassigned'}`,
+      after: outcome === 'effective'
+        ? 'effective · no classified recurrence · no escalation'
+        : `ineffective · escalation required${recurrenceIssueIds.length ? ` · linked ${recurrenceIssueIds.join(', ')}` : ''}`,
+      actorSuggestion: managedIdentity ? undefined : action?.effectivenessOwner || issue.owner || 'Quality owner',
+      reasonSuggestion: `CAPA effectiveness evidence reviewed for ${issue.id}; outcome ${outcome}.`,
+      evidenceReferenceSuggestion: `CAPA effectiveness ${issue.id}`,
+      apply: async (record) => {
+        await mutateProduction('production.quality_effectiveness.reviewed', record.commandId, productionActionProof(record), (current) => reviewProductionQualityEffectiveness(current, issue.id, productionActionProof(record), outcome, evidenceSummary))
       },
     })
   }
@@ -10852,7 +10949,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <section className="core-panel production-issue-launcher">
           <div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Open problems</h2></div><span className="panel-note">{urgentIssueCount ? `${urgentIssueCount} urgent · ` : ''}{openIssues.length} open</span></div>
           <IssueList disabled={!productionCanWrite || Boolean(pendingAction)} issues={openIssues} now={issueClock} onResolve={resolveIssue} />
-          <ResolvedIssueHistory issues={resolvedIssues} now={issueClock} />
+          <ResolvedIssueHistory disabled={!productionCanWrite || Boolean(pendingAction)} issues={resolvedIssues} now={issueClock} onReviewEffectiveness={startQualityEffectivenessReview} />
           <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={openManualIssueDialog} ref={issueTriggerRef} type="button">Record problem</button>
           <details className="compact-disclosure production-history" open={heldJobs.length ? true : undefined}>
             <summary>Quality holds <span>{heldJobs.length}</span></summary>
@@ -10990,15 +11087,28 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     </dialog>
     <dialog aria-labelledby="quality-corrective-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setQualityCorrectiveDraft(null) }} ref={qualityCorrectiveDialogRef}>
       {qualityCorrectiveDraft ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Quality CAPA</span><h2 id="quality-corrective-title">Verify corrective action</h2></div><button aria-label="Close quality CAPA form" className="text-link" onClick={() => setQualityCorrectiveDraft(null)} type="button">Close</button></div>
+        <div className="panel-head"><div><span className="core-eyebrow">Quality CAPA</span><h2 id="quality-corrective-title">Close implementation</h2></div><button aria-label="Close quality CAPA form" className="text-link" onClick={() => setQualityCorrectiveDraft(null)} type="button">Close</button></div>
         <form autoComplete="off" className="core-form" onSubmit={reviewQualityCorrectiveResolution}>
           <label>Failure mode<input autoFocus maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, failureMode: event.target.value } : current)} placeholder="Stable name used to find repeats" required value={qualityCorrectiveDraft.failureMode} /><small>Use the same short name when the same defect happens again.</small></label>
           <div className="form-row"><label>Cause category<select onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, causeCategory: event.target.value as ProductionQualityCauseCategory } : current)} value={qualityCorrectiveDraft.causeCategory}>{productionQualityCauseCategories.map((category) => <option key={category} value={category}>{productionQualityCauseLabels[category]}</option>)}</select></label><label>Effectiveness owner<input autoComplete="off" maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessOwner: event.target.value } : current)} placeholder="Named person or role" required value={qualityCorrectiveDraft.effectivenessOwner} /></label></div>
           <label>Verified root cause<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, rootCause: event.target.value } : current)} placeholder="What evidence identifies the cause?" required value={qualityCorrectiveDraft.rootCause} /></label>
           <label>Corrective action<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, correctiveAction: event.target.value } : current)} placeholder="What changed to prevent recurrence?" required value={qualityCorrectiveDraft.correctiveAction} /></label>
-          <label>Effectiveness evidence<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What result proves the action worked?" required value={qualityCorrectiveDraft.verificationResult} /></label>
-          <p className="panel-copy">Matching prior CAPA records are linked automatically from the failure mode and cause category. Closing changes only this problem record; it does not release a batch, block stock, contact a customer, or issue a certificate.</p>
-          <div className="form-actions"><button className="core-button" onClick={() => setQualityCorrectiveDraft(null)} type="button">Cancel</button><button className="core-button primary" type="submit">Review CAPA closeout</button></div>
+          <label>Implementation evidence<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What evidence shows the corrective action was put in place?" required value={qualityCorrectiveDraft.verificationResult} /></label>
+          <label>Effectiveness review due<input min={localDateTimeInputValue(new Date(Date.now() + 60 * 60 * 1000))} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessReviewDueAt: event.target.value } : current)} required type="datetime-local" value={qualityCorrectiveDraft.effectivenessReviewDueAt} /><small>A separate review later checks recurrence before declaring this effective.</small></label>
+          <p className="panel-copy">Matching prior CAPA records are linked automatically from the failure mode and cause category. This closes implementation only; it does not declare effectiveness, release a batch, block stock, contact a customer, or issue a certificate.</p>
+          <div className="form-actions"><button className="core-button" onClick={() => setQualityCorrectiveDraft(null)} type="button">Cancel</button><button className="core-button primary" type="submit">Review implementation close</button></div>
+        </form>
+      </> : null}
+    </dialog>
+    <dialog aria-labelledby="quality-effectiveness-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setQualityEffectivenessDraft(null) }} ref={qualityEffectivenessDialogRef}>
+      {qualityEffectivenessDraft ? <>
+        <div className="panel-head"><div><span className="core-eyebrow">CAPA follow-up</span><h2 id="quality-effectiveness-title">Review effectiveness</h2></div><button aria-label="Close effectiveness review form" className="text-link" onClick={() => setQualityEffectivenessDraft(null)} type="button">Close</button></div>
+        <form autoComplete="off" className="core-form" onSubmit={reviewQualityEffectiveness}>
+          {qualityEffectivenessDraft.recurrenceIssueIds.length ? <p className="form-notice" role="status"><strong>Recurrence found</strong><br />Linked classified problems: {qualityEffectivenessDraft.recurrenceIssueIds.join(', ')}. The outcome is ineffective and escalation is required.</p> : <p className="form-notice" role="status"><strong>No classified recurrence found</strong><br />Confirm the evidence observed through the planned review period.</p>}
+          <label>Outcome<select disabled={qualityEffectivenessDraft.recurrenceIssueIds.length > 0} onChange={(event) => setQualityEffectivenessDraft((current) => current ? { ...current, outcome: event.target.value as ProductionQualityEffectivenessOutcome } : current)} value={qualityEffectivenessDraft.outcome}><option value="effective">Effective</option><option value="ineffective">Ineffective — escalate</option></select></label>
+          <label>Review evidence<textarea autoFocus maxLength={360} onChange={(event) => setQualityEffectivenessDraft((current) => current ? { ...current, evidenceSummary: event.target.value } : current)} placeholder="What was checked across the review period, and what was observed?" required value={qualityEffectivenessDraft.evidenceSummary} /></label>
+          <p className="panel-copy">This records one immutable review only. An ineffective result requires escalation, but this step does not reopen work, release stock, contact customers, or control equipment.</p>
+          <div className="form-actions"><button className="core-button" onClick={() => setQualityEffectivenessDraft(null)} type="button">Cancel</button><button className="core-button primary" type="submit">Review effectiveness</button></div>
         </form>
       </> : null}
     </dialog>
@@ -11035,12 +11145,16 @@ function CompletedJobHistory({ jobs, now, progressById }: { jobs: ProductionJob[
   </details>
 }
 
-function IssueList({ disabled = false, issues, now, onResolve }: { disabled?: boolean; issues: ProductionIssue[]; now: number; onResolve: (id: string) => void }) {
+function IssueList({ disabled = false, issues, now, onResolve, onReviewEffectiveness }: { disabled?: boolean; issues: ProductionIssue[]; now: number; onResolve: (id: string) => void; onReviewEffectiveness?: (id: string) => void }) {
   if (!issues.length) return <Empty>No production issue is open.</Empty>
   return <div className="issue-list">{issues.map((issue) => {
     const actionable = Boolean(issue.severity && issue.owner && issue.dueAt && issue.containment)
     const overdue = issue.status === 'open' && Boolean(issue.dueAt) && Date.parse(issue.dueAt ?? '') < now
     const severityLabel = issue.severity ? productionIssueSeverityLabels[issue.severity] : 'Legacy'
+    const qualityAction = issue.resolution?.qualityCorrectiveAction
+    const effectivenessReview = issue.resolution?.qualityEffectivenessReview
+    const effectivenessDueAt = productionQualityEffectivenessReviewDueAt(qualityAction)
+    const effectivenessDue = Boolean(effectivenessDueAt) && Date.parse(effectivenessDueAt ?? '') <= now
     return <article key={issue.id} title={issue.id}>
       <span className={`issue-mark ${issue.status}`}>{issue.status === 'open' ? issue.severity?.charAt(0).toUpperCase() ?? '!' : '✓'}</span>
       <div>
@@ -11053,18 +11167,26 @@ function IssueList({ disabled = false, issues, now, onResolve }: { disabled?: bo
         {issue.maintenanceFindingSource ? <small style={wrappedIssueDetail}>Maintenance finding · {issue.maintenanceFindingSource.equipmentName} · Strategy R{issue.maintenanceFindingSource.strategyRevision} · Source {issue.maintenanceFindingSource.completionActionId}</small> : null}
         {issue.status === 'resolved' ? <small style={wrappedIssueDetail}>{issue.resolution ? `Resolved by ${issue.resolution.resolvedBy} · Evidence: ${issue.resolution.evidenceReference}` : 'Legacy resolution · no attributed proof was available'}</small> : null}
         {issue.resolution?.maintenanceCorrectiveAction ? <small style={wrappedIssueDetail}>Corrective action: {issue.resolution.maintenanceCorrectiveAction.correctiveAction} · Verified: {issue.resolution.maintenanceCorrectiveAction.verificationResult} · Final disposition: {issue.resolution.maintenanceCorrectiveAction.finalDisposition.replaceAll('_', ' ')}</small> : null}
-        {issue.resolution?.qualityCorrectiveAction ? <><small style={wrappedIssueDetail}>CAPA: {productionQualityCauseLabels[issue.resolution.qualityCorrectiveAction.causeCategory]} · {issue.resolution.qualityCorrectiveAction.failureMode} · Owner {issue.resolution.qualityCorrectiveAction.effectivenessOwner}</small><small style={wrappedIssueDetail}>{issue.resolution.qualityCorrectiveAction.priorIssueIds.length ? `Repeat · linked to ${issue.resolution.qualityCorrectiveAction.priorIssueIds.join(', ')}` : 'First classified occurrence'} · Verified: {issue.resolution.qualityCorrectiveAction.verificationResult}</small></> : null}
+        {qualityAction ? <><small style={wrappedIssueDetail}>CAPA: {productionQualityCauseLabels[qualityAction.causeCategory]} · {qualityAction.failureMode} · Owner {qualityAction.effectivenessOwner}</small><small style={wrappedIssueDetail}>{qualityAction.priorIssueIds.length ? `Repeat · linked to ${qualityAction.priorIssueIds.join(', ')}` : 'First classified occurrence'} · Implementation: {qualityAction.verificationResult}</small></> : null}
+        {effectivenessDueAt && !effectivenessReview ? <small style={wrappedIssueDetail}>{effectivenessDue ? 'EFFECTIVENESS REVIEW DUE' : `Effectiveness review due ${formatIssueDue(effectivenessDueAt)}`} · effectiveness not yet declared</small> : null}
+        {effectivenessReview ? <><small style={wrappedIssueDetail}>Effectiveness: {effectivenessReview.outcome} · {effectivenessReview.escalation === 'required' ? 'ESCALATION REQUIRED' : 'no escalation'} · reviewed by {effectivenessReview.reviewedBy}</small><small style={wrappedIssueDetail}>Evidence: {effectivenessReview.evidenceSummary}{effectivenessReview.recurrenceIssueIds.length ? ` · Recurrence: ${effectivenessReview.recurrenceIssueIds.join(', ')}` : ''}</small></> : null}
       </div>
-      {issue.status === 'open' ? <button className="text-link" disabled={disabled} onClick={() => onResolve(issue.id)} type="button">{issue.kind === 'quality' ? 'Review CAPA' : 'Review close'}</button> : <b>Resolved</b>}
+      {issue.status === 'open'
+        ? <button className="text-link" disabled={disabled} onClick={() => onResolve(issue.id)} type="button">{issue.kind === 'quality' ? 'Review CAPA' : 'Review close'}</button>
+        : effectivenessDue && !effectivenessReview && onReviewEffectiveness
+          ? <button className="text-link" disabled={disabled} onClick={() => onReviewEffectiveness(issue.id)} type="button">Review effectiveness</button>
+          : <b>{effectivenessReview ? effectivenessReview.outcome === 'effective' ? 'Effective' : 'Escalate' : effectivenessDueAt ? 'Follow-up pending' : 'Resolved'}</b>}
     </article>
   })}</div>
 }
 
-function ResolvedIssueHistory({ issues, now }: { issues: ProductionIssue[]; now: number }) {
+function ResolvedIssueHistory({ disabled = false, issues, now, onReviewEffectiveness }: { disabled?: boolean; issues: ProductionIssue[]; now: number; onReviewEffectiveness: (id: string) => void }) {
   if (!issues.length) return null
-  return <details className="compact-disclosure production-history resolved-issue-history">
-    <summary>Resolved problems <span>{issues.length}</span></summary>
-    <IssueList issues={issues.slice(0, 8)} now={now} onResolve={() => undefined} />
+  const pendingFollowUps = issues.filter((issue) => productionQualityEffectivenessReviewDueAt(issue.resolution?.qualityCorrectiveAction) && !issue.resolution?.qualityEffectivenessReview)
+  const dueFollowUps = pendingFollowUps.filter((issue) => Date.parse(productionQualityEffectivenessReviewDueAt(issue.resolution?.qualityCorrectiveAction) ?? '') <= now).length
+  return <details className="compact-disclosure production-history resolved-issue-history" open={dueFollowUps > 0}>
+    <summary>{pendingFollowUps.length ? 'CAPA follow-up' : 'Resolved problems'} <span>{pendingFollowUps.length ? `${dueFollowUps} due · ${pendingFollowUps.length} pending` : issues.length}</span></summary>
+    <IssueList disabled={disabled} issues={issues.slice(0, 8)} now={now} onResolve={() => undefined} onReviewEffectiveness={onReviewEffectiveness} />
     {issues.length > 8 ? <p>Showing the latest 8 resolved problems.</p> : null}
   </details>
 }
