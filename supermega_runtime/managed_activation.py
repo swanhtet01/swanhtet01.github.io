@@ -24,10 +24,15 @@ from supermega_runtime.spa_staff_access import (
     SPA_STAFF_ACCESS_EVENT_CONTRACT,
     SPA_STAFF_ACCESS_RECEIPT_CONTRACT,
     SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT,
+    SPA_STAFF_INVITATION_ATTEMPT_CONTRACT,
+    SPA_STAFF_INVITATION_ATTEMPT_RESULT_CONTRACT,
     spa_staff_email_digest,
     spa_staff_invitation_approval_id,
+    spa_staff_invitation_attempt_id,
+    spa_staff_invitation_attempt_result_id,
     validate_spa_staff_access_plan,
     validate_spa_staff_invitation_handoff,
+    validate_spa_staff_invitation_receipt,
 )
 from supermega_runtime.trial_store import TrialValidationError
 
@@ -1478,6 +1483,227 @@ class ManagedWorkspaceProvisioner:
             "externalProviderRequestsPerformed": False,
         }
 
+    @staticmethod
+    def _staff_invitation_claim_event_result(handoff: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "contract": SPA_STAFF_INVITATION_ATTEMPT_CONTRACT,
+            "version": 1,
+            "status": "claimed_no_provider_request",
+            "invitationId": handoff["invitationId"],
+            "attemptId": spa_staff_invitation_attempt_id(handoff["invitationId"]),
+            "approvalId": spa_staff_invitation_approval_id(handoff["invitationId"]),
+            "handoffDigest": handoff["handoffDigest"],
+            "sourceReviewDigest": handoff["sourceReviewDigest"],
+            "workspaceId": handoff["workspaceId"],
+            "ownerActorId": handoff["ownerActorId"],
+            "authorizedProviderRequestCount": 1,
+            "authorizationConsumed": True,
+            "automaticRetryAllowed": False,
+            "providerRequestState": "not_started",
+            "providerRequestPerformed": False,
+            "invitationSent": False,
+            "membershipWritten": False,
+            "secretValuesExposed": False,
+            "externalProviderRequestsPerformed": False,
+        }
+
+    @classmethod
+    def _staff_invitation_claim_matches(cls, row: Any, handoff: Mapping[str, Any]) -> bool:
+        if row is None:
+            return False
+        result = _row_value(row, "result_json", 0)
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError:
+                return False
+        return bool(
+            result == cls._staff_invitation_claim_event_result(handoff)
+            and _row_value(row, "command_fingerprint", 2) == str(handoff["handoffDigest"])[7:]
+            and isinstance(_row_value(row, "created_at", 1), datetime)
+        )
+
+    @classmethod
+    def _staff_invitation_claim_receipt(
+        cls,
+        handoff: Mapping[str, Any],
+        created_at: datetime,
+        *,
+        replayed: bool,
+        result_recorded: bool,
+    ) -> dict[str, Any]:
+        receipt = cls._staff_invitation_claim_event_result(handoff)
+        provider_state = (
+            "performed_succeeded"
+            if result_recorded
+            else "unknown_after_claim"
+            if replayed
+            else "not_started"
+        )
+        provider_performed = True if result_recorded else None if replayed else False
+        receipt.update({
+            "status": (
+                "attempt_result_already_recorded"
+                if result_recorded
+                else "attempt_claimed_reconciliation_required"
+                if replayed
+                else "claimed_no_provider_request"
+            ),
+            "replayed": replayed,
+            "claimedAt": _timestamp_text(created_at),
+            "providerRequestMayStart": not replayed and not result_recorded,
+            "providerRequestState": provider_state,
+            "providerRequestPerformed": provider_performed,
+            "resultRecorded": result_recorded,
+            "reconciliationRequired": replayed and not result_recorded,
+            "externalProviderRequestsPerformed": provider_performed,
+            "authority": {
+                "system": "postgresql",
+                "table": "app_private.workspace_events",
+                "commandId": spa_staff_invitation_attempt_id(handoff["invitationId"]),
+                "verification": "requery_required",
+            },
+        })
+        return receipt
+
+    @staticmethod
+    def _staff_invitation_result_event_result(
+        handoff: Mapping[str, Any],
+        invitation_receipt: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        attempt_id = spa_staff_invitation_attempt_id(handoff["invitationId"])
+        return {
+            "contract": SPA_STAFF_INVITATION_ATTEMPT_RESULT_CONTRACT,
+            "version": 1,
+            "status": "invited_pending_first_sign_in",
+            "invitationId": handoff["invitationId"],
+            "attemptId": attempt_id,
+            "resultId": spa_staff_invitation_attempt_result_id(attempt_id),
+            "approvalId": spa_staff_invitation_approval_id(handoff["invitationId"]),
+            "handoffDigest": handoff["handoffDigest"],
+            "sourceReviewDigest": handoff["sourceReviewDigest"],
+            "workspaceId": handoff["workspaceId"],
+            "ownerActorId": handoff["ownerActorId"],
+            "providerReceiptId": invitation_receipt["receiptId"],
+            "providerReceiptDigest": invitation_receipt["receiptDigest"],
+            "providerUserId": invitation_receipt["identity"]["actorId"],
+            "emailDigest": invitation_receipt["identity"]["emailDigest"],
+            "role": invitation_receipt["role"],
+            "access": invitation_receipt["access"],
+            "capabilities": invitation_receipt["capabilities"],
+            "providerRequestState": "performed_succeeded",
+            "automaticRetryAllowed": False,
+            "invitationSent": True,
+            "authUserCreated": True,
+            "emailDeliveryVerified": False,
+            "inviteAcceptedByUser": False,
+            "membershipWritten": False,
+            "secretValuesExposed": False,
+            "externalProviderRequestsPerformed": True,
+        }
+
+    @classmethod
+    def _staff_invitation_result_matches(
+        cls,
+        row: Any,
+        handoff: Mapping[str, Any],
+        invitation_receipt: Mapping[str, Any] | None = None,
+    ) -> bool:
+        if row is None:
+            return False
+        result = _row_value(row, "result_json", 0)
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except json.JSONDecodeError:
+                return False
+        if not isinstance(result, Mapping):
+            return False
+        if invitation_receipt is not None:
+            expected = cls._staff_invitation_result_event_result(handoff, invitation_receipt)
+            return bool(
+                result == expected
+                and _row_value(row, "command_fingerprint", 2) == str(invitation_receipt["receiptDigest"])[7:]
+                and isinstance(_row_value(row, "created_at", 1), datetime)
+            )
+        expected_keys = {
+            "contract", "version", "status", "invitationId", "attemptId", "resultId", "approvalId",
+            "handoffDigest", "sourceReviewDigest", "workspaceId", "ownerActorId", "providerReceiptId",
+            "providerReceiptDigest", "providerUserId", "emailDigest", "role", "access", "capabilities",
+            "providerRequestState", "automaticRetryAllowed", "invitationSent", "authUserCreated",
+            "emailDeliveryVerified", "inviteAcceptedByUser", "membershipWritten", "secretValuesExposed",
+            "externalProviderRequestsPerformed",
+        }
+        if set(result) != expected_keys:
+            return False
+        try:
+            provider_receipt_id = _uuid(result.get("providerReceiptId"), "Provider receipt ID")
+            provider_user_id = _uuid(result.get("providerUserId"), "Provider user ID")
+        except ManagedActivationError:
+            return False
+        receipt_digest = result.get("providerReceiptDigest")
+        attempt_id = spa_staff_invitation_attempt_id(handoff["invitationId"])
+        return bool(
+            result.get("contract") == SPA_STAFF_INVITATION_ATTEMPT_RESULT_CONTRACT
+            and result.get("version") == 1
+            and result.get("status") == "invited_pending_first_sign_in"
+            and result.get("invitationId") == handoff["invitationId"]
+            and result.get("attemptId") == attempt_id
+            and result.get("resultId") == spa_staff_invitation_attempt_result_id(attempt_id)
+            and result.get("approvalId") == spa_staff_invitation_approval_id(handoff["invitationId"])
+            and result.get("handoffDigest") == handoff["handoffDigest"]
+            and result.get("sourceReviewDigest") == handoff["sourceReviewDigest"]
+            and result.get("workspaceId") == handoff["workspaceId"]
+            and result.get("ownerActorId") == handoff["ownerActorId"]
+            and provider_receipt_id == result.get("providerReceiptId")
+            and provider_user_id == result.get("providerUserId")
+            and provider_user_id != handoff["ownerActorId"]
+            and result.get("emailDigest") == handoff["candidate"]["emailDigest"]
+            and result.get("role") == handoff["candidate"]["role"]
+            and result.get("access") == handoff["candidate"]["access"]
+            and result.get("capabilities") == handoff["candidate"]["capabilities"]
+            and result.get("providerRequestState") == "performed_succeeded"
+            and result.get("automaticRetryAllowed") is False
+            and result.get("invitationSent") is True
+            and result.get("authUserCreated") is True
+            and result.get("emailDeliveryVerified") is False
+            and result.get("inviteAcceptedByUser") is False
+            and result.get("membershipWritten") is False
+            and result.get("secretValuesExposed") is False
+            and result.get("externalProviderRequestsPerformed") is True
+            and isinstance(receipt_digest, str)
+            and _SHA256.fullmatch(receipt_digest) is not None
+            and _row_value(row, "command_fingerprint", 2) == receipt_digest[7:]
+            and isinstance(_row_value(row, "created_at", 1), datetime)
+        )
+
+    @classmethod
+    def _staff_invitation_result_receipt(
+        cls,
+        handoff: Mapping[str, Any],
+        invitation_receipt: Mapping[str, Any],
+        created_at: datetime,
+        *,
+        replayed: bool,
+    ) -> dict[str, Any]:
+        receipt = cls._staff_invitation_result_event_result(handoff, invitation_receipt)
+        receipt.update({
+            "replayed": replayed,
+            "recordedAt": _timestamp_text(created_at),
+            "providerRequestEvidenceRecorded": True,
+            "externalProviderRequestsPerformedByRecorder": False,
+            "databaseMutationPerformed": not replayed,
+            "authority": {
+                "system": "postgresql",
+                "table": "app_private.workspace_events",
+                "commandId": spa_staff_invitation_attempt_result_id(
+                    spa_staff_invitation_attempt_id(handoff["invitationId"])
+                ),
+                "verification": "requery_required",
+            },
+        })
+        return receipt
+
     def authorize_spa_staff_invitation(
         self,
         handoff_value: object,
@@ -1560,8 +1786,203 @@ class ManagedWorkspaceProvisioner:
         finally:
             connection.close()
 
+    def claim_spa_staff_invitation_attempt(
+        self,
+        handoff_value: object,
+        *,
+        verified_owner_actor_id: str,
+        verified_owner_session_id: str,
+    ) -> dict[str, Any]:
+        """Consume one owner authorization before a separate provider transport runs."""
+
+        handoff = validate_spa_staff_invitation_handoff(handoff_value, require_current=True)
+        verified_owner = _uuid(verified_owner_actor_id, "Verified owner actor ID")
+        verified_session = _uuid(verified_owner_session_id, "Verified owner session ID")
+        if verified_owner != handoff["ownerActorId"]:
+            raise ManagedActivationError("Supabase Auth user does not match the staff-invitation owner.")
+        attempt_id = spa_staff_invitation_attempt_id(handoff["invitationId"])
+        result_id = spa_staff_invitation_attempt_result_id(attempt_id)
+        connection = self._connect()
+        try:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.execute("set transaction isolation level serializable")
+                    self._assert_schema(cursor, require_write_privilege=True)
+                    cursor.execute(
+                        "select app_private.supabase_session_is_active(%s::uuid, %s::uuid) as active",
+                        (verified_owner, verified_session),
+                    )
+                    if not bool(_row_value(cursor.fetchone(), "active", 0)):
+                        raise ManagedActivationError("Supabase owner session is no longer active.")
+                    self._lock(cursor, handoff["workspaceId"])
+                    authorization = self._staff_invitation_authorization_row(cursor, handoff)
+                    access = self._access_row(cursor, handoff["workspaceId"])
+                    rows = self._membership_rows(cursor, handoff["workspaceId"])
+                    claim = self._event_row(cursor, handoff["workspaceId"], attempt_id)
+                    result = self._event_row(cursor, handoff["workspaceId"], result_id)
+                    authorization_ready = self._staff_invitation_authorization_matches(authorization, handoff)
+                    workspace_ready = (
+                        self._staff_workspace_matches(access, handoff)
+                        and self._owner_controls_staff_access(rows, handoff)
+                    )
+                    if self._staff_invitation_claim_matches(claim, handoff):
+                        if not authorization_ready or (
+                            result is not None and not self._staff_invitation_result_matches(result, handoff)
+                        ):
+                            raise ManagedActivationConflict("Staff invitation attempt or result evidence changed.")
+                        created_at = _row_value(claim, "created_at", 1)
+                        if not isinstance(created_at, datetime):
+                            raise ManagedActivationConflict("Staff invitation attempt timestamp is invalid.")
+                        return self._staff_invitation_claim_receipt(
+                            handoff,
+                            created_at,
+                            replayed=True,
+                            result_recorded=result is not None,
+                        )
+                    if claim is not None or result is not None:
+                        raise ManagedActivationConflict("Staff invitation has conflicting attempt state.")
+                    if not authorization_ready:
+                        raise ManagedActivationConflict("Durable owner staff-invitation authorization is missing or changed.")
+                    if not workspace_ready:
+                        raise ManagedActivationConflict("Workspace or invitation authority changed before attempt claim.")
+                    payload = {
+                        "invitationId": handoff["invitationId"],
+                        "attemptId": attempt_id,
+                        "approvalId": spa_staff_invitation_approval_id(handoff["invitationId"]),
+                        "handoffDigest": handoff["handoffDigest"],
+                        "sourceReviewDigest": handoff["sourceReviewDigest"],
+                        "candidate": handoff["candidate"],
+                        "target": handoff["target"],
+                        "providerOperation": handoff["providerOperation"],
+                    }
+                    event_result = self._staff_invitation_claim_event_result(handoff)
+                    cursor.execute(
+                        """
+                        insert into app_private.workspace_events (
+                          event_id, workspace_id, command_id, command_fingerprint,
+                          surface, event_type, actor_id, actor_kind, expected_version,
+                          resulting_version, payload_json, result_json
+                        ) values (
+                          %s, %s, %s, %s, 'company', 'company.spa_staff_invitation.attempt_claimed',
+                          %s, 'human', null, null, %s::jsonb, %s::jsonb
+                        )
+                        returning created_at
+                        """,
+                        (
+                            attempt_id,
+                            handoff["workspaceId"],
+                            attempt_id,
+                            str(handoff["handoffDigest"])[7:],
+                            handoff["ownerActorId"],
+                            _canonical_json(payload),
+                            _canonical_json(event_result),
+                        ),
+                    )
+                    inserted = cursor.fetchone()
+                    created_at = _row_value(inserted, "created_at", 0)
+                    if not isinstance(created_at, datetime):
+                        raise ManagedActivationError("Staff invitation attempt timestamp was not returned by PostgreSQL.")
+            return self._staff_invitation_claim_receipt(
+                handoff,
+                created_at,
+                replayed=False,
+                result_recorded=False,
+            )
+        finally:
+            connection.close()
+
+    def record_spa_staff_invitation_attempt_result(
+        self,
+        handoff_value: object,
+        invitation_receipt_value: object,
+    ) -> dict[str, Any]:
+        """Persist a validated provider receipt; this method performs no provider request."""
+
+        handoff = validate_spa_staff_invitation_handoff(handoff_value)
+        invitation_receipt = validate_spa_staff_invitation_receipt(
+            invitation_receipt_value,
+            handoff_value=handoff,
+        )
+        attempt_id = spa_staff_invitation_attempt_id(handoff["invitationId"])
+        result_id = spa_staff_invitation_attempt_result_id(attempt_id)
+        connection = self._connect()
+        try:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.execute("set transaction isolation level serializable")
+                    self._assert_schema(cursor, require_write_privilege=True)
+                    self._lock(cursor, handoff["workspaceId"])
+                    authorization = self._staff_invitation_authorization_row(cursor, handoff)
+                    claim = self._event_row(cursor, handoff["workspaceId"], attempt_id)
+                    result = self._event_row(cursor, handoff["workspaceId"], result_id)
+                    if self._staff_invitation_result_matches(result, handoff, invitation_receipt):
+                        if (
+                            not self._staff_invitation_authorization_matches(authorization, handoff)
+                            or not self._staff_invitation_claim_matches(claim, handoff)
+                        ):
+                            raise ManagedActivationConflict("Staff invitation result lost its authorization or claim.")
+                        created_at = _row_value(result, "created_at", 1)
+                        if not isinstance(created_at, datetime):
+                            raise ManagedActivationConflict("Staff invitation result timestamp is invalid.")
+                        return self._staff_invitation_result_receipt(
+                            handoff,
+                            invitation_receipt,
+                            created_at,
+                            replayed=True,
+                        )
+                    if result is not None:
+                        raise ManagedActivationConflict("Staff invitation has a conflicting provider result.")
+                    if not self._staff_invitation_authorization_matches(authorization, handoff):
+                        raise ManagedActivationConflict("Durable owner staff-invitation authorization is missing or changed.")
+                    if not self._staff_invitation_claim_matches(claim, handoff):
+                        raise ManagedActivationConflict("Staff invitation authorization was not consumed before provider evidence.")
+                    event_result = self._staff_invitation_result_event_result(handoff, invitation_receipt)
+                    payload = {
+                        "invitationId": handoff["invitationId"],
+                        "attemptId": attempt_id,
+                        "resultId": result_id,
+                        "handoffDigest": handoff["handoffDigest"],
+                        "providerReceipt": invitation_receipt,
+                    }
+                    cursor.execute(
+                        """
+                        insert into app_private.workspace_events (
+                          event_id, workspace_id, command_id, command_fingerprint,
+                          surface, event_type, actor_id, actor_kind, expected_version,
+                          resulting_version, payload_json, result_json
+                        ) values (
+                          %s, %s, %s, %s, 'company', 'company.spa_staff_invitation.result_recorded',
+                          %s, 'human', null, null, %s::jsonb, %s::jsonb
+                        )
+                        returning created_at
+                        """,
+                        (
+                            result_id,
+                            handoff["workspaceId"],
+                            result_id,
+                            str(invitation_receipt["receiptDigest"])[7:],
+                            handoff["ownerActorId"],
+                            _canonical_json(payload),
+                            _canonical_json(event_result),
+                        ),
+                    )
+                    inserted = cursor.fetchone()
+                    created_at = _row_value(inserted, "created_at", 0)
+                    if not isinstance(created_at, datetime):
+                        raise ManagedActivationError("Staff invitation result timestamp was not returned by PostgreSQL.")
+            return self._staff_invitation_result_receipt(
+                handoff,
+                invitation_receipt,
+                created_at,
+                replayed=False,
+            )
+        finally:
+            connection.close()
+
     def inspect_spa_staff_invitation(self, handoff_value: object) -> dict[str, Any]:
         handoff = validate_spa_staff_invitation_handoff(handoff_value)
+        attempt_id = spa_staff_invitation_attempt_id(handoff["invitationId"])
+        result_id = spa_staff_invitation_attempt_result_id(attempt_id)
         connection = self._connect()
         try:
             with connection.transaction():
@@ -1571,26 +1992,52 @@ class ManagedWorkspaceProvisioner:
                     authorization = self._staff_invitation_authorization_row(cursor, handoff)
                     access = self._access_row(cursor, handoff["workspaceId"])
                     rows = self._membership_rows(cursor, handoff["workspaceId"])
+                    claim = self._event_row(cursor, handoff["workspaceId"], attempt_id)
+                    result = self._event_row(cursor, handoff["workspaceId"], result_id)
             workspace_ready = self._staff_workspace_matches(access, handoff) and self._owner_controls_staff_access(rows, handoff)
             authorization_ready = self._staff_invitation_authorization_matches(authorization, handoff)
-            if workspace_ready and authorization is None:
+            claim_ready = self._staff_invitation_claim_matches(claim, handoff)
+            result_ready = self._staff_invitation_result_matches(result, handoff)
+            if workspace_ready and authorization is None and claim is None and result is None:
                 status = "authorization_required"
-            elif workspace_ready and authorization_ready:
+            elif workspace_ready and authorization_ready and claim is None and result is None:
                 status = "authorized_no_provider_request"
+            elif workspace_ready and authorization_ready and claim_ready and result is None:
+                status = "attempt_claimed_reconciliation_required"
+            elif workspace_ready and authorization_ready and claim_ready and result_ready:
+                status = "invited_pending_first_sign_in"
             else:
                 status = "conflict"
+            provider_state = (
+                "performed_succeeded"
+                if result_ready
+                else "unknown_after_claim"
+                if claim_ready
+                else "not_performed"
+                if claim is None and result is None
+                else "unknown_conflict"
+            )
+            provider_performed = True if result_ready else None if claim_ready or result is not None else False
             return {
                 "contract": "supermega.managed_spa_staff_invitation_preflight.v1",
                 "status": status,
                 "ready": status == "authorized_no_provider_request",
                 "authorizationReady": authorization_ready,
+                "authorizationConsumed": claim_ready,
                 "workspaceReady": workspace_ready,
                 "invitationId": handoff["invitationId"],
                 "approvalId": spa_staff_invitation_approval_id(handoff["invitationId"]),
+                "attemptId": attempt_id,
+                "resultId": result_id,
                 "handoffDigest": handoff["handoffDigest"],
+                "providerRequestMayStart": status == "authorized_no_provider_request",
+                "providerRequestState": provider_state,
+                "resultRecorded": result_ready,
+                "reconciliationRequired": status == "attempt_claimed_reconciliation_required",
+                "automaticRetryAllowed": False,
                 "schemaVersion": schema["schemaVersion"],
-                "providerRequestPerformed": False,
-                "externalProviderRequestsPerformed": False,
+                "providerRequestPerformed": provider_performed,
+                "externalProviderRequestsPerformed": provider_performed,
                 "mutationStatementsExecuted": 0,
             }
         finally:

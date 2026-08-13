@@ -33,9 +33,12 @@ from supermega_runtime.spa_staff_access import (
     SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT,
     SPA_STAFF_ACCESS_RECEIPT_CONTRACT,
     SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT,
+    SPA_STAFF_INVITATION_ATTEMPT_CONTRACT,
+    SPA_STAFF_INVITATION_ATTEMPT_RESULT_CONTRACT,
     compile_spa_staff_access_plan,
     compile_spa_staff_access_review,
     compile_spa_staff_invitation_handoff,
+    record_spa_staff_invitation_result,
 )
 
 
@@ -960,6 +963,23 @@ class ManagedSpaStaffInvitationAuthorizationTests(unittest.TestCase):
             decision_note="Owner approved exactly one server-side invitation attempt.",
         )
 
+    def provider_receipt(
+        self,
+        *,
+        provider_user_id: str = STAFF_ID,
+        provider_response_digest: str = "sha256:" + "5" * 64,
+    ) -> dict[str, object]:
+        return record_spa_staff_invitation_result(
+            self.handoff,
+            provider_user_id=provider_user_id,
+            provider_user_email="staff@example.com",
+            provider_user_created_at=(NOW + timedelta(minutes=1)).isoformat(),
+            provider_response_digest=provider_response_digest,
+            redirect_allowlist_evidence_digest="sha256:" + "6" * 64,
+            smtp_delivery_evidence_digest="sha256:" + "7" * 64,
+            now=NOW + timedelta(minutes=2),
+        )
+
     def test_authorization_is_durable_private_and_replay_safe(self) -> None:
         preflight = self.provisioner.inspect_spa_staff_invitation(self.handoff)
         self.assertEqual(preflight["status"], "authorization_required")
@@ -1031,6 +1051,120 @@ class ManagedSpaStaffInvitationAuthorizationTests(unittest.TestCase):
         self.assertIn("insert into app_private.approval_requests", statements)
         self.assertNotIn("insert into app_private.workspace_memberships", statements)
         self.assertNotIn("insert into app_private.workspace_events", statements)
+
+    def test_attempt_claim_is_single_use_and_replay_requires_reconciliation(self) -> None:
+        self.authorize()
+        claim = self.provisioner.claim_spa_staff_invitation_attempt(
+            self.handoff,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+        )
+        self.assertEqual(claim["contract"], SPA_STAFF_INVITATION_ATTEMPT_CONTRACT)
+        self.assertEqual(claim["status"], "claimed_no_provider_request")
+        self.assertTrue(claim["authorizationConsumed"])
+        self.assertTrue(claim["providerRequestMayStart"])
+        self.assertEqual(claim["providerRequestState"], "not_started")
+        self.assertFalse(claim["providerRequestPerformed"])
+        self.assertFalse(claim["automaticRetryAllowed"])
+
+        replay = self.provisioner.claim_spa_staff_invitation_attempt(
+            self.handoff,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+        )
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(replay["status"], "attempt_claimed_reconciliation_required")
+        self.assertFalse(replay["providerRequestMayStart"])
+        self.assertEqual(replay["providerRequestState"], "unknown_after_claim")
+        self.assertIsNone(replay["providerRequestPerformed"])
+        self.assertTrue(replay["reconciliationRequired"])
+        inspection = self.provisioner.inspect_spa_staff_invitation(self.handoff)
+        self.assertEqual(inspection["status"], "attempt_claimed_reconciliation_required")
+        self.assertTrue(inspection["authorizationConsumed"])
+        self.assertFalse(inspection["providerRequestMayStart"])
+        self.assertEqual(inspection["providerRequestState"], "unknown_after_claim")
+        self.assertIsNone(inspection["providerRequestPerformed"])
+        self.assertFalse(inspection["automaticRetryAllowed"])
+        self.assertEqual(len(self.database.events), 2)
+        self.assertEqual(len(self.database.memberships), 1)
+
+    def test_provider_result_requires_claim_and_records_one_exact_receipt(self) -> None:
+        self.authorize()
+        provider_receipt = self.provider_receipt()
+        with self.assertRaisesRegex(ManagedActivationConflict, "not consumed"):
+            self.provisioner.record_spa_staff_invitation_attempt_result(self.handoff, provider_receipt)
+
+        self.provisioner.claim_spa_staff_invitation_attempt(
+            self.handoff,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+        )
+        result = self.provisioner.record_spa_staff_invitation_attempt_result(self.handoff, provider_receipt)
+        self.assertEqual(result["contract"], SPA_STAFF_INVITATION_ATTEMPT_RESULT_CONTRACT)
+        self.assertEqual(result["status"], "invited_pending_first_sign_in")
+        self.assertFalse(result["replayed"])
+        self.assertTrue(result["providerRequestEvidenceRecorded"])
+        self.assertFalse(result["externalProviderRequestsPerformedByRecorder"])
+        self.assertFalse(result["membershipWritten"])
+        self.assertFalse(result["automaticRetryAllowed"])
+
+        replay = self.provisioner.record_spa_staff_invitation_attempt_result(self.handoff, provider_receipt)
+        self.assertTrue(replay["replayed"])
+        self.assertFalse(replay["databaseMutationPerformed"])
+        inspection = self.provisioner.inspect_spa_staff_invitation(self.handoff)
+        self.assertEqual(inspection["status"], "invited_pending_first_sign_in")
+        self.assertTrue(inspection["resultRecorded"])
+        self.assertEqual(inspection["providerRequestState"], "performed_succeeded")
+        self.assertTrue(inspection["providerRequestPerformed"])
+        self.assertFalse(inspection["reconciliationRequired"])
+        self.assertEqual(len(self.database.events), 3)
+        self.assertEqual(len(self.database.memberships), 1)
+
+        claim_replay = self.provisioner.claim_spa_staff_invitation_attempt(
+            self.handoff,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+        )
+        self.assertEqual(claim_replay["status"], "attempt_result_already_recorded")
+        self.assertFalse(claim_replay["providerRequestMayStart"])
+        self.assertEqual(claim_replay["providerRequestState"], "performed_succeeded")
+        self.assertTrue(claim_replay["providerRequestPerformed"])
+
+        changed_receipt = self.provider_receipt(
+            provider_user_id="74772291-df22-41a7-b4a3-e9d716fd0168",
+            provider_response_digest="sha256:" + "8" * 64,
+        )
+        with self.assertRaisesRegex(ManagedActivationConflict, "conflicting provider result"):
+            self.provisioner.record_spa_staff_invitation_attempt_result(self.handoff, changed_receipt)
+
+    def test_attempt_claim_and_result_sql_are_private_and_provider_free(self) -> None:
+        self.authorize()
+        statement_start = len(self.database.statements)
+        self.provisioner.claim_spa_staff_invitation_attempt(
+            self.handoff,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+        )
+        self.provisioner.record_spa_staff_invitation_attempt_result(
+            self.handoff,
+            self.provider_receipt(),
+        )
+        statements = "\n".join(
+            statement for statement, _params in self.database.statements[statement_start:]
+        )
+        serialized_params = json.dumps(
+            [params for _statement, params in self.database.statements[statement_start:]],
+            default=str,
+            sort_keys=True,
+        )
+        self.assertNotIn("staff@example.com", statements)
+        self.assertNotIn("staff@example.com", serialized_params)
+        self.assertNotIn("Su Su", statements)
+        self.assertNotIn("Su Su", serialized_params)
+        self.assertNotIn("inviteuserbyemail", statements)
+        self.assertIn("company.spa_staff_invitation.attempt_claimed", statements)
+        self.assertIn("company.spa_staff_invitation.result_recorded", statements)
+        self.assertNotIn("insert into app_private.workspace_memberships", statements)
 
 
 class ManagedActivationCliTests(unittest.TestCase):

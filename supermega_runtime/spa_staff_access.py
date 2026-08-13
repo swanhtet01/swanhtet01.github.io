@@ -15,6 +15,8 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 SPA_STAFF_ACCESS_REVIEW_CONTRACT = "supermega.commerce.spa_staff_access_review.v1"
 SPA_STAFF_INVITATION_HANDOFF_CONTRACT = "supermega.managed_spa_staff_invitation_handoff.v1"
 SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT = "supermega.managed_spa_staff_invitation_authorization.v1"
+SPA_STAFF_INVITATION_ATTEMPT_CONTRACT = "supermega.managed_spa_staff_invitation_attempt.v1"
+SPA_STAFF_INVITATION_ATTEMPT_RESULT_CONTRACT = "supermega.managed_spa_staff_invitation_attempt_result.v1"
 SPA_STAFF_INVITATION_RECEIPT_CONTRACT = "supermega.managed_spa_staff_invitation_receipt.v1"
 SPA_STAFF_ACCESS_PLAN_CONTRACT = "supermega.managed_spa_staff_access_plan.v1"
 SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT = "supermega.managed_spa_staff_access_authorization.v1"
@@ -168,6 +170,26 @@ def spa_staff_invitation_approval_id(value: object) -> str:
     return str(uuid5(
         NAMESPACE_URL,
         f"{SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT}:{invitation_id}",
+    ))
+
+
+def spa_staff_invitation_attempt_id(value: object) -> str:
+    """Return the immutable event ID that consumes one invitation authorization."""
+
+    invitation_id = _uuid(value, "Staff invitation ID")
+    return str(uuid5(
+        NAMESPACE_URL,
+        f"{SPA_STAFF_INVITATION_ATTEMPT_CONTRACT}:{invitation_id}",
+    ))
+
+
+def spa_staff_invitation_attempt_result_id(value: object) -> str:
+    """Return the one result-event ID paired with a consumed invitation attempt."""
+
+    attempt_id = _uuid(value, "Staff invitation attempt ID")
+    return str(uuid5(
+        NAMESPACE_URL,
+        f"{SPA_STAFF_INVITATION_ATTEMPT_RESULT_CONTRACT}:{attempt_id}",
     ))
 
 
@@ -842,6 +864,8 @@ __all__ = [
     "SPA_STAFF_ACCESS_RECEIPT_CONTRACT",
     "SPA_STAFF_ACCESS_REVIEW_CONTRACT",
     "SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT",
+    "SPA_STAFF_INVITATION_ATTEMPT_CONTRACT",
+    "SPA_STAFF_INVITATION_ATTEMPT_RESULT_CONTRACT",
     "SPA_STAFF_INVITATION_HANDOFF_CONTRACT",
     "SPA_STAFF_INVITATION_RECEIPT_CONTRACT",
     "SPA_STAFF_INVITATION_REDIRECT_URL",
@@ -852,6 +876,8 @@ __all__ = [
     "record_spa_staff_invitation_result",
     "spa_staff_email_digest",
     "spa_staff_invitation_approval_id",
+    "spa_staff_invitation_attempt_id",
+    "spa_staff_invitation_attempt_result_id",
     "validate_spa_staff_access_plan",
     "validate_spa_staff_access_review",
     "validate_spa_staff_invitation_handoff",
