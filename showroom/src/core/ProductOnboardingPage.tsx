@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
@@ -141,7 +141,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   // The business name and the person accountable for it belong to the company
   // rather than to one product, so a client setting up their second product is
   // not asked for either again.
-  const [sharedCompanyIdentity] = useState(() => {
+  const sharedCompanyIdentity = useMemo(() => {
     if (typeof window === 'undefined') return { workspace: '', owner: '' }
     const others: SetupProductId[] = ['commerce', 'ecommerce', 'production', 'website']
     for (const id of others) {
@@ -150,13 +150,16 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       if (existing?.workspace) return { workspace: existing.workspace, owner: existing.owner }
     }
     return { workspace: '', owner: '' }
-  })
+  }, [product])
   const sharedWorkspaceName = sharedCompanyIdentity.workspace
   const sharedOwnerName = sharedCompanyIdentity.owner
   // Prefilling the owner only helps at first setup. If a client later changes
   // who is accountable in one product, the others keep the old name, so the
-  // difference is surfaced here rather than corrected silently.
-  const [startedOwnersElsewhere] = useState(() => {
+  // difference is surfaced here rather than corrected silently. This is keyed
+  // on the product because the page receives it as a prop and switches in
+  // place; a value captured once would compare the current product's owner
+  // against its own saved record and report it as a disagreement.
+  const startedOwnersElsewhere = useMemo(() => {
     if (typeof window === 'undefined') return [] as { product: SetupProductId; owner: string }[]
     const others: SetupProductId[] = ['commerce', 'ecommerce', 'production', 'website']
     return others.flatMap((id) => {
@@ -165,7 +168,7 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       const owner = existing?.owner.trim() ?? ''
       return existing?.startedAt && owner ? [{ product: id, owner }] : []
     })
-  })
+  }, [product])
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]
