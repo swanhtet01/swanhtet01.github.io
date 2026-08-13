@@ -137,16 +137,21 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     const partnerId = PRIMARY_PARTNER[product]
     return partnerId ? readProductSetup(window.localStorage, partnerId) : null
   })
-  const [sharedWorkspaceName] = useState(() => {
-    if (typeof window === 'undefined') return ''
+  // The business name and the person accountable for it belong to the company
+  // rather than to one product, so a client setting up their second product is
+  // not asked for either again.
+  const [sharedCompanyIdentity] = useState(() => {
+    if (typeof window === 'undefined') return { workspace: '', owner: '' }
     const others: SetupProductId[] = ['commerce', 'ecommerce', 'production', 'website']
     for (const id of others) {
       if (id === product) continue
       const existing = readProductSetup(window.localStorage, id)
-      if (existing?.workspace) return existing.workspace
+      if (existing?.workspace) return { workspace: existing.workspace, owner: existing.owner }
     }
-    return ''
+    return { workspace: '', owner: '' }
   })
+  const sharedWorkspaceName = sharedCompanyIdentity.workspace
+  const sharedOwnerName = sharedCompanyIdentity.owner
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]
@@ -175,12 +180,16 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
       rememberProductSetup(window.localStorage, setup)
       const saved = readProductSetup(window.localStorage, product)
       const freshSeed = seedSetupForProduct(product, template.id)
-      setSetup(saved ?? (sharedWorkspaceName ? { ...freshSeed, workspace: sharedWorkspaceName } : freshSeed))
+      setSetup(saved ?? (sharedWorkspaceName
+        ? { ...freshSeed, workspace: sharedWorkspaceName, owner: sharedOwnerName }
+        : freshSeed))
       setNotice(saved
         ? `Continue your saved ${onboardingProduct.name} workspace.`
-        : sharedWorkspaceName
-          ? `${onboardingProduct.name} is ready. We matched your business name — change it if this workspace needs a different one.`
-          : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
+        : sharedWorkspaceName && sharedOwnerName
+          ? `${onboardingProduct.name} is ready. We carried over your business name and the person accountable — change either if this workspace needs different ones.`
+          : sharedWorkspaceName
+            ? `${onboardingProduct.name} is ready. We matched your business name — change it if this workspace needs a different one.`
+            : `${onboardingProduct.name} is ready. Add only the details needed for this workspace.`)
     }, 0)
     return () => window.clearTimeout(selectionTimer)
   }, [onboardingProduct.name, product, selectedShopIndustryPack.workflowTemplateId, setSetup, setup])
