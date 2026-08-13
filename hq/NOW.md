@@ -54,7 +54,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 - OPS-282 (`de0e7690`) keeps a Shop-confirmed Ecommerce request locked after quote expiry. The exact receipt now offers Continue in Shop or Start another order; duplicate submission is absent. Completion history: 130. Hosted activation remains unproven.
-- OPS-283 (`7b97476f`) sends blocked Sell directly to Stock setup instead of Orders. Desktop QA reaches the existing location foundation with zero overflow or errors. Completion history: 131. Mobile route rendering and hosted activation remain unproven.
+- OPS-283 (`f1dcc7f9`) sends blocked Sell to the first prerequisite: the exact active order, otherwise Stock locations. 390/1280 QA focuses Start preparing with zero overflow or errors; clean no-order rendering and hosting remain unproven. Completion history: 131.
 
 ## Owner-gated actions
 
@@ -64,7 +64,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. `7b97476f` passes strict TypeScript, focused Shop lint, the 237-module build, and 358 Commerce checks. At 1280 px, Sell reaches Stock setup with zero overflow or errors. Hosted activation stays owner-gated.
+- Codex is sole integrator. `f1dcc7f9` passes strict TypeScript, focused Shop lint, the 237-module build, and 358 Commerce checks. At 390/1280 px, Sell focuses the exact blocking order with zero overflow or errors. Hosted activation stays owner-gated.
 - Local company inference remains Ollama-only and scale-to-zero. This Codex task does not dispatch Claude or Gemini; owner Claude/Bionic sessions were untouched.
 - Real leads remain blocked. Production schema v7 is healthy, but preview lacks v8-v10 and direct-admin proof. Keep it disconnected from Vercel/Auth until PR #412's rehearsal and every managed gate pass.
 

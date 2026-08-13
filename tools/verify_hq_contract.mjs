@@ -693,7 +693,7 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[129]?.checkpoint === 'OPS-282'
   && workboard.includes('| OPS-282 | Product Platform + Ecommerce Codex | done-local |')
   && portfolio.completedLocalAutomations[130]?.productId === 'shop'
-  && portfolio.completedLocalAutomations[130]?.workOrderId === 'shop-sell-stock-setup-handoff'
+  && portfolio.completedLocalAutomations[130]?.workOrderId === 'shop-sell-prerequisite-handoff'
   && portfolio.completedLocalAutomations[130]?.checkpoint === 'OPS-283'
   && workboard.includes('| OPS-283 | Product Platform + Shop Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
@@ -1277,11 +1277,12 @@ requireContract('Ecommerce confirmed requests require explicit new-order reset a
   && workboard.includes('Completion history preserves 73 archived plus 57 current receipts, 130 unique entries')
   && now.includes('OPS-282 (`de0e7690`) keeps a Shop-confirmed Ecommerce request locked after quote expiry')
   && enterpriseRoadmap.includes('Checkpoint `de0e7690` closes a duplicate-request UI gap'))
-requireContract('Shop Sell opens the first missing stock setup step',
+requireContract('Shop Sell opens the exact first setup prerequisite',
   workboard.includes('| OPS-283 | Product Platform + Shop Codex | done-local |')
-  && workboard.includes('routes Sell directly to `/shop/?tab=inventory#shop-location-foundation` when inventory locations are missing')
+  && workboard.includes('when active orders prevent location setup, Sell opens the exact oldest blocker with `return=location-setup`')
+  && workboard.includes('without one it opens `/shop/?tab=inventory#shop-location-foundation`')
   && workboard.includes('Completion history preserves 73 archived plus 58 current receipts, 131 unique entries')
-  && now.includes('OPS-283 (`7b97476f`) sends blocked Sell directly to Stock setup instead of Orders'))
+  && now.includes('OPS-283 (`f1dcc7f9`) sends blocked Sell to the first prerequisite'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')
