@@ -9,6 +9,7 @@ import {
   originMainReleaseReview,
   validateSupabaseRehearsalPacket,
 } from './prepare_supabase_rehearsal_packet.mjs'
+import { runSelfTest as runPreviewBranchRehearsalSelfTest } from './run_preview_branch_rehearsal.mjs'
 
 const repositoryRoot = resolve(import.meta.dirname, '..')
 const targetProjectRef = 'abcdefghijklmnopqrst'
@@ -29,10 +30,11 @@ test('builds an exact non-mutating v10 rehearsal packet', async () => {
   })
   await validateSupabaseRehearsalPacket(packet, { repositoryRoot, expectedReleaseCommit: releaseCommit })
 
-  assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v2')
+  assert.equal(packet.contract, 'supermega.supabase-rehearsal-packet.v3')
   assert.equal(packet.state, 'prepared-not-executed')
   assert.equal(packet.release.schemaVersion, 10)
-  assert.equal(packet.release.migrationCount, 11)
+  assert.equal(packet.release.migrationCount, 12)
+  assert.equal(packet.release.migrations[0].name, '20260711081300_public_legacy_baseline.sql')
   assert.deepEqual(packet.release.review, releaseReview)
   assert.equal(packet.release.migrations.at(-1).name, '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql')
   assert.equal(packet.release.browserQuarantine.contract, 'supermega.public-browser-quarantine.v1')
@@ -141,4 +143,16 @@ test('binds an unpublished candidate only through an exact owner-review handoff 
     () => candidateReleaseReviewFromReceipt({ ...receipt, authority: { ...receipt.authority, providerMutationApproved: true } }),
     /supabase_rehearsal_release_handoff_invalid/,
   )
+})
+
+test('gates the preview-branch rehearsal orchestrator with its fail-closed self-test', async () => {
+  const report = await runPreviewBranchRehearsalSelfTest()
+  assert.deepEqual(report, {
+    ok: true,
+    contract: 'supermega.preview-branch-rehearsal.v2.self-test',
+    cases: 16,
+    networkRequestsPerformed: 0,
+    childProcessesSpawned: 0,
+    productionMutated: false,
+  })
 })

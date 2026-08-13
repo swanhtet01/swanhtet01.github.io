@@ -7,13 +7,14 @@ import { fileURLToPath } from 'node:url'
 import { RELEASE_HANDOFF_CONTRACT, verifyCurrentReleaseHandoff } from './prepare_release_handoff.mjs'
 
 const root = resolve(import.meta.dirname, '..')
-export const SUPABASE_REHEARSAL_CONTRACT = 'supermega.supabase-rehearsal-packet.v2'
+export const SUPABASE_REHEARSAL_CONTRACT = 'supermega.supabase-rehearsal-packet.v3'
 const projectRefPattern = /^[a-z0-9]{20}$/
 const commitPattern = /^[0-9a-f]{40}$/
 const digestPattern = /^sha256:[0-9a-f]{64}$/
 const branchPattern = /^(?:agent|codex)\/[a-z0-9][a-z0-9._/-]{0,119}$/
 const expectedSchemaVersion = 10
-const expectedMigrationCount = 11
+const expectedMigrationCount = 12
+const expectedFirstMigration = '20260711081300_public_legacy_baseline.sql'
 const expectedFinalMigration = '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql'
 const browserQuarantinePath = 'supabase/rehearsal/20260804_public_browser_quarantine.sql'
 const securityAuditPath = 'hq/readiness/supabase-security-advisor-audit.json'
@@ -33,9 +34,10 @@ async function readManifest(repositoryRoot) {
 async function migrationInventory(repositoryRoot) {
   const directory = resolve(repositoryRoot, 'supabase', 'migrations')
   const names = (await readdir(directory))
-    .filter((name) => /^\d{14}_private_trial_backend.*\.sql$/.test(name))
+    .filter((name) => /^\d{14}_(?:public_legacy_baseline|private_trial_backend.*)\.sql$/.test(name))
     .sort()
   if (names.length !== expectedMigrationCount) fail('supabase_rehearsal_migration_count_mismatch')
+  if (names[0] !== expectedFirstMigration) fail('supabase_rehearsal_first_migration_mismatch')
   if (names.at(-1) !== expectedFinalMigration) fail('supabase_rehearsal_final_migration_mismatch')
   return Promise.all(names.map(async (name) => ({
     name,

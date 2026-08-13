@@ -26,7 +26,7 @@ ACTIVATION_RUNBOOK = ROOT / "docs" / "supermega-enterprise-activation.md"
 PACKAGE_JSON = ROOT / "package.json"
 POWERSHELL = shutil.which("powershell") if os.name == "nt" else None
 SUPABASE_PREFLIGHT_QUERY_SHA256 = (
-    "9157ca7802c7f422c616aba86465c22fabee57dcf032b21af8685069b8983a9e"
+    "3223b21f0976711b95fcdab2f054716143a3ad3737853a4b62fda89a5afe40a3"
 )
 TRIAL_STORE = ROOT / "supermega_runtime" / "trial_store.py"
 MIGRATION_PREFLIGHT = (
@@ -834,6 +834,11 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
             "postgres_database": True,
             "private_schema_absent": True,
             "backend_role_absent": True,
+            "public_user_relations_absent": True,
+            "auth_users_absent": True,
+            "auth_sessions_absent": True,
+            "storage_buckets_absent": True,
+            "storage_objects_absent": True,
         }
 
         class Cursor:

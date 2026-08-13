@@ -1042,7 +1042,19 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
               to_regnamespace('app_private') is null as private_schema_absent,
               not exists (
                 select 1 from pg_roles where rolname = 'supermega_trial_backend'
-              ) as backend_role_absent
+              ) as backend_role_absent,
+              not exists (
+                select 1
+                from pg_class relation_record
+                join pg_namespace schema_record
+                  on schema_record.oid = relation_record.relnamespace
+                where schema_record.nspname = 'public'
+                  and relation_record.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
+              ) as public_user_relations_absent,
+              not exists (select 1 from auth.users limit 1) as auth_users_absent,
+              not exists (select 1 from auth.sessions limit 1) as auth_sessions_absent,
+              not exists (select 1 from storage.buckets limit 1) as storage_buckets_absent,
+              not exists (select 1 from storage.objects limit 1) as storage_objects_absent
             """
         )
         return _mapping(cursor.fetchone())
@@ -1070,6 +1082,13 @@ def evaluate_supabase_rehearsal_target_snapshot(
         "postgres_database_selected": _bool(snapshot.get("postgres_database")),
         "private_schema_absent": _bool(snapshot.get("private_schema_absent")),
         "backend_role_absent": _bool(snapshot.get("backend_role_absent")),
+        "public_user_relations_absent": _bool(
+            snapshot.get("public_user_relations_absent")
+        ),
+        "auth_users_absent": _bool(snapshot.get("auth_users_absent")),
+        "auth_sessions_absent": _bool(snapshot.get("auth_sessions_absent")),
+        "storage_buckets_absent": _bool(snapshot.get("storage_buckets_absent")),
+        "storage_objects_absent": _bool(snapshot.get("storage_objects_absent")),
     }
     failed = sorted(name for name, passed in checks.items() if not passed)
     return {
