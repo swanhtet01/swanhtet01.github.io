@@ -3867,7 +3867,7 @@ if (addToCartStart < 0
   || !ecommerceBuyingUiSource.includes('&& configuredPaymentPolicies.length === 0')
   || !ecommerceBuyingUiSource.includes('currentPaymentPolicies: checkoutPaymentPolicies')
   || !ecommerceBuyingUiSource.includes('Browser-local sample payment. No charge or payment-provider request is made.')
-  || !ecommerceBuyingUiSource.includes('const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)')
+  || !ecommerceBuyingUiSource.includes('const latestRequestConfirmed = Boolean(latestRequestOrder)')
   || !ecommerceBuyingUiSource.includes("const latestRequestCompleted = latestRequestEntry?.stage === 'completed'")
   || !ecommerceBuyingUiSource.includes("latestRequestConfirmed || !quoteCurrent")
   || !ecommerceBuyingUiSource.includes('Confirmed in Shop')

@@ -711,7 +711,7 @@ export function EcommerceBuyingWorkspace({
     cart.reduce((total, line) => total + line.quantity, 0),
   )
   const replacingCurrentRequest = Boolean(latestRequest && !latestRequestOrder && quoteNextAction)
-  const latestRequestConfirmed = Boolean(latestRequestOrder && quoteCurrent)
+  const latestRequestConfirmed = Boolean(latestRequestOrder)
   useEffect(() => {
     onRequestStateChange(customerRequestState)
     onRequestCurrentChange(latestRequestConfirmed)
