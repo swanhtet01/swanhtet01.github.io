@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-13
+Updated: 2026-08-14
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -40,7 +40,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Shop Stock has one Commerce authority. New location-managed orders reserve only from the canonical `LOC-*` bound to their reviewed scope; cancellation releases, completion consumes, and sellable returns restore exact lots.
 - Shop's correction-aware accounting CSV retains reviewed scope and `LOC-*` through close/export, separates same-day books, rejects mixed scopes, and never posts.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
-- Plant CAPA now requires structured close evidence and one due-dated human effectiveness review. Its read-only trend control changes no record. Restrictive strategy-bound maintenance findings now preserve the exact work centre and unreleased controlled-order routes for review without holding or rescheduling work or commanding equipment.
+- Plant CAPA now requires structured close evidence and one due-dated human effectiveness review. Its trend is read-only. Restrictive strategy-bound maintenance findings now preserve the exact work centre and unreleased controlled-order routes. Maintenance review now shows exact unfinished order load and job IDs by work centre; it cannot schedule, reschedule, or command equipment.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
 - `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
 
@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-278 (`4aabf9c5`) adds browser/managed maintenance-to-order evidence parity. Exact order revision, head, plan, and routed operations are immutable; omission and routing tamper fail closed. Completion history: 126. Hosted activation remains unproven.
+- OPS-279 (`b8867924`) adds browser/managed maintenance-capacity parity: exact plans, orders, routed unfinished operations, quantities, reviewed minutes, and job IDs. It is read-only. Completion history: 127. Hosted activation remains unproven.
 
 ## Owner-gated actions
 
@@ -63,13 +63,13 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. `4aabf9c5` passes 29 Python, 400 Plant (39 equipment-import), 107 security, 56 PostgreSQL, and the complete serial app gate. Rendered 1280 px Problems QA has zero overflow/error overlay and retains the no-equipment-control boundary; the source-specific journey remains unclaimed. Hosted activation remains unproven and CLAUDE-009 stays owner-controlled.
-- Autonomous cycles and the local coding entrypoint remain Ollama-only and scale to zero; the admitted model is local `llama3.2:1b`, with one model and one request maximum. This does not convert the current Codex desktop task. No automatic Claude or Gemini dispatch or fallback lane exists, and owner-controlled Claude/Bionic sessions were not inspected, continued, closed, or altered.
-- Real lead accounts remain blocked. Production is at managed schema v7. The `managed-pilot-rehearsal` branch is unsafe: it has only the public baseline, 27 tables lack RLS, `app_private` is absent, and quarantine lacked default-privilege authority. Keep it disconnected from Vercel and Auth. Recover through PR #412's direct-admin rehearsal and prove every gate before inviting one user.
+- Codex is sole integrator. `b8867924` passes 29 Python, 400 Plant (43 equipment-import), 107 security, 56 PostgreSQL, and the complete serial app gate. Rendered 1280 px Maintenance QA has no overflow or error overlay; exact with-load rendering remains unclaimed because the sample has no strategy. Hosted activation is unproven.
+- Local company inference remains Ollama-only and scale-to-zero. This Codex task does not dispatch Claude or Gemini; owner Claude/Bionic sessions were untouched.
+- Real leads remain blocked. Production schema v7 is healthy, but preview lacks v8-v10 and direct-admin proof. Keep it disconnected from Vercel/Auth until PR #412's rehearsal and every managed gate pass.
 
 ## Blockers
 
-- Read-only audit: production is healthy on PostgreSQL 17.6 at schema v7 with zero managed rows, legacy public RLS on, and managed writes off. Preview is `MIGRATIONS_FAILED`; PostgreSQL logged `permission denied to change default privileges`, and v8-v10 are absent. Treat it as unsafe until the direct-admin rehearsal passes.
+- Read-only audit: production is healthy on PostgreSQL 17.6 at schema v7 with zero managed rows, legacy public RLS on, and managed writes off. Preview is `MIGRATIONS_FAILED`; its 27 copied public tables still have RLS disabled, `app_private` is absent, PostgreSQL logged `permission denied to change default privileges`, and v8-v10 are absent. Treat it as unsafe until the direct-admin rehearsal passes.
 - Live HQ and both domains agree on `4ce500c2`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
 - The retired standalone POS host, legacy demo launcher, and internal Console still return 200 from separate projects. Canonical customer routing is public site to app; retire or redirect the two legacy customer hosts and rebaseline Console only through an owner-approved domain release.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.

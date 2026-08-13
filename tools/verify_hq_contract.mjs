@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 53
+  && portfolioSource.completedLocalAutomations.length === 54
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 126
+  && portfolio.completedLocalAutomations.length === 127
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -676,6 +676,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[125]?.workOrderId === 'plant-maintenance-controlled-order-impact'
   && portfolio.completedLocalAutomations[125]?.checkpoint === 'OPS-278'
   && workboard.includes('| OPS-278 | Product Platform + Plant Maintenance Codex | done-local |')
+  && portfolio.completedLocalAutomations[126]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[126]?.workOrderId === 'plant-maintenance-capacity-review'
+  && portfolio.completedLocalAutomations[126]?.checkpoint === 'OPS-279'
+  && workboard.includes('| OPS-279 | Product Platform + Plant Maintenance Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1231,6 +1235,14 @@ requireContract('Plant maintenance findings retain exact controlled-order eviden
   && now.includes('Restrictive strategy-bound maintenance findings now preserve the exact work centre')
   && enterpriseRoadmap.includes('Checkpoint `4aabf9c5` adds backward-compatible `supermega.production.maintenance-finding-source.v2` parity')
   && enterpriseRoadmap.includes('it does not hold or reschedule orders, change inventory, or command equipment'))
+requireContract('Plant maintenance capacity review retains exact current load without scheduling authority',
+  workboard.includes('| OPS-279 | Product Platform + Plant Maintenance Codex | done-local |')
+  && workboard.includes('read-only `supermega.production.maintenance-capacity-review.v1`')
+  && workboard.includes('Completion history preserves 73 archived plus 54 current receipts, 127 unique entries')
+  && now.includes('Maintenance review now shows exact unfinished order load and job IDs by work centre')
+  && now.includes('OPS-279 (`b8867924`) adds browser/managed maintenance-capacity parity')
+  && enterpriseRoadmap.includes('Checkpoint `b8867924` adds read-only `supermega.production.maintenance-capacity-review.v1` parity')
+  && enterpriseRoadmap.includes('Planned duration/window optimization remains unimplemented'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')
