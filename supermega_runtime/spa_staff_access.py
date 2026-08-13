@@ -14,6 +14,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 SPA_STAFF_ACCESS_REVIEW_CONTRACT = "supermega.commerce.spa_staff_access_review.v1"
 SPA_STAFF_INVITATION_HANDOFF_CONTRACT = "supermega.managed_spa_staff_invitation_handoff.v1"
+SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT = "supermega.managed_spa_staff_invitation_authorization.v1"
 SPA_STAFF_INVITATION_RECEIPT_CONTRACT = "supermega.managed_spa_staff_invitation_receipt.v1"
 SPA_STAFF_ACCESS_PLAN_CONTRACT = "supermega.managed_spa_staff_access_plan.v1"
 SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT = "supermega.managed_spa_staff_access_authorization.v1"
@@ -158,6 +159,16 @@ def spa_staff_email_digest(value: object) -> str:
     """Return the canonical digest used to bind a reviewed work email."""
 
     return _digest(_email(value))
+
+
+def spa_staff_invitation_approval_id(value: object) -> str:
+    """Return the one durable owner-authorization ID for a staff invitation."""
+
+    invitation_id = _uuid(value, "Staff invitation ID")
+    return str(uuid5(
+        NAMESPACE_URL,
+        f"{SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT}:{invitation_id}",
+    ))
 
 
 def _uuid(value: object, label: str) -> str:
@@ -317,9 +328,10 @@ def compile_spa_staff_invitation_handoff(
     if not _PROJECT_REF.fullmatch(project) or not _RELEASE_COMMIT.fullmatch(release) or not _SHA256.fullmatch(ca_digest):
         raise SpaStaffAccessError("Spa staff invitation target is invalid.")
     review_expires = _timestamp(review["expires_at"], "Review expiry time")
+    email_digest = spa_staff_email_digest(review["candidate"]["email"])
     invitation_id = str(uuid5(
         NAMESPACE_URL,
-        f"{SPA_STAFF_INVITATION_HANDOFF_CONTRACT}:{review['workspace_id']}:{review['review_digest']}",
+        f"{SPA_STAFF_INVITATION_HANDOFF_CONTRACT}:{review['workspace_id']}:{email_digest}",
     ))
     role = review["candidate"]["role"]
     profile = SPA_STAFF_ACCESS_PROFILES[role]
@@ -335,7 +347,7 @@ def compile_spa_staff_invitation_handoff(
         "ownerActorId": owner_actor_id,
         "candidate": {
             "displayNameDigest": _digest(review["candidate"]["display_name"]),
-            "emailDigest": spa_staff_email_digest(review["candidate"]["email"]),
+            "emailDigest": email_digest,
             "role": role,
             "access": profile["access"],
             "capabilities": list(profile["capabilities"]),
@@ -463,7 +475,7 @@ def validate_spa_staff_invitation_handoff(
         raise SpaStaffAccessError("Spa staff invitation handoff digest does not match its content.")
     expected_id = str(uuid5(
         NAMESPACE_URL,
-        f"{SPA_STAFF_INVITATION_HANDOFF_CONTRACT}:{workspace_id}:{source_digest}",
+        f"{SPA_STAFF_INVITATION_HANDOFF_CONTRACT}:{workspace_id}:{candidate['emailDigest']}",
     ))
     if invitation_id != expected_id or owner_actor_id != handoff["ownerActorId"]:
         raise SpaStaffAccessError("Spa staff invitation identity is invalid.")
@@ -829,6 +841,7 @@ __all__ = [
     "SPA_STAFF_ACCESS_PROFILES",
     "SPA_STAFF_ACCESS_RECEIPT_CONTRACT",
     "SPA_STAFF_ACCESS_REVIEW_CONTRACT",
+    "SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT",
     "SPA_STAFF_INVITATION_HANDOFF_CONTRACT",
     "SPA_STAFF_INVITATION_RECEIPT_CONTRACT",
     "SPA_STAFF_INVITATION_REDIRECT_URL",
@@ -838,6 +851,7 @@ __all__ = [
     "compile_spa_staff_invitation_handoff",
     "record_spa_staff_invitation_result",
     "spa_staff_email_digest",
+    "spa_staff_invitation_approval_id",
     "validate_spa_staff_access_plan",
     "validate_spa_staff_access_review",
     "validate_spa_staff_invitation_handoff",

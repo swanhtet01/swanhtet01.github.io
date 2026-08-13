@@ -23,8 +23,11 @@ from supermega_runtime.spa_staff_access import (
     SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT,
     SPA_STAFF_ACCESS_EVENT_CONTRACT,
     SPA_STAFF_ACCESS_RECEIPT_CONTRACT,
+    SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT,
     spa_staff_email_digest,
+    spa_staff_invitation_approval_id,
     validate_spa_staff_access_plan,
+    validate_spa_staff_invitation_handoff,
 )
 from supermega_runtime.trial_store import TrialValidationError
 
@@ -1328,6 +1331,270 @@ class ManagedWorkspaceProvisioner:
     @staticmethod
     def _staff_target_exists(rows: list[Any], plan: Mapping[str, Any]) -> bool:
         return any(_row_value(row, "actor_id", 0) == plan["identity"]["actorId"] for row in rows)
+
+    @staticmethod
+    def _staff_invitation_authorization_projection(handoff: Mapping[str, Any]) -> dict[str, Any]:
+        handoff_digest = handoff["handoffDigest"]
+        review_digest = handoff["sourceReviewDigest"]
+        email_digest = handoff["candidate"]["emailDigest"]
+        captured_at = handoff["createdAt"]
+        return {
+            "contract": "decision_packet.v1",
+            "subject": {
+                "kind": "managed_spa_staff_invitation",
+                "id": handoff["invitationId"],
+                "version": 1,
+            },
+            "decision": (
+                f"Authorize one server-only Supabase invitation for the reviewed {handoff['candidate']['role']} "
+                f"candidate in workspace {handoff['workspaceId']}."
+            ),
+            "claims": [
+                {
+                    "id": "owner-authorized-exact-invitation-handoff",
+                    "claim_type": "fact",
+                    "statement": "The workspace owner authorized this exact no-send invitation handoff.",
+                    "source_reference": handoff_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": handoff_digest,
+                },
+                {
+                    "id": "reviewed-candidate-and-role-bound",
+                    "claim_type": "fact",
+                    "statement": "The candidate identity remains hashed and bound to one exact Spa role.",
+                    "source_reference": email_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": email_digest,
+                },
+                {
+                    "id": "provider-call-not-yet-performed",
+                    "claim_type": "fact",
+                    "statement": "No provider request, email delivery, user acceptance, or membership is claimed.",
+                    "source_reference": review_digest,
+                    "captured_at": captured_at,
+                    "status": "verified",
+                    "uncertainty": "low",
+                    "visibility": "private",
+                    "digest": review_digest,
+                },
+            ],
+            "baseline": "No provider request or staff membership has been performed.",
+            "target": "Authorize one consumable server invitation after every recorded preflight passes.",
+            "result": "The owner authorized one provider attempt with no automatic retry.",
+            "acceptance": "Consume authorization once, record the provider result, then require fresh staff sign-in.",
+            "artifact_reference": (
+                f"managed-spa-staff-invitation://{handoff['workspaceId']}/{handoff['invitationId']}"
+            ),
+        }
+
+    @classmethod
+    def _staff_invitation_authorization_row(cls, cursor: Any, handoff: Mapping[str, Any]) -> Any:
+        approval_id = spa_staff_invitation_approval_id(handoff["invitationId"])
+        cursor.execute(
+            """
+            select approval_id, workspace_id, command_id, command_fingerprint,
+                   proposal_json, evidence_refs_json, status, requested_by,
+                   requested_actor_kind, requested_at, decided_by,
+                   decided_actor_kind, decided_at, decision_note,
+                   decision_contract_version, version
+            from app_private.approval_requests
+            where approval_id = %s
+               or (workspace_id = %s and command_id = %s)
+            order by (approval_id = %s) desc
+            limit 1
+            """,
+            (approval_id, handoff["workspaceId"], handoff["invitationId"], approval_id),
+        )
+        return cursor.fetchone()
+
+    @classmethod
+    def _staff_invitation_authorization_matches(cls, row: Any, handoff: Mapping[str, Any]) -> bool:
+        if row is None:
+            return False
+        proposal = _row_value(row, "proposal_json", 4)
+        evidence = _row_value(row, "evidence_refs_json", 5)
+        if isinstance(proposal, str):
+            try:
+                proposal = json.loads(proposal)
+            except json.JSONDecodeError:
+                return False
+        if isinstance(evidence, str):
+            try:
+                evidence = json.loads(evidence)
+            except json.JSONDecodeError:
+                return False
+        approval_id = spa_staff_invitation_approval_id(handoff["invitationId"])
+        return bool(
+            str(_row_value(row, "approval_id", 0)) == approval_id
+            and _row_value(row, "workspace_id", 1) == handoff["workspaceId"]
+            and str(_row_value(row, "command_id", 2)) == handoff["invitationId"]
+            and _row_value(row, "command_fingerprint", 3) == str(handoff["handoffDigest"])[7:]
+            and proposal == cls._staff_invitation_authorization_projection(handoff)
+            and evidence == [
+                handoff["sourceReviewDigest"],
+                handoff["handoffDigest"],
+                handoff["candidate"]["emailDigest"],
+            ]
+            and _row_value(row, "status", 6) == "approved"
+            and _row_value(row, "requested_by", 7) == handoff["ownerActorId"]
+            and _row_value(row, "requested_actor_kind", 8) == "human"
+            and _row_value(row, "decided_by", 10) == handoff["ownerActorId"]
+            and _row_value(row, "decided_actor_kind", 11) == "human"
+            and isinstance(_row_value(row, "requested_at", 9), datetime)
+            and isinstance(_row_value(row, "decided_at", 12), datetime)
+            and _row_value(row, "decision_contract_version", 14) == 2
+            and _row_value(row, "version", 15) == 1
+        )
+
+    @staticmethod
+    def _staff_invitation_authorization_receipt(
+        handoff: Mapping[str, Any],
+        *,
+        replayed: bool,
+    ) -> dict[str, Any]:
+        return {
+            "contract": SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT,
+            "version": 1,
+            "status": "approved_no_provider_request",
+            "replayed": replayed,
+            "invitationId": handoff["invitationId"],
+            "approvalId": spa_staff_invitation_approval_id(handoff["invitationId"]),
+            "handoffDigest": handoff["handoffDigest"],
+            "workspaceId": handoff["workspaceId"],
+            "ownerActorId": handoff["ownerActorId"],
+            "authorizedProviderRequestCount": 1,
+            "authorizationConsumptionRequired": True,
+            "automaticRetryAllowed": False,
+            "providerRequestPerformed": False,
+            "invitationSent": False,
+            "membershipWritten": False,
+            "secretValuesExposed": False,
+            "externalProviderRequestsPerformed": False,
+        }
+
+    def authorize_spa_staff_invitation(
+        self,
+        handoff_value: object,
+        *,
+        verified_owner_actor_id: str,
+        verified_owner_session_id: str,
+        decision_note: str,
+    ) -> dict[str, Any]:
+        handoff = validate_spa_staff_invitation_handoff(handoff_value, require_current=True)
+        verified_owner = _uuid(verified_owner_actor_id, "Verified owner actor ID")
+        verified_session = _uuid(verified_owner_session_id, "Verified owner session ID")
+        note = _visible_text(decision_note, "Staff invitation authorization note", 500)
+        if verified_owner != handoff["ownerActorId"]:
+            raise ManagedActivationError("Supabase Auth user does not match the staff-invitation owner.")
+        connection = self._connect()
+        try:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.execute("set transaction isolation level serializable")
+                    self._assert_schema(cursor, require_write_privilege=True)
+                    cursor.execute(
+                        "select app_private.supabase_session_is_active(%s::uuid, %s::uuid) as active",
+                        (verified_owner, verified_session),
+                    )
+                    if not bool(_row_value(cursor.fetchone(), "active", 0)):
+                        raise ManagedActivationError("Supabase owner session is no longer active.")
+                    self._lock(cursor, handoff["workspaceId"])
+                    authorization = self._staff_invitation_authorization_row(cursor, handoff)
+                    access = self._access_row(cursor, handoff["workspaceId"])
+                    rows = self._membership_rows(cursor, handoff["workspaceId"])
+                    if self._staff_invitation_authorization_matches(authorization, handoff):
+                        if (
+                            not self._staff_workspace_matches(access, handoff)
+                            or not self._owner_controls_staff_access(rows, handoff)
+                        ):
+                            raise ManagedActivationConflict("Workspace or invitation authority changed after approval.")
+                        return self._staff_invitation_authorization_receipt(handoff, replayed=True)
+                    if (
+                        authorization is not None
+                        or not self._staff_workspace_matches(access, handoff)
+                        or not self._owner_controls_staff_access(rows, handoff)
+                    ):
+                        raise ManagedActivationConflict("Workspace has conflicting staff-invitation authority or state.")
+                    approval_id = spa_staff_invitation_approval_id(handoff["invitationId"])
+                    cursor.execute(
+                        """
+                        insert into app_private.approval_requests (
+                          approval_id, workspace_id, command_id, command_fingerprint,
+                          title, proposal_json, evidence_refs_json, status,
+                          requested_by, requested_actor_kind, decided_by,
+                          decided_actor_kind, decided_at, decision_note,
+                          decision_contract_version, version
+                        ) values (
+                          %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, 'approved',
+                          %s, 'human', %s, 'human', transaction_timestamp(), %s, 2, 1
+                        )
+                        returning requested_at, decided_at
+                        """,
+                        (
+                            approval_id,
+                            handoff["workspaceId"],
+                            handoff["invitationId"],
+                            str(handoff["handoffDigest"])[7:],
+                            "Authorize one Spa staff invitation",
+                            _canonical_json(self._staff_invitation_authorization_projection(handoff)),
+                            _canonical_json([
+                                handoff["sourceReviewDigest"],
+                                handoff["handoffDigest"],
+                                handoff["candidate"]["emailDigest"],
+                            ]),
+                            handoff["ownerActorId"],
+                            handoff["ownerActorId"],
+                            note,
+                        ),
+                    )
+                    inserted = cursor.fetchone()
+                    if not isinstance(_row_value(inserted, "decided_at", 1), datetime):
+                        raise ManagedActivationError("Staff invitation authorization timestamp was not returned by PostgreSQL.")
+            return self._staff_invitation_authorization_receipt(handoff, replayed=False)
+        finally:
+            connection.close()
+
+    def inspect_spa_staff_invitation(self, handoff_value: object) -> dict[str, Any]:
+        handoff = validate_spa_staff_invitation_handoff(handoff_value)
+        connection = self._connect()
+        try:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.execute("set transaction read only")
+                    schema = self._assert_schema(cursor, require_write_privilege=False)
+                    authorization = self._staff_invitation_authorization_row(cursor, handoff)
+                    access = self._access_row(cursor, handoff["workspaceId"])
+                    rows = self._membership_rows(cursor, handoff["workspaceId"])
+            workspace_ready = self._staff_workspace_matches(access, handoff) and self._owner_controls_staff_access(rows, handoff)
+            authorization_ready = self._staff_invitation_authorization_matches(authorization, handoff)
+            if workspace_ready and authorization is None:
+                status = "authorization_required"
+            elif workspace_ready and authorization_ready:
+                status = "authorized_no_provider_request"
+            else:
+                status = "conflict"
+            return {
+                "contract": "supermega.managed_spa_staff_invitation_preflight.v1",
+                "status": status,
+                "ready": status == "authorized_no_provider_request",
+                "authorizationReady": authorization_ready,
+                "workspaceReady": workspace_ready,
+                "invitationId": handoff["invitationId"],
+                "approvalId": spa_staff_invitation_approval_id(handoff["invitationId"]),
+                "handoffDigest": handoff["handoffDigest"],
+                "schemaVersion": schema["schemaVersion"],
+                "providerRequestPerformed": False,
+                "externalProviderRequestsPerformed": False,
+                "mutationStatementsExecuted": 0,
+            }
+        finally:
+            connection.close()
 
     @staticmethod
     def _staff_access_receipt(plan: Mapping[str, Any], created_at: datetime, *, replayed: bool) -> dict[str, Any]:

@@ -32,8 +32,10 @@ from supermega_runtime.managed_activation import (
 from supermega_runtime.spa_staff_access import (
     SPA_STAFF_ACCESS_AUTHORIZATION_CONTRACT,
     SPA_STAFF_ACCESS_RECEIPT_CONTRACT,
+    SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT,
     compile_spa_staff_access_plan,
     compile_spa_staff_access_review,
+    compile_spa_staff_invitation_handoff,
 )
 
 
@@ -277,6 +279,24 @@ def staff_access_plan(role: str = "front-desk") -> dict[str, object]:
         verified_staff_email="staff@example.com",
         approval_id=STAFF_APPROVAL_ID,
         approved_at=NOW.isoformat(),
+        project_ref=PROJECT_REF,
+        release_commit=RELEASE_COMMIT,
+        admin_ca_sha256=ADMIN_CA_SHA256,
+        now=NOW,
+    )
+
+
+def staff_invitation_handoff(role: str = "front-desk") -> dict[str, object]:
+    review = compile_spa_staff_access_review(
+        display_name="Su Su",
+        email="staff@example.com",
+        role=role,
+        workspace_id="mingalar-fresh-mart",
+        requested_by=OWNER_ID,
+        now=NOW - timedelta(minutes=2),
+    )
+    return compile_spa_staff_invitation_handoff(
+        review,
         project_ref=PROJECT_REF,
         release_commit=RELEASE_COMMIT,
         admin_ca_sha256=ADMIN_CA_SHA256,
@@ -913,6 +933,104 @@ class ManagedSpaStaffAccessProvisionerTests(unittest.TestCase):
         self.assertIn("insert into app_private.approval_requests", statements)
         self.assertIn("insert into app_private.workspace_memberships", statements)
         self.assertIn("insert into app_private.workspace_events", statements)
+
+
+class ManagedSpaStaffInvitationAuthorizationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.database = FakeDatabase()
+        self.provisioner = ManagedWorkspaceProvisioner(
+            "postgresql://ignored",
+            connection_factory=self.database.connect,
+        )
+        owner_plan = activation_plan()
+        self.provisioner.authorize(
+            owner_plan,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+            decision_note="Owner reviewed the exact workspace, release, and plan digest.",
+        )
+        self.provisioner.apply(owner_plan)
+        self.handoff = staff_invitation_handoff()
+
+    def authorize(self) -> dict[str, object]:
+        return self.provisioner.authorize_spa_staff_invitation(
+            self.handoff,
+            verified_owner_actor_id=OWNER_ID,
+            verified_owner_session_id=OWNER_SESSION_ID,
+            decision_note="Owner approved exactly one server-side invitation attempt.",
+        )
+
+    def test_authorization_is_durable_private_and_replay_safe(self) -> None:
+        preflight = self.provisioner.inspect_spa_staff_invitation(self.handoff)
+        self.assertEqual(preflight["status"], "authorization_required")
+        self.assertFalse(preflight["ready"])
+
+        authorization = self.authorize()
+        self.assertEqual(authorization["contract"], SPA_STAFF_INVITATION_AUTHORIZATION_CONTRACT)
+        self.assertEqual(authorization["status"], "approved_no_provider_request")
+        self.assertFalse(authorization["replayed"])
+        self.assertEqual(authorization["authorizedProviderRequestCount"], 1)
+        self.assertTrue(authorization["authorizationConsumptionRequired"])
+        self.assertFalse(authorization["automaticRetryAllowed"])
+        self.assertFalse(authorization["providerRequestPerformed"])
+        self.assertFalse(authorization["invitationSent"])
+        self.assertFalse(authorization["membershipWritten"])
+        proposal = self.database.approvals[-1]["proposal_json"]
+        serialized = json.dumps(proposal, sort_keys=True)
+        self.assertNotIn("Su Su", serialized)
+        self.assertNotIn("staff@example.com", serialized)
+        self.assertEqual(proposal["subject"]["kind"], "managed_spa_staff_invitation")
+        self.assertTrue(self.authorize()["replayed"])
+        self.assertEqual(self.provisioner.inspect_spa_staff_invitation(self.handoff)["status"], "authorized_no_provider_request")
+        self.assertEqual(len(self.database.approvals), 2)
+        self.assertEqual(len(self.database.memberships), 1)
+        self.assertEqual(len(self.database.events), 1)
+
+    def test_owner_session_capability_and_changed_retry_fail_closed(self) -> None:
+        with self.assertRaisesRegex(ManagedActivationError, "does not match the staff-invitation owner"):
+            self.provisioner.authorize_spa_staff_invitation(
+                self.handoff,
+                verified_owner_actor_id=STAFF_ID,
+                verified_owner_session_id=OWNER_SESSION_ID,
+                decision_note="Wrong owner.",
+            )
+        self.database.session_active = False
+        with self.assertRaisesRegex(ManagedActivationError, "owner session is no longer active"):
+            self.authorize()
+        self.database.session_active = True
+        self.authorize()
+
+        changed = staff_invitation_handoff("therapist")
+        self.assertEqual(changed["invitationId"], self.handoff["invitationId"])
+        with self.assertRaisesRegex(ManagedActivationConflict, "conflicting staff-invitation"):
+            self.provisioner.authorize_spa_staff_invitation(
+                changed,
+                verified_owner_actor_id=OWNER_ID,
+                verified_owner_session_id=OWNER_SESSION_ID,
+                decision_note="Changed role must not reuse the invitation authorization.",
+            )
+
+        owner_membership = next(row for row in self.database.memberships if row["actor_id"] == OWNER_ID)
+        owner_membership["capabilities"] = [
+            capability
+            for capability in owner_membership["capabilities"]
+            if capability != "company.control.approve"
+        ]
+        with self.assertRaisesRegex(ManagedActivationConflict, "authority changed"):
+            self.authorize()
+
+    def test_authorization_sql_contains_no_review_pii_or_provider_call(self) -> None:
+        statement_start = len(self.database.statements)
+        self.authorize()
+        statements = "\n".join(
+            statement for statement, _params in self.database.statements[statement_start:]
+        )
+        self.assertNotIn("staff@example.com", statements)
+        self.assertNotIn("Su Su", statements)
+        self.assertNotIn("inviteuserbyemail", statements)
+        self.assertIn("insert into app_private.approval_requests", statements)
+        self.assertNotIn("insert into app_private.workspace_memberships", statements)
+        self.assertNotIn("insert into app_private.workspace_events", statements)
 
 
 class ManagedActivationCliTests(unittest.TestCase):
