@@ -234,6 +234,11 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
 
   const serviceById = new Map(schedule.services.map((service) => [service.id, service]))
   const resourceById = new Map(schedule.resources.map((resource) => [resource.id, resource]))
+  // A guided sample seeds its bookings at fixed times of day, so setting up
+  // during the evening leaves nothing ending in the future and the agenda would
+  // read as empty moments after provisioning promised a working day. Fall back
+  // to what the day actually held rather than claiming there is nothing.
+  const agenda = projection.upcoming.length ? projection.upcoming : projection.today
   return <details className="core-panel shop-service-schedule" id="shop-service-schedule" onToggle={(event) => setWorkspaceOpen(event.currentTarget.open)} open={workspaceOpen} ref={schedulePanelRef}>
     <summary><span><small>{vocabulary.plural}</small><strong>{projection.today.length ? `${projection.today.length} today` : 'Schedule services'}</strong></span><span>{projection.awaitingArrival} waiting · {projection.inService} in service</span></summary>
     <div className="service-schedule-body">
@@ -254,8 +259,8 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', disabled: e
         <button className="core-button primary" disabled={disabled} type="submit">{vocabulary.holdAction}</button>
       </form>
       <section className="service-agenda" aria-label={`Upcoming ${vocabulary.plural.toLowerCase()}`}>
-        <div className="panel-head"><div><span className="core-eyebrow">Agenda</span><h3>{projection.upcoming.length ? `Next ${vocabulary.plural.toLowerCase()}` : `No upcoming ${vocabulary.plural.toLowerCase()}`}</h3></div></div>
-        {projection.upcoming.length ? projection.upcoming.slice(0, 12).map((booking) => {
+        <div className="panel-head"><div><span className="core-eyebrow">Agenda</span><h3>{projection.upcoming.length ? `Next ${vocabulary.plural.toLowerCase()}` : agenda.length ? `Today's ${vocabulary.plural.toLowerCase()}` : `No upcoming ${vocabulary.plural.toLowerCase()}`}</h3></div></div>
+        {agenda.length ? agenda.slice(0, 12).map((booking) => {
           const service = serviceById.get(booking.serviceId)
           const resource = resourceById.get(booking.resourceId)
           return <article key={booking.id}>
