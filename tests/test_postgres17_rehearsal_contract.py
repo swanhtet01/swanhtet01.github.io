@@ -109,6 +109,17 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
             "node tools/run_postgres17_rehearsal.mjs",
         )
 
+    def test_identity_bound_spa_staff_modules_are_in_the_evidence_boundary(self) -> None:
+        module = _load_rehearsal()
+        self.assertEqual(len(module.IMPLEMENTATION_PATHS), 18)
+        self.assertEqual(
+            module.IMPLEMENTATION_PATHS[3:5],
+            (
+                "supermega_runtime/spa_staff_access.py",
+                "supermega_runtime/supabase_auth.py",
+            ),
+        )
+
     def test_real_product_journeys_use_the_exact_managed_adapter(self) -> None:
         source = REHEARSAL.read_text(encoding="utf-8")
         for expected in (
