@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 62
+  && portfolioSource.completedLocalAutomations.length === 63
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 135
+  && portfolio.completedLocalAutomations.length === 136
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -712,6 +712,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[134]?.workOrderId === 'shop-local-ollama-order-intake'
   && portfolio.completedLocalAutomations[134]?.checkpoint === 'OPS-287'
   && workboard.includes('| OPS-287 | Product Platform + Shop AI Codex | done-local |')
+  && portfolio.completedLocalAutomations[135]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[135]?.workOrderId === 'shop-local-ai-message-intake'
+  && portfolio.completedLocalAutomations[135]?.checkpoint === 'OPS-288'
+  && workboard.includes('| OPS-288 | Product Platform + Shop AI Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1330,6 +1334,15 @@ requireContract('local Order Intake is Llama-only, review-gated, and side-effect
   && workboard.includes('one small-model sample is not quality, interactive, hosted, or production acceptance')
   && workboard.includes('Completion history preserves 73 archived plus 62 current receipts, 135 unique entries')
   && now.includes('OPS-287 (`e6fd480e`) adds fixed-loopback local Order Intake with 17 provider checks and zero operational actions'))
+requireContract('local Order Intake is usable in Shop without granting operational authority',
+  workboard.includes('| OPS-288 | Product Platform + Shop AI Codex | done-local |')
+  && workboard.includes('adds a separate local route only when the runtime has no database')
+  && workboard.includes('customer remains explicitly for a person')
+  && workboard.includes('quantity 2, KBZPay, and 37,000 MMK')
+  && workboard.includes('zero operational actions, and zero writes')
+  && workboard.includes('Fresh rendered desktop/mobile acceptance remains unclaimed')
+  && workboard.includes('Completion history preserves 73 archived plus 63 current receipts, 136 unique entries')
+  && now.includes('OPS-288 (`d5a7e358`) makes it usable in Shop with grounded fields and zero actions'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')

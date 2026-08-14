@@ -33,7 +33,6 @@ AI assistance stays review-gated R&D; Order Intake has a local server prototype.
 
 - Hosted scheduling stays dormant. Local `SuperMega Ally CEO Cycle` is source-pinned, four-hourly, idle-gated, limited, and single-flight. Six checks cover five outcomes; finished or gated work is zero-model.
 - Ally inference is Ollama-only: `llama3.2:1b` is the admitted local model, with a 256-token maximum, immediate unload, and no cloud fallback.
-- Shop Order Intake is local Ollama-only, source-checked, tool-free, and review-required.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
@@ -54,7 +53,7 @@ AI assistance stays review-gated R&D; Order Intake has a local server prototype.
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load. OPS-286 (`78dbc1f7`) removes 5,693 bytes of duplicated shared UI/schema literals. OPS-287 (`e6fd480e`) adds fixed-loopback local Order Intake with 17 provider checks and zero operational actions. Completion history is 135; fresh rendered and hosted acceptance remain unproven.
+- OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load. OPS-286 (`78dbc1f7`) removes 5,693 bytes of duplicated shared UI/schema literals. OPS-287 (`e6fd480e`) adds fixed-loopback local Order Intake with 17 provider checks and zero operational actions. OPS-288 (`d5a7e358`) makes it usable in Shop with grounded fields and zero actions. Completion history is 136; rendered and hosted acceptance remain unproven.
 
 ## Owner-gated actions
 
@@ -64,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. `e6fd480e` passes 237 modules, 521 Python tests, 408 Production checks, 108 security checks, and full app/HQ gates. Browser and hosting acceptance remain pending.
+- Codex is sole integrator. `d5a7e358` passes 237 modules, 524 Python tests, 408 Production checks, 109 security checks, and full app/HQ gates. Browser and hosting acceptance remain pending.
 - Local company inference remains Ollama-only and scale-to-zero. This Codex task does not dispatch Claude or Gemini; owner Claude/Bionic sessions were untouched.
 - Real leads remain blocked. Production schema v7 is healthy, but preview lacks v8-v10 and direct-admin proof. Keep it disconnected from Vercel/Auth until PR #412's rehearsal and every managed gate pass.
 
