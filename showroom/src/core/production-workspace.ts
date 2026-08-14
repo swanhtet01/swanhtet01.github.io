@@ -18,6 +18,7 @@ export const PRODUCTION_QUALITY_CAPA_TREND_SCHEMA = 'supermega.production.qualit
 export const PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA = 'supermega.production.maintenance-finding-source.v2' as const
 export const PRODUCTION_MAINTENANCE_FINDING_SOURCE_LEGACY_SCHEMA = 'supermega.production.maintenance-finding-source.v1' as const
 export const PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA = 'supermega.production.maintenance-capacity-review.v1' as const
+export const PRODUCTION_MAINTENANCE_WINDOW_SCHEMA = 'supermega.production.maintenance-window.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -273,7 +274,7 @@ export type ProductionOpeningPlan = {
   machineIds: string[]
 }
 
-export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_effectiveness_reviewed' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'equipment_commissioned' | 'equipment_maintenance_strategy_saved' | 'downtime_started' | 'downtime_ended' | 'maintenance_started' | 'maintenance_completed' | 'shift_closed'
+export type ProductionEventKind = 'job_created' | 'job_schedule_updated' | 'job_closed' | 'output_recorded' | 'material_consumed' | 'issue_opened' | 'issue_resolved' | 'quality_effectiveness_reviewed' | 'quality_hold_placed' | 'quality_hold_released' | 'machine_state_changed' | 'equipment_master_imported' | 'equipment_commissioned' | 'equipment_maintenance_strategy_saved' | 'downtime_started' | 'downtime_ended' | 'maintenance_window_scheduled' | 'maintenance_started' | 'maintenance_completed' | 'shift_closed'
 export type ProductionOutputKind = 'good' | 'scrap'
 
 export type ProductionEvent = {
@@ -324,6 +325,13 @@ export type ProductionEvent = {
   maintenanceReturnToService?: ProductionMaintenanceReturnToService
   maintenanceFindingSource?: ProductionMaintenanceFindingSource
   maintenanceCorrectiveAction?: ProductionMaintenanceCorrectiveAction
+  maintenanceWindowStartAt?: string
+  maintenanceWindowEndAt?: string
+  maintenanceWindowDurationMinutes?: number
+  maintenanceWindowCapacityAsOf?: string
+  maintenanceWindowWorkCentreId?: string
+  maintenanceWindowOrderCount?: number
+  maintenanceWindowLoadMinutesMilli?: number
   qualityCorrectiveAction?: ProductionQualityCorrectiveAction
   qualityEffectivenessReview?: ProductionQualityEffectivenessReview
   equipmentIds?: string[]
@@ -649,13 +657,43 @@ export type ProductionMaintenanceCapacityReview = {
   }
 }
 
+export type ProductionMaintenanceWindow = {
+  contract: typeof PRODUCTION_MAINTENANCE_WINDOW_SCHEMA
+  actionId: string
+  equipmentId: string
+  equipmentName: string
+  maintenanceOwner: string
+  scheduledAt: string
+  scheduledBy: string
+  evidenceReference: string
+  plannedStartAt: string
+  plannedEndAt: string
+  durationMinutes: number
+  capacityAsOf: string
+  workCentreId: string
+  orderCount: number
+  totalRemainingMinutesMilli: number
+  strategyActionId: string
+  strategyRevision: number
+  procedureReference: string
+  dueAt: string
+  sourceRevision: number
+  sourceDigest: string
+  authority: {
+    maintenanceScheduled: true
+    ordersRescheduled: false
+    machineStatusChanged: false
+    equipmentCommanded: false
+  }
+}
+
 const issueKinds: ProductionIssueKind[] = ['quality', 'maintenance', 'materials', 'operations']
 export const productionIssueSeverities: ProductionIssueSeverity[] = ['critical', 'high', 'medium', 'low']
 export const productionJobPriorities: ProductionJobPriority[] = ['urgent', 'normal', 'low']
 export const productionMachineStates: ProductionMachineState[] = ['running', 'attention', 'stopped']
 export const productionMaterialUnits: ProductionMaterialUnit[] = ['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm']
 export const productionQualityCauseCategories: ProductionQualityCauseCategory[] = ['material', 'method', 'machine', 'measurement', 'people', 'environment']
-const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_effectiveness_reviewed', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'equipment_maintenance_strategy_saved', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'shift_closed']
+const eventKinds: ProductionEventKind[] = ['job_created', 'job_schedule_updated', 'job_closed', 'output_recorded', 'material_consumed', 'issue_opened', 'issue_resolved', 'quality_effectiveness_reviewed', 'quality_hold_placed', 'quality_hold_released', 'machine_state_changed', 'equipment_master_imported', 'equipment_commissioned', 'equipment_maintenance_strategy_saved', 'downtime_started', 'downtime_ended', 'maintenance_window_scheduled', 'maintenance_started', 'maintenance_completed', 'shift_closed']
 const baseEventFields = ['id', 'actionId', 'createdAt', 'actor', 'reason', 'evidenceReference', 'kind', 'subjectId', 'summary']
 const jobCreatedEventFields = [...baseEventFields, 'jobPriority', 'jobDueAt', 'jobOwner']
 const jobScheduleUpdateEventFields = [...jobCreatedEventFields, 'fromJobPriority', 'fromJobDueAt', 'fromJobOwner']
@@ -667,6 +705,7 @@ const downtimeEndEventFields = [...baseEventFields, 'downtimeStartActionId']
 const shiftClosedEventFields = [...baseEventFields, 'shiftRef', 'sourceRevision', 'sourceDigest', 'goodUnits', 'scrapUnits', 'outputEntryCount', 'materialEntryCount']
 const maintenanceStrategyBindingFields = ['maintenanceStrategyActionId', 'maintenanceStrategyRevision', 'maintenanceProcedureReference', 'maintenancePlannedDueAt']
 const maintenanceResultFields = ['maintenanceOutcome', 'maintenanceFindings', 'maintenanceProcedureCompleted', 'maintenanceReturnToService']
+const maintenanceWindowFields = [...baseEventFields, 'maintenanceOwner', ...maintenanceStrategyBindingFields, 'maintenanceWindowStartAt', 'maintenanceWindowEndAt', 'maintenanceWindowDurationMinutes', 'maintenanceWindowCapacityAsOf', 'maintenanceWindowWorkCentreId', 'maintenanceWindowOrderCount', 'maintenanceWindowLoadMinutesMilli', 'sourceRevision', 'sourceDigest']
 const maintenanceStartEventFields = [...baseEventFields, 'maintenanceOwner', ...maintenanceStrategyBindingFields]
 const maintenanceCompleteEventFields = [...baseEventFields, 'maintenanceStartActionId', ...maintenanceStrategyBindingFields, ...maintenanceResultFields, 'nextDueAt']
 const maintenanceHistoricalCompleteEventFields = maintenanceCompleteEventFields.filter((field) => !maintenanceResultFields.includes(field))
@@ -714,6 +753,7 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   equipment_maintenance_strategy_saved: equipmentMaintenanceStrategyEventFields,
   downtime_started: baseEventFields,
   downtime_ended: downtimeEndEventFields,
+  maintenance_window_scheduled: maintenanceWindowFields,
   maintenance_started: maintenanceStartEventFields,
   maintenance_completed: maintenanceCompleteEventFields,
   shift_closed: shiftClosedEventFields,
@@ -1689,6 +1729,34 @@ export function validateProductionState(value: unknown): ProductionState {
       const expectedFields = candidate.kind === 'downtime_ended' ? downtimeEndEventFields : baseEventFields
       if (JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify([...expectedFields].sort())) throw new Error(`events[${index}] downtime event fields are invalid.`)
       if (candidate.kind === 'downtime_ended') canonicalText(candidate.downtimeStartActionId, `events[${index}].downtimeStartActionId`, 160)
+    } else if (candidate.kind === 'maintenance_window_scheduled') {
+      const machine = machines.find((entry): entry is Record<string, unknown> => isRecord(entry) && entry.id === candidate.subjectId)
+      if (!machine || !equipmentIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] maintenance window must reference commissioned equipment.`)
+      if (!validDowntimeTimestamp(candidate.createdAt)
+        || !validDowntimeTimestamp(candidate.maintenanceWindowCapacityAsOf)
+        || !validDowntimeTimestamp(candidate.maintenanceWindowStartAt)
+        || !validDowntimeTimestamp(candidate.maintenanceWindowEndAt)) throw new Error(`events[${index}] maintenance window timestamps are invalid.`)
+      if (Date.parse(candidate.maintenanceWindowCapacityAsOf as string) > Date.parse(candidate.createdAt as string)) throw new Error(`events[${index}] maintenance capacity review cannot follow confirmation.`)
+      if (timestampAtOrBefore(candidate.maintenanceWindowStartAt as string, candidate.createdAt as string)) throw new Error(`events[${index}] maintenance window must begin after confirmation.`)
+      assertSafeInteger(candidate.maintenanceWindowDurationMinutes, `events[${index}].maintenanceWindowDurationMinutes`, 15)
+      if (Number(candidate.maintenanceWindowDurationMinutes) > 10_080 || Number(candidate.maintenanceWindowDurationMinutes) % 15 !== 0) throw new Error(`events[${index}] maintenance duration must use 15-minute increments up to seven days.`)
+      if (Date.parse(candidate.maintenanceWindowEndAt as string) !== Date.parse(candidate.maintenanceWindowStartAt as string) + Number(candidate.maintenanceWindowDurationMinutes) * 60_000) throw new Error(`events[${index}] maintenance window end does not match its duration.`)
+      canonicalText(candidate.maintenanceOwner, `events[${index}].maintenanceOwner`, 120)
+      canonicalText(candidate.maintenanceStrategyActionId, `events[${index}].maintenanceStrategyActionId`, 160)
+      assertSafeInteger(candidate.maintenanceStrategyRevision, `events[${index}].maintenanceStrategyRevision`, 1)
+      canonicalText(candidate.maintenanceProcedureReference, `events[${index}].maintenanceProcedureReference`, 240)
+      if (!validDowntimeTimestamp(candidate.maintenancePlannedDueAt)) throw new Error(`events[${index}].maintenancePlannedDueAt is invalid.`)
+      const workCentreId = canonicalText(candidate.maintenanceWindowWorkCentreId, `events[${index}].maintenanceWindowWorkCentreId`, 80)
+      if (!/^[A-Z0-9][A-Z0-9._/-]{0,79}$/.test(workCentreId)) throw new Error(`events[${index}].maintenanceWindowWorkCentreId is invalid.`)
+      assertSafeInteger(candidate.maintenanceWindowOrderCount, `events[${index}].maintenanceWindowOrderCount`)
+      assertSafeInteger(candidate.maintenanceWindowLoadMinutesMilli, `events[${index}].maintenanceWindowLoadMinutesMilli`)
+      if (Number(candidate.maintenanceWindowOrderCount) > 20
+        || (Number(candidate.maintenanceWindowOrderCount) === 0) !== (Number(candidate.maintenanceWindowLoadMinutesMilli) === 0)) throw new Error(`events[${index}] maintenance controlled-load summary is invalid.`)
+      assertSafeInteger(candidate.sourceRevision, `events[${index}].sourceRevision`)
+      if (candidate.sourceRevision !== events.length - index - 1) throw new Error(`events[${index}] maintenance window source revision does not match its append position.`)
+      if (typeof candidate.sourceDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(candidate.sourceDigest)) throw new Error(`events[${index}].sourceDigest is invalid.`)
+      const expectedSummary = `Scheduled maintenance for ${String(machine.name)} from ${candidate.maintenanceWindowStartAt} to ${candidate.maintenanceWindowEndAt}`
+      if (candidate.summary !== expectedSummary) throw new Error(`events[${index}] maintenance window summary is not canonical.`)
     } else if (candidate.kind === 'maintenance_started' || candidate.kind === 'maintenance_completed') {
       if (!machineIds.includes(candidate.subjectId as string)) throw new Error(`events[${index}] references an unknown machine.`)
       if (!validDowntimeTimestamp(candidate.createdAt)) throw new Error(`events[${index}].createdAt must be a canonical UTC millisecond timestamp for maintenance.`)
@@ -1809,7 +1877,7 @@ export function validateProductionState(value: unknown): ProductionState {
       || event.summary !== `Commissioned ${String(asset.name)} at ${String(asset.workCentreId)}`) throw new Error('Equipment commissioning record does not match its immutable event.')
     const laterLifecycle = events.filter((candidate): candidate is Record<string, unknown> => isRecord(candidate)
       && candidate.subjectId === equipmentId
-      && ['machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_started', 'maintenance_completed', 'equipment_maintenance_strategy_saved'].includes(String(candidate.kind)))
+      && ['machine_state_changed', 'downtime_started', 'downtime_ended', 'maintenance_window_scheduled', 'maintenance_started', 'maintenance_completed', 'equipment_maintenance_strategy_saved'].includes(String(candidate.kind)))
     if (laterLifecycle.some((candidate) => timestampBefore(candidate.createdAt as string, event.createdAt as string))) throw new Error('Equipment lifecycle history cannot predate commissioning.')
     commissionedIds.add(equipmentId)
   }
@@ -1819,7 +1887,7 @@ export function validateProductionState(value: unknown): ProductionState {
     if (postOpeningIds.length !== commissionedIds.size || postOpeningIds.some((id) => !commissionedIds.has(id))) throw new Error('Every runtime machine added after opening requires equipment commissioning.')
   }
   const equipmentMaintenanceStrategyEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'equipment_maintenance_strategy_saved')
-  const equipmentMaintenanceEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && (event.kind === 'maintenance_started' || event.kind === 'maintenance_completed'))
+  const equipmentMaintenanceEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && (event.kind === 'maintenance_window_scheduled' || event.kind === 'maintenance_started' || event.kind === 'maintenance_completed'))
   let retainedEquipmentMaintenanceStrategyEvents = 0
   for (const asset of equipmentAssets) {
     const equipmentId = String(asset.id)
@@ -1841,11 +1909,15 @@ export function validateProductionState(value: unknown): ProductionState {
       const isBound = maintenanceEvent.maintenanceStrategyActionId !== undefined
       if (Boolean(applicableStrategy) !== isBound) throw new Error('Commissioned equipment maintenance must bind the strategy active at execution time.')
       if (!applicableStrategy) continue
+      const previousCompletion = assetMaintenanceEvents.find((candidate) => candidate.kind === 'maintenance_completed'
+        && candidate.maintenanceStrategyActionId === applicableStrategy.actionId
+        && timestampBefore(candidate.createdAt as string, maintenanceEvent.createdAt as string))
+      const expectedCycleDueAt = previousCompletion?.nextDueAt ?? applicableStrategy.nextDueAt
       if (maintenanceEvent.maintenanceStrategyActionId !== applicableStrategy.actionId
         || maintenanceEvent.maintenanceStrategyRevision !== applicableStrategy.strategyRevision
         || maintenanceEvent.maintenanceProcedureReference !== applicableStrategy.procedureReference
-        || maintenanceEvent.maintenancePlannedDueAt !== applicableStrategy.nextDueAt
-        || (maintenanceEvent.kind === 'maintenance_started' && maintenanceEvent.maintenanceOwner !== applicableStrategy.maintenanceOwner)) throw new Error('Equipment maintenance execution does not match its immutable strategy revision.')
+        || maintenanceEvent.maintenancePlannedDueAt !== expectedCycleDueAt
+        || ((maintenanceEvent.kind === 'maintenance_started' || maintenanceEvent.kind === 'maintenance_window_scheduled') && maintenanceEvent.maintenanceOwner !== applicableStrategy.maintenanceOwner)) throw new Error('Equipment maintenance execution does not match its immutable strategy revision and due cycle.')
       if (maintenanceEvent.kind === 'maintenance_completed') {
         const expectedNextDueAt = new Date(Date.parse(maintenanceEvent.createdAt as string) + Number(applicableStrategy.intervalDays) * 86_400_000).toISOString()
         if (maintenanceEvent.nextDueAt !== expectedNextDueAt) throw new Error('Equipment maintenance completion next due does not match its strategy interval.')
@@ -1866,6 +1938,17 @@ export function validateProductionState(value: unknown): ProductionState {
     retainedEquipmentMaintenanceStrategyEvents += matches.length
   }
   if (retainedEquipmentMaintenanceStrategyEvents !== equipmentMaintenanceStrategyEvents.length) throw new Error('Equipment maintenance strategy history contains an unknown event.')
+  const maintenanceWindowEvents = equipmentMaintenanceEvents.filter((event) => event.kind === 'maintenance_window_scheduled')
+  const maintenanceWindowCycles = maintenanceWindowEvents.map((event) => `${String(event.subjectId)}\u0000${String(event.maintenanceStrategyActionId)}\u0000${String(event.maintenancePlannedDueAt)}`)
+  assertUnique(maintenanceWindowCycles, 'Production maintenance window cycle')
+  for (const [index, event] of maintenanceWindowEvents.entries()) {
+    for (const other of maintenanceWindowEvents.slice(index + 1)) {
+      if (event.maintenanceWindowWorkCentreId !== other.maintenanceWindowWorkCentreId) continue
+      const overlaps = Date.parse(event.maintenanceWindowStartAt as string) < Date.parse(other.maintenanceWindowEndAt as string)
+        && Date.parse(other.maintenanceWindowStartAt as string) < Date.parse(event.maintenanceWindowEndAt as string)
+      if (overlaps) throw new Error('Production maintenance windows cannot overlap at one work centre.')
+    }
+  }
   if (openingJobIds) {
     const openingJobIdSet = new Set(openingJobIds)
     const creationEvents = events.filter((event): event is Record<string, unknown> => isRecord(event) && event.kind === 'job_created')
@@ -2790,6 +2873,56 @@ export function productionMaintenanceCapacityReview(
       equipmentCommanded: false,
     },
   }
+}
+
+export function productionMaintenanceWindows(state: ProductionState): ProductionMaintenanceWindow[] {
+  const current = validateProductionState(state)
+  return current.events.flatMap((event): ProductionMaintenanceWindow[] => {
+    if (event.kind !== 'maintenance_window_scheduled') return []
+    const machine = current.machines.find((candidate) => candidate.id === event.subjectId)
+    if (!machine) return []
+    return [{
+      contract: PRODUCTION_MAINTENANCE_WINDOW_SCHEMA,
+      actionId: event.actionId,
+      equipmentId: event.subjectId,
+      equipmentName: machine.name,
+      maintenanceOwner: event.maintenanceOwner ?? '',
+      scheduledAt: event.createdAt,
+      scheduledBy: event.actor,
+      evidenceReference: event.evidenceReference,
+      plannedStartAt: event.maintenanceWindowStartAt ?? '',
+      plannedEndAt: event.maintenanceWindowEndAt ?? '',
+      durationMinutes: event.maintenanceWindowDurationMinutes ?? 0,
+      capacityAsOf: event.maintenanceWindowCapacityAsOf ?? '',
+      workCentreId: event.maintenanceWindowWorkCentreId ?? '',
+      orderCount: event.maintenanceWindowOrderCount ?? 0,
+      totalRemainingMinutesMilli: event.maintenanceWindowLoadMinutesMilli ?? 0,
+      strategyActionId: event.maintenanceStrategyActionId ?? '',
+      strategyRevision: event.maintenanceStrategyRevision ?? 0,
+      procedureReference: event.maintenanceProcedureReference ?? '',
+      dueAt: event.maintenancePlannedDueAt ?? '',
+      sourceRevision: event.sourceRevision ?? 0,
+      sourceDigest: event.sourceDigest ?? '',
+      authority: {
+        maintenanceScheduled: true,
+        ordersRescheduled: false,
+        machineStatusChanged: false,
+        equipmentCommanded: false,
+      },
+    }]
+  }).sort((left, right) => Date.parse(left.plannedStartAt) - Date.parse(right.plannedStartAt)
+    || left.equipmentId.localeCompare(right.equipmentId))
+}
+
+export function currentProductionMaintenanceWindow(state: ProductionState, equipmentId: string) {
+  if (!validCanonicalText(equipmentId, 80)) return null
+  const current = validateProductionState(state)
+  const strategy = current.equipmentMaster?.assets.find((asset) => asset.id === equipmentId)?.maintenanceStrategy
+  if (!strategy) return null
+  return productionMaintenanceWindows(current).find((window) => window.equipmentId === equipmentId
+    && window.strategyActionId === strategy.actionId
+    && window.strategyRevision === strategy.revision
+    && window.dueAt === strategy.nextDueAt) ?? null
 }
 
 export function buildProductionShiftHandoff(state: ProductionState, shiftRef: string, plantOrderScope = 'plant:local-sample'): ProductionShiftHandoff | null {
@@ -4288,6 +4421,95 @@ export function endProductionDowntime(
     ...state,
     revision: state.revision + 1,
     events: [event, ...state.events],
+  })
+}
+
+export function scheduleProductionMaintenanceWindow(
+  state: ProductionState,
+  equipmentId: string,
+  reviewedCapacity: ProductionMaintenanceCapacityReview,
+  plannedStartAt: string,
+  durationMinutes: number,
+  proof: ProductionActionProof,
+) {
+  const current = validateProductionState(state)
+  if (!validProof(proof)
+    || !validDowntimeTimestamp(proof.capturedAt)
+    || !validCanonicalText(equipmentId, 80)
+    || reviewedCapacity?.contract !== PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA
+    || !validDowntimeTimestamp(reviewedCapacity.asOf)
+    || Date.parse(reviewedCapacity.asOf) > Date.parse(proof.capturedAt)
+    || !validDowntimeTimestamp(plannedStartAt)
+    || timestampAtOrBefore(plannedStartAt, proof.capturedAt)
+    || !Number.isSafeInteger(durationMinutes)
+    || durationMinutes < 15
+    || durationMinutes > 10_080
+    || durationMinutes % 15 !== 0) return null
+  const plannedEndAt = new Date(Date.parse(plannedStartAt) + durationMinutes * 60_000).toISOString()
+  const reviewedItem = reviewedCapacity.items.find((item) => item.assetId === equipmentId)
+  if (!reviewedItem) return null
+  const existing = current.events.find((event) => event.actionId === proof.actionId)
+  if (existing) return existing.kind === 'maintenance_window_scheduled'
+    && existing.subjectId === equipmentId
+    && existing.maintenanceWindowStartAt === plannedStartAt
+    && existing.maintenanceWindowEndAt === plannedEndAt
+    && existing.maintenanceWindowDurationMinutes === durationMinutes
+    && existing.maintenanceWindowCapacityAsOf === reviewedCapacity.asOf
+    && existing.maintenanceWindowWorkCentreId === reviewedItem.workCentreId
+    && existing.maintenanceWindowOrderCount === reviewedItem.orders.length
+    && existing.maintenanceWindowLoadMinutesMilli === reviewedItem.totalRemainingMinutesMilli
+    && sameProof(existing, proof) ? current : null
+  const expectedCapacity = productionMaintenanceCapacityReview(current, reviewedCapacity.asOf)
+  if (JSON.stringify(expectedCapacity) !== JSON.stringify(reviewedCapacity)) return null
+  const asset = current.equipmentMaster?.assets.find((candidate) => candidate.id === equipmentId)
+  const strategy = asset?.maintenanceStrategy
+  const machine = current.machines.find((candidate) => candidate.id === equipmentId)
+  if (!asset || !strategy || !machine
+    || asset.commissioningStatus !== 'commissioned'
+    || reviewedItem.strategyActionId !== strategy.actionId
+    || reviewedItem.strategyRevision !== strategy.revision
+    || reviewedItem.procedureReference !== strategy.procedureReference
+    || reviewedItem.dueAt !== strategy.nextDueAt
+    || reviewedItem.owner !== strategy.maintenanceOwner
+    || reviewedItem.workCentreId !== asset.workCentreId
+    || reviewedItem.orders.length > 20
+    || (reviewedItem.orders.length === 0) !== (reviewedItem.totalRemainingMinutesMilli === 0)) return null
+  const latestEvent = current.events[0]
+  if (actionIdIsUsed(current, proof.actionId)
+    || current.revision >= Number.MAX_SAFE_INTEGER
+    || (latestEvent && timestampBefore(proof.capturedAt, latestEvent.createdAt))
+    || current.events.some((event) => event.kind === 'maintenance_window_scheduled'
+      && event.subjectId === equipmentId
+      && event.maintenanceStrategyActionId === strategy.actionId
+      && event.maintenancePlannedDueAt === strategy.nextDueAt)
+    || current.events.some((event) => event.kind === 'maintenance_window_scheduled'
+      && event.maintenanceWindowWorkCentreId === asset.workCentreId
+      && Date.parse(plannedStartAt) < Date.parse(event.maintenanceWindowEndAt ?? '')
+      && Date.parse(event.maintenanceWindowStartAt ?? '') < Date.parse(plannedEndAt))) return null
+  const sourceDigest = `sha256:${sha256Hex(productionCanonical(current))}`
+  const event = eventFor(proof, {
+    kind: 'maintenance_window_scheduled',
+    subjectId: equipmentId,
+    summary: `Scheduled maintenance for ${machine.name} from ${plannedStartAt} to ${plannedEndAt}`,
+    maintenanceOwner: strategy.maintenanceOwner,
+    maintenanceStrategyActionId: strategy.actionId,
+    maintenanceStrategyRevision: strategy.revision,
+    maintenanceProcedureReference: strategy.procedureReference,
+    maintenancePlannedDueAt: strategy.nextDueAt,
+    maintenanceWindowStartAt: plannedStartAt,
+    maintenanceWindowEndAt: plannedEndAt,
+    maintenanceWindowDurationMinutes: durationMinutes,
+    maintenanceWindowCapacityAsOf: reviewedCapacity.asOf,
+    maintenanceWindowWorkCentreId: asset.workCentreId,
+    maintenanceWindowOrderCount: reviewedItem.orders.length,
+    maintenanceWindowLoadMinutesMilli: reviewedItem.totalRemainingMinutesMilli,
+    sourceRevision: current.revision,
+    sourceDigest,
+  })
+  return validateProductionState({
+    ...current,
+    revision: current.revision + 1,
+    events: [event, ...current.events],
   })
 }
 

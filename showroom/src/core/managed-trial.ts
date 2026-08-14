@@ -212,6 +212,7 @@ export type ManagedProductionEvent =
   | 'production.order_execution.recorded'
   | 'production.downtime.started'
   | 'production.downtime.ended'
+  | 'production.maintenance_window.scheduled'
   | 'production.maintenance.started'
   | 'production.maintenance.completed'
   | 'production.shift.closed'

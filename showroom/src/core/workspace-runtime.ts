@@ -167,6 +167,7 @@ export type ActionKind =
   | 'machine_state'
   | 'downtime_start'
   | 'downtime_end'
+  | 'maintenance_window'
   | 'maintenance_start'
   | 'maintenance_complete'
   | 'production_shift_close'
