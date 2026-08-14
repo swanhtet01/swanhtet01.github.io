@@ -107,6 +107,26 @@ const [manifestText, appPackageText, appSource, coreSource, coreShellSource, beh
 ])
 const manifest = JSON.parse(manifestText)
 const appPackage = JSON.parse(appPackageText)
+const coreSharedUiValueContract = [
+  ['coreEyebrowClass', "'core-eyebrow'"],
+  ['primaryButtonClass', "'core-button primary'"],
+  ['compactPrimaryButtonClass', "'core-button primary compact'"],
+  ['compactButtonClass', "'core-button compact'"],
+  ['compactFormClass', "'core-form compact-form'"],
+  ['formActionsClass', "'form-actions'"],
+  ['compactDisclosureClass', "'compact-disclosure'"],
+  ['productionHistoryClass', "'compact-disclosure production-history'"],
+  ['productionIssueDialogClass', "'production-issue-dialog'"],
+  ['plantControlRowsClass', "'plant-control-rows'"],
+  ['shopOrderControlRowsClass', "'shop-order-control-rows'"],
+  ['orderDraftRecoveryActionsClass', "'order-draft-recovery-actions'"],
+  ['stockReceiptPreviewClass', "'stock-receipt-preview'"],
+  ['stockReceiptCopyClass', "'stock-receipt-copy'"],
+  ['actionHistoryListClass', "'action-history-list'"],
+  ['purchaseOrderEditorClass', "'stock-receipt-editor purchase-order-editor'"],
+  ['ecommerceShopDraftSchema', "'supermega.ecommerce.shop_draft.v7'"],
+]
+if (coreSharedUiValueContract.some(([name, value]) => !coreSource.includes(`const ${name} = ${value}`))) fail('core_shared_ui_value_contract_missing')
 const rootPackage = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
 const schedulerAuthority = JSON.parse(await readFile(resolve(root, 'tools', 'supermega_scheduler_authority.json'), 'utf8'))
 let schedulerExecutionBudget
@@ -2161,7 +2181,7 @@ const plantJobImportSampleContract = plantJobImportSampleStart >= 0 && plantJobI
 const plantJobImportUploadContract = plantJobImportUploadStart >= 0 && plantJobScheduleStart > plantJobImportUploadStart
   ? coreSource.slice(plantJobImportUploadStart, plantJobScheduleStart)
   : ''
-const plantJobFormStart = coreSource.indexOf('<form className="core-form compact-form" onSubmit={createJob}>')
+const plantJobFormStart = coreSource.indexOf('<form className={compactFormClass} onSubmit={createJob}>')
 const plantJobFormEnd = coreSource.indexOf('</form>', plantJobFormStart)
 const plantJobFormContract = plantJobFormStart >= 0 && plantJobFormEnd > plantJobFormStart
   ? coreSource.slice(plantJobFormStart, plantJobFormEnd)
@@ -2197,7 +2217,7 @@ if (!coreSource.includes('const plantTodayMetrics = [')
   || !coreSource.includes('aria-labelledby="plant-today-title"')
   || !coreSource.includes('data-step={plantTodayStep}')
   || !coreSource.includes('aria-label="Plant today status"')
-  || !coreSource.includes('<span className="core-eyebrow">Start here</span><h2 id="plant-today-title">')
+  || !coreSource.includes('<span className={coreEyebrowClass}>Start here</span><h2 id="plant-today-title">')
   || coreSource.includes('const plantStartGuide =')
   || coreSource.includes('aria-label="Plant guided jobs"')
   || coreSource.includes('Use Plant in 3 steps.')
@@ -3873,7 +3893,7 @@ if (addToCartStart < 0
   || !commerceSource.includes('if (commercePaymentPolicies(state).length) return state')
   || !commerceSource.includes("expected.status !== 'approved'")
   || !commerceSource.includes('JSON.stringify(expected) !== JSON.stringify(decision)')
-  || !coreSource.includes("ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'")
+  || !coreSource.includes('ecommerceDraft?.schema === ecommerceShopDraftSchema')
   || !coreSource.includes('&& !managedIdentity')
   || !coreSource.includes('&& (current.paymentPolicies?.length ?? 0) === 0')
   || !coreSource.includes('restoreBrowserLocalSamplePaymentPolicies(')
@@ -4037,7 +4057,7 @@ const ecommerceOrderSubmitStart = coreSource.indexOf('<div className="order-subm
 const ecommerceOrderSubmitEnd = coreSource.indexOf('</div>', ecommerceOrderSubmitStart)
 const ecommerceOrderSubmit = coreSource.slice(ecommerceOrderSubmitStart, ecommerceOrderSubmitEnd)
 const ecommercePaymentPosition = ecommerceOrderSubmit.indexOf('preparedEcommerceDraft ? <label className="order-ecommerce-payment">')
-const ecommerceReviewPosition = ecommerceOrderSubmit.indexOf('className="core-button primary"')
+const ecommerceReviewPosition = ecommerceOrderSubmit.indexOf('className={primaryButtonClass}')
 const ecommerceNavigationHydration = sourceBlock(
   coreSource,
   '  useEffect(() => {\n    if (!ecommerceNavigationDraft',
@@ -4066,14 +4086,14 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceBuyingUiSource.includes('Payment remains unauthorized.')
   || !ecommerceSource.includes('state: { ecommerceShopDraft: draft }')
   || !coreSource.includes('Ecommerce request')
-  || !coreSource.includes("<span className=\"core-eyebrow\">Shop review</span><h2 id=\"order-composer-title\" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review Ecommerce request' : preparedWebsiteLead ? 'Review Website inquiry' : 'Add an order'}</h2>")
+  || !coreSource.includes("<span className={coreEyebrowClass}>Shop review</span><h2 id=\"order-composer-title\" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review Ecommerce request' : preparedWebsiteLead ? 'Review Website inquiry' : 'Add an order'}</h2>")
   || !coreSource.includes('Check the source and details. Nothing changes until separate confirmation.')
   || !coreSource.includes('aria-label="Close Shop review"')
   || !coreSource.includes('ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftMatchesOperatingContext, ecommerceShopDraftPayment')
   || !coreSource.includes('const draftLines = ecommerceShopDraftLines(ecommerceNavigationDraft)')
   || !coreSource.includes('setExtraOrderLines(draftLines.slice(1).map')
   || !coreSource.includes('setPayment(ecommerceShopDraftPayment(ecommerceNavigationDraft))')
-  || !coreSource.includes("ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7'")
+  || !coreSource.includes('ecommerceDraft.schema === ecommerceShopDraftSchema')
   || !coreSource.includes("setNotice('The Ecommerce request has no valid Shop operating authority. Nothing was prepared.')")
   || !coreSource.includes("setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')")
   || !coreSource.includes('governed handoff')
@@ -4205,7 +4225,7 @@ if (!coreSource.includes("className={`status-pill ${managedIdentity ? 'bounded' 
   || coreSource.includes('Open a company account to use the shared inbox.')
   || !coreSource.includes('loaded from the Shop inbox')) fail('shop_local_ecommerce_inbox_review_missing')
 const ecommercePaymentEntry = coreSource.slice(coreSource.indexOf('<div className="order-submit-bar" data-ecommerce-payment='), coreSource.indexOf('</dialog>', coreSource.indexOf('<div className="order-submit-bar" data-ecommerce-payment=')))
-if (!coreSource.includes("const preparedEcommercePaymentLocked = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'")
+if (!coreSource.includes('const preparedEcommercePaymentLocked = preparedEcommerceDraft?.schema === ecommerceShopDraftSchema')
   || !ecommercePaymentEntry.includes("<span>{preparedEcommercePaymentLocked ? 'Payment policy' : 'Payment'}</span>")
   || !ecommercePaymentEntry.includes('aria-readonly={preparedEcommercePaymentLocked || undefined}')
   || !ecommercePaymentEntry.includes('disabled={commerceControlsDisabled || preparedEcommercePaymentLocked}')
@@ -4925,7 +4945,7 @@ if (!orderListContract.includes("const settleRefundIsPrimary = !reconcileIsPrima
   || !orderListContract.includes('const hasSecondaryActions = Boolean(acknowledgement) || canCancelOrder')
   || !orderListContract.includes('className="order-row-more"')
   || !orderListContract.includes('aria-label={`More options for ${order.id}`}')
-  || (orderListContract.match(/className="core-button primary compact"/g) || []).length !== 3
+  || (orderListContract.match(/className=\{compactPrimaryButtonClass\}/g) || []).length !== 3
   || !orderListContract.includes('>Cancel order</button>')
   || !coreCssSource.includes('.order-row-more > summary {')
   || !coreCssSource.includes('.order-row-more > div .text-link { min-height: 44px;')) fail('shop_order_action_hierarchy_missing')
@@ -5480,7 +5500,7 @@ if (!shopInventoryUiSource.includes('onSetupBlocked: (orderId: string) => void')
   || !shopInventoryUiSource.includes("`Review ${activeAggregateOrders.length} ${activeAggregateOrders.length === 1 ? 'order' : 'orders'}`")
   || !coreSource.includes("commerceLocation.search.includes('return=location-setup')")
   || !coreSource.includes('onSetupBlocked={(orderId) => navigate(`/shop/?tab=orders&return=location-setup#${commerceOrderTargetId(orderId)}`)}')
-  || !coreSource.includes('returnToLocationSetup\n            ? !actionOrders.length ? <Link className="core-button primary compact" replace to="/shop/?tab=inventory#shop-location-foundation">Continue location setup</Link> : null')) fail('shop_location_setup_blocker_recovery_missing')
+  || !coreSource.includes('returnToLocationSetup\n            ? !actionOrders.length ? <Link className={compactPrimaryButtonClass} replace to="/shop/?tab=inventory#shop-location-foundation">Continue location setup</Link> : null')) fail('shop_location_setup_blocker_recovery_missing')
 const shopLocationAction = shopInventoryUiSource.indexOf('aria-controls="location-stock-setup"')
 const shopLocationGuide = shopInventoryUiSource.indexOf('aria-label="Stock guide"')
 if (shopLocationAction < 0 || shopLocationGuide < 0 || shopLocationAction > shopLocationGuide) fail('shop_location_foundation_action_priority_missing')
@@ -7732,7 +7752,7 @@ if (!productionPageContract.includes('className="plant-today"')
   || !productionPageContract.includes('disabled={!productionCanWrite')
   || !productionPageContract.includes('<IssueList disabled={!productionCanWrite')
   || !productionPageContract.includes('<ResolvedIssueHistory disabled={!productionCanWrite || Boolean(pendingAction)} issues={resolvedIssues} now={issueClock} onReviewEffectiveness={startQualityEffectivenessReview} trend={qualityCapaTrend} />')
-  || !productionPageContract.includes('className="production-issue-dialog"')
+  || !productionPageContract.includes('className={productionIssueDialogClass}')
   || !productionPageContract.includes("dialog.querySelector('textarea')?.focus()")
   || !productionPageContract.includes('}, [issueDialogOpen, tab])')
   || coreSource.includes("attention: 'Stop machine'")

@@ -320,6 +320,24 @@ const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((mod
 const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: module.ShopToday })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
 
+const coreEyebrowClass = 'core-eyebrow'
+const primaryButtonClass = 'core-button primary'
+const compactPrimaryButtonClass = 'core-button primary compact'
+const compactButtonClass = 'core-button compact'
+const compactFormClass = 'core-form compact-form'
+const formActionsClass = 'form-actions'
+const compactDisclosureClass = 'compact-disclosure'
+const productionHistoryClass = 'compact-disclosure production-history'
+const productionIssueDialogClass = 'production-issue-dialog'
+const plantControlRowsClass = 'plant-control-rows'
+const shopOrderControlRowsClass = 'shop-order-control-rows'
+const orderDraftRecoveryActionsClass = 'order-draft-recovery-actions'
+const stockReceiptPreviewClass = 'stock-receipt-preview'
+const stockReceiptCopyClass = 'stock-receipt-copy'
+const actionHistoryListClass = 'action-history-list'
+const purchaseOrderEditorClass = 'stock-receipt-editor purchase-order-editor'
+const ecommerceShopDraftSchema = 'supermega.ecommerce.shop_draft.v7'
+
 type PurchaseBudgetDraft = {
   budgetCode: string
   label: string
@@ -1164,7 +1182,7 @@ function AccountableActionGate({ action, authenticatedActor, localBusinessWorksp
   }
 
   return <dialog aria-labelledby="action-confirm-title" className="accountable-action-gate" onCancel={(event) => { event.preventDefault(); if (!busy && !action.confirmation) onCancel() }} ref={dialogRef}>
-    <div className="action-change"><span className="core-eyebrow">{isCounterConfirmation ? 'Review counter order' : isOrderCreation ? 'Confirm order' : 'Confirm'}</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
+    <div className="action-change"><span className={coreEyebrowClass}>{isCounterConfirmation ? 'Review counter order' : isOrderCreation ? 'Confirm order' : 'Confirm'}</span><h2 id="action-confirm-title" ref={headingRef} tabIndex={-1}>{action.summary}</h2><dl className="action-change-flow"><div><dt>Current evidence</dt><dd>{action.before}</dd></div><div><dt>After confirmation</dt><dd>{action.after}</dd></div></dl></div>
     <form className="core-form action-confirm-form" onSubmit={(event) => void submit(event)}>
       {authenticatedActor
         ? <label>Your account<input readOnly value={authenticatedActor.label} /></label>
@@ -1173,7 +1191,7 @@ function AccountableActionGate({ action, authenticatedActor, localBusinessWorksp
         ? <div className="counter-confirm-proof"><span><small>Reason</small><strong>{action.confirmation?.reason ?? reason}</strong></span><span><small>Reference</small><strong>{action.confirmation?.evidenceReference ?? evidenceReference}</strong></span></div>
         : <><label>Reason<input maxLength={180} readOnly={Boolean(action.confirmation)} required value={action.confirmation?.reason ?? reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this change is correct now" /></label><label>Reference<input maxLength={180} readOnly={Boolean(action.confirmation) || action.evidenceReferenceLocked} required value={action.confirmation?.evidenceReference ?? (action.evidenceReferenceLocked ? action.evidenceReferenceSuggestion ?? '' : evidenceReference)} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="Message ID, receipt, count sheet, or observation" /></label></>}
       {isCounterConfirmation && !authenticatedActor ? <p className="form-notice counter-local-boundary">{localBusinessWorkspace ? 'Browser-local business workspace. Confirming creates an accountable local order and reserves this workspace stock. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, and no server or company account is written.' : 'Browser-local sample only. Confirming creates a sample order and reserves sample stock in this browser. Payment and fulfilment stay pending for review in Orders. No payment is captured, no customer is contacted, no server or company account is written, and no real stock is moved.'}</p> : null}
-      <div className="form-actions"><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className="core-button primary" disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : accountableActionSubmitLabel(action)}</button></div>
+      <div className={formActionsClass}><button className="core-button" disabled={busy || Boolean(action.confirmation)} onClick={onCancel} type="button">Cancel</button><button className={primaryButtonClass} disabled={busy} type="submit">{busy ? 'Applying…' : action.confirmation ? 'Retry same confirmation' : accountableActionSubmitLabel(action)}</button></div>
       {error || action.confirmation ? <p className="form-notice" role="status">{error || 'This command proof is frozen. Retry reuses it; reload can reconcile.'}</p> : null}
     </form>
   </dialog>
@@ -1183,7 +1201,7 @@ function ActionHistory({ actions, domain }: { actions: AccountableAction[]; doma
   const domainActions = actions.filter((action) => action.domain === domain)
   return <details className="core-panel action-history">
     <summary><span>Action history</span><strong>{domainActions.length} accountable records</strong></summary>
-    {domainActions.length ? <div className="action-history-list">{domainActions.slice(0, 6).map((action) => <article key={action.id}><div><strong>{action.summary}</strong><small>{action.id} · {action.actor} · {formatTime(action.capturedAt)}</small></div><p>{action.before} → {action.after}</p><small>{action.reason} · Evidence: {action.evidenceReference}</small></article>)}</div> : <p className="panel-copy">No accountable action has been confirmed in this local workspace.</p>}
+    {domainActions.length ? <div className={actionHistoryListClass}>{domainActions.slice(0, 6).map((action) => <article key={action.id}><div><strong>{action.summary}</strong><small>{action.id} · {action.actor} · {formatTime(action.capturedAt)}</small></div><p>{action.before} → {action.after}</p><small>{action.reason} · Evidence: {action.evidenceReference}</small></article>)}</div> : <p className="panel-copy">No accountable action has been confirmed in this local workspace.</p>}
   </details>
 }
 
@@ -1687,7 +1705,7 @@ function ShopCounter({ disabled, industryPack, items, locationLabel, lowStockCou
         data-state={counterRecoveryReview?.ok ? 'ready' : 'conflict'}
       >
         <div className="tab-recovery-copy">
-          <span className="core-eyebrow">Unfinished sale found</span>
+          <span className={coreEyebrowClass}>Unfinished sale found</span>
           <h2 id="shop-counter-tab-recovery-title">{counterRecoveryReview?.ok ? 'Continue this sale?' : 'This sale needs a fresh start'}</h2>
           <p>{counterRecoveryReview?.ok
             ? 'Resume the saved sale. No order is created automatically.'
@@ -1701,7 +1719,7 @@ function ShopCounter({ disabled, industryPack, items, locationLabel, lowStockCou
         </div>
         <div className="tab-recovery-actions">
           <button className="core-button secondary" onClick={discardCounterRecovery} ref={counterRecoveryReview?.ok ? undefined : counterRecoveryActionRef} type="button">Discard</button>
-          {counterRecoveryReview?.ok ? <button className="core-button primary" onClick={resumeCounterRecovery} ref={counterRecoveryActionRef} type="button">Resume sale</button> : null}
+          {counterRecoveryReview?.ok ? <button className={primaryButtonClass} onClick={resumeCounterRecovery} ref={counterRecoveryActionRef} type="button">Resume sale</button> : null}
         </div>
         <small className="tab-recovery-boundary">No order, stock reservation, payment, receipt, customer message, or company write happens here.</small>
       </section>
@@ -1712,14 +1730,14 @@ function ShopCounter({ disabled, industryPack, items, locationLabel, lowStockCou
     <div className="shop-counter-grid">
       <section className="shop-catalog-panel">
         <header className="shop-catalog-head">
-          <div><span className="core-eyebrow">{industryPack ? `${industryPack.name} ${sampleCatalogActive ? 'working sample' : 'workflow'}` : 'Counter open'}{locationLabel ? ` · ${locationLabel}` : ''}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
+          <div><span className={coreEyebrowClass}>{industryPack ? `${industryPack.name} ${sampleCatalogActive ? 'working sample' : 'workflow'}` : 'Counter open'}{locationLabel ? ` · ${locationLabel}` : ''}</span><h2>Tap an item to add it</h2>{industryPack ? <p className="shop-pack-context"><span>{industryPack.firstWorkflow} {sampleCatalogActive ? `${industryPack.name} sample items are loaded.` : 'Existing Shop catalog data was preserved.'}</span><Link to="/shop/?tab=orders#shop-service-schedule">Open schedule</Link></p> : null}<nav aria-label="Shop attention" className="shop-counter-summary"><Link to="/shop/?tab=orders">{openOrderCount} open orders</Link><Link to="/shop/?tab=inventory">{lowStockCount} low stock</Link></nav></div>
           <label className="shop-item-search"><span className="sr-only">Find or scan an item</span><input aria-describedby="shop-counter-search-help shop-counter-search-status" autoComplete="off" data-shop-counter-primary-field="true" disabled={!counterRecoverySource} onChange={(event) => { setQuery(event.target.value); setSearchStatus('') }} onKeyDown={addSearchMatch} placeholder="Search or scan SKU" ref={searchInputRef} type="search" value={query} /><small id="shop-counter-search-help">{counterCatalogDigestState.error || (counterRecoverySource ? 'Enter adds an exact SKU or the only match.' : 'Preparing safe sale recovery…')}</small></label>
         </header>
         <p aria-live="polite" className="sr-only" id="shop-counter-search-status">{searchStatus}</p>
         {counterRecoveryNotice ? <p className="form-notice shop-counter-recovery-notice" role="status">{counterRecoveryNotice}</p> : null}
         {clearedSale ? <div className="shop-clear-recovery" data-shop-counter-recovery="cleared-sale" role="status">
           <span><strong>{clearedSaleRestorable ? 'Sale cleared' : 'Sale changed'}</strong><small>{clearedSaleRestorable ? `${clearedSale.unitCount} ${clearedSale.unitCount === 1 ? 'item' : 'items'} across ${clearedSale.lineCount} ${clearedSale.lineCount === 1 ? 'line' : 'lines'} · ${clearedSale.customer.trim() || 'Guest'} · ${clearedSale.payment}. No order or stock changed.` : 'Current stock changed, so this sale cannot be restored exactly. Start a new sale.'}</small></span>
-          <button aria-label="Undo clear sale" className="core-button primary" disabled={!clearedSaleRestorable} onClick={undoClearSale} ref={undoClearSaleButtonRef} type="button">Undo</button>
+          <button aria-label="Undo clear sale" className={primaryButtonClass} disabled={!clearedSaleRestorable} onClick={undoClearSale} ref={undoClearSaleButtonRef} type="button">Undo</button>
         </div> : null}
         {visibleItems.length ? <div className="shop-item-grid">
           {visibleItems.map((item) => {
@@ -1732,13 +1750,13 @@ function ShopCounter({ disabled, industryPack, items, locationLabel, lowStockCou
             </button>
           })}
         </div> : items.length
-          ? <div className="shop-search-recovery" data-shop-counter-recovery="no-match"><ShopProductArtwork kind={0} /><strong>No item matches "{query.trim()}"</strong><span>Try an item name or exact SKU. {unitCount ? `Your ${unitCount}-item sale is still here.` : 'No item was added.'}</span><button className="core-button primary" onClick={recoverSearch} type="button">Clear search</button></div>
+          ? <div className="shop-search-recovery" data-shop-counter-recovery="no-match"><ShopProductArtwork kind={0} /><strong>No item matches "{query.trim()}"</strong><span>Try an item name or exact SKU. {unitCount ? `Your ${unitCount}-item sale is still here.` : 'No item was added.'}</span><button className={primaryButtonClass} onClick={recoverSearch} type="button">Clear search</button></div>
           : <Empty>Your catalog is empty. <Link className="text-link" to="/shop/?tab=inventory#shop-catalog-import">Add or import products</Link> before the first sale.</Empty>}
       </section>
 
       <button aria-label="Close current sale" className={`shop-cart-backdrop${cartOpen ? ' is-open' : ''}`} onClick={() => setCartOpen(false)} type="button" />
       <aside aria-label="Current sale" className={`shop-current-sale${cartOpen ? ' is-open' : ''}`} id="shop-current-sale">
-        <header><div><span className="core-eyebrow">Current sale</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : 'Ready for the first item'}</h2></div><div className="shop-cart-actions">{unitCount ? <button aria-label="Clear current sale" className="text-link" onClick={clearSaleWithUndo} ref={clearSaleButtonRef} type="button">Clear sale</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
+        <header><div><span className={coreEyebrowClass}>Current sale</span><h2>{unitCount ? `${unitCount} ${unitCount === 1 ? 'item' : 'items'}` : 'Ready for the first item'}</h2></div><div className="shop-cart-actions">{unitCount ? <button aria-label="Clear current sale" className="text-link" onClick={clearSaleWithUndo} ref={clearSaleButtonRef} type="button">Clear sale</button> : null}<button aria-label="Close current sale" className="shop-cart-close" onClick={() => setCartOpen(false)} type="button">×</button></div></header>
         <div className="shop-cart-lines">
           {lines.length ? lines.map(({ item, quantity }) => <article key={item.sku}><div><strong>{item.name}</strong><small>{formatMoney(item.price)} each</small></div><div className="shop-quantity-stepper"><button aria-label={`Remove one ${item.name}`} onClick={() => changeQuantity(item, quantity - 1)} type="button">−</button><strong>{quantity}</strong><button aria-label={`Add one ${item.name}`} disabled={quantity >= item.onHand} onClick={() => changeQuantity(item, quantity + 1)} type="button">+</button></div><b>{formatMoney(item.price * quantity)}</b></article>) : <div className="shop-empty-cart"><ShopProductArtwork kind={0} /><strong>Your sale is empty</strong><small>Tap any product to begin.</small></div>}
         </div>
@@ -2019,10 +2037,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   }))
   const manualOrderQuantity = manualOrderLineDrafts.reduce((total, line) => total + Math.max(line.quantity, 0), 0)
   const manualOrderTotal = manualOrderLineItems.reduce((total, line) => total + (line.item?.price ?? 0) * Math.max(line.quantity, 0), 0)
-  const manualOrderPricedTotal = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+  const manualOrderPricedTotal = preparedEcommerceDraft?.schema === ecommerceShopDraftSchema
     ? preparedEcommerceDraft.totalMmk
     : manualOrderTotal
-  const preparedEcommercePaymentLocked = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+  const preparedEcommercePaymentLocked = preparedEcommerceDraft?.schema === ecommerceShopDraftSchema
   const orderCreditCalculation = commerceOrderCalculation(commerce, manualOrderPricedTotal, new Date(purchaseOrderClock).toISOString())
   const orderCreditReview = orderCreditCalculation
     ? commerceCustomerCreditReview(
@@ -2241,7 +2259,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     : null
   const preparedEcommerceSupersededByRequestId = preparedEcommerceManagedSuccessorRequestId
     ?? preparedEcommerceLocalSuccessorRequestId
-  const preparedEcommerceReplacesRequestId = preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+  const preparedEcommerceReplacesRequestId = preparedEcommerceDraft?.schema === ecommerceShopDraftSchema
     ? preparedEcommerceDraft.supersedesRequestId ?? null
     : preparedEcommerceSourceTimeline?.request.schema === 'supermega.ecommerce.order_request.v2'
       ? preparedEcommerceSourceTimeline.request.supersedesRequestId ?? null
@@ -2254,7 +2272,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const pendingEcommerceReviewCount = pendingStorefrontRequests.length + Number(preparedEcommerceRequestIsWaiting)
   const pendingOnlineReviewCount = pendingEcommerceReviewCount + pendingWebsiteLeadCount
   useEffect(() => {
-    if (preparedEcommerceDraft?.schema !== 'supermega.ecommerce.shop_draft.v7') return
+    if (preparedEcommerceDraft?.schema !== ecommerceShopDraftSchema) return
     const sourceRequestId = preparedEcommerceDraft.sourceRequestId
     const scope = preparedEcommerceDraft.operatingContext.organizationScope
     let current = true
@@ -2893,10 +2911,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           setNotice('The Ecommerce request no longer matches the current Shop catalog. Nothing was prepared.')
           return
         }
-        const navigationCustomer = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v7'
+        const navigationCustomer = ecommerceNavigationDraft.schema === ecommerceShopDraftSchema
           ? ecommerceNavigationDraft.customerProfile?.name ?? ecommerceNavigationDraft.customerReference
           : ecommerceNavigationDraft.customerReference
-        const navigationAddress = ecommerceNavigationDraft.schema === 'supermega.ecommerce.shop_draft.v7'
+        const navigationAddress = ecommerceNavigationDraft.schema === ecommerceShopDraftSchema
           ? ecommerceNavigationDraft.deliveryAddress
           : null
         setPreparedChannelDraft(null)
@@ -3335,22 +3353,22 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const managedCommerceBoundary: ReactNode = managedIdentity && effectiveMode !== 'managed-ready' ? (() => {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Company Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <div className="panel-head"><div><span className={coreEyebrowClass}>Company Shop setup</span><h2>Create the real catalog</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">Start with the first real inventory item. No browser demo orders, customers, or stock records are copied into this workspace.</p>
-      <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
+      <form className={compactFormClass} onSubmit={(formEvent) => void initializeManagedCatalog(formEvent)}>
         <div className="form-row"><label>SKU<input maxLength={80} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, sku: inputEvent.target.value }))} placeholder="SKU-001" required value={catalogDraft.sku} /></label><label>Item name<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, name: inputEvent.target.value }))} placeholder="Real item name" required value={catalogDraft.name} /></label></div>
         <div className="form-row"><label>Opening stock<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, onHand: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.onHand} /></label><label>Reorder at<input min="0" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reorderAt: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.reorderAt} /></label></div>
         <label>Price (MMK)<input min="1" onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, price: inputEvent.target.value }))} required step="1" type="number" value={catalogDraft.price} /></label>
         <label>Opening balance reason<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How the opening count was verified" required value={catalogDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setCatalogDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Count sheet, stocktake, or source record" required value={catalogDraft.evidenceReference} /></label>
-        <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : 'Create managed catalog'}</button></div>
+        <div className={formActionsClass}><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className={primaryButtonClass} disabled={catalogBusy} type="submit">{catalogBusy ? 'Creating…' : 'Create managed catalog'}</button></div>
         <p className="form-notice" role="status">{catalogError || commerceStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
       </form>
     </section>
     return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Company Shop</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <div className="panel-head"><div><span className={coreEyebrowClass}>Company Shop</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{commerceStorageError || 'Shop remains read-only until the authenticated tenant state is confirmed.'}</p>
-      <div className="form-actions"><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
+      <div className={formActionsClass}><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
     </section>
   })() : null
 
@@ -3437,11 +3455,11 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Gate', pendingAction ? 'Pending approval' : commerceCanWrite ? 'Two-person' : 'Locked'],
   ] as const
   const supplierControl = <section className="shop-order-control supplier-control" aria-label="Supplier control">
-    <div><span className="core-eyebrow">Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, stock, Plant materials, approved-vendor evidence, comparable quotes, delivery, quality, and exposure. Budget, sourcing, requisition, and independent PO approval stay separate. Nothing contacts or pays a supplier here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : !activePurchaseBudget ? 'Set buying limits' : openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : 'Compare supplier quotes'}</button></div>
-    <div className="shop-order-control-rows">{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
-    {procurementReviews.length ? <section aria-label="Shop procurement decisions" className="supplier-performance"><div className="supplier-performance-heading"><span className="core-eyebrow">Requisition review</span><small>Source-bound ranking · budget and review required</small></div><div className="shop-replenishment-list" role="list">{procurementReviews.slice(0, 4).map((row) => { const approved = openPurchaseRequisitions.find((requisition) => requisition.sku === row.sku); const budget = approved?.budgetEnvelopeId ? purchaseBudgetEnvelopes.find((envelope) => envelope.id === approved.budgetEnvelopeId) : null; return <div data-status={approved ? 'approved' : row.status} key={row.requisitionReference} role="listitem"><span><strong>{row.itemName}</strong><small>{approved?.id ?? row.requisitionReference} · {approved?.quantityRequested ?? row.quantity} units{row.plantJobIds.length ? ` · Plant ${row.plantJobIds.join(', ')}` : ''}</small></span><span><b>{approved ? 'Approved requisition' : row.recommendedSupplier ?? 'Supplier terms needed'}</b><small>{approved ? `${approved.supplier} · ${formatMoney(approved.totalMmk)} · ${budget?.budgetCode ?? 'legacy authority'} · second operator next` : `${row.estimatedTotalMmk === null ? 'Cost not retained' : formatMoney(row.estimatedTotalMmk)} · ${row.supplierOptions.length} ${row.supplierOptions.length === 1 ? 'option' : 'options'} · ${row.status === 'risk_review_required' ? 'risk review' : row.status === 'terms_required' ? 'terms review' : 'ready for review'}`}</small></span></div> })}</div></section> : null}
+    <div><span className={coreEyebrowClass}>Procurement control</span><strong>{supplierControlNext}</strong><small>AI combines demand, stock, Plant materials, approved-vendor evidence, comparable quotes, delivery, quality, and exposure. Budget, sourcing, requisition, and independent PO approval stay separate. Nothing contacts or pays a supplier here.</small><button className="text-link" disabled={commerceControlsDisabled || (Boolean(activePurchaseBudget) && !openPurchaseRequisitions.length && !procurementReviews.length)} onClick={startSupplierRequest} type="button">{openPurchaseRequisitions.length ? 'Create with second operator' : !activePurchaseBudget ? 'Set buying limits' : openSupplierSourcingDecisions.length ? 'Approve quoted requisition' : 'Compare supplier quotes'}</button></div>
+    <div className={shopOrderControlRowsClass}>{supplierControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    {procurementReviews.length ? <section aria-label="Shop procurement decisions" className="supplier-performance"><div className="supplier-performance-heading"><span className={coreEyebrowClass}>Requisition review</span><small>Source-bound ranking · budget and review required</small></div><div className="shop-replenishment-list" role="list">{procurementReviews.slice(0, 4).map((row) => { const approved = openPurchaseRequisitions.find((requisition) => requisition.sku === row.sku); const budget = approved?.budgetEnvelopeId ? purchaseBudgetEnvelopes.find((envelope) => envelope.id === approved.budgetEnvelopeId) : null; return <div data-status={approved ? 'approved' : row.status} key={row.requisitionReference} role="listitem"><span><strong>{row.itemName}</strong><small>{approved?.id ?? row.requisitionReference} · {approved?.quantityRequested ?? row.quantity} units{row.plantJobIds.length ? ` · Plant ${row.plantJobIds.join(', ')}` : ''}</small></span><span><b>{approved ? 'Approved requisition' : row.recommendedSupplier ?? 'Supplier terms needed'}</b><small>{approved ? `${approved.supplier} · ${formatMoney(approved.totalMmk)} · ${budget?.budgetCode ?? 'legacy authority'} · second operator next` : `${row.estimatedTotalMmk === null ? 'Cost not retained' : formatMoney(row.estimatedTotalMmk)} · ${row.supplierOptions.length} ${row.supplierOptions.length === 1 ? 'option' : 'options'} · ${row.status === 'risk_review_required' ? 'risk review' : row.status === 'terms_required' ? 'terms review' : 'ready for review'}`}</small></span></div> })}</div></section> : null}
     {demandForecastRows.length ? <section aria-label="Shop demand intelligence" className="supplier-performance">
-      <div className="supplier-performance-heading"><span className="core-eyebrow">Demand intelligence</span><small>28-day completed sales · returns netted · recommendation only</small></div>
+      <div className="supplier-performance-heading"><span className={coreEyebrowClass}>Demand intelligence</span><small>28-day completed sales · returns netted · recommendation only</small></div>
       <div className="shop-replenishment-list" role="list">{demandForecastRows.slice(0, 4).map((row) => <div data-status={row.status} key={row.sku} role="listitem"><span><strong>{row.itemName}</strong><small>{row.completedOrderCount} completed {row.completedOrderCount === 1 ? 'order' : 'orders'} · {row.confidence} evidence</small></span><span><b>{row.status === 'stockout_risk' ? 'Stockout risk' : row.status === 'reorder_soon' ? 'Reorder soon' : `${row.forecastWeeklyUnits}/week`}</b><small>{row.projectedDaysOfCover === null ? 'Cover collecting' : `${row.projectedDaysOfCover}d projected cover`} · {row.planningHorizonDays}d {row.planningHorizonSource === 'supplier_policy' ? 'supplier lead' : 'planning horizon'}{row.recommendedSafetyStockUnits === null ? '' : ` · ${row.recommendedSafetyStockUnits} safety suggested`}</small></span></div>)}</div>
     </section> : <p className="empty-state">Demand forecast starts after the first completed sale.</p>}
   </section>
@@ -3488,7 +3506,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Boundary', 'Review before writes'],
   ] as const
   const shopCatalogOnboarding = <section aria-label="Shop catalog import helper" className="catalog-onboarding-bridge" id="shop-catalog-import" tabIndex={-1}>
-    <div><span className="core-eyebrow">Catalog import helper</span><strong>Bring your catalog into the Shop trial.</strong><p>The assistant routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
+    <div><span className={coreEyebrowClass}>Catalog import helper</span><strong>Bring your catalog into the Shop trial.</strong><p>The assistant routes product spreadsheets through the shared mapper, checks SKU, name, stock, reorder, and price fields, then prepares one reviewed import package. No supplier message, stock move, sale, accounting post, or Shop write runs from this panel.</p></div>
     <div className="catalog-onboarding-status">{shopCatalogUploadRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <button className="core-button" disabled={commerceControlsDisabled} onClick={loadSampleCatalogItem} type="button">Load sample catalog item</button>
     <Link className="core-button" to={clientSetupPath('commerce')}>Upload product data</Link>
@@ -3538,20 +3556,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
 
   const shopCommandCenter = <section aria-label="Shop next step" className="shop-command-center">
     <div>
-      <span className="core-eyebrow">Shop next step</span>
+      <span className={coreEyebrowClass}>Shop next step</span>
       <h2>{shopAutopilotStage}</h2>
       <p>Open the next useful Shop task. SuperMega brings together online requests, orders, payments, purchasing, and stock so the manager can review one clear step at a time.</p>
     </div>
     <div className="shop-command-center-rows">{shopAutopilotRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
-    <button className="core-button primary compact" onClick={runShopAutopilot} type="button">Open next step</button>
+    <button className={compactPrimaryButtonClass} onClick={runShopAutopilot} type="button">Open next step</button>
   </section>
   const shopSetupGuide = <section aria-label="Shop setup guide" className="shop-order-control shop-setup-guide">
     <div>
-      <span className="core-eyebrow">Shop setup guide</span>
+      <span className={coreEyebrowClass}>Shop setup guide</span>
       <strong>Import products once. Then run the daily queue.</strong>
       <small>Import products and set stock once. Then follow the daily queue.</small>
     </div>
-    <div className="shop-order-control-rows">{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div className={shopOrderControlRowsClass}>{shopSetupGuideRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   useEffect(() => {
     recordBehaviorSignal(window.localStorage, {
@@ -4416,37 +4434,37 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       return
     }
     const ecommerceLines = ecommerceDraft
-      ? ecommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7'
+      ? ecommerceDraft.schema === ecommerceShopDraftSchema
         ? ecommerceDraft.lines
         : [ecommerceDraft.line]
       : []
-    const ecommercePayment = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const ecommercePayment = ecommerceDraft?.schema === ecommerceShopDraftSchema
       ? ecommerceDraft.pricing.payment.adapter === 'cash_on_delivery'
         ? 'Cash on delivery'
         : ecommerceDraft.pricing.payment.adapter === 'kbzpay_manual'
           ? 'KBZPay'
           : 'Cash'
       : ''
-    const ecommerceCustomer = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const ecommerceCustomer = ecommerceDraft?.schema === ecommerceShopDraftSchema
       ? ecommerceDraft.customerProfile?.name ?? ecommerceDraft.customerReference
       : ecommerceDraft?.customerReference ?? ''
-    if (ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    if (ecommerceDraft?.schema === ecommerceShopDraftSchema
       && commerce.inventoryFoundation
       && !managedInventoryProjection?.locations.some((candidate) => candidate.id === ecommerceDraft.operatingContext.operatingUnitLocationId)) {
       detachPreparedOrderSources({ ecommerce: true })
       setNotice('The Shop operating location changed after Ecommerce review. Reopen the request; no order was prepared.')
       return
     }
-    const promotionDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const promotionDecision = ecommerceDraft?.schema === ecommerceShopDraftSchema
       ? ecommerceDraft.pricing.promotion
       : undefined
-    const shippingDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const shippingDecision = ecommerceDraft?.schema === ecommerceShopDraftSchema
       ? ecommerceDraft.pricing.shipping
       : undefined
-    const paymentDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const paymentDecision = ecommerceDraft?.schema === ecommerceShopDraftSchema
       ? ecommerceDraft.pricing.payment
       : undefined
-    const taxDecision = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+    const taxDecision = ecommerceDraft?.schema === ecommerceShopDraftSchema
       ? ecommerceDraft.pricing.tax
       : undefined
     if (taxDecision) {
@@ -4625,7 +4643,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         const ownedOrder = { ...order, owner: action.actor }
         const proof = commerceActionProof(action)
         await mutateCommerce('commerce.order.created', action.commandId, proof, (current) => {
-          const paymentPolicyState = ecommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7'
+          const paymentPolicyState = ecommerceDraft?.schema === ecommerceShopDraftSchema
             && !managedIdentity
             && paymentDecision
             && (current.paymentPolicies?.length ?? 0) === 0
@@ -6973,8 +6991,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Export gate', commerceCanWrite && !pendingAction ? 'Review only' : 'Locked'],
   ] as const
   const shopAccountingReadiness = <section className="shop-order-control" aria-label="Shop accounting readiness">
-    <div><span className="core-eyebrow">Accounting readiness</span><strong>{shopAccountingNext}</strong><small>AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and manager review before any accounting export is reviewed. No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.</small></div>
-    <div className="shop-order-control-rows">{shopAccountingRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Accounting readiness</span><strong>{shopAccountingNext}</strong><small>AI checks sales capture, payment exceptions, refund exposure, supplier receipts, inventory evidence, and manager review before any accounting export is reviewed. No ledger, tax, payment, payable, refund, inventory, or Shop write runs from this panel.</small></div>
+    <div className={shopOrderControlRowsClass}>{shopAccountingRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const shopAccountingPacketRows = [
     ['Close', latestCloseDownload ? 'CSV ready' : closePreview ? `${closableOrders.length} ready` : 'Close first'],
@@ -6985,8 +7003,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence'],
   ] as const
   const shopAccountingPacket = <section className="shop-order-control" aria-label="Shop accounting export packet">
-    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload || supplierPayablesDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages reviewed sales and exact supplier payables with source evidence for accounting review. No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small>{supplierPayablesDownload ? <small><a className="text-link" data-supplier-payables-handoff="review-required" download={supplierPayablesDownload.filename} href={supplierPayablesDownload.href}>Download supplier payables CSV</a> · {formatMoney(supplierPayablesDownload.artifact.netPayableTotalMmk)} net · {supplierPayablesAging.overdueInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.overdue)} overdue` : supplierPayablesAging.dueWithin7DaysInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.due_7_days)} due within 7 days` : 'nothing due within 7 days'} · {formatMoney(supplierPayablesDownload.artifact.supplierCreditTotalMmk)} supplier credit · no payment initiated</small> : null}</div>
-    <div className="shop-order-control-rows">{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Accounting export packet</span><strong>{latestCloseDownload || supplierPayablesDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages reviewed sales and exact supplier payables with source evidence for accounting review. No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small>{supplierPayablesDownload ? <small><a className="text-link" data-supplier-payables-handoff="review-required" download={supplierPayablesDownload.filename} href={supplierPayablesDownload.href}>Download supplier payables CSV</a> · {formatMoney(supplierPayablesDownload.artifact.netPayableTotalMmk)} net · {supplierPayablesAging.overdueInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.overdue)} overdue` : supplierPayablesAging.dueWithin7DaysInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.due_7_days)} due within 7 days` : 'nothing due within 7 days'} · {formatMoney(supplierPayablesDownload.artifact.supplierCreditTotalMmk)} supplier credit · no payment initiated</small> : null}</div>
+    <div className={shopOrderControlRowsClass}>{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
 
   const afterSalesCount = commerce.orders.reduce((total, order) => (
@@ -7038,7 +7056,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     {commerceBoundary}
     <Suspense fallback={<p className="form-notice" role="status">Loading appointments…</p>}><ShopServiceSchedule access={managedIdentity?.access} actor={managedIdentity?.email ?? 'Spa staff'} closedCheckoutOrderIds={closedSpaCheckoutOrderIds} disabled={commerceControlsDisabled} initiallyOpen onReviewCheckout={spaFrontDesk ? reviewShopServiceCheckout : undefined} /></Suspense>
     {spaFrontDesk ? <section className="core-panel order-queue-panel order-workspace" id="spa-payment-queue">
-      <div className="panel-head"><div><span className="core-eyebrow">Visit payment</span><h2>{spaServiceActionOrders.length ? `${spaServiceActionOrders.length} ${spaServiceActionOrders.length === 1 ? 'visit needs' : 'visits need'} action` : 'No visit payment waiting'}</h2></div><span className="panel-note">Check the real receipt or cash</span></div>
+      <div className="panel-head"><div><span className={coreEyebrowClass}>Visit payment</span><h2>{spaServiceActionOrders.length ? `${spaServiceActionOrders.length} ${spaServiceActionOrders.length === 1 ? 'visit needs' : 'visits need'} action` : 'No visit payment waiting'}</h2></div><span className="panel-note">Check the real receipt or cash</span></div>
       <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={() => false} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={spaServiceActionOrders} />
     </section> : null}
     {notice ? <p className="form-notice" aria-live="polite">{notice}</p> : null}
@@ -7061,7 +7079,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     {commerceBoundary}
     <section className="core-panel order-queue-panel order-workspace" id="shop-order-queue">
       <div className="panel-head">
-        <div><span className="core-eyebrow">Orders</span><h2>{actionOrders.length
+        <div><span className={coreEyebrowClass}>Orders</span><h2>{actionOrders.length
           ? `${actionOrders.length} ${actionOrders.length === 1 ? 'order needs' : 'orders need'} action`
           : supportWorkQueue.length
             ? `${supportWorkQueue.length} help ${supportWorkQueue.length === 1 ? 'case needs' : 'cases need'} action`
@@ -7071,13 +7089,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <div className="order-queue-actions">
           <span className="panel-note">{openOrders.length} in fulfilment{supportWorkQueue.length ? ` · ${supportWorkQueue.length} help open` : ''}{correctionDraft ? ' · 1 balance review' : ''}</span>
           {returnToLocationSetup
-            ? !actionOrders.length ? <Link className="core-button primary compact" replace to="/shop/?tab=inventory#shop-location-foundation">Continue location setup</Link> : null
+            ? !actionOrders.length ? <Link className={compactPrimaryButtonClass} replace to="/shop/?tab=inventory#shop-location-foundation">Continue location setup</Link> : null
             : !orderDraftRecoveryVisible
             ? nextSupportWork && !actionOrders.length
-              ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={openNextSupportWork} type="button">{nextSupportActionLabel}</button>
+              ? <button className={compactPrimaryButtonClass} disabled={commerceControlsDisabled} onClick={openNextSupportWork} type="button">{nextSupportActionLabel}</button>
               : correctionDraft && !actionOrders.length
-                ? <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={focusCurrentCorrectionReview} type="button">Review balance</button>
-                : <button className="core-button primary compact" disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{realOrderSetupLabel ?? (!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order')}</button>
+                ? <button className={compactPrimaryButtonClass} disabled={commerceControlsDisabled} onClick={focusCurrentCorrectionReview} type="button">Review balance</button>
+                : <button className={compactPrimaryButtonClass} disabled={!commerceCanWrite || Boolean(pendingAction) || !orderDraftInitialized || orderDraftRecoveryBlocked} onClick={() => openOrderComposer()} ref={orderComposerTriggerRef} type="button">{realOrderSetupLabel ?? (!orderDraftInitialized ? 'Loading orders' : orderDraftRead.status === 'unavailable' ? 'Recovery unavailable' : 'New order')}</button>
             : null}
         </div>
       </div>
@@ -7097,8 +7115,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             : orderDraftRead.error}</small>
           {orderDraftRecoveryWarning && orderDraftRead.draft ? <small>{orderDraftRead.draft.lines.length} {orderDraftRead.draft.lines.length === 1 ? 'item' : 'items'} · revision {orderDraftRead.draft.revision} · review before creating another order</small> : null}
         </div>
-        <div className="order-draft-recovery-actions">
-          {orderDraftRead.status === 'ready' ? <button className="core-button compact" onClick={resumeSavedOrderDraft} type="button">Resume order</button> : <Link className="text-link" to="/settings/#controls">{orderDraftRead.status === 'invalid' ? 'Export evidence' : 'Open Settings'}</Link>}
+        <div className={orderDraftRecoveryActionsClass}>
+          {orderDraftRead.status === 'ready' ? <button className={compactButtonClass} onClick={resumeSavedOrderDraft} type="button">Resume order</button> : <Link className="text-link" to="/settings/#controls">{orderDraftRead.status === 'invalid' ? 'Export evidence' : 'Open Settings'}</Link>}
           {orderDraftRead.status !== 'unavailable' ? <button className="text-link danger-text" disabled={orderDraftSaving} onClick={() => void discardSavedOrderDraft()} type="button">{orderDraftRead.status === 'ready' ? 'Discard' : 'Discard unreadable draft'}</button> : null}
         </div>
       </div> : null}
@@ -7109,9 +7127,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <small>{formatMoney(orderRescheduleReview.intent.originalTotalMmk)} original → {formatMoney(orderRescheduleReview.draft.totalMmk)} currently repriced · replacement {orderRescheduleReview.intent.replacementRequestId}</small>
           <small>{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'Original cancelled. Resume the recovered replacement.' : 'First cancel and release; then confirm the repriced replacement.'}</small>
         </div>
-        <div className="order-draft-recovery-actions">
-          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => void prepareOrderRescheduleReplacement()} type="button">{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'Resume reschedule' : 'Review reschedule'}</button>
-          <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={() => { setOrderRescheduleReview(null); setNotice('Reschedule review closed. Nothing changed.') }} type="button">Close review</button>
+        <div className={orderDraftRecoveryActionsClass}>
+          <button className={compactPrimaryButtonClass} disabled={commerceControlsDisabled} onClick={() => void prepareOrderRescheduleReplacement()} type="button">{ecommerceOrderRescheduleShopState(commerce, orderRescheduleReview.intent) === 'replacement_needed' ? 'Resume reschedule' : 'Review reschedule'}</button>
+          <button className={compactButtonClass} disabled={Boolean(pendingAction)} onClick={() => { setOrderRescheduleReview(null); setNotice('Reschedule review closed. Nothing changed.') }} type="button">Close review</button>
         </div>
       </section> : null}
       {orderAmendmentReview ? <section aria-label="Customer order change review" className="order-draft-recovery" id="shop-order-amendment-review" tabIndex={-1}>
@@ -7121,9 +7139,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <small>{formatMoney(orderAmendmentReview.intent.originalTotalMmk)} original → {formatMoney(orderAmendmentReview.draft.totalMmk)} repriced · replacement {orderAmendmentReview.intent.replacementRequestId}</small>
           <small>{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'The original is already cancelled with this exact evidence. Resume the recovered replacement draft.' : 'Step 1 cancels and releases the original under accountable review. Step 2 separately confirms the repriced replacement order.'}</small>
         </div>
-        <div className="order-draft-recovery-actions">
-          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => void prepareOrderAmendmentReplacement()} type="button">{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'Resume replacement' : 'Review replacement'}</button>
-          <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={() => { setOrderAmendmentReview(null); setNotice('Order change review closed. Nothing changed.') }} type="button">Close review</button>
+        <div className={orderDraftRecoveryActionsClass}>
+          <button className={compactPrimaryButtonClass} disabled={commerceControlsDisabled} onClick={() => void prepareOrderAmendmentReplacement()} type="button">{ecommerceOrderAmendmentShopState(commerce, orderAmendmentReview.intent) === 'replacement_needed' ? 'Resume replacement' : 'Review replacement'}</button>
+          <button className={compactButtonClass} disabled={Boolean(pendingAction)} onClick={() => { setOrderAmendmentReview(null); setNotice('Order change review closed. Nothing changed.') }} type="button">Close review</button>
         </div>
       </section> : null}
       {cancellationDraft ? <section aria-label="Customer cancellation review" className="order-draft-recovery" id="shop-cancellation-review" tabIndex={-1}>
@@ -7133,9 +7151,9 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <small>{cancellationDraft.id} · requested {new Date(cancellationDraft.createdAt).toLocaleString()} · {formatMoney(cancellationDraft.totalMmk)} · payment {cancellationDraft.paymentStatus}</small>
           <small>Shop rechecked the exact acknowledgement, active order, reserved stock, payment, and refund state. No message, refund, provider call, or cancellation has run.</small>
         </div>
-        <div className="order-draft-recovery-actions">
-          <button className="core-button primary compact" disabled={commerceControlsDisabled} onClick={() => cancelOrder(cancellationDraft.orderId, cancellationDraft)} type="button">Review cancellation</button>
-          <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
+        <div className={orderDraftRecoveryActionsClass}>
+          <button className={compactPrimaryButtonClass} disabled={commerceControlsDisabled} onClick={() => cancelOrder(cancellationDraft.orderId, cancellationDraft)} type="button">Review cancellation</button>
+          <button className={compactButtonClass} disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
       {!actionOrders.length && (supportWorkQueue.length || correctionDraft) ? <Empty>{supportWorkQueue.length ? 'Order fulfilment is clear. Continue the customer help case.' : 'Order fulfilment is clear. Continue the customer balance review.'}</Empty> : <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />}
@@ -7145,12 +7163,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           {shopCommandCenter}
           {shopSetupGuide}
           <section className="shop-order-control" aria-label="Shop order control">
-            <div><span className="core-eyebrow">Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
-            <div className="shop-order-control-rows">{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+            <div><span className={coreEyebrowClass}>Order control</span><strong>{shopOrderControlNext}</strong><small>{shopOrderControlBoundary}</small></div>
+            <div className={shopOrderControlRowsClass}>{shopOrderControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
           </section>
           <section className="shop-order-control" aria-label="Shop order lifecycle">
-            <div><span className="core-eyebrow">Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
-            <div className="shop-order-control-rows">{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+            <div><span className={coreEyebrowClass}>Order lifecycle</span><strong>Capture to return</strong><small>AI guides capture, reserve, fulfil, collect, replenish, and returns. Owner confirms orders, payments, refunds, deliveries, cancellations, and stock writes.</small></div>
+            <div className={shopOrderControlRowsClass}>{shopOrderLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
           </section>
           {shopAccountingReadiness}
           {shopAccountingPacket}
@@ -7182,7 +7200,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setResumedOrderDraft(null)
       setOrderDraftConflict(false)
     }} ref={orderComposerRef}>
-      <div className="order-composer-head"><div><span className="core-eyebrow">Shop review</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review Ecommerce request' : preparedWebsiteLead ? 'Review Website inquiry' : 'Add an order'}</h2><p>Check the source and details. Nothing changes until separate confirmation.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft && !preparedWebsiteLead ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close Shop review" className="core-button compact" onClick={closeOrderComposer} type="button">Close</button></div></div>
+      <div className="order-composer-head"><div><span className={coreEyebrowClass}>Shop review</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review Ecommerce request' : preparedWebsiteLead ? 'Review Website inquiry' : 'Add an order'}</h2><p>Check the source and details. Nothing changes until separate confirmation.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft && !preparedWebsiteLead ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close Shop review" className={compactButtonClass} onClick={closeOrderComposer} type="button">Close</button></div></div>
       {orderDraftActive && orderEntryMode === 'manual' && !preparedChannelDraft && !preparedEcommerceDraft && !preparedWebsiteLead && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftConflict
@@ -7198,7 +7216,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             ? 'Customer, promise, fulfilment, item quantities, and payment can be resumed after reload.'
             : 'This structured manual draft stays on this device. Raw messages and source links are never stored.')}</small>
         </div>
-        {resumedOrderNeedsReview ? <button className="core-button compact" disabled={!resumedOrderCanRebind || orderDraftSaving || orderDraftConflict} onClick={() => void acceptCurrentOrderDraftCatalog()} type="button">Use current Shop values</button> : null}
+        {resumedOrderNeedsReview ? <button className={compactButtonClass} disabled={!resumedOrderCanRebind || orderDraftSaving || orderDraftConflict} onClick={() => void acceptCurrentOrderDraftCatalog()} type="button">Use current Shop values</button> : null}
       </div> : null}
       {!preparedEcommerceDraft && !preparedChannelDraft && !preparedWebsiteLead ? <div aria-label="Order source" className="order-entry-methods" role="group">
         <button aria-pressed={orderEntryMode === 'manual'} disabled={Boolean(pendingAction)} onClick={() => setOrderEntryMode('manual')} type="button">Enter order</button>
@@ -7209,15 +7227,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {orderEntryMode === 'message' ? <div className="order-entry-panel" data-mode="message"><Suspense fallback={<p className="form-notice" role="status">Loading message intake…</p>}><ChannelOrderIntake disabled={commerceControlsDisabled} identity={managedIdentity ?? undefined} items={commerce.items} onAcceptedFocus={() => requestAnimationFrame(() => preparedChannelRef.current?.focus())} onUse={useChannelDraft} /></Suspense></div> : null}
       {orderEntryMode === 'online' ? <div className="order-entry-panel" data-mode="online">
         <section className="website-intake website-lead-intake">
-          <div className="website-intake-head"><div><span className="core-eyebrow">Website inquiry inbox</span><strong>{pendingWebsiteLeadCount} qualified {pendingWebsiteLeadCount === 1 ? 'inquiry' : 'inquiries'} waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'ready'}`}>{managedIdentity ? 'Activation needed' : 'This device'}</span></div>
+          <div className="website-intake-head"><div><span className={coreEyebrowClass}>Website inquiry inbox</span><strong>{pendingWebsiteLeadCount} qualified {pendingWebsiteLeadCount === 1 ? 'inquiry' : 'inquiries'} waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'ready'}`}>{managedIdentity ? 'Activation needed' : 'This device'}</span></div>
           {websiteLeadInbox.error ? <div className="website-intake-record"><strong>Website inquiry recovery needed</strong><small>{websiteLeadInbox.error} Open Settings before creating an order from this source.</small></div> : websiteLeadInbox.leads.length ? websiteLeadInbox.leads.slice(0, 20).map((lead) => <div className="website-intake-ready" key={lead.id}>
             <div><strong>{lead.name} · {lead.contact}</strong><small>{lead.id} · {lead.siteName} {lead.sourcePage} · owner {lead.owner}</small><small>{lead.request}</small></div>
-            <button className="core-button compact" data-website-lead-id={lead.id} disabled={commerceControlsDisabled || !commerce.items.length} onClick={() => reviewWebsiteInquiryInShop(lead.id)} ref={lead.id === requestedRequestId ? websiteInboxTargetRef : undefined} type="button">Review</button>
+            <button className={compactButtonClass} data-website-lead-id={lead.id} disabled={commerceControlsDisabled || !commerce.items.length} onClick={() => reviewWebsiteInquiryInShop(lead.id)} ref={lead.id === requestedRequestId ? websiteInboxTargetRef : undefined} type="button">Review</button>
           </div>) : <div className="website-intake-record"><strong>{managedIdentity ? 'Managed Website routing is not active.' : 'No qualified Website inquiry needs Shop review.'}</strong><small>{managedIdentity ? 'Website inquiries stay in Website until shared routing is active.' : 'Qualify it in Website, then review one bound Shop order.'}</small></div>}
           <Link className="text-link" to="/website/">Open Website</Link>
         </section>
         <section className="website-intake">
-          <div className="website-intake-head"><div><span className="core-eyebrow">Ecommerce inbox</span><strong>{pendingEcommerceReviewCount} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'ready'}`}>{managedIdentity ? 'Managed' : 'This device'}</span></div>
+          <div className="website-intake-head"><div><span className={coreEyebrowClass}>Ecommerce inbox</span><strong>{pendingEcommerceReviewCount} requests waiting</strong></div><span className={`status-pill ${managedIdentity ? 'bounded' : 'ready'}`}>{managedIdentity ? 'Managed' : 'This device'}</span></div>
           {pendingStorefrontRequests.length ? pendingStorefrontRequests.slice(0, 20).map((request) => {
             const lines = commerceStorefrontRequestLines(request)
             const itemSummary = lines.length === 1 ? `${lines[0].name} × ${lines[0].quantity}` : `${lines.length} items · ${lines.reduce((total, line) => total + line.quantity, 0)} units`
@@ -7226,7 +7244,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
               : null
             return <div className="website-intake-ready" key={request.id}>
               <div><strong>{request.customerReference} · {itemSummary}</strong><small>{request.id} · {request.totalMmk.toLocaleString()} MMK · {request.fulfilment}</small>{replacedRequest ? <small title={`Exact predecessor ${replacedRequest.id}`}>Replacement · replaces {replacedRequest.id} · {replacedRequest.totalMmk.toLocaleString()} MMK · prior quote is history only</small> : null}</div>
-              <button className="core-button compact" data-ecommerce-request-id={request.id} disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
+              <button className={compactButtonClass} data-ecommerce-request-id={request.id} disabled={commerceControlsDisabled} onClick={() => void reviewStorefrontRequest(request.id)} ref={request.id === requestedRequestId ? ecommerceInboxTargetRef : undefined} type="button">Review</button>
             </div>
           }) : <div className="website-intake-record"><strong>No Ecommerce request needs Shop review.</strong><small>No request creates an order, reserves stock, starts payment, sends a message, or requests delivery.</small></div>}
           <Link className="text-link" to="/ecommerce/">Open Ecommerce</Link>
@@ -7235,15 +7253,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       {orderEntryMode === 'manual' ? <>
         <div className="order-entry-panel" data-mode="manual">
         {preparedEcommerceDraft ? <div className="channel-source-ready">
-          <div><span className="core-eyebrow">Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === 'supermega.ecommerce.shop_draft.v7' ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small>{preparedEcommerceReplacesRequestId ? <small title={`Exact predecessor ${preparedEcommerceReplacesRequestId}`}>Replacement request · replaces {preparedEcommerceReplacesRequestId} · prior quote stays history-only</small> : null}</div>
+          <div><span className={coreEyebrowClass}>Ecommerce request</span><strong>{preparedEcommerceDraft.sourceRequestId}</strong><small>{preparedEcommerceDraft.schema === ecommerceShopDraftSchema ? `${preparedEcommerceDraft.operatingContext.operatingUnitLocationId} · ${preparedEcommerceDraft.customerProfile?.phone ? `${preparedEcommerceDraft.customerProfile.phone} · ` : ''}${preparedEcommerceDraft.deliveryAddress ? `${preparedEcommerceDraft.deliveryAddress.township}, ${preparedEcommerceDraft.deliveryAddress.city} · ` : ''}${preparedEcommerceDraft.pricing.promotion.status === 'approved' ? `${preparedEcommerceDraft.pricing.promotion.code} approved · -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)} · ` : preparedEcommerceDraft.pricing.promotion.status === 'rejected' ? `${preparedEcommerceDraft.pricing.promotion.code} rejected · ` : ''}${preparedEcommerceDraft.pricing.shipping.status === 'approved' ? `${preparedEcommerceDraft.pricing.shipping.zoneCode} delivery · ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)} · ` : ''}${preparedEcommerceDraft.pricing.tax.status === 'configured' ? `${preparedEcommerceDraft.pricing.tax.taxCode} tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)} · ` : 'tax not configured · '}${preparedEcommerceDraft.pricing.payment.adapter.replaceAll('_', ' ')} · policy ${preparedEcommerceDraft.pricing.payment.policyRevision} · governed handoff · ` : ''}{preparedEcommerceDraft.fulfilment} · price locked · payment not authorized · no stock reserved</small>{preparedEcommerceReplacesRequestId ? <small title={`Exact predecessor ${preparedEcommerceReplacesRequestId}`}>Replacement request · replaces {preparedEcommerceReplacesRequestId} · prior quote stays history-only</small> : null}</div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
-          <div><span className="core-eyebrow">Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>Exact excerpts reviewed; the full message was discarded.</small></div>
+          <div><span className={coreEyebrowClass}>Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>Exact excerpts reviewed; the full message was discarded.</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ ecommerce: false }); setNotice('Source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedWebsiteLead ? <div className="channel-source-ready website-lead-source" tabIndex={-1}>
-          <div><span className="core-eyebrow">Qualified Website inquiry</span><strong>{preparedWebsiteLead.name} · {preparedWebsiteLead.id}</strong><small>{preparedWebsiteLead.contact} · owner {preparedWebsiteLead.owner} · {preparedWebsiteLead.request}</small></div>
+          <div><span className={coreEyebrowClass}>Qualified Website inquiry</span><strong>{preparedWebsiteLead.name} · {preparedWebsiteLead.id}</strong><small>{preparedWebsiteLead.contact} · owner {preparedWebsiteLead.owner} · {preparedWebsiteLead.request}</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ website: true }); setNotice('Website source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         <form className="core-form compact-form commerce-order-form" id="commerce-manual-order-form" onSubmit={recordOrder}>
@@ -7262,7 +7280,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>Handoff reference<input disabled={commerceControlsDisabled} maxLength={160} onChange={(event) => setFulfilmentReference(event.target.value)} placeholder="Pickup ticket or delivery route" required value={fulfilmentReference} /></label>
             <label>{extraOrderLines.length ? 'Item 1' : 'Item'}<select disabled={commerceControlsDisabled} value={selectedSku} onChange={(event) => { setSku(event.target.value); detachPreparedOrderSources() }}>{!commerce.items.some((item) => item.sku === selectedSku) && selectedSku ? <option disabled value={selectedSku}>{selectedSku} · no longer in Shop</option> : null}{commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.onHand} available</option>)}</select></label>
             <label>{extraOrderLines.length ? 'Quantity 1' : 'Quantity'}<input disabled={commerceControlsDisabled} min="1" max={selected?.onHand ?? 1} type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); detachPreparedOrderSources() }} /></label>
-            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.promotion.status === 'approved' ? ` · ${preparedEcommerceDraft.pricing.promotion.code} -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)}` : ''}{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.shipping.feeMmk ? ` · delivery ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)}` : ''}{preparedEcommerceDraft?.schema === 'supermega.ecommerce.shop_draft.v7' && preparedEcommerceDraft.pricing.tax.taxMmk ? ` · tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)}` : ''}</span><strong>{formatMoney(manualOrderPricedTotal)}</strong></div>
+            <div className="order-total"><span>{manualOrderLineDrafts.length} {manualOrderLineDrafts.length === 1 ? 'item' : 'items'} · {manualOrderQuantity} units{preparedEcommerceDraft?.schema === ecommerceShopDraftSchema && preparedEcommerceDraft.pricing.promotion.status === 'approved' ? ` · ${preparedEcommerceDraft.pricing.promotion.code} -${formatMoney(preparedEcommerceDraft.pricing.promotion.discountMmk)}` : ''}{preparedEcommerceDraft?.schema === ecommerceShopDraftSchema && preparedEcommerceDraft.pricing.shipping.feeMmk ? ` · delivery ${formatMoney(preparedEcommerceDraft.pricing.shipping.feeMmk)}` : ''}{preparedEcommerceDraft?.schema === ecommerceShopDraftSchema && preparedEcommerceDraft.pricing.tax.taxMmk ? ` · tax ${formatMoney(preparedEcommerceDraft.pricing.tax.taxMmk)}` : ''}</span><strong>{formatMoney(manualOrderPricedTotal)}</strong></div>
           </div>
           {paymentTermsDays !== 0 ? <p className="form-notice" data-customer-credit-review={orderCreditReview?.reason ?? 'calculation_unavailable'}>
             {orderCreditReview?.allowed
@@ -7281,14 +7299,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             return <div className="form-row" key={`${index}:${line.sku}`}>
               <label>Item {lineNumber}<select disabled={commerceControlsDisabled} value={line.sku} onChange={(event) => updateExtraOrderLine(index, { sku: event.target.value })}>{!commerce.items.some((candidate) => candidate.sku === line.sku) && line.sku ? <option disabled value={line.sku}>{line.sku} · no longer in Shop</option> : null}{commerce.items.map((candidate) => <option key={candidate.sku} value={candidate.sku}>{candidate.name} · {candidate.onHand} available</option>)}</select></label>
               <label>Quantity {lineNumber}<input data-shop-order-line-quantity={line.sku} disabled={commerceControlsDisabled} max={item?.onHand ?? 1} min="1" onChange={(event) => updateExtraOrderLine(index, { quantity: Number(event.target.value) })} ref={(node) => { if (node) orderLineQuantityRefs.current.set(line.sku, node); else orderLineQuantityRefs.current.delete(line.sku) }} type="number" value={line.quantity} /></label>
-              <button aria-label={`Remove item ${lineNumber}`} className="core-button compact" disabled={commerceControlsDisabled} onClick={() => removeExtraOrderLine(index)} type="button">Remove</button>
+              <button aria-label={`Remove item ${lineNumber}`} className={compactButtonClass} disabled={commerceControlsDisabled} onClick={() => removeExtraOrderLine(index)} type="button">Remove</button>
             </div>
           })}
           {removedOrderLine ? <div className="order-line-remove-recovery" data-shop-order-line-remove-recovery={removedOrderLine.line.sku} role="status">
             <span><strong>{removedOrderLine.itemName} removed</strong><small>Quantity {removedOrderLine.line.quantity} can return at item {removedOrderLine.index + 2} after a current stock check. {removedOrderLine.sourceDetached ? 'The reviewed source handoff stays detached.' : 'Other order details stay here.'}</small></span>
-            <button aria-label={`Undo remove ${removedOrderLine.itemName}`} className="core-button compact" disabled={commerceControlsDisabled} onClick={undoExtraOrderLineRemoval} ref={orderLineRemovalUndoRef} type="button">Undo remove</button>
+            <button aria-label={`Undo remove ${removedOrderLine.itemName}`} className={compactButtonClass} disabled={commerceControlsDisabled} onClick={undoExtraOrderLineRemoval} ref={orderLineRemovalUndoRef} type="button">Undo remove</button>
           </div> : null}
-          <button className="core-button compact" disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
+          <button className={compactButtonClass} disabled={commerceControlsDisabled || manualOrderLineDrafts.length >= commerce.items.length || manualOrderLineDrafts.length >= 20} onClick={addOrderLine} type="button">Add item</button>
           {!preparedEcommerceDraft ? <details className="order-options" id="commerce-order-options" ref={orderOptionsRef}>
             <summary><span>Channel and payment</span><small>{channel} · {payment || 'Choose payment'}</small></summary>
             <div className="form-row order-options-fields">
@@ -7300,7 +7318,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         </div>
         <div className="order-submit-bar" data-ecommerce-payment={preparedEcommerceDraft ? 'true' : 'false'}>
           {preparedEcommerceDraft ? <label className="order-ecommerce-payment"><span>{preparedEcommercePaymentLocked ? 'Payment policy' : 'Payment'}</span><select aria-readonly={preparedEcommercePaymentLocked || undefined} disabled={commerceControlsDisabled || preparedEcommercePaymentLocked} form="commerce-manual-order-form" onChange={(event) => setPayment(event.target.value)} ref={orderPaymentRef} value={payment}>{preparedEcommercePaymentLocked ? <option>{payment}</option> : <><option value="">Choose payment</option>{commerceOrderDraftPayments.map((option) => <option key={option}>{option}</option>)}</>}</select></label> : null}
-          <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className="core-button primary" disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : preparedEcommerceDraft ? 'Review request' : 'Review order'}</button>
+          <button aria-controls={!promisedAt ? 'commerce-order-promise' : !payment && !preparedEcommerceDraft ? 'commerce-order-options' : undefined} className={primaryButtonClass} disabled={commerceControlsDisabled || resumedOrderNeedsReview || orderDraftConflict || orderCreditBlocked || Boolean(preparedEcommerceDraft && (!payment || !promisedAt))} form="commerce-manual-order-form" onClick={!preparedEcommerceDraft && (!promisedAt || !payment) ? focusNextOrderRequirement : undefined} ref={orderReviewRef} type={!preparedEcommerceDraft && (!promisedAt || !payment) ? 'button' : 'submit'}>{!promisedAt ? 'Choose promise' : !payment ? 'Choose payment' : orderCreditBlocked ? 'Credit policy required' : resumedOrderNeedsReview ? 'Review current Shop values' : orderDraftConflict ? 'Reload saved draft' : preparedEcommerceDraft ? 'Review request' : 'Review order'}</button>
         </div>
       </> : null}
     </dialog>
@@ -7366,23 +7384,23 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     <summary><span>Daily close</span><small>{closeScopeOptions.length > 1 && !closePreview ? 'Choose one location' : closePreview ? `${closePreview.orderIds.length} order${closePreview.orderIds.length === 1 ? '' : 's'} ready` : latestClose ? 'Today is closed' : 'Nothing to close'}</small></summary>
     <div className="today-more-content">
       <div className="exception-summary"><span><strong>{closePreview?.orderIds.length ?? 0}</strong><small>orders ready</small></span><span><strong>{closePreview?.paymentExceptionOrderIds.length ?? 0}</strong><small>payment review</small></span></div>
-      {closeScopeOptions.length > 1 ? <label className="core-form compact-form">Location to close<select disabled={commerceControlsDisabled} onChange={(event) => { setCloseScopeKey(event.target.value); setCloseSettlementDraft([]) }} required value={effectiveCloseScopeKey}><option value="">Choose location</option>{closeScopeOptions.map((option) => <option key={option.key} value={option.key}>{accountingScopeName(option.accountingScope)} · {option.orderCount} order{option.orderCount === 1 ? '' : 's'} · {formatMoney(option.totalMmk)}</option>)}</select></label> : null}
+      {closeScopeOptions.length > 1 ? <label className={compactFormClass}>Location to close<select disabled={commerceControlsDisabled} onChange={(event) => { setCloseScopeKey(event.target.value); setCloseSettlementDraft([]) }} required value={effectiveCloseScopeKey}><option value="">Choose location</option>{closeScopeOptions.map((option) => <option key={option.key} value={option.key}>{accountingScopeName(option.accountingScope)} · {option.orderCount} order{option.orderCount === 1 ? '' : 's'} · {formatMoney(option.totalMmk)}</option>)}</select></label> : null}
       {selectedCloseScopeOption && (selectedCloseScopeOption.accountingScope || currentAccountingScopeConfiguration) ? <p className="form-notice" data-close-accounting-scope={selectedCloseScopeOption.accountingScope ? 'reviewed' : 'legacy'}><strong>{selectedCloseScopeOption.accountingScope ? accountingScopeName(selectedCloseScopeOption.accountingScope) : 'Historical unscoped orders'}</strong>{selectedCloseScopeOption.accountingScope ? ` · ${accountingScopeCode(selectedCloseScopeOption.accountingScope)}` : ''}</p> : null}
-      <details className="compact-disclosure" data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'} id="shop-business-location" open={!commerce.inventoryFoundation || !currentAccountingScopeConfiguration || undefined}>
+      <details className={compactDisclosureClass} data-accounting-scope={currentAccountingScopeConfiguration ? 'reviewed' : 'required'} id="shop-business-location" open={!commerce.inventoryFoundation || !currentAccountingScopeConfiguration || undefined}>
         <summary><span>Business and location</span><small>{!commerce.inventoryFoundation ? 'Stock setup required' : currentAccountingScopeConfiguration ? accountingScopeName(currentAccountingScopeConfiguration) : 'Required before real orders'}</small></summary>
-        {!commerce.inventoryFoundation ? <div className="core-form compact-form" data-shop-location-foundation="required"><p className="form-notice">Set up Stock locations before real orders.</p><Link className="core-button primary compact" to="/shop/?tab=inventory#shop-location-foundation">Set up stock locations</Link></div> : <form className="core-form compact-form" onSubmit={reviewAccountingScope}>
+        {!commerce.inventoryFoundation ? <div className={compactFormClass} data-shop-location-foundation="required"><p className="form-notice">Set up Stock locations before real orders.</p><Link className={compactPrimaryButtonClass} to="/shop/?tab=inventory#shop-location-foundation">Set up stock locations</Link></div> : <form className={compactFormClass} onSubmit={reviewAccountingScope}>
           {managedInventoryProjection ? <label>Stock location<select disabled={commerceControlsDisabled} id="shop-accounting-stock-location" onChange={(event) => { const location = managedInventoryProjection.locations.find((candidate) => candidate.id === event.target.value); const derivedCode = accountingInventoryLocationCode(effectiveAccountingScope.inventoryLocationId); setAccountingScope({ ...effectiveAccountingScope, inventoryLocationId: event.target.value, locationCode: !effectiveAccountingScope.locationCode || effectiveAccountingScope.locationCode === derivedCode ? accountingInventoryLocationCode(event.target.value) : effectiveAccountingScope.locationCode, locationName: location?.name ?? effectiveAccountingScope.locationName }) }} required value={effectiveAccountingScope.inventoryLocationId || defaultReceiptLocationId}><option value="">Choose location</option>{managedInventoryProjection.locations.map((location) => <option key={location.id} value={location.id}>{location.name} / {location.id}</option>)}</select></label> : null}
           {accountingScopeFields.map((row, rowIndex) => <div className="form-row" key={rowIndex}>{row.map(([field, label, placeholder, maxLength, uppercase]) => <label key={field}>{label}<input autoCapitalize={uppercase ? 'characters' : undefined} disabled={commerceControlsDisabled} maxLength={maxLength} onChange={(event) => setAccountingScope({ ...effectiveAccountingScope, [field]: uppercase ? event.target.value.toUpperCase() : event.target.value })} placeholder={placeholder} required value={effectiveAccountingScope[field]} /></label>)}</div>)}
-          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review business and location</button></div>
+          <div className={formActionsClass}><button className={compactButtonClass} disabled={commerceControlsDisabled} type="submit">Review business and location</button></div>
           {currentAccountingScopeConfiguration ? <p className="form-notice">Revision {currentAccountingScopeConfiguration.revision} · saved by {currentAccountingScopeConfiguration.proof.actor} · evidence {currentAccountingScopeConfiguration.proof.evidenceReference}</p> : null}
         </form>}
       </details>
-      <details className="compact-disclosure" data-shop-policy-controls>
+      <details className={compactDisclosureClass} data-shop-policy-controls>
         <summary><span>Policies and accounting setup</span><small>6 reviewed controls</small></summary>
         <div className="today-more-content">
-      <details className="compact-disclosure" data-promotion-policy="versioned">
+      <details className={compactDisclosureClass} data-promotion-policy="versioned">
         <summary><span>Promotions</span><small>{currentPromotionPolicy ? `${currentPromotionPolicy.code} · ${formatTaxRate(currentPromotionPolicy.discountBasisPoints)} · ${currentPromotionPolicy.status}` : 'No policy for this code'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewPromotionPolicy}>
+        <form className={compactFormClass} onSubmit={reviewPromotionPolicy}>
           <div className="form-row">
             <label>Customer code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="WELCOME" required value={promotionPolicyDraft.code} /></label>
             <label>Discount (%)<input disabled={commerceControlsDisabled} inputMode="decimal" max="100" min="0.01" onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, discountPercent: event.target.value }))} required step="0.01" type="number" value={promotionPolicyDraft.discountPercent} /></label>
@@ -7396,13 +7414,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={promotionPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={promotionPolicyDraft.effectiveUntil} /></label>
           </div>
           <label>Policy status<select disabled={commerceControlsDisabled} onChange={(event) => setPromotionPolicyDraft((current) => ({ ...current, status: event.target.value as 'active' | 'inactive' }))} value={promotionPolicyDraft.status}><option value="active">Active · approve when limits match</option><option value="inactive">Inactive · reject this code safely</option></select></label>
-          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review promotion</button></div>
+          <div className={formActionsClass}><button className={compactButtonClass} disabled={commerceControlsDisabled} type="submit">Review promotion</button></div>
           {currentPromotionPolicy ? <p className="form-notice">Revision {currentPromotionPolicy.revision} · effective {formatTime(currentPromotionPolicy.effectiveFrom)}{currentPromotionPolicy.effectiveUntil ? ` to ${formatTime(currentPromotionPolicy.effectiveUntil)}` : ''} · saved by {currentPromotionPolicy.proof.actor} · evidence {currentPromotionPolicy.proof.evidenceReference}</p> : null}
         </form>
       </details>
-      <details className="compact-disclosure" data-shipping-policy="versioned">
+      <details className={compactDisclosureClass} data-shipping-policy="versioned">
         <summary><span>Delivery zones</span><small>{currentShippingPolicy ? `${currentShippingPolicy.zoneCode} · ${formatMoney(currentShippingPolicy.feeMmk)} · ${currentShippingPolicy.promiseMinutes} min` : 'No policy for this zone'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewShippingPolicy}>
+        <form className={compactFormClass} onSubmit={reviewShippingPolicy}>
           <div className="form-row">
             <label>Zone code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, zoneCode: event.target.value.toUpperCase() }))} required value={shippingPolicyDraft.zoneCode} /></label>
             <label>Fee (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, feeMmk: event.target.value }))} required step="1" type="number" value={shippingPolicyDraft.feeMmk} /></label>
@@ -7416,12 +7434,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={shippingPolicyDraft.effectiveFrom} /></label>
             <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={shippingPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setShippingPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={shippingPolicyDraft.effectiveUntil} /></label>
           </div>
-          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review delivery zone</button></div>
+          <div className={formActionsClass}><button className={compactButtonClass} disabled={commerceControlsDisabled} type="submit">Review delivery zone</button></div>
         </form>
       </details>
-      <details className="compact-disclosure" data-payment-policy="versioned">
+      <details className={compactDisclosureClass} data-payment-policy="versioned">
         <summary><span>Payment methods</span><small>{currentPaymentPolicy ? `${paymentPolicyDraft.adapter.replaceAll('_', ' ')} · ${currentPaymentPolicy.allowedFulfilments.join(' + ')} · revision ${currentPaymentPolicy.revision}` : 'No policy for this method'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewPaymentPolicy}>
+        <form className={compactFormClass} onSubmit={reviewPaymentPolicy}>
           <div className="form-row">
             <label>Method<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, adapter: event.target.value as PaymentPolicyDraft['adapter'] }))} value={paymentPolicyDraft.adapter}><option value="cash_on_delivery">Cash on delivery</option><option value="pay_on_pickup">Pay on pickup</option><option value="kbzpay_manual">KBZPay · manual proof</option></select></label>
             <label>Allowed handoff<select disabled={commerceControlsDisabled} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, allowedFulfilments: event.target.value as PaymentPolicyDraft['allowedFulfilments'] }))} value={paymentPolicyDraft.allowedFulfilments}><option value="delivery">Delivery only</option><option value="pickup">Pickup only</option><option value="both">Delivery and pickup</option></select></label>
@@ -7435,13 +7453,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, effectiveFrom: event.target.value }))} required type="datetime-local" value={paymentPolicyDraft.effectiveFrom} /></label>
             <label>End (optional)<input autoComplete="off" disabled={commerceControlsDisabled} min={paymentPolicyDraft.effectiveFrom || localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setPaymentPolicyDraft((current) => ({ ...current, effectiveUntil: event.target.value }))} type="datetime-local" value={paymentPolicyDraft.effectiveUntil} /></label>
           </div>
-          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review payment method</button></div>
+          <div className={formActionsClass}><button className={compactButtonClass} disabled={commerceControlsDisabled} type="submit">Review payment method</button></div>
           {currentPaymentPolicy ? <p className="form-notice">Revision {currentPaymentPolicy.revision} · {currentPaymentPolicy.status} · effective {formatTime(currentPaymentPolicy.effectiveFrom)}{currentPaymentPolicy.effectiveUntil ? ` to ${formatTime(currentPaymentPolicy.effectiveUntil)}` : ''} · {currentPaymentPolicy.instructions} · evidence {currentPaymentPolicy.proof.evidenceReference}</p> : null}
         </form>
       </details>
-      <details className="compact-disclosure" data-customer-credit-policy="versioned">
+      <details className={compactDisclosureClass} data-customer-credit-policy="versioned">
         <summary><span>Customer credit</span><small>{commerce.customerCreditPolicies?.length ? `${commerce.customerCreditPolicies.length} reviewed ${commerce.customerCreditPolicies.length === 1 ? 'policy' : 'revisions'}` : 'Cash terms only'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewCustomerCreditPolicy}>
+        <form className={compactFormClass} onSubmit={reviewCustomerCreditPolicy}>
           <label>Customer<input disabled={commerceControlsDisabled} list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined} maxLength={120} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, customer: event.target.value }))} placeholder="Exact customer name or reference" required value={creditPolicyDraft.customer} /></label>
           <div className="form-row">
             <label>Credit limit (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="0" onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, creditLimitMmk: event.target.value }))} placeholder="500000" required step="1" type="number" value={creditPolicyDraft.creditLimitMmk} /></label>
@@ -7449,12 +7467,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           </div>
           <label>Account status<select disabled={commerceControlsDisabled} onChange={(event) => setCreditPolicyDraft((current) => ({ ...current, status: event.target.value as CommerceCustomerCreditPolicyStatus }))} value={creditPolicyDraft.status}><option value="active">Active · allow within boundary</option><option value="hold">Hold · block new credit</option></select></label>
           {currentCreditPolicy ? <p className="form-notice"><strong>Current revision {currentCreditPolicy.revision}</strong> · {formatMoney(currentCreditPolicy.creditLimitMmk)} limit · {currentCreditPolicy.maxPaymentTermsDays}-day maximum · {currentCreditPolicy.status} · evidence {currentCreditPolicy.proof.evidenceReference}</p> : creditPolicyCustomer ? <p className="form-notice">No policy exists for this exact customer. New 7/30-day orders remain blocked.</p> : null}
-          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review credit policy</button></div>
+          <div className={formActionsClass}><button className={compactButtonClass} disabled={commerceControlsDisabled} type="submit">Review credit policy</button></div>
         </form>
       </details>
-      <details className="compact-disclosure" data-tax-configuration="versioned">
+      <details className={compactDisclosureClass} data-tax-configuration="versioned">
         <summary><span>Tax schedule</span><small>{currentTaxConfiguration ? `${currentTaxConfiguration.code} · ${currentTaxConfiguration.jurisdictionCode ?? 'legacy scope'} · ${formatTaxRate(currentTaxConfiguration.rateBasisPoints)}` : 'Not configured'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewTaxConfiguration}>
+        <form className={compactFormClass} onSubmit={reviewTaxConfiguration}>
           <div className="form-row">
             <label>Tax code<input autoCapitalize="characters" disabled={commerceControlsDisabled} maxLength={12} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, code: event.target.value.toUpperCase() })} placeholder="Your configured code" required value={effectiveTaxDraft.code} /></label>
             <label>Rate (%)<input disabled={commerceControlsDisabled} inputMode="decimal" max="100" min="0" onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, ratePercent: event.target.value })} placeholder="Enter reviewed rate" required step="0.01" type="number" value={effectiveTaxDraft.ratePercent} /></label>
@@ -7465,13 +7483,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>Effective from<input autoComplete="off" disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(purchaseOrderClock + 60_000))} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, effectiveFrom: event.target.value })} required type="datetime-local" value={effectiveTaxDraft.effectiveFrom} /></label>
           </div>
           <label>Price treatment<select disabled={commerceControlsDisabled} onChange={(event) => setTaxDraft({ ...effectiveTaxDraft, mode: event.target.value as CommerceTaxMode })} value={effectiveTaxDraft.mode}><option value="exclusive">Add tax to listed price</option><option value="inclusive">Tax included in listed price</option></select></label>
-          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled} type="submit">Review tax setup</button></div>
+          <div className={formActionsClass}><button className={compactButtonClass} disabled={commerceControlsDisabled} type="submit">Review tax setup</button></div>
           {currentTaxConfiguration ? <p className="form-notice">Revision {currentTaxConfiguration.revision} · {currentTaxConfiguration.effectiveFrom ? `effective ${formatTime(currentTaxConfiguration.effectiveFrom)} · ` : ''}saved by {currentTaxConfiguration.proof.actor} · evidence {currentTaxConfiguration.proof.evidenceReference}</p> : null}
         </form>
       </details>
-      <details className="compact-disclosure" data-account-mapping="versioned">
+      <details className={compactDisclosureClass} data-account-mapping="versioned">
         <summary><span>Account mapping</span><small>{currentAccountMappingConfiguration ? `${currentAccountingScopeConfiguration?.locationCode ?? 'legacy'} · revision ${currentAccountMappingConfiguration.revision}` : currentAccountingScopeConfiguration ? `${currentAccountingScopeConfiguration.locationCode} · required` : 'Set location first'}</small></summary>
-        <form className="core-form compact-form" onSubmit={reviewAccountMapping}>
+        <form className={compactFormClass} onSubmit={reviewAccountMapping}>
           <div className="form-row">
             <label>Payment clearing<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, paymentClearing: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.paymentClearing} /></label>
             <label>Sales revenue<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, salesRevenue: event.target.value })} placeholder="Reviewed account code" required value={effectiveAccountMapping.salesRevenue} /></label>
@@ -7485,15 +7503,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>Correction receivable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, correctionReceivable: event.target.value })} placeholder="Customer amount due" required value={effectiveAccountMapping.correctionReceivable} /></label>
           </div>
           <label>Correction payable<input disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setAccountMapping({ ...effectiveAccountMapping, correctionPayable: event.target.value })} placeholder="Customer refund or credit due" required value={effectiveAccountMapping.correctionPayable} /></label>
-          <div className="form-actions"><button className="core-button compact" disabled={commerceControlsDisabled || Boolean((localBusinessWorkspace || managedIdentity) && !currentAccountingScopeConfiguration)} type="submit">Review account mapping</button></div>
+          <div className={formActionsClass}><button className={compactButtonClass} disabled={commerceControlsDisabled || Boolean((localBusinessWorkspace || managedIdentity) && !currentAccountingScopeConfiguration)} type="submit">Review account mapping</button></div>
           {currentAccountMappingConfiguration ? <p className="form-notice">Revision {currentAccountMappingConfiguration.revision} · {accountingScopeCode(currentAccountMappingConfiguration.accountingScope)} · saved by {currentAccountMappingConfiguration.proof.actor} · evidence {currentAccountMappingConfiguration.proof.evidenceReference}</p> : null}
         </form>
       </details>
         </div>
       </details>
-      <details className="compact-disclosure" data-close-settlement={closeSettlement?.status ?? 'incomplete'} open={Boolean(closePreview)}>
+      <details className={compactDisclosureClass} data-close-settlement={closeSettlement?.status ?? 'incomplete'} open={Boolean(closePreview)}>
         <summary><span>Settlement count</span><small>{closePreview ? `${closeExpectedByPayment.size} payment method${closeExpectedByPayment.size === 1 ? '' : 's'} · ${closeSettlement?.status === 'matched' ? 'matched' : closeSettlement?.status === 'variance_review' ? 'variance needs review' : 'complete the count'}` : 'No open close'}</small></summary>
-        <section aria-label="Daily settlement count" className="core-form compact-form">
+        <section aria-label="Daily settlement count" className={compactFormClass}>
           {effectiveCloseSettlementDraft.length ? effectiveCloseSettlementDraft.map((line) => {
             const expectedMmk = closeExpectedByPayment.get(line.paymentMethod) ?? 0
             const countedMmk = /^(?:0|[1-9]\d*)$/.test(line.countedMmk) ? Number(line.countedMmk) : null
@@ -7520,7 +7538,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       </details>
       <button className="core-button" data-close-primary disabled={commerceControlsDisabled || !closePreview || !closeSettlement} onClick={closeDay} type="button">{closePreview ? 'Review and save close' : legacyCloseNeedsMigration ? 'Close history needs migration' : 'Today is closed'}</button>
       <p className="form-notice" aria-live="polite">{`${closableOrders.length} completed, reconciled orders · ${formatMoney(closeExpectedPaymentValue)} payments · ${formatMoney(netCloseValue)} net sales ready to close.`}</p>
-      {latestClose?.operator ? <details className="compact-disclosure">
+      {latestClose?.operator ? <details className={compactDisclosureClass}>
         <summary><span>Last close · {latestClose.businessDate}</span><small>{latestClose.accountingScope ? `${latestClose.accountingScope.locationCode} · ` : ''}{latestClose.orders} orders · {formatMoney(latestClose.total)}</small></summary>
         <p className="form-notice">{accountingScopeName(latestClose.accountingScope)} · {latestClose.operator} · {formatTime(latestClose.createdAt)} · evidence {latestClose.evidenceReference}</p>
         <p className="form-notice">Orders: {latestClose.orderIds?.length ? latestClose.orderIds.join(', ') : 'none'} · Payment exceptions: {latestClose.paymentExceptionOrderIds?.length ? latestClose.paymentExceptionOrderIds.join(', ') : 'none'} · Stock exceptions: {latestClose.stockExceptionSkus?.length ? latestClose.stockExceptionSkus.join(', ') : 'none'}</p>
@@ -7540,10 +7558,10 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     {commerceBoundary}
     {!commerce.items.length ? shopCatalogOnboarding : null}
     <section className="core-panel inventory-panel">
-      <div className="panel-head"><div><span className="core-eyebrow">Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></div></div>
+      <div className="panel-head"><div><span className={coreEyebrowClass}>Stock</span><h2>Available stock</h2></div><div className="order-queue-actions"><span className="panel-note">{lowStock.length} need attention</span><button aria-controls="stock-count-editor" aria-expanded={Boolean(stockCountDraft)} className="core-button" disabled={commerceControlsDisabled || !commerce.items.length} onClick={openStockCount} ref={stockCountTriggerRef} type="button">{stockCountDraft ? 'Continue count' : commerce.items.length ? 'Count stock' : 'Add products first'}</button></div></div>
       {stockCountDraft ? <form aria-labelledby="stock-count-title" className="stock-receipt-editor stock-count-editor" id="stock-count-editor" onSubmit={reviewStockCount} ref={stockCountEditorRef}>
-        <div className="stock-receipt-copy">
-          <span className="core-eyebrow">Stock check</span>
+        <div className={stockReceiptCopyClass}>
+          <span className={coreEyebrowClass}>Stock check</span>
           <h3 id="stock-count-title">{commerce.inventoryFoundation ? 'Count one location' : 'Count available units'}</h3>
           <small id="stock-count-help">{commerce.inventoryFoundation
             ? 'Count every unit in this lot, including reserved stock.'
@@ -7568,7 +7586,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             })
           : commerce.items.map((item) => <option key={item.sku} value={item.sku}>{item.name} · {item.sku}</option>)}</select></label>
         <label>{commerce.inventoryFoundation ? 'Counted physical units' : 'Counted available units'}<input aria-describedby="stock-count-help stock-count-preview" aria-invalid={Boolean(stockCountQuantityText) && stockCountQuantityResult === null} disabled={commerceControlsDisabled || !stockCountItem || Boolean(commerce.inventoryFoundation && !stockCountBalance)} id="stock-count-quantity" inputMode="numeric" max={stockCountBalance?.tracking === 'serial' ? 1 : Number.MAX_SAFE_INTEGER} min={stockCountBalance?.reserved ?? 0} onChange={(event) => setStockCountDraft((current) => current ? { ...current, quantity: event.target.value } : current)} placeholder="0" required step="1" type="number" value={stockCountDraft.quantity} /></label>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || stockCountQuantityResult === null || Boolean(commerce.inventoryFoundation && !stockCountBalance)} type="submit">Review count</button></div>
+        <div className={formActionsClass}><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelStockCount} type="button">Cancel</button><button className={primaryButtonClass} disabled={commerceControlsDisabled || stockCountQuantityResult === null || Boolean(commerce.inventoryFoundation && !stockCountBalance)} type="submit">Review count</button></div>
       </form> : null}
       <div className="data-table stock-attention-table" data-stock-list="attention" role="table" aria-label="Shop stock">
         <div className="data-row table-head" role="row"><span role="columnheader">Item</span><span role="columnheader">Available</span><span role="columnheader">Reorder</span><span role="columnheader">Price</span><span role="columnheader">Next step</span></div>
@@ -7584,14 +7602,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         </div>
       </details>
       {catalogEditDraft && catalogEditItem ? <form aria-labelledby="catalog-item-editor-title" className="stock-receipt-editor" id="catalog-item-editor" onSubmit={reviewCatalogItemUpdate} ref={catalogEditEditorRef}>
-        <div className="stock-receipt-copy">
-          <span className="core-eyebrow">Edit item</span>
+        <div className={stockReceiptCopyClass}>
+          <span className={coreEyebrowClass}>Edit item</span>
           <h3 id="catalog-item-editor-title">{catalogEditItem.name}</h3>
           <small>{catalogEditItem.sku} · Only price and reorder level change{catalogEditStale ? ' · reload current values' : ''}</small>
         </div>
         <label>Price (MMK)<input aria-invalid={Boolean(catalogEditPriceText) && catalogEditPriceResult === null} autoFocus disabled={commerceControlsDisabled || catalogEditStale} id="catalog-edit-price" inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="1" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, price: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.price} /></label>
         <label>Reorder at<input aria-invalid={Boolean(catalogEditReorderText) && catalogEditReorderResult === null} disabled={commerceControlsDisabled || catalogEditStale} inputMode="numeric" max={Number.MAX_SAFE_INTEGER} min="0" onChange={(event) => setCatalogEditDraft((current) => current ? { ...current, reorderAt: event.target.value } : current)} required step="1" type="number" value={catalogEditDraft.reorderAt} /></label>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className="core-button primary" disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
+        <div className={formActionsClass}><button className="core-button" disabled={Boolean(pendingAction)} onClick={cancelCatalogItemEditor} type="button">Cancel</button><button className={primaryButtonClass} disabled={catalogEditStale ? Boolean(pendingAction) || !commerceCanWrite : commerceControlsDisabled || !catalogEditChanged} onClick={catalogEditStale ? () => openCatalogItemEditor(catalogEditItem.sku) : undefined} type={catalogEditStale ? 'button' : 'submit'}>{catalogEditStale ? 'Reload values' : 'Review changes'}</button></div>
       </form> : null}
       <details className="inventory-tools-disclosure" id="shop-location-foundation" open={!commerce.inventoryFoundation || undefined}>
         <summary><span><strong>Purchasing &amp; locations</strong><small>Suppliers, locations, and available stock</small></span></summary>
@@ -7600,27 +7618,27 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           {supplierControl}
         </div>
       </details>
-      {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierSourcing}>
-        <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier sourcing</span><h3 id="supplier-sourcing-title">Compare quotes for {supplierSourcingDraft.itemName}</h3><small>{supplierSourcingDraft.quantity.toLocaleString()} units · immutable award evidence · no supplier contact</small></div>
+      {supplierSourcingDraft ? <form aria-labelledby="supplier-sourcing-title" className={purchaseOrderEditorClass} onSubmit={reviewSupplierSourcing}>
+        <div className={stockReceiptCopyClass}><span className={coreEyebrowClass}>Supplier sourcing</span><h3 id="supplier-sourcing-title">Compare quotes for {supplierSourcingDraft.itemName}</h3><small>{supplierSourcingDraft.quantity.toLocaleString()} units · immutable award evidence · no supplier contact</small></div>
         {supplierSourcingDraft.quotes.map((quote, index) => <fieldset className="form-row" key={index}><legend><label><input checked={supplierSourcingDraft.selectedIndex === index} disabled={commerceControlsDisabled || (index === 1 && !quote.supplier.trim())} name="selected-supplier-quote" onChange={() => setSupplierSourcingDraft((current) => current ? { ...current, selectedIndex: index as 0 | 1 } : current)} type="radio" /> {index === 0 ? 'Primary quote' : 'Alternate quote (optional)'}</label></legend><label>Supplier<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'supplier', event.target.value)} required={index === 0} value={quote.supplier} /></label><label>Quote reference<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'quoteReference', event.target.value)} required={index === 0} value={quote.quoteReference} /></label><label>Approved-vendor reference<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'vendorApprovalReference', event.target.value)} required={index === 0} value={quote.vendorApprovalReference} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => updateSupplierQuote(index as 0 | 1, 'unitCostMmk', event.target.value)} required={index === 0} step="1" type="number" value={quote.unitCostMmk} /></label><label>Delivery<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => updateSupplierQuote(index as 0 | 1, 'deliveryAt', event.target.value)} required={index === 0} type="datetime-local" value={quote.deliveryAt} /></label></fieldset>)}
         <div className="form-row"><label>Quotes valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, validUntil: event.target.value } : current)} required type="datetime-local" value={supplierSourcingDraft.validUntil} /></label><label>Cost tolerance (%)<input disabled={commerceControlsDisabled} max="20" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, unitCostTolerancePercent: event.target.value } : current)} required step="0.1" type="number" value={supplierSourcingDraft.unitCostTolerancePercent} /></label><label>Delivery tolerance (days)<input disabled={commerceControlsDisabled} max="30" min="0" onChange={(event) => setSupplierSourcingDraft((current) => current ? { ...current, deliveryToleranceDays: event.target.value } : current)} required step="1" type="number" value={supplierSourcingDraft.deliveryToleranceDays} /></label></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierSourcingDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review supplier award</button></div>
+        <div className={formActionsClass}><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierSourcingDraft(null)} type="button">Cancel</button><button className={primaryButtonClass} disabled={commerceControlsDisabled} type="submit">Review supplier award</button></div>
       </form> : null}
-      {purchaseBudgetDraft ? <form aria-labelledby="purchase-budget-title" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewPurchaseBudget}>
-        <div className="stock-receipt-copy"><span className="core-eyebrow">Buying limits</span><h3 id="purchase-budget-title">Approve purchase budget</h3><small>Immutable commitment ceiling · internal authority only</small></div>
+      {purchaseBudgetDraft ? <form aria-labelledby="purchase-budget-title" className={purchaseOrderEditorClass} onSubmit={reviewPurchaseBudget}>
+        <div className={stockReceiptCopyClass}><span className={coreEyebrowClass}>Buying limits</span><h3 id="purchase-budget-title">Approve purchase budget</h3><small>Immutable commitment ceiling · internal authority only</small></div>
         <div className="form-row"><label>Budget code<input autoFocus disabled={commerceControlsDisabled} maxLength={40} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, budgetCode: event.target.value.toUpperCase() } : current)} required value={purchaseBudgetDraft.budgetCode} /></label><label>Budget name<input disabled={commerceControlsDisabled} maxLength={120} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, label: event.target.value } : current)} required value={purchaseBudgetDraft.label} /></label></div>
         <label>Valid until<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date())} onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, periodEnd: event.target.value } : current)} required type="datetime-local" value={purchaseBudgetDraft.periodEnd} /></label>
         <div className="form-row"><label>Total ceiling (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, ceilingMmk: event.target.value } : current)} required step="1" type="number" value={purchaseBudgetDraft.ceilingMmk} /></label><label>Per request (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setPurchaseBudgetDraft((current) => current ? { ...current, perRequisitionLimitMmk: event.target.value } : current)} required step="1" type="number" value={purchaseBudgetDraft.perRequisitionLimitMmk} /></label></div>
-        <div className="stock-receipt-preview"><small>Authority</small><strong>{formatMoney(Number(purchaseBudgetDraft.ceilingMmk) || 0)} total · {formatMoney(Number(purchaseBudgetDraft.perRequisitionLimitMmk) || 0)} per request</strong></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setPurchaseBudgetDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled} type="submit">Review buying limits</button></div>
+        <div className={stockReceiptPreviewClass}><small>Authority</small><strong>{formatMoney(Number(purchaseBudgetDraft.ceilingMmk) || 0)} total · {formatMoney(Number(purchaseBudgetDraft.perRequisitionLimitMmk) || 0)} per request</strong></div>
+        <div className={formActionsClass}><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setPurchaseBudgetDraft(null)} type="button">Cancel</button><button className={primaryButtonClass} disabled={commerceControlsDisabled} type="submit">Review buying limits</button></div>
       </form> : null}
       {closedPurchaseOrderDraft ? <div className={`order-draft-recovery purchase-order-draft-recovery ${purchaseOrderRecovery?.ok ? '' : 'is-blocked'}`} data-shop-purchase-order-recovery={purchaseOrderRecovery?.ok ? 'ready' : 'expired'} role={purchaseOrderRecovery?.ok ? 'status' : 'alert'}>
         <div><strong>{closedPurchaseOrderItem?.name ?? (closedPurchaseOrderDraft.draft.mode === 'create' ? closedPurchaseOrderDraft.draft.sku : closedPurchaseOrderDraft.draft.purchaseOrderId)} {closedPurchaseOrderDraft.draft.mode === 'create' ? 'supplier-order' : 'receipt'} draft is still available</strong><small>{purchaseOrderRecovery?.ok ? `${closedPurchaseOrderSummary}. Restore once or discard; no requisition, purchase order, receipt, stock, payable, supplier message, or payment was created.` : 'Purchasing evidence changed. Discard and reopen from current Shop data.'}</small></div>
-        <div className="order-draft-recovery-actions"><button className="core-button primary compact" disabled={Boolean(pendingAction)} onClick={restoreClosedPurchaseOrderEditor} ref={purchaseOrderRecoveryRef} type="button">{purchaseOrderRecovery?.ok ? 'Undo close' : 'Review expiry'}</button><button className="text-link danger-text" disabled={Boolean(pendingAction)} onClick={discardPurchaseOrderEditor} type="button">Discard</button></div>
+        <div className={orderDraftRecoveryActionsClass}><button className={compactPrimaryButtonClass} disabled={Boolean(pendingAction)} onClick={restoreClosedPurchaseOrderEditor} ref={purchaseOrderRecoveryRef} type="button">{purchaseOrderRecovery?.ok ? 'Undo close' : 'Review expiry'}</button><button className="text-link danger-text" disabled={Boolean(pendingAction)} onClick={discardPurchaseOrderEditor} type="button">Discard</button></div>
       </div> : null}
-      {purchaseOrderDraft && purchaseOrderDraftItem ? <form aria-labelledby="purchase-order-title" className="stock-receipt-editor purchase-order-editor" data-mode={purchaseOrderDraft.mode} id="purchase-order-editor" onSubmit={reviewPurchaseOrder} ref={purchaseOrderEditorRef}>
-        <div className="stock-receipt-copy">
-          <span className="core-eyebrow">{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Second operator approval' : 'Approve requisition' : 'Receive order'}</span>
+      {purchaseOrderDraft && purchaseOrderDraftItem ? <form aria-labelledby="purchase-order-title" className={purchaseOrderEditorClass} data-mode={purchaseOrderDraft.mode} id="purchase-order-editor" onSubmit={reviewPurchaseOrder} ref={purchaseOrderEditorRef}>
+        <div className={stockReceiptCopyClass}>
+          <span className={coreEyebrowClass}>{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Second operator approval' : 'Approve requisition' : 'Receive order'}</span>
           <h3 id="purchase-order-title">{purchaseOrderDraftItem.name}</h3>
           <small>{purchaseOrderDraft.mode === 'create'
             ? `${purchaseOrderDraft.requisitionId ?? purchaseOrderDraftItem.sku} · internal record only`
@@ -7633,38 +7651,38 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         {purchaseOrderDraft.mode === 'receive' ? <div className="form-row"><label>Rejected units<input aria-describedby="stock-receipt-preview" disabled={commerceControlsDisabled} inputMode="numeric" max={Math.max(0, (purchaseOrderDraftOrder?.progress.remaining ?? 0) - (purchaseOrderQuantityResult ?? 0))} min="0" onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, rejectedQuantity: event.target.value } : current)} required step="1" type="number" value={purchaseOrderDraft.rejectedQuantity} /></label><label>Discrepancy reason<select disabled={commerceControlsDisabled || purchaseOrderRejectedResult === 0} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, discrepancyCode: event.target.value as CommercePurchaseOrderDiscrepancyCode } : current)} required={Boolean(purchaseOrderRejectedResult)} value={purchaseOrderDraft.discrepancyCode}><option value="damaged">Damaged</option><option value="wrong_item">Wrong item</option><option value="quality_failed">Quality failed</option></select></label></div> : null}
         {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Receive into<select disabled={commerceControlsDisabled || !managedInventoryProjection} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, locationId: event.target.value } : current)} required value={purchaseOrderDraft.locationId}><option value="">Choose location</option>{managedInventoryProjection?.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label> : null}
         {purchaseOrderDraft.mode === 'receive' && commerce.inventoryFoundation ? <label>Lot or batch<input autoComplete="off" disabled={commerceControlsDisabled || !managedInventoryProjection} maxLength={80} onChange={(event) => setPurchaseOrderDraft((current) => current?.mode === 'receive' ? { ...current, trackingCode: event.target.value } : current)} placeholder="Scan or enter lot" required value={purchaseOrderDraft.trackingCode} /></label> : null}
-        <div aria-live="polite" className="stock-receipt-preview" id="stock-receipt-preview"><small>{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Internal order' : 'Requisition exposure' : 'New on hand'}</small><strong>{purchaseOrderQuantityResult === null
+        <div aria-live="polite" className={stockReceiptPreviewClass} id="stock-receipt-preview"><small>{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Internal order' : 'Requisition exposure' : 'New on hand'}</small><strong>{purchaseOrderQuantityResult === null
           ? 'Enter whole units'
           : purchaseOrderDraft.mode === 'create'
             ? `${purchaseOrderQuantityResult.toLocaleString()} units${purchaseOrderDraftTotal === null ? ' · enter unit cost' : ` · ${formatMoney(purchaseOrderDraftTotal)} total`}`
             : `${purchaseOrderDraftItem.onHand.toLocaleString()} → ${(purchaseOrderDraftItem.onHand + purchaseOrderQuantityResult).toLocaleString()} accepted into stock${purchaseOrderRejectedResult ? ` · ${purchaseOrderRejectedResult.toLocaleString()} rejected / return to vendor` : ''}${purchaseReceiptLocation ? ` · ${purchaseReceiptLocation.name}` : ''}`}</strong></div>
-        <div className="form-actions"><button className="text-link danger-text" disabled={Boolean(pendingAction)} onClick={discardPurchaseOrderEditor} type="button">Discard</button><button className="core-button" disabled={Boolean(pendingAction)} onClick={closePurchaseOrderEditor} type="button">Close</button><button className="core-button primary" disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || !purchaseReceiptDiscrepancyReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null || purchaseOrderUnitCostResult === null || purchaseOrderDraftTotal === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition' : 'Review receipt'}</button></div>
+        <div className={formActionsClass}><button className="text-link danger-text" disabled={Boolean(pendingAction)} onClick={discardPurchaseOrderEditor} type="button">Discard</button><button className="core-button" disabled={Boolean(pendingAction)} onClick={closePurchaseOrderEditor} type="button">Close</button><button className={primaryButtonClass} disabled={commerceControlsDisabled || purchaseOrderQuantityResult === null || !purchaseReceiptAllocationReady || !purchaseReceiptDiscrepancyReady || (purchaseOrderDraft.mode === 'create' && (!purchaseOrderDraft.supplier.trim() || purchaseOrderExpectedAtResult === null || purchaseOrderUnitCostResult === null || purchaseOrderDraftTotal === null))} type="submit">{purchaseOrderDraft.mode === 'create' ? purchaseOrderDraft.requisitionId ? 'Review second approval' : 'Review requisition' : 'Review receipt'}</button></div>
       </form> : null}
-      {supplierReturnDraft && supplierReturnDraftRow && supplierReturnDraftReceipt ? <form aria-label="Supplier return review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierReturn}>
-        <div className="stock-receipt-copy"><span className="core-eyebrow">Rejected supplier units</span><h3>{supplierReturnDraftRow.purchaseOrder.supplier}</h3><small>{supplierReturnDraftReceipt.rejectedQuantity} rejected · {supplierReturnDraftReceipt.discrepancyCode?.replaceAll('_', ' ')} · internal claim only</small></div>
+      {supplierReturnDraft && supplierReturnDraftRow && supplierReturnDraftReceipt ? <form aria-label="Supplier return review" className={purchaseOrderEditorClass} onSubmit={reviewSupplierReturn}>
+        <div className={stockReceiptCopyClass}><span className={coreEyebrowClass}>Rejected supplier units</span><h3>{supplierReturnDraftRow.purchaseOrder.supplier}</h3><small>{supplierReturnDraftReceipt.rejectedQuantity} rejected · {supplierReturnDraftReceipt.discrepancyCode?.replaceAll('_', ' ')} · internal claim only</small></div>
         <label>Internal return reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierReturnDraft((current) => current ? { ...current, internalReturnReference: event.target.value } : current)} required value={supplierReturnDraft.internalReturnReference} /></label>
-        <div className="stock-receipt-preview"><small>Claim value</small><strong>{formatMoney((supplierReturnDraftReceipt.rejectedQuantity ?? 0) * (supplierReturnDraftRow.purchaseOrder.unitCostMmk ?? 0))}</strong><small>Not dispatched · supplier not contacted · accounting not posted</small></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierReturnDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierReturnDraftReady} type="submit">Review return claim</button></div>
+        <div className={stockReceiptPreviewClass}><small>Claim value</small><strong>{formatMoney((supplierReturnDraftReceipt.rejectedQuantity ?? 0) * (supplierReturnDraftRow.purchaseOrder.unitCostMmk ?? 0))}</strong><small>Not dispatched · supplier not contacted · accounting not posted</small></div>
+        <div className={formActionsClass}><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierReturnDraft(null)} type="button">Cancel</button><button className={primaryButtonClass} disabled={commerceControlsDisabled || !supplierReturnDraftReady} type="submit">Review return claim</button></div>
       </form> : null}
-      {supplierCreditDraft && supplierCreditDraftRow && supplierCreditDraftClaim ? <form aria-label="Supplier credit review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierCredit}>
-        <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier credit evidence</span><h3>{supplierCreditDraftRow.purchaseOrder.supplier}</h3><small>{supplierCreditDraftClaim.internalReturnReference} · {formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim))} outstanding</small></div>
+      {supplierCreditDraft && supplierCreditDraftRow && supplierCreditDraftClaim ? <form aria-label="Supplier credit review" className={purchaseOrderEditorClass} onSubmit={reviewSupplierCredit}>
+        <div className={stockReceiptCopyClass}><span className={coreEyebrowClass}>Supplier credit evidence</span><h3>{supplierCreditDraftRow.purchaseOrder.supplier}</h3><small>{supplierCreditDraftClaim.internalReturnReference} · {formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim))} outstanding</small></div>
         <label>Supplier credit reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, supplierReference: event.target.value } : current)} placeholder="Supplier credit note number" required value={supplierCreditDraft.supplierReference} /></label>
         <div className="form-row"><label>Credit issued<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierCreditDraftClaim.createdAt))} onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type="datetime-local" value={supplierCreditDraft.issuedAt} /></label><label>Amount (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" max={commerceSupplierReturnClaimBalance(supplierCreditDraftClaim)} min="1" onChange={(event) => setSupplierCreditDraft((current) => current ? { ...current, amountMmk: event.target.value } : current)} required step="1" type="number" value={supplierCreditDraft.amountMmk} /></label></div>
-        <div className="stock-receipt-preview"><small>Balance after</small><strong>{supplierCreditDraftReady ? formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim) - supplierCreditAmount) : 'Enter valid credit'}</strong><small>Evidence only · accounting not posted</small></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierCreditDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierCreditDraftReady} type="submit">Review supplier credit</button></div>
+        <div className={stockReceiptPreviewClass}><small>Balance after</small><strong>{supplierCreditDraftReady ? formatMoney(commerceSupplierReturnClaimBalance(supplierCreditDraftClaim) - supplierCreditAmount) : 'Enter valid credit'}</strong><small>Evidence only · accounting not posted</small></div>
+        <div className={formActionsClass}><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierCreditDraft(null)} type="button">Cancel</button><button className={primaryButtonClass} disabled={commerceControlsDisabled || !supplierCreditDraftReady} type="submit">Review supplier credit</button></div>
       </form> : null}
-      {supplierInvoiceDraft && supplierInvoiceDraftRow ? <form aria-label="Supplier invoice review" className="stock-receipt-editor purchase-order-editor" onSubmit={reviewSupplierInvoice}>
-        <div className="stock-receipt-copy"><span className="core-eyebrow">Supplier invoice</span><h3>{supplierInvoiceDraftRow.purchaseOrder.supplier}</h3><small>{supplierInvoiceDraftRow.purchaseOrder.id} · three-way review only</small></div>
+      {supplierInvoiceDraft && supplierInvoiceDraftRow ? <form aria-label="Supplier invoice review" className={purchaseOrderEditorClass} onSubmit={reviewSupplierInvoice}>
+        <div className={stockReceiptCopyClass}><span className={coreEyebrowClass}>Supplier invoice</span><h3>{supplierInvoiceDraftRow.purchaseOrder.supplier}</h3><small>{supplierInvoiceDraftRow.purchaseOrder.id} · three-way review only</small></div>
         <label>Invoice reference<input autoFocus disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, supplierReference: event.target.value } : current)} placeholder="Supplier invoice number" required value={supplierInvoiceDraft.supplierReference} /></label>
         <div className="form-row"><label>Invoice date<input disabled={commerceControlsDisabled} min={localDateTimeInputValue(new Date(supplierInvoiceDraftRow.purchaseOrder.createdAt))} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, issuedAt: event.target.value } : current)} required type="datetime-local" value={supplierInvoiceDraft.issuedAt} /></label><label>Due date<input disabled={commerceControlsDisabled} min={supplierInvoiceDraft.issuedAt} onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type="datetime-local" value={supplierInvoiceDraft.dueAt} /></label></div>
         <div className="form-row"><label>Invoiced units<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, quantity: event.target.value } : current)} required step="1" type="number" value={supplierInvoiceDraft.quantity} /></label><label>Unit cost (MMK)<input disabled={commerceControlsDisabled} inputMode="numeric" min="1" onChange={(event) => setSupplierInvoiceDraft((current) => current ? { ...current, unitCostMmk: event.target.value } : current)} required step="1" type="number" value={supplierInvoiceDraft.unitCostMmk} /></label></div>
-        <div className="stock-receipt-preview"><small>Invoice total</small><strong>{supplierInvoiceTotal === null ? 'Enter valid terms' : formatMoney(supplierInvoiceTotal)}</strong></div>
-        <div className="form-actions"><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierInvoiceDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={commerceControlsDisabled || !supplierInvoiceDraftReady} type="submit">Review invoice</button></div>
+        <div className={stockReceiptPreviewClass}><small>Invoice total</small><strong>{supplierInvoiceTotal === null ? 'Enter valid terms' : formatMoney(supplierInvoiceTotal)}</strong></div>
+        <div className={formActionsClass}><button className="core-button" disabled={Boolean(pendingAction)} onClick={() => setSupplierInvoiceDraft(null)} type="button">Cancel</button><button className={primaryButtonClass} disabled={commerceControlsDisabled || !supplierInvoiceDraftReady} type="submit">Review invoice</button></div>
       </form> : null}
       <details className="compact-disclosure purchase-order-history" id="purchase-orders" ref={purchaseOrderHistoryRef}>
         <summary><span>Purchase orders</span><strong>{purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received').length} active · {purchaseOrderRows.length} total</strong></summary>
         {supplierPerformance.length ? <section aria-label="Supplier performance" className="supplier-performance">
-          <div className="supplier-performance-heading"><span className="core-eyebrow">Supplier performance</span><small>Measured from Shop orders and receipts</small></div>
+          <div className="supplier-performance-heading"><span className={coreEyebrowClass}>Supplier performance</span><small>Measured from Shop orders and receipts</small></div>
           <div className="supplier-performance-grid">{supplierPerformance.map((supplier) => <article data-supplier-status={supplier.status} key={supplier.supplier}>
             <div><strong>{supplier.supplier}</strong><small>{supplier.totalOrders} order{supplier.totalOrders === 1 ? '' : 's'} · {supplier.activeOrders} active</small></div>
             <span><strong>{supplier.receivedUnits}/{supplier.orderedUnits}</strong><small>units accepted · {supplier.rejectedUnits} rejected · {supplier.openUnits} open</small></span>
@@ -7712,7 +7730,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <div className="form-row"><label>SKU<input disabled={commerceControlsDisabled} maxLength={80} onChange={(event) => setItemDraft((current) => ({ ...current, sku: event.target.value }))} placeholder="SKU-002" required value={itemDraft.sku} /></label><label>Item name<input disabled={commerceControlsDisabled} maxLength={180} onChange={(event) => setItemDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Real item name" required value={itemDraft.name} /></label></div>
           <div className="form-row"><label>Opening stock<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, onHand: event.target.value }))} required step="1" type="number" value={itemDraft.onHand} /></label><label>Reorder at<input disabled={commerceControlsDisabled} min="0" onChange={(event) => setItemDraft((current) => ({ ...current, reorderAt: event.target.value }))} required step="1" type="number" value={itemDraft.reorderAt} /></label></div>
           <label>Price (MMK)<input disabled={commerceControlsDisabled} min="1" onChange={(event) => setItemDraft((current) => ({ ...current, price: event.target.value }))} required step="1" type="number" value={itemDraft.price} /></label>
-          <div className="form-actions"><button className="core-button primary compact" disabled={commerceControlsDisabled} type="submit">Review catalog item</button></div>
+          <div className={formActionsClass}><button className={compactPrimaryButtonClass} disabled={commerceControlsDisabled} type="submit">Review catalog item</button></div>
           <p className="panel-copy">The opening balance may be zero. A named operator, reason, and evidence are required before the SKU is recorded.</p>
         </form>
       </details>
@@ -7740,7 +7758,7 @@ function ReceivablesAging({ aging, disabled, onRecordContact }: {
   ] as const
   return <details className="core-panel receivables-aging" data-overdue-orders={aging.overdueOrders}>
     <summary>
-      <span><span className="core-eyebrow">Payment follow-up</span><strong>{aging.overdueOrders ? `${aging.overdueOrders} overdue` : 'No overdue orders'}</strong></span>
+      <span><span className={coreEyebrowClass}>Payment follow-up</span><strong>{aging.overdueOrders ? `${aging.overdueOrders} overdue` : 'No overdue orders'}</strong></span>
       <small>{formatMoney(aging.overdueMmk)} overdue · {formatMoney(aging.totalOutstandingMmk)} pending</small>
     </summary>
     <div className="receivables-aging-buckets" aria-label="Receivables aging buckets">
@@ -7845,9 +7863,9 @@ function OrderList({
       </div>
       <div className="order-row-actions">
         <b>{formatMoney(order.total)}</b>
-        {reconcileIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
-        {settleRefundIsPrimary ? <button className="core-button primary compact" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
-        {canAdvance ? <button className="core-button primary compact" disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{serviceCheckout ? order.status === 'ready' ? 'Close visit' : 'Ready for payment' : nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
+        {reconcileIsPrimary ? <button className={compactPrimaryButtonClass} disabled={disabled} onClick={() => onReconcilePayment(order.id)} type="button">Reconcile payment</button> : null}
+        {settleRefundIsPrimary ? <button className={compactPrimaryButtonClass} disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
+        {canAdvance ? <button className={compactPrimaryButtonClass} disabled={disabled} onClick={() => onAdvance(order.id)} type="button">{serviceCheckout ? order.status === 'ready' ? 'Close visit' : 'Ready for payment' : nextAction[order.status as 'confirmed' | 'preparing' | 'ready']}</button> : null}
         {hasSecondaryActions ? <details className="order-row-more">
           <summary aria-label={`More options for ${order.id}`}>More</summary>
           <div>
@@ -8092,8 +8110,8 @@ function ClosedOrderHistory({
             {supportCase.reopen ? <small>Follow-up opened by {supportCase.reopen.proof.actor} · {formatTime(supportCase.reopen.proof.capturedAt)} · linked to resolution {supportCase.reopen.sourceResolutionActionId} · {supportCase.reopen.note}</small> : null}
             {supportCase.reopen && supportCase.resolution ? <small>Original resolution retained · {supportCase.resolution.outcome.replaceAll('_', ' ')} · {supportCase.resolution.note}</small> : null}
             {checkpoints.acknowledged ? <small>Acknowledged by {checkpoints.acknowledged.proof.actor} · {formatTime(checkpoints.acknowledged.proof.capturedAt)}{checkpoints.firstResponseReady ? ` · first response ready ${formatTime(checkpoints.firstResponseReady.proof.capturedAt)}` : ' · first response pending'}</small> : service ? <small>Acknowledgement pending</small> : null}
-            {serviceEvents.length ? <details className="compact-disclosure"><summary><span>Service history</span><small>{serviceEvents.length} {serviceEvents.length === 1 ? 'event' : 'events'}</small></summary><div className="boundary-list">{serviceEvents.map((serviceEvent) => <div key={serviceEvent.proof.actionId}><strong>{serviceEvent.kind.replaceAll('_', ' ')} · {serviceEvent.priority} · {serviceEvent.owner}</strong><small>{formatTime(serviceEvent.proof.capturedAt)} · due {formatTime(serviceEvent.dueAt)} · {serviceEvent.note}</small></div>)}</div></details> : null}
-            {supportCase.status === 'resolved' && finalResolution ? <><small>{finalResolution.outcome.replaceAll('_', ' ')} · {finalResolution.note} · {finalResolution.proof.actor}</small>{!supportCase.reopen ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportReopen(order.id, supportCase.caseId)} type="button">Reopen case</button> : null}</> : service ? <div className="form-actions">{!checkpoints.acknowledged ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')} type="button">Acknowledge</button> : !checkpoints.firstResponseReady ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')} type="button">Response ready</button> : <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}<button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'reassigned')} type="button">Reassign</button><button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'escalated')} type="button">Escalate</button></div> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve legacy case</button>}
+            {serviceEvents.length ? <details className={compactDisclosureClass}><summary><span>Service history</span><small>{serviceEvents.length} {serviceEvents.length === 1 ? 'event' : 'events'}</small></summary><div className="boundary-list">{serviceEvents.map((serviceEvent) => <div key={serviceEvent.proof.actionId}><strong>{serviceEvent.kind.replaceAll('_', ' ')} · {serviceEvent.priority} · {serviceEvent.owner}</strong><small>{formatTime(serviceEvent.proof.capturedAt)} · due {formatTime(serviceEvent.dueAt)} · {serviceEvent.note}</small></div>)}</div></details> : null}
+            {supportCase.status === 'resolved' && finalResolution ? <><small>{finalResolution.outcome.replaceAll('_', ' ')} · {finalResolution.note} · {finalResolution.proof.actor}</small>{!supportCase.reopen ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportReopen(order.id, supportCase.caseId)} type="button">Reopen case</button> : null}</> : service ? <div className={formActionsClass}>{!checkpoints.acknowledged ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'acknowledged')} type="button">Acknowledge</button> : !checkpoints.firstResponseReady ? <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'first_response_ready')} type="button">Response ready</button> : <button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve case</button>}<button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'reassigned')} type="button">Reassign</button><button className="text-link" disabled={disabled || Boolean(activeSupportReopen || activeSupportService || activeSupportResolution)} onClick={() => onOpenSupportService(order.id, supportCase.caseId, 'escalated')} type="button">Escalate</button></div> : <button className="text-link" disabled={disabled || Boolean(activeSupportResolution)} onClick={() => onOpenSupportResolution(order.id, supportCase.caseId)} type="button">Resolve legacy case</button>}
             <small>No external message or refund performed</small>
           </div>
         })}
@@ -8106,45 +8124,45 @@ function ClosedOrderHistory({
         </div>)}
       </div> : null}
       {activeReturnDraft && selectedLine ? <form aria-label={`Return items from ${order.id}`} className="order-return-editor" onSubmit={onReviewReturn} ref={onReturnEditor}>
-        <div className="order-return-copy"><span className="core-eyebrow">Return</span><strong>{order.id}</strong><small>{activeReturnDraft.sourceIntent ? `Prepared from customer request ${activeReturnDraft.sourceIntent.id}. Confirm what Shop actually received.` : 'Record received goods only.'} Payment and order totals do not change.</small></div>
+        <div className="order-return-copy"><span className={coreEyebrowClass}>Return</span><strong>{order.id}</strong><small>{activeReturnDraft.sourceIntent ? `Prepared from customer request ${activeReturnDraft.sourceIntent.id}. Confirm what Shop actually received.` : 'Record received goods only.'} Payment and order totals do not change.</small></div>
         <label>Item<select disabled={disabled || availableLines.length === 1} onChange={(event) => onChangeReturn({ sku: event.target.value, quantity: '1' })} value={selectedLine.sku}>{availableLines.map((line) => <option key={line.sku} value={line.sku}>{line.name} · {line.remaining} left</option>)}</select></label>
         <label>Quantity<input disabled={disabled} id="order-return-quantity" max={selectedLine.remaining} min="1" onChange={(event) => onChangeReturn({ quantity: event.target.value })} required step="1" type="number" value={activeReturnDraft.quantity} /></label>
         <label>Stock result<select disabled={disabled} onChange={(event) => onChangeReturn({ disposition: event.target.value as CommerceReturnDisposition })} value={activeReturnDraft.disposition}><option value="restock">Sellable · add to stock</option><option value="not_restocked">Not sellable · stock unchanged</option></select></label>
         {activeReturnDraft.disposition === 'restock' && returnLocationPreview ? <small role="note">Restock to {returnLocationPreview}</small> : null}
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review return</button><button className="core-button compact" disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
+        <div className={formActionsClass}><button className={compactPrimaryButtonClass} disabled={disabled} type="submit">Review return</button><button className={compactButtonClass} disabled={disabled} onClick={onCancelReturn} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportDraft ? <form aria-label={`Open support case for ${order.id}`} className="order-return-editor" onSubmit={onReviewSupportOpen}>
-        <div className="order-return-copy"><span className="core-eyebrow">Customer help</span><strong>{activeSupportDraft.intent.category.replaceAll('_', ' ')}</strong><small>{activeSupportDraft.intent.description}</small><small>Assign service responsibility before opening. This does not send a message or start a refund.</small></div>
+        <div className="order-return-copy"><span className={coreEyebrowClass}>Customer help</span><strong>{activeSupportDraft.intent.category.replaceAll('_', ' ')}</strong><small>{activeSupportDraft.intent.description}</small><small>Assign service responsibility before opening. This does not send a message or start a refund.</small></div>
         <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportOpen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportDraft.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} maxLength={120} onChange={(event) => onChangeSupportOpen({ owner: event.target.value })} required value={activeSupportDraft.owner} /></label></div>
         <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportOpen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportDraft.dueAt} /></label>
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
+        <div className={formActionsClass}><button className={compactPrimaryButtonClass} disabled={disabled} id="shop-support-open-review" type="submit">Review case opening</button><button className={compactButtonClass} disabled={disabled} onClick={onCancelSupportOpen} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportReopen ? <form aria-label={`Reopen support case ${activeSupportReopen.caseId}`} className="order-return-editor" onSubmit={onReviewSupportReopen}>
-        <div className="order-return-copy"><span className="core-eyebrow">Follow-up</span><strong>{activeSupportReopen.caseId}</strong><small>Retain resolution {activeSupportReopen.sourceResolutionActionId} and start one linked service cycle. This does not send a message or start a refund.</small></div>
+        <div className="order-return-copy"><span className={coreEyebrowClass}>Follow-up</span><strong>{activeSupportReopen.caseId}</strong><small>Retain resolution {activeSupportReopen.sourceResolutionActionId} and start one linked service cycle. This does not send a message or start a refund.</small></div>
         <div className="form-row"><label>Priority<select disabled={disabled} onChange={(event) => onChangeSupportReopen({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportReopen.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label><label>Owner<input disabled={disabled} id={`support-reopen-${activeSupportReopen.caseId}`} maxLength={120} onChange={(event) => onChangeSupportReopen({ owner: event.target.value })} required value={activeSupportReopen.owner} /></label></div>
         <label>Due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportReopen({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportReopen.dueAt} /></label>
         <label>Follow-up reason<textarea disabled={disabled} maxLength={300} onChange={(event) => onChangeSupportReopen({ note: event.target.value })} required rows={2} value={activeSupportReopen.note} /></label>
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review follow-up</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportReopen} type="button">Cancel</button></div>
+        <div className={formActionsClass}><button className={compactPrimaryButtonClass} disabled={disabled} type="submit">Review follow-up</button><button className={compactButtonClass} disabled={disabled} onClick={onCancelSupportReopen} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportService ? <form aria-label={`${commerceSupportServiceActionLabels[activeSupportService.kind]} ${activeSupportService.caseId}`} className="order-return-editor" onSubmit={onReviewSupportService}>
-        <div className="order-return-copy"><span className="core-eyebrow">{commerceSupportServiceActionLabels[activeSupportService.kind]}</span><strong>{activeSupportService.caseId}</strong><small>{activeSupportService.kind === 'reassigned' ? 'Change only the accountable owner. Priority and due time stay immutable.' : activeSupportService.kind === 'escalated' ? 'Keep the owner and raise priority or bring a future due time forward.' : activeSupportService.kind === 'acknowledged' ? 'Record that the accountable owner accepted this case internally.' : 'Record that a first response is ready for independent delivery.'} No message, refund, or payment action runs.</small></div>
+        <div className="order-return-copy"><span className={coreEyebrowClass}>{commerceSupportServiceActionLabels[activeSupportService.kind]}</span><strong>{activeSupportService.caseId}</strong><small>{activeSupportService.kind === 'reassigned' ? 'Change only the accountable owner. Priority and due time stay immutable.' : activeSupportService.kind === 'escalated' ? 'Keep the owner and raise priority or bring a future due time forward.' : activeSupportService.kind === 'acknowledged' ? 'Record that the accountable owner accepted this case internally.' : 'Record that a first response is ready for independent delivery.'} No message, refund, or payment action runs.</small></div>
         {activeSupportService.kind === 'reassigned' ? <label>New owner<input disabled={disabled} id={`support-service-${activeSupportService.caseId}`} maxLength={120} onChange={(event) => onChangeSupportService({ owner: event.target.value })} required value={activeSupportService.owner} /></label> : activeSupportService.kind === 'escalated' ? <><div className="form-row"><label>Owner<input disabled value={activeSupportService.owner} /></label><label>Priority<select disabled={disabled} id={`support-service-${activeSupportService.caseId}`} onChange={(event) => onChangeSupportService({ priority: event.target.value as CommerceSupportPriority })} value={activeSupportService.priority}><option value="urgent">Urgent</option><option value="high">High</option><option value="normal">Normal</option><option value="low">Low</option></select></label></div><label>Earlier due time<input disabled={disabled} min={localDateTimeInputValue(new Date())} onChange={(event) => onChangeSupportService({ dueAt: event.target.value })} required type="datetime-local" value={activeSupportService.dueAt} /></label></> : <small role="note">{activeSupportService.priority} priority · owner {activeSupportService.owner} · target {formatTime(new Date(activeSupportService.dueAt).toISOString())}</small>}
         <label>{activeSupportService.kind === 'first_response_ready' ? 'Response preparation note' : activeSupportService.kind === 'acknowledged' ? 'Acknowledgement note' : 'Reason'}<textarea disabled={disabled} id={activeSupportService.kind === 'acknowledged' || activeSupportService.kind === 'first_response_ready' ? `support-service-${activeSupportService.caseId}` : undefined} maxLength={300} onChange={(event) => onChangeSupportService({ note: event.target.value })} required rows={2} value={activeSupportService.note} /></label>
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review {activeSupportService.kind === 'acknowledged' ? 'acknowledgement' : activeSupportService.kind === 'first_response_ready' ? 'response readiness' : 'service change'}</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportService} type="button">Cancel</button></div>
+        <div className={formActionsClass}><button className={compactPrimaryButtonClass} disabled={disabled} type="submit">Review {activeSupportService.kind === 'acknowledged' ? 'acknowledgement' : activeSupportService.kind === 'first_response_ready' ? 'response readiness' : 'service change'}</button><button className={compactButtonClass} disabled={disabled} onClick={onCancelSupportService} type="button">Cancel</button></div>
       </form> : null}
       {activeSupportResolution ? <form aria-label={`Resolve support case ${activeSupportResolution.caseId}`} className="order-return-editor" onSubmit={onReviewSupportResolution}>
-        <div className="order-return-copy"><span className="core-eyebrow">Resolve help case</span><strong>{activeSupportResolution.caseId}</strong><small>Record the reviewed outcome only. External communication and financial action remain separate.</small></div>
+        <div className="order-return-copy"><span className={coreEyebrowClass}>Resolve help case</span><strong>{activeSupportResolution.caseId}</strong><small>Record the reviewed outcome only. External communication and financial action remain separate.</small></div>
         <label>Outcome<select disabled={disabled} onChange={(event) => onChangeSupportResolution({ outcome: event.target.value as CommerceSupportResolutionOutcome })} value={activeSupportResolution.outcome}><option value="information_provided">Information provided</option><option value="replacement_review_required">Replacement review required</option><option value="refund_review_required">Refund review required</option><option value="no_action">No action</option></select></label>
         <label>Resolution note<textarea disabled={disabled} id={`support-resolution-${activeSupportResolution.caseId}`} maxLength={300} onChange={(event) => onChangeSupportResolution({ note: event.target.value })} required rows={2} value={activeSupportResolution.note} /></label>
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled} type="submit">Review resolution</button><button className="core-button compact" disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
+        <div className={formActionsClass}><button className={compactPrimaryButtonClass} disabled={disabled} type="submit">Review resolution</button><button className={compactButtonClass} disabled={disabled} onClick={onCancelSupportResolution} type="button">Cancel</button></div>
       </form> : null}
       {activeCorrectionDraft ? <form aria-label={`Correct invoice ${order.id}`} className="order-return-editor" onSubmit={onReviewCorrection} ref={onCorrectionEditor}>
-        <div className="order-return-copy"><span className="core-eyebrow">Correction note</span><strong>{order.id}</strong><small>{activeCorrectionDraft.sourceIntent ? `Prepared from customer request ${activeCorrectionDraft.sourceIntent.id}. Recheck the calculation; request details stay locked.` : 'The original invoice stays unchanged.'} This records review evidence; it does not post externally.</small></div>
+        <div className="order-return-copy"><span className={coreEyebrowClass}>Correction note</span><strong>{order.id}</strong><small>{activeCorrectionDraft.sourceIntent ? `Prepared from customer request ${activeCorrectionDraft.sourceIntent.id}. Recheck the calculation; request details stay locked.` : 'The original invoice stays unchanged.'} This records review evidence; it does not post externally.</small></div>
         <label>Type<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ kind: event.target.value as CommerceCorrectionKind })} value={activeCorrectionDraft.kind}><option value="credit">Credit · reduce balance</option><option value="debit">Debit · increase balance</option></select></label>
         <label>Reason<select disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} onChange={(event) => onChangeCorrection({ reasonCode: event.target.value as CommerceCorrectionReasonCode })} value={activeCorrectionDraft.reasonCode}><option value="pricing_error">Pricing error</option><option value="service_recovery">Service recovery</option><option value="fee_adjustment">Fee adjustment</option><option value="other">Other</option></select></label>
         <label>Amount before tax<input disabled={disabled || Boolean(activeCorrectionDraft.sourceIntent)} id="order-correction-amount" inputMode="numeric" min="1" onChange={(event) => onChangeCorrection({ listedAmountMmk: event.target.value })} required step="1" type="number" value={activeCorrectionDraft.listedAmountMmk} /></label>
         {correctionCalculation ? <small role="note">Tax {formatMoney(correctionCalculation.taxMmk)} · note total {formatMoney(correctionCalculation.totalMmk)} · same tax snapshot as the original invoice</small> : null}
-        <div className="form-actions"><button className="core-button primary compact" disabled={disabled || !correctionCalculation} id="shop-correction-review" type="submit">Review correction</button><button className="core-button compact" disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
+        <div className={formActionsClass}><button className={compactPrimaryButtonClass} disabled={disabled || !correctionCalculation} id="shop-correction-review" type="submit">Review correction</button><button className={compactButtonClass} disabled={disabled} onClick={onCancelCorrection} type="button">Cancel</button></div>
       </form> : null}
     </article>})}</div>
     {pageCount > 1 ? <nav aria-label="Closed order pages" className="order-archive-pagination">
@@ -8160,8 +8178,8 @@ function StockMovementHistory({ actionHistory, movements }: { actionHistory: Rea
     <summary><span>Stock records</span><strong>{movements.length} movements · actions on demand</strong></summary>
     <div className="stock-record-content">
       <section aria-label="Stock movements">
-        <span className="core-eyebrow">Stock movements</span>
-        {movements.length ? <div className="action-history-list">{movements.map((movement) => <article key={movement.id}>
+        <span className={coreEyebrowClass}>Stock movements</span>
+        {movements.length ? <div className={actionHistoryListClass}>{movements.map((movement) => <article key={movement.id}>
           <div>
             <strong>{movement.kind === 'count'
               ? `count · ${movement.sku} · ${movement.expectedQuantity} → ${movement.countedQuantity} · ${movement.quantityDelta === 0 ? 'no variance' : `${movement.quantityDelta > 0 ? '+' : ''}${movement.quantityDelta}`}`
@@ -8237,7 +8255,7 @@ function ProductionEventHistory({ events }: { events: ProductionEvent[] }) {
   const visibleEvents = showAll ? events : events.slice(0, 8)
   return <details className="core-panel action-history production-event-history">
     <summary><span>Plant record</span><strong>{events.length} attributed events</strong></summary>
-    {visibleEvents.length ? <div className="action-history-list">{visibleEvents.map((event) => <article key={event.id}>
+    {visibleEvents.length ? <div className={actionHistoryListClass}>{visibleEvents.map((event) => <article key={event.id}>
       <div>
         <strong>{event.kind === 'output_recorded' ? event.outputKind === 'scrap' ? 'Scrap recorded' : 'Good output recorded' : productionEventLabels[event.kind]} - {event.summary}</strong>
         <small>{event.subjectId} - {event.actionId} - {event.actor}{event.kind === 'output_recorded' ? ` - Shift: ${event.shiftRef ?? 'Unassigned (legacy)'}` : event.kind === 'material_consumed' ? ` - Shift: ${event.shiftRef} - ${event.quantity} ${event.materialUnit} ${event.materialRef}${event.materialLot ? ` - Lot: ${event.materialLot}` : ''}` : event.kind === 'job_schedule_updated' ? productionJobPlanEventDetail(event) : event.kind === 'job_closed' ? ` - Shift: ${event.shiftRef} - ${event.remainingQuantity} not produced` : event.kind === 'maintenance_window_scheduled' ? ` - ${event.maintenanceWindowDurationMinutes} min - ${event.maintenanceWindowOrderCount} controlled orders` : event.kind === 'maintenance_started' ? ` - Owner: ${event.maintenanceOwner}` : event.kind === 'maintenance_completed' ? ` - Start action: ${event.maintenanceStartActionId}` : ''}</small>
@@ -9438,9 +9456,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   if (managedIdentity && effectiveMode !== 'managed-ready') {
     const unprovisioned = effectiveMode === 'managed-unprovisioned'
     if (unprovisioned) return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Company Plant setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
+      <div className="panel-head"><div><span className={coreEyebrowClass}>Company Plant setup</span><h2>Create the real operating plan</h2></div><span className="status-pill pending">Not provisioned</span></div>
       <p className="panel-copy">Start with one real job and one machine. No browser demo jobs, issues, equipment, or output are copied into this workspace.</p>
-      <form className="core-form compact-form" onSubmit={(formEvent) => void initializeManagedProduction(formEvent)}>
+      <form className={compactFormClass} onSubmit={(formEvent) => void initializeManagedProduction(formEvent)}>
         <div className="form-row"><label>Job ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, jobId: inputEvent.target.value }))} placeholder="JOB-001" required value={planDraft.jobId} /></label><label>Line or team<input maxLength={120} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, line: inputEvent.target.value }))} placeholder="Line 01" required value={planDraft.line} /></label></div>
         <div className="form-row"><label>Product or batch<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, product: inputEvent.target.value }))} placeholder="Product name" required value={planDraft.product} /></label><label>Target units<input min="1" onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, target: inputEvent.target.value }))} required step="1" type="number" value={planDraft.target} /></label></div>
         <div className="form-row"><label>Priority<select onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, priority: inputEvent.target.value as ProductionJobPriority }))} value={planDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, dueAt: inputEvent.target.value }))} required type="datetime-local" value={planDraft.dueAt} /></label></div>
@@ -9448,14 +9466,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <div className="form-row"><label>Machine ID<input maxLength={80} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineId: inputEvent.target.value }))} placeholder="MC-01" required value={planDraft.machineId} /></label><label>Machine name<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, machineName: inputEvent.target.value }))} placeholder="Mixer 01" required value={planDraft.machineName} /></label></div>
         <label>Opening plan reason<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, reason: inputEvent.target.value }))} placeholder="How this job and target were confirmed" required value={planDraft.reason} /></label>
         <label>Evidence reference<input maxLength={180} onChange={(inputEvent) => setPlanDraft((current) => ({ ...current, evidenceReference: inputEvent.target.value }))} placeholder="Shift plan, work order, or count sheet" required value={planDraft.evidenceReference} /></label>
-        <div className="form-actions"><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className="core-button primary" disabled={planBusy} type="submit">{planBusy ? 'Creating…' : 'Create managed plan'}</button></div>
+        <div className={formActionsClass}><Link className="text-link" to="/settings/#controls">Workspace settings</Link><button className={primaryButtonClass} disabled={planBusy} type="submit">{planBusy ? 'Creating…' : 'Create managed plan'}</button></div>
         <p className="form-notice" role="status">{planError || productionStorageError || `Signed in as ${managedIdentity.email}. The company account records this setup.`}</p>
       </form>
     </section>
     return <section className="core-panel managed-commerce-boundary">
-      <div className="panel-head"><div><span className="core-eyebrow">Company Plant</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
+      <div className="panel-head"><div><span className={coreEyebrowClass}>Company Plant</span><h2>{effectiveMode === 'managed-error' ? 'Company account unavailable' : 'Loading company account'}</h2></div><span className="status-pill bounded">{effectiveMode === 'managed-error' ? 'Blocked' : 'Checking'}</span></div>
       <p className="panel-copy">{productionStorageError || 'Plant remains read-only until the authenticated tenant state is confirmed.'}</p>
-      <div className="form-actions"><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
+      <div className={formActionsClass}><Link className="core-button" to="/settings/#controls">Open workspace settings</Link></div>
     </section>
   }
 
@@ -9473,7 +9491,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         data-state={plantOutputRecoveryReview?.ok ? 'ready' : 'conflict'}
       >
         <div className="tab-recovery-copy">
-          <span className="core-eyebrow">Unfinished output found</span>
+          <span className={coreEyebrowClass}>Unfinished output found</span>
           <h2 id="plant-output-tab-recovery-title">{plantOutputRecoveryReview?.ok ? 'Continue this output entry?' : 'This entry needs a fresh start'}</h2>
           <p>{plantOutputRecoveryReview?.ok
             ? 'Resume the exact job, quantity, result, shift, and output panel. Nothing records production automatically.'
@@ -9487,7 +9505,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </div>
         <div className="tab-recovery-actions">
           <button className="core-button secondary" onClick={discardPlantOutputRecovery} ref={plantOutputRecoveryReview?.ok ? undefined : plantOutputRecoveryActionRef} type="button">Discard</button>
-          {plantOutputRecoveryReview?.ok ? <button className="core-button primary" onClick={resumePlantOutputRecovery} ref={plantOutputRecoveryActionRef} type="button">Resume entry</button> : null}
+          {plantOutputRecoveryReview?.ok ? <button className={primaryButtonClass} onClick={resumePlantOutputRecovery} ref={plantOutputRecoveryActionRef} type="button">Resume entry</button> : null}
         </div>
         <small className="tab-recovery-boundary">No output, material use, equipment command, inventory movement, costing, accounting, message, or company write happens here. Source: Plant revision {activePlantOutputRecovery.source.productionRevision}.</small>
       </section>
@@ -10925,45 +10943,45 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
   }
   const plantToday = <section aria-labelledby="plant-today-title" className="plant-today" data-state={plantTodayState} data-step={plantTodayStep}>
-    <div className="plant-today-priority"><span className="core-eyebrow">Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><div className="plant-pack-context"><strong>{plantWorkspaceLabel}</strong><span>{plantWorkflow}. {plantWorkspaceContext}</span></div><button className="core-button primary" onClick={(event) => runPlantAutopilot(event.currentTarget)} ref={plantTodayActionRef} type="button">{plantTodayAction}</button></div>
+    <div className="plant-today-priority"><span className={coreEyebrowClass}>Start here</span><h2 id="plant-today-title">{plantTodayHeadline}</h2><p>{plantTodayReason}</p><div className="plant-pack-context"><strong>{plantWorkspaceLabel}</strong><span>{plantWorkflow}. {plantWorkspaceContext}</span></div><button className={primaryButtonClass} onClick={(event) => runPlantAutopilot(event.currentTarget)} ref={plantTodayActionRef} type="button">{plantTodayAction}</button></div>
     <div aria-label="Plant today status" className="plant-today-metrics" role="group">{plantTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}</div>
     <div className="plant-today-source" role={productionCanWrite ? 'status' : 'alert'}><span>{plantTodaySource}</span><small>{plantTodayNotice}</small></div>
   </section>
   const plantControl = <section aria-label="Plant control" className="plant-control">
-    <div><span className="core-eyebrow">Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
-    <div className="plant-control-rows">{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Plant control</span><strong>{plantControlNext}</strong><small>{plantControlBoundary}</small></div>
+    <div className={plantControlRowsClass}>{plantControlRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const mesDispatch = <section aria-label="Plant dispatch helper" className="plant-control mes-dispatch-control">
-    <div><span className="core-eyebrow">Daily dispatch</span><strong>{plantAgentJob}</strong><small>Next station, blocker, evidence, and shift route. Manager review gates Plant changes.</small></div>
-    <div className="plant-control-rows">{mesDispatchRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Daily dispatch</span><strong>{plantAgentJob}</strong><small>Next station, blocker, evidence, and shift route. Manager review gates Plant changes.</small></div>
+    <div className={plantControlRowsClass}>{mesDispatchRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantLifecycle = <section aria-label="Plant lifecycle control" className="plant-control">
-    <div><span className="core-eyebrow">Production lifecycle</span><strong>Plan to shift close</strong><small>Planning, output, quality, maintenance, trace, and shift close in one path. Manager review gates Plant writes.</small></div>
-    <div className="plant-control-rows">{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Production lifecycle</span><strong>Plan to shift close</strong><small>Planning, output, quality, maintenance, trace, and shift close in one path. Manager review gates Plant writes.</small></div>
+    <div className={plantControlRowsClass}>{plantLifecycleRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantMrp = <section aria-label="Plant material readiness" className="plant-control">
-    <div><span className="core-eyebrow">Material readiness</span><strong>{plantMrpNext}</strong><small>Check demand, BOM, supply, blockers, and trace. Cannot buy, issue, cost, move inventory, or write production.</small></div>
-    <div className="plant-control-rows">{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Material readiness</span><strong>{plantMrpNext}</strong><small>Check demand, BOM, supply, blockers, and trace. Cannot buy, issue, cost, move inventory, or write production.</small></div>
+    <div className={plantControlRowsClass}>{plantMrpRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantCostReadiness = <section aria-label="Plant cost readiness" className="plant-control">
-    <div><span className="core-eyebrow">Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check output, waste, trace, quality, maintenance, and shift close. Cannot cost, post, value stock, run payroll, invoice, or write production.</small></div>
-    <div className="plant-control-rows">{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Cost readiness</span><strong>{plantCostReadinessNext}</strong><small>Check output, waste, trace, quality, maintenance, and shift close. Cannot cost, post, value stock, run payroll, invoice, or write production.</small></div>
+    <div className={plantControlRowsClass}>{plantCostReadinessRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantCostPacket = <section aria-label="Plant cost review file" className="plant-control">
-    <div><span className="core-eyebrow">Cost review file</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>Packages Plant evidence. Cannot update costs, inventory, journals, payroll, invoices, certificates, or production.</small></div>
-    <div className="plant-control-rows">{plantCostPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Cost review file</span><strong>{plantCostPacketReady ? 'Ready for cost review' : plantCostReadinessNext}</strong><small>Packages Plant evidence. Cannot update costs, inventory, journals, payroll, invoices, certificates, or production.</small></div>
+    <div className={plantControlRowsClass}>{plantCostPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantQualityRelease = <section aria-label="Plant quality release" className="plant-control">
-    <div><span className="core-eyebrow">Quality release</span><strong>{plantQualityReleaseNext}</strong><small>Check holds, maintenance, trace, shift close, and manager evidence. Cannot release, certify, command equipment, issue material, cost, move stock, or write production.</small></div>
-    <div className="plant-control-rows">{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Quality release</span><strong>{plantQualityReleaseNext}</strong><small>Check holds, maintenance, trace, shift close, and manager evidence. Cannot release, certify, command equipment, issue material, cost, move stock, or write production.</small></div>
+    <div className={plantControlRowsClass}>{plantQualityReleaseRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantInspectionControl = <section aria-label="Plant inspection and CAPA" className="plant-control">
-    <div><span className="core-eyebrow">Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>Sampling, containment, corrective action, evidence, and release in one queue. Cannot close CAPA, certify, contact customers, block stock, cost, or write production.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
-    <div className="plant-control-rows">{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Inspection + CAPA</span><strong>{plantInspectionNext}</strong><small>Sampling, containment, corrective action, evidence, and release in one queue. Cannot close CAPA, certify, contact customers, block stock, cost, or write production.</small>{tab === 'control' ? <button className="text-link" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={startInspectionNcr} type="button">Start inspection NCR</button> : <Link className="text-link" to="/plant/?tab=control">Open inspection queue</Link>}</div>
+    <div className={plantControlRowsClass}>{plantInspectionRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantComplianceDossier = <section aria-label="Plant compliance dossier" className="plant-control plant-compliance-dossier">
-    <div><span className="core-eyebrow">Compliance file</span><strong>{plantComplianceDossierNext}</strong><small>Packages release, maintenance, trace, output, shift, and cost evidence for audit. Cannot certify, release quality, value stock, command equipment, contact customers, or write production.</small></div>
-    <div className="plant-control-rows">{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
+    <div><span className={coreEyebrowClass}>Compliance file</span><strong>{plantComplianceDossierNext}</strong><small>Packages release, maintenance, trace, output, shift, and cost evidence for audit. Cannot certify, release quality, value stock, command equipment, contact customers, or write production.</small></div>
+    <div className={plantControlRowsClass}>{plantComplianceDossierRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
   const plantJobImportReady = plantJobImportReview?.readyJobs.filter((draft) => !production.jobs.some((job) => job.id === draft.id)) ?? []
   const plantJobImportSummary = plantJobImportReview
@@ -10991,26 +11009,26 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     {plantToday}
     <div className="split-workspace production-view">
       <section className="core-panel job-panel">
-        <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
+        <div className="panel-head"><div><span className={coreEyebrowClass}>Plant plan</span><h2>Jobs to finish</h2></div><span className="panel-note">{activeJobs.length} active · {completedJobs.length} finished</span></div>
         <JobList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={activeJobs} now={issueClock} onOutput={openJobOutput} onSchedule={openJobSchedule} progressById={jobProgressById} />
         {closedScheduleDraft ? <div className="order-draft-recovery plant-plan-recovery" data-plant-job-plan-recovery role="status">
           <div><strong>{closedScheduleDraft.draft.jobId} plan draft is still available</strong><small>{closedScheduleDraft.draft.owner.trim() || 'Owner blank'} · {productionJobPriorityLabels[closedScheduleDraft.draft.priority]} · due {closedScheduleDraft.draft.dueAt || 'blank'}. Restore once or discard; no schedule, dispatch, or production write occurred.</small></div>
-          <div className="order-draft-recovery-actions"><button className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={undoClosedJobSchedule} ref={scheduleDraftRecoveryRef} type="button">Undo close</button><button className="text-link" onClick={discardClosedJobSchedule} type="button">Discard</button></div>
+          <div className={orderDraftRecoveryActionsClass}><button className={compactPrimaryButtonClass} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={undoClosedJobSchedule} ref={scheduleDraftRecoveryRef} type="button">Undo close</button><button className="text-link" onClick={discardClosedJobSchedule} type="button">Discard</button></div>
         </div> : null}
-        {nextShopDemand ? <section aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'} className="stock-receipt-preview" data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'} data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>{nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'} · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} units</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} demand · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} gap · {nextShopDemand.sourceOrderIds.length} orders</span>{nextShopDemand.existingActiveJobIds.length ? <button className="core-button compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className="core-button primary compact" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? nextShopDemand.sourceOrderIds.length ? 'Shop demand selected' : 'Replenishment selected' : nextShopDemand.sourceOrderIds.length ? 'Use Shop demand' : 'Plan replenishment'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
+        {nextShopDemand ? <section aria-label={nextShopDemand.sourceOrderIds.length ? 'Shop demand to Plant' : 'Stock replenishment to Plant'} className={stockReceiptPreviewClass} data-demand-kind={nextShopDemand.sourceOrderIds.length ? 'orders' : 'replenishment'} data-selected={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? 'true' : 'false'}><small>{nextShopDemand.sourceOrderIds.length ? 'Shop demand' : 'Stock replenishment'} · {nextShopDemand.operatingContext.operatingUnitLocationId}</small><strong>{nextShopDemand.productName} · {nextShopDemand.recommendedBatchUnits.toLocaleString()} units</strong><span>{nextShopDemand.activeDemandUnits.toLocaleString()} demand · {nextShopDemand.availableToPromiseUnits.toLocaleString()} available · {nextShopDemand.replenishmentGapUnits.toLocaleString()} gap · {nextShopDemand.sourceOrderIds.length} orders</span>{nextShopDemand.existingActiveJobIds.length ? <button className={compactButtonClass} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">Open {nextShopDemand.existingActiveJobIds[0]}</button> : <button aria-pressed={selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest} className={compactPrimaryButtonClass} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => selectShopDemand(nextShopDemand)} type="button">{selectedShopDemand?.sourceDigest === nextShopDemand.sourceDigest ? nextShopDemand.sourceOrderIds.length ? 'Shop demand selected' : 'Replenishment selected' : nextShopDemand.sourceOrderIds.length ? 'Use Shop demand' : 'Plan replenishment'}</button>}</section> : shopDemandIssue ? <p className="form-notice" role="alert">{shopDemandIssue}</p> : null}
         <CompletedJobHistory jobs={completedJobs} now={issueClock} progressById={jobProgressById} />
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
           <section aria-label="Plant job CSV import" className="plant-job-import">
-            <div><span className="core-eyebrow">Job CSV import</span><strong>Prepare job list</strong><small>Download, edit, upload. Local review; no jobs created.</small><button className="text-link" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Or try a sample</button></div>
+            <div><span className={coreEyebrowClass}>Job CSV import</span><strong>Prepare job list</strong><small>Download, edit, upload. Local review; no jobs created.</small><button className="text-link" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Or try a sample</button></div>
             <div className="plant-job-import-actions">
-              <a className="core-button primary" download="supermega-plant-job-template.csv" href={`data:text/csv;charset=utf-8,%EF%BB%BF${encodeURIComponent(buildPlantJobImportTemplateCsv())}`}>Download template</a>
+              <a className={primaryButtonClass} download="supermega-plant-job-template.csv" href={`data:text/csv;charset=utf-8,%EF%BB%BF${encodeURIComponent(buildPlantJobImportTemplateCsv())}`}>Download template</a>
               <label className="plant-job-import-upload">Upload completed CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
-              {plantJobImportReview ? <><div className={`plant-job-import-review ${plantJobImportReview.blockedRows ? 'blocked' : 'ready'}`} role="status"><strong>{plantJobImportReview.blockedRows ? plantJobImportReady.length ? 'Review jobs + fixes' : 'Repair blocked rows' : plantJobImportReady.length ? 'Ready for review' : 'Import reviewed'}</strong><span>{plantJobImportSummary}</span><small>{plantJobImportReady.length} ready / {plantJobImportReview.blockedRows} blocked / review only</small></div>{plantJobImportReview.readyRows > 1 && plantJobImportReady.length ? <label className="core-form"><small>Ready job</small><select aria-label="Ready imported job" disabled={Boolean(pendingAction)} onChange={(event) => { const draft = plantJobImportReady.find((candidate) => candidate.id === event.target.value); if (draft) loadPlantJobImportDraft(draft) }} value={plantJobImportReady.some((draft) => draft.id === jobDraft.id) ? jobDraft.id : ''}><option value="">Choose ready job</option>{plantJobImportReady.map((draft) => <option key={draft.id} value={draft.id}>{draft.id} · {draft.product}</option>)}</select></label> : null}{plantJobImportReview.issues.length ? <details className="compact-disclosure"><summary>Fix {plantJobImportReview.issues.length} blocked rows</summary><div aria-label="Blocked imported jobs" className="plant-job-import-repair" role="list">{plantJobImportReview.issues.map((issue) => <span key={issue.row} role="listitem"><small>Row {issue.row} · {issue.id || 'No ID'}</small><strong>{issue.reasons.join(' · ')}</strong></span>)}</div></details> : null}</> : null}
+              {plantJobImportReview ? <><div className={`plant-job-import-review ${plantJobImportReview.blockedRows ? 'blocked' : 'ready'}`} role="status"><strong>{plantJobImportReview.blockedRows ? plantJobImportReady.length ? 'Review jobs + fixes' : 'Repair blocked rows' : plantJobImportReady.length ? 'Ready for review' : 'Import reviewed'}</strong><span>{plantJobImportSummary}</span><small>{plantJobImportReady.length} ready / {plantJobImportReview.blockedRows} blocked / review only</small></div>{plantJobImportReview.readyRows > 1 && plantJobImportReady.length ? <label className="core-form"><small>Ready job</small><select aria-label="Ready imported job" disabled={Boolean(pendingAction)} onChange={(event) => { const draft = plantJobImportReady.find((candidate) => candidate.id === event.target.value); if (draft) loadPlantJobImportDraft(draft) }} value={plantJobImportReady.some((draft) => draft.id === jobDraft.id) ? jobDraft.id : ''}><option value="">Choose ready job</option>{plantJobImportReady.map((draft) => <option key={draft.id} value={draft.id}>{draft.id} · {draft.product}</option>)}</select></label> : null}{plantJobImportReview.issues.length ? <details className={compactDisclosureClass}><summary>Fix {plantJobImportReview.issues.length} blocked rows</summary><div aria-label="Blocked imported jobs" className="plant-job-import-repair" role="list">{plantJobImportReview.issues.map((issue) => <span key={issue.row} role="listitem"><small>Row {issue.row} · {issue.id || 'No ID'}</small><strong>{issue.reasons.join(' · ')}</strong></span>)}</div></details> : null}</> : null}
               {plantJobImportSourceName ? <p className="plant-job-import-source">File: {plantJobImportSourceName}</p> : null}
             </div>
           </section>
-          <form className="core-form compact-form" onSubmit={createJob}>
+          <form className={compactFormClass} onSubmit={createJob}>
             <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" ref={plantJobIdInputRef} required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
             <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
             <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setJobDraft((current) => ({ ...current, priority: event.target.value as ProductionJobPriority }))} value={jobDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setJobDraft((current) => ({ ...current, dueAt: event.target.value }))} required type="datetime-local" value={jobDraft.dueAt} /></label></div>
@@ -11023,23 +11041,23 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </section>
       <button aria-label="Close job output" className={`plant-output-backdrop${outputOpen ? ' is-open' : ''}`} onClick={closeJobOutput} type="button" />
       <section aria-labelledby="plant-output-title" aria-modal={outputOpen} className={`core-panel output-panel${outputOpen ? ' is-open' : ''}`} id="plant-output-panel" onKeyDown={handleOutputDialogKeyDown} ref={outputPanelRef} role="dialog">
-        <div className="plant-output-head"><div><span className="core-eyebrow">{materialGuideOpen ? 'Materials used' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Record materials used' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
-        {outputOpen && !materialGuideOpen ? <form autoComplete="off" className="core-form compact-form" id="plant-output-form" noValidate onSubmit={recordOutput}>
+        <div className="plant-output-head"><div><span className={coreEyebrowClass}>{materialGuideOpen ? 'Materials used' : 'Job output'}</span><h2 id="plant-output-title">{materialGuideOpen ? 'Record materials used' : 'Record good or scrap'}</h2></div><button aria-label="Close Plant action" className="plant-output-close" onClick={closeJobOutput} type="button">Close</button></div>
+        {outputOpen && !materialGuideOpen ? <form autoComplete="off" className={compactFormClass} id="plant-output-form" noValidate onSubmit={recordOutput}>
           <label>Job<select aria-invalid={outputValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !manualEntryJobs.length} ref={outputJobSelectRef} value={selectedJobId} onChange={(event) => { setJobId(event.target.value); setPlantOutputRecoveryArmed(true); clearOutputValidation() }}>{manualEntryJobs.length ? manualEntryJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line} · {(jobProgressById.get(job.id)?.remainingQuantity ?? 0).toLocaleString()} left{job.qualityHold ? ' · QUALITY HOLD' : ''}</option>) : <option value="">No manual-entry jobs</option>}</select></label>
           <label>Result<select disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} value={outputKind} onChange={(event) => { setOutputKind(event.target.value as ProductionOutputKind); setPlantOutputRecoveryArmed(true) }}><option value="good">Good output</option><option value="scrap">Scrap</option></select></label>
           <div className="form-row"><label>Shift reference<input aria-describedby="plant-output-validation" aria-invalid={outputValidationField === 'shift'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} maxLength={80} name="plant-output-shift-reference" placeholder={`e.g. ${shiftReferencePlaceholder()}`} ref={outputShiftInputRef} required value={shiftRef} onChange={(event) => { setShiftRef(event.target.value); setPlantOutputRecoveryArmed(true); if (outputValidationField === 'shift') clearOutputValidation() }} /></label><label>{outputKind === 'scrap' ? 'Scrap units' : 'Good units'}<input aria-describedby="plant-output-quantity-help plant-output-validation" aria-invalid={outputValidationField === 'quantity'} autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob} max={selectedRemaining} min="1" name="plant-output-quantity" ref={outputQuantityRef} step="1" type="number" value={quantity} onChange={(event) => { setQuantity(Number(event.target.value)); setPlantOutputRecoveryArmed(true); if (outputValidationField === 'quantity') clearOutputValidation() }} /><small className="plant-output-boundary" id="plant-output-quantity-help">{selectedJob ? `Enter 1 to ${selectedRemaining.toLocaleString()} whole units. Review does not record output.` : 'Choose an active job first.'}</small></label></div>
           <p aria-live="assertive" className="form-notice plant-output-validation" id="plant-output-validation">{outputValidationIssue}</p>
           {selectedJob?.qualityHold ? <p className="form-notice" role="alert">QUALITY HOLD · Held by {selectedJob.qualityHold.heldBy}. Recording a result does not release this hold; verify the hold and evidence before review.</p> : null}
           <p className="form-notice" role="status">{canonicalShiftRef && canonicalShiftRef.length <= 80 ? `This shift: ${currentShiftOutput.goodUnits.toLocaleString()} good · ${currentShiftOutput.scrapUnits.toLocaleString()} scrap across ${currentShiftOutput.entryCount} ${currentShiftOutput.entryCount === 1 ? 'entry' : 'entries'}.` : 'Enter the shift name or date to continue.'}</p>
-          <div className="form-actions">
-            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
+          <div className={formActionsClass}>
+            <button className={primaryButtonClass} disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1} type="submit">Review {outputKind === 'scrap' ? 'scrap' : 'good output'}</button>
             <button aria-describedby="plant-short-close-boundary" className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedJob || selectedRemaining < 1 || !canonicalShiftRef || canonicalShiftRef.length > 80} onClick={(event) => closeSelectedJobShort(event.currentTarget)} type="button">Review short close</button>
           </div>
           <p className="panel-copy" id="plant-short-close-boundary">{selectedJob ? `${selectedJob.id} · ${selectedJob.product} · ${selectedJob.line} · ${selectedJob.output.toLocaleString()} good · ${(selectedJob.scrap ?? 0).toLocaleString()} scrap · ${selectedRemaining.toLocaleString()} left.` : 'Add or choose an active job.'} Results are append-only. Short close ends the selected job without changing its target, output, hold, inventory, costing, or accounting.</p>
         </form> : null}
-        <details className="compact-disclosure production-history" onToggle={(event) => setMaterialGuideOpen(event.currentTarget.open)} open={materialGuideOpen} ref={materialDisclosureRef}>
+        <details className={productionHistoryClass} onToggle={(event) => setMaterialGuideOpen(event.currentTarget.open)} open={materialGuideOpen} ref={materialDisclosureRef}>
           <summary>Materials used <span>{materialEntries.length}</span></summary>
-          <form autoComplete="off" className="core-form compact-form" noValidate onSubmit={recordMaterialUse}>
+          <form autoComplete="off" className={compactFormClass} noValidate onSubmit={recordMaterialUse}>
             <label>Job<select aria-describedby={materialValidationIssue ? 'plant-material-validation' : undefined} aria-invalid={materialValidationField === 'job'} disabled={!productionCanWrite || Boolean(pendingAction) || !manualEntryJobs.length} onChange={(event) => { setMaterialDraft((current) => ({ ...current, jobId: event.target.value })); clearMaterialValidation('job') }} ref={materialJobSelectRef} value={materialDraft.jobId}>
               {!materialDraft.jobId ? <option value="">Choose an active job</option> : null}
               {materialJobIsStale ? <option disabled value={materialDraft.jobId}>{materialDraft.jobId} · no longer active</option> : null}
@@ -11062,7 +11080,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               setMaterialDraft((current) => ({ ...current, materialRef: 'RM-SAMPLE-01', materialLot: 'LOT-SAMPLE-01', quantity: '1', materialUnit: 'pcs' }))
               setNotice('Sample material details filled locally. Review and confirm them before any Plant record changes.')
             }} type="button">Use sample material</button> : null}
-            <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !manualEntryJobs.length} type="submit">Review material record</button>
+            <button className={primaryButtonClass} disabled={!productionCanWrite || Boolean(pendingAction) || !manualEntryJobs.length} type="submit">Review material record</button>
             <p className="panel-copy">Records one material and quantity against this job. Stock, purchasing, costing, accounting, and equipment stay unchanged.</p>
           </form>
           {recentMaterialEntries.length ? <div className="issue-list">{recentMaterialEntries.map((entry) => <article key={entry.actionId}>
@@ -11080,15 +11098,15 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       </div>
     </details>
     {plantBusinessControls}
-    <dialog aria-labelledby="job-schedule-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeJobSchedule('recover') }} ref={scheduleDialogRef}>
+    <dialog aria-labelledby="job-schedule-title" className={productionIssueDialogClass} onCancel={(event) => { event.preventDefault(); closeJobSchedule('recover') }} ref={scheduleDialogRef}>
       {scheduleDraft ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={() => closeJobSchedule('recover')} type="button">Close</button></div>
+        <div className="panel-head"><div><span className={coreEyebrowClass}>Plant plan</span><h2 id="job-schedule-title">Change {scheduleDraft.jobId} plan</h2></div><button aria-label="Close job schedule" className="text-link" onClick={() => closeJobSchedule('recover')} type="button">Close</button></div>
         <form autoComplete="off" className="core-form" onSubmit={reviewJobSchedule}>
           <div className="form-row"><label>Priority<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setScheduleDraft((current) => current ? { ...current, priority: event.target.value as ProductionJobPriority } : current)} value={scheduleDraft.priority}>{productionJobPriorities.map((priority) => <option key={priority} value={priority}>{productionJobPriorityLabels[priority]}</option>)}</select></label><label>Due time<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} min={localDateTimeInputValue(new Date())} onChange={(event) => setScheduleDraft((current) => current ? { ...current, dueAt: event.target.value } : current)} required type="datetime-local" value={scheduleDraft.dueAt} /></label></div>
           <label>Responsible owner<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setScheduleDraft((current) => current ? { ...current, owner: event.target.value } : current)} placeholder="Named person or role" required value={scheduleDraft.owner} /></label>
           <p className="panel-copy">This records responsibility and run order only. It grants no access, assigns no machine, and dispatches no work. Target, output, quality hold, materials, and accounting stay unchanged.</p>
           <p className="panel-copy">Nothing changes until the accountable operator confirms a reason and evidence.</p>
-          <div className="form-actions"><button className="core-button" onClick={() => closeJobSchedule('discard')} type="button">Cancel</button><button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review plan</button></div>
+          <div className={formActionsClass}><button className="core-button" onClick={() => closeJobSchedule('discard')} type="button">Cancel</button><button className={primaryButtonClass} disabled={!productionCanWrite || Boolean(pendingAction)} type="submit">Review plan</button></div>
         </form>
       </> : null}
     </dialog>
@@ -11101,22 +11119,22 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     <div className="control-workspace">
       <div className="split-workspace">
         <section className="core-panel production-issue-launcher">
-          <div className="panel-head"><div><span className="core-eyebrow">Shift review</span><h2>Open problems</h2></div><span className="panel-note">{urgentIssueCount ? `${urgentIssueCount} urgent · ` : ''}{openIssues.length} open</span></div>
+          <div className="panel-head"><div><span className={coreEyebrowClass}>Shift review</span><h2>Open problems</h2></div><span className="panel-note">{urgentIssueCount ? `${urgentIssueCount} urgent · ` : ''}{openIssues.length} open</span></div>
           <IssueList disabled={!productionCanWrite || Boolean(pendingAction)} issues={openIssues} now={issueClock} onResolve={resolveIssue} />
           <ResolvedIssueHistory disabled={!productionCanWrite || Boolean(pendingAction)} issues={resolvedIssues} now={issueClock} onReviewEffectiveness={startQualityEffectivenessReview} trend={qualityCapaTrend} />
-          <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={openManualIssueDialog} ref={issueTriggerRef} type="button">Record problem</button>
-          <details className="compact-disclosure production-history" open={heldJobs.length ? true : undefined}>
+          <button className={primaryButtonClass} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={openManualIssueDialog} ref={issueTriggerRef} type="button">Record problem</button>
+          <details className={productionHistoryClass} open={heldJobs.length ? true : undefined}>
             <summary>Quality holds <span>{heldJobs.length}</span></summary>
             <QualityHoldList disabled={!productionCanWrite || Boolean(pendingAction)} jobs={heldJobs} onRelease={releaseQualityHold} />
-            {holdableJobs.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={placeQualityHold}>
+            {holdableJobs.length ? <form autoComplete="off" className={compactFormClass} onSubmit={placeQualityHold}>
               <label>Job or batch<select disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setHoldJobId(event.target.value)} value={selectedHoldJobId}>{holdableJobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product} · {job.line}</option>)}</select></label>
               <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedHoldJob} type="submit">Review hold</button>
               <p className="panel-copy">Review records owner and evidence; no output or equipment change.</p>
             </form> : <p className="panel-copy">Every recorded job is currently held. Release one with evidence before placing another hold.</p>}
           </details>
-          <details className="compact-disclosure production-history" data-plant-genealogy="versioned">
+          <details className={productionHistoryClass} data-plant-genealogy="versioned">
             <summary>Batch trace <span>{batchGenealogyDownload ? 'Ready' : 'None'}</span></summary>
-            {production.jobs.length ? <div className="core-form compact-form">
+            {production.jobs.length ? <div className={compactFormClass}>
               <label>Job or batch<select onChange={(event) => setGenealogyJobId(event.target.value)} value={selectedGenealogyJobId}>{production.jobs.map((job) => <option key={job.id} value={job.id}>{job.id} · {job.product}</option>)}</select></label>
               {batchGenealogyDownload ? <>
                 <p className="panel-copy"><strong>{batchGenealogyDownload.report.job.product}</strong> · {batchGenealogyDownload.report.job.goodUnits.toLocaleString()} good · {batchGenealogyDownload.report.job.scrapUnits.toLocaleString()} scrap · {batchGenealogyDownload.report.materialEntries.length} material records · {batchGenealogyDownload.report.qualityEvents.length} quality events.</p>
@@ -11124,11 +11142,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 <a className="core-button" download={batchGenealogyDownload.filename} href={batchGenealogyDownload.href}>Download batch genealogy</a>
                 <p className="panel-copy">Read-only evidence. No inventory, equipment, costing, certificate, or external action.</p>
               </> : null}
-              <form className="core-form compact-form" onSubmit={(event) => { event.preventDefault(); setRecallSearchId(recallQuery.trim()) }}>
+              <form className={compactFormClass} onSubmit={(event) => { event.preventDefault(); setRecallSearchId(recallQuery.trim()) }}>
                 <label>Recall lot or output batch<input autoCapitalize="characters" maxLength={120} onChange={(event) => { setRecallQuery(event.target.value); setRecallSearchId('') }} placeholder="LOT-INPUT-001 or BATCH-OUTPUT-001" required spellCheck={false} value={recallQuery} /></label>
                 <button className="core-button" type="submit">Trace batch</button>
               </form>
-              {recallTraceDownload ? <div className="stock-receipt-preview" role="status">
+              {recallTraceDownload ? <div className={stockReceiptPreviewClass} role="status">
                 <small>{recallTraceDownload.report.completeness.status === 'complete' ? 'Exact retained trace' : 'Partial trace · review gaps'}</small>
                 <strong>{recallTraceDownload.report.match.directJobIds.length} direct {recallTraceDownload.report.match.directJobIds.length === 1 ? 'job' : 'jobs'} · {recallTraceDownload.report.downstream.outputBatchIds.length} downstream {recallTraceDownload.report.downstream.outputBatchIds.length === 1 ? 'batch' : 'batches'} · {recallTraceDownload.report.upstream.inputLotIds.length} upstream {recallTraceDownload.report.upstream.inputLotIds.length === 1 ? 'lot' : 'lots'}</strong>
                 <span>{recallTraceDownload.report.completeness.reason}</span>
@@ -11137,9 +11155,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
               <p className="panel-copy">Read-only recall trace. No inventory block, contact, certificate, payment, or external action.</p>
             </div> : <p className="panel-copy">Add a job before building a batch trace.</p>}
           </details>
-          <details className="compact-disclosure production-history" onToggle={(event) => { if (!event.currentTarget.open && shiftCloseGuideOpen) setShiftCloseGuideOpen(false) }} open={shiftCloseGuideOpen || Boolean(shiftHandoff || currentShiftClose)} ref={shiftCloseDisclosureRef}>
+          <details className={productionHistoryClass} onToggle={(event) => { if (!event.currentTarget.open && shiftCloseGuideOpen) setShiftCloseGuideOpen(false) }} open={shiftCloseGuideOpen || Boolean(shiftHandoff || currentShiftClose)} ref={shiftCloseDisclosureRef}>
             <summary>Release / shift close <span>{controlledCompletionReplacesShiftClose ? 'Batch released' : currentShiftClose ? 'Closed' : shiftHandoffIsCurrent ? shiftCloseReady ? 'Ready' : 'Blocked' : 'Build'}</span></summary>
-            {controlledCompletionReplacesShiftClose ? <div className="stock-receipt-preview" data-controlled-completion="current" role="status"><small>Controlled-only completion</small><strong>{controlledProductionEvidence.releasedOrderCount} {controlledProductionEvidence.releasedOrderCount === 1 ? 'batch' : 'batches'} released · {controlledProductionEvidence.acceptedQuantity.toLocaleString()} accepted</strong><span>{controlledProductionEvidence.materialTraceCount} linked material {controlledProductionEvidence.materialTraceCount === 1 ? 'lot' : 'lots'}. Human batch release is the completion gate; do not record duplicate shift output or material use. Shift close remains available when manual shift entries exist.</span></div> : <form autoComplete="off" className="core-form compact-form" onSubmit={buildShiftHandoff}>
+            {controlledCompletionReplacesShiftClose ? <div className={stockReceiptPreviewClass} data-controlled-completion="current" role="status"><small>Controlled-only completion</small><strong>{controlledProductionEvidence.releasedOrderCount} {controlledProductionEvidence.releasedOrderCount === 1 ? 'batch' : 'batches'} released · {controlledProductionEvidence.acceptedQuantity.toLocaleString()} accepted</strong><span>{controlledProductionEvidence.materialTraceCount} linked material {controlledProductionEvidence.materialTraceCount === 1 ? 'lot' : 'lots'}. Human batch release is the completion gate; do not record duplicate shift output or material use. Shift close remains available when manual shift entries exist.</span></div> : <form autoComplete="off" className={compactFormClass} onSubmit={buildShiftHandoff}>
               <label>Shift reference<input maxLength={80} onChange={(event) => setHandoffShiftRef(event.target.value)} placeholder={shiftReferencePlaceholder()} ref={shiftCloseInputRef} required value={handoffShiftRef} /></label>
               <button className="core-button" disabled={!handoffShiftRef.trim() && !shiftRef.trim()} type="submit">Prepare shift close file</button>
               <p className="panel-copy">No change yet. Close needs owner, reason, and evidence.</p>
@@ -11148,12 +11166,12 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             {currentShiftClose ? <div className="form-notice" role="status"><strong>Shift closed by {currentShiftClose.actor}</strong><br />{currentShiftClose.shiftRef} | revision {currentShiftClose.sourceRevision} | {currentShiftClose.goodUnits} good | {currentShiftClose.materialEntryCount} material entries | {currentShiftCloseEvidence?.handoff.controlledOrders.length ?? 0} controlled orders | quality clear | WCM clear<br />Evidence: {currentShiftClose.evidenceReference}</div> : null}
             {shiftHandoff && !shiftHandoffIsCurrent && !currentShiftClose ? <p className="form-notice" role="alert">Plant records or the shift reference changed after this close file was prepared. Prepare it again before use.</p> : null}
             {currentShiftCloseEvidence ? <ShiftHandoffView handoff={currentShiftCloseEvidence.handoff} onCopy={copyClosedShiftHandoff} /> : shiftHandoff && shiftHandoffIsCurrent ? <ShiftHandoffView handoff={shiftHandoff} onCopy={copyShiftHandoff} /> : null}
-            {!currentShiftClose && shiftHandoff && shiftHandoffIsCurrent ? <button className="core-button primary" disabled={!productionCanWrite || Boolean(pendingAction) || !shiftCloseReady} onClick={(event) => reviewShiftClose(event.currentTarget)} type="button">Review shift close</button> : null}
+            {!currentShiftClose && shiftHandoff && shiftHandoffIsCurrent ? <button className={primaryButtonClass} disabled={!productionCanWrite || Boolean(pendingAction) || !shiftCloseReady} onClick={(event) => reviewShiftClose(event.currentTarget)} type="button">Review shift close</button> : null}
             {!currentShiftClose && shiftHandoff && shiftHandoffIsCurrent && !shiftCloseReady ? <p className="panel-copy">Close needs output, materials, safe orders, quality, and maintenance.</p> : null}
           </details>
         </section>
         <section className="core-panel" style={{ overflowY: 'auto' }}>
-          <div className="panel-head"><div><span className="core-eyebrow">Equipment</span><h2>Recorded status</h2></div></div>
+          <div className="panel-head"><div><span className={coreEyebrowClass}>Equipment</span><h2>Recorded status</h2></div></div>
           <p className="panel-copy production-control-boundary" style={{ fontSize: 11, lineHeight: 1.35, marginTop: 6 }}>Records operator observations only. No equipment control.</p>
           <button aria-label={`Review downtime records; ${openDowntimeIntervals.length} open`} className="core-button" onClick={() => setDowntimeDialogOpen(true)} ref={downtimeTriggerRef} style={{ justifyContent: 'space-between', margin: '8px 0', width: '100%' }} type="button"><span>Downtime</span><small>{openDowntimeIntervals.length ? `${openDowntimeIntervals.length} open` : `${recentDowntimeIntervals.length} recent`}</small></button>
           <button aria-label={`Review maintenance work; ${maintenanceButtonStatus}`} className="core-button" onClick={() => setMaintenanceDialogOpen(true)} ref={maintenanceTriggerRef} style={{ justifyContent: 'space-between', margin: '0 0 8px', width: '100%' }} type="button"><span>Maintenance</span><small>{maintenanceButtonStatus}</small></button>
@@ -11161,25 +11179,25 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         </section>
       </div>
     </div>
-    <dialog aria-labelledby="downtime-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeDowntimeDialog() }} ref={downtimeDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Equipment record</span><h2 id="downtime-dialog-title">Machine downtime</h2></div><button aria-label="Close downtime records" className="text-link" onClick={closeDowntimeDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
+    <dialog aria-labelledby="downtime-dialog-title" className={productionIssueDialogClass} onCancel={(event) => { event.preventDefault(); closeDowntimeDialog() }} ref={downtimeDialogRef}>
+      <div className="panel-head"><div><span className={coreEyebrowClass}>Equipment record</span><h2 id="downtime-dialog-title">Machine downtime</h2></div><button aria-label="Close downtime records" className="text-link" onClick={closeDowntimeDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
       {openDowntimeIntervals.length ? <div className="issue-list">{openDowntimeIntervals.map((interval, index) => <article key={interval.startActionId}>
         <span aria-hidden="true" className="issue-mark">DT</span>
         <div><strong>{interval.machineName} · downtime open</strong><small style={wrappedIssueDetail}>Started {formatTime(interval.startedAt)} by {interval.startedBy} · {formatDowntimeDuration(issueClock - Date.parse(interval.startedAt))} elapsed</small><small style={wrappedIssueDetail}>Reason: {interval.startReason}</small><small style={wrappedIssueDetail}>Evidence: {interval.startEvidenceReference} · Action: {interval.startActionId}</small></div>
         <button className="core-button" data-downtime-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => reviewDowntimeEnd(interval)} type="button">Review end</button>
       </article>)}</div> : <p className="panel-copy">No machine has an open downtime record.</p>}
-      {availableDowntimeMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewDowntimeStart}>
+      {availableDowntimeMachines.length ? <form autoComplete="off" className={compactFormClass} onSubmit={reviewDowntimeStart}>
         <label>Machine<select data-downtime-primary={!openDowntimeIntervals.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setDowntimeMachineId(event.target.value)} value={selectedDowntimeMachineId}>{availableDowntimeMachines.map((machine) => <option key={machine.id} value={machine.id}>{machine.name} · {machine.id} · recorded {productionMachineStateLabels[machine.state]}</option>)}</select></label>
         <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedDowntimeMachine} type="submit">Review start</button>
       </form> : <p className="panel-copy">Every recorded machine already has open downtime.</p>}
-      {recentDowntimeIntervals.length ? <><p className="panel-copy"><strong>Recent closed intervals</strong></p><div className="action-history-list">{recentDowntimeIntervals.map((interval) => <article key={interval.startActionId}><div><strong>{interval.machineName} · {formatDowntimeDuration(interval.durationMs ?? 0)}</strong><small style={wrappedIssueDetail}>{formatTime(interval.startedAt)} to {formatTime(interval.end?.endedAt ?? interval.startedAt)}</small><small style={wrappedIssueDetail}>Start: {interval.startedBy} · {interval.startReason} · {interval.startEvidenceReference}</small><small style={wrappedIssueDetail}>End: {interval.end?.endedBy} · {interval.end?.reason} · {interval.end?.evidenceReference}</small></div></article>)}</div></> : null}
+      {recentDowntimeIntervals.length ? <><p className="panel-copy"><strong>Recent closed intervals</strong></p><div className={actionHistoryListClass}>{recentDowntimeIntervals.map((interval) => <article key={interval.startActionId}><div><strong>{interval.machineName} · {formatDowntimeDuration(interval.durationMs ?? 0)}</strong><small style={wrappedIssueDetail}>{formatTime(interval.startedAt)} to {formatTime(interval.end?.endedAt ?? interval.startedAt)}</small><small style={wrappedIssueDetail}>Start: {interval.startedBy} · {interval.startReason} · {interval.startEvidenceReference}</small><small style={wrappedIssueDetail}>End: {interval.end?.endedBy} · {interval.end?.reason} · {interval.end?.evidenceReference}</small></div></article>)}</div></> : null}
       <p className="panel-copy">Downtime record only; no machine, job, or output change.</p>
     </dialog>
-    <dialog aria-labelledby="maintenance-dialog-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMaintenanceDialog() }} ref={maintenanceDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
+    <dialog aria-labelledby="maintenance-dialog-title" className={productionIssueDialogClass} onCancel={(event) => { event.preventDefault(); closeMaintenanceDialog() }} ref={maintenanceDialogRef}>
+      <div className="panel-head"><div><span className={coreEyebrowClass}>Owned work</span><h2 id="maintenance-dialog-title">Machine maintenance</h2></div><button aria-label="Close maintenance work" className="text-link" onClick={closeMaintenanceDialog} style={{ minHeight: 44, minWidth: 44 }} type="button">Close</button></div>
       {readyMaintenanceDueItems.length ? <>
         <p className="panel-copy"><strong>Preventive work</strong> · {overdueMaintenanceCount ? `${overdueMaintenanceCount} overdue` : `${readyMaintenanceDueItems.length} planned`} · {maintenanceControlledLoadCount ? `${maintenanceControlledLoadCount} with controlled load` : 'No controlled load'}</p>
-        <div className="action-history-list">{readyMaintenanceDueItems.map((item, index) => {
+        <div className={actionHistoryListClass}>{readyMaintenanceDueItems.map((item, index) => {
           const plannedWindow = maintenanceWindowByAsset.get(item.assetId)
           return <article key={item.assetId}><div>
             <strong>{item.assetName} · {item.status === 'overdue' ? (item.daysUntilDue === 0 ? 'Due now' : `${Math.abs(item.daysUntilDue)}d overdue`) : item.status === 'due_soon' ? `Due in ${item.daysUntilDue}d` : formatIssueDue(item.dueAt)}</strong>
@@ -11198,11 +11216,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             beginMaintenanceWindow(item)
           }} type="button">{plannedWindow ? 'Start work' : 'Plan window'}</button> : null}</article>
         })}</div>
-        {maintenanceWindowDraft && maintenanceWindowDraftItem ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceWindow}>
+        {maintenanceWindowDraft && maintenanceWindowDraftItem ? <form autoComplete="off" className={compactFormClass} onSubmit={reviewMaintenanceWindow}>
           <p className="panel-copy"><strong>Plan window · {maintenanceWindowDraftItem.assetName}</strong><br />{formatProductionMaintenanceCapacityLoad(maintenanceWindowDraftItem)}</p>
           <div className="form-row"><label>Start<input autoComplete="off" min={localDateTimeInputValue(new Date())} onChange={(event) => setMaintenanceWindowDraft((current) => current ? { ...current, plannedStartInput: event.target.value } : current)} required type="datetime-local" value={maintenanceWindowDraft.plannedStartInput} /></label><label>Duration<input inputMode="numeric" max="10080" min="15" onChange={(event) => setMaintenanceWindowDraft((current) => current ? { ...current, durationMinutes: event.target.value } : current)} required step="15" type="number" value={maintenanceWindowDraft.durationMinutes} /><small>Minutes, in 15-minute steps</small></label></div>
           <p className="panel-copy">Records timing against this exact load review. It does not move an order, reserve labor, change machine status, or command equipment.</p>
-          <div className="form-actions"><button className="core-button" onClick={() => setMaintenanceWindowDraft(null)} type="button">Cancel</button><button className="core-button primary" disabled={!maintenanceWindowDraftIsValid || Boolean(pendingAction)} type="submit">Review window</button></div>
+          <div className={formActionsClass}><button className="core-button" onClick={() => setMaintenanceWindowDraft(null)} type="button">Cancel</button><button className={primaryButtonClass} disabled={!maintenanceWindowDraftIsValid || Boolean(pendingAction)} type="submit">Review window</button></div>
         </form> : null}
       </> : null}
       {openMaintenanceRecords.length ? <div className="issue-list">{openMaintenanceRecords.map((record, index) => <article key={record.startActionId}>
@@ -11210,39 +11228,39 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started {formatTime(record.startedAt)} by {record.startedBy}</small>{record.strategy ? <small style={wrappedIssueDetail}>Strategy R{record.strategy.revision} · Due {formatIssueDue(record.strategy.plannedDueAt)} · {record.strategy.procedureReference}</small> : null}<small style={wrappedIssueDetail}>Scope: {record.scope}</small><small style={wrappedIssueDetail}>Evidence: {record.startEvidenceReference} · Action: {record.startActionId}</small></div>
         <button className="core-button" data-maintenance-primary={index === 0 ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => beginMaintenanceCompletion(record)} type="button">{record.strategy ? 'Add result' : 'Review complete'}</button>
       </article>)}</div> : <p className="panel-copy">No machine has open maintenance work.</p>}
-      {maintenanceCompletionDraft && selectedMaintenanceCompletionRecord ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceCompletion}>
+      {maintenanceCompletionDraft && selectedMaintenanceCompletionRecord ? <form autoComplete="off" className={compactFormClass} onSubmit={reviewMaintenanceCompletion}>
         <p className="panel-copy"><strong>Completion result · {selectedMaintenanceCompletionRecord.machineName}</strong><br />Strategy R{selectedMaintenanceCompletionRecord.strategy?.revision} · {selectedMaintenanceCompletionRecord.strategy?.procedureReference}</p>
         <label>Outcome<select onChange={(event) => { const outcome = event.target.value as ProductionMaintenanceOutcome; setMaintenanceCompletionDraft((current) => current ? { ...current, outcome, returnToService: outcome === 'completed' ? 'recommended' : current.returnToService } : current) }} ref={maintenanceOutcomeRef} value={maintenanceCompletionDraft.outcome}><option value="completed">Completed · no limiting finding</option><option value="completed_with_findings">Completed with findings</option></select></label>
         <label>Findings<textarea maxLength={360} onChange={(event) => setMaintenanceCompletionDraft((current) => current ? { ...current, findings: event.target.value } : current)} placeholder="Record inspected condition and findings; use 'No findings' only when confirmed." required value={maintenanceCompletionDraft.findings} /></label>
         <label className="website-intake-confirm"><input checked={maintenanceCompletionDraft.procedureCompleted} onChange={(event) => setMaintenanceCompletionDraft((current) => current ? { ...current, procedureCompleted: event.target.checked } : current)} type="checkbox" /><span>Reviewed procedure completed</span></label>
         <label>Return-to-service recommendation<select disabled={maintenanceCompletionDraft.outcome === 'completed'} onChange={(event) => setMaintenanceCompletionDraft((current) => current ? { ...current, returnToService: event.target.value as ProductionMaintenanceReturnToService } : current)} value={maintenanceCompletionDraft.returnToService}><option value="recommended">Recommended</option><option value="restricted">Restricted service</option><option value="not_recommended">Not recommended</option></select></label>
         <p className="panel-copy">This recommendation does not change recorded machine status. Record any status observation or problem separately.</p>
-        <div className="form-actions"><button className="core-button" onClick={() => setMaintenanceCompletionDraft(null)} type="button">Cancel result</button><button className="core-button primary" disabled={!maintenanceCompletionIsValid || Boolean(pendingAction)} type="submit">Review completion</button></div>
-      </form> : availableMaintenanceMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceStart}>
+        <div className={formActionsClass}><button className="core-button" onClick={() => setMaintenanceCompletionDraft(null)} type="button">Cancel result</button><button className={primaryButtonClass} disabled={!maintenanceCompletionIsValid || Boolean(pendingAction)} type="submit">Review completion</button></div>
+      </form> : availableMaintenanceMachines.length ? <form autoComplete="off" className={compactFormClass} onSubmit={reviewMaintenanceStart}>
         <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} ref={maintenanceMachineSelectRef} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => { const strategy = production.equipmentMaster?.assets.find((asset) => asset.id === machine.id)?.maintenanceStrategy; return <option key={machine.id} value={machine.id}>{machine.name} · {strategy ? `planned R${strategy.revision}` : `recorded ${productionMachineStateLabels[machine.state]}`}</option> })}</select></label>
         {selectedMaintenanceStrategy ? <p className="panel-copy"><strong>Strategy R{selectedMaintenanceStrategy.revision}</strong> · Due {formatIssueDue(selectedMaintenanceStrategy.nextDueAt)}<br />Procedure: {selectedMaintenanceStrategy.procedureReference}{selectedMaintenanceWindow ? <><br /><strong>Window</strong> · {formatTime(selectedMaintenanceWindow.plannedStartAt)} to {formatTime(selectedMaintenanceWindow.plannedEndAt)} · {selectedMaintenanceWindow.durationMinutes} min{selectedMaintenanceCapacityItem ? <><br /><strong>Start review</strong> · {formatProductionMaintenanceCapacityLoad(selectedMaintenanceCapacityItem)}</> : <><br />Current controlled load is unavailable. Reopen Maintenance.</>}</> : <><br />Plan a window above before starting preventive work.</>}</p> : null}
         <label>{selectedMaintenanceStrategy ? 'Strategy owner' : 'Owner'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" readOnly={Boolean(selectedMaintenanceStrategy)} required value={selectedMaintenanceStrategy ? selectedMaintenanceOwner : maintenanceOwner} /></label>
         <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !selectedMaintenanceOwner || selectedMaintenanceOwner.length > 120 || Boolean(selectedMaintenanceStrategy && (!selectedMaintenanceWindow || !selectedMaintenanceCapacityItem))} type="submit">Review start</button>
       </form> : <p className="panel-copy">Every recorded machine already has open maintenance work.</p>}
-      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => {
+      {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className={actionHistoryListClass}>{recentMaintenanceRecords.map((record) => {
         const findingSource = record.completion ? maintenanceFindingSources.get(record.completion.actionId) : undefined
         return <article key={record.startActionId}><div><strong>{record.machineName} · {record.owner}</strong><small style={wrappedIssueDetail}>Started: {record.startedBy} · {record.scope} · {record.startEvidenceReference}</small><small style={wrappedIssueDetail}>Completed: {record.completion?.completedBy} · {record.completion?.outcome} · {record.completion?.evidenceReference}</small>{record.completion?.result ? <small style={wrappedIssueDetail}>{record.completion.result.outcome.replaceAll('_', ' ')} · Return: {record.completion.result.returnToService.replaceAll('_', ' ')} · {record.completion.result.findings}</small> : null}{findingSource?.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA ? <small style={wrappedIssueDetail}>Order impact · {findingSource.workCentreId} · {findingSource.affectedOrders.length} controlled {findingSource.affectedOrders.length === 1 ? 'order' : 'orders'}</small> : null}{record.completion?.nextDueAt ? <small style={wrappedIssueDetail}>Next due: {formatIssueDue(record.completion.nextDueAt)} · Strategy R{record.strategy?.revision}</small> : null}<small style={wrappedIssueDetail}>{formatTime(record.startedAt)} to {formatTime(record.completion?.completedAt ?? record.startedAt)}</small></div>{findingSource ? <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction)} onClick={() => startMaintenanceFindingProblem(record)} type="button">Review problem</button> : null}</article>
       })}</div></> : null}
       <p className="panel-copy">Maintenance windows and evidence are review records only; no order reschedule, machine, inventory, job, or equipment-control change.</p>
     </dialog>
-    <dialog aria-labelledby="machine-observation-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
+    <dialog aria-labelledby="machine-observation-title" className={productionIssueDialogClass} onCancel={(event) => { event.preventDefault(); closeMachineObservation() }} ref={machineDialogRef}>
       {observedMachine && machineObservation ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Equipment observation</span><h2 id="machine-observation-title">{observedMachine.name}</h2></div><button aria-label="Close equipment observation" className="text-link" onClick={closeMachineObservation} type="button">Close</button></div>
+        <div className="panel-head"><div><span className={coreEyebrowClass}>Equipment observation</span><h2 id="machine-observation-title">{observedMachine.name}</h2></div><button aria-label="Close equipment observation" className="text-link" onClick={closeMachineObservation} type="button">Close</button></div>
         <form className="core-form" onSubmit={reviewMachineObservation}>
           <label>New recorded status<select onChange={(event) => setMachineObservation((current) => current ? { ...current, toState: event.target.value as ProductionMachineState } : current)} value={machineObservation.toState}>{machineObservationTargets.map((state) => <option key={state} value={state}>{productionMachineStateLabels[state]}</option>)}</select></label>
           <p className="panel-copy">Currently recorded as {productionMachineStateLabels[observedMachine.state]}. This records an operator observation only; it does not start, stop, or control equipment.</p>
           <p className="panel-copy">Nothing changes until the accountable review is confirmed.</p>
-          <div className="form-actions"><button className="core-button" onClick={closeMachineObservation} type="button">Cancel</button><button className="core-button primary" type="submit">Review observation</button></div>
+          <div className={formActionsClass}><button className="core-button" onClick={closeMachineObservation} type="button">Cancel</button><button className={primaryButtonClass} type="submit">Review observation</button></div>
         </form>
       </> : null}
     </dialog>
-    <dialog aria-labelledby="production-issue-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); closeIssueDialog() }} ref={issueDialogRef}>
-      <div className="panel-head"><div><span className="core-eyebrow">Plant problem</span><h2 id="production-issue-title">{issueMaintenanceFindingSource ? 'Review maintenance finding' : 'Record an observation'}</h2></div><button aria-label="Close problem form" className="text-link" onClick={closeIssueDialog} type="button">Close</button></div>
+    <dialog aria-labelledby="production-issue-title" className={productionIssueDialogClass} onCancel={(event) => { event.preventDefault(); closeIssueDialog() }} ref={issueDialogRef}>
+      <div className="panel-head"><div><span className={coreEyebrowClass}>Plant problem</span><h2 id="production-issue-title">{issueMaintenanceFindingSource ? 'Review maintenance finding' : 'Record an observation'}</h2></div><button aria-label="Close problem form" className="text-link" onClick={closeIssueDialog} type="button">Close</button></div>
       <form autoComplete="off" className="core-form" onSubmit={createIssue}>
         {issueMaintenanceFindingSource ? <p className="form-notice" role="status"><strong>Linked completion</strong><br />{issueMaintenanceFindingSource.equipmentName} · Strategy R{issueMaintenanceFindingSource.strategyRevision} · {issueMaintenanceFindingSource.returnToService.replaceAll('_', ' ')}<br />Owner: {issueMaintenanceFindingSource.maintenanceOwner} · Evidence: {issueMaintenanceFindingSource.evidenceReference}{issueMaintenanceFindingSource.contract === PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA ? <><br />Order impact: {formatProductionMaintenanceOrderImpact(issueMaintenanceFindingSource)}</> : null}</p> : null}
         <div className="form-row"><label>Type<select disabled={Boolean(issueMaintenanceFindingSource)} value={kind} onChange={(event) => setKind(event.target.value as ProductionIssue['kind'])}><option value="quality">Quality</option><option value="maintenance">Maintenance</option><option value="materials">Materials</option><option value="operations">Operations</option></select></label><label>Area<input maxLength={120} onChange={(event) => setArea(event.target.value)} placeholder="Line, machine, or work centre" required value={area} /></label></div>
@@ -11251,24 +11269,24 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <label>Due time<input autoComplete="off" min={localDateTimeInputValue(new Date())} name="plant-issue-due" onChange={(event) => setIssueDueInput(event.target.value)} required type="datetime-local" value={issueDueInput} /></label>
         <label>Containment / next action<textarea maxLength={240} onChange={(event) => setContainment(event.target.value)} placeholder="What happens next, and what stays on hold?" required value={containment} /></label>
         <p className="panel-copy">{issueMaintenanceFindingSource ? 'The completion link is immutable. This review opens one problem only; it does not change machine status, dispatch work, buy parts, or control equipment.' : 'Nothing is saved until the next accountable review is confirmed.'}</p>
-        <div className="form-actions"><button className="core-button" onClick={closeIssueDialog} type="button">Cancel</button><button className="core-button primary" type="submit">Review problem</button></div>
+        <div className={formActionsClass}><button className="core-button" onClick={closeIssueDialog} type="button">Cancel</button><button className={primaryButtonClass} type="submit">Review problem</button></div>
       </form>
     </dialog>
-    <dialog aria-labelledby="maintenance-corrective-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setMaintenanceCorrectiveDraft(null) }} ref={maintenanceCorrectiveDialogRef}>
+    <dialog aria-labelledby="maintenance-corrective-title" className={productionIssueDialogClass} onCancel={(event) => { event.preventDefault(); setMaintenanceCorrectiveDraft(null) }} ref={maintenanceCorrectiveDialogRef}>
       {maintenanceCorrectiveDraft ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Maintenance closeout</span><h2 id="maintenance-corrective-title">Review corrective action</h2></div><button aria-label="Close corrective action form" className="text-link" onClick={() => setMaintenanceCorrectiveDraft(null)} type="button">Close</button></div>
+        <div className="panel-head"><div><span className={coreEyebrowClass}>Maintenance closeout</span><h2 id="maintenance-corrective-title">Review corrective action</h2></div><button aria-label="Close corrective action form" className="text-link" onClick={() => setMaintenanceCorrectiveDraft(null)} type="button">Close</button></div>
         <form autoComplete="off" className="core-form" onSubmit={reviewMaintenanceCorrectiveResolution}>
           <label>Corrective action<textarea autoFocus maxLength={360} onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, correctiveAction: event.target.value } : current)} placeholder="What was corrected or controlled?" required value={maintenanceCorrectiveDraft.correctiveAction} /></label>
           <label>Verification result<textarea maxLength={360} onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What evidence shows the action was effective?" required value={maintenanceCorrectiveDraft.verificationResult} /></label>
           <label>Final return-to-service disposition<select onChange={(event) => setMaintenanceCorrectiveDraft((current) => current ? { ...current, finalDisposition: event.target.value as ProductionMaintenanceReturnToService } : current)} value={maintenanceCorrectiveDraft.finalDisposition}><option value="recommended">Recommended</option><option value="restricted">Restricted service</option><option value="not_recommended">Not recommended</option></select></label>
           <p className="panel-copy">This closes the problem record only. It does not change machine status, dispatch work, buy parts, or control equipment.</p>
-          <div className="form-actions"><button className="core-button" onClick={() => setMaintenanceCorrectiveDraft(null)} type="button">Cancel</button><button className="core-button primary" type="submit">Review closeout</button></div>
+          <div className={formActionsClass}><button className="core-button" onClick={() => setMaintenanceCorrectiveDraft(null)} type="button">Cancel</button><button className={primaryButtonClass} type="submit">Review closeout</button></div>
         </form>
       </> : null}
     </dialog>
-    <dialog aria-labelledby="quality-corrective-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setQualityCorrectiveDraft(null) }} ref={qualityCorrectiveDialogRef}>
+    <dialog aria-labelledby="quality-corrective-title" className={productionIssueDialogClass} onCancel={(event) => { event.preventDefault(); setQualityCorrectiveDraft(null) }} ref={qualityCorrectiveDialogRef}>
       {qualityCorrectiveDraft ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">Quality CAPA</span><h2 id="quality-corrective-title">Close implementation</h2></div><button aria-label="Close quality CAPA form" className="text-link" onClick={() => setQualityCorrectiveDraft(null)} type="button">Close</button></div>
+        <div className="panel-head"><div><span className={coreEyebrowClass}>Quality CAPA</span><h2 id="quality-corrective-title">Close implementation</h2></div><button aria-label="Close quality CAPA form" className="text-link" onClick={() => setQualityCorrectiveDraft(null)} type="button">Close</button></div>
         <form autoComplete="off" className="core-form" onSubmit={reviewQualityCorrectiveResolution}>
           <label>Failure mode<input autoFocus maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, failureMode: event.target.value } : current)} placeholder="Stable name used to find repeats" required value={qualityCorrectiveDraft.failureMode} /><small>Use the same short name when the same defect happens again.</small></label>
           <div className="form-row"><label>Cause category<select onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, causeCategory: event.target.value as ProductionQualityCauseCategory } : current)} value={qualityCorrectiveDraft.causeCategory}>{productionQualityCauseCategories.map((category) => <option key={category} value={category}>{productionQualityCauseLabels[category]}</option>)}</select></label><label>Effectiveness owner<input autoComplete="off" maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessOwner: event.target.value } : current)} placeholder="Named person or role" required value={qualityCorrectiveDraft.effectivenessOwner} /></label></div>
@@ -11277,19 +11295,19 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <label>Implementation evidence<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What evidence shows the corrective action was put in place?" required value={qualityCorrectiveDraft.verificationResult} /></label>
           <label>Effectiveness review due<input min={localDateTimeInputValue(new Date(Date.now() + 60 * 60 * 1000))} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessReviewDueAt: event.target.value } : current)} required type="datetime-local" value={qualityCorrectiveDraft.effectivenessReviewDueAt} /><small>A separate review later checks recurrence before declaring this effective.</small></label>
           <p className="panel-copy">Matching prior CAPA records are linked automatically from the failure mode and cause category. This closes implementation only; it does not declare effectiveness, release a batch, block stock, contact a customer, or issue a certificate.</p>
-          <div className="form-actions"><button className="core-button" onClick={() => setQualityCorrectiveDraft(null)} type="button">Cancel</button><button className="core-button primary" type="submit">Review implementation close</button></div>
+          <div className={formActionsClass}><button className="core-button" onClick={() => setQualityCorrectiveDraft(null)} type="button">Cancel</button><button className={primaryButtonClass} type="submit">Review implementation close</button></div>
         </form>
       </> : null}
     </dialog>
-    <dialog aria-labelledby="quality-effectiveness-title" className="production-issue-dialog" onCancel={(event) => { event.preventDefault(); setQualityEffectivenessDraft(null) }} ref={qualityEffectivenessDialogRef}>
+    <dialog aria-labelledby="quality-effectiveness-title" className={productionIssueDialogClass} onCancel={(event) => { event.preventDefault(); setQualityEffectivenessDraft(null) }} ref={qualityEffectivenessDialogRef}>
       {qualityEffectivenessDraft ? <>
-        <div className="panel-head"><div><span className="core-eyebrow">CAPA follow-up</span><h2 id="quality-effectiveness-title">Review effectiveness</h2></div><button aria-label="Close effectiveness review form" className="text-link" onClick={() => setQualityEffectivenessDraft(null)} type="button">Close</button></div>
+        <div className="panel-head"><div><span className={coreEyebrowClass}>CAPA follow-up</span><h2 id="quality-effectiveness-title">Review effectiveness</h2></div><button aria-label="Close effectiveness review form" className="text-link" onClick={() => setQualityEffectivenessDraft(null)} type="button">Close</button></div>
         <form autoComplete="off" className="core-form" onSubmit={reviewQualityEffectiveness}>
           {qualityEffectivenessDraft.recurrenceIssueIds.length ? <p className="form-notice" role="status"><strong>Recurrence found</strong><br />Linked classified problems: {qualityEffectivenessDraft.recurrenceIssueIds.join(', ')}. The outcome is ineffective and escalation is required.</p> : <p className="form-notice" role="status"><strong>No classified recurrence found</strong><br />Confirm the evidence observed through the planned review period.</p>}
           <label>Outcome<select disabled={qualityEffectivenessDraft.recurrenceIssueIds.length > 0} onChange={(event) => setQualityEffectivenessDraft((current) => current ? { ...current, outcome: event.target.value as ProductionQualityEffectivenessOutcome } : current)} value={qualityEffectivenessDraft.outcome}><option value="effective">Effective</option><option value="ineffective">Ineffective — escalate</option></select></label>
           <label>Review evidence<textarea autoFocus maxLength={360} onChange={(event) => setQualityEffectivenessDraft((current) => current ? { ...current, evidenceSummary: event.target.value } : current)} placeholder="What was checked across the review period, and what was observed?" required value={qualityEffectivenessDraft.evidenceSummary} /></label>
           <p className="panel-copy">This records one immutable review only. An ineffective result requires escalation, but this step does not reopen work, release stock, contact customers, or control equipment.</p>
-          <div className="form-actions"><button className="core-button" onClick={() => setQualityEffectivenessDraft(null)} type="button">Cancel</button><button className="core-button primary" type="submit">Review effectiveness</button></div>
+          <div className={formActionsClass}><button className="core-button" onClick={() => setQualityEffectivenessDraft(null)} type="button">Cancel</button><button className={primaryButtonClass} type="submit">Review effectiveness</button></div>
         </form>
       </> : null}
     </dialog>
@@ -11319,7 +11337,7 @@ function JobList({ disabled = false, jobs, now, onOutput, onSchedule, progressBy
 
 function CompletedJobHistory({ jobs, now, progressById }: { jobs: ProductionJob[]; now: number; progressById?: ReadonlyMap<string, ProductionJobProgress> }) {
   if (!jobs.length) return null
-  return <details className="compact-disclosure production-history">
+  return <details className={productionHistoryClass}>
     <summary>Finished jobs <span>{jobs.length}</span></summary>
     <JobList jobs={jobs.slice(0, 8)} now={now} progressById={progressById} />
     {jobs.length > 8 ? <p>Showing the latest 8 completed jobs.</p> : null}
@@ -11413,7 +11431,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
   return <div>
     <p className="panel-copy"><strong>Close gate</strong> | {controlledOrderBlockers.length} controlled-order blockers | {handoff.openQualityIssues.length} open quality | {handoff.activeDowntime.length} downtime open | {handoff.activeMaintenance.length} maintenance open.</p>
     <p className="form-notice" role="status">{handoff.shiftRef} · revision {handoff.sourceRevision} · {handoff.shiftOutput.goodUnits.toLocaleString()} good · {handoff.shiftOutput.scrapUnits.toLocaleString()} scrap · {handoff.materialTotals.length} material totals · {handoff.controlledOrders.length} controlled orders · {handoff.shortCloses.length} closed short · {handoff.unfinishedJobs.length} unfinished · {handoff.activeHolds.length} held · {handoff.priorityProblems.length} critical/high · {handoff.activeMaintenance.length} maintenance open.</p>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Shift entries <span>{handoff.shiftEntries.length}</span></summary>
       <div className="issue-list">
         {handoff.shiftEntries.map((entry) => <article key={entry.actionId}>
@@ -11423,7 +11441,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.shiftEntries.length ? <Empty>No output entry is attributed to this shift reference.</Empty> : null}
       </div>
     </details>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Material use <span>{handoff.materialEntries.length}</span></summary>
       <p className="panel-copy"><strong>Shift totals</strong></p>
       <div className="issue-list">
@@ -11439,7 +11457,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
       </article>)}</div></> : null}
       {handoff.materialEntries.length > visibleMaterialEntries.length ? <p className="panel-copy">Showing the latest {visibleMaterialEntries.length} of {handoff.materialEntries.length} entries. Copy keeps every attributed entry.</p> : null}
     </details>
-    <details className="compact-disclosure production-history" open={Boolean(controlledOrderBlockers.length)}>
+    <details className={productionHistoryClass} open={Boolean(controlledOrderBlockers.length)}>
       <summary>Controlled orders <span>{handoff.controlledOrders.length}</span></summary>
       <div className="issue-list">
         {handoff.controlledOrders.map((order) => <article key={order.jobId}>
@@ -11449,7 +11467,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.controlledOrders.length ? <Empty>No controlled order exists in this Plant workspace.</Empty> : null}
       </div>
     </details>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Closed short <span>{handoff.shortCloses.length}</span></summary>
       <div className="issue-list">
         {handoff.shortCloses.map((entry) => <article key={entry.actionId}>
@@ -11459,7 +11477,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.shortCloses.length ? <Empty>No job was closed short in this shift.</Empty> : null}
       </div>
     </details>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Unfinished jobs <span>{handoff.unfinishedJobs.length}</span></summary>
       <div className="issue-list">
         {handoff.unfinishedJobs.map((job) => <article key={job.id}>
@@ -11469,7 +11487,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.unfinishedJobs.length ? <Empty>No unfinished job is recorded.</Empty> : null}
       </div>
     </details>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Active quality holds <span>{handoff.activeHolds.length}</span></summary>
       <div className="issue-list">
         {handoff.activeHolds.map((heldJob) => <article key={heldJob.id}>
@@ -11479,7 +11497,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.activeHolds.length ? <Empty>No active quality hold is recorded.</Empty> : null}
       </div>
     </details>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Open quality problems <span>{handoff.openQualityIssues.length}</span></summary>
       <div className="issue-list">
         {handoff.openQualityIssues.map((problem) => <article key={problem.id}>
@@ -11489,7 +11507,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.openQualityIssues.length ? <Empty>No open quality problem is recorded.</Empty> : null}
       </div>
     </details>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Critical/high problems <span>{handoff.priorityProblems.length}</span></summary>
       <div className="issue-list">
         {handoff.priorityProblems.map((problem) => <article key={problem.id}>
@@ -11499,7 +11517,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.priorityProblems.length ? <Empty>No open critical or high problem is recorded.</Empty> : null}
       </div>
     </details>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Active downtime <span>{handoff.activeDowntime.length}</span></summary>
       <div className="issue-list">
         {handoff.activeDowntime.map((interval) => <article key={interval.startActionId}>
@@ -11509,7 +11527,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.activeDowntime.length ? <Empty>No active downtime is recorded.</Empty> : null}
       </div>
     </details>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Active maintenance <span>{handoff.activeMaintenance.length}</span></summary>
       <div className="issue-list">
         {handoff.activeMaintenance.map((record) => <article key={record.startActionId}>
@@ -11519,7 +11537,7 @@ function ShiftHandoffView({ handoff, onCopy }: { handoff: ProductionShiftHandoff
         {!handoff.activeMaintenance.length ? <Empty>No active maintenance work is recorded.</Empty> : null}
       </div>
     </details>
-    <details className="compact-disclosure production-history">
+    <details className={productionHistoryClass}>
       <summary>Machine observations <span>{handoff.machineObservations.length}</span></summary>
       <div className="issue-list">
         {handoff.machineObservations.map((machine) => <article key={machine.id}>
