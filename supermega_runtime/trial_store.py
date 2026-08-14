@@ -93,6 +93,7 @@ HUMAN_COMMAND_EVENTS = frozenset(
         "production.order_execution.recorded",
         "production.downtime.started",
         "production.downtime.ended",
+        "production.maintenance_window.scheduled",
         "production.maintenance.started",
         "production.maintenance.completed",
         "production.shift.closed",
