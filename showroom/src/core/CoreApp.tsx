@@ -8782,6 +8782,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const selectedMaintenanceMachine = availableMaintenanceMachines.find((machine) => machine.id === selectedMaintenanceMachineId)
   const selectedMaintenanceStrategy = production.equipmentMaster?.assets.find((asset) => asset.id === selectedMaintenanceMachineId)?.maintenanceStrategy
   const selectedMaintenanceWindow = maintenanceWindowByAsset.get(selectedMaintenanceMachineId)
+  const selectedMaintenanceCapacityItem = maintenanceCapacityReview.items.find((item) => item.assetId === selectedMaintenanceMachineId)
   const selectedMaintenanceOwner = selectedMaintenanceStrategy?.maintenanceOwner ?? maintenanceOwner.trim()
   const maintenanceWindowDraftItem = maintenanceWindowDraft?.reviewedCapacity.items.find((item) => item.assetId === maintenanceWindowDraft.assetId)
   const maintenanceWindowDraftDuration = Number(maintenanceWindowDraft?.durationMinutes ?? '')
@@ -10756,19 +10757,35 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       setNotice('Plan and confirm a maintenance window before starting preventive work.')
       return
     }
+    if (selectedMaintenanceStrategy && !selectedMaintenanceCapacityItem) {
+      setNotice('The planned maintenance load changed. Reopen Maintenance and review the current queue.')
+      return
+    }
     const machine = selectedMaintenanceMachine
+    const reviewedCapacity = maintenanceCapacityReview
+    const reviewedItem = selectedMaintenanceCapacityItem
+    const plannedWindow = selectedMaintenanceWindow
     maintenanceDialogRef.current?.close()
     setMaintenanceDialogOpen(false)
     queueAction({
       kind: 'maintenance_start',
       subjectId: machine.id,
       summary: `Start maintenance for ${machine.name}`,
-      before: `${machine.name} · no open maintenance work · machine status and downtime records unchanged`,
+      before: selectedMaintenanceStrategy && reviewedItem && plannedWindow
+        ? `${machine.name} · window load ${plannedWindow.orderCount} / ${formatProductionCapacityMinutes(plannedWindow.totalRemainingMinutesMilli)} · current ${formatProductionMaintenanceCapacityLoad(reviewedItem)} · no open work`
+        : `${machine.name} · no open maintenance work · machine status and downtime records unchanged`,
       after: selectedMaintenanceStrategy
-        ? `${machine.name} · strategy R${selectedMaintenanceStrategy.revision} procedure bound to ${owner} with evidence · no equipment command`
+        ? `${machine.name} · strategy R${selectedMaintenanceStrategy.revision} and current load bound to ${owner} · no reschedule or equipment command`
         : `${machine.name} · maintenance owned by ${owner} with scope and evidence · no equipment command`,
       apply: async (record) => {
-        await mutateProduction('production.maintenance.started', record.commandId, productionActionProof(record), (current) => startProductionMaintenance(current, machine.id, owner, productionActionProof(record)))
+        await mutateProduction('production.maintenance.started', record.commandId, productionActionProof(record), (current) => startProductionMaintenance(
+          current,
+          machine.id,
+          owner,
+          productionActionProof(record),
+          selectedMaintenanceStrategy ? reviewedCapacity : undefined,
+          selectedMaintenanceStrategy ? plannedWindow?.actionId : undefined,
+        ))
         setMaintenanceMachineId('')
         setMaintenanceOwner('')
       },
@@ -11203,9 +11220,9 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <div className="form-actions"><button className="core-button" onClick={() => setMaintenanceCompletionDraft(null)} type="button">Cancel result</button><button className="core-button primary" disabled={!maintenanceCompletionIsValid || Boolean(pendingAction)} type="submit">Review completion</button></div>
       </form> : availableMaintenanceMachines.length ? <form autoComplete="off" className="core-form compact-form" onSubmit={reviewMaintenanceStart}>
         <label>Machine<select data-maintenance-primary={!openMaintenanceRecords.length ? true : undefined} disabled={!productionCanWrite || Boolean(pendingAction)} onChange={(event) => setMaintenanceMachineId(event.target.value)} ref={maintenanceMachineSelectRef} value={selectedMaintenanceMachineId}>{availableMaintenanceMachines.map((machine) => { const strategy = production.equipmentMaster?.assets.find((asset) => asset.id === machine.id)?.maintenanceStrategy; return <option key={machine.id} value={machine.id}>{machine.name} · {strategy ? `planned R${strategy.revision}` : `recorded ${productionMachineStateLabels[machine.state]}`}</option> })}</select></label>
-        {selectedMaintenanceStrategy ? <p className="panel-copy"><strong>Strategy R{selectedMaintenanceStrategy.revision}</strong> · Due {formatIssueDue(selectedMaintenanceStrategy.nextDueAt)}<br />Procedure: {selectedMaintenanceStrategy.procedureReference}{selectedMaintenanceWindow ? <><br /><strong>Window</strong> · {formatTime(selectedMaintenanceWindow.plannedStartAt)} to {formatTime(selectedMaintenanceWindow.plannedEndAt)} · {selectedMaintenanceWindow.durationMinutes} min</> : <><br />Plan a window above before starting preventive work.</>}</p> : null}
+        {selectedMaintenanceStrategy ? <p className="panel-copy"><strong>Strategy R{selectedMaintenanceStrategy.revision}</strong> · Due {formatIssueDue(selectedMaintenanceStrategy.nextDueAt)}<br />Procedure: {selectedMaintenanceStrategy.procedureReference}{selectedMaintenanceWindow ? <><br /><strong>Window</strong> · {formatTime(selectedMaintenanceWindow.plannedStartAt)} to {formatTime(selectedMaintenanceWindow.plannedEndAt)} · {selectedMaintenanceWindow.durationMinutes} min{selectedMaintenanceCapacityItem ? <><br /><strong>Start review</strong> · {formatProductionMaintenanceCapacityLoad(selectedMaintenanceCapacityItem)}</> : <><br />Current controlled load is unavailable. Reopen Maintenance.</>}</> : <><br />Plan a window above before starting preventive work.</>}</p> : null}
         <label>{selectedMaintenanceStrategy ? 'Strategy owner' : 'Owner'}<input autoComplete="off" disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setMaintenanceOwner(event.target.value)} placeholder="Named person or role" readOnly={Boolean(selectedMaintenanceStrategy)} required value={selectedMaintenanceStrategy ? selectedMaintenanceOwner : maintenanceOwner} /></label>
-        <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !selectedMaintenanceOwner || selectedMaintenanceOwner.length > 120 || Boolean(selectedMaintenanceStrategy && !selectedMaintenanceWindow)} type="submit">Review start</button>
+        <button className="core-button" disabled={!productionCanWrite || Boolean(pendingAction) || !selectedMaintenanceMachine || !selectedMaintenanceOwner || selectedMaintenanceOwner.length > 120 || Boolean(selectedMaintenanceStrategy && (!selectedMaintenanceWindow || !selectedMaintenanceCapacityItem))} type="submit">Review start</button>
       </form> : <p className="panel-copy">Every recorded machine already has open maintenance work.</p>}
       {recentMaintenanceRecords.length ? <><p className="panel-copy"><strong>Recent completed work</strong></p><div className="action-history-list">{recentMaintenanceRecords.map((record) => {
         const findingSource = record.completion ? maintenanceFindingSources.get(record.completion.actionId) : undefined

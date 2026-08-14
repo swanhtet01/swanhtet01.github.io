@@ -7386,11 +7386,13 @@ if (!productionSource.includes('startProductionMaintenance')
   || !managedProductionRuntime.includes('project_production_maintenance_windows')
   || !managedProductionRuntime.includes('_maintenance_finding_source_for_completion')
   || !managedProductionRuntime.includes('_validate_maintenance_finding_impact_history')
-  || (productionSource.match(/const next = structuredClone\(state\)/g) || []).length < 2
+  || ((productionSource.match(/const next = structuredClone\(state\)/g) || []).length + (productionSource.match(/const next = structuredClone\(current\)/g) || []).length) < 2
   || !productionSource.includes('Maintenance timestamps for ${machine.id} contradict lifecycle order.')
   || !managedProductionRuntime.includes('_validate_maintenance_history')
   || !managedProductionRuntime.includes('_validate_maintenance_window_scheduled')
   || !managedProductionRuntime.includes('_validate_maintenance_started')
+  || !managedProductionRuntime.includes('strategy-bound maintenance start requires the exact reviewed window and current load')
+  || !managedProductionRuntime.includes('maintenance start does not match its freshly reviewed controlled load')
   || !managedProductionRuntime.includes('_validate_maintenance_completed')
   || !managedProductionRuntime.includes('production.maintenance.started')
   || !managedProductionRuntime.includes('production.maintenance_window.scheduled')
@@ -7405,6 +7407,7 @@ if (!productionSource.includes('startProductionMaintenance')
   || !coreSource.includes('Completion result')
   || !coreSource.includes('Order impact')
   || !coreSource.includes('Controlled load')
+  || !coreSource.includes('Start review')
   || !coreSource.includes('No unreleased controlled orders')
   || !coreSource.includes('Reviewed procedure completed')
   || !coreSource.includes('Maintenance windows and evidence are review records only; no order reschedule, machine, inventory, job, or equipment-control change.')) fail('production_bounded_maintenance_contract_missing')
@@ -12516,10 +12519,25 @@ async function verifyPlantEquipmentImportRuntime() {
       'plant_maintenance_window_duplicate_cycle_succeeded')
     assert(production.scheduleProductionMaintenanceWindow(impactState, commissionedAsset.id, capacityReview, windowStart, 91, { ...windowProof, actionId: 'ACT-MAINTENANCE-WINDOW-DURATION' }) === null,
       'plant_maintenance_window_unbounded_duration_succeeded')
-    const maintenanceStartProof = { actionId: 'ACT-MAINTENANCE-IMPACT-START', capturedAt: '2026-07-30T10:00:00.000Z', actor: identity.userId, reason: 'Performed planned inspection.', evidenceReference: 'MAINTENANCE-START-001' }
-    const maintenanceStarted = production.startProductionMaintenance(impactState, commissionedAsset.id, strategyInput.maintenanceOwner, maintenanceStartProof)
-    assert(Boolean(maintenanceStarted), 'plant_maintenance_impact_start_failed')
-    const maintenanceCompleteProof = { actionId: 'ACT-MAINTENANCE-IMPACT-COMPLETE', capturedAt: '2026-07-30T11:00:00.000Z', actor: identity.userId, reason: 'Reviewed restrictive maintenance result.', evidenceReference: 'MAINTENANCE-COMPLETE-001' }
+    const maintenanceStartProof = { actionId: 'ACT-MAINTENANCE-IMPACT-START', capturedAt: windowStart, actor: identity.userId, reason: 'Performed planned inspection.', evidenceReference: 'MAINTENANCE-START-001' }
+    const maintenanceStartReview = production.productionMaintenanceCapacityReview(windowScheduled, maintenanceStartProof.capturedAt)
+    const maintenanceStarted = production.startProductionMaintenance(windowScheduled, commissionedAsset.id, strategyInput.maintenanceOwner, maintenanceStartProof, maintenanceStartReview, windowProof.actionId)
+    assert(maintenanceStarted
+      && maintenanceStarted.events[0].maintenanceWindowActionId === windowProof.actionId
+      && maintenanceStarted.events[0].maintenanceWindowCapacityAsOf === maintenanceStartProof.capturedAt
+      && maintenanceStarted.events[0].maintenanceWindowWorkCentreId === commissionedAsset.workCentreId
+      && maintenanceStarted.events[0].maintenanceWindowOrderCount === 1
+      && maintenanceStarted.events[0].maintenanceWindowLoadMinutesMilli === 100_000
+      && maintenanceStarted.events[0].maintenanceWindowJobIds?.join(',') === 'JOB-OPEN-1'
+      && maintenanceStarted.events[0].sourceRevision === windowScheduled.revision,
+    'plant_maintenance_impact_start_failed')
+    assert(production.startProductionMaintenance(impactState, commissionedAsset.id, strategyInput.maintenanceOwner, maintenanceStartProof, capacityReview, windowProof.actionId) === null,
+      'plant_maintenance_start_without_retained_window_succeeded')
+    const forgedStartReview = structuredClone(maintenanceStartReview)
+    forgedStartReview.items[0].totalRemainingMinutesMilli += 1
+    assert(production.startProductionMaintenance(windowScheduled, commissionedAsset.id, strategyInput.maintenanceOwner, { ...maintenanceStartProof, actionId: 'ACT-MAINTENANCE-FORGED-START' }, forgedStartReview, windowProof.actionId) === null,
+      'plant_maintenance_start_forged_current_load_succeeded')
+    const maintenanceCompleteProof = { actionId: 'ACT-MAINTENANCE-IMPACT-COMPLETE', capturedAt: '2026-08-11T02:00:00.000Z', actor: identity.userId, reason: 'Reviewed restrictive maintenance result.', evidenceReference: 'MAINTENANCE-COMPLETE-001' }
     const maintenanceCompleted = production.completeProductionMaintenance(
       maintenanceStarted,
       commissionedAsset.id,
@@ -12538,11 +12556,11 @@ async function verifyPlantEquipmentImportRuntime() {
       && findingSource.affectedOrders[0].status === 'planned'
       && findingSource.affectedOrders[0].operations.map((operation) => operation.operationId).join(',') === 'OP-MAINTENANCE-10',
     'plant_maintenance_controlled_order_impact_not_exact')
-    const issueProof = { actionId: 'ACT-MAINTENANCE-IMPACT-ISSUE', capturedAt: '2026-07-30T12:00:00.000Z', actor: identity.userId, reason: 'Opened reviewed maintenance problem.', evidenceReference: 'MAINTENANCE-ISSUE-001' }
+    const issueProof = { actionId: 'ACT-MAINTENANCE-IMPACT-ISSUE', capturedAt: '2026-08-11T03:00:00.000Z', actor: identity.userId, reason: 'Opened reviewed maintenance problem.', evidenceReference: 'MAINTENANCE-ISSUE-001' }
     const maintenanceIssue = {
       id: 'ISS-MAINTENANCE-IMPACT-001', createdAt: issueProof.capturedAt, area: commissionedAsset.name, kind: 'maintenance',
       summary: 'Maintenance finding: drive vibration exceeds the reviewed operating band.', status: 'open', severity: 'medium', owner: strategyInput.maintenanceOwner,
-      dueAt: '2026-07-31T12:00:00.000Z', containment: 'Review the linked controlled order before normal operation.', maintenanceFindingSource: findingSource,
+      dueAt: '2026-08-12T03:00:00.000Z', containment: 'Review the linked controlled order before normal operation.', maintenanceFindingSource: findingSource,
     }
     const issueOpened = production.openProductionIssue(maintenanceCompleted, maintenanceIssue, issueProof)
     assert(issueOpened

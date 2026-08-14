@@ -4508,6 +4508,11 @@ class ProductionRuntimeTests(unittest.TestCase):
             "ACT-MAINTENANCE-IMPACT-START",
             captured_at="2026-07-24T13:00:00.000Z",
         )
+        start_capacity = project_production_maintenance_capacity_review(
+            scheduled,
+            start_evidence["capturedAt"],
+        )
+        start_item = start_capacity["items"][0]
         started = deepcopy(scheduled)
         started["revision"] += 1
         started["events"] = [
@@ -4521,6 +4526,18 @@ class ProductionRuntimeTests(unittest.TestCase):
                 maintenanceStrategyRevision=strategy_record["revision"],
                 maintenanceProcedureReference=strategy_record["procedureReference"],
                 maintenancePlannedDueAt=strategy_record["nextDueAt"],
+                maintenanceWindowActionId=window_evidence["actionId"],
+                maintenanceWindowCapacityAsOf=start_capacity["asOf"],
+                maintenanceWindowWorkCentreId=start_item["workCentreId"],
+                maintenanceWindowOrderCount=len(start_item["orders"]),
+                maintenanceWindowLoadMinutesMilli=start_item[
+                    "totalRemainingMinutesMilli"
+                ],
+                maintenanceWindowJobIds=[
+                    order["jobId"] for order in start_item["orders"]
+                ],
+                sourceRevision=scheduled["revision"],
+                sourceDigest=production_source_digest(scheduled),
             ),
             *scheduled["events"],
         ]

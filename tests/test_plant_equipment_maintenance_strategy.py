@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
 import unittest
 
 from fastapi import FastAPI, Request
@@ -8,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from supermega_runtime.plant_equipment_import import validate_plant_equipment_import
 from supermega_runtime.production_runtime import (
+    project_production_maintenance_capacity_review,
     project_production_maintenance_due_queue,
     reduce_production_state,
     validate_production_state,
@@ -70,6 +74,81 @@ def _maintenance_evidence(
     }
 
 
+def _production_source_digest(state: dict[str, object]) -> str:
+    canonical = json.dumps(
+        state,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+
+
+def _strategy_window_state(
+    current: dict[str, object],
+    start_evidence: dict[str, str],
+) -> dict[str, object]:
+    state = deepcopy(current)
+    machine = state["machines"][0]
+    asset = next(
+        candidate
+        for candidate in state["equipmentMaster"]["assets"]
+        if candidate["id"] == machine["id"]
+    )
+    strategy = asset["maintenanceStrategy"]
+    start_at = datetime.fromisoformat(
+        start_evidence["capturedAt"].replace("Z", "+00:00")
+    )
+    capacity_at = (start_at - timedelta(hours=2)).astimezone(timezone.utc).isoformat(
+        timespec="milliseconds"
+    ).replace("+00:00", "Z")
+    confirmed_at = (start_at - timedelta(hours=1)).astimezone(timezone.utc).isoformat(
+        timespec="milliseconds"
+    ).replace("+00:00", "Z")
+    end_at = (start_at + timedelta(hours=1)).astimezone(timezone.utc).isoformat(
+        timespec="milliseconds"
+    ).replace("+00:00", "Z")
+    capacity = project_production_maintenance_capacity_review(current, capacity_at)
+    item = next(candidate for candidate in capacity["items"] if candidate["assetId"] == machine["id"])
+    window_evidence = _maintenance_evidence(
+        f"{start_evidence['actionId']}-WINDOW",
+        confirmed_at,
+        "Reviewed maintenance timing against the current controlled load",
+    )
+    window_event = {
+        "id": f"EVT-{window_evidence['actionId']}",
+        "actionId": window_evidence["actionId"],
+        "createdAt": window_evidence["capturedAt"],
+        "actor": window_evidence["actor"],
+        "reason": window_evidence["reason"],
+        "evidenceReference": window_evidence["evidenceReference"],
+        "kind": "maintenance_window_scheduled",
+        "subjectId": machine["id"],
+        "summary": f"Scheduled maintenance for {machine['name']} from {start_evidence['capturedAt']} to {end_at}",
+        "maintenanceOwner": strategy["maintenanceOwner"],
+        "maintenanceStrategyActionId": strategy["actionId"],
+        "maintenanceStrategyRevision": strategy["revision"],
+        "maintenanceProcedureReference": strategy["procedureReference"],
+        "maintenancePlannedDueAt": strategy["nextDueAt"],
+        "maintenanceWindowStartAt": start_evidence["capturedAt"],
+        "maintenanceWindowEndAt": end_at,
+        "maintenanceWindowDurationMinutes": 60,
+        "maintenanceWindowCapacityAsOf": capacity["asOf"],
+        "maintenanceWindowWorkCentreId": item["workCentreId"],
+        "maintenanceWindowOrderCount": len(item["orders"]),
+        "maintenanceWindowLoadMinutesMilli": item["totalRemainingMinutesMilli"],
+        "sourceRevision": current["revision"],
+        "sourceDigest": _production_source_digest(current),
+    }
+    state["revision"] += 1
+    state["events"] = [window_event, *state["events"]]
+    return reduce_production_state(
+        "production.maintenance_window.scheduled",
+        current,
+        {"state": state, "evidence": window_evidence},
+    )
+
+
 def _strategy_maintenance_state(
     current: dict[str, object],
     evidence: dict[str, str],
@@ -113,6 +192,29 @@ def _strategy_maintenance_state(
         strategy["nextDueAt"] = event["nextDueAt"]
     else:
         event["maintenanceOwner"] = strategy["maintenanceOwner"]
+        window = next(
+            candidate
+            for candidate in state["events"]
+            if candidate["kind"] == "maintenance_window_scheduled"
+            and candidate["subjectId"] == machine["id"]
+            and candidate["maintenanceStrategyActionId"] == strategy["actionId"]
+            and candidate["maintenancePlannedDueAt"] == strategy["nextDueAt"]
+        )
+        capacity = project_production_maintenance_capacity_review(
+            current,
+            evidence["capturedAt"],
+        )
+        item = next(candidate for candidate in capacity["items"] if candidate["assetId"] == machine["id"])
+        event.update({
+            "maintenanceWindowActionId": window["actionId"],
+            "maintenanceWindowCapacityAsOf": capacity["asOf"],
+            "maintenanceWindowWorkCentreId": item["workCentreId"],
+            "maintenanceWindowOrderCount": len(item["orders"]),
+            "maintenanceWindowLoadMinutesMilli": item["totalRemainingMinutesMilli"],
+            "maintenanceWindowJobIds": [order["jobId"] for order in item["orders"]],
+            "sourceRevision": current["revision"],
+            "sourceDigest": _production_source_digest(current),
+        })
     state["revision"] += 1
     state["events"] = [event, *state["events"]]
     return state
@@ -319,11 +421,12 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
             "2026-08-15T09:00:00.000Z",
             "Performed reviewed mixer preventive maintenance procedure",
         )
+        windowed = _strategy_window_state(saved, start_evidence)
         started = reduce_production_state(
             "production.maintenance.started",
-            saved,
+            windowed,
             {
-                "state": _strategy_maintenance_state(saved, start_evidence),
+                "state": _strategy_maintenance_state(windowed, start_evidence),
                 "evidence": start_evidence,
             },
         )
@@ -391,7 +494,8 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
             "2026-08-15T09:00:00.000Z",
             "Performed reviewed mixer preventive maintenance procedure",
         )
-        valid_start = _strategy_maintenance_state(saved, start_evidence)
+        windowed = _strategy_window_state(saved, start_evidence)
+        valid_start = _strategy_maintenance_state(windowed, start_evidence)
         cases = []
         unbound = deepcopy(valid_start)
         for field in (
@@ -408,6 +512,25 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         wrong_procedure = deepcopy(valid_start)
         wrong_procedure["events"][0]["maintenanceProcedureReference"] = "SOP-OTHER"
         cases.append(wrong_procedure)
+        unreviewed_start = deepcopy(valid_start)
+        for field in (
+            "maintenanceWindowActionId",
+            "maintenanceWindowCapacityAsOf",
+            "maintenanceWindowWorkCentreId",
+            "maintenanceWindowOrderCount",
+            "maintenanceWindowLoadMinutesMilli",
+            "maintenanceWindowJobIds",
+            "sourceRevision",
+            "sourceDigest",
+        ):
+            unreviewed_start["events"][0].pop(field)
+        cases.append(unreviewed_start)
+        stale_source = deepcopy(valid_start)
+        stale_source["events"][0]["sourceDigest"] = f"sha256:{'0' * 64}"
+        cases.append(stale_source)
+        forged_load = deepcopy(valid_start)
+        forged_load["events"][0]["maintenanceWindowJobIds"] = ["JOB-FORGED"]
+        cases.append(forged_load)
         changed_master = deepcopy(valid_start)
         changed_master["equipmentMaster"]["assets"][0]["owner"] = "Other owner"
         cases.append(changed_master)
@@ -415,13 +538,13 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
             with self.subTest(candidate=candidate), self.assertRaises(TrialValidationError):
                 reduce_production_state(
                     "production.maintenance.started",
-                    saved,
+                    windowed,
                     {"state": candidate, "evidence": start_evidence},
                 )
 
         started = reduce_production_state(
             "production.maintenance.started",
-            saved,
+            windowed,
             {"state": valid_start, "evidence": start_evidence},
         )
         completion_evidence = _maintenance_evidence(
@@ -476,10 +599,11 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
             "2026-08-15T09:00:00.000Z",
             "Performed reviewed mixer preventive maintenance procedure",
         )
+        windowed = _strategy_window_state(saved, start_evidence)
         started = reduce_production_state(
             "production.maintenance.started",
-            saved,
-            {"state": _strategy_maintenance_state(saved, start_evidence), "evidence": start_evidence},
+            windowed,
+            {"state": _strategy_maintenance_state(windowed, start_evidence), "evidence": start_evidence},
         )
         completion_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-504",
@@ -682,10 +806,11 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
             "2026-08-15T09:00:00.000Z",
             "Performed reviewed mixer preventive maintenance procedure",
         )
+        windowed = _strategy_window_state(second_saved, start_evidence)
         started = reduce_production_state(
             "production.maintenance.started",
-            second_saved,
-            {"state": _strategy_maintenance_state(second_saved, start_evidence), "evidence": start_evidence},
+            windowed,
+            {"state": _strategy_maintenance_state(windowed, start_evidence), "evidence": start_evidence},
         )
         completion_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-503",

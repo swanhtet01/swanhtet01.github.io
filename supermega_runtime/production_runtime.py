@@ -362,6 +362,18 @@ _MAINTENANCE_STRATEGY_BINDING_FIELDS = frozenset(
         "maintenancePlannedDueAt",
     }
 )
+_MAINTENANCE_START_REVIEW_FIELDS = frozenset(
+    {
+        "maintenanceWindowActionId",
+        "maintenanceWindowCapacityAsOf",
+        "maintenanceWindowWorkCentreId",
+        "maintenanceWindowOrderCount",
+        "maintenanceWindowLoadMinutesMilli",
+        "maintenanceWindowJobIds",
+        "sourceRevision",
+        "sourceDigest",
+    }
+)
 _MAINTENANCE_RESULT_FIELDS = frozenset(
     {
         "maintenanceOutcome",
@@ -1641,6 +1653,7 @@ def _validate_event(
             else _ISSUE_RESOLVED_EVENT_OPTIONAL_FIELDS
             if kind == "issue_resolved"
             else _MAINTENANCE_STRATEGY_BINDING_FIELDS
+            | _MAINTENANCE_START_REVIEW_FIELDS
             if kind == "maintenance_started"
             else _MAINTENANCE_COMPLETION_STRATEGY_FIELDS
             if kind == "maintenance_completed"
@@ -2011,6 +2024,17 @@ def _validate_event(
             raise TrialValidationError(
                 f"{field} maintenance result requires strategy-bound completion."
             )
+        start_review_fields = _MAINTENANCE_START_REVIEW_FIELDS.intersection(event)
+        if start_review_fields and start_review_fields != _MAINTENANCE_START_REVIEW_FIELDS:
+            raise TrialValidationError(
+                f"{field} maintenance start review must be complete or absent."
+            )
+        if start_review_fields and (
+            kind != "maintenance_started" or not binding_fields
+        ):
+            raise TrialValidationError(
+                f"{field} maintenance start review requires strategy-bound work."
+            )
         if binding_fields:
             _text(
                 event["maintenanceStrategyActionId"],
@@ -2031,6 +2055,66 @@ def _validate_event(
                 event["maintenancePlannedDueAt"],
                 f"{field}.maintenancePlannedDueAt",
             )
+            if kind == "maintenance_started" and start_review_fields:
+                _text(
+                    event["maintenanceWindowActionId"],
+                    f"{field}.maintenanceWindowActionId",
+                    maximum=160,
+                )
+                capacity_at = _parsed_timestamp(
+                    event["maintenanceWindowCapacityAsOf"],
+                    f"{field}.maintenanceWindowCapacityAsOf",
+                )[1]
+                created_at = _parsed_timestamp(
+                    event["createdAt"], f"{field}.createdAt"
+                )[1]
+                if capacity_at > created_at:
+                    raise TrialValidationError(
+                        f"{field}.maintenanceWindowCapacityAsOf cannot follow confirmation."
+                    )
+                work_centre_id = _text(
+                    event["maintenanceWindowWorkCentreId"],
+                    f"{field}.maintenanceWindowWorkCentreId",
+                    maximum=80,
+                )
+                if _EQUIPMENT_ID_PATTERN.fullmatch(work_centre_id) is None:
+                    raise TrialValidationError(
+                        f"{field}.maintenanceWindowWorkCentreId is invalid."
+                    )
+                order_count = _integer(
+                    event["maintenanceWindowOrderCount"],
+                    f"{field}.maintenanceWindowOrderCount",
+                    minimum=0,
+                )
+                load_minutes = _integer(
+                    event["maintenanceWindowLoadMinutesMilli"],
+                    f"{field}.maintenanceWindowLoadMinutesMilli",
+                    minimum=0,
+                )
+                job_ids = [
+                    _text(job_id, f"{field}.maintenanceWindowJobIds[{position}]", maximum=80)
+                    for position, job_id in enumerate(
+                        _list(
+                            event["maintenanceWindowJobIds"],
+                            f"{field}.maintenanceWindowJobIds",
+                            maximum=20,
+                        )
+                    )
+                ]
+                if (
+                    len(job_ids) != len(set(job_ids))
+                    or len(job_ids) != order_count
+                    or ((order_count == 0) != (load_minutes == 0))
+                ):
+                    raise TrialValidationError(
+                        f"{field} maintenance start controlled-load summary is invalid."
+                    )
+                _integer(event["sourceRevision"], f"{field}.sourceRevision", minimum=0)
+                if (
+                    not isinstance(event["sourceDigest"], str)
+                    or _DIGEST_PATTERN.fullmatch(event["sourceDigest"]) is None
+                ):
+                    raise TrialValidationError(f"{field}.sourceDigest is invalid.")
             if kind == "maintenance_completed":
                 next_due_at = _parsed_timestamp(
                     event["nextDueAt"], f"{field}.nextDueAt"
@@ -3585,6 +3669,42 @@ def _validate_equipment_maintenance_strategy_history(
                 raise TrialValidationError(
                     "Production maintenance windows cannot overlap at one work centre."
                 )
+    reviewed_starts = [
+        event
+        for event in maintenance_events
+        if event["kind"] == "maintenance_started"
+        and "maintenanceWindowActionId" in event
+    ]
+    for start_event in reviewed_starts:
+        window = next(
+            (
+                event
+                for event in window_events
+                if event["actionId"] == start_event["maintenanceWindowActionId"]
+            ),
+            None,
+        )
+        if (
+            window is None
+            or window["subjectId"] != start_event["subjectId"]
+            or window["maintenanceStrategyActionId"]
+            != start_event["maintenanceStrategyActionId"]
+            or window["maintenanceStrategyRevision"]
+            != start_event["maintenanceStrategyRevision"]
+            or window["maintenancePlannedDueAt"]
+            != start_event["maintenancePlannedDueAt"]
+            or window["maintenanceWindowWorkCentreId"]
+            != start_event["maintenanceWindowWorkCentreId"]
+            or _parsed_timestamp(
+                start_event["createdAt"], "maintenance start createdAt"
+            )[1]
+            < _parsed_timestamp(
+                window["createdAt"], "maintenance window createdAt"
+            )[1]
+        ):
+            raise TrialValidationError(
+                "Maintenance start review does not match its reviewed window."
+            )
 
 
 def validate_production_state(value: object) -> dict[str, Any]:
@@ -3696,7 +3816,9 @@ def validate_production_state(value: object) -> dict[str, Any]:
             "Production revision must equal the append-only event count."
         )
     for index, event in enumerate(events):
-        if event["kind"] not in {"shift_closed", "maintenance_window_scheduled"}:
+        if event["kind"] not in {"shift_closed", "maintenance_window_scheduled", "maintenance_started"}:
+            continue
+        if event["kind"] == "maintenance_started" and "maintenanceWindowActionId" not in event:
             continue
         if event["sourceRevision"] != len(events) - index - 1:
             raise TrialValidationError(
@@ -5075,6 +5197,66 @@ def _validate_maintenance_started(
     ):
         raise TrialValidationError(
             "maintenance start does not match the current reviewed strategy."
+        )
+    if strategy is None:
+        if _MAINTENANCE_START_REVIEW_FIELDS.intersection(event):
+            raise TrialValidationError(
+                "unbound maintenance cannot claim a preventive-maintenance window review."
+            )
+        return
+    if not _MAINTENANCE_START_REVIEW_FIELDS.issubset(event):
+        raise TrialValidationError(
+            "strategy-bound maintenance start requires the exact reviewed window and current load."
+        )
+    if (
+        event["sourceRevision"] != current["revision"]
+        or event["sourceDigest"] != _production_source_digest(current)
+    ):
+        raise TrialValidationError(
+            "maintenance start revision or source digest does not match current Plant evidence."
+        )
+    window = next(
+        (
+            candidate
+            for candidate in current["events"]
+            if candidate["kind"] == "maintenance_window_scheduled"
+            and candidate["actionId"] == event["maintenanceWindowActionId"]
+        ),
+        None,
+    )
+    if (
+        window is None
+        or window["subjectId"] != machine["id"]
+        or window["maintenanceStrategyActionId"] != strategy["actionId"]
+        or window["maintenanceStrategyRevision"] != strategy["revision"]
+        or window["maintenancePlannedDueAt"] != strategy["nextDueAt"]
+        or window["maintenanceWindowWorkCentreId"] != asset["workCentreId"]
+    ):
+        raise TrialValidationError(
+            "maintenance start does not reference the current reviewed window."
+        )
+    capacity_review = project_production_maintenance_capacity_review(
+        current,
+        event["maintenanceWindowCapacityAsOf"],
+    )
+    capacity_item = next(
+        (
+            item
+            for item in capacity_review["items"]
+            if item["assetId"] == machine["id"]
+        ),
+        None,
+    )
+    if capacity_item is None or (
+        event["maintenanceWindowWorkCentreId"] != capacity_item["workCentreId"]
+        or event["maintenanceWindowOrderCount"] != len(capacity_item["orders"])
+        or event["maintenanceWindowLoadMinutesMilli"]
+        != capacity_item["totalRemainingMinutesMilli"]
+        or event["maintenanceWindowJobIds"]
+        != [order["jobId"] for order in capacity_item["orders"]]
+    ):
+        raise TrialValidationError(
+            "maintenance start does not match its freshly reviewed controlled load."
         )
 
 
