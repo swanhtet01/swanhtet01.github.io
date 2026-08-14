@@ -36,6 +36,11 @@ from supermega_runtime.order_intake_provider import (
     OrderIntakeProviderError,
     configured_order_intake_provider,
 )
+from supermega_runtime.plant_job_request_provider import (
+    PlantJobRequest,
+    PlantJobRequestProviderError,
+    configured_plant_job_request_provider,
+)
 from supermega_runtime.production_runtime import reduce_production_state
 from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_identity
 from supermega_runtime.trial_runtime import create_trial_router
@@ -71,6 +76,8 @@ _LOCAL_ORDER_INTAKE_MAX_BODY_BYTES = 256 * 1024
 _LOCAL_ORDER_INTAKE_REVIEW_HEADER = "order-intake-v1"
 _LOCAL_WEBSITE_BRIEF_MAX_BODY_BYTES = 16 * 1024
 _LOCAL_WEBSITE_BRIEF_REVIEW_HEADER = "website-brief-v1"
+_LOCAL_PLANT_JOB_REQUEST_MAX_BODY_BYTES = 16 * 1024
+_LOCAL_PLANT_JOB_REQUEST_REVIEW_HEADER = "plant-job-request-v1"
 _DNS_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _IDENTITY_SECRET_PLACEHOLDER_MARKERS = frozenset(
     {
@@ -284,6 +291,28 @@ def _local_website_brief_request_allowed(
         and _loopback_host(origin_host)
         and request.headers.get("x-supermega-local-review")
         == _LOCAL_WEBSITE_BRIEF_REVIEW_HEADER
+    )
+
+
+def _local_plant_job_request_allowed(
+    request: Request,
+    origins: list[str],
+) -> bool:
+    """Admit the exact loopback Plant UI without cookies or remote access."""
+
+    origin = _text(request.headers.get("origin"))
+    try:
+        origin_host = urlsplit(origin).hostname
+    except ValueError:
+        return False
+    return bool(
+        request.client
+        and _loopback_host(request.client.host)
+        and _loopback_host(request.url.hostname)
+        and origin in origins
+        and _loopback_host(origin_host)
+        and request.headers.get("x-supermega-local-review")
+        == _LOCAL_PLANT_JOB_REQUEST_REVIEW_HEADER
     )
 
 
@@ -1054,6 +1083,7 @@ def create_app() -> FastAPI:
     except OrderIntakeProviderError:
         order_intake_provider = None
     website_brief_provider = configured_website_brief_provider()
+    plant_job_request_provider = configured_plant_job_request_provider()
     app = FastAPI(
         title="SuperMega Service",
         version=SERVICE_VERSION,
@@ -1072,6 +1102,12 @@ def create_app() -> FastAPI:
         not database_url
         and not _flag("SUPERMEGA_TRIAL_WRITES_ENABLED")
         and getattr(website_brief_provider, "provider_id", "") == "ollama-local"
+        and any(_loopback_host(urlsplit(origin).hostname) for origin in origins)
+    )
+    local_plant_job_request_enabled = bool(
+        not database_url
+        and not _flag("SUPERMEGA_TRIAL_WRITES_ENABLED")
+        and getattr(plant_job_request_provider, "provider_id", "") == "ollama-local"
         and any(_loopback_host(urlsplit(origin).hostname) for origin in origins)
     )
     app.add_middleware(
@@ -1184,6 +1220,8 @@ def create_app() -> FastAPI:
                 "local_order_intake_review_enabled": local_order_intake_enabled,
                 "website_brief_provider": getattr(website_brief_provider, "provider_id", "none"),
                 "local_website_brief_review_enabled": local_website_brief_enabled,
+                "plant_job_request_provider": getattr(plant_job_request_provider, "provider_id", "none"),
+                "local_plant_job_request_review_enabled": local_plant_job_request_enabled,
                 "browser_api_key_exposed": False,
                 "operational_actions_allowed": False,
             },
@@ -1311,6 +1349,58 @@ def create_app() -> FastAPI:
             "raw_brief_retained": False,
             "website_changes_performed": 0,
             "publish_performed": False,
+            "external_writes_performed": False,
+        }
+
+    @app.post("/api/local/v1/plant/job-request-drafts")
+    async def local_plant_job_request_draft(request: Request) -> dict[str, Any]:
+        if (
+            not local_plant_job_request_enabled
+            or plant_job_request_provider is None
+            or not _local_plant_job_request_allowed(request, origins)
+        ):
+            raise HTTPException(status_code=404, detail={"code": "local_plant_job_request_unavailable"})
+        content_type = _text(request.headers.get("content-type")).casefold()
+        if not content_type.startswith("application/json"):
+            raise HTTPException(status_code=415, detail={"code": "local_plant_job_request_json_required"})
+        encoded_body = await request.body()
+        if not encoded_body or len(encoded_body) > _LOCAL_PLANT_JOB_REQUEST_MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail={"code": "local_plant_job_request_too_large"})
+        try:
+            body = json.loads(encoded_body)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail={"code": "local_plant_job_request_json_invalid"}) from exc
+        if not isinstance(body, dict) or set(body) != {"source_label", "request_text"}:
+            raise HTTPException(status_code=422, detail={"code": "local_plant_job_request_invalid"})
+        source_label = body.get("source_label")
+        if (
+            not isinstance(source_label, str)
+            or source_label != source_label.strip()
+            or not 1 <= len(source_label) <= 120
+        ):
+            raise HTTPException(status_code=422, detail={"code": "local_plant_job_request_invalid"})
+        try:
+            request_text = PlantJobRequest.model_validate({"source_text": body.get("request_text")}).source_text
+            draft = await plant_job_request_provider.generate(
+                source_text=request_text,
+                workspace_id="local-demo-plant",
+                actor_id="local-human-review",
+            )
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "local_plant_job_request_invalid"}) from exc
+        except PlantJobRequestProviderError as exc:
+            status_code = 422 if exc.code in {"plant_job_request_invalid", "plant_job_request_too_large"} else 503
+            if exc.code in {"plant_job_request_provider_invalid_response", "plant_job_request_provider_incomplete"}:
+                status_code = 502
+            raise HTTPException(status_code=status_code, detail={"code": exc.code}) from exc
+        return {
+            "draft": draft.model_dump(mode="json"),
+            "source_label_digest": f"sha256:{hashlib.sha256(source_label.encode('utf-8')).hexdigest()}",
+            "raw_request_retained": False,
+            "jobs_created": 0,
+            "schedule_changes_performed": 0,
+            "material_actions_performed": 0,
+            "equipment_actions_performed": 0,
             "external_writes_performed": False,
         }
 

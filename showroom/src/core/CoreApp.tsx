@@ -774,11 +774,6 @@ const PLANT_JOB_IMPORT_PRIORITIES: Record<string, ProductionJobPriority> = {
   low: 'low',
 }
 
-function plantJobImportCsvCell(value: string | number) {
-  const text = String(value)
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
-}
-
 function buildPlantJobImportTemplateCsv() {
   const now = Date.now()
   return `job_id,line,product,target,owner,priority,due_at\r\nJOB-${now},Line A,Product,100,Production lead,normal,${localDateTimeInputValue(new Date(now + 6048e5))}`
@@ -8401,6 +8396,8 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     returnToService: ProductionMaintenanceReturnToService
   } | null>(null)
   const [jobDraft, setJobDraft] = useState<PlantJobDraft>(emptyPlantJobDraft)
+  const [plantJobRequestText, setPlantJobRequestText] = useState('')
+  const [plantJobRequestBusy, setPlantJobRequestBusy] = useState(false)
   const [shopDemandSignals, setShopDemandSignals] = useState<ShopProductionDemandSignal[]>([])
   const [shopDemandIssue, setShopDemandIssue] = useState('')
   const [selectedShopDemandDigest, setSelectedShopDemandDigest] = useState('')
@@ -8408,7 +8405,6 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const plantBatchDisclosureRef = useRef<HTMLDetailsElement>(null)
   const plantJobIdInputRef = useRef<HTMLInputElement>(null)
   const [plantJobImportReview, setPlantJobImportReview] = useState<PlantJobImportReview | null>(null)
-  const [plantJobImportSourceName, setPlantJobImportSourceName] = useState('')
   const plantJobImportReadRef = useRef(0)
   const [scheduleDraft, setScheduleDraft] = useState<ProductionJobPlanDraft | null>(null)
   const [closedScheduleDraft, setClosedScheduleDraft] = useState<ProductionClosedJobPlanDraft | null>(null)
@@ -9922,6 +9918,52 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }, outputTriggerRef.current)
   }
 
+  async function preparePlantJobRequest(event: FormEvent) {
+    event.preventDefault()
+    const source = plantJobRequestText.trim()
+    if (source.length < 20) {
+      setNotice('Include product, quantity, line or team, owner, and an exact future date and time.')
+      return
+    }
+    setPlantJobRequestBusy(true)
+    setNotice('Preparing the job draft on this device...')
+    try {
+      const { prepareLocalPlantJobRequest } = await import('./plant-ai-job-request')
+      const draft = await prepareLocalPlantJobRequest(source)
+      setSelectedShopDemandDigest('')
+      setPlantJobImportReview(null)
+      setJobDraft({
+        id: draft.job_id,
+        line: draft.line ?? '',
+        product: draft.product ?? '',
+        target: draft.target ? String(draft.target) : '',
+        owner: draft.owner ?? '',
+        priority: draft.priority,
+        dueAt: draft.due_at ?? '',
+      })
+      setPlantJobRequestText('')
+      setNotice(draft.status === 'needs_clarification'
+        ? 'Draft ready. Complete or verify the blank details.'
+        : 'Source-checked draft ready. Review before creating anything.')
+      requestAnimationFrame(focusPlantJobIdInput)
+      recordBehaviorSignal(window.localStorage, {
+        event: 'agent_job_chosen',
+        product: 'production',
+        route: productionLocation.pathname + productionLocation.search,
+        detail: 'Prepare source-bound Plant job request with local AI',
+      })
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
+      setNotice(code === 'local_plant_job_request_unavailable'
+        ? 'Local AI is off. Start Ollama or enter the job below.'
+        : code === 'local_plant_job_request_invalid'
+          ? 'Add a clearer production request, then try again.'
+          : 'The local model could not make a safe draft. Try again or use the fields below.')
+    } finally {
+      setPlantJobRequestBusy(false)
+    }
+  }
+
   function createJob(event: FormEvent) {
     event.preventDefault()
     const id = jobDraft.id.trim().toUpperCase()
@@ -9967,6 +10009,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       summary: `Create ${id} for ${product}`,
       before: demandSignal ? `Shop ${demandSignal.operatingContext.operatingUnitLocationId} · ${demandSignal.activeDemandUnits} active demand · ${demandSignal.replenishmentGapUnits} replenishment gap · ${demandSignal.sourceOrderIds.length || 'reorder'} source ${demandSignal.sourceOrderIds.length === 1 ? 'order' : 'orders'}` : 'No production job',
       after: `${line} · owner ${owner} · ${productionJobPriorityLabels[jobDraft.priority]} · due ${formatIssueDue(canonicalDueAt)} · target ${jobTarget.toLocaleString()}${demandSignal ? ' · governed Shop demand' : ''}`,
+      evidenceReferenceSuggestion: demandSignal?.evidenceReference ?? (id.startsWith('JOB-AI-') ? `Local Plant request ${id.slice(7)}` : undefined),
       apply: async (record) => {
         if (demandSignal && !await shopProductionDemandIsCurrent(demandSignal, relatedCommerceRef.current, productionRef.current.jobs)) {
           throw new PlantReviewRequiredError('Shop orders, stock, reorder level, or Plant coverage changed. Nothing was written; review the current demand again.')
@@ -10082,17 +10125,6 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     }
   }
 
-  function buildSamplePlantJobImportCsv() {
-    const rows = [
-      ['job_id', 'line', 'product', 'target', 'owner', 'priority', 'due_at'],
-      ['JOB-AI-101', 'Line A', 'First production run', 120, 'Plant supervisor', 'urgent', localDateTimeInputValue(new Date(Date.now() + 10 * 60 * 60 * 1000))],
-      ['JOB-SAMPLE-102', 'Quality Lab', 'Quality release sample', 1, 'Quality owner', 'normal', localDateTimeInputValue(new Date(Date.now() + 12 * 60 * 60 * 1000))],
-      ['', '', 'Repair sample', 0, '', 'normal', 'not-a-date'],
-      ['JOB-AI-101', 'Line C', 'Duplicate sample', 10, 'Plant planner', 'normal', localDateTimeInputValue(new Date(Date.now() + 14 * 60 * 60 * 1000))],
-    ]
-    return rows.map((row) => row.map(plantJobImportCsvCell).join(',')).join('\r\n')
-  }
-
   function loadPlantJobImportDraft(draft: PlantJobDraft) {
     setSelectedShopDemandDigest('')
     setJobDraft(draft)
@@ -10107,31 +10139,11 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     if (firstReady) loadPlantJobImportDraft(firstReady)
   }
 
-  function loadSamplePlantJobImportBatch() {
-    if (pendingAction) {
-      setNotice('Finish or cancel the pending review first.')
-      return
-    }
-    const review = buildPlantJobImportReview(buildSamplePlantJobImportCsv())
-    loadPlantJobImportReview(review)
-    setPlantJobImportSourceName('sample-plant-job-batch.csv')
-    setNotice(review.readyRows
-      ? 'Sample ready.'
-      : 'Sample needs fixes.')
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_chosen',
-      product: 'production',
-      route: productionLocation.pathname + productionLocation.search,
-      detail: 'Load sample Plant job batch',
-    })
-  }
-
   async function uploadPlantJobCsv(event: ChangeEvent<HTMLInputElement>) {
     const read = ++plantJobImportReadRef.current
     const file = event.currentTarget.files?.[0] ?? null
     event.currentTarget.value = ''
     if (!file) return
-    setPlantJobImportSourceName(file.name)
     if (!file.name.toLowerCase().endsWith('.csv') && file.type !== 'text/csv') {
       setPlantJobImportReview(null)
       setNotice('Choose a CSV. No Plant write ran.')
@@ -11024,15 +11036,20 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <CompletedJobHistory jobs={completedJobs} now={issueClock} progressById={jobProgressById} />
         <details className="compact-disclosure catalog-disclosure" ref={jobDisclosureRef}>
           <summary>{selectedShopDemand ? 'Add Shop-demand job' : 'Add job'}</summary>
+          {!selectedShopDemand ? <form className={compactFormClass} onSubmit={(event) => void preparePlantJobRequest(event)}>
+            <label>Describe the production request<textarea disabled={plantJobRequestBusy || Boolean(pendingAction)} maxLength={1_800} onChange={(event) => setPlantJobRequestText(event.target.value)} placeholder="Make 500 aloe shampoo bottles on Filling Line 2 by YYYY-MM-DD HH:MM. Owner: Production lead. Urgent." rows={4} value={plantJobRequestText} /></label>
+            <button className={primaryButtonClass} disabled={plantJobRequestBusy || Boolean(pendingAction)} type="submit">{plantJobRequestBusy ? 'Preparing...' : 'Prepare job draft'}</button>
+          </form> : null}
+          <details className={compactDisclosureClass}>
+            <summary>Import many jobs from CSV</summary>
           <section aria-label="Plant job CSV import" className="plant-job-import">
-            <div><span className={coreEyebrowClass}>Job CSV import</span><strong>Prepare job list</strong><small>Download, edit, upload. Local review; no jobs created.</small><button className="text-link" disabled={Boolean(pendingAction)} onClick={loadSamplePlantJobImportBatch} type="button">Or try a sample</button></div>
             <div className="plant-job-import-actions">
               <a className={primaryButtonClass} download="supermega-plant-job-template.csv" href={`data:text/csv;charset=utf-8,%EF%BB%BF${encodeURIComponent(buildPlantJobImportTemplateCsv())}`}>Download template</a>
               <label className="plant-job-import-upload">Upload completed CSV<input accept=".csv,text/csv" disabled={Boolean(pendingAction)} onChange={uploadPlantJobCsv} type="file" /></label>
               {plantJobImportReview ? <><div className={`plant-job-import-review ${plantJobImportReview.blockedRows ? 'blocked' : 'ready'}`} role="status"><strong>{plantJobImportReview.blockedRows ? plantJobImportReady.length ? 'Review jobs + fixes' : 'Repair blocked rows' : plantJobImportReady.length ? 'Ready for review' : 'Import reviewed'}</strong><span>{plantJobImportSummary}</span><small>{plantJobImportReady.length} ready / {plantJobImportReview.blockedRows} blocked / review only</small></div>{plantJobImportReview.readyRows > 1 && plantJobImportReady.length ? <label className="core-form"><small>Ready job</small><select aria-label="Ready imported job" disabled={Boolean(pendingAction)} onChange={(event) => { const draft = plantJobImportReady.find((candidate) => candidate.id === event.target.value); if (draft) loadPlantJobImportDraft(draft) }} value={plantJobImportReady.some((draft) => draft.id === jobDraft.id) ? jobDraft.id : ''}><option value="">Choose ready job</option>{plantJobImportReady.map((draft) => <option key={draft.id} value={draft.id}>{draft.id} · {draft.product}</option>)}</select></label> : null}{plantJobImportReview.issues.length ? <details className={compactDisclosureClass}><summary>Fix {plantJobImportReview.issues.length} blocked rows</summary><div aria-label="Blocked imported jobs" className="plant-job-import-repair" role="list">{plantJobImportReview.issues.map((issue) => <span key={issue.row} role="listitem"><small>Row {issue.row} · {issue.id || 'No ID'}</small><strong>{issue.reasons.join(' · ')}</strong></span>)}</div></details> : null}</> : null}
-              {plantJobImportSourceName ? <p className="plant-job-import-source">File: {plantJobImportSourceName}</p> : null}
             </div>
           </section>
+          </details>
           <form className={compactFormClass} onSubmit={createJob}>
             <div className="form-row"><label>Job ID<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={80} onChange={(event) => setJobDraft((current) => ({ ...current, id: event.target.value }))} placeholder="JOB-002" ref={plantJobIdInputRef} required value={jobDraft.id} /></label><label>Line or team<input disabled={!productionCanWrite || Boolean(pendingAction)} maxLength={120} onChange={(event) => setJobDraft((current) => ({ ...current, line: event.target.value }))} placeholder="Line 02" required value={jobDraft.line} /></label></div>
             <div className="form-row"><label>Product or batch<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} maxLength={180} onChange={(event) => setJobDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Product name" required value={jobDraft.product} /></label><label>Target units<input disabled={!productionCanWrite || Boolean(pendingAction) || Boolean(selectedShopDemand)} min="1" onChange={(event) => setJobDraft((current) => ({ ...current, target: event.target.value }))} required step="1" type="number" value={jobDraft.target} /></label></div>
