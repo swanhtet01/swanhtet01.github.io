@@ -296,6 +296,7 @@ export function EcommerceProduct() {
   const [merchandising, setMerchandising] = useState<CommerceStorefrontMerchandising[] | null>(initialState.merchandising)
   const [device, setDevice] = useState<PreviewDevice>(() => window.matchMedia('(max-width: 760px)').matches ? 'phone' : 'desktop')
   const [workspaceView, setWorkspaceView] = useState<'setup' | 'preview'>('preview')
+  const [storefrontWorkspaceOpen, setStorefrontWorkspaceOpen] = useState(false)
   const [digestState, setDigestState] = useState({ previewJson: '', value: '', error: '' })
   const [managedCatalogDigestState, setManagedCatalogDigestState] = useState({
     source: '',
@@ -1858,78 +1859,6 @@ export function EcommerceProduct() {
     && ecommerceTodayCartUnits > 0
   const customerQuoteNextAction = ecommerceQuoteNextAction(customerRequestState, ecommerceTodayCartUnits)
   const customerRequestNeedsQuoteReview = Boolean(customerQuoteNextAction)
-  const aiDeskRows = [
-    ['Import', importNeeded ? 'Needed' : `${catalog.items.length} items`],
-    ['Merchandise', selectedSkus.length ? `${selectedSkus.length} selected` : 'Pick products'],
-    ['Checkout', buyingReady ? 'Quote ready' : 'Save first'],
-    ['Shop review', pendingManagedRequests.length ? `${pendingManagedRequests.length} waiting` : customerRequestNeedsQuoteReview ? customerQuoteNextAction?.action ?? 'Review quote' : customerRequestState === 'waiting_shop_review' ? 'Request sent' : 'No queue'],
-  ] as const
-  const aiAgentJob = checkoutEntryRecoveryPending
-    ? 'Review unfinished checkout'
-    : pendingManagedRequests.length
-    ? 'Review Ecommerce requests in Shop'
-    : customerRequestNeedsQuoteReview
-      ? customerQuoteNextAction?.action ?? 'Review current total'
-    : customerRequestState === 'waiting_shop_review'
-      ? 'View the customer request receipt'
-    : ecommerceActiveOrderCount
-      ? 'Continue Ecommerce order in Shop'
-    : retainedCompletedCheckout
-      ? 'Review completed Ecommerce order'
-    : importNeeded
-      ? 'Prepare catalog import'
-      : storefrontSetupRequired
-        ? 'Finish store'
-        : buyingCart.length
-          ? 'Review cart quote'
-          : managedIdentity
-            ? 'Open store for ordering'
-            : sampleStore ? 'Start sample order' : 'Start customer order'
-  const aiAgentReason = checkoutEntryRecoveryPending
-    ? 'A source-bound customer checkout must be resumed or discarded before the cart can change.'
-    : pendingManagedRequests.length
-    ? `${pendingManagedRequests.length} request${pendingManagedRequests.length === 1 ? '' : 's'} waiting for accountable Shop review.`
-    : customerRequestNeedsQuoteReview
-      ? customerQuoteNextAction?.summary ?? 'The retained request needs a current checkout review.'
-    : customerRequestState === 'waiting_shop_review'
-      ? 'The customer request is retained separately from the Shop operator review.'
-    : ecommerceActiveOrderCount
-      ? `${ecommerceActiveOrderCount} Ecommerce order${ecommerceActiveOrderCount === 1 ? '' : 's'} now use the Shop-owned fulfilment record.`
-    : retainedCompletedCheckout
-      ? 'The retained checkout belongs to a completed Shop order and cannot create a duplicate request.'
-    : importNeeded
-      ? 'The order desk needs a real Shop catalog before the store can sell.'
-      : storefrontSetupRequired
-        ? 'Save the customer view before quotes and order review are trusted.'
-        : buyingCart.length
-          ? `${buyingCart.length} cart line${buyingCart.length === 1 ? '' : 's'} ready for quote review.`
-          : managedIdentity
-            ? 'The store is saved and ready for a customer request.'
-            : sampleStore ? 'The sample store is ready for one customer-order walkthrough.' : 'The customer store is ready for its next reviewed order.'
-  const aiOwnerGate = checkoutEntryRecoveryPending
-    ? 'Resume or discard only; recovery cannot create a quote, order, payment, stock change, or message.'
-    : pendingManagedRequests.length
-    ? 'Shop confirms stock, delivery, payment, and customer contact.'
-    : customerRequestNeedsQuoteReview
-      ? 'Review one current total. No request is resent until the customer checkout is submitted again.'
-    : customerRequestState === 'waiting_shop_review'
-      ? 'The Shop operator confirms stock, promise, payment, and delivery.'
-    : ecommerceActiveOrderCount
-      ? 'Shop remains authoritative for fulfilment, payment, cancellation, and returns.'
-    : retainedCompletedCheckout
-      ? 'View the completed Shop record or explicitly start another order; Ecommerce does not rewrite the result.'
-    : importNeeded
-      ? 'Review the imported catalog before going live.'
-      : storefrontSetupRequired
-        ? 'Save the exact customer view first.'
-      : buyingCart.length
-          ? 'Review the quote before sending to Shop.'
-          : 'Payment and customer messages stay locked.'
-  const aiAgentQueueRows = [
-    ['Next step', aiAgentJob],
-    ['Why', aiAgentReason],
-    ['Review', aiOwnerGate],
-  ] as const
   const orderAutopilotStage = checkoutEntryRecoveryPending
     ? 'Review checkout recovery'
     : importNeeded
@@ -2055,6 +1984,7 @@ export function EcommerceProduct() {
           : 'No order yet'],
   ] as const
   const ecommerceTodayGuided = hasStorefrontEditRecovery || checkoutEntryRecoveryPending || importNeeded || storefrontSetupRequired || customerRequestNeedsQuoteReview
+  const ecommerceStorefrontSecondary = ecommerceActiveOrderCount > 0
   function runOrderAutopilot() {
     recordBehaviorSignal(window.localStorage, {
       event: 'agent_job_chosen',
@@ -2117,9 +2047,9 @@ export function EcommerceProduct() {
       event: 'agent_job_seen',
       product: 'ecommerce',
       route: location.pathname + location.search,
-      detail: aiAgentJob,
+      detail: ecommerceTodayAction,
     })
-  }, [aiAgentJob, location.pathname, location.search])
+  }, [ecommerceTodayAction, location.pathname, location.search])
 
   return (
     <div className="workspace-screen ecommerce-product">
@@ -2184,29 +2114,6 @@ export function EcommerceProduct() {
       <details className="ecommerce-business-controls">
         <summary><span><strong>Extra order tools</strong><small>Use only when importing orders, checking delivery, or preparing launch</small></span><b>Extra</b></summary>
         <div className="ecommerce-business-controls-content">
-      <section aria-label="Order workspace" className="ecommerce-ai-desk">
-        <div>
-          <span className="core-eyebrow">Order workspace</span>
-          <h2>{pendingManagedRequests.length ? 'Shop review is waiting' : importNeeded ? 'Import first, then sell' : storefrontSetupRequired ? 'Save store before orders' : managedIdentity ? 'Ready to take reviewed orders' : sampleStore ? 'Try the sample order flow' : 'Take a customer order'}</h2>
-          <p>{pendingManagedRequests.length
-            ? 'Requests are retained for Shop confirmation before stock, delivery, payment, or customer contact changes.'
-            : importNeeded
-              ? 'Upload or connect the Shop catalog once. The customer view, quote, and order review use that source.'
-              : storefrontSetupRequired
-                ? 'Save the customer view so the quote, cart, and Shop review all use the same products and prices.'
-                : managedIdentity
-                  ? 'Customers can build a cart; Shop still confirms the accountable order before anything consequential happens.'
-                  : sampleStore ? 'Use the sample cart to review the customer path. Nothing reaches Shop until confirmation.' : 'Use the customer cart to review the order. Nothing reaches Shop until confirmation.'}</p>
-        </div>
-        <div className="ecommerce-ai-desk-queue">
-          {aiDeskRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-        </div>
-        <div className="ecommerce-ai-agent-queue" aria-label="Ecommerce next step" role="group">
-          {aiAgentQueueRows.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-        </div>
-        <button className="core-button primary compact" disabled={catalogHydrating} onClick={runOrderAutopilot} type="button">Open next step</button>
-      </section>
-
       <section aria-label="Import customer orders" className="ecommerce-ops-cockpit ecommerce-order-import-cockpit">
         <div>
           <span className="core-eyebrow">Import customer orders</span>
@@ -2414,6 +2321,13 @@ export function EcommerceProduct() {
         </div>
       </details>
 
+      <section
+        className="ecommerce-business-controls ecommerce-storefront-disclosure"
+        data-open={!ecommerceStorefrontSecondary || storefrontWorkspaceOpen ? 'true' : 'false'}
+        data-priority={ecommerceStorefrontSecondary ? 'secondary' : 'primary'}
+      >
+        {ecommerceStorefrontSecondary ? <button aria-controls="ecommerce-storefront-content" aria-expanded={storefrontWorkspaceOpen} className="ecommerce-storefront-toggle" onClick={() => setStorefrontWorkspaceOpen((current) => !current)} type="button"><span><strong>Browse or start another order</strong><small>Your current order continues in Shop</small></span><b>{storefrontWorkspaceOpen ? 'Hide' : 'Browse'}</b></button> : null}
+        {!ecommerceStorefrontSecondary || storefrontWorkspaceOpen ? <div className="ecommerce-storefront-content" id="ecommerce-storefront-content">
       <label className="ecommerce-workspace-switch">
         <span>View</span>
         <select aria-controls={workspaceView === 'preview' ? 'ecommerce-preview-panel' : 'ecommerce-setup-panel'} aria-label="Storefront view" disabled={hasStorefrontEditRecovery} onChange={(event) => showWorkspace(event.target.value as 'setup' | 'preview')} value={workspaceView}>
@@ -2667,6 +2581,8 @@ export function EcommerceProduct() {
 
         </section>
       </div>
+        </div> : null}
+      </section>
     </div>
   )
 }

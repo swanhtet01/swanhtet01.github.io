@@ -22,7 +22,7 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 
 ## 3. Demo script
 
-1. Start on `/ecommerce/`. Press `Start customer order` in the `Start here` panel, or scroll to `Customer storefront` directly — this is what the client's customer would see.
+1. Start on `/ecommerce/`. On a fresh workspace, press `Start customer order` in the `Start here` panel. If an order is already active, first show the accountable `Open Shop` handoff, then press `Browse or start another order` to reveal `Customer storefront` for the next customer.
 2. Tap `Add to cart` on one or two products; the button flips to `In cart`, and availability is honest per item (`Available` or `Sold out`).
 3. Open the `Cart and checkout` panel (`Review one total before Shop`). Show the cart lines with quantities and the products total.
 4. Fill the customer fields — Name and Phone — then `Receive order`: `Pickup · included` or `Delivery · Shop confirms`. Payment shows the sample notice (quoted in section 4); the empty-cart copy already set the rule: `Nothing goes to Shop until you review the exact quote.`
@@ -30,7 +30,7 @@ Honesty note: Ecommerce's manifest status is `release-candidate-local`. Demo it 
 6. Press `Continue in Shop`. The app navigates to the Shop order queue (`/shop/?tab=orders&source=ecommerce`) where a named person reviews the request — this is the accountability handoff, the core selling moment.
 7. Confirm the draft in Shop, then use the same Shop record to start preparation, mark it ready, reconcile payment, complete fulfilment, and save the daily close. Every step has its own accountable review; Ecommerce never performs those writes.
 8. Return to Ecommerce: the retained receipt now reads `Completed in Shop`, shows payment as confirmed, and offers `View completed Shop order`. That action opens and focuses the exact completed record inside Shop history; `Start another order` explicitly clears the retained checkout for the next customer.
-9. Wrap on the order workspace panel (`Order workspace`): in the business-data path it reads `Take a customer order`, and the timeline shows the one path from cart to return, with `Open Shop order queue` linking back.
+9. Wrap with the storefront collapsed: the active-order headline keeps `Open Shop` as the one primary action, while `Browse or start another order` preserves the complete store one tap away. This is the operating rule: finish the current order in Shop without blocking the next customer.
 
 ## 4. Objection handling: the boundary
 

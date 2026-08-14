@@ -250,112 +250,18 @@
 .ecommerce-business-controls > summary small { overflow: hidden; color: var(--core-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .ecommerce-business-controls > summary b { min-width: 0; margin-left: auto; overflow: hidden; color: var(--core-muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .ecommerce-business-controls-content { display: grid; gap: 10px; padding: 10px; }
-.ecommerce-business-controls-content > .ecommerce-ai-desk,
 .ecommerce-business-controls-content > .ecommerce-ops-cockpit { margin: 0; }
 
-.ecommerce-ai-desk {
-  display: grid;
-  grid-template-columns: minmax(0, .9fr) minmax(300px, .75fr) minmax(280px, .8fr) auto;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 12px;
-  border: 1px solid rgba(31, 68, 51, .14);
-  border-radius: 10px;
-  padding: 12px;
-  background: #fff;
-}
-
-.ecommerce-ai-desk > div:first-child {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.ecommerce-ai-desk h2 {
-  margin: 0;
-  color: #17231d;
-  font-size: 17px;
-  line-height: 1.2;
-}
-
-.ecommerce-ai-desk p {
-  max-width: 680px;
-  margin: 0;
-  color: #66746b;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.ecommerce-ai-desk-queue {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid rgba(31, 68, 51, .12);
-  border-radius: 8px;
-}
-
-.ecommerce-ai-desk-queue span {
-  min-width: 0;
-  min-height: 46px;
-  display: grid;
-  align-content: center;
-  gap: 2px;
-  border-right: 1px solid rgba(31, 68, 51, .1);
-  padding: 6px 8px;
-  background: rgba(11, 116, 94, .04);
-}
-
-.ecommerce-ai-desk-queue span:last-child {
-  border-right: 0;
-}
-
-.ecommerce-ai-desk-queue small {
-  overflow: hidden;
-  color: #66746b;
-  font-size: 8px;
-  font-weight: 780;
-  letter-spacing: .04em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.ecommerce-ai-desk-queue strong {
-  overflow: hidden;
-  color: #17231d;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ecommerce-ai-agent-queue {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-}
-
-.ecommerce-ai-agent-queue span {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.ecommerce-ai-agent-queue small {
-  color: #66746b;
-  font-size: 8px;
-  font-weight: 780;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-.ecommerce-ai-agent-queue strong {
-  min-width: 0;
-  color: #17231d;
-  font-size: 11px;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
+.ecommerce-storefront-disclosure { order: 1; margin: 0 0 12px; }
+.ecommerce-storefront-disclosure[data-priority="primary"] { border: 0; background: transparent; }
+.ecommerce-storefront-toggle { width: 100%; min-height: 48px; display: flex; align-items: center; gap: 14px; border: 0; border-radius: 10px; padding: 9px 12px; background: transparent; color: var(--core-ink); cursor: pointer; text-align: left; }
+.ecommerce-storefront-toggle span { min-width: 0; display: grid; gap: 2px; }
+.ecommerce-storefront-toggle strong { font-size: 12px; }
+.ecommerce-storefront-toggle small { color: var(--core-muted); font-size: 9px; }
+.ecommerce-storefront-toggle b { margin-left: auto; color: var(--core-green); font-size: 10px; }
+.ecommerce-storefront-disclosure[data-open="true"] > .ecommerce-storefront-toggle { border-bottom: 1px solid var(--core-line); border-radius: 10px 10px 0 0; }
+.ecommerce-storefront-content { min-width: 0; display: grid; padding: 12px; }
+.ecommerce-storefront-content > .ecommerce-workspace-switch { margin-bottom: 12px; }
 
 .ecommerce-ops-cockpit {
   display: grid;
@@ -1894,31 +1800,6 @@
   .ecommerce-today-source small {
     margin-left: 0;
     text-align: left;
-  }
-
-  .ecommerce-ai-desk {
-    grid-template-columns: 1fr;
-  }
-
-  .ecommerce-ai-desk .core-button {
-    width: 100%;
-  }
-
-  .ecommerce-ai-desk-queue {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .ecommerce-ai-agent-queue {
-    border-top: 1px solid rgba(31, 68, 51, .1);
-    padding-top: 8px;
-  }
-
-  .ecommerce-ai-desk-queue span:nth-child(2n) {
-    border-right: 0;
-  }
-
-  .ecommerce-ai-desk-queue span:nth-child(-n+2) {
-    border-bottom: 1px solid rgba(31, 68, 51, .1);
   }
 
   .ecommerce-save-actions {
