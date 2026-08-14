@@ -9,6 +9,7 @@ import {
   commerceCatalogDigest,
   commerceStorefrontConfigurationActionId,
   validateCommerceState,
+  type CommerceItem,
   type CommerceState,
 } from './commerce-workspace.ts'
 import {
@@ -3693,6 +3694,69 @@ export async function prepareManagedOrderIntakeDraft(request: {
     true,
     request.identity,
   )
+}
+
+export async function localOrderIntakeReviewAvailable() {
+  try {
+    const response = await fetch('/api/health', {
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: { accept: 'application/json' },
+      redirect: 'error',
+    })
+    if (!response.ok) return false
+    const body: unknown = await response.json()
+    if (!isRecord(body) || !isRecord(body.ai)) return false
+    const ai = body.ai
+    return Boolean(
+      body.operating_mode === 'isolated_demo'
+      && ai.order_intake_provider === 'ollama-local'
+      && ai.local_order_intake_review_enabled === true
+      && ai.operational_actions_allowed === false
+    )
+  } catch {
+    return false
+  }
+}
+
+export async function prepareLocalOrderIntakeDraft(request: {
+  items: CommerceItem[]
+  message: string
+  sourceLabel: string
+}) {
+  const response = await fetch('/api/local/v1/commerce/order-intake/drafts', {
+    method: 'POST',
+    body: JSON.stringify({
+      source_label: request.sourceLabel,
+      message: request.message,
+      catalog: request.items.map((item) => ({
+        sku: item.sku,
+        name: item.name,
+        variant: item.variant ?? null,
+        on_hand: item.onHand,
+        unit_price_mmk: item.price,
+      })),
+    }),
+    cache: 'no-store',
+    credentials: 'omit',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      'x-supermega-local-review': 'order-intake-v1',
+    },
+    redirect: 'error',
+  })
+  if (!response.ok) throw await parseError(response)
+  const body: unknown = await response.json()
+  if (!isRecord(body)
+    || body.raw_message_retained !== false
+    || body.operational_actions_performed !== 0
+    || body.external_writes_performed !== false) {
+    throw new ManagedTrialError('The local AI review response crossed its safety boundary.', {
+      code: 'local_order_intake_response_invalid',
+    })
+  }
+  return body
 }
 
 function managedCounterOrderIntent(state: Record<string, unknown>, evidence: ManagedCommandEvidence) {

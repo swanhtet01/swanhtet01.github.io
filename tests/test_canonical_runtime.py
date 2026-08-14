@@ -6,11 +6,16 @@ import os
 import time
 import unittest
 from contextlib import contextmanager
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from supermega_runtime.order_intake import (
+    OrderIntakeCatalogItem,
+    OrderIntakeModelExtraction,
+    build_order_intake_draft,
+)
 from supermega_runtime.runtime import create_app, reduce_trial_state
 from supermega_runtime.supabase_auth import VerifiedSupabaseUser
 from supermega_runtime.trial_store import (
@@ -22,11 +27,69 @@ from supermega_runtime.trial_store import (
 
 
 STRONG_TEST_IDENTITY_SECRET = "mN7!qP2#vR9$kT4@xC8&dF5*zH1_wS6+"
+LOCAL_ORDER_MESSAGE = "May wants 2 SM-1001 through Messenger and will pay KBZPay."
+
+
+class FakeLocalOrderIntakeProvider:
+    provider_id = "ollama-local"
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def generate(
+        self,
+        *,
+        message: str,
+        catalog: Sequence[OrderIntakeCatalogItem],
+        workspace_id: str,
+        actor_id: str,
+    ):
+        self.calls.append(
+            {
+                "message": message,
+                "catalog": list(catalog),
+                "workspace_id": workspace_id,
+                "actor_id": actor_id,
+            }
+        )
+        extraction = OrderIntakeModelExtraction.model_validate(
+            {
+                "scope": "single_item_order",
+                "customer_reference": "May",
+                "channel": "messenger",
+                "sku": "SM-1001",
+                "quantity": 2,
+                "payment": "kbzpay",
+                "fulfilment": None,
+                "uncertain_fields": [],
+                "provenance": [
+                    {"field": "customer_reference", "source_quotes": [{"quote": "May", "occurrence": 1}]},
+                    {"field": "channel", "source_quotes": [{"quote": "Messenger", "occurrence": 1}]},
+                    {"field": "sku", "source_quotes": [{"quote": "SM-1001", "occurrence": 1}]},
+                    {"field": "quantity", "source_quotes": [{"quote": "2", "occurrence": 1}]},
+                    {"field": "payment", "source_quotes": [{"quote": "KBZPay", "occurrence": 1}]},
+                ],
+            }
+        )
+        return build_order_intake_draft(
+            message=message,
+            catalog=list(catalog),
+            extraction=extraction,
+            response_id="local-route-test",
+            model="llama3.2:1b",
+            provider="ollama-local",
+        )
 
 
 class CanonicalRuntimeTests(unittest.TestCase):
     @contextmanager
-    def _client(self, **environment: str) -> Iterator[TestClient]:
+    def _client(
+        self,
+        *,
+        base_url: str = "http://testserver",
+        client_host: str = "testclient",
+        **environment: str,
+    ) -> Iterator[TestClient]:
         controlled = {
             "SUPERMEGA_DATABASE_URL": "",
             "SUPERMEGA_TRIAL_IDENTITY_SECRET": "",
@@ -40,10 +103,17 @@ class CanonicalRuntimeTests(unittest.TestCase):
             "VITE_SUPABASE_PUBLISHABLE_KEY": "",
             "VITE_SUPABASE_ANON_KEY": "",
             "SUPERMEGA_CORS_ORIGINS": "",
+            "SUPERMEGA_AI_PROVIDER_POLICY": "local-only",
+            "SUPERMEGA_OLLAMA_ENABLED": "0",
+            "SUPERMEGA_OLLAMA_MODEL": "",
             **environment,
         }
         with patch.dict(os.environ, controlled, clear=False):
-            with TestClient(create_app()) as client:
+            with TestClient(
+                create_app(),
+                base_url=base_url,
+                client=(client_host, 50_000),
+            ) as client:
                 yield client
 
     def test_health_is_available_without_claiming_managed_readiness(self) -> None:
@@ -108,6 +178,107 @@ class CanonicalRuntimeTests(unittest.TestCase):
                 with patch.dict(os.environ, {"SUPERMEGA_CORS_ORIGINS": value}, clear=False):
                     with self.assertRaisesRegex(ValueError, "SUPERMEGA_CORS_ORIGINS"):
                         create_app()
+
+    def test_local_order_intake_is_loopback_origin_bound_and_non_mutating(self) -> None:
+        origin = "http://127.0.0.1:5190"
+        payload = {
+            "source_label": "MSG-DEMO-001",
+            "message": LOCAL_ORDER_MESSAGE,
+            "catalog": [
+                {
+                    "sku": "SM-1001",
+                    "name": "Classic Tee",
+                    "variant": "Black / M",
+                    "on_hand": 12,
+                    "unit_price_mmk": 25_000,
+                }
+            ],
+        }
+        provider = FakeLocalOrderIntakeProvider()
+        with patch(
+            "supermega_runtime.runtime.configured_order_intake_provider",
+            return_value=provider,
+        ):
+            with self._client(
+                base_url="http://127.0.0.1:8790",
+                client_host="127.0.0.1",
+                SUPERMEGA_CORS_ORIGINS=origin,
+            ) as client:
+                health = client.get("/api/health").json()
+                missing_review_header = client.post(
+                    "/api/local/v1/commerce/order-intake/drafts",
+                    headers={"origin": origin},
+                    json=payload,
+                )
+                invalid_catalog = client.post(
+                    "/api/local/v1/commerce/order-intake/drafts",
+                    headers={
+                        "origin": origin,
+                        "x-supermega-local-review": "order-intake-v1",
+                    },
+                    json={**payload, "catalog": [{**payload["catalog"][0], "unexpected": True}]},
+                )
+                response = client.post(
+                    "/api/local/v1/commerce/order-intake/drafts",
+                    headers={
+                        "origin": origin,
+                        "x-supermega-local-review": "order-intake-v1",
+                    },
+                    json=payload,
+                )
+
+        self.assertTrue(health["ai"]["local_order_intake_review_enabled"])
+        self.assertFalse(health["ai"]["operational_actions_allowed"])
+        self.assertEqual(missing_review_header.status_code, 404)
+        self.assertEqual(invalid_catalog.status_code, 422)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["draft"]["generation"]["provider"], "ollama-local")
+        self.assertEqual(
+            response.json()["source_label_digest"],
+            f"sha256:{hashlib.sha256(payload['source_label'].encode()).hexdigest()}",
+        )
+        self.assertFalse(response.json()["raw_message_retained"])
+        self.assertEqual(response.json()["operational_actions_performed"], 0)
+        self.assertFalse(response.json()["external_writes_performed"])
+        self.assertEqual(len(provider.calls), 1)
+        self.assertEqual(provider.calls[0]["workspace_id"], "local-demo-shop")
+        self.assertEqual(provider.calls[0]["actor_id"], "local-human-review")
+
+        with patch(
+            "supermega_runtime.runtime.configured_order_intake_provider",
+            return_value=FakeLocalOrderIntakeProvider(),
+        ):
+            with self._client(
+                base_url="http://127.0.0.1:8790",
+                client_host="10.0.0.8",
+                SUPERMEGA_CORS_ORIGINS=origin,
+            ) as remote_client:
+                remote = remote_client.post(
+                    "/api/local/v1/commerce/order-intake/drafts",
+                    headers={
+                        "origin": origin,
+                        "x-supermega-local-review": "order-intake-v1",
+                    },
+                    json=payload,
+                )
+            with self._client(
+                base_url="http://127.0.0.1:8790",
+                client_host="127.0.0.1",
+                SUPERMEGA_CORS_ORIGINS=origin,
+                SUPERMEGA_TRIAL_WRITES_ENABLED="true",
+            ) as write_client:
+                write_health = write_client.get("/api/health").json()
+                write_enabled = write_client.post(
+                    "/api/local/v1/commerce/order-intake/drafts",
+                    headers={
+                        "origin": origin,
+                        "x-supermega-local-review": "order-intake-v1",
+                    },
+                    json=payload,
+                )
+        self.assertEqual(remote.status_code, 404)
+        self.assertFalse(write_health["ai"]["local_order_intake_review_enabled"])
+        self.assertEqual(write_enabled.status_code, 404)
 
     def test_trial_identity_fails_closed_without_a_valid_gateway_signature(self) -> None:
         with self._client(SUPERMEGA_TRIAL_IDENTITY_SECRET=STRONG_TEST_IDENTITY_SECRET) as client:

@@ -71,6 +71,7 @@ const siteManifest = await read('site-manifest.json')
 const shopInventoryRuntime = await read('supermega_runtime/shop_inventory_runtime.py')
 const orderIntakeContract = await read('supermega_runtime/order_intake.py')
 const orderIntakeProvider = await read('supermega_runtime/order_intake_provider.py')
+const channelOrderIntakeUi = await read('showroom/src/core/ChannelOrderIntake.tsx')
 const clientImportRuntime = await read('supermega_runtime/client_import_runtime.py')
 const clientOnboardingUi = await read('showroom/src/core/ClientDataOnboarding.tsx')
 const clientOnboardingModel = await read('showroom/src/core/client-onboarding.ts')
@@ -80,6 +81,10 @@ const plantIndustryPacks = await read('showroom/src/core/plant-industry-packs.ts
 const orderIntakeRoute = trialRuntime.slice(
   trialRuntime.indexOf('@router.post("/commerce/order-intake/drafts")'),
   trialRuntime.indexOf('@router.get("/commerce/service-schedule")'),
+)
+const localOrderIntakeRoute = runtime.slice(
+  runtime.indexOf('@app.post("/api/local/v1/commerce/order-intake/drafts")'),
+  runtime.indexOf('@app.get("/api/trial/v1/workspaces")'),
 )
 const spaStaffAccessReviewRoute = trialRuntime.slice(
   trialRuntime.indexOf('@router.post("/commerce/spa/staff-access/review")'),
@@ -434,6 +439,9 @@ requireContract('local AI order intake is fixed-loopback, Llama-only, scale-to-z
   && orderIntakeProvider.includes('"format": schema')
   && orderIntakeProvider.includes('provider="ollama-local"')
   && orderIntakeProvider.includes('_quarantine_unproven_local_extraction(')
+  && orderIntakeProvider.includes('_ground_exact_local_fields(')
+  && orderIntakeProvider.includes('if len(visible) != 1:')
+  && orderIntakeProvider.includes('if len(quantity_matches) == 1:')
   && orderIntakeProvider.includes('if local_requested:')
   && orderIntakeProvider.includes('policy = configured_policy or "local-only"')
   && orderIntakeProvider.includes('if policy == "local-only":\n        return None')
@@ -443,6 +451,33 @@ requireContract('local AI order intake is fixed-loopback, Llama-only, scale-to-z
   && orderIntakeContract.includes('ORDER_INTAKE_PROMPT_VERSION = "supermega.order_intake.extract.v3"')
   && runtime.includes('configured_order_intake_provider()')
   && !runtime.includes('OpenAIOrderIntakeProvider.from_environment()'))
+requireContract('local browser Order Intake is exact-origin, loopback-only, review-only, and unavailable with writes',
+  runtime.includes('not database_url')
+  && runtime.includes('not _flag("SUPERMEGA_TRIAL_WRITES_ENABLED")')
+  && runtime.includes('getattr(order_intake_provider, "provider_id", "") == "ollama-local"')
+  && runtime.includes('_loopback_host(request.client.host)')
+  && runtime.includes('_loopback_host(request.url.hostname)')
+  && runtime.includes('origin in origins')
+  && runtime.includes('request.headers.get("x-supermega-local-review")')
+  && localOrderIntakeRoute.includes('_local_order_intake_request_allowed(request, origins)')
+  && localOrderIntakeRoute.includes('set(body) != {"source_label", "message", "catalog"}')
+  && localOrderIntakeRoute.includes('OrderIntakeCatalogItem.model_validate(item)')
+  && localOrderIntakeRoute.includes('workspace_id="local-demo-shop"')
+  && localOrderIntakeRoute.includes('actor_id="local-human-review"')
+  && localOrderIntakeRoute.includes('"raw_message_retained": False')
+  && localOrderIntakeRoute.includes('"operational_actions_performed": 0')
+  && localOrderIntakeRoute.includes('"external_writes_performed": False')
+  && !/store\.(?:apply_command|create_approval|decide_approval)/.test(localOrderIntakeRoute)
+  && managedTrialClient.includes("localOrderIntakeReviewAvailable")
+  && managedTrialClient.includes("'/api/local/v1/commerce/order-intake/drafts'")
+  && managedTrialClient.includes("'x-supermega-local-review': 'order-intake-v1'")
+  && managedTrialClient.includes("credentials: 'omit'")
+  && managedTrialClient.includes('body.operational_actions_performed !== 0')
+  && managedTrialClient.includes('body.external_writes_performed !== false')
+  && channelOrderIntakeUi.includes('localOrderIntakeReviewAvailable')
+  && channelOrderIntakeUi.includes('prepareLocalOrderIntakeDraft')
+  && channelOrderIntakeUi.includes('const aiAvailable = Boolean(identity) || localAiAvailable === true')
+  && channelOrderIntakeUi.includes("? 'Runs on this device. No order, stock, payment, or customer message action happens.'"))
 requireContract('managed Shop appointments are tenant-scoped, human-only, identity-bound, and optimistic',
   /_resolve_principal\(request, resolve_principal\)/.test(serviceScheduleRoute)
   && /has_surface_read_capability\(readiness\.capabilities, "commerce"\)/.test(serviceScheduleRoute)

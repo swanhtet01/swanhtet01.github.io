@@ -325,6 +325,93 @@ class OllamaOrderIntakeProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(budget.reserved[0][0], "workspace-a")
         self.assertEqual(budget.settled, [("budget-1", "consumed", 140)])
 
+    async def test_unique_literal_fields_repair_a_small_local_model_without_guessing_customer(self) -> None:
+        extraction = {
+            "scope": "single_item_order",
+            "customer_reference": None,
+            "channel": None,
+            "sku": None,
+            "quantity": None,
+            "payment": None,
+            "fulfilment": None,
+            "uncertain_fields": ["customer_reference", "channel", "sku", "quantity", "payment"],
+            "provenance": [],
+        }
+        catalog = [
+            CATALOG[0],
+            OrderIntakeCatalogItem(
+                sku="SM-1002",
+                name="Cold drink pack",
+                on_hand=8,
+                unit_price_mmk=6_500,
+            ),
+        ]
+        provider = OllamaOrderIntakeProvider(
+            budget=RecordingBudget(),
+            transport=RecordingOllamaTransport(completed_ollama_response(extraction)),
+        )
+
+        draft = await provider.generate(
+            message=MESSAGE,
+            catalog=catalog,
+            workspace_id="workspace-a",
+            actor_id="actor-a",
+        )
+
+        self.assertIsNone(draft.customer_reference)
+        self.assertIn("customer_reference", draft.uncertain_fields)
+        self.assertEqual(draft.channel, "messenger")
+        self.assertEqual(draft.sku, "SM-1001")
+        self.assertEqual(draft.quantity, 2)
+        self.assertEqual(draft.payment, "kbzpay")
+        self.assertEqual(draft.total_mmk, 50_000)
+        self.assertEqual(
+            [record.field for record in draft.provenance],
+            ["channel", "sku", "quantity", "payment"],
+        )
+
+    async def test_literal_repair_leaves_multiple_options_ambiguous(self) -> None:
+        message = "Compare SM-1001 and SM-1002 by Phone or Messenger; pay Cash or Card."
+        extraction = {
+            "scope": "ambiguous",
+            "customer_reference": None,
+            "channel": None,
+            "sku": None,
+            "quantity": None,
+            "payment": None,
+            "fulfilment": None,
+            "uncertain_fields": ["channel", "sku", "payment"],
+            "provenance": [],
+        }
+        catalog = [
+            CATALOG[0],
+            OrderIntakeCatalogItem(
+                sku="SM-1002",
+                name="Cold drink pack",
+                on_hand=8,
+                unit_price_mmk=6_500,
+            ),
+        ]
+        provider = OllamaOrderIntakeProvider(
+            budget=RecordingBudget(),
+            transport=RecordingOllamaTransport(completed_ollama_response(extraction)),
+        )
+
+        draft = await provider.generate(
+            message=message,
+            catalog=catalog,
+            workspace_id="workspace-a",
+            actor_id="actor-a",
+        )
+
+        self.assertEqual(draft.scope, "ambiguous")
+        self.assertIsNone(draft.channel)
+        self.assertIsNone(draft.sku)
+        self.assertIsNone(draft.quantity)
+        self.assertIsNone(draft.payment)
+        self.assertEqual(draft.provenance, [])
+        self.assertEqual(draft.status, "needs_clarification")
+
     async def test_unproven_local_value_is_quarantined_instead_of_entering_the_draft(self) -> None:
         extraction = valid_extraction()
         extraction["provenance"] = [

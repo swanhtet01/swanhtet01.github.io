@@ -17,6 +17,7 @@ from hashlib import sha256
 import hmac
 import json
 import os
+import re
 from threading import RLock
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -537,6 +538,110 @@ def _local_source_quote_exists(message: str, source: Mapping[str, Any]) -> bool:
     return True
 
 
+def _unique_grounded_option(
+    message: str,
+    options: Sequence[tuple[str, object]],
+) -> tuple[object, str] | None:
+    """Return one non-overlapping exact option while preserving its source quote."""
+
+    matches: list[tuple[int, int, object, str]] = []
+    for literal, value in options:
+        if not literal:
+            continue
+        pattern = re.compile(
+            rf"(?<![A-Za-z0-9_-]){re.escape(literal)}(?![A-Za-z0-9_-])",
+            flags=re.IGNORECASE | re.ASCII,
+        )
+        matches.extend(
+            (match.start(), match.end(), value, match.group(0))
+            for match in pattern.finditer(message)
+        )
+    visible = [
+        match
+        for match in matches
+        if not any(
+            other[0] <= match[0]
+            and other[1] >= match[1]
+            and (other[1] - other[0]) > (match[1] - match[0])
+            for other in matches
+        )
+    ]
+    if len(visible) != 1:
+        return None
+    return visible[0][2], visible[0][3]
+
+
+def _ground_exact_local_fields(
+    message: str,
+    catalog: Sequence[OrderIntakeCatalogItem],
+    extraction: OrderIntakeModelExtraction,
+) -> OrderIntakeModelExtraction:
+    """Reconcile small-model output only with unique literal message evidence."""
+
+    grounded: dict[str, tuple[object, str]] = {}
+    options = {
+        "channel": (
+            ("Messenger", "messenger"),
+            ("Viber", "viber"),
+            ("Phone", "phone"),
+        ),
+        "sku": tuple((item.sku, item.sku) for item in catalog),
+        "payment": (
+            ("Cash on delivery", "cash_on_delivery"),
+            ("KBZPay", "kbzpay"),
+            ("WavePay", "wavepay"),
+            ("Cash", "cash"),
+            ("Card", "card"),
+        ),
+        "fulfilment": (
+            ("Delivery", "delivery"),
+            ("Pickup", "pickup"),
+        ),
+    }
+    for field, field_options in options.items():
+        match = _unique_grounded_option(message, field_options)
+        if match is not None:
+            grounded[field] = match
+
+    grounded_sku = grounded.get("sku")
+    if grounded_sku is not None:
+        sku_quote = re.escape(str(grounded_sku[1]))
+        quantity_matches: dict[tuple[int, int], str] = {}
+        for pattern in (
+            rf"(?<![A-Za-z0-9_-])([1-9][0-9]{{0,3}})\s*(?:x|×)?\s*{sku_quote}(?![A-Za-z0-9_-])",
+            rf"(?<![A-Za-z0-9_-]){sku_quote}(?![A-Za-z0-9_-])\s*(?:x|×|qty|quantity)?\s*([1-9][0-9]{{0,3}})(?![A-Za-z0-9_-])",
+        ):
+            for match in re.finditer(pattern, message, flags=re.IGNORECASE | re.ASCII):
+                quantity_matches[(match.start(1), match.end(1))] = match.group(1)
+        if len(quantity_matches) == 1:
+            quantity_quote = next(iter(quantity_matches.values()))
+            grounded["quantity"] = (int(quantity_quote), quantity_quote)
+
+    payload = extraction.model_dump(mode="python")
+    uncertain_fields = {str(field) for field in payload["uncertain_fields"]}
+    provenance = {
+        str(record["field"]): record
+        for record in payload["provenance"]
+        if str(record["field"]) not in grounded
+    }
+    for field, (value, quote) in grounded.items():
+        payload[field] = value
+        uncertain_fields.discard(field)
+        provenance[field] = {
+            "field": field,
+            "source_quotes": [{"quote": quote, "occurrence": 1}],
+        }
+    payload["uncertain_fields"] = [
+        field for field in _PROVENANCE_FIELDS if field in uncertain_fields
+    ]
+    payload["provenance"] = [
+        provenance[field]
+        for field in _PROVENANCE_FIELDS
+        if field in provenance
+    ]
+    return OrderIntakeModelExtraction.model_validate(payload)
+
+
 class OpenAIOrderIntakeProvider:
     provider_id = "openai"
 
@@ -767,9 +872,13 @@ class OllamaOrderIntakeProvider:
                 object_pairs_hook=_strict_json_object,
                 parse_constant=_reject_json_constant,
             )
-            extraction = _quarantine_unproven_local_extraction(
+            extraction = _ground_exact_local_fields(
                 prepared.request.message,
-                OrderIntakeModelExtraction.model_validate(extraction_payload)
+                prepared.catalog,
+                _quarantine_unproven_local_extraction(
+                    prepared.request.message,
+                    OrderIntakeModelExtraction.model_validate(extraction_payload),
+                ),
             )
             response_model = response.get("model")
             if not isinstance(response_model, str) or _safe_local_ollama_model(response_model) != self._model:

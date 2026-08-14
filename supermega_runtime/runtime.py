@@ -22,10 +22,17 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
 
 from supermega_runtime.cloud_runtime import router as cloud_runtime_router
 from supermega_runtime.commerce_runtime import reduce_commerce_state
+from supermega_runtime.order_intake import (
+    MAX_ORDER_MESSAGE_LENGTH,
+    OrderIntakeCatalogItem,
+    OrderIntakeDraftRequest,
+)
 from supermega_runtime.order_intake_provider import (
+    MAX_ORDER_INTAKE_CATALOG_ITEMS,
     OrderIntakeProviderError,
     configured_order_intake_provider,
 )
@@ -55,6 +62,8 @@ _DEFAULT_CORS_ORIGINS = "https://app.supermega.dev,https://supermega.dev,https:/
 _MAX_CORS_ORIGINS = 16
 _MAX_CORS_CONFIGURATION_BYTES = 8 * 1024
 _MAX_CORS_ORIGIN_BYTES = 512
+_LOCAL_ORDER_INTAKE_MAX_BODY_BYTES = 256 * 1024
+_LOCAL_ORDER_INTAKE_REVIEW_HEADER = "order-intake-v1"
 _DNS_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _IDENTITY_SECRET_PLACEHOLDER_MARKERS = frozenset(
     {
@@ -215,6 +224,38 @@ def _cors_origins(value: object) -> list[str]:
         if canonical not in origins:
             origins.append(canonical)
     return origins
+
+
+def _loopback_host(value: object) -> bool:
+    host = _text(value).casefold()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _local_order_intake_request_allowed(
+    request: Request,
+    origins: list[str],
+) -> bool:
+    """Admit only the exact local UI through a non-cookie review boundary."""
+
+    origin = _text(request.headers.get("origin"))
+    try:
+        origin_host = urlsplit(origin).hostname
+    except ValueError:
+        return False
+    return bool(
+        request.client
+        and _loopback_host(request.client.host)
+        and _loopback_host(request.url.hostname)
+        and origin in origins
+        and _loopback_host(origin_host)
+        and request.headers.get("x-supermega-local-review")
+        == _LOCAL_ORDER_INTAKE_REVIEW_HEADER
+    )
 
 
 def _validate_state_shape(surface: str, state: Mapping[str, Any]) -> None:
@@ -991,6 +1032,12 @@ def create_app() -> FastAPI:
         openapi_url=None,
     )
     origins = _cors_origins(os.getenv("SUPERMEGA_CORS_ORIGINS"))
+    local_order_intake_enabled = bool(
+        not database_url
+        and not _flag("SUPERMEGA_TRIAL_WRITES_ENABLED")
+        and getattr(order_intake_provider, "provider_id", "") == "ollama-local"
+        and any(_loopback_host(urlsplit(origin).hostname) for origin in origins)
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -1005,6 +1052,7 @@ def create_app() -> FastAPI:
             "x-supermega-actor-kind",
             "x-supermega-identity-timestamp",
             "x-supermega-identity-signature",
+            "x-supermega-local-review",
         ],
     )
 
@@ -1097,6 +1145,7 @@ def create_app() -> FastAPI:
             "ai": {
                 "order_intake_configured": order_intake_provider is not None,
                 "order_intake_provider": getattr(order_intake_provider, "provider_id", "none"),
+                "local_order_intake_review_enabled": local_order_intake_enabled,
                 "browser_api_key_exposed": False,
                 "operational_actions_allowed": False,
             },
@@ -1110,6 +1159,71 @@ def create_app() -> FastAPI:
                 "import_provisioning": import_provisioning,
                 "secret_values_exposed": False,
             },
+        }
+
+    @app.post("/api/local/v1/commerce/order-intake/drafts")
+    async def local_order_intake_draft(request: Request) -> dict[str, Any]:
+        if (
+            not local_order_intake_enabled
+            or order_intake_provider is None
+            or not _local_order_intake_request_allowed(request, origins)
+        ):
+            raise HTTPException(status_code=404, detail={"code": "local_order_intake_unavailable"})
+        content_type = _text(request.headers.get("content-type")).casefold()
+        if not content_type.startswith("application/json"):
+            raise HTTPException(status_code=415, detail={"code": "local_order_intake_json_required"})
+        encoded_body = await request.body()
+        if not encoded_body or len(encoded_body) > _LOCAL_ORDER_INTAKE_MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail={"code": "local_order_intake_request_too_large"})
+        try:
+            body = json.loads(encoded_body)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail={"code": "local_order_intake_json_invalid"}) from exc
+        if not isinstance(body, dict) or set(body) != {"source_label", "message", "catalog"}:
+            raise HTTPException(status_code=422, detail={"code": "local_order_intake_request_invalid"})
+        source_label = body.get("source_label")
+        raw_catalog = body.get("catalog")
+        if (
+            not isinstance(source_label, str)
+            or source_label != source_label.strip()
+            or not 1 <= len(source_label) <= 120
+            or not isinstance(raw_catalog, list)
+            or not 1 <= len(raw_catalog) <= MAX_ORDER_INTAKE_CATALOG_ITEMS
+        ):
+            raise HTTPException(status_code=422, detail={"code": "local_order_intake_request_invalid"})
+        try:
+            message = OrderIntakeDraftRequest.model_validate(
+                {"message": body.get("message")}
+            ).message
+            catalog = [OrderIntakeCatalogItem.model_validate(item) for item in raw_catalog]
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "local_order_intake_request_invalid"}) from exc
+        try:
+            draft = await order_intake_provider.generate(
+                message=message,
+                catalog=catalog,
+                workspace_id="local-demo-shop",
+                actor_id="local-human-review",
+            )
+        except OrderIntakeProviderError as exc:
+            status_code = 503
+            if exc.code == "order_intake_company_budget_reached":
+                status_code = 429
+            elif exc.code in {
+                "order_intake_catalog_empty",
+                "order_intake_catalog_invalid",
+                "order_intake_catalog_too_large",
+            }:
+                status_code = 409
+            elif exc.code == "order_intake_provider_refused":
+                status_code = 422
+            raise HTTPException(status_code=status_code, detail={"code": exc.code}) from exc
+        return {
+            "draft": draft.model_dump(mode="json"),
+            "source_label_digest": f"sha256:{hashlib.sha256(source_label.encode('utf-8')).hexdigest()}",
+            "raw_message_retained": False,
+            "operational_actions_performed": 0,
+            "external_writes_performed": False,
         }
 
     @app.get("/api/trial/v1/workspaces")

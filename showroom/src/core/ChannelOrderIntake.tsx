@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 
 import {
   CHANNEL_ORDER_MESSAGE_MAX,
@@ -14,7 +14,12 @@ import {
   type ChannelOrderField,
 } from './channel-order-intake'
 import type { CommerceItem } from './commerce-workspace'
-import { prepareManagedOrderIntakeDraft, type ManagedIdentity } from './managed-trial'
+import {
+  localOrderIntakeReviewAvailable,
+  prepareLocalOrderIntakeDraft,
+  prepareManagedOrderIntakeDraft,
+  type ManagedIdentity,
+} from './managed-trial'
 
 type ChannelAttributionDraft = { kind: ChannelOrderAttributionInput['kind']; quote: string }
 
@@ -83,11 +88,24 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
   const [aiBusy, setAiBusy] = useState(false)
   const [aiIssue, setAiIssue] = useState('')
   const [aiPrepared, setAiPrepared] = useState(false)
+  const [localAiAvailable, setLocalAiAvailable] = useState<boolean | null>(null)
   const controlsDisabled = disabled || aiBusy
+  const aiAvailable = Boolean(identity) || localAiAvailable === true
+  const localAiChecked = Boolean(identity) || localAiAvailable !== null
   const selectedSku = items.some((item) => item.sku === sku) ? sku : sku || items[0]?.sku || ''
   const mappingFieldIndex = channelOrderFields.indexOf(mappingField)
   const previousMappingField = mappingFieldIndex > 0 ? channelOrderFields[mappingFieldIndex - 1] : undefined
   const nextMappingField = channelOrderFields[mappingFieldIndex + 1]
+
+  useEffect(() => {
+    let active = true
+    if (identity) return () => { active = false }
+    void localOrderIntakeReviewAvailable().then((available) => {
+      if (!active) return
+      setLocalAiAvailable(available)
+    })
+    return () => { active = false }
+  }, [identity])
 
   function attributionIsComplete(field: ChannelOrderField) {
     const attribution = attributions[field]
@@ -143,14 +161,16 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
   }
 
   async function prepareWithAi() {
-    if (!identity || disabled || aiBusy || !sourceLabel.trim() || !message.trim()) return
+    if (!aiAvailable || disabled || aiBusy || !sourceLabel.trim() || !message.trim()) return
     const requestSourceLabel = sourceLabel.trim()
     const requestMessage = message
     setAiBusy(true)
     setAiIssue('')
     setReviewedDraft(null)
     try {
-      const response = await prepareManagedOrderIntakeDraft({ identity, sourceLabel: requestSourceLabel, message: requestMessage })
+      const response = identity
+        ? await prepareManagedOrderIntakeDraft({ identity, sourceLabel: requestSourceLabel, message: requestMessage })
+        : await prepareLocalOrderIntakeDraft({ items, sourceLabel: requestSourceLabel, message: requestMessage })
       const draft = await buildManagedChannelOrderDraft({
         catalogSkus: items.map((item) => item.sku),
         fallbackChannel: channel,
@@ -214,10 +234,18 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
       </div>
       <label>Single message<textarea disabled={controlsDisabled} maxLength={CHANNEL_ORDER_MESSAGE_MAX} onChange={(event) => { setMessage(event.target.value); invalidateReview() }} placeholder="Paste only the message needed to prepare this order." required value={message} /></label>
       <div className="channel-intake-actions">
-        {identity
+        {aiAvailable
           ? <button className="core-button primary" disabled={controlsDisabled || !sourceLabel.trim() || !message.trim() || items.length === 0} onClick={() => void prepareWithAi()} type="button">{aiBusy ? 'Preparing draft…' : 'Prepare with AI'}</button>
-          : <button className="core-button" disabled={controlsDisabled} onClick={() => setManualOpen(true)} type="button">Map manually</button>}
-        <small>{identity ? 'Uses the company account and current Shop catalog. No order or stock change happens yet.' : 'Open a company account to use AI. Manual mapping stays available.'}</small>
+          : !localAiChecked
+            ? <button className="core-button" disabled type="button">Checking local AI…</button>
+            : <button className="core-button" disabled={controlsDisabled} onClick={() => setManualOpen(true)} type="button">Map manually</button>}
+        <small>{identity
+          ? 'Uses the company account and current Shop catalog. No order or stock change happens yet.'
+          : localAiAvailable
+            ? 'Runs on this device. No order, stock, payment, or customer message action happens.'
+            : localAiChecked
+              ? 'Open a company account to use AI. Manual mapping stays available.'
+              : 'Checking for local AI on this device.'}</small>
       </div>
       {aiIssue ? <p className="form-notice" role="alert">{aiIssue}</p> : null}
       <details className="channel-intake-disclosure" onToggle={(event) => setManualOpen(event.currentTarget.open)} open={manualOpen}>
