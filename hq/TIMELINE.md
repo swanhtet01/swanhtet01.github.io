@@ -22,7 +22,7 @@ One real workflow where SuperMega keeps the record and a responsible owner resol
 
 **Budget**: 2,836,231 / 2,840,000 bytes. Headroom: 3,769 bytes (ceiling raised OPS-182 after Website lead view consumed 3,072 bytes; next planned slices are Ecommerce pipeline view, Analytics Step 6). Largest JS chunk: 394,820 / 500,000 bytes.
 
-**Live**: Both domains serve `25cac2f5`. Live scheduler is `degraded`, managed persistence is not proven, security writes are off.
+**Live**: Both domains serve `64e6f843` (paired release 31818675222, 2026-08-14 — the full OPS-735..749 sprint is live). Live scheduler is `degraded`, managed persistence is not proven, security writes are off.
 
 **Blockers**: Seven hosted-readiness gates; founder decisions now (approve_preview_branch_target — GIVEN 2026-08-12, approve_self_serve_activation_window — pending). Pilots are self-serve; users name themselves (decision 2026-08-12).
 
