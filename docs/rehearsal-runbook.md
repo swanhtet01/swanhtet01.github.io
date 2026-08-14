@@ -17,7 +17,7 @@ is bound to `supermega.supabase-rehearsal-packet.v4` and the exact reviewed
   of one empty branch, migration application, and final branch deletion.
 - The operator may run the committed tool only after receiving an Ed25519 owner
   signature and a distinct Ed25519 risk-reviewer acceptance in the private
-  `supermega.preview-rehearsal-approval.v3` receipt described below.
+  `supermega.preview-rehearsal-approval.v4` receipt described below.
 - The checked-in `supermega.preview-rehearsal-authority.v1` policy is
   intentionally `unconfigured`. Execution stays blocked until a separate
   owner-reviewed source change registers two distinct public keys and pins the
@@ -80,12 +80,22 @@ The read-only preflight requires PostgreSQL 17, hostname-verified TLS, the
 `postgres` database, permission to create the reviewed runtime role and schema,
 absence of both `app_private` and `supermega_trial_backend`, no user relation in
 `public`, no public routine or event trigger, no unreviewed user schema, and
-zero Auth users/sessions and Storage buckets/objects. It also returns a
-metadata-only inventory of provider schemas, extensions, relations, routines,
-types, event triggers, and default ACLs. The owner and independent reviewer
-inspect that private inventory and sign its canonical digest. It never reads
-business-row contents. A production schema, executable-object addition,
-metadata-fingerprint change, or data mirror fails closed.
+no subscription, foreign server, user mapping, or large object, plus zero Auth
+users/sessions and Storage buckets/objects. The catalog probe forces
+`search_path=pg_catalog` before inspection so an untrusted schema cannot shadow
+catalog functions. It also returns a
+metadata-only inventory of provider schemas, extensions, relations, columns,
+constraints, indexes, routine-definition/configuration digests, ordinary and
+event triggers, policies, rewrite rules, ACLs, roles and memberships,
+publications/subscriptions, foreign-data surfaces, large objects, and database
+configuration. Subscriptions, foreign servers, user mappings, and large objects
+must all be absent. The owner and independent reviewer inspect that private
+inventory and sign its canonical digest. It never reads business-row contents
+or emits foreign-server or user-mapping option values; only their SHA-256
+digests enter the inventory, and subscription connection strings are never
+selected. A production schema, executable or
+privilege-object addition, catalog-fingerprint change, or data mirror fails
+closed.
 
 ## 3. Bind the reviewed release
 
@@ -136,16 +146,38 @@ Run the exact reviewed database validator once in read-only rehearsal-preflight
 mode, retain its private metadata inventory, and independently review its
 `metadata_fingerprint_digest`. Create SHA-256 digests of the exact three URL
 strings without printing the URL values. Also digest the CA bytes, the absolute
-Node/Git/Python/psql executable files, and the exact reviewed source/lock files
-listed in `trust.sources`. The owner signs the exact domain-separated canonical
-approval below; the independent reviewer then signs the digest of that signed
-owner approval.
+Node/Git/Python/psql executable files, the complete Python virtual environment,
+its base runtime, the complete PostgreSQL native `bin` dependency closure, and
+the exact reviewed source/lock files listed in `trust.sources`. Every runtime
+closure is a sorted, symlink/reparse-free manifest of every directory and file
+path, byte count, and SHA-256 digest. The runner derives the Python roots from
+the approved virtual-environment executable and `pyvenv.cfg`, derives the
+PostgreSQL closure from the approved `psql` directory, removes inherited
+`PATH`, `PYTHONPATH`, and user-site resolution from children, and rechecks the
+relevant closure immediately before and after execution. Python runs with
+`-I -S -B`; the sealed launcher adds only the site-packages directory inside
+the signed virtual-environment closure, so `.pth` files and external import
+paths cannot widen execution. The owner signs the
+exact domain-separated canonical approval below; the independent reviewer then
+signs the digest of that signed owner approval.
+
+After setting only the CA and toolchain path variables, generate the exact
+secret-free trust object locally. This command reads no database URL,
+credential value, provider, or remote:
+
+```powershell
+node tools/run_preview_branch_rehearsal.mjs --capture-trust-inputs
+```
+
+Copy its exact `trust` object into the approval. Any later file addition,
+removal, or byte change in a bound runtime closure invalidates the approval.
+
 Put only public-key fingerprints, signatures, receipt and URL digests in a
 private `.tmp/rehearsal-approval.json`:
 
 ```json
 {
-  "contract": "supermega.preview-rehearsal-approval.v3",
+  "contract": "supermega.preview-rehearsal-approval.v4",
   "decision": "approved",
   "approvalId": "<OWNER_APPROVAL_UUID>",
   "approvedAt": "<UTC_ISO_TIMESTAMP>",
@@ -165,6 +197,29 @@ private `.tmp/rehearsal-approval.json`:
       "git": { "path": "<ABSOLUTE_GIT_PATH>", "digest": "sha256:<GIT_SHA256>" },
       "python": { "path": "<ABSOLUTE_PYTHON_PATH>", "digest": "sha256:<PYTHON_SHA256>" },
       "psql": { "path": "<ABSOLUTE_PSQL17_PATH>", "digest": "sha256:<PSQL_SHA256>" }
+    },
+    "runtimeClosures": {
+      "pythonEnvironment": {
+        "path": "<ABSOLUTE_VIRTUAL_ENVIRONMENT_ROOT>",
+        "digest": "sha256:<SORTED_DIRECTORY_CLOSURE_SHA256>",
+        "fileCount": 1,
+        "directoryCount": 1,
+        "totalBytes": 1
+      },
+      "pythonBaseRuntime": {
+        "path": "<ABSOLUTE_PYVENV_HOME>",
+        "digest": "sha256:<SORTED_DIRECTORY_CLOSURE_SHA256>",
+        "fileCount": 1,
+        "directoryCount": 1,
+        "totalBytes": 1
+      },
+      "postgresNative": {
+        "path": "<ABSOLUTE_POSTGRES17_BIN>",
+        "digest": "sha256:<SORTED_DIRECTORY_CLOSURE_SHA256>",
+        "fileCount": 1,
+        "directoryCount": 1,
+        "totalBytes": 1
+      }
     },
     "sources": {
       "runner": "sha256:<RUNNER_SHA256>",
@@ -226,7 +281,7 @@ private `.tmp/rehearsal-approval.json`:
 }
 ```
 
-The owner signature uses domain `supermega.preview-rehearsal-approval.v3` and
+The owner signature uses domain `supermega.preview-rehearsal-approval.v4` and
 stable JSON with `ownerSignature` and `independentReview` omitted. The reviewer
 signature uses domain `supermega.preview-rehearsal-independent-review.v1` and
 stable JSON with only its own signature omitted. The receipt is execution

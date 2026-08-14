@@ -4,7 +4,7 @@
   "signaturePolicy": {
     "algorithm": "Ed25519",
     "canonicalization": "supermega.stable-json.v1",
-    "approvalDomain": "supermega.preview-rehearsal-approval.v3",
+    "approvalDomain": "supermega.preview-rehearsal-approval.v4",
     "reviewDomain": "supermega.preview-rehearsal-independent-review.v1",
     "maximumApprovalValidityHours": 24,
     "distinctRoleKeysRequired": true
@@ -33,5 +33,5 @@
     "providerWritesAuthorized": false,
     "registrationOwnerGated": true
   },
-  "sourceDigest": "sha256:1e074156d7889b18ba87df3b35f096d2e495e9da83080ce4213a30b59ef17459"
+  "sourceDigest": "sha256:97f53be25da04e4c4c1084b36c4b1d564463fc78ca73d97bb430efc56199e189"
 }

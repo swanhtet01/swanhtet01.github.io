@@ -31,6 +31,33 @@ TRUSTED_OWNER = "postgres"
 SCHEMA_COMPONENT = "private_trial_backend"
 SCHEMA_VERSION = 10
 EXPECTED_POSTGRES_MAJOR = 17
+REHEARSAL_METADATA_INVENTORY_KEYS = (
+    "schemas",
+    "extensions",
+    "relations",
+    "columns",
+    "constraints",
+    "indexes",
+    "routines",
+    "triggers",
+    "policies",
+    "rewrite_rules",
+    "types",
+    "event_triggers",
+    "default_acls",
+    "roles",
+    "role_memberships",
+    "role_settings",
+    "publications",
+    "publication_relations",
+    "subscriptions",
+    "subscription_relations",
+    "foreign_data_wrappers",
+    "foreign_servers",
+    "user_mappings",
+    "large_objects",
+    "database_configuration",
+)
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 UNSUPPORTED_SUPABASE_POSTGRES17_EXTENSIONS = frozenset(
     {"timescaledb", "plv8", "pls", "plcoffee", "pgjwt"}
@@ -1021,6 +1048,7 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
 
     with connection.cursor() as cursor:
         cursor.execute("set transaction read only")
+        cursor.execute("set local search_path = pg_catalog")
         cursor.execute(
             """
             with current_login as (
@@ -1063,6 +1091,16 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
               ) as event_triggers_absent,
               not exists (
                 select 1
+                from pg_subscription subscription_record
+                where subscription_record.subdbid = (
+                  select oid from pg_database where datname = current_database()
+                )
+              ) as subscriptions_absent,
+              not exists (select 1 from pg_foreign_server) as foreign_servers_absent,
+              not exists (select 1 from pg_user_mapping) as user_mappings_absent,
+              not exists (select 1 from pg_largeobject_metadata) as large_objects_absent,
+              not exists (
+                select 1
                 from pg_namespace schema_record
                 where schema_record.nspname !~ '^pg_'
                   and schema_record.nspname not in (
@@ -1075,7 +1113,11 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
               ) as unexpected_user_schemas_absent,
               jsonb_build_object(
                 'schemas', coalesce((
-                  select jsonb_agg(schema_record.nspname order by schema_record.nspname)
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    pg_get_userbyid(schema_record.nspowner),
+                    coalesce(schema_record.nspacl::text, '')
+                  ) order by schema_record.nspname)
                   from pg_namespace schema_record
                   where schema_record.nspname !~ '^pg_'
                     and schema_record.nspname <> 'information_schema'
@@ -1084,7 +1126,9 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                   select jsonb_agg(jsonb_build_array(
                     extension_record.extname,
                     extension_record.extversion,
-                    schema_record.nspname
+                    schema_record.nspname,
+                    pg_get_userbyid(extension_record.extowner),
+                    extension_record.extrelocatable
                   ) order by extension_record.extname)
                   from pg_extension extension_record
                   join pg_namespace schema_record
@@ -1096,11 +1140,103 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                     relation_record.relname,
                     relation_record.relkind,
                     relation_record.relpersistence,
-                    pg_get_userbyid(relation_record.relowner)
+                    pg_get_userbyid(relation_record.relowner),
+                    coalesce(relation_record.relacl::text, ''),
+                    relation_record.relrowsecurity,
+                    relation_record.relforcerowsecurity,
+                    relation_record.relreplident,
+                    relation_record.relispartition,
+                    coalesce(relation_record.reloptions::text, ''),
+                    coalesce(relation_record.relpartbound::text, ''),
+                    case when relation_record.relkind in ('v', 'm') then
+                      'sha256:' || encode(sha256(convert_to(
+                        coalesce(pg_get_viewdef(relation_record.oid, true), ''), 'UTF8'
+                      )), 'hex')
+                    else '' end
                   ) order by schema_record.nspname, relation_record.relname)
                   from pg_class relation_record
                   join pg_namespace schema_record
                     on schema_record.oid = relation_record.relnamespace
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                ), '[]'::jsonb),
+                'columns', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    relation_record.relname,
+                    attribute_record.attnum,
+                    attribute_record.attname,
+                    attribute_record.atttypid::regtype::text,
+                    attribute_record.atttypmod,
+                    attribute_record.attnotnull,
+                    attribute_record.attidentity,
+                    attribute_record.attgenerated,
+                    coalesce(attribute_record.attacl::text, ''),
+                    case when default_record.adbin is null then '' else
+                      'sha256:' || encode(sha256(convert_to(
+                        pg_get_expr(default_record.adbin, default_record.adrelid, true), 'UTF8'
+                      )), 'hex')
+                    end
+                  ) order by schema_record.nspname, relation_record.relname,
+                             attribute_record.attnum)
+                  from pg_attribute attribute_record
+                  join pg_class relation_record
+                    on relation_record.oid = attribute_record.attrelid
+                  join pg_namespace schema_record
+                    on schema_record.oid = relation_record.relnamespace
+                  left join pg_attrdef default_record
+                    on default_record.adrelid = attribute_record.attrelid
+                   and default_record.adnum = attribute_record.attnum
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                    and attribute_record.attnum > 0
+                    and not attribute_record.attisdropped
+                ), '[]'::jsonb),
+                'constraints', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    coalesce(relation_record.relname, ''),
+                    constraint_record.conname,
+                    constraint_record.contype,
+                    constraint_record.condeferrable,
+                    constraint_record.condeferred,
+                    constraint_record.convalidated,
+                    'sha256:' || encode(sha256(convert_to(
+                      pg_get_constraintdef(constraint_record.oid, true), 'UTF8'
+                    )), 'hex')
+                  ) order by schema_record.nspname,
+                             coalesce(relation_record.relname, ''),
+                             constraint_record.conname)
+                  from pg_constraint constraint_record
+                  join pg_namespace schema_record
+                    on schema_record.oid = constraint_record.connamespace
+                  left join pg_class relation_record
+                    on relation_record.oid = constraint_record.conrelid
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                ), '[]'::jsonb),
+                'indexes', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    table_record.relname,
+                    index_record.relname,
+                    index_catalog.indisunique,
+                    index_catalog.indisprimary,
+                    index_catalog.indisvalid,
+                    index_catalog.indisready,
+                    index_catalog.indislive,
+                    'sha256:' || encode(sha256(convert_to(
+                      pg_get_indexdef(index_catalog.indexrelid, 0, true), 'UTF8'
+                    )), 'hex')
+                  ) order by schema_record.nspname, table_record.relname,
+                             index_record.relname)
+                  from pg_index index_catalog
+                  join pg_class index_record
+                    on index_record.oid = index_catalog.indexrelid
+                  join pg_class table_record
+                    on table_record.oid = index_catalog.indrelid
+                  join pg_namespace schema_record
+                    on schema_record.oid = table_record.relnamespace
                   where schema_record.nspname !~ '^pg_'
                     and schema_record.nspname <> 'information_schema'
                 ), '[]'::jsonb),
@@ -1112,7 +1248,27 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                     function_record.prokind,
                     function_record.prosecdef,
                     pg_get_userbyid(function_record.proowner),
-                    language_record.lanname
+                    language_record.lanname,
+                    function_record.proleakproof,
+                    function_record.provolatile,
+                    function_record.proparallel,
+                    function_record.proisstrict,
+                    function_record.proretset,
+                    function_record.prorettype::regtype::text,
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(function_record.proconfig::text, ''), 'UTF8'
+                    )), 'hex'),
+                    coalesce(function_record.proacl::text, ''),
+                    'sha256:' || encode(sha256(convert_to(concat_ws(E'\n',
+                      function_record.prosrc,
+                      function_record.probin,
+                      pg_get_function_arguments(function_record.oid),
+                      pg_get_function_result(function_record.oid),
+                      case when function_record.prokind in ('f', 'p')
+                        then pg_get_functiondef(function_record.oid)
+                        else ''
+                      end
+                    ), 'UTF8')), 'hex')
                   ) order by schema_record.nspname, function_record.proname,
                              pg_get_function_identity_arguments(function_record.oid))
                   from pg_proc function_record
@@ -1123,12 +1279,92 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                   where schema_record.nspname !~ '^pg_'
                     and schema_record.nspname <> 'information_schema'
                 ), '[]'::jsonb),
+                'triggers', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    relation_record.relname,
+                    trigger_record.tgname,
+                    trigger_record.tgenabled,
+                    trigger_record.tgisinternal,
+                    trigger_record.tgfoid::regprocedure::text,
+                    'sha256:' || encode(sha256(convert_to(
+                      pg_get_triggerdef(trigger_record.oid, true), 'UTF8'
+                    )), 'hex')
+                  ) order by schema_record.nspname, relation_record.relname,
+                             trigger_record.tgname)
+                  from pg_trigger trigger_record
+                  join pg_class relation_record
+                    on relation_record.oid = trigger_record.tgrelid
+                  join pg_namespace schema_record
+                    on schema_record.oid = relation_record.relnamespace
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                ), '[]'::jsonb),
+                'policies', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    relation_record.relname,
+                    policy_record.polname,
+                    policy_record.polpermissive,
+                    policy_record.polcmd,
+                    coalesce((
+                      select jsonb_agg(
+                        coalesce(role_record.rolname, 'PUBLIC')
+                        order by coalesce(role_record.rolname, 'PUBLIC')
+                      )
+                      from unnest(policy_record.polroles) as policy_role(role_oid)
+                      left join pg_roles role_record
+                        on role_record.oid = policy_role.role_oid
+                    ), '[]'::jsonb),
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(pg_get_expr(policy_record.polqual, policy_record.polrelid, true), ''),
+                      'UTF8'
+                    )), 'hex'),
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(pg_get_expr(policy_record.polwithcheck, policy_record.polrelid, true), ''),
+                      'UTF8'
+                    )), 'hex')
+                  ) order by schema_record.nspname, relation_record.relname,
+                             policy_record.polname)
+                  from pg_policy policy_record
+                  join pg_class relation_record
+                    on relation_record.oid = policy_record.polrelid
+                  join pg_namespace schema_record
+                    on schema_record.oid = relation_record.relnamespace
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                ), '[]'::jsonb),
+                'rewrite_rules', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    schema_record.nspname,
+                    relation_record.relname,
+                    rewrite_record.rulename,
+                    rewrite_record.ev_type,
+                    rewrite_record.is_instead,
+                    rewrite_record.ev_enabled,
+                    'sha256:' || encode(sha256(convert_to(
+                      pg_get_ruledef(rewrite_record.oid, true), 'UTF8'
+                    )), 'hex')
+                  ) order by schema_record.nspname, relation_record.relname,
+                             rewrite_record.rulename)
+                  from pg_rewrite rewrite_record
+                  join pg_class relation_record
+                    on relation_record.oid = rewrite_record.ev_class
+                  join pg_namespace schema_record
+                    on schema_record.oid = relation_record.relnamespace
+                  where schema_record.nspname !~ '^pg_'
+                    and schema_record.nspname <> 'information_schema'
+                ), '[]'::jsonb),
                 'types', coalesce((
                   select jsonb_agg(jsonb_build_array(
                     schema_record.nspname,
                     type_record.typname,
                     type_record.typtype,
-                    pg_get_userbyid(type_record.typowner)
+                    pg_get_userbyid(type_record.typowner),
+                    coalesce(type_record.typacl::text, ''),
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(type_record.typdefault, ''), 'UTF8'
+                    )), 'hex')
                   ) order by schema_record.nspname, type_record.typname)
                   from pg_type type_record
                   join pg_namespace schema_record
@@ -1158,6 +1394,195 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                   from pg_default_acl default_acl
                   left join pg_namespace schema_record
                     on schema_record.oid = default_acl.defaclnamespace
+                ), '[]'::jsonb),
+                'roles', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    role_record.rolname,
+                    role_record.rolsuper,
+                    role_record.rolinherit,
+                    role_record.rolcreaterole,
+                    role_record.rolcreatedb,
+                    role_record.rolcanlogin,
+                    role_record.rolreplication,
+                    role_record.rolbypassrls,
+                    role_record.rolconnlimit,
+                    coalesce(extract(epoch from role_record.rolvaliduntil)::text, '')
+                  ) order by role_record.rolname)
+                  from pg_roles role_record
+                  where role_record.rolname !~ '^pg_'
+                ), '[]'::jsonb),
+                'role_memberships', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    granted_role.rolname,
+                    member_role.rolname,
+                    grantor_role.rolname,
+                    membership.admin_option,
+                    membership.inherit_option,
+                    membership.set_option
+                  ) order by granted_role.rolname, member_role.rolname,
+                             grantor_role.rolname)
+                  from pg_auth_members membership
+                  join pg_roles granted_role on granted_role.oid = membership.roleid
+                  join pg_roles member_role on member_role.oid = membership.member
+                  join pg_roles grantor_role on grantor_role.oid = membership.grantor
+                  where granted_role.rolname !~ '^pg_'
+                     or member_role.rolname !~ '^pg_'
+                ), '[]'::jsonb),
+                'role_settings', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    coalesce(role_record.rolname, '*'),
+                    coalesce(database_record.datname, '*'),
+                    'sha256:' || encode(sha256(convert_to(
+                      setting_record.setconfig::text, 'UTF8'
+                    )), 'hex')
+                  ) order by coalesce(role_record.rolname, '*'),
+                             coalesce(database_record.datname, '*'))
+                  from pg_db_role_setting setting_record
+                  left join pg_roles role_record on role_record.oid = setting_record.setrole
+                  left join pg_database database_record on database_record.oid = setting_record.setdatabase
+                  where setting_record.setdatabase = 0
+                     or setting_record.setdatabase = (
+                       select oid from pg_database where datname = current_database()
+                     )
+                ), '[]'::jsonb),
+                'publications', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    publication_record.pubname,
+                    pg_get_userbyid(publication_record.pubowner),
+                    publication_record.puballtables,
+                    publication_record.pubinsert,
+                    publication_record.pubupdate,
+                    publication_record.pubdelete,
+                    publication_record.pubtruncate,
+                    publication_record.pubviaroot
+                  ) order by publication_record.pubname)
+                  from pg_publication publication_record
+                ), '[]'::jsonb),
+                'publication_relations', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    publication_record.pubname,
+                    schema_record.nspname,
+                    relation_record.relname,
+                    coalesce(publication_relation.prattrs::text, ''),
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(pg_get_expr(publication_relation.prqual,
+                        publication_relation.prrelid, true), ''), 'UTF8'
+                    )), 'hex')
+                  ) order by publication_record.pubname, schema_record.nspname,
+                             relation_record.relname)
+                  from pg_publication_rel publication_relation
+                  join pg_publication publication_record
+                    on publication_record.oid = publication_relation.prpubid
+                  join pg_class relation_record
+                    on relation_record.oid = publication_relation.prrelid
+                  join pg_namespace schema_record
+                    on schema_record.oid = relation_record.relnamespace
+                ), '[]'::jsonb),
+                'subscriptions', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    subscription_record.subname,
+                    pg_get_userbyid(subscription_record.subowner),
+                    subscription_record.subenabled,
+                    subscription_record.subbinary,
+                    subscription_record.substream,
+                    subscription_record.subtwophasestate,
+                    subscription_record.subdisableonerr,
+                    subscription_record.subpasswordrequired,
+                    subscription_record.subrunasowner,
+                    subscription_record.suborigin,
+                    subscription_record.subfailover,
+                    coalesce(subscription_record.subslotname, ''),
+                    subscription_record.subsynccommit,
+                    subscription_record.subpublications::text
+                  ) order by subscription_record.subname)
+                  from pg_subscription subscription_record
+                  where subscription_record.subdbid = (
+                    select oid from pg_database where datname = current_database()
+                  )
+                ), '[]'::jsonb),
+                'subscription_relations', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    subscription_record.subname,
+                    schema_record.nspname,
+                    relation_record.relname,
+                    subscription_relation.srsubstate,
+                    coalesce(subscription_relation.srsublsn::text, '')
+                  ) order by subscription_record.subname,
+                             schema_record.nspname, relation_record.relname)
+                  from pg_subscription_rel subscription_relation
+                  join pg_subscription subscription_record
+                    on subscription_record.oid = subscription_relation.srsubid
+                  join pg_class relation_record
+                    on relation_record.oid = subscription_relation.srrelid
+                  join pg_namespace schema_record
+                    on schema_record.oid = relation_record.relnamespace
+                  where subscription_record.subdbid = (
+                    select oid from pg_database where datname = current_database()
+                  )
+                ), '[]'::jsonb),
+                'foreign_data_wrappers', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    wrapper_record.fdwname,
+                    pg_get_userbyid(wrapper_record.fdwowner),
+                    coalesce(wrapper_record.fdwhandler::regprocedure::text, ''),
+                    coalesce(wrapper_record.fdwvalidator::regprocedure::text, ''),
+                    coalesce(wrapper_record.fdwacl::text, ''),
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(wrapper_record.fdwoptions::text, ''), 'UTF8'
+                    )), 'hex')
+                  ) order by wrapper_record.fdwname)
+                  from pg_foreign_data_wrapper wrapper_record
+                ), '[]'::jsonb),
+                'foreign_servers', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    wrapper_record.fdwname,
+                    server_record.srvname,
+                    pg_get_userbyid(server_record.srvowner),
+                    coalesce(server_record.srvtype, ''),
+                    coalesce(server_record.srvversion, ''),
+                    coalesce(server_record.srvacl::text, ''),
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(server_record.srvoptions::text, ''), 'UTF8'
+                    )), 'hex')
+                  ) order by wrapper_record.fdwname, server_record.srvname)
+                  from pg_foreign_server server_record
+                  join pg_foreign_data_wrapper wrapper_record
+                    on wrapper_record.oid = server_record.srvfdw
+                ), '[]'::jsonb),
+                'user_mappings', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    server_record.srvname,
+                    coalesce(role_record.rolname, 'PUBLIC'),
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(mapping_record.umoptions::text, ''), 'UTF8'
+                    )), 'hex')
+                  ) order by server_record.srvname,
+                             coalesce(role_record.rolname, 'PUBLIC'))
+                  from pg_user_mapping mapping_record
+                  join pg_foreign_server server_record
+                    on server_record.oid = mapping_record.umserver
+                  left join pg_roles role_record
+                    on role_record.oid = mapping_record.umuser
+                ), '[]'::jsonb),
+                'large_objects', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    large_object.oid,
+                    pg_get_userbyid(large_object.lomowner),
+                    coalesce(large_object.lomacl::text, '')
+                  ) order by large_object.oid)
+                  from pg_largeobject_metadata large_object
+                ), '[]'::jsonb),
+                'database_configuration', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    database_record.datname,
+                    pg_get_userbyid(database_record.datdba),
+                    coalesce(database_record.datacl::text, ''),
+                    database_record.datallowconn,
+                    database_record.datconnlimit,
+                    coalesce(database_record.datcollversion, '')
+                  ) order by database_record.datname)
+                  from pg_database database_record
+                  where database_record.datname = current_database()
                 ), '[]'::jsonb)
               ) as metadata_inventory,
               not exists (select 1 from auth.users limit 1) as auth_users_absent,
@@ -1185,6 +1610,14 @@ def evaluate_supabase_rehearsal_target_snapshot(
             metadata_inventory = json.loads(metadata_inventory)
         except json.JSONDecodeError:
             metadata_inventory = None
+    metadata_inventory_complete = (
+        isinstance(metadata_inventory, Mapping)
+        and set(metadata_inventory) == set(REHEARSAL_METADATA_INVENTORY_KEYS)
+        and all(
+            isinstance(metadata_inventory.get(key), list)
+            for key in REHEARSAL_METADATA_INVENTORY_KEYS
+        )
+    )
     metadata_fingerprint_digest = (
         "sha256:"
         + sha256(
@@ -1195,7 +1628,7 @@ def evaluate_supabase_rehearsal_target_snapshot(
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
-        if isinstance(metadata_inventory, Mapping)
+        if metadata_inventory_complete
         else None
     )
     checks = {
@@ -1215,12 +1648,17 @@ def evaluate_supabase_rehearsal_target_snapshot(
         ),
         "public_routines_absent": _bool(snapshot.get("public_routines_absent")),
         "event_triggers_absent": _bool(snapshot.get("event_triggers_absent")),
+        "subscriptions_absent": _bool(snapshot.get("subscriptions_absent")),
+        "foreign_servers_absent": _bool(snapshot.get("foreign_servers_absent")),
+        "user_mappings_absent": _bool(snapshot.get("user_mappings_absent")),
+        "large_objects_absent": _bool(snapshot.get("large_objects_absent")),
         "unexpected_user_schemas_absent": _bool(
             snapshot.get("unexpected_user_schemas_absent")
         ),
         "provider_metadata_fingerprint_captured": bool(
             re.fullmatch(r"sha256:[0-9a-f]{64}", metadata_fingerprint_digest or "")
         ),
+        "complete_provider_catalog_fingerprint": metadata_inventory_complete,
         "auth_users_absent": _bool(snapshot.get("auth_users_absent")),
         "auth_sessions_absent": _bool(snapshot.get("auth_sessions_absent")),
         "storage_buckets_absent": _bool(snapshot.get("storage_buckets_absent")),

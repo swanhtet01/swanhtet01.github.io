@@ -26,7 +26,7 @@ ACTIVATION_RUNBOOK = ROOT / "docs" / "supermega-enterprise-activation.md"
 PACKAGE_JSON = ROOT / "package.json"
 POWERSHELL = shutil.which("powershell") if os.name == "nt" else None
 SUPABASE_PREFLIGHT_QUERY_SHA256 = (
-    "502fa90d0b6e87481bc11312b3eea7e448ac8e9c9ee630a17dbe3fe2b398a0e1"
+    "4847d3d33e972bcce3d5caada75db993b27aab3a9dead34bc8a9cd9acf1f9f43"
 )
 TRIAL_STORE = ROOT / "supermega_runtime" / "trial_store.py"
 MIGRATION_PREFLIGHT = (
@@ -837,15 +837,46 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
             "public_user_relations_absent": True,
             "public_routines_absent": True,
             "event_triggers_absent": True,
+            "subscriptions_absent": True,
+            "foreign_servers_absent": True,
+            "user_mappings_absent": True,
+            "large_objects_absent": True,
             "unexpected_user_schemas_absent": True,
             "metadata_inventory": {
-                "schemas": ["auth", "extensions", "public", "storage"],
-                "extensions": [["pgcrypto", "1.3", "extensions"]],
+                "schemas": [
+                    ["auth", "supabase_admin", ""],
+                    ["extensions", "postgres", ""],
+                    ["public", "postgres", ""],
+                    ["storage", "supabase_admin", ""],
+                ],
+                "extensions": [
+                    ["pgcrypto", "1.3", "extensions", "postgres", True]
+                ],
                 "relations": [],
+                "columns": [],
+                "constraints": [],
+                "indexes": [],
                 "routines": [],
+                "triggers": [],
+                "policies": [],
+                "rewrite_rules": [],
                 "types": [],
                 "event_triggers": [],
                 "default_acls": [],
+                "roles": [],
+                "role_memberships": [],
+                "role_settings": [],
+                "publications": [],
+                "publication_relations": [],
+                "subscriptions": [],
+                "subscription_relations": [],
+                "foreign_data_wrappers": [],
+                "foreign_servers": [],
+                "user_mappings": [],
+                "large_objects": [],
+                "database_configuration": [
+                    ["postgres", "postgres", "", True, -1, ""]
+                ],
             },
             "auth_users_absent": True,
             "auth_sessions_absent": True,
@@ -897,16 +928,22 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
         self.assertFalse(report["vercel_mutated"])
         self.assertTrue(connection.rolled_back)
         self.assertTrue(connection.closed)
-        self.assertEqual(len(statements), 2)
+        self.assertEqual(len(statements), 3)
         self.assertEqual(
             re.sub(r"\s+", " ", statements[0]).strip().lower(),
             "set transaction read only",
         )
-        self.assertEqual(_first_sql_token(statements[1]), "with")
+        self.assertEqual(
+            re.sub(r"\s+", " ", statements[1]).strip().lower(),
+            "set local search_path = pg_catalog",
+        )
+        self.assertEqual(_first_sql_token(statements[2]), "with")
+        for inventory_key in self.validator.REHEARSAL_METADATA_INVENTORY_KEYS:
+            self.assertIn(f"'{inventory_key}'", statements[2])
         normalized_catalog_probe = re.sub(
             r"\s+",
             " ",
-            statements[1],
+            statements[2],
         ).strip()
         self.assertEqual(
             sha256(normalized_catalog_probe.encode("utf-8")).hexdigest(),
@@ -915,7 +952,7 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
         catalog_probe_without_literals = re.sub(
             r"'(?:''|[^'])*'",
             "''",
-            statements[1],
+            statements[2],
         )
         self.assertNotRegex(
             catalog_probe_without_literals,
@@ -970,6 +1007,85 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
         self.assertFalse(executable_object_report["ready"])
         self.assertIn("public_routines_absent", executable_object_report["failed_checks"])
         self.assertIn("event_triggers_absent", executable_object_report["failed_checks"])
+
+        baseline_fingerprint = report["metadata_fingerprint_digest"]
+        for inventory_key, catalog_entry in (
+            (
+                "triggers",
+                [
+                    "storage",
+                    "objects",
+                    "unexpected_trigger",
+                    "O",
+                    False,
+                    "storage.side_effect()",
+                    "sha256:" + "1" * 64,
+                ],
+            ),
+            (
+                "routines",
+                [
+                    "storage",
+                    "side_effect",
+                    "",
+                    "f",
+                    True,
+                    "supabase_admin",
+                    "plpgsql",
+                    False,
+                    "v",
+                    "u",
+                    False,
+                    False,
+                    "trigger",
+                    "",
+                    "",
+                    "sha256:" + "2" * 64,
+                ],
+            ),
+            (
+                "policies",
+                [
+                    "storage",
+                    "objects",
+                    "unexpected_policy",
+                    True,
+                    "*",
+                    ["public"],
+                    "sha256:" + "3" * 64,
+                    "sha256:" + "4" * 64,
+                ],
+            ),
+            (
+                "publications",
+                ["unexpected_publication", "postgres", True, True, True, True, True, False],
+            ),
+        ):
+            changed_snapshot = json.loads(json.dumps(snapshot))
+            changed_snapshot["metadata_inventory"][inventory_key].append(catalog_entry)
+            changed_report = self.validator.evaluate_supabase_rehearsal_target_snapshot(
+                changed_snapshot,
+                connection_mode="direct",
+                target_project_ref=self.TARGET_REF,
+            )
+            self.assertNotEqual(
+                changed_report["metadata_fingerprint_digest"],
+                baseline_fingerprint,
+                inventory_key,
+            )
+
+        incomplete_snapshot = json.loads(json.dumps(snapshot))
+        del incomplete_snapshot["metadata_inventory"]["triggers"]
+        incomplete_report = self.validator.evaluate_supabase_rehearsal_target_snapshot(
+            incomplete_snapshot,
+            connection_mode="direct",
+            target_project_ref=self.TARGET_REF,
+        )
+        self.assertFalse(incomplete_report["ready"])
+        self.assertIn(
+            "complete_provider_catalog_fingerprint",
+            incomplete_report["failed_checks"],
+        )
 
     def test_connection_options_preserve_and_enforce_verify_full(self) -> None:
         calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
