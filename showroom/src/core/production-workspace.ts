@@ -1,7 +1,7 @@
 import { sha256Hex } from './managed-trial-proof.ts'
-import { createEmptyPlantOrderState, plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderProjection, type PlantOrderState } from './plant-order-foundation.ts'
+import { applyPlantOrderPlan, buildPlantOrderControlledPlan, createEmptyPlantOrderState, plantOrderEvidenceDigest, projectPlantOrder, type PlantOrderProjection, type PlantOrderState } from './plant-order-foundation.ts'
 import { plantIndustryPack, type PlantIndustryPackId } from './plant-industry-packs.ts'
-import { productionOrderPortfolioEntries, validateProductionOrderPortfolio, type ProductionOrderPortfolio } from './production-order-portfolio.ts'
+import { productionOrderPortfolioEntries, upsertProductionOrderExecution, validateProductionOrderPortfolio, type ProductionOrderPortfolio } from './production-order-portfolio.ts'
 import type { ShopProductionDemandSourceSnapshot } from './shop-production-demand.ts'
 
 export const PRODUCTION_WORKSPACE_SCHEMA = 'supermega.production.workspace.v2' as const
@@ -1376,7 +1376,7 @@ function createLegacySeedProduction(now = deterministicSeedNow): ProductionState
   }
 }
 
-export function createSeedProduction(now = deterministicSeedNow): ProductionState {
+function createMaintenanceSeedProduction(now = deterministicSeedNow): ProductionState {
   const seed = createLegacySeedProduction(now)
   const equipmentId = 'MC-02'
   const workCentreId = 'WC-LINE-LINE-02'
@@ -1435,6 +1435,35 @@ export function createSeedProduction(now = deterministicSeedNow): ProductionStat
       { id: `EVT-${importActionId}`, actionId: importActionId, createdAt: importedAt, actor: 'Demo setup', reason: 'Prepared fictional equipment master data.', evidenceReference: equipmentDigest, kind: 'equipment_master_imported', subjectId: 'equipment-master', summary: 'Imported 1 equipment master records', equipmentIds: [equipmentId] },
     ],
   }
+}
+
+export function createSeedProduction(now = deterministicSeedNow): ProductionState {
+  const seed = createMaintenanceSeedProduction(now)
+  const controlledJob = seed.jobs.find((job) => job.id === 'JOB-202')
+  if (!controlledJob) throw new Error('The Plant demo controlled job is missing.')
+  const workCentreId = 'WC-LINE-LINE-02'
+  const emptyExecution = createEmptyPlantOrderState()
+  const plan = buildPlantOrderControlledPlan({
+    planId: 'PLN-DEMO-JOB-202-R1',
+    sourceDigest: productionJobPlanSourceDigest('plant:local-sample', controlledJob),
+    job: {
+      jobId: controlledJob.id,
+      product: controlledJob.product,
+      targetQuantity: controlledJob.target - controlledJob.output - (controlledJob.scrap ?? 0),
+      outputBatchId: 'BATCH-DEMO-JOB-202-R1',
+    },
+    materials: [{ materialId: 'MAT-DEMO-BETA-BASE', name: 'Batch Beta base', unit: 'kg', quantityPerUnitMilli: 1_000 }],
+    workCentres: [{ workCentreId, name: 'Line 02 press' }],
+    routing: [{ operationId: 'OP-DEMO-JOB-202-PRESS', sequence: 1, name: 'Press Batch Beta', workCentreId, minutesPerUnitMilli: 750 }],
+  })
+  const execution = applyPlantOrderPlan(emptyExecution, plan, {
+    actionId: 'ACT-DEMO-JOB-202-PLAN-R1',
+    capturedAt: new Date(now - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    actor: 'Demo setup',
+    reason: 'Approved the fictional JOB-202 controlled plan.',
+    evidenceReference: 'DEMO-PLAN-JOB-202-R1',
+  }, emptyExecution.headDigest).state
+  return validateProductionState(upsertProductionOrderExecution(seed, execution))
 }
 
 export function validateProductionState(value: unknown): ProductionState {
@@ -2560,7 +2589,8 @@ export function loadProductionWorkspace(storage = browserStorage()): ProductionW
   if (currentRaw !== null) {
     try {
       const current = validateProductionState(JSON.parse(currentRaw))
-      if (JSON.stringify(current) === JSON.stringify(createLegacySeedProduction())) {
+      if (JSON.stringify(current) === JSON.stringify(createLegacySeedProduction())
+        || JSON.stringify(current) === JSON.stringify(createMaintenanceSeedProduction())) {
         return persistInitialState(storage, createSeedProduction(), 'seed')
       }
       return { state: current, source: 'current', error: '' }
@@ -3834,7 +3864,10 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
     && JSON.stringify(currentSampleJobs) === JSON.stringify(requestedJobs)) return source
 
   const seed = createSeedProduction()
-  const seedWithoutJobs = validateProductionState({ ...seed, jobs: [] })
+  const seedWithoutJobsValue = { ...seed }
+  delete seedWithoutJobsValue.orderExecution
+  delete seedWithoutJobsValue.orderPortfolio
+  const seedWithoutJobs = validateProductionState({ ...seedWithoutJobsValue, jobs: [] })
   let base = source
   if (sampleEvents.length || sampleJobIds.size) {
     const baseRevision = source.revision - sampleEvents.length

@@ -7370,6 +7370,11 @@ if (!productionSource.includes('startProductionMaintenance')
   || !productionSource.includes('productionMaintenanceDueQueue')
   || !productionSource.includes("PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA = 'supermega.production.maintenance-capacity-review.v1'")
   || !productionSource.includes('productionMaintenanceCapacityReview')
+  || !productionSource.includes("planId: 'PLN-DEMO-JOB-202-R1'")
+  || !productionSource.includes("productionJobPlanSourceDigest('plant:local-sample', controlledJob)")
+  || !productionSource.includes("operationId: 'OP-DEMO-JOB-202-PRESS'")
+  || !productionSource.includes('createMaintenanceSeedProduction')
+  || !productionSource.includes('delete seedWithoutJobsValue.orderPortfolio')
   || !productionSource.includes("PRODUCTION_MAINTENANCE_WINDOW_SCHEMA = 'supermega.production.maintenance-window.v1'")
   || !productionSource.includes('scheduleProductionMaintenanceWindow')
   || !productionSource.includes('productionMaintenanceWindows')
@@ -20884,6 +20889,7 @@ async function verifyProductionRuntime() {
     assert(pristineSeedClientImport?.state.jobs.length === 2
       && pristineSeedClientImport.state.issues.length === 0
       && pristineSeedClientImport.state.machines.length === 0
+      && pristineSeedClientImport.state.orderPortfolio === undefined
       && !pristineSeedClientImport.state.jobs.some((job) => job.id === 'JOB-201')
       && model.productionBusinessJobs(pristineSeedClientImport.state).length === 2
       && !model.productionWorkspaceIsPristineDemo(pristineSeedClientImport.state),
@@ -20927,6 +20933,7 @@ async function verifyProductionRuntime() {
     assert(foodWorkingSample?.jobs.length === 2
       && foodWorkingSample.jobs.some((job) => job.id === 'FOOD-001')
       && !foodWorkingSample.jobs.some((job) => job.id === 'JOB-201')
+      && foodWorkingSample.orderPortfolio === undefined
       && model.productionWorkingSamplePackId(foodWorkingSample) === 'food-beverage',
     'production_working_sample_was_not_installed_or_identified')
     assert(model.productionWorkspaceIsPristineDemo(model.createSeedProduction())
@@ -22101,21 +22108,37 @@ async function verifyProductionRuntime() {
     const currentState = model.createSeedProduction()
     const seedMaintenanceAsOf = '2026-08-14T08:00:00.000Z'
     const seedMaintenanceReview = model.productionMaintenanceCapacityReview(currentState, seedMaintenanceAsOf)
+    const seedControlledOrder = currentState.orderPortfolio?.entries[0]
+    const seedControlledProjection = seedControlledOrder ? plantModel.projectPlantOrder(seedControlledOrder.execution) : null
     assert(currentState.revision === 3
       && currentState.events.map((event) => event.kind).join(',') === 'equipment_maintenance_strategy_saved,equipment_commissioned,equipment_master_imported'
       && currentState.equipmentMaster?.assets[0]?.id === 'MC-02',
     'production_seed_maintenance_evidence_missing')
+    assert(currentState.orderPortfolio?.entries.length === 1
+      && seedControlledOrder?.jobId === 'JOB-202'
+      && seedControlledProjection?.plan?.contract === 'supermega.plant.reviewed_plan.v3'
+      && seedControlledProjection.plan.sourceDigest === model.productionJobPlanSourceDigest('plant:local-sample', currentState.jobs[1])
+      && seedControlledProjection.plan.routing[0]?.workCentreId === 'WC-LINE-LINE-02'
+      && seedControlledProjection.operations[0]?.remainingQuantity === 155,
+    'production_seed_controlled_order_evidence_missing')
     assert(seedMaintenanceReview.items.length === 1
       && seedMaintenanceReview.items[0].assetId === 'MC-02'
-      && seedMaintenanceReview.items[0].loadStatus === 'overdue_no_load'
-      && seedMaintenanceReview.items[0].orders.length === 0,
+      && seedMaintenanceReview.items[0].loadStatus === 'overdue_with_load'
+      && seedMaintenanceReview.items[0].orders.length === 1
+      && seedMaintenanceReview.items[0].orders[0].jobId === 'JOB-202'
+      && seedMaintenanceReview.items[0].orders[0].operations[0]?.operationId === 'OP-DEMO-JOB-202-PRESS'
+      && seedMaintenanceReview.items[0].orders[0].operations[0]?.remainingMinutesMilli === 116_250
+      && seedMaintenanceReview.items[0].totalRemainingMinutesMilli === 116_250,
     'production_seed_maintenance_review_not_actionable')
     const seedMaintenanceWindow = model.scheduleProductionMaintenanceWindow(currentState, 'MC-02', seedMaintenanceReview, '2026-08-15T08:00:00.000Z', 90, proof('ACT-DEMO-MAINTENANCE-WINDOW', 0, { capturedAt: seedMaintenanceAsOf }))
     assert(seedMaintenanceWindow
       && model.productionMaintenanceWindows(seedMaintenanceWindow)[0]?.equipmentId === 'MC-02'
       && model.productionMaintenanceWindows(seedMaintenanceWindow)[0]?.durationMinutes === 90
+      && model.productionMaintenanceWindows(seedMaintenanceWindow)[0]?.orderCount === 1
+      && model.productionMaintenanceWindows(seedMaintenanceWindow)[0]?.totalRemainingMinutesMilli === 116_250
       && JSON.stringify(seedMaintenanceWindow.jobs) === JSON.stringify(currentState.jobs)
-      && JSON.stringify(seedMaintenanceWindow.machines) === JSON.stringify(currentState.machines),
+      && JSON.stringify(seedMaintenanceWindow.machines) === JSON.stringify(currentState.machines)
+      && JSON.stringify(seedMaintenanceWindow.orderPortfolio) === JSON.stringify(currentState.orderPortfolio),
     'production_seed_maintenance_window_not_reviewable')
     const legacySeedState = { schema: currentState.schema, revision: 0, jobs: currentState.jobs, issues: currentState.issues, machines: currentState.machines, events: [] }
     values.set(model.PRODUCTION_KEY, JSON.stringify(legacySeedState))
@@ -22123,6 +22146,7 @@ async function verifyProductionRuntime() {
     assert(upgradedLegacySeed.source === 'seed'
       && upgradedLegacySeed.state.revision === 3
       && upgradedLegacySeed.state.equipmentMaster?.assets[0]?.maintenanceStrategy?.revision === 1
+      && upgradedLegacySeed.state.orderPortfolio?.entries[0]?.jobId === 'JOB-202'
       && JSON.parse(values.get(model.PRODUCTION_KEY)).revision === 3,
     'production_untouched_legacy_seed_not_upgraded')
     const changedLegacySeed = { ...legacySeedState, jobs: legacySeedState.jobs.map((job, index) => index ? job : { ...job, output: job.output + 1 }) }
@@ -22133,6 +22157,22 @@ async function verifyProductionRuntime() {
       && retainedChangedLegacySeed.state.jobs[0].output === changedLegacySeed.jobs[0].output
       && retainedChangedLegacySeed.state.equipmentMaster === undefined,
     'production_changed_legacy_seed_was_replaced')
+    const previousMaintenanceSeed = structuredClone(currentState)
+    delete previousMaintenanceSeed.orderPortfolio
+    values.set(model.PRODUCTION_KEY, JSON.stringify(previousMaintenanceSeed))
+    const upgradedPreviousMaintenanceSeed = model.loadProductionWorkspace(storage)
+    assert(upgradedPreviousMaintenanceSeed.source === 'seed'
+      && upgradedPreviousMaintenanceSeed.state.orderPortfolio?.entries[0]?.jobId === 'JOB-202'
+      && upgradedPreviousMaintenanceSeed.state.equipmentMaster?.assets[0]?.maintenanceStrategy?.revision === 1,
+    'production_untouched_maintenance_seed_not_upgraded')
+    const changedPreviousMaintenanceSeed = structuredClone(previousMaintenanceSeed)
+    changedPreviousMaintenanceSeed.jobs[1].output += 1
+    values.set(model.PRODUCTION_KEY, JSON.stringify(changedPreviousMaintenanceSeed))
+    const retainedChangedPreviousMaintenanceSeed = model.loadProductionWorkspace(storage)
+    assert(retainedChangedPreviousMaintenanceSeed.source === 'current'
+      && retainedChangedPreviousMaintenanceSeed.state.jobs[1].output === changedPreviousMaintenanceSeed.jobs[1].output
+      && retainedChangedPreviousMaintenanceSeed.state.orderPortfolio === undefined,
+    'production_changed_maintenance_seed_was_replaced')
     values.set(model.PRODUCTION_KEY, JSON.stringify(currentState))
     values.set(model.LEGACY_PRODUCTION_KEYS[0], '{malformed')
     assert(model.productionWorkspaceCanWrite(storage, locks), 'production_valid_local_workspace_not_write_ready')
