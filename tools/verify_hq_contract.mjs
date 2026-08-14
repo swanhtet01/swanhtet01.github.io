@@ -1281,8 +1281,10 @@ requireContract('Shop Sell opens the exact first setup prerequisite',
   workboard.includes('| OPS-283 | Product Platform + Shop Codex | done-local |')
   && workboard.includes('when active orders prevent location setup, Sell opens the exact oldest blocker with `return=location-setup`')
   && workboard.includes('without one it opens `/shop/?tab=inventory#shop-location-foundation`')
+  && workboard.includes('Acceptance checkpoint `44909dfc` moves the real **Set up locations** action ahead of Stock guidance')
+  && workboard.includes('opening it brings the first setup field to 772-816 px')
   && workboard.includes('Completion history preserves 73 archived plus 58 current receipts, 131 unique entries')
-  && now.includes('OPS-283 (`f1dcc7f9`) sends blocked Sell to the first prerequisite'))
+  && now.includes('OPS-283 (`f1dcc7f9`, acceptance `44909dfc`) sends blocked Sell to the exact active order or Stock locations'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')
