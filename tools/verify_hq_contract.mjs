@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 59
+  && portfolioSource.completedLocalAutomations.length === 60
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 132
+  && portfolio.completedLocalAutomations.length === 133
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -700,6 +700,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[131]?.workOrderId === 'plant-maintenance-window-demo-acceptance'
   && portfolio.completedLocalAutomations[131]?.checkpoint === 'OPS-284'
   && workboard.includes('| OPS-284 | Product Platform + Plant Maintenance Codex | done-local |')
+  && portfolio.completedLocalAutomations[132]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[132]?.workOrderId === 'plant-maintenance-load-acceptance'
+  && portfolio.completedLocalAutomations[132]?.checkpoint === 'OPS-285'
+  && workboard.includes('| OPS-285 | Product Platform + Plant Maintenance Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1294,7 +1298,15 @@ requireContract('Plant maintenance demo exposes a reviewed window without equipm
   && workboard.includes('persisted four attributed events across reload')
   && workboard.includes('canceled before maintenance start')
   && workboard.includes('Completion history preserves 73 archived plus 59 current receipts, 132 unique entries')
-  && now.includes('OPS-284 (`304280a1`) makes Plant maintenance actionable in the built-in sample'))
+  && now.includes("OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load"))
+requireContract('Plant maintenance exposes exact controlled load through accountable review',
+  workboard.includes('| OPS-285 | Product Platform + Plant Maintenance Codex | done-local |')
+  && workboard.includes('155 remaining units project 116,250 milli-minutes, rendered as one order / 1.9 h')
+  && workboard.includes('saved a six-record restore point')
+  && workboard.includes('the exact Press 02 strategy enabled **Review start**')
+  && workboard.includes('Reload preserved the planned window and controlled load')
+  && workboard.includes('Completion history preserves 73 archived plus 60 current receipts, 133 unique entries')
+  && now.includes("OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load"))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')

@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-284 (`304280a1`) makes Plant maintenance actionable in the built-in sample. A reviewed fictional 60-minute Press 02 window persisted four attributed events without changing jobs or machines; 390/1280 QA had zero horizontal overflow, overlay, warning, or error. Completion history: 132. Hosting remains unproven.
+- OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load. A reviewed fictional 60-minute window retained one order / 1.9 h and four attributed events without changing jobs, machines, inventory, or equipment; 390/1280 QA had zero horizontal overflow, overlay, warning, or error. Completion history: 133. Hosting remains unproven.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. `304280a1` passes focused Plant lint, the 237-module build, 405 Production checks, and the complete serial app/HQ gate. The app is 2,993,673 bytes with a 455,937-byte largest JavaScript chunk under unchanged caps. At 390/1280 px, the exact Press 02 strategy moves from `1 overdue` to `1 planned` through accountable review with no layout or browser errors. Hosted activation stays owner-gated.
+- Codex is sole integrator. `614cbe49` passes focused Plant lint, the 237-module build, 408 Production checks, and the complete serial app/HQ gate. The app is 2,994,923 bytes with a 455,937-byte largest JavaScript chunk under unchanged caps. At 390/1280 px, Press 02 retains JOB-202's one-order / 1.9-hour load through accountable window review with no layout or browser errors. Hosted activation stays owner-gated.
 - Local company inference remains Ollama-only and scale-to-zero. This Codex task does not dispatch Claude or Gemini; owner Claude/Bionic sessions were untouched.
 - Real leads remain blocked. Production schema v7 is healthy, but preview lacks v8-v10 and direct-admin proof. Keep it disconnected from Vercel/Auth until PR #412's rehearsal and every managed gate pass.
 
