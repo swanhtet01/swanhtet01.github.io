@@ -85,3 +85,33 @@ verifier's own self-test in this session (both shells, hard denial), so no
 live rerun was attempted and no proof JSON exists. Fail-closed holds: the
 gate stays blocked; evidence may only be produced after the amendment is
 reviewed/committed and the self-test and audit run under granted permission.
+
+## Addendum 2026-08-15 (2): landed amendment run - proof 4 fail-closed
+
+The proof-1 amendment was reviewed and landed as commit 1f572a446c2d
+(OPS-750); working tree verified clean before running. Self-test green
+(15 cases, 0 network). Live run 3 on the same branch:
+
+- Proofs 1-3 PASSED for the first time hosted: anonymous listing denied
+  (explicit 4xx rejection via the branch deny policy), tenant A positive
+  control sentinel_visible (2xx), cross-tenant listing empty_filtered (2xx).
+- Proof 4 FAILED CLOSED at request 4 of 6: error cross_tenant_object_visible,
+  provider_requests_performed 4, persistent_mutations_performed 0,
+  secrets_exposed false, bucket_or_object_names_exposed false.
+
+Diagnosis (read-only probes, statuses/bodies only): tenant A's GET of tenant
+B's sentinel returns outer HTTP 400 with body statusCode "404", code
+"NoSuchKey", "Object not found" - the object is fully hidden and zero bytes
+were disclosed; tenant B's own ranged read returns 206. There is NO
+cross-tenant leak. This is the third instance of the storage 1.69.0 renderer
+quirk (inner denial status wrapped in outer HTTP 400), now on the
+object-GET path, where DENIED_STATUSES {401,403,404} does not cover it.
+
+Escalation: proofs 3/4 denial semantics on this storage version need the
+same class of tech-lead decision as proof 1. A bare "accept 400" would be
+weaker than intent (400 can be a malformed request that never tested
+access); a sound amendment likely requires reading the error body on 400
+and requiring a NoSuchKey/not_found discriminator, or pinning a storage
+version whose renderer preserves outer status. Not decided or implemented
+by the executing agent. No evidence JSON written; gate stays blocked.
+Proofs 5-6 not reached. Branch delete-by 2026-08-15T16:49Z stands.

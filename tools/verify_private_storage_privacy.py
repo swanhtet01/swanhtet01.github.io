@@ -28,6 +28,10 @@ SIGNED_URL_TTL_SECONDS = 60
 READ_ONLY_METHODS = frozenset({"GET", "HEAD", "POST"})
 DENIED_STATUSES = frozenset({401, 403, 404})
 ANONYMOUS_REJECTED_STATUSES = frozenset({400, 401, 403, 404})
+DENIAL_BODY_KEYS = frozenset({"statusCode", "error", "message", "code"})
+DENIAL_NOT_FOUND_CODES = frozenset({"NoSuchKey", "not_found"})
+DENIAL_ACCESS_DENIED_CODES = frozenset({"AccessDenied", "access_denied", "Unauthorized", "unauthorized"})
+DENIAL_STATUS_CODE_CLASSES = {"401": "access_denied", "403": "access_denied", "404": "not_found"}
 
 ENV_ADAPTER = "SUPERMEGA_STORAGE_PRIVACY_ADAPTER"
 ENV_BASE_URL = "SUPERMEGA_STORAGE_PRIVACY_BASE_URL"
@@ -335,8 +339,16 @@ class NetworkTransport:
         except PrivacyAuditError:
             raise
         except HTTPError as exc:
+            # Error bodies are retained (bounded) so denial classification can
+            # apply the 2026-08-14 body discriminator to outer-400 responses.
             try:
-                return AuditResponse(int(exc.code), {}, b"")
+                try:
+                    raw = exc.read(MAX_RESPONSE_BYTES + 1) or b""
+                except OSError as read_error:
+                    raise PrivacyAuditError("storage_network_request_failed") from read_error
+                if len(raw) > MAX_RESPONSE_BYTES:
+                    raise PrivacyAuditError("response_too_large")
+                return AuditResponse(int(exc.code), {}, raw)
             finally:
                 exc.close()
         except (TimeoutError, URLError, OSError) as exc:
@@ -430,6 +442,46 @@ def _validate_signed_url(config: AuditConfig, value: Any) -> str:
     ):
         raise PrivacyAuditError("signed_url_target_invalid")
     return candidate
+
+
+def _denial_discriminator(config: AuditConfig, response: AuditResponse) -> str:
+    # Object-path denial semantics (2026-08-14 tech-lead decision; same
+    # strengthen-never-loosen principle as proof 1). Storage 1.69.0 can wrap a
+    # denial in an outer HTTP 400 whose JSON body carries the true status
+    # ("statusCode" 401/403/404) or a denial code such as NoSuchKey or
+    # AccessDenied. An outer 400 counts as denial ONLY when that discriminator
+    # is present and the body provably leaks no bucket, prefix, or object
+    # name; a bare 400 without it stays a hard failure because it may be a
+    # malformed request that never tested access. Reports may carry only the
+    # discriminator class (not_found / access_denied), never message text.
+    payload = _parse_json(response.body)
+    if not isinstance(payload, dict) or not payload or set(payload) - DENIAL_BODY_KEYS:
+        raise PrivacyAuditError("denial_body_unparseable")
+    for value in payload.values():
+        if not isinstance(value, (str, int)) or isinstance(value, bool):
+            raise PrivacyAuditError("denial_body_unparseable")
+        if isinstance(value, str) and any(
+            name in value
+            for name in (
+                config.bucket,
+                config.tenant_a_prefix,
+                config.tenant_b_prefix,
+                config.tenant_a_object,
+                config.tenant_b_object,
+            )
+        ):
+            raise PrivacyAuditError("denial_body_leaks_names")
+    status_class = DENIAL_STATUS_CODE_CLASSES.get(str(payload.get("statusCode", "")))
+    if status_class:
+        return status_class
+    for field_name in ("code", "error"):
+        value = payload.get(field_name)
+        if isinstance(value, str):
+            if value in DENIAL_NOT_FOUND_CODES:
+                return "not_found"
+            if value in DENIAL_ACCESS_DENIED_CODES:
+                return "access_denied"
+    raise PrivacyAuditError("denial_discriminator_missing")
 
 
 class PrivacyAuditSession:
@@ -549,7 +601,15 @@ class PrivacyAuditSession:
         )
 
         cross_listing = self._list(prefix=self.config.tenant_b_prefix, jwt=self.config.tenant_a_jwt)
+        cross_listing_extra: dict[str, str | int] = {}
         if cross_listing.status in DENIED_STATUSES:
+            cross_listing_result = "denied"
+        elif cross_listing.status == 400:
+            # 2026-08-14 tech-lead decision: outer-400 denial accepted only
+            # with the body discriminator (see _denial_discriminator).
+            cross_listing_extra["denial_discriminator"] = _denial_discriminator(
+                self.config, cross_listing
+            )
             cross_listing_result = "denied"
         elif cross_listing.status == 200:
             cross_payload = _list_result(cross_listing)
@@ -563,6 +623,7 @@ class PrivacyAuditSession:
                 "id": "cross_tenant_listing_denied",
                 "result": cross_listing_result,
                 "http_status_class": _status_class(cross_listing.status),
+                **cross_listing_extra,
             }
         )
 
@@ -574,13 +635,27 @@ class PrivacyAuditSession:
             headers={**self._headers(self.config.tenant_a_jwt), "Range": "bytes=0-0"},
             expect_json=False,
         )
-        if cross_object.status not in DENIED_STATUSES:
+        # 2026-08-14 tech-lead decision (object-path denial semantics): a
+        # plain 401/403/404 denies as before; an outer 400 denies only with
+        # the parsed, leak-checked body discriminator. The canary condition
+        # (the object provably exists and is readable by its owner) is
+        # enforced by run atomicity: proofs 5 and 6 must still succeed with
+        # tenant B's own 2xx ranged access before any evidence is emitted.
+        cross_object_extra: dict[str, str | int] = {}
+        if cross_object.status in DENIED_STATUSES:
+            pass
+        elif cross_object.status == 400:
+            cross_object_extra["denial_discriminator"] = _denial_discriminator(
+                self.config, cross_object
+            )
+        else:
             raise PrivacyAuditError("cross_tenant_object_visible")
         proofs.append(
             {
                 "id": "cross_tenant_object_denied",
                 "result": "denied",
                 "http_status_class": _status_class(cross_object.status),
+                **cross_object_extra,
             }
         )
 
@@ -823,6 +898,58 @@ def run_self_test() -> dict[str, Any]:
     rate_limited[0] = AuditResponse(429, {})
     expect_failure("anonymous_listing_not_denied", rate_limited)
 
+    cases += 1
+    wrapped_denial = _fixture_responses(config)
+    wrapped_denial[3] = _json_fixture(
+        {"statusCode": "404", "error": "not_found", "message": "Object not found", "code": "NoSuchKey"},
+        status=400,
+    )
+    wrapped_report = PrivacyAuditSession(config, _FixtureTransport(wrapped_denial)).run(
+        captured_at=datetime(2030, 1, 1, tzinfo=timezone.utc)
+    )
+    wrapped_proof = wrapped_report["proofs"][3]
+    if (
+        wrapped_proof["id"] != "cross_tenant_object_denied"
+        or wrapped_proof["result"] != "denied"
+        or wrapped_proof.get("denial_discriminator") != "not_found"
+        or wrapped_proof["http_status_class"] != "4xx"
+    ):
+        raise PrivacyAuditError("self_test_wrapped_denial_failed")
+
+    cases += 1
+    wrapped_listing = _fixture_responses(config)
+    wrapped_listing[2] = _json_fixture(
+        {"statusCode": "403", "error": "Unauthorized", "message": "access denied", "code": "AccessDenied"},
+        status=400,
+    )
+    listing_report = PrivacyAuditSession(config, _FixtureTransport(wrapped_listing)).run(
+        captured_at=datetime(2030, 1, 1, tzinfo=timezone.utc)
+    )
+    listing_proof = listing_report["proofs"][2]
+    if (
+        listing_proof["result"] != "denied"
+        or listing_proof.get("denial_discriminator") != "access_denied"
+    ):
+        raise PrivacyAuditError("self_test_wrapped_denial_failed")
+
+    leaking_denial = _fixture_responses(config)
+    leaking_denial[3] = _json_fixture(
+        {"statusCode": "404", "error": "not_found", "message": config.tenant_b_object, "code": "NoSuchKey"},
+        status=400,
+    )
+    expect_failure("denial_body_leaks_names", leaking_denial)
+
+    undiscriminated_denial = _fixture_responses(config)
+    undiscriminated_denial[3] = _json_fixture(
+        {"statusCode": "400", "error": "invalid_request", "message": "bad range", "code": "InvalidRequest"},
+        status=400,
+    )
+    expect_failure("denial_discriminator_missing", undiscriminated_denial)
+
+    unparseable_denial = _fixture_responses(config)
+    unparseable_denial[3] = AuditResponse(400, {}, b"<html>bad gateway</html>")
+    expect_failure("response_json_invalid", unparseable_denial)
+
     missing_own = _fixture_responses(config)
     missing_own[1] = _json_fixture({"folders": [], "hasNext": False, "objects": []})
     expect_failure("own_sentinel_not_visible", missing_own)
@@ -882,7 +1009,7 @@ def run_self_test() -> dict[str, Any]:
     preflight = configuration_preflight(
         config, captured_at=datetime(2030, 1, 1, tzinfo=timezone.utc)
     )
-    serialized = json.dumps([report, filtered_report, preflight], sort_keys=True)
+    serialized = json.dumps([report, filtered_report, wrapped_report, listing_report, preflight], sort_keys=True)
     forbidden_values = [
         config.publishable_key,
         config.tenant_a_jwt,
