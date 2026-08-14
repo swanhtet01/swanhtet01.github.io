@@ -1,6 +1,6 @@
 import { createHash, createPublicKey, generateKeyPairSync, sign as signBytes, verify as verifyBytes } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,8 +20,9 @@ import {
 //     Ed25519 owner signature, and a distinct reviewer signature bind
 //     origin/main, the authenticated ephemeral branch receipt, absolute
 //     deletion deadline, connection digests, and exact migration bytes.
-//   - Migration application: psql --set ON_ERROR_STOP=1 --file <migration>.
-//     No SQL is embedded here; only reviewed, packet-bound files are applied.
+//   - Migration application: one sealed Python/psycopg serializable transaction
+//     rechecks the owner-bound catalog and applies deterministic inner bytes
+//     from the transaction-wrapped, packet-bound files before one COMMIT.
 //   - Quarantine: supabase/rehearsal/20260804_public_browser_quarantine.sql
 //     (self-guarding, self-verifying; fail-closes on inventory drift).
 //   - Hosted validator: validate_supermega_database_url.py --ensure-schema
@@ -61,11 +62,13 @@ const REF_ENV = 'SUPERMEGA_REHEARSAL_PROJECT_REF'
 const CA_ENV = 'SUPERMEGA_SUPABASE_CA_FILE'
 const RUNTIME_URL_ENV = 'SUPERMEGA_REHEARSAL_RUNTIME_DATABASE_URL'
 const STORAGE_AUDIT_URL_ENV = 'SUPERMEGA_REHEARSAL_STORAGE_AUDIT_DATABASE_URL'
+const LAUNCHER_ATTESTATION_ENV = 'SUPERMEGA_REHEARSAL_SCRUBBED_LAUNCHER'
 const PACKET_ENV = 'SUPERMEGA_REHEARSAL_PACKET_FILE'
 const APPROVAL_ENV = 'SUPERMEGA_REHEARSAL_APPROVAL_FILE'
 const MANAGEMENT_TOKEN_ENV = 'SUPERMEGA_REHEARSAL_MANAGEMENT_API_TOKEN'
 const PRODUCTION_REF_ENV = 'SUPERMEGA_PRODUCTION_PROJECT_REF'
 const POSTGRES_BIN_ENV = 'SUPERMEGA_POSTGRES17_BIN'
+const NODE_BIN_ENV = 'SUPERMEGA_NODE_BIN'
 const GIT_BIN_ENV = 'SUPERMEGA_GIT_BIN'
 const PYTHON_BIN_ENV = 'SUPERMEGA_PYTHON_BIN'
 const STORAGE_PRIVACY_ENV = [
@@ -99,6 +102,7 @@ const REQUIRED_APPROVED_ACTIONS = [
   'run_preview_validation_and_rollback_only_probes',
 ]
 const TRUST_SOURCE_PATHS = Object.freeze({
+  launcher: 'tools/run_preview_branch_rehearsal.ps1',
   runner: 'tools/run_preview_branch_rehearsal.mjs',
   packetBuilder: 'tools/prepare_supabase_rehearsal_packet.mjs',
   databaseValidator: 'tools/validate_supermega_database_url.py',
@@ -142,8 +146,9 @@ const REQUIRED_CLEAN_TARGET_CHECKS = [
 const CLEAN_TARGET_METADATA_KEYS = [
   'schemas', 'extensions', 'relations', 'columns', 'constraints', 'indexes',
   'routines', 'triggers', 'policies', 'rewrite_rules', 'types', 'event_triggers',
-  'default_acls', 'roles', 'role_memberships', 'role_settings', 'publications',
-  'publication_relations', 'subscriptions', 'subscription_relations',
+  'default_acls', 'roles', 'role_memberships', 'role_settings', 'parameter_acls',
+  'publications', 'publication_relations', 'publication_namespaces', 'inheritance',
+  'aggregates', 'casts', 'operators', 'sequences', 'subscriptions', 'subscription_relations',
   'foreign_data_wrappers', 'foreign_servers', 'user_mappings', 'large_objects',
   'database_configuration',
 ]
@@ -193,6 +198,8 @@ const RUNTIME_CLOSURE_LIMITS = Object.freeze({
   maximumFileBytes: 512 * 1024 * 1024,
   maximumTotalBytes: 4 * 1024 * 1024 * 1024,
 })
+const ATOMIC_APPLY_CONTRACT = 'supermega_supabase_rehearsal_atomic_apply_v1'
+const ATOMIC_BUNDLE_CONTRACT = 'supermega.preview-rehearsal-atomic-bundle.v1'
 const OWNER_CONSOLE_SEGMENTS = [
   { id: 'owner_branch_creation', estimateMinutes: 45, description: 'Create one empty preview branch without production data and capture ref, connection string, and CA file (docs/rehearsal-runbook.md step 2).' },
   { id: 'owner_runtime_login_and_urls', estimateMinutes: 30, description: 'Create the branch runtime login and read-only Storage-audit login, then prepare the private URL-bound approval (runbook step 4).' },
@@ -215,6 +222,176 @@ function stableStringify(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+}
+
+function stripLeadingSqlTrivia(value) {
+  let index = 0
+  while (index < value.length) {
+    if (/\s/.test(value[index])) {
+      index += 1
+      continue
+    }
+    if (value.startsWith('--', index)) {
+      const newline = value.indexOf('\n', index + 2)
+      index = newline === -1 ? value.length : newline + 1
+      continue
+    }
+    if (value.startsWith('/*', index)) {
+      let depth = 1
+      index += 2
+      while (index < value.length && depth > 0) {
+        if (value.startsWith('/*', index)) {
+          depth += 1
+          index += 2
+        } else if (value.startsWith('*/', index)) {
+          depth -= 1
+          index += 2
+        } else {
+          index += 1
+        }
+      }
+      if (depth !== 0) fail('rehearsal_sql_transaction_wrapper_invalid')
+      continue
+    }
+    break
+  }
+  return value.slice(index)
+}
+
+function topLevelSqlStatementRanges(value) {
+  const ranges = []
+  let start = 0
+  let index = 0
+  let singleQuoted = false
+  let doubleQuoted = false
+  let lineComment = false
+  let blockDepth = 0
+  let dollarTag = ''
+  while (index < value.length) {
+    if (lineComment) {
+      if (value[index] === '\n') lineComment = false
+      index += 1
+      continue
+    }
+    if (blockDepth > 0) {
+      if (value.startsWith('/*', index)) {
+        blockDepth += 1
+        index += 2
+      } else if (value.startsWith('*/', index)) {
+        blockDepth -= 1
+        index += 2
+      } else {
+        index += 1
+      }
+      continue
+    }
+    if (dollarTag) {
+      if (value.startsWith(dollarTag, index)) {
+        index += dollarTag.length
+        dollarTag = ''
+      } else {
+        index += 1
+      }
+      continue
+    }
+    if (singleQuoted) {
+      if (value[index] === "'" && value[index + 1] === "'") {
+        index += 2
+      } else if (value[index] === "'") {
+        singleQuoted = false
+        index += 1
+      } else {
+        index += 1
+      }
+      continue
+    }
+    if (doubleQuoted) {
+      if (value[index] === '"' && value[index + 1] === '"') {
+        index += 2
+      } else if (value[index] === '"') {
+        doubleQuoted = false
+        index += 1
+      } else {
+        index += 1
+      }
+      continue
+    }
+    if (value.startsWith('--', index)) {
+      lineComment = true
+      index += 2
+      continue
+    }
+    if (value.startsWith('/*', index)) {
+      blockDepth = 1
+      index += 2
+      continue
+    }
+    if (value[index] === "'") {
+      singleQuoted = true
+      index += 1
+      continue
+    }
+    if (value[index] === '"') {
+      doubleQuoted = true
+      index += 1
+      continue
+    }
+    if (value[index] === '$') {
+      const match = /^\$(?:[A-Za-z_\u0080-\uFFFF][A-Za-z0-9_\u0080-\uFFFF]*)?\$/.exec(value.slice(index))
+      if (match) {
+        dollarTag = match[0]
+        index += dollarTag.length
+        continue
+      }
+    }
+    if (value[index] === ';') {
+      ranges.push({ start, end: index + 1 })
+      start = index + 1
+    }
+    index += 1
+  }
+  if (singleQuoted || doubleQuoted || blockDepth > 0 || dollarTag) {
+    fail('rehearsal_sql_transaction_wrapper_invalid')
+  }
+  if (stripLeadingSqlTrivia(value.slice(start)).trim()) {
+    fail('rehearsal_sql_transaction_wrapper_invalid')
+  }
+  return ranges.filter(({ start: rangeStart, end }) => stripLeadingSqlTrivia(
+    value.slice(rangeStart, end),
+  ).trim())
+}
+
+function stripReviewedTransactionWrapper(bytes, name) {
+  const text = Buffer.from(bytes).toString('utf8')
+  if (Buffer.byteLength(text, 'utf8') !== bytes.length || text.includes('\u0000')) {
+    fail('rehearsal_sql_transaction_wrapper_invalid')
+  }
+  const ranges = topLevelSqlStatementRanges(text)
+  if (ranges.length < 3) fail('rehearsal_sql_transaction_wrapper_invalid')
+  const controls = ranges.map(({ start, end }) => stripLeadingSqlTrivia(text.slice(start, end)).trim().toLowerCase())
+  if (controls[0] !== 'begin;' || controls.at(-1) !== 'commit;'
+    || controls.slice(1, -1).some((statement) => /^(?:begin|start\s+transaction|commit|end|rollback|abort|savepoint|release\s+savepoint|prepare\s+transaction|set\s+transaction)(?:\s|;)/.test(statement))) {
+    fail('rehearsal_sql_transaction_wrapper_invalid')
+  }
+  const inner = Buffer.from(text.slice(ranges[0].end, ranges.at(-1).start), 'utf8')
+  if (!inner.length) fail('rehearsal_sql_transaction_wrapper_invalid')
+  return {
+    name,
+    sourceDigest: `sha256:${sha256(bytes)}`,
+    innerDigest: `sha256:${sha256(inner)}`,
+    sqlBase64: inner.toString('base64'),
+  }
+}
+
+function buildAtomicBundle(units) {
+  const projection = {
+    contract: ATOMIC_BUNDLE_CONTRACT,
+    units,
+  }
+  return {
+    ...projection,
+    digest: objectDigest(projection),
+  }
 }
 
 function strictUtcTimestamp(value) {
@@ -681,13 +858,16 @@ function validateExecutionApproval(approval, {
     || !Object.values(approval.connectionDigests).every((value) => digestPattern.test(value))) {
     fail('rehearsal_approval_connections_unreviewed')
   }
-  if (!exactKeys(approval.trust, ['certificateAuthorityDigest', 'executables', 'runtimeClosures', 'sources'])
-    || !exactKeys(approval.trust.executables, ['node', 'git', 'python', 'psql'])
+  if (!exactKeys(approval.trust, [
+    'certificateAuthorityDigest', 'atomicBundleDigest', 'executables', 'runtimeClosures', 'sources',
+  ])
+    || !digestPattern.test(approval.trust.atomicBundleDigest || '')
+    || !exactKeys(approval.trust.executables, ['node', 'git', 'python', 'pythonBase', 'psql'])
     || !Object.values(approval.trust.executables).every((entry) => exactKeys(entry, ['path', 'digest'])
       && isAbsolute(entry.path)
       && digestPattern.test(entry.digest || ''))
     || !exactKeys(approval.trust.runtimeClosures, [
-      'pythonEnvironment', 'pythonBaseRuntime', 'postgresNative',
+      'pythonEnvironment', 'pythonBaseRuntime', 'postgresNative', 'nodePglite',
     ])
     || !Object.values(approval.trust.runtimeClosures).every(runtimeClosureSummaryValid)
     || !exactKeys(approval.trust.sources, Object.keys(TRUST_SOURCE_PATHS))
@@ -698,7 +878,7 @@ function validateExecutionApproval(approval, {
   }
   if (!exactKeys(approval.branch, [
     'parentProjectRef', 'name', 'projectRef', 'createdAt', 'deleteBy', 'creationReceiptDigest',
-    'cleanTargetMetadataDigest',
+    'cleanTargetMetadataDigest', 'cleanTargetMetadataInventory',
     'startsWithProductionData', 'maximumLifetimeHours', 'providerUsageChargesAcknowledged',
     'creationApproved', 'migrationApplicationApproved', 'deleteAfterEvidence',
   ])
@@ -708,6 +888,9 @@ function validateExecutionApproval(approval, {
     || !/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/.test(approval.branch.name)
     || !digestPattern.test(approval.branch.creationReceiptDigest || '')
     || !digestPattern.test(approval.branch.cleanTargetMetadataDigest || '')
+    || !exactKeys(approval.branch.cleanTargetMetadataInventory, CLEAN_TARGET_METADATA_KEYS)
+    || !Object.values(approval.branch.cleanTargetMetadataInventory).every(Array.isArray)
+    || objectDigest(approval.branch.cleanTargetMetadataInventory) !== approval.branch.cleanTargetMetadataDigest
     || approval.branch.startsWithProductionData !== false
     || approval.branch.maximumLifetimeHours !== WINDOW_HOURS
     || approval.branch.providerUsageChargesAcknowledged !== true
@@ -778,13 +961,6 @@ function validateExecutionApproval(approval, {
 }
 
 export function buildPlan() {
-  const migrationSteps = EXPECTED_MIGRATIONS.map((name, index) => ({
-    id: `apply_migration_${String(index + 1).padStart(2, '0')}`,
-    kind: 'branch-mutation',
-    estimateMinutes: 8,
-    covers: ['ordered-migration-application-through-v10'],
-    command: `recheck clean reviewed checkout; verify ${MIGRATION_DIRECTORY}/${name}; pass those exact bytes to psql --file -`,
-  }))
   const steps = [
     { id: 'release_pin', kind: 'local', estimateMinutes: 1, covers: [], command: 'git status --porcelain && git rev-parse HEAD == origin/main' },
     { id: 'release_authority', kind: 'network-read', estimateMinutes: 3, covers: [], command: `verify ${PACKET_ENV}, digest-pinned owner/reviewer signatures in ${APPROVAL_ENV}, and a fresh authenticated branch receipt bind this clean origin/main commit, target, URL digests, creation time, and absolute deletion deadline` },
@@ -794,9 +970,8 @@ export function buildPlan() {
     { id: 'url_preflight', kind: 'network-read', estimateMinutes: 3, covers: ['hostname-verified-postgresql-17-preflight', 'clean-target-without-production-data'], command: `[signed Python and closure] -I -S -B [sealed launcher] [sealed database validator] --env-key ${URL_ENV} --rehearsal-preflight --expected-project-ref-env-key ${REF_ENV} --production-project-ref-env-key ${PRODUCTION_REF_ENV} --ssl-root-cert-env-key ${CA_ENV}` },
     { id: 'runtime_credential_boundary', kind: 'network-read', estimateMinutes: 3, covers: ['dedicated-unprivileged-runtime-and-storage-audit-logins'], command: `connect read-only with ${RUNTIME_URL_ENV} and ${STORAGE_AUDIT_URL_ENV}; prove exact identities, role attributes, memberships, TLS, and transaction mode without printing credentials` },
     { id: 'storage_privacy_preflight', kind: 'local', estimateMinutes: 2, covers: ['private-storage-isolation-proof (offline configuration preflight; live audit stays owner-gated)'], command: '[signed Python and closure] -I -S -B [sealed launcher] [sealed Storage privacy verifier] --preflight' },
-    ...migrationSteps,
-    { id: 'apply_quarantine', kind: 'branch-mutation', estimateMinutes: 10, covers: ['public-browser-table-and-sequence-denial', 'public-default-privilege-denial-for-postgres-and-supabase-admin', 'service-role-contact-path-retained'], command: `recheck clean reviewed checkout; verify ${QUARANTINE_PATH}; pass those exact bytes to psql --file -` },
-    { id: 'storage_audit_postmigration_boundary', kind: 'network-read', estimateMinutes: 3, covers: ['storage-audit-credential-remains-without-persistent-write-authority'], command: `recheck ${STORAGE_AUDIT_URL_ENV} role attributes, membership paths, ownership, default ACLs, and effective write privileges after DDL` },
+    { id: 'atomic_migration_and_quarantine_apply', kind: 'branch-mutation', estimateMinutes: 106, covers: ['ordered-migration-application-through-v10', 'public-browser-table-and-sequence-denial', 'public-default-privilege-denial-for-postgres-and-supabase-admin', 'service-role-contact-path-retained'], command: 'sealed validator: BEGIN SERIALIZABLE; verify exact owner-bound catalog inventory; execute deterministic inner bytes for 12 packet-bound migrations plus quarantine; COMMIT once' },
+    { id: 'postmigration_credential_boundary', kind: 'network-read', estimateMinutes: 6, covers: ['runtime-and-storage-audit-credentials-remain-without-persistent-write-or-parameter-authority'], command: `recheck ${RUNTIME_URL_ENV} and ${STORAGE_AUDIT_URL_ENV} role attributes, parameter ACLs, membership paths, ownership, default ACLs, and effective write privileges after DDL` },
     { id: 'hosted_validator', kind: 'network-read', estimateMinutes: 10, covers: ['read-only-v10-runtime-validator'], command: `[signed Python and closure] -I -S -B [sealed launcher] [sealed database validator] --env-key ${RUNTIME_URL_ENV} --storage-audit-env-key ${STORAGE_AUDIT_URL_ENV} --ensure-schema --require-ready` },
     { id: 'session_revocation_probe', kind: 'network-read', estimateMinutes: 5, covers: ['active-session-acceptance-and-revoked-session-denial'], command: `recheck clean reviewed checkout; verify ${PROBE_PATH}; pass exact bytes to psql --file - (single transaction, ends in ROLLBACK)` },
     { id: 'evidence_packet', kind: 'local', estimateMinutes: 2, covers: [], command: 'assemble sanitized evidence packet under .tmp/' },
@@ -825,6 +1000,26 @@ function safeChildEnvironment(source) {
     if (typeof source?.[key] === 'string' && source[key]) output[key] = source[key]
   }
   return output
+}
+
+export function assertSafeNodeBootstrap({
+  env = process.env,
+  execArgv = process.execArgv,
+  requireLauncher = true,
+} = {}) {
+  const unsafeEnvironment = [
+    'NODE_OPTIONS', 'NODE_PATH', 'NPM_CONFIG_NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS',
+    'OPENSSL_CONF', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'HTTP_PROXY', 'HTTPS_PROXY',
+    'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy',
+  ]
+    .filter((key) => typeof env[key] === 'string' && env[key].trim())
+  if (unsafeEnvironment.length || !Array.isArray(execArgv) || execArgv.length) {
+    fail('rehearsal_node_bootstrap_unsafe')
+  }
+  if (requireLauncher && env[LAUNCHER_ATTESTATION_ENV] !== 'v1') {
+    fail('rehearsal_scrubbed_launcher_required')
+  }
+  return true
 }
 
 function sameCanonicalPath(left, right) {
@@ -947,6 +1142,72 @@ function collectDirectoryClosure(rootPath, code) {
   }
 }
 
+function sealDirectoryClosure(sourceClosure, destinationParent, name, code) {
+  assertRuntimeClosureCurrent(sourceClosure, code)
+  const destination = join(destinationParent, name)
+  mkdirSync(destination)
+  const canonicalDestination = requirePlainDirectory(destination, destinationParent, code)
+  const directories = [canonicalDestination]
+
+  const copy = (sourceDirectory, destinationDirectory) => {
+    for (const entry of readdirSync(sourceDirectory).sort()) {
+      const source = join(sourceDirectory, entry)
+      const sourceMetadata = lstatSync(source)
+      if (sourceMetadata.isSymbolicLink()) fail(code)
+      const target = join(destinationDirectory, entry)
+      if (sourceMetadata.isDirectory()) {
+        mkdirSync(target)
+        requirePlainDirectory(target, destinationDirectory, code)
+        directories.push(target)
+        copy(source, target)
+      } else if (sourceMetadata.isFile()) {
+        const file = readBoundedRegularFile(
+          source,
+          RUNTIME_CLOSURE_LIMITS.maximumFileBytes,
+          code,
+          { allowEmpty: true },
+        )
+        writeExclusiveFile(target, file.bytes)
+        chmodSync(target, 0o400)
+      } else {
+        fail(code)
+      }
+    }
+  }
+  copy(sourceClosure.path, canonicalDestination)
+  const sealed = collectDirectoryClosure(canonicalDestination, code)
+  const comparable = ({ digest, fileCount, directoryCount, totalBytes }) => ({
+    digest, fileCount, directoryCount, totalBytes,
+  })
+  if (stableStringify(comparable(sealed)) !== stableStringify(comparable(sourceClosure))) fail(code)
+  assertRuntimeClosureCurrent(sourceClosure, code)
+  for (const directory of directories.sort((left, right) => right.length - left.length)) {
+    chmodSync(directory, 0o500)
+  }
+  assertRuntimeClosureCurrent(sealed, code)
+  return sealed
+}
+
+function sealedPathFor(sourceClosure, sealedClosure, sourcePath, code) {
+  const relativePath = relative(sourceClosure.path, sourcePath)
+  if (!relativePath || relativePath === '..' || relativePath.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`)
+    || isAbsolute(relativePath)) fail(code)
+  const sealedPath = resolve(sealedClosure.path, relativePath)
+  if (relative(sealedClosure.path, sealedPath).startsWith('..')) fail(code)
+  return sealedPath
+}
+
+function sealExecutableFile(file, destinationDirectory, name, code) {
+  assertExecutableCurrent(file, code)
+  const destination = join(destinationDirectory, name)
+  writeExclusiveFile(destination, file.bytes)
+  chmodSync(destination, 0o500)
+  const sealed = readBoundedRegularFile(destination, 256 * 1024 * 1024, code)
+  if (sealed.digest !== file.digest) fail(code)
+  assertExecutableCurrent(file, code)
+  return sealed
+}
+
 function parsePythonBaseRuntime(pythonEnvironmentRoot) {
   const configuration = readBoundedRegularFile(
     join(pythonEnvironmentRoot, 'pyvenv.cfg'),
@@ -976,6 +1237,22 @@ function resolvePythonSitePackages(pythonEnvironmentRoot) {
   return requirePlainDirectory(existing[0], dirname(existing[0]), 'python_site_packages_invalid')
 }
 
+function resolvePythonBaseExecutable(pythonBaseRuntimeRoot, pythonExecutable) {
+  const candidates = [
+    join(pythonBaseRuntimeRoot, basename(pythonExecutable.path)),
+    join(pythonBaseRuntimeRoot, process.platform === 'win32' ? 'python.exe' : 'python3'),
+    join(pythonBaseRuntimeRoot, process.platform === 'win32' ? 'python3.exe' : 'python'),
+  ]
+  const existing = [...new Set(candidates.map((candidate) => resolve(candidate)))]
+    .filter((candidate) => existsSync(candidate))
+  if (existing.length < 1) fail('python_base_executable_invalid')
+  return resolveExecutable(
+    existing[0],
+    ['python', 'python.exe', 'python3', 'python3.exe'],
+    'python_base_executable_invalid',
+  )
+}
+
 function runtimeClosureSummaryValid(value) {
   return exactKeys(value, ['path', 'digest', 'fileCount', 'directoryCount', 'totalBytes'])
     && isAbsolute(value.path)
@@ -998,8 +1275,12 @@ function resolveTrustedInputs({ env, rootDir, caFile }) {
   const postgresBin = String(env[POSTGRES_BIN_ENV] || '').trim()
   if (!isAbsolute(postgresBin)) fail('postgres17_bin_absolute_path_required')
   const certificateAuthority = readBoundedRegularFile(caFile, 256 * 1024, 'rehearsal_ssl_root_certificate_invalid')
+  const requestedNode = String(env[NODE_BIN_ENV] || '').trim()
+  if (!isAbsolute(requestedNode) || !sameCanonicalPath(requestedNode, process.execPath)) {
+    fail('node_executable_not_scrubbed_launcher_bound')
+  }
   const executables = {
-    node: resolveExecutable(process.execPath, ['node', 'node.exe'], 'node_executable_invalid'),
+    node: resolveExecutable(requestedNode, ['node', 'node.exe'], 'node_executable_invalid'),
     git: resolveExecutable(env[GIT_BIN_ENV], ['git', 'git.exe'], 'git_executable_invalid'),
     python: resolveExecutable(
       env[PYTHON_BIN_ENV],
@@ -1019,6 +1300,15 @@ function resolveTrustedInputs({ env, rootDir, caFile }) {
   )
   const pythonBaseRuntimeRoot = parsePythonBaseRuntime(pythonEnvironmentRoot)
   const pythonSitePackages = resolvePythonSitePackages(pythonEnvironmentRoot)
+  executables.pythonBase = resolvePythonBaseExecutable(
+    pythonBaseRuntimeRoot,
+    executables.python,
+  )
+  const nodePgliteRoot = requirePlainDirectory(
+    resolve(rootDir, 'node_modules', '@electric-sql', 'pglite'),
+    resolve(rootDir, 'node_modules', '@electric-sql'),
+    'node_pglite_runtime_invalid',
+  )
   const runtimeClosures = {
     pythonEnvironment: collectDirectoryClosure(
       pythonEnvironmentRoot,
@@ -1032,6 +1322,10 @@ function resolveTrustedInputs({ env, rootDir, caFile }) {
       dirname(executables.psql.path),
       'postgres_native_runtime_closure_invalid',
     ),
+    nodePglite: collectDirectoryClosure(
+      nodePgliteRoot,
+      'node_pglite_runtime_closure_invalid',
+    ),
   }
   const sources = Object.fromEntries(Object.entries(TRUST_SOURCE_PATHS).map(([name, path]) => [
     name,
@@ -1039,6 +1333,24 @@ function resolveTrustedInputs({ env, rootDir, caFile }) {
   ]))
   const approvalTrust = {
     certificateAuthorityDigest: certificateAuthority.digest,
+    atomicBundleDigest: buildAtomicBundle([
+      ...EXPECTED_MIGRATIONS.map((name) => stripReviewedTransactionWrapper(
+        readBoundedRegularFile(
+          resolve(rootDir, MIGRATION_DIRECTORY, name),
+          4 * 1024 * 1024,
+          'rehearsal_atomic_migration_source_invalid',
+        ).bytes,
+        name,
+      )),
+      stripReviewedTransactionWrapper(
+        readBoundedRegularFile(
+          resolve(rootDir, QUARANTINE_PATH),
+          4 * 1024 * 1024,
+          'rehearsal_atomic_quarantine_source_invalid',
+        ).bytes,
+        basename(QUARANTINE_PATH),
+      ),
+    ]).digest,
     executables: Object.fromEntries(Object.entries(executables).map(([name, file]) => [
       name,
       { path: file.path, digest: file.digest },
@@ -1083,12 +1395,16 @@ function assertRuntimeClosureCurrent(closure, code) {
 
 function assertExecutableRuntimeCurrent(trustedInputs, executable, code) {
   assertExecutableCurrent(executable, code)
-  if (sameCanonicalPath(executable.path, trustedInputs.executables.python.path)) {
+  if (sameCanonicalPath(executable.path, trustedInputs.executables.python.path)
+    || sameCanonicalPath(executable.path, trustedInputs.executables.pythonBase.path)) {
     assertRuntimeClosureCurrent(trustedInputs.runtimeClosures.pythonEnvironment, code)
     assertRuntimeClosureCurrent(trustedInputs.runtimeClosures.pythonBaseRuntime, code)
   }
   if (sameCanonicalPath(executable.path, trustedInputs.executables.psql.path)) {
     assertRuntimeClosureCurrent(trustedInputs.runtimeClosures.postgresNative, code)
+  }
+  if (sameCanonicalPath(executable.path, trustedInputs.executables.node.path)) {
+    assertRuntimeClosureCurrent(trustedInputs.runtimeClosures.nodePglite, code)
   }
 }
 
@@ -1176,6 +1492,41 @@ function validateCleanTargetReport(report, approvalMetadataDigest, expectedProje
     || report.production_mutated !== false
     || report.supabase_mutated !== false
     || report.vercel_mutated !== false) fail('rehearsal_clean_target_required')
+  return report
+}
+
+function validateAtomicApplyReport(report, atomicBundle, approvalMetadataDigest, expectedProjectRef) {
+  if (!exactKeys(report, [
+    'contract', 'ok', 'targetProjectRef', 'connectionMode', 'metadataFingerprintBefore',
+    'atomicBundleDigest', 'appliedUnits', 'mutationUnitsExecuted', 'transactionCommitted',
+    'transactionRolledBack', 'secretValuesExposed', 'productionMutated', 'vercelMutated',
+  ])
+    || report.contract !== ATOMIC_APPLY_CONTRACT
+    || report.ok !== true
+    || report.targetProjectRef !== expectedProjectRef
+    || !['direct', 'session_pooler'].includes(report.connectionMode)
+    || report.metadataFingerprintBefore !== approvalMetadataDigest
+    || report.atomicBundleDigest !== atomicBundle.digest
+    || report.mutationUnitsExecuted !== atomicBundle.units.length
+    || report.transactionCommitted !== true
+    || report.transactionRolledBack !== false
+    || report.secretValuesExposed !== false
+    || report.productionMutated !== false
+    || report.vercelMutated !== false
+    || !Array.isArray(report.appliedUnits)
+    || report.appliedUnits.length !== atomicBundle.units.length) {
+    fail('atomic_migration_apply_report_invalid')
+  }
+  for (let index = 0; index < atomicBundle.units.length; index += 1) {
+    const observed = report.appliedUnits[index]
+    const expected = atomicBundle.units[index]
+    if (!exactKeys(observed, ['name', 'sourceDigest', 'innerDigest'])
+      || observed.name !== expected.name
+      || observed.sourceDigest !== expected.sourceDigest
+      || observed.innerDigest !== expected.innerDigest) {
+      fail('atomic_migration_apply_report_invalid')
+    }
+  }
   return report
 }
 
@@ -1445,6 +1796,20 @@ select json_build_object(
     select 1
     from login_role
     join pg_db_role_setting role_setting on role_setting.setrole = login_role.oid
+  ),
+  'noExplicitParameterPrivileges', not exists (
+    select 1
+    from pg_parameter_acl parameter_acl
+    where has_parameter_privilege(current_user, parameter_acl.parname, 'SET')
+       or has_parameter_privilege(current_user, parameter_acl.parname, 'ALTER SYSTEM')
+  ),
+  'noSessionReplicationRoleSetPrivilege', not has_parameter_privilege(
+    current_user, 'session_replication_role', 'SET'
+  ),
+  'noAlterSystemParameterPrivilege', not exists (
+    select 1
+    from pg_settings setting_record
+    where has_parameter_privilege(current_user, setting_record.name, 'ALTER SYSTEM')
   )
 )::text;
 rollback;`
@@ -1458,6 +1823,8 @@ function validateCredentialPreflightReport(report, expectedRole, purpose) {
     'noSequenceMutationPrivilege', 'noLargeObjectWritePrivilege', 'noLargeObjectCreationPrivilege',
     'noSecurityDefinerExecutePrivilege',
     'noObjectOwnership', 'noDefaultWritePrivileges', 'noRoleSettings',
+    'noExplicitParameterPrivileges', 'noSessionReplicationRoleSetPrivilege',
+    'noAlterSystemParameterPrivilege',
   ])
     || report.contract !== 'supermega.preview-rehearsal-credential-preflight.v1'
     || report.loginRole !== expectedRole
@@ -1487,6 +1854,9 @@ function validateCredentialPreflightReport(report, expectedRole, purpose) {
     noObjectOwnership: true,
     noDefaultWritePrivileges: true,
     noRoleSettings: true,
+    noExplicitParameterPrivileges: true,
+    noSessionReplicationRoleSetPrivilege: true,
+    noAlterSystemParameterPrivilege: true,
   }
 }
 
@@ -1718,6 +2088,16 @@ async function runRehearsalWithAuthority({
     fail('rehearsal_packet_quarantine_digest_mismatch')
   }
   inventory[QUARANTINE_PATH] = quarantineDigest
+  const atomicBundle = buildAtomicBundle([
+    ...migrations.map((migration) => stripReviewedTransactionWrapper(
+      reviewedSqlBytes[migration.name],
+      migration.name,
+    )),
+    stripReviewedTransactionWrapper(quarantineBytes, basename(QUARANTINE_PATH)),
+  ])
+  if (atomicBundle.digest !== trustedInputs.approvalTrust.atomicBundleDigest) {
+    fail('rehearsal_atomic_bundle_unreviewed')
+  }
   const securityAuditBytes = readReviewedBlob(SECURITY_AUDIT_PATH)
   const securityAuditDigest = `sha256:${sha256(securityAuditBytes)}`
   if (packet.release?.browserQuarantine?.sourceAudit?.path !== SECURITY_AUDIT_PATH
@@ -1797,7 +2177,7 @@ async function runRehearsalWithAuthority({
   runRoot = requirePlainDirectory(runRoot, resolvedEvidenceRoot, 'rehearsal_run_root_invalid')
 
   const makePlainChildDirectory = (parent, name) => {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(name)) fail('rehearsal_sealed_directory_invalid')
+    if (!/^[A-Za-z0-9@][A-Za-z0-9@._-]{0,79}$/.test(name)) fail('rehearsal_sealed_directory_invalid')
     const destination = join(parent, name)
     mkdirSync(destination)
     return requirePlainDirectory(destination, parent, 'rehearsal_sealed_directory_invalid')
@@ -1808,6 +2188,9 @@ async function runRehearsalWithAuthority({
   const sealedReadiness = makePlainChildDirectory(sealedHq, 'readiness')
   const sealedSupabase = makePlainChildDirectory(sealedRoot, 'supabase')
   const sealedRehearsal = makePlainChildDirectory(sealedSupabase, 'rehearsal')
+  const sealedRuntime = makePlainChildDirectory(sealedRoot, 'runtime')
+  const sealedNodeModules = makePlainChildDirectory(sealedRoot, 'node_modules')
+  const sealedElectricSql = makePlainChildDirectory(sealedNodeModules, '@electric-sql')
   const sealed = {
     certificateAuthority: join(sealedRoot, 'rehearsal-ca.crt'),
     databaseValidator: join(sealedTools, 'validate_supermega_database_url.py'),
@@ -1822,6 +2205,81 @@ async function runRehearsalWithAuthority({
   writeExclusiveFile(sealed.publicQuarantineVerifier, reviewedSourceBytes.publicQuarantineVerifier)
   writeExclusiveFile(sealed.securityAudit, securityAuditBytes)
   writeExclusiveFile(sealed.quarantine, quarantineBytes)
+
+  const sealedRuntimeClosures = {
+    pythonEnvironment: sealDirectoryClosure(
+      trustedInputs.runtimeClosures.pythonEnvironment,
+      sealedRuntime,
+      'python-environment',
+      'python_virtual_environment_seal_invalid',
+    ),
+    pythonBaseRuntime: sealDirectoryClosure(
+      trustedInputs.runtimeClosures.pythonBaseRuntime,
+      sealedRuntime,
+      'python-base',
+      'python_base_runtime_seal_invalid',
+    ),
+    postgresNative: sealDirectoryClosure(
+      trustedInputs.runtimeClosures.postgresNative,
+      sealedRuntime,
+      'postgres-bin',
+      'postgres_native_runtime_seal_invalid',
+    ),
+    nodePglite: sealDirectoryClosure(
+      trustedInputs.runtimeClosures.nodePglite,
+      sealedElectricSql,
+      'pglite',
+      'node_pglite_runtime_seal_invalid',
+    ),
+  }
+  const sealedNode = sealExecutableFile(
+    trustedInputs.executables.node,
+    sealedRuntime,
+    basename(trustedInputs.executables.node.path),
+    'node_executable_seal_invalid',
+  )
+  const sealedPythonBasePath = sealedPathFor(
+    trustedInputs.runtimeClosures.pythonBaseRuntime,
+    sealedRuntimeClosures.pythonBaseRuntime,
+    trustedInputs.executables.pythonBase.path,
+    'python_base_executable_seal_invalid',
+  )
+  const sealedPsqlPath = sealedPathFor(
+    trustedInputs.runtimeClosures.postgresNative,
+    sealedRuntimeClosures.postgresNative,
+    trustedInputs.executables.psql.path,
+    'psql_executable_seal_invalid',
+  )
+  const sealedPythonSitePackages = sealedPathFor(
+    trustedInputs.runtimeClosures.pythonEnvironment,
+    sealedRuntimeClosures.pythonEnvironment,
+    trustedInputs.pythonSitePackages,
+    'python_site_packages_seal_invalid',
+  )
+  const executionInputs = {
+    ...trustedInputs,
+    executables: {
+      ...trustedInputs.executables,
+      node: sealedNode,
+      python: readBoundedRegularFile(
+        sealedPythonBasePath,
+        256 * 1024 * 1024,
+        'python_base_executable_seal_invalid',
+      ),
+      pythonBase: readBoundedRegularFile(
+        sealedPythonBasePath,
+        256 * 1024 * 1024,
+        'python_base_executable_seal_invalid',
+      ),
+      psql: readBoundedRegularFile(
+        sealedPsqlPath,
+        256 * 1024 * 1024,
+        'psql_executable_seal_invalid',
+      ),
+    },
+    pythonSitePackages: sealedPythonSitePackages,
+    runtimeClosures: sealedRuntimeClosures,
+  }
 
   let stepIndex = 0
   const record = (id, outcome, detail) => {
@@ -1848,12 +2306,12 @@ async function runRehearsalWithAuthority({
   } = {}) => {
     const remainingMs = assertActionWindow()
     const started = now()
-    const executable = Object.values(trustedInputs.executables)
+    const executable = Object.values(executionInputs.executables)
       .find((entry) => sameCanonicalPath(entry.path, argv[0]))
     if (!executable) fail('rehearsal_untrusted_child_executable')
-    assertExecutableRuntimeCurrent(trustedInputs, executable, 'rehearsal_child_runtime_changed')
+    assertExecutableRuntimeCurrent(executionInputs, executable, 'rehearsal_child_runtime_changed')
     const result = invoke({ stepId: id, argv, envOverrides, cwd: rootDir, timeoutMs: remainingMs, input })
-    assertExecutableRuntimeCurrent(trustedInputs, executable, 'rehearsal_child_runtime_changed')
+    assertExecutableRuntimeCurrent(executionInputs, executable, 'rehearsal_child_runtime_changed')
     assertActionWindow()
     assertNoSecretOccurrence(result.stdout, secrets, 'rehearsal_child_output_contained_secret')
     assertNoSecretOccurrence(result.stderr, secrets, 'rehearsal_child_output_contained_secret')
@@ -1934,7 +2392,7 @@ async function runRehearsalWithAuthority({
 
     runCommandStep(
       'local_quarantine_guard',
-      [trustedInputs.executables.node.path, sealed.publicQuarantineVerifier],
+      [executionInputs.executables.node.path, sealed.publicQuarantineVerifier],
       {},
       {
         validateResult: (result) => validateLocalQuarantineReport(
@@ -1959,21 +2417,21 @@ async function runRehearsalWithAuthority({
     })
 
     assertActionWindow()
-    assertExecutableRuntimeCurrent(trustedInputs, trustedInputs.executables.psql, 'psql_runtime_changed')
+    assertExecutableRuntimeCurrent(executionInputs, executionInputs.executables.psql, 'psql_runtime_changed')
     const toolchain = verifyPsql(
-      trustedInputs.executables.psql,
+      executionInputs.executables.psql,
       invoke,
       rootDir,
       Math.min(assertActionWindow(), LOCAL_SUBPROCESS_TIMEOUT_MS),
     )
-    assertExecutableRuntimeCurrent(trustedInputs, trustedInputs.executables.psql, 'psql_runtime_changed')
+    assertExecutableRuntimeCurrent(executionInputs, executionInputs.executables.psql, 'psql_runtime_changed')
     assertActionWindow()
     record('toolchain', 'ok', { psqlVersion: sanitizeText(toolchain.versionOutput, secrets) })
 
     // url_preflight: require the clean target described by the reviewed packet.
     // A production schema mirror, existing private schema, or existing backend
     // role is rejected before any migration is handed to psql.
-    const preflightArgv = sealedPythonArgv(trustedInputs, sealed.databaseValidator, [
+    const preflightArgv = sealedPythonArgv(executionInputs, sealed.databaseValidator, [
       '--env-key', URL_ENV,
       '--rehearsal-preflight',
       '--expected-project-ref-env-key', REF_ENV,
@@ -1981,7 +2439,7 @@ async function runRehearsalWithAuthority({
       '--ssl-root-cert-env-key', CA_ENV,
     ])
     const preflightStarted = now()
-    assertExecutableRuntimeCurrent(trustedInputs, trustedInputs.executables.python, 'python_runtime_changed')
+    assertExecutableRuntimeCurrent(executionInputs, executionInputs.executables.python, 'python_runtime_changed')
     const result = invoke({
       stepId: 'url_preflight',
       argv: preflightArgv,
@@ -1997,7 +2455,7 @@ async function runRehearsalWithAuthority({
       timeoutMs: assertActionWindow(),
     })
     assertActionWindow()
-    assertExecutableRuntimeCurrent(trustedInputs, trustedInputs.executables.python, 'python_runtime_changed')
+    assertExecutableRuntimeCurrent(executionInputs, executionInputs.executables.python, 'python_runtime_changed')
     assertNoSecretOccurrence(result.stdout, secrets, 'rehearsal_child_output_contained_secret')
     assertNoSecretOccurrence(result.stderr, secrets, 'rehearsal_child_output_contained_secret')
     const report = parseSingleJson(
@@ -2031,7 +2489,7 @@ async function runRehearsalWithAuthority({
       ['storage_audit', storageAuditConnection],
     ]) {
       const remainingMs = assertActionWindow()
-      assertExecutableRuntimeCurrent(trustedInputs, trustedInputs.executables.psql, 'psql_runtime_changed')
+      assertExecutableRuntimeCurrent(executionInputs, executionInputs.executables.psql, 'psql_runtime_changed')
       const result = invoke({
         stepId: `${purpose}_credential_preflight`,
         argv: [
@@ -2042,7 +2500,7 @@ async function runRehearsalWithAuthority({
         cwd: rootDir,
         timeoutMs: remainingMs,
       })
-      assertExecutableRuntimeCurrent(trustedInputs, trustedInputs.executables.psql, 'psql_runtime_changed')
+      assertExecutableRuntimeCurrent(executionInputs, executionInputs.executables.psql, 'psql_runtime_changed')
       assertActionWindow()
       assertNoSecretOccurrence(result.stdout, secrets, 'rehearsal_child_output_contained_secret')
       assertNoSecretOccurrence(result.stderr, secrets, 'rehearsal_child_output_contained_secret')
@@ -2070,7 +2528,7 @@ async function runRehearsalWithAuthority({
     // mutation. The live six-request audit remains a separately confirmed,
     // read-only owner action documented in the runbook.
     runCommandStep('storage_privacy_preflight', sealedPythonArgv(
-      trustedInputs,
+      executionInputs,
       sealed.storagePrivacyVerifier,
       ['--preflight'],
     ), {
@@ -2084,72 +2542,94 @@ async function runRehearsalWithAuthority({
       )),
     })
 
-    // Apply the reviewed public baseline and all private migrations through
-    // v10. Recheck the exact packet digest immediately before every psql call.
+    // Preserve the approved clean catalog snapshot through the first and last
+    // hosted writes. The sealed Python validator opens one serializable admin
+    // transaction, rechecks the complete owner-bound inventory in that same
+    // session, applies the deterministic inner bytes of all 12 reviewed
+    // transaction-wrapped migrations plus quarantine, then commits once.
+    assertReviewedCheckout('atomic_migration_and_quarantine_apply')
+    if (atomicBundle.digest !== approval.trust.atomicBundleDigest) {
+      fail('rehearsal_atomic_bundle_unreviewed')
+    }
+    const atomicPayload = {
+      contract: ATOMIC_APPLY_CONTRACT,
+      targetProjectRef: expectedProjectRef,
+      productionProjectRef,
+      expectedMetadataInventory: approval.branch.cleanTargetMetadataInventory,
+      expectedMetadataDigest: approval.branch.cleanTargetMetadataDigest,
+      atomicBundleDigest: atomicBundle.digest,
+      units: atomicBundle.units,
+    }
+    runCommandStep(
+      'atomic_migration_and_quarantine_apply',
+      sealedPythonArgv(executionInputs, sealed.databaseValidator, [
+        '--env-key', URL_ENV,
+        '--rehearsal-atomic-apply',
+        '--expected-project-ref-env-key', REF_ENV,
+        '--production-project-ref-env-key', PRODUCTION_REF_ENV,
+        '--ssl-root-cert-env-key', CA_ENV,
+      ]),
+      {
+        [URL_ENV]: databaseUrl,
+        [PRODUCTION_REF_ENV]: productionProjectRef,
+        [REF_ENV]: expectedProjectRef,
+        [CA_ENV]: sealed.certificateAuthority,
+        PYTHONNOUSERSITE: '1',
+        PYTHONDONTWRITEBYTECODE: '1',
+      },
+      {
+        input: Buffer.from(stableStringify(atomicPayload), 'utf8'),
+        validateResult: (result) => validateAtomicApplyReport(
+          parseSingleJson(result.stdout, 'atomic_migration_apply_report_invalid'),
+          atomicBundle,
+          approval.branch.cleanTargetMetadataDigest,
+          expectedProjectRef,
+        ),
+      },
+    )
     const branchEnv = psqlEnv(connection, sealed.certificateAuthority)
-    for (const [index, migration] of migrations.entries()) {
-      const id = `apply_migration_${String(index + 1).padStart(2, '0')}`
-      assertReviewedCheckout(id)
-      const bytes = reviewedSqlBytes[migration.name]
-      if (sha256(bytes) !== migration.sha256) {
-        fail(`migration_digest_mismatch_${String(index + 1).padStart(2, '0')}`)
-      }
-      runCommandStep(id, [
-        toolchain.psql, '--no-psqlrc', '--no-password',
-        '--set', 'ON_ERROR_STOP=1',
-        '--file', '-',
-      ], branchEnv, { input: bytes })
-    }
 
-    assertReviewedCheckout('apply_quarantine')
-    if (`sha256:${sha256(quarantineBytes)}` !== inventory[QUARANTINE_PATH]) {
-      fail('rehearsal_quarantine_digest_mismatch')
-    }
-    runCommandStep('apply_quarantine', [
-      toolchain.psql, '--no-psqlrc', '--no-password',
-      '--set', 'ON_ERROR_STOP=1',
-      '--file', '-',
-    ], branchEnv, { input: quarantineBytes })
-
-    // The dedicated Storage auditor must still have no persistent write path
-    // after reviewed DDL/default privileges have been installed.
-    assertExecutableRuntimeCurrent(trustedInputs, trustedInputs.executables.psql, 'psql_runtime_changed')
-    const postStorageResult = invoke({
-      stepId: 'storage_audit_postmigration_credential_preflight',
-      argv: [
-        toolchain.psql, '--no-psqlrc', '--no-password', '--tuples-only', '--no-align',
-        '--set', 'ON_ERROR_STOP=1', '--command', CREDENTIAL_PREFLIGHT_SQL,
-      ],
-      envOverrides: psqlEnv(storageAuditConnection, sealed.certificateAuthority),
-      cwd: rootDir,
-      timeoutMs: assertActionWindow(),
-    })
-    assertExecutableRuntimeCurrent(trustedInputs, trustedInputs.executables.psql, 'psql_runtime_changed')
-    assertActionWindow()
-    assertNoSecretOccurrence(postStorageResult.stdout, secrets, 'rehearsal_child_output_contained_secret')
-    assertNoSecretOccurrence(postStorageResult.stderr, secrets, 'rehearsal_child_output_contained_secret')
-    const postStorageReport = lastJsonLine(sanitizeText(postStorageResult.stdout, secrets))
-    if (postStorageResult.status !== 0 || !postStorageReport) {
-      record('storage_audit_postmigration_boundary', 'failed', {
-        exitCode: postStorageResult.status,
-        stderr: sanitizeText(postStorageResult.stderr, secrets).slice(0, 20000),
-        credentialsIncluded: false,
+    // Both bounded logins must still have no persistent write path or explicit
+    // parameter authority after the transaction installs roles/default ACLs.
+    const postMigrationCredentials = {}
+    for (const [purpose, boundedConnection] of [
+      ['runtime', runtimeConnection],
+      ['storage_audit', storageAuditConnection],
+    ]) {
+      assertExecutableRuntimeCurrent(executionInputs, executionInputs.executables.psql, 'psql_runtime_changed')
+      const result = invoke({
+        stepId: `${purpose}_postmigration_credential_preflight`,
+        argv: [
+          toolchain.psql, '--no-psqlrc', '--no-password', '--tuples-only', '--no-align',
+          '--set', 'ON_ERROR_STOP=1', '--command', CREDENTIAL_PREFLIGHT_SQL,
+        ],
+        envOverrides: psqlEnv(boundedConnection, sealed.certificateAuthority),
+        cwd: rootDir,
+        timeoutMs: assertActionWindow(),
       })
-      fail('storage_audit_postmigration_preflight_failed')
+      assertExecutableRuntimeCurrent(executionInputs, executionInputs.executables.psql, 'psql_runtime_changed')
+      assertActionWindow()
+      assertNoSecretOccurrence(result.stdout, secrets, 'rehearsal_child_output_contained_secret')
+      assertNoSecretOccurrence(result.stderr, secrets, 'rehearsal_child_output_contained_secret')
+      const report = lastJsonLine(sanitizeText(result.stdout, secrets))
+      if (result.status !== 0 || !report) fail(`${purpose}_postmigration_preflight_failed`)
+      postMigrationCredentials[purpose] = validateCredentialPreflightReport(
+        report,
+        boundedConnection.loginRole,
+        `${purpose}_postmigration`,
+      )
     }
-    record('storage_audit_postmigration_boundary', 'ok', {
-      storageAudit: validateCredentialPreflightReport(
-        postStorageReport,
-        storageAuditConnection.loginRole,
-        'storage_audit_postmigration',
-      ),
+    record('postmigration_credential_boundary', 'ok', {
+      runtime: postMigrationCredentials.runtime,
+      storageAudit: postMigrationCredentials.storage_audit,
       persistentWriteAuthorityAbsent: true,
+      parameterAuthorityAbsent: true,
       credentialsIncluded: false,
     })
 
     // hosted_validator: read-only v10 contract via the prevalidated dedicated
     // runtime and Storage-audit logins.
-    runCommandStep('hosted_validator', sealedPythonArgv(trustedInputs, sealed.databaseValidator, [
+    runCommandStep('hosted_validator', sealedPythonArgv(executionInputs, sealed.databaseValidator, [
       '--env-key', RUNTIME_URL_ENV,
       '--storage-audit-env-key', STORAGE_AUDIT_URL_ENV,
       '--ensure-schema', '--require-ready',
@@ -2366,6 +2846,7 @@ async function selfTestFixtures(testRoot) {
   mkdirSync(postgresBin)
   const gitPath = join(fixtureBin, process.platform === 'win32' ? 'git.exe' : 'git')
   const pythonPath = join(pythonBin, process.platform === 'win32' ? 'python.exe' : 'python3')
+  const pythonBasePath = join(pythonBaseRoot, process.platform === 'win32' ? 'python.exe' : 'python3')
   const psqlPath = join(postgresBin, process.platform === 'win32' ? 'psql.exe' : 'psql')
   const pythonPackagePath = join(pythonPackageRoot, '__init__.py')
   const postgresLibraryPath = join(postgresBin, process.platform === 'win32' ? 'libpq.dll' : 'libpq.so')
@@ -2373,6 +2854,7 @@ async function selfTestFixtures(testRoot) {
   for (const [path, bytes] of [
     [gitPath, 'self-test-git-executable-v1'],
     [pythonPath, 'self-test-python-executable-v1'],
+    [pythonBasePath, 'self-test-python-base-executable-v1'],
     [psqlPath, 'self-test-psql-executable-v1'],
     [postgresLibraryPath, 'self-test-libpq-v1'],
     [join(pythonBaseRoot, process.platform === 'win32' ? 'python312.dll' : 'libpython3.so'), 'self-test-python-runtime-v1'],
@@ -2393,6 +2875,7 @@ async function selfTestFixtures(testRoot) {
     [PACKET_ENV]: packetPath,
     [APPROVAL_ENV]: approvalPath,
     [MANAGEMENT_TOKEN_ENV]: 'fixture-management-token-read-only-0001',
+    [NODE_BIN_ENV]: process.execPath,
     [GIT_BIN_ENV]: gitPath,
     [PYTHON_BIN_ENV]: pythonPath,
     [POSTGRES_BIN_ENV]: postgresBin,
@@ -2421,8 +2904,15 @@ async function selfTestFixtures(testRoot) {
     roles: [],
     role_memberships: [],
     role_settings: [],
+    parameter_acls: [],
     publications: [],
     publication_relations: [],
+    publication_namespaces: [],
+    inheritance: [],
+    aggregates: [],
+    casts: [],
+    operators: [],
+    sequences: [],
     subscriptions: [],
     subscription_relations: [],
     foreign_data_wrappers: [],
@@ -2451,6 +2941,7 @@ async function selfTestFixtures(testRoot) {
       deleteBy: '2026-08-13T15:30:00.000Z',
       creationReceiptDigest: objectDigest(branchReceipt),
       cleanTargetMetadataDigest,
+      cleanTargetMetadataInventory,
       startsWithProductionData: false,
       maximumLifetimeHours: WINDOW_HOURS,
       providerUsageChargesAcknowledged: true,
@@ -2527,6 +3018,9 @@ async function selfTestFixtures(testRoot) {
     noObjectOwnership: true,
     noDefaultWritePrivileges: true,
     noRoleSettings: true,
+    noExplicitParameterPrivileges: true,
+    noSessionReplicationRoleSetPrivilege: true,
+    noAlterSystemParameterPrivilege: true,
     ...overrides,
   })
   const storageEvidence = {
@@ -2601,6 +3095,9 @@ async function selfTestFixtures(testRoot) {
         envKeys: Object.keys(call.envOverrides || {}).sort(),
         baseEnvKeys: Object.keys(call.baseEnv || {}).sort(),
         inputDigest: call.input === undefined ? null : `sha256:${sha256(call.input)}`,
+        atomicBundleDigest: call.argv.includes('--rehearsal-atomic-apply')
+          ? JSON.parse(Buffer.from(call.input).toString('utf8')).atomicBundleDigest
+          : null,
       })
       if (overrides[call.stepId]) {
         const override = overrides[call.stepId]
@@ -2627,6 +3124,30 @@ async function selfTestFixtures(testRoot) {
         }
       }
       if (call.argv.includes('--rehearsal-preflight')) return { status: 0, stdout: cleanPreflight, stderr: '' }
+      if (call.argv.includes('--rehearsal-atomic-apply')) {
+        const payload = JSON.parse(Buffer.from(call.input).toString('utf8'))
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            contract: ATOMIC_APPLY_CONTRACT,
+            ok: true,
+            targetProjectRef: payload.targetProjectRef,
+            connectionMode: 'direct',
+            metadataFingerprintBefore: payload.expectedMetadataDigest,
+            atomicBundleDigest: payload.atomicBundleDigest,
+            appliedUnits: payload.units.map(({ name, sourceDigest, innerDigest }) => ({
+              name, sourceDigest, innerDigest,
+            })),
+            mutationUnitsExecuted: payload.units.length,
+            transactionCommitted: true,
+            transactionRolledBack: false,
+            secretValuesExposed: false,
+            productionMutated: false,
+            vercelMutated: false,
+          }),
+          stderr: '',
+        }
+      }
       if (call.argv.includes('--require-ready')) return { status: 0, stdout: hostedReport, stderr: '' }
       if (call.argv.includes('--preflight')) return { status: 0, stdout: storagePreflight, stderr: '' }
       if (call.stepId === 'local_quarantine_guard') return { status: 0, stdout: localQuarantineReport, stderr: '' }
@@ -2710,7 +3231,7 @@ export async function runSelfTest() {
     const result = await run({ argv: ['--dry-run'], env: {}, exec: stub.exec })
     if (result.exitCode !== 0 || stub.calls.length !== 0) throw new Error('self_test_dry_run_failed')
     const plan = result.plan
-    if (plan.steps.length !== 25 || plan.totals.bufferMinutes <= 0 || plan.totals.plannedMinutes >= plan.totals.windowMinutes) {
+    if (plan.steps.length !== 13 || plan.totals.bufferMinutes <= 0 || plan.totals.plannedMinutes >= plan.totals.windowMinutes) {
       throw new Error('self_test_dry_run_budget_failed')
     }
     if (plan.ownerConsoleSegments.length !== OWNER_CONSOLE_SEGMENTS.length) throw new Error('self_test_dry_run_owner_segments_failed')
@@ -2754,16 +3275,15 @@ export async function runSelfTest() {
     if (packetText.includes('stub-password')) throw new Error('self_test_packet_leaked_password')
     const sqlCalls = stub.calls.filter((call) => call.argv.includes('--file'))
     const expectedOrder = [
-      ...EXPECTED_MIGRATIONS.map((name, index) => ({
-        stepId: `apply_migration_${String(index + 1).padStart(2, '0')}`,
-        inputDigest: `sha256:${sha256(readFileSync(resolve(root, MIGRATION_DIRECTORY, name)))}`,
-      })),
-      { stepId: 'apply_quarantine', inputDigest: `sha256:${sha256(readFileSync(resolve(root, QUARANTINE_PATH)))}` },
       { stepId: 'session_revocation_probe', inputDigest: `sha256:${sha256(readFileSync(resolve(root, PROBE_PATH)))}` },
     ]
     if (sqlCalls.some((call) => call.argv[call.argv.indexOf('--file') + 1] !== '-')
       || JSON.stringify(sqlCalls.map(({ stepId, inputDigest }) => ({ stepId, inputDigest }))) !== JSON.stringify(expectedOrder)) {
       throw new Error('self_test_step_order_or_byte_binding_failed')
+    }
+    const atomicCall = stub.calls.find((call) => call.stepId === 'atomic_migration_and_quarantine_apply')
+    if (!atomicCall || atomicCall.atomicBundleDigest !== approvedTrust.atomicBundleDigest) {
+      throw new Error('self_test_atomic_bundle_binding_failed')
     }
     if (stub.calls.some((call) => call.envKeys.includes(MANAGEMENT_TOKEN_ENV)
       || call.baseEnvKeys.some((key) => !SAFE_CHILD_ENV_KEYS.includes(key)))) {
@@ -2852,23 +3372,17 @@ export async function runSelfTest() {
     if (stub.calls.some((call) => call.argv.includes('--file'))) throw new Error('self_test_extra_migration_reached_psql')
   }
 
-  // 7. A mid-run failure stops the sequence and cannot be resumed locally.
+  // 7. An atomic apply failure rolls back and cannot be resumed locally.
   {
-    let v9Attempts = 0
-    const failingV9 = () => {
-      v9Attempts += 1
-      return v9Attempts === 1
-        ? { status: 3, stdout: '', stderr: 'psql:...: ERROR: private trial backend v9 requires schema version 8' }
-        : { status: 0, stdout: 'stubbed-ok', stderr: '' }
-    }
-    const stub = makeExec({ apply_migration_11: failingV9 })
-    await expectFailure('step_failed_apply_migration_11', {
+    const atomicFailure = { status: 1, stdout: '', stderr: 'atomic_apply_failed' }
+    const stub = makeExec({ atomic_migration_and_quarantine_apply: atomicFailure })
+    await expectFailure('step_failed_atomic_migration_and_quarantine_apply', {
       env, exec: stub.exec, evidenceRoot: evidencePath('midrun'),
     })
-    if (stub.calls.some((call) => call.stepId === 'apply_migration_12' || call.stepId === 'apply_quarantine')) {
+    if (stub.calls.some((call) => call.stepId === 'hosted_validator')) {
       throw new Error('self_test_failure_did_not_stop_sequence')
     }
-    const resumeStub = makeExec({ apply_migration_11: failingV9 })
+    const resumeStub = makeExec({ atomic_migration_and_quarantine_apply: atomicFailure })
     const resumed = await expectFailure('rehearsal_prior_attempt_requires_new_empty_branch', {
       env, exec: resumeStub.exec, evidenceRoot: evidencePath('midrun'),
     })
@@ -3143,7 +3657,7 @@ export async function runSelfTest() {
     let clock = new Date('2026-08-12T16:00:00.000Z')
     const nowAtClock = () => new Date(clock)
     const stub = makeExec({
-      apply_migration_01: () => {
+      atomic_migration_and_quarantine_apply: () => {
         clock = new Date('2026-08-13T15:30:00.000Z')
         return { status: 0, stdout: 'stubbed-ok', stderr: '' }
       },
@@ -3153,8 +3667,8 @@ export async function runSelfTest() {
       authorityContext,
     )
     if (result.error !== 'rehearsal_branch_or_approval_deadline_reached'
-      || !stub.calls.some((call) => call.stepId === 'apply_migration_01')
-      || stub.calls.some((call) => call.stepId === 'apply_migration_02')) {
+      || !stub.calls.some((call) => call.stepId === 'atomic_migration_and_quarantine_apply')
+      || stub.calls.some((call) => call.stepId === 'hosted_validator')) {
       throw new Error('self_test_action_deadline_failed_open')
     }
   }
@@ -3231,38 +3745,51 @@ export async function runSelfTest() {
       },
     })
     try {
-      await expectFailure('python_runtime_changed', {
+      cases += 1
+      const result = await run({
         env,
         exec: stub.exec,
         evidenceRoot: evidencePath('python-closure-mid-run-drift'),
       })
+      if (result.ok !== true) throw new Error('self_test_sealed_python_source_swap_affected_execution')
     } finally {
       writeFileSync(path, original)
-    }
-    if (stub.calls.some((call) => call.argv.includes('--file'))) {
-      throw new Error('self_test_python_mid_run_drift_reached_psql')
     }
   }
   {
-    const path = fixture.runtimeFixtureFiles.postgresLibraryPath
-    const original = readFileSync(path)
     const stub = makeExec({
-      toolchain: () => {
-        writeFileSync(path, Buffer.concat([original, Buffer.from('-during-run', 'utf8')]))
+      url_preflight: (call) => {
+        const sealedPackage = join(call.argv[6], 'psycopg', '__init__.py')
+        chmodSync(sealedPackage, 0o600)
+        writeFileSync(sealedPackage, Buffer.from('sealed-runtime-tampered', 'utf8'))
+        return { status: 0, stdout: fixture.cleanPreflight, stderr: '' }
+      },
+    })
+    await expectFailure('python_runtime_changed', {
+      env,
+      exec: stub.exec,
+      evidenceRoot: evidencePath('sealed-python-mid-run-drift'),
+    })
+    if (stub.calls.some((call) => call.argv.includes('--file'))) {
+      throw new Error('self_test_sealed_python_drift_reached_psql')
+    }
+  }
+  {
+    const stub = makeExec({
+      toolchain: (call) => {
+        const sealedLibrary = join(dirname(call.argv[0]), basename(fixture.runtimeFixtureFiles.postgresLibraryPath))
+        chmodSync(sealedLibrary, 0o600)
+        writeFileSync(sealedLibrary, Buffer.from('sealed-postgres-runtime-tampered', 'utf8'))
         return { status: 0, stdout: 'psql (PostgreSQL) 17.10', stderr: '' }
       },
     })
-    try {
-      await expectFailure('psql_runtime_changed', {
-        env,
-        exec: stub.exec,
-        evidenceRoot: evidencePath('psql-closure-mid-run-drift'),
-      })
-    } finally {
-      writeFileSync(path, original)
-    }
-    if (stub.calls.some((call) => call.argv.includes('--file'))) {
-      throw new Error('self_test_psql_mid_run_drift_reached_migration')
+    await expectFailure('psql_runtime_changed', {
+      env,
+      exec: stub.exec,
+      evidenceRoot: evidencePath('sealed-psql-mid-run-drift'),
+    })
+    if (stub.calls.some((call) => call.stepId === 'atomic_migration_and_quarantine_apply')) {
+      throw new Error('self_test_sealed_psql_drift_reached_migration')
     }
   }
 
@@ -3327,6 +3854,21 @@ export async function runSelfTest() {
     }
   }
   {
+    const publicationDrift = JSON.parse(fixture.cleanPreflight)
+    publicationDrift.metadata_inventory.publication_namespaces.push([
+      'existing_publication', 'public',
+    ])
+    publicationDrift.metadata_fingerprint_digest = objectDigest(publicationDrift.metadata_inventory)
+    const stub = makeExec({
+      url_preflight: { status: 0, stdout: JSON.stringify(publicationDrift), stderr: '' },
+    })
+    await expectFailure('rehearsal_clean_target_required', {
+      env,
+      exec: stub.exec,
+      evidenceRoot: evidencePath('preflight-publication-namespace-drift'),
+    })
+  }
+  {
     const stub = makeExec({
       hosted_validator: {
         status: 0,
@@ -3345,6 +3887,9 @@ export async function runSelfTest() {
   for (const [name, override] of [
     ['maintain-privilege', { noTableWritePrivilege: false }],
     ['large-object-create', { noLargeObjectCreationPrivilege: false }],
+    ['parameter-set-privilege', { noExplicitParameterPrivileges: false }],
+    ['session-replication-role-set', { noSessionReplicationRoleSetPrivilege: false }],
+    ['alter-system-parameter', { noAlterSystemParameterPrivilege: false }],
   ]) {
     const stub = makeExec({
       runtime_credential_preflight: {
@@ -3359,6 +3904,22 @@ export async function runSelfTest() {
       evidenceRoot: evidencePath(name),
     })
     if (stub.calls.some((call) => call.argv.includes('--file'))) throw new Error(`self_test_${name}_reached_psql`)
+  }
+
+  // The scrubbed launcher is the pre-Node boundary: preload flags and a
+  // missing launcher attestation are rejected before hosted orchestration.
+  cases += 3
+  for (const [bootstrap, code] of [
+    [{ env: { [LAUNCHER_ATTESTATION_ENV]: 'v1', NODE_OPTIONS: '--require attacker.cjs' }, execArgv: [] }, 'rehearsal_node_bootstrap_unsafe'],
+    [{ env: { [LAUNCHER_ATTESTATION_ENV]: 'v1' }, execArgv: ['--import=attacker.mjs'] }, 'rehearsal_node_bootstrap_unsafe'],
+    [{ env: {}, execArgv: [] }, 'rehearsal_scrubbed_launcher_required'],
+  ]) {
+    try {
+      assertSafeNodeBootstrap(bootstrap)
+      throw new Error(`self_test_expected_${code}`)
+    } catch (error) {
+      if (error?.rehearsalCode !== code) throw error
+    }
   }
 
   // Private inputs and evidence are direct children of a plain .tmp root.
@@ -3400,7 +3961,20 @@ export async function runSelfTest() {
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const argv = process.argv.slice(2)
-  if (argv.includes('--self-test')) {
+  try {
+    assertSafeNodeBootstrap({
+      requireLauncher: !argv.includes('--self-test') && !argv.includes('--dry-run'),
+    })
+  } catch (error) {
+    console.error(JSON.stringify({
+      ok: false,
+      contract: PREVIEW_REHEARSAL_CONTRACT,
+      error: String(error?.rehearsalCode || error?.message || 'rehearsal_node_bootstrap_unsafe').slice(0, 240),
+      productionMutated: false,
+    }))
+    process.exitCode = 1
+  }
+  if (process.exitCode !== 1 && argv.includes('--self-test')) {
     runSelfTest()
       .then((report) => {
         console.log(JSON.stringify(report))
@@ -3410,7 +3984,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
         console.error(JSON.stringify({ ok: false, error: String(error?.message || 'self_test_failed').slice(0, 240) }))
         process.exitCode = 1
       })
-  } else if (argv.includes('--capture-trust-inputs')) {
+  } else if (process.exitCode !== 1 && argv.includes('--capture-trust-inputs')) {
     try {
       if (argv.length !== 1) fail('rehearsal_arguments_invalid')
       console.log(JSON.stringify(captureExecutionTrust()))
@@ -3423,7 +3997,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       }))
       process.exitCode = 1
     }
-  } else {
+  } else if (process.exitCode !== 1) {
     runRehearsal({ argv })
       .then((result) => {
         process.exitCode = result.exitCode

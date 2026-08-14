@@ -178,7 +178,7 @@ test('gates the preview-branch rehearsal orchestrator with its fail-closed self-
   assert.deepEqual(report, {
     ok: true,
     contract: 'supermega.preview-branch-rehearsal.v2.self-test',
-    cases: 46,
+    cases: 54,
     networkRequestsPerformed: 0,
     childProcessesSpawned: 0,
     productionMutated: false,

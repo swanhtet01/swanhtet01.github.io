@@ -40,7 +40,8 @@ npm run database:public-browser-quarantine:verify
 npm run database:validator:self-test
 npm run storage:privacy:self-test
 node tools/run_preview_branch_rehearsal.mjs --self-test
-node tools/run_preview_branch_rehearsal.mjs --dry-run
+$env:SUPERMEGA_NODE_BIN = (Get-Command node).Source
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools\run_preview_branch_rehearsal.ps1 --dry-run
 ```
 
 The source checkout must already contain the reviewed R1–R4 sequence. GitHub
@@ -68,7 +69,7 @@ With a fine-grained Management API token limited to `environment:read`, capture
 the authenticated, secret-free creation receipt:
 
 ```powershell
-node tools/run_preview_branch_rehearsal.mjs --capture-branch-receipt
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools\run_preview_branch_rehearsal.ps1 --capture-branch-receipt
 ```
 
 The command performs one GET and zero provider writes. It accepts exactly one
@@ -87,7 +88,9 @@ catalog functions. It also returns a
 metadata-only inventory of provider schemas, extensions, relations, columns,
 constraints, indexes, routine-definition/configuration digests, ordinary and
 event triggers, policies, rewrite rules, ACLs, roles and memberships,
-publications/subscriptions, foreign-data surfaces, large objects, and database
+parameter ACLs, publication schemas, inheritance, aggregate/cast/operator/type
+and sequence internals, publications/subscriptions, foreign-data surfaces,
+large objects, and database
 configuration. Subscriptions, foreign servers, user mappings, and large objects
 must all be absent. The owner and independent reviewer inspect that private
 inventory and sign its canonical digest. It never reads business-row contents
@@ -129,6 +132,7 @@ Set these only in the operator's process environment:
 | `SUPERMEGA_SUPABASE_CA_FILE` | reviewed CA certificate path |
 | `SUPERMEGA_REHEARSAL_RUNTIME_DATABASE_URL` | dedicated `supermega_trial_runtime` login; never `postgres`, `supabase_admin`, service/browser, or elevated role |
 | `SUPERMEGA_REHEARSAL_STORAGE_AUDIT_DATABASE_URL` | distinct dedicated `supermega_storage_audit` login; never the runtime or a provider/elevated role |
+| `SUPERMEGA_NODE_BIN` | absolute canonical path to the reviewed Node executable; the scrubbed PowerShell launcher is the only hosted entrypoint |
 | `SUPERMEGA_GIT_BIN` | absolute canonical path to the reviewed Git executable |
 | `SUPERMEGA_PYTHON_BIN` | absolute canonical path to the reviewed Python executable from the exact `uv.lock` environment |
 | `SUPERMEGA_POSTGRES17_BIN` | absolute directory containing the reviewed PostgreSQL 17 `psql` executable |
@@ -138,7 +142,9 @@ Set these only in the operator's process environment:
 
 The separately owner-approved role-provisioning step must leave both dedicated
 logins without direct, inherited, `SET ROLE`, ownership, default-ACL, or
-function-based persistent write authority. In particular, explicitly deny the
+function- or parameter-based persistent write authority. In particular,
+explicitly deny `SET`/`ALTER SYSTEM` parameter ACLs (especially
+`session_replication_role`) and the
 PostgreSQL large-object creation/import functions to these logins; an empty
 large-object catalog is not proof that they cannot create one.
 
@@ -147,14 +153,17 @@ mode, retain its private metadata inventory, and independently review its
 `metadata_fingerprint_digest`. Create SHA-256 digests of the exact three URL
 strings without printing the URL values. Also digest the CA bytes, the absolute
 Node/Git/Python/psql executable files, the complete Python virtual environment,
-its base runtime, the complete PostgreSQL native `bin` dependency closure, and
-the exact reviewed source/lock files listed in `trust.sources`. Every runtime
+its base runtime, the complete PostgreSQL native `bin` dependency closure, the
+complete `@electric-sql/pglite` package closure, the deterministic inner-byte
+atomic migration bundle, and the exact reviewed source/lock files listed in
+`trust.sources`. Every runtime
 closure is a sorted, symlink/reparse-free manifest of every directory and file
 path, byte count, and SHA-256 digest. The runner derives the Python roots from
 the approved virtual-environment executable and `pyvenv.cfg`, derives the
-PostgreSQL closure from the approved `psql` directory, removes inherited
-`PATH`, `PYTHONPATH`, and user-site resolution from children, and rechecks the
-relevant closure immediately before and after execution. Python runs with
+PostgreSQL closure from the approved `psql` directory, then copies the approved
+Node executable and all child runtime closures into a new exclusive,
+non-reparse, read-only sealed directory before credentials are passed to a
+child. Python runs with
 `-I -S -B`; the sealed launcher adds only the site-packages directory inside
 the signed virtual-environment closure, so `.pth` files and external import
 paths cannot widen execution. The owner signs the
@@ -166,7 +175,7 @@ secret-free trust object locally. This command reads no database URL,
 credential value, provider, or remote:
 
 ```powershell
-node tools/run_preview_branch_rehearsal.mjs --capture-trust-inputs
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools\run_preview_branch_rehearsal.ps1 --capture-trust-inputs
 ```
 
 Copy its exact `trust` object into the approval. Any later file addition,
@@ -192,10 +201,12 @@ private `.tmp/rehearsal-approval.json`:
   },
   "trust": {
     "certificateAuthorityDigest": "sha256:<CA_FILE_SHA256>",
+    "atomicBundleDigest": "sha256:<DETERMINISTIC_12_MIGRATION_PLUS_QUARANTINE_INNER_BYTES_DIGEST>",
     "executables": {
       "node": { "path": "<ABSOLUTE_NODE_PATH>", "digest": "sha256:<NODE_SHA256>" },
       "git": { "path": "<ABSOLUTE_GIT_PATH>", "digest": "sha256:<GIT_SHA256>" },
       "python": { "path": "<ABSOLUTE_PYTHON_PATH>", "digest": "sha256:<PYTHON_SHA256>" },
+      "pythonBase": { "path": "<ABSOLUTE_BASE_PYTHON_PATH>", "digest": "sha256:<BASE_PYTHON_SHA256>" },
       "psql": { "path": "<ABSOLUTE_PSQL17_PATH>", "digest": "sha256:<PSQL_SHA256>" }
     },
     "runtimeClosures": {
@@ -219,9 +230,17 @@ private `.tmp/rehearsal-approval.json`:
         "fileCount": 1,
         "directoryCount": 1,
         "totalBytes": 1
+      },
+      "nodePglite": {
+        "path": "<ABSOLUTE_PGLITE_PACKAGE_ROOT>",
+        "digest": "sha256:<SORTED_DIRECTORY_CLOSURE_SHA256>",
+        "fileCount": 1,
+        "directoryCount": 1,
+        "totalBytes": 1
       }
     },
     "sources": {
+      "launcher": "sha256:<POWERSHELL_LAUNCHER_SHA256>",
       "runner": "sha256:<RUNNER_SHA256>",
       "packetBuilder": "sha256:<PACKET_BUILDER_SHA256>",
       "databaseValidator": "sha256:<DATABASE_VALIDATOR_SHA256>",
@@ -241,6 +260,18 @@ private `.tmp/rehearsal-approval.json`:
     "deleteBy": "<ABSOLUTE_UTC_DEADLINE_NO_MORE_THAN_24_HOURS_AFTER_CREATED_AT>",
     "creationReceiptDigest": "sha256:<AUTHENTICATED_BRANCH_RECEIPT_DIGEST>",
     "cleanTargetMetadataDigest": "sha256:<REVIEWED_METADATA_INVENTORY_DIGEST>",
+    "cleanTargetMetadataInventory": {
+      "schemas": [], "extensions": [], "relations": [], "columns": [],
+      "constraints": [], "indexes": [], "routines": [], "triggers": [],
+      "policies": [], "rewrite_rules": [], "types": [], "event_triggers": [],
+      "default_acls": [], "roles": [], "role_memberships": [], "role_settings": [],
+      "parameter_acls": [], "publications": [], "publication_relations": [],
+      "publication_namespaces": [], "inheritance": [], "aggregates": [],
+      "casts": [], "operators": [], "sequences": [], "subscriptions": [],
+      "subscription_relations": [], "foreign_data_wrappers": [],
+      "foreign_servers": [], "user_mappings": [], "large_objects": [],
+      "database_configuration": []
+    },
     "startsWithProductionData": false,
     "maximumLifetimeHours": 24,
     "providerUsageChargesAcknowledged": true,
@@ -293,8 +324,8 @@ production authority, or managed-activation authority.
 Review the plan once more, then run:
 
 ```powershell
-node tools/run_preview_branch_rehearsal.mjs --dry-run
-node tools/run_preview_branch_rehearsal.mjs
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools\run_preview_branch_rehearsal.ps1 --dry-run
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools\run_preview_branch_rehearsal.ps1
 ```
 
 Before the first branch mutation, the tool verifies:
@@ -310,16 +341,23 @@ Before the first branch mutation, the tool verifies:
   `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, replication, membership or `SET ROLE`
   path, persistent write privilege (including PostgreSQL 17 `MAINTAIN`), large
   object creation, object ownership, dangerous default ACL, security-definer
-  execution, or role setting;
+  execution, role setting, explicit parameter ACL, `session_replication_role`
+  `SET`, or parameter `ALTER SYSTEM` authority;
 - local quarantine behavior, full migration digests, PostgreSQL 17 tooling,
   and Storage privacy configuration.
 
-It reads every authoritative source from the exact reviewed Git blob, stages
-the signed CA and validator bytes inside a new non-reparse evidence directory,
-rechecks the clean commit before every SQL action, and passes already-hashed SQL
-bytes to `psql` through standard input; `psql` never reopens a mutable source
-pathname. After DDL, it proves the
-Storage-audit login still has no persistent write path, then runs the read-only
+The pre-Node PowerShell launcher rejects unreviewed Node/runner/launcher bytes,
+removes preload, alternate-trust, and proxy variables, then starts the exact
+approved Node executable with no `process.execArgv`. The runner reads every
+authoritative source from the exact reviewed Git blob and stages the signed CA,
+validators, Node executable, PGlite package, Python environment/base, and
+PostgreSQL native closure inside a new non-reparse evidence directory. One
+sealed Python/psycopg session opens a serializable transaction, compares the
+complete live catalog inventory with the exact owner-signed inventory, applies
+the deterministic inner bytes of all twelve transaction-wrapped migrations and
+the quarantine script, and commits once. A catalog mismatch or any unit failure
+rolls the whole transaction back. After DDL, it proves both the runtime and
+Storage-audit logins still have no persistent write or parameter path, then runs the read-only
 v10 hosted validator and the packet-bound session-revocation probe inside a
 transaction that ends in `ROLLBACK`. Child processes receive a purpose-built
 environment containing only operating-system basics and the credential needed

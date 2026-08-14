@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""Read-only activation audit for the SuperMega managed trial database.
+"""Fail-closed activation audit and isolated preview transaction executor.
 
 The database URL is accepted only through an explicitly named environment
-variable. The verifier never prints connection details, never applies a
-migration, and executes every catalog probe inside a read-only transaction.
+variable. The default verifier never prints connection details or applies a
+migration and executes every audit probe in a read-only transaction. The
+separate rehearsal atomic-apply mode accepts only the exact digest-bound bundle
+on stdin and commits it once after a same-transaction clean-catalog guard.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 from hashlib import sha256
 import json
 import os
@@ -23,6 +27,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 CONTRACT = "supermega_private_trial_database_v10"
 REHEARSAL_PREFLIGHT_CONTRACT = "supermega_supabase_rehearsal_preflight_v1"
+REHEARSAL_ATOMIC_APPLY_CONTRACT = "supermega_supabase_rehearsal_atomic_apply_v1"
 ACTIVATION_TARGET_CONTRACT = "supermega_supabase_activation_target_v1"
 ACTIVATION_EVIDENCE_CONTRACT = "supermega_managed_activation_evidence_v1"
 SCHEMA = "app_private"
@@ -48,8 +53,15 @@ REHEARSAL_METADATA_INVENTORY_KEYS = (
     "roles",
     "role_memberships",
     "role_settings",
+    "parameter_acls",
     "publications",
     "publication_relations",
+    "publication_namespaces",
+    "inheritance",
+    "aggregates",
+    "casts",
+    "operators",
+    "sequences",
     "subscriptions",
     "subscription_relations",
     "foreign_data_wrappers",
@@ -57,6 +69,21 @@ REHEARSAL_METADATA_INVENTORY_KEYS = (
     "user_mappings",
     "large_objects",
     "database_configuration",
+)
+REHEARSAL_ATOMIC_UNIT_NAMES = (
+    "20260711081300_public_legacy_baseline.sql",
+    "20260722004500_private_trial_backend_role_preflight.sql",
+    "20260722005134_private_trial_backend_foundation.sql",
+    "20260722142801_private_trial_backend_v2.sql",
+    "20260723094500_private_trial_backend_v3_website.sql",
+    "20260723144500_private_trial_backend_v4_hardening.sql",
+    "20260724204920_private_trial_backend_v5_read_capabilities.sql",
+    "20260730113000_private_trial_backend_v6_managed_activation.sql",
+    "20260730123000_private_trial_backend_v7_workspace_discovery.sql",
+    "20260802161500_private_trial_backend_v8_rls_initplan.sql",
+    "20260803063822_private_trial_backend_v9_metadata_rls.sql",
+    "20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
+    "20260804_public_browser_quarantine.sql",
 )
 SAFE_SSL_MODES = frozenset({"require", "verify-ca", "verify-full"})
 UNSUPPORTED_SUPABASE_POSTGRES17_EXTENSIONS = frozenset(
@@ -1043,11 +1070,16 @@ def validate_supabase_rehearsal_target(
     return mode
 
 
-def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any]:
-    """Inspect a clean migration target inside one forced read-only transaction."""
+def collect_supabase_rehearsal_target_snapshot(
+    connection: Any,
+    *,
+    force_read_only: bool = True,
+) -> dict[str, Any]:
+    """Inspect one migration target in the caller's current transaction."""
 
     with connection.cursor() as cursor:
-        cursor.execute("set transaction read only")
+        if force_read_only:
+            cursor.execute("set transaction read only")
         cursor.execute("set local search_path = pg_catalog")
         cursor.execute(
             """
@@ -1361,6 +1393,29 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                     type_record.typname,
                     type_record.typtype,
                     pg_get_userbyid(type_record.typowner),
+                    type_record.typcategory,
+                    type_record.typispreferred,
+                    type_record.typisdefined,
+                    type_record.typdelim,
+                    type_record.typnotnull,
+                    type_record.typbyval,
+                    type_record.typalign,
+                    type_record.typstorage,
+                    type_record.typtypmod,
+                    type_record.typndims,
+                    coalesce(nullif(type_record.typrelid, 0)::regclass::text, ''),
+                    coalesce(nullif(type_record.typelem, 0)::regtype::text, ''),
+                    coalesce(nullif(type_record.typarray, 0)::regtype::text, ''),
+                    coalesce(nullif(type_record.typbasetype, 0)::regtype::text, ''),
+                    coalesce(nullif(type_record.typcollation, 0)::regcollation::text, ''),
+                    type_record.typinput::regprocedure::text,
+                    type_record.typoutput::regprocedure::text,
+                    coalesce(nullif(type_record.typreceive, 0)::regprocedure::text, ''),
+                    coalesce(nullif(type_record.typsend, 0)::regprocedure::text, ''),
+                    coalesce(nullif(type_record.typmodin, 0)::regprocedure::text, ''),
+                    coalesce(nullif(type_record.typmodout, 0)::regprocedure::text, ''),
+                    coalesce(nullif(type_record.typanalyze, 0)::regprocedure::text, ''),
+                    coalesce(nullif(type_record.typsubscript, 0)::regprocedure::text, ''),
                     coalesce(type_record.typacl::text, ''),
                     'sha256:' || encode(sha256(convert_to(
                       coalesce(type_record.typdefault, ''), 'UTF8'
@@ -1371,7 +1426,104 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                     on schema_record.oid = type_record.typnamespace
                   where schema_record.nspname !~ '^pg_'
                     and schema_record.nspname <> 'information_schema'
-                    and type_record.typtype in ('d', 'e', 'm', 'r')
+                ), '[]'::jsonb),
+                'inheritance', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    child_schema.nspname,
+                    child_relation.relname,
+                    parent_schema.nspname,
+                    parent_relation.relname,
+                    inheritance_record.inhseqno,
+                    inheritance_record.inhdetachpending
+                  ) order by child_schema.nspname, child_relation.relname,
+                             inheritance_record.inhseqno)
+                  from pg_inherits inheritance_record
+                  join pg_class child_relation on child_relation.oid = inheritance_record.inhrelid
+                  join pg_namespace child_schema on child_schema.oid = child_relation.relnamespace
+                  join pg_class parent_relation on parent_relation.oid = inheritance_record.inhparent
+                  join pg_namespace parent_schema on parent_schema.oid = parent_relation.relnamespace
+                  where child_schema.nspname !~ '^pg_'
+                     or parent_schema.nspname !~ '^pg_'
+                ), '[]'::jsonb),
+                'aggregates', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    aggregate_record.aggfnoid::regprocedure::text,
+                    aggregate_record.aggkind,
+                    aggregate_record.aggnumdirectargs,
+                    aggregate_record.aggtransfn::regprocedure::text,
+                    coalesce(nullif(aggregate_record.aggfinalfn, 0)::regprocedure::text, ''),
+                    coalesce(nullif(aggregate_record.aggcombinefn, 0)::regprocedure::text, ''),
+                    coalesce(nullif(aggregate_record.aggserialfn, 0)::regprocedure::text, ''),
+                    coalesce(nullif(aggregate_record.aggdeserialfn, 0)::regprocedure::text, ''),
+                    coalesce(nullif(aggregate_record.aggmtransfn, 0)::regprocedure::text, ''),
+                    coalesce(nullif(aggregate_record.aggminvtransfn, 0)::regprocedure::text, ''),
+                    coalesce(nullif(aggregate_record.aggmfinalfn, 0)::regprocedure::text, ''),
+                    aggregate_record.aggtranstype::regtype::text,
+                    coalesce(nullif(aggregate_record.aggmtranstype, 0)::regtype::text, ''),
+                    coalesce(nullif(aggregate_record.aggsortop, 0)::regoperator::text, ''),
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(aggregate_record.agginitval, ''), 'UTF8'
+                    )), 'hex'),
+                    'sha256:' || encode(sha256(convert_to(
+                      coalesce(aggregate_record.aggminitval, ''), 'UTF8'
+                    )), 'hex')
+                  ) order by aggregate_record.aggfnoid::regprocedure::text)
+                  from pg_aggregate aggregate_record
+                  join pg_proc aggregate_function on aggregate_function.oid = aggregate_record.aggfnoid
+                  join pg_namespace aggregate_schema on aggregate_schema.oid = aggregate_function.pronamespace
+                  where aggregate_schema.nspname !~ '^pg_'
+                    and aggregate_schema.nspname <> 'information_schema'
+                ), '[]'::jsonb),
+                'casts', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    cast_record.castsource::regtype::text,
+                    cast_record.casttarget::regtype::text,
+                    coalesce(nullif(cast_record.castfunc, 0)::regprocedure::text, ''),
+                    cast_record.castcontext,
+                    cast_record.castmethod
+                  ) order by cast_record.castsource::regtype::text,
+                             cast_record.casttarget::regtype::text)
+                  from pg_cast cast_record
+                  where cast_record.castsource >= 16384 or cast_record.casttarget >= 16384
+                ), '[]'::jsonb),
+                'operators', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    operator_schema.nspname,
+                    operator_record.oprname,
+                    pg_get_userbyid(operator_record.oprowner),
+                    operator_record.oprkind,
+                    operator_record.oprcanmerge,
+                    operator_record.oprcanhash,
+                    coalesce(nullif(operator_record.oprleft, 0)::regtype::text, ''),
+                    coalesce(nullif(operator_record.oprright, 0)::regtype::text, ''),
+                    operator_record.oprresult::regtype::text,
+                    operator_record.oprcode::regprocedure::text,
+                    coalesce(nullif(operator_record.oprrest, 0)::regprocedure::text, ''),
+                    coalesce(nullif(operator_record.oprjoin, 0)::regprocedure::text, '')
+                  ) order by operator_schema.nspname, operator_record.oprname,
+                             operator_record.oprleft, operator_record.oprright)
+                  from pg_operator operator_record
+                  join pg_namespace operator_schema on operator_schema.oid = operator_record.oprnamespace
+                  where operator_schema.nspname !~ '^pg_'
+                    and operator_schema.nspname <> 'information_schema'
+                ), '[]'::jsonb),
+                'sequences', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    sequence_schema.nspname,
+                    sequence_relation.relname,
+                    sequence_record.seqtypid::regtype::text,
+                    sequence_record.seqstart,
+                    sequence_record.seqincrement,
+                    sequence_record.seqmax,
+                    sequence_record.seqmin,
+                    sequence_record.seqcache,
+                    sequence_record.seqcycle
+                  ) order by sequence_schema.nspname, sequence_relation.relname)
+                  from pg_sequence sequence_record
+                  join pg_class sequence_relation on sequence_relation.oid = sequence_record.seqrelid
+                  join pg_namespace sequence_schema on sequence_schema.oid = sequence_relation.relnamespace
+                  where sequence_schema.nspname !~ '^pg_'
+                    and sequence_schema.nspname <> 'information_schema'
                 ), '[]'::jsonb),
                 'event_triggers', coalesce((
                   select jsonb_agg(jsonb_build_array(
@@ -1445,6 +1597,13 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                        select oid from pg_database where datname = current_database()
                      )
                 ), '[]'::jsonb),
+                'parameter_acls', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    parameter_acl.parname,
+                    coalesce(parameter_acl.paracl::text, '')
+                  ) order by parameter_acl.parname)
+                  from pg_parameter_acl parameter_acl
+                ), '[]'::jsonb),
                 'publications', coalesce((
                   select jsonb_agg(jsonb_build_array(
                     publication_record.pubname,
@@ -1477,6 +1636,17 @@ def collect_supabase_rehearsal_target_snapshot(connection: Any) -> dict[str, Any
                     on relation_record.oid = publication_relation.prrelid
                   join pg_namespace schema_record
                     on schema_record.oid = relation_record.relnamespace
+                ), '[]'::jsonb),
+                'publication_namespaces', coalesce((
+                  select jsonb_agg(jsonb_build_array(
+                    publication_record.pubname,
+                    schema_record.nspname
+                  ) order by publication_record.pubname, schema_record.nspname)
+                  from pg_publication_namespace publication_namespace
+                  join pg_publication publication_record
+                    on publication_record.oid = publication_namespace.pnpubid
+                  join pg_namespace schema_record
+                    on schema_record.oid = publication_namespace.pnnspid
                 ), '[]'::jsonb),
                 'subscriptions', coalesce((
                   select jsonb_agg(jsonb_build_array(
@@ -1716,6 +1886,209 @@ def audit_supabase_rehearsal_target(
             connection.rollback()
         finally:
             connection.close()
+
+
+def _exact_mapping_keys(value: Any, keys: Sequence[str]) -> bool:
+    return isinstance(value, Mapping) and set(value) == set(keys)
+
+
+def _rehearsal_metadata_digest(inventory: Any) -> str | None:
+    if not (
+        isinstance(inventory, Mapping)
+        and set(inventory) == set(REHEARSAL_METADATA_INVENTORY_KEYS)
+        and all(isinstance(inventory.get(key), list) for key in REHEARSAL_METADATA_INVENTORY_KEYS)
+    ):
+        return None
+    return "sha256:" + sha256(
+        json.dumps(
+            inventory,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def parse_rehearsal_atomic_payload(raw_payload: bytes) -> dict[str, Any]:
+    if not raw_payload or len(raw_payload) > 32 * 1024 * 1024:
+        raise AuditConfigurationError("atomic_apply_payload_invalid")
+    try:
+        payload = json.loads(raw_payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AuditConfigurationError("atomic_apply_payload_invalid") from exc
+    if not _exact_mapping_keys(
+        payload,
+        (
+            "contract",
+            "targetProjectRef",
+            "productionProjectRef",
+            "expectedMetadataInventory",
+            "expectedMetadataDigest",
+            "atomicBundleDigest",
+            "units",
+        ),
+    ) or payload.get("contract") != REHEARSAL_ATOMIC_APPLY_CONTRACT:
+        raise AuditConfigurationError("atomic_apply_payload_invalid")
+    inventory = payload.get("expectedMetadataInventory")
+    expected_digest = _rehearsal_metadata_digest(inventory)
+    if expected_digest is None or payload.get("expectedMetadataDigest") != expected_digest:
+        raise AuditConfigurationError("atomic_apply_metadata_invalid")
+    units = payload.get("units")
+    if not isinstance(units, list) or len(units) != len(REHEARSAL_ATOMIC_UNIT_NAMES):
+        raise AuditConfigurationError("atomic_apply_units_invalid")
+    normalized_units: list[dict[str, Any]] = []
+    for expected_name, unit in zip(REHEARSAL_ATOMIC_UNIT_NAMES, units, strict=True):
+        if not _exact_mapping_keys(unit, ("name", "sourceDigest", "innerDigest", "sqlBase64")):
+            raise AuditConfigurationError("atomic_apply_units_invalid")
+        if unit.get("name") != expected_name:
+            raise AuditConfigurationError("atomic_apply_units_invalid")
+        source_digest = unit.get("sourceDigest")
+        inner_digest = unit.get("innerDigest")
+        encoded = unit.get("sqlBase64")
+        if not (
+            isinstance(source_digest, str)
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", source_digest)
+            and isinstance(inner_digest, str)
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", inner_digest)
+            and isinstance(encoded, str)
+        ):
+            raise AuditConfigurationError("atomic_apply_units_invalid")
+        try:
+            sql_bytes = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise AuditConfigurationError("atomic_apply_units_invalid") from exc
+        if not sql_bytes or len(sql_bytes) > 4 * 1024 * 1024:
+            raise AuditConfigurationError("atomic_apply_units_invalid")
+        if "sha256:" + sha256(sql_bytes).hexdigest() != inner_digest:
+            raise AuditConfigurationError("atomic_apply_units_invalid")
+        try:
+            sql_text = sql_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise AuditConfigurationError("atomic_apply_units_invalid") from exc
+        normalized_units.append(
+            {
+                "name": expected_name,
+                "sourceDigest": source_digest,
+                "innerDigest": inner_digest,
+                "sqlBase64": encoded,
+                "sqlText": sql_text,
+            }
+        )
+    bundle_projection = [
+        {
+            "name": unit["name"],
+            "sourceDigest": unit["sourceDigest"],
+            "innerDigest": unit["innerDigest"],
+            "sqlBase64": unit["sqlBase64"],
+        }
+        for unit in normalized_units
+    ]
+    bundle_digest = "sha256:" + sha256(
+        json.dumps(
+            {
+                "contract": "supermega.preview-rehearsal-atomic-bundle.v1",
+                "units": bundle_projection,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    if payload.get("atomicBundleDigest") != bundle_digest:
+        raise AuditConfigurationError("atomic_apply_bundle_digest_invalid")
+    return {**payload, "units": normalized_units}
+
+
+def apply_supabase_rehearsal_atomically(
+    database_url: str,
+    *,
+    expected_project_ref: str,
+    production_project_ref: str,
+    ssl_root_cert_path: str,
+    payload: Mapping[str, Any],
+    connect_factory: Any = None,
+) -> dict[str, Any]:
+    connection_mode = validate_supabase_rehearsal_target(
+        database_url,
+        expected_project_ref=expected_project_ref,
+        production_project_ref=production_project_ref,
+    )
+    if (
+        payload.get("targetProjectRef") != expected_project_ref.strip().lower()
+        or payload.get("productionProjectRef") != production_project_ref.strip().lower()
+    ):
+        raise AuditConfigurationError("atomic_apply_target_mismatch")
+    resolved_ssl_root_cert = validate_ssl_root_certificate(ssl_root_cert_path)
+    connection = (
+        connect_factory or _open_supabase_rehearsal_mutation_connection
+    )(database_url, resolved_ssl_root_cert)
+    attempted_units = 0
+    committed = False
+    try:
+        connection.autocommit = True
+        with connection.cursor() as cursor:
+            cursor.execute("begin isolation level serializable")
+            cursor.execute("set local search_path = pg_catalog")
+            snapshot = collect_supabase_rehearsal_target_snapshot(
+                connection,
+                force_read_only=False,
+            )
+            expected_inventory = payload["expectedMetadataInventory"]
+            observed_inventory = snapshot.get("metadata_inventory")
+            if isinstance(observed_inventory, str):
+                observed_inventory = json.loads(observed_inventory)
+            observed_digest = _rehearsal_metadata_digest(observed_inventory)
+            safety_snapshot = dict(snapshot)
+            # The same serializable transaction must now write. Reuse the
+            # read-only preflight policy for every other clean-target control.
+            safety_snapshot["transaction_read_only"] = True
+            guard = evaluate_supabase_rehearsal_target_snapshot(
+                safety_snapshot,
+                connection_mode=connection_mode,
+                target_project_ref=expected_project_ref.strip().lower(),
+            )
+            if (
+                guard.get("ready") is not True
+                or observed_inventory != expected_inventory
+                or observed_digest != payload.get("expectedMetadataDigest")
+            ):
+                raise AuditConfigurationError("atomic_apply_clean_target_changed")
+            for unit in payload["units"]:
+                attempted_units += 1
+                cursor.execute(unit["sqlText"])
+            cursor.execute("commit")
+            committed = True
+        return {
+            "contract": REHEARSAL_ATOMIC_APPLY_CONTRACT,
+            "ok": True,
+            "targetProjectRef": expected_project_ref.strip().lower(),
+            "connectionMode": connection_mode,
+            "metadataFingerprintBefore": observed_digest,
+            "atomicBundleDigest": payload["atomicBundleDigest"],
+            "appliedUnits": [
+                {
+                    "name": unit["name"],
+                    "sourceDigest": unit["sourceDigest"],
+                    "innerDigest": unit["innerDigest"],
+                }
+                for unit in payload["units"]
+            ],
+            "mutationUnitsExecuted": attempted_units,
+            "transactionCommitted": True,
+            "transactionRolledBack": False,
+            "secretValuesExposed": False,
+            "productionMutated": False,
+            "vercelMutated": False,
+        }
+    except Exception:
+        if not committed:
+            try:
+                connection.rollback()
+            except Exception:
+                pass
+        raise
+    finally:
+        connection.close()
 
 
 def _execute_rows(cursor: Any, query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
@@ -2751,6 +3124,23 @@ def _open_supabase_rehearsal_connection(
     )
 
 
+def _open_supabase_rehearsal_mutation_connection(
+    database_url: str,
+    ssl_root_cert_path: str,
+) -> Any:
+    psycopg, dict_row = _postgres_driver()
+    return psycopg.connect(
+        database_url,
+        row_factory=dict_row,
+        cursor_factory=psycopg.ClientCursor,
+        connect_timeout=5,
+        sslmode="verify-full",
+        sslrootcert=ssl_root_cert_path,
+        application_name="supermega-supabase-rehearsal-atomic-apply",
+        options="-c statement_timeout=0 -c lock_timeout=5000 -c idle_in_transaction_session_timeout=300000",
+    )
+
+
 def audit_database(
     database_url: str,
     *,
@@ -2827,7 +3217,11 @@ def _safe_failure(code: str, *, contract: str = CONTRACT) -> dict[str, Any]:
         "mutation_statements_executed": 0,
         "secret_values_exposed": False,
     }
-    if contract in {REHEARSAL_PREFLIGHT_CONTRACT, ACTIVATION_TARGET_CONTRACT}:
+    if contract in {
+        REHEARSAL_PREFLIGHT_CONTRACT,
+        REHEARSAL_ATOMIC_APPLY_CONTRACT,
+        ACTIVATION_TARGET_CONTRACT,
+    }:
         report.update(
             {
                 "production_mutated": False,
@@ -2839,7 +3233,9 @@ def _safe_failure(code: str, *, contract: str = CONTRACT) -> dict[str, Any]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Audit the SuperMega trial database without mutating it.")
+    parser = argparse.ArgumentParser(
+        description="Audit SuperMega read-only or execute one exact isolated rehearsal transaction."
+    )
     parser.add_argument("--env-key", default="SUPERMEGA_DATABASE_URL")
     parser.add_argument(
         "--storage-audit-env-key",
@@ -2864,6 +3260,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--rehearsal-preflight",
         action="store_true",
         help="Verify one explicit clean non-production Supabase migration target without mutation.",
+    )
+    parser.add_argument(
+        "--rehearsal-atomic-apply",
+        action="store_true",
+        help=(
+            "Verify the owner-bound clean catalog snapshot and apply the exact migration bundle "
+            "inside one serializable transaction read from stdin."
+        ),
     )
     parser.add_argument(
         "--activation-target",
@@ -2895,7 +3299,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0 if report["ok"] is True else 1
 
     mode_contract = (
-        REHEARSAL_PREFLIGHT_CONTRACT
+        REHEARSAL_ATOMIC_APPLY_CONTRACT
+        if args.rehearsal_atomic_apply
+        else REHEARSAL_PREFLIGHT_CONTRACT
         if args.rehearsal_preflight
         else ACTIVATION_TARGET_CONTRACT
         if args.activation_target
@@ -2903,7 +3309,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     environment_keys = [args.env_key]
-    if args.rehearsal_preflight:
+    if args.rehearsal_preflight or args.rehearsal_atomic_apply:
         environment_keys.extend(
             [
                 args.expected_project_ref_env_key,
@@ -2939,7 +3345,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 2
 
-    if args.rehearsal_preflight and args.activation_target:
+    if (
+        (args.rehearsal_preflight and args.rehearsal_atomic_apply)
+        or ((args.rehearsal_preflight or args.rehearsal_atomic_apply) and args.activation_target)
+    ):
         print(
             json.dumps(
                 _safe_failure(
@@ -2963,12 +3372,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
 
-    if args.rehearsal_preflight and (args.ensure_schema or args.require_ready):
+    if (args.rehearsal_preflight or args.rehearsal_atomic_apply) and (
+        args.ensure_schema or args.require_ready
+    ):
         print(
             json.dumps(
                 _safe_failure(
-                    "rehearsal_preflight_mode_conflict",
-                    contract=REHEARSAL_PREFLIGHT_CONTRACT,
+                    "rehearsal_mode_conflict",
+                    contract=mode_contract,
                 ),
                 sort_keys=True,
             )
@@ -2976,7 +3387,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     try:
-        if args.rehearsal_preflight:
+        if args.rehearsal_atomic_apply:
+            payload = parse_rehearsal_atomic_payload(sys.stdin.buffer.read(32 * 1024 * 1024 + 1))
+            report = apply_supabase_rehearsal_atomically(
+                database_url,
+                expected_project_ref=str(
+                    os.getenv(args.expected_project_ref_env_key, "")
+                ),
+                production_project_ref=str(
+                    os.getenv(args.production_project_ref_env_key, "")
+                ),
+                ssl_root_cert_path=str(
+                    os.getenv(args.ssl_root_cert_env_key, "")
+                ),
+                payload=payload,
+            )
+        elif args.rehearsal_preflight:
             report = audit_supabase_rehearsal_target(
                 database_url,
                 expected_project_ref=str(
@@ -3020,6 +3446,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             code = exc.code if isinstance(exc, AuditConfigurationError) else "activation_evidence_write_failed"
             report = _safe_failure(code, contract=mode_contract)
     print(json.dumps(report, sort_keys=True))
+    if args.rehearsal_atomic_apply:
+        return 0 if report.get("ok") is True else 1
     if args.rehearsal_preflight:
         return 0 if report.get("ready") is True else 1
     if args.require_ready or args.ensure_schema:

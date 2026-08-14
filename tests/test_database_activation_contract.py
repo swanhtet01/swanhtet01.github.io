@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import base64
 from hashlib import sha256
 import importlib.util
 import json
@@ -26,7 +27,7 @@ ACTIVATION_RUNBOOK = ROOT / "docs" / "supermega-enterprise-activation.md"
 PACKAGE_JSON = ROOT / "package.json"
 POWERSHELL = shutil.which("powershell") if os.name == "nt" else None
 SUPABASE_PREFLIGHT_QUERY_SHA256 = (
-    "4847d3d33e972bcce3d5caada75db993b27aab3a9dead34bc8a9cd9acf1f9f43"
+    "2297a345483e9f23ed7459173f837b79e953a20f5ad9bf87956ff9da90b2f5ef"
 )
 TRIAL_STORE = ROOT / "supermega_runtime" / "trial_store.py"
 MIGRATION_PREFLIGHT = (
@@ -866,8 +867,15 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
                 "roles": [],
                 "role_memberships": [],
                 "role_settings": [],
+                "parameter_acls": [],
                 "publications": [],
                 "publication_relations": [],
+                "publication_namespaces": [],
+                "inheritance": [],
+                "aggregates": [],
+                "casts": [],
+                "operators": [],
+                "sequences": [],
                 "subscriptions": [],
                 "subscription_relations": [],
                 "foreign_data_wrappers": [],
@@ -1308,6 +1316,124 @@ class SupabaseRehearsalPreflightContractTests(unittest.TestCase):
         self.assertEqual(state["expected"], "before-expected")
         self.assertEqual(state["production"], "before-production")
         self.assertEqual(state["certificate"], "before-certificate")
+
+    def _atomic_payload(self):
+        inventory = {
+            key: [] for key in self.validator.REHEARSAL_METADATA_INVENTORY_KEYS
+        }
+        units = []
+        for index, name in enumerate(
+            self.validator.REHEARSAL_ATOMIC_UNIT_NAMES,
+            start=1,
+        ):
+            sql_bytes = f"select {index};\n".encode("utf-8")
+            units.append(
+                {
+                    "name": name,
+                    "sourceDigest": "sha256:" + sha256(name.encode("utf-8")).hexdigest(),
+                    "innerDigest": "sha256:" + sha256(sql_bytes).hexdigest(),
+                    "sqlBase64": base64.b64encode(sql_bytes).decode("ascii"),
+                }
+            )
+        canonical = lambda value: json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return {
+            "contract": self.validator.REHEARSAL_ATOMIC_APPLY_CONTRACT,
+            "targetProjectRef": self.TARGET_REF,
+            "productionProjectRef": self.PRODUCTION_REF,
+            "expectedMetadataInventory": inventory,
+            "expectedMetadataDigest": "sha256:" + sha256(canonical(inventory)).hexdigest(),
+            "atomicBundleDigest": "sha256:" + sha256(
+                canonical(
+                    {
+                        "contract": "supermega.preview-rehearsal-atomic-bundle.v1",
+                        "units": units,
+                    }
+                )
+            ).hexdigest(),
+            "units": units,
+        }
+
+    def test_atomic_payload_exactly_binds_every_inner_sql_unit(self):
+        payload = self._atomic_payload()
+        parsed = self.validator.parse_rehearsal_atomic_payload(
+            json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        )
+        self.assertEqual(parsed["atomicBundleDigest"], payload["atomicBundleDigest"])
+        self.assertEqual(len(parsed["units"]), 13)
+        tampered = json.loads(json.dumps(payload))
+        tampered["units"][4]["sqlBase64"] = base64.b64encode(
+            b"select app_private.unreviewed();\n"
+        ).decode("ascii")
+        with self.assertRaisesRegex(
+            self.validator.AuditConfigurationError,
+            "atomic_apply_units_invalid",
+        ):
+            self.validator.parse_rehearsal_atomic_payload(
+                json.dumps(tampered, separators=(",", ":")).encode("utf-8")
+            )
+
+    def test_atomic_apply_preserves_catalog_guard_through_one_commit(self):
+        payload = self.validator.parse_rehearsal_atomic_payload(
+            json.dumps(self._atomic_payload(), separators=(",", ":")).encode("utf-8")
+        )
+        statements = []
+
+        class Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def execute(self, statement, *_args, **_kwargs):
+                statements.append(statement)
+
+        class Connection:
+            autocommit = False
+            rolled_back = False
+            closed = False
+
+            def cursor(self):
+                return Cursor()
+
+            def rollback(self):
+                self.rolled_back = True
+
+            def close(self):
+                self.closed = True
+
+        connection = Connection()
+        with mock.patch.object(
+            self.validator,
+            "collect_supabase_rehearsal_target_snapshot",
+            return_value={"metadata_inventory": payload["expectedMetadataInventory"]},
+        ), mock.patch.object(
+            self.validator,
+            "evaluate_supabase_rehearsal_target_snapshot",
+            return_value={"ready": True},
+        ):
+            report = self.validator.apply_supabase_rehearsal_atomically(
+                self._direct_url(),
+                expected_project_ref=self.TARGET_REF,
+                production_project_ref=self.PRODUCTION_REF,
+                ssl_root_cert_path=str(self.ca_file),
+                payload=payload,
+                connect_factory=lambda _url, _certificate: connection,
+            )
+        self.assertTrue(report["ok"], report)
+        self.assertTrue(report["transactionCommitted"])
+        self.assertEqual(report["mutationUnitsExecuted"], 13)
+        self.assertEqual(statements[0].lower(), "begin isolation level serializable")
+        self.assertEqual(statements[1].lower(), "set local search_path = pg_catalog")
+        self.assertEqual(statements[-1].lower(), "commit")
+        self.assertEqual(statements[2:-1], [unit["sqlText"] for unit in payload["units"]])
+        self.assertFalse(connection.rolled_back)
+        self.assertTrue(connection.closed)
 
 
 @unittest.skipUnless(
