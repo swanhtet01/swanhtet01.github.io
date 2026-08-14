@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-282 (`de0e7690`) keeps a Shop-confirmed Ecommerce request locked after quote expiry. The exact receipt now offers Continue in Shop or Start another order; duplicate submission is absent. Completion history: 130. Hosted activation remains unproven.
+- OPS-282 (`de0e7690`) keeps a Shop-confirmed Ecommerce request locked after quote expiry. Acceptance `1af5ab81` keeps Open Shop primary; Browse preserves the full store. Mobile: 862 px/7 controls, zero overflow/errors. Completion history: 130. Hosting unproven.
 - OPS-283 (`f1dcc7f9`, acceptance `44909dfc`) sends blocked Sell to the exact active order or Stock locations. Clean-state 390/1280 QA now keeps **Set up locations** inside the first viewport; opening it brings the first field into view with zero overflow or errors. Hosting remains unproven. Completion history: 131.
 
 ## Owner-gated actions
