@@ -8764,7 +8764,17 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
   const maintenanceWindowByAsset = new Map<string, ProductionMaintenanceWindow>(currentMaintenanceWindows.map((window) => [window.equipmentId, window]))
   const readyMaintenanceDueItems = maintenanceCapacityReview.items.filter((item) => !maintenanceMachineIds.has(item.assetId)).slice(0, 6)
   const overdueMaintenanceCount = readyMaintenanceDueItems.filter((item) => item.status === 'overdue').length
+  const dueSoonMaintenanceCount = readyMaintenanceDueItems.filter((item) => item.status === 'due_soon').length
   const maintenanceControlledLoadCount = readyMaintenanceDueItems.filter((item) => item.totalRemainingMinutesMilli > 0).length
+  const maintenanceButtonStatus = openMaintenanceRecords.length
+    ? `${openMaintenanceRecords.length} open`
+    : currentMaintenanceWindows.length
+      ? `${currentMaintenanceWindows.length} planned`
+      : overdueMaintenanceCount
+        ? `${overdueMaintenanceCount} overdue`
+        : dueSoonMaintenanceCount
+          ? `${dueSoonMaintenanceCount} due soon`
+          : `${recentMaintenanceRecords.length} recent`
   const availableMaintenanceMachines = production.machines.filter((machine) => !maintenanceMachineIds.has(machine.id))
   const selectedMaintenanceMachineId = availableMaintenanceMachines.some((machine) => machine.id === maintenanceMachineId)
     ? maintenanceMachineId
@@ -11129,7 +11139,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
           <div className="panel-head"><div><span className="core-eyebrow">Equipment</span><h2>Recorded status</h2></div></div>
           <p className="panel-copy production-control-boundary" style={{ fontSize: 11, lineHeight: 1.35, marginTop: 6 }}>Records operator observations only. No equipment control.</p>
           <button aria-label={`Review downtime records; ${openDowntimeIntervals.length} open`} className="core-button" onClick={() => setDowntimeDialogOpen(true)} ref={downtimeTriggerRef} style={{ justifyContent: 'space-between', margin: '8px 0', width: '100%' }} type="button"><span>Downtime</span><small>{openDowntimeIntervals.length ? `${openDowntimeIntervals.length} open` : `${recentDowntimeIntervals.length} recent`}</small></button>
-          <button aria-label={`Review maintenance work; ${openMaintenanceRecords.length} open`} className="core-button" onClick={() => setMaintenanceDialogOpen(true)} ref={maintenanceTriggerRef} style={{ justifyContent: 'space-between', margin: '0 0 8px', width: '100%' }} type="button"><span>Maintenance</span><small>{openMaintenanceRecords.length ? `${openMaintenanceRecords.length} open` : `${recentMaintenanceRecords.length} recent`}</small></button>
+          <button aria-label={`Review maintenance work; ${maintenanceButtonStatus}`} className="core-button" onClick={() => setMaintenanceDialogOpen(true)} ref={maintenanceTriggerRef} style={{ justifyContent: 'space-between', margin: '0 0 8px', width: '100%' }} type="button"><span>Maintenance</span><small>{maintenanceButtonStatus}</small></button>
           {production.machines.length ? <div className="machine-list">{production.machines.map((machine) => <button aria-label={`Review recorded status for ${machine.name}; currently ${productionMachineStateLabels[machine.state]}`} disabled={!productionCanWrite || Boolean(pendingAction)} key={machine.id} type="button" onClick={(event) => openMachineObservation(machine.id, event.currentTarget)}><span className={`machine-dot ${machine.state}`} /><span><strong>{machine.name}</strong><small>{machine.id} - Recorded: {productionMachineStateLabels[machine.state]}</small></span><b>Record status</b></button>)}</div> : <Empty>No equipment records exist in this workspace.</Empty>}
         </section>
       </div>

@@ -1355,7 +1355,7 @@ export function createEmptyProduction(): ProductionState {
   return { schema: PRODUCTION_WORKSPACE_SCHEMA, revision: 0, jobs: [], issues: [], machines: [], events: [] }
 }
 
-export function createSeedProduction(now = deterministicSeedNow): ProductionState {
+function createLegacySeedProduction(now = deterministicSeedNow): ProductionState {
   return {
     schema: PRODUCTION_WORKSPACE_SCHEMA,
     revision: 0,
@@ -1373,6 +1373,67 @@ export function createSeedProduction(now = deterministicSeedNow): ProductionStat
       { id: 'MC-03', name: 'Finishing 01', state: 'running' },
     ],
     events: [],
+  }
+}
+
+export function createSeedProduction(now = deterministicSeedNow): ProductionState {
+  const seed = createLegacySeedProduction(now)
+  const equipmentId = 'MC-02'
+  const workCentreId = 'WC-LINE-LINE-02'
+  const importActionId = 'ACT-DEMO-EQUIPMENT-IMPORT-MC-02'
+  const commissionActionId = 'ACT-DEMO-EQUIPMENT-COMMISSION-MC-02'
+  const strategyActionId = 'ACT-DEMO-MAINTENANCE-STRATEGY-MC-02'
+  const importedAt = new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString()
+  const installedAt = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString()
+  const commissionedAt = new Date(now - 59 * 24 * 60 * 60 * 1000).toISOString()
+  const strategySavedAt = new Date(now - 9 * 24 * 60 * 60 * 1000).toISOString()
+  const nextDueAt = new Date(now + 21 * 24 * 60 * 60 * 1000).toISOString()
+  const equipmentDigest = `sha256:${'d'.repeat(64)}`
+  const maintenanceOwner = 'Demo maintenance lead'
+  const procedureReference = 'SOP-PM-PRESS-02-R1'
+  const commissioningSafetyReference = 'SAFETY-DEMO-MC-02-R1'
+  const maintenanceSafetyReference = 'SAFETY-PM-DEMO-MC-02-R1'
+  return {
+    ...seed,
+    revision: 3,
+    equipmentMaster: {
+      contract: 'supermega.production.equipment-master.v1',
+      assets: [{
+        id: equipmentId,
+        name: 'Press 02',
+        workCentreId,
+        criticality: 'high',
+        owner: 'Line 02 lead',
+        commissioningStatus: 'commissioned',
+        sourceActionId: importActionId,
+        sourcePackageDigest: equipmentDigest,
+        importedAt,
+        commissioning: {
+          actionId: commissionActionId,
+          commissionedAt,
+          commissionedBy: 'Demo setup',
+          installedAt,
+          initialState: 'attention',
+          safetyBaselineReference: commissioningSafetyReference,
+        },
+        maintenanceStrategy: {
+          revision: 1,
+          actionId: strategyActionId,
+          savedAt: strategySavedAt,
+          savedBy: 'Demo setup',
+          maintenanceOwner,
+          intervalDays: 30,
+          nextDueAt,
+          procedureReference,
+          safetyBaselineReference: maintenanceSafetyReference,
+        },
+      }],
+    },
+    events: [
+      { id: `EVT-${strategyActionId}`, actionId: strategyActionId, createdAt: strategySavedAt, actor: 'Demo setup', reason: 'Prepared a fictional preventive-maintenance example.', evidenceReference: maintenanceSafetyReference, kind: 'equipment_maintenance_strategy_saved', subjectId: equipmentId, summary: `Saved maintenance strategy R1 for ${equipmentId}`, strategyRevision: 1, maintenanceOwner, intervalDays: 30, nextDueAt, procedureReference },
+      { id: `EVT-${commissionActionId}`, actionId: commissionActionId, createdAt: commissionedAt, actor: 'Demo setup', reason: 'Prepared fictional commissioned equipment.', evidenceReference: commissioningSafetyReference, kind: 'equipment_commissioned', subjectId: equipmentId, summary: `Commissioned Press 02 at ${workCentreId}`, installedAt, toState: 'attention', workCentreId },
+      { id: `EVT-${importActionId}`, actionId: importActionId, createdAt: importedAt, actor: 'Demo setup', reason: 'Prepared fictional equipment master data.', evidenceReference: equipmentDigest, kind: 'equipment_master_imported', subjectId: 'equipment-master', summary: 'Imported 1 equipment master records', equipmentIds: [equipmentId] },
+    ],
   }
 }
 
@@ -2498,7 +2559,11 @@ export function loadProductionWorkspace(storage = browserStorage()): ProductionW
   try { currentRaw = storage.getItem(PRODUCTION_KEY) } catch { return { state: createEmptyProduction(), source: 'recovery', error: 'Production storage could not be read. No local data was replaced.' } }
   if (currentRaw !== null) {
     try {
-      return { state: validateProductionState(JSON.parse(currentRaw)), source: 'current', error: '' }
+      const current = validateProductionState(JSON.parse(currentRaw))
+      if (JSON.stringify(current) === JSON.stringify(createLegacySeedProduction())) {
+        return persistInitialState(storage, createSeedProduction(), 'seed')
+      }
+      return { state: current, source: 'current', error: '' }
     } catch {
       return { state: createEmptyProduction(), source: 'recovery', error: 'Production v2 data is malformed. Recovery failed closed without restoring or replacing older data.' }
     }
@@ -2585,10 +2650,12 @@ function productionOrderExecutionAppendIsExact(current: ProductionState, candida
 
 function productionWorkingSampleTransitionIsExact(current: ProductionState, candidate: ProductionState) {
   const sampleId = productionWorkingSamplePackId(candidate)
-  if (!sampleId || candidate.jobs.length < 1 || candidate.events.length !== candidate.jobs.length) return false
+  if (!sampleId || candidate.jobs.length < 1) return false
   const prefix = `${productionWorkingSampleActionPrefix}${sampleId.toUpperCase()}-`
   const sampleEvents = candidate.events.filter((event) => event.actionId.startsWith(prefix))
-  if (sampleEvents.length !== candidate.events.length) return false
+  const retainedSeedEvents = candidate.events.filter((event) => !event.actionId.startsWith(prefix))
+  if (sampleEvents.length !== candidate.jobs.length
+    || JSON.stringify(retainedSeedEvents) !== JSON.stringify(createSeedProduction().events)) return false
   const capturedAt = sampleEvents[0]?.createdAt
   const reasonMatch = /^Seed the (.+) working sample\.$/.exec(sampleEvents[0]?.reason ?? '')
   if (!capturedAt || !reasonMatch
@@ -3833,11 +3900,15 @@ export function productionWorkspaceIsPristineDemo(stateValue: ProductionState) {
   const seed = createSeedProduction()
   if (JSON.stringify(state) === JSON.stringify(seed)) return true
   const sampleId = productionWorkingSamplePackId(state)
-  if (!sampleId || state.events.length !== state.jobs.length || state.revision !== state.events.length) return false
-  const [firstEvent] = state.events
+  const sampleEvents = state.events.filter((event) => event.actionId.startsWith(productionWorkingSampleActionPrefix))
+  const retainedSeedEvents = state.events.filter((event) => !event.actionId.startsWith(productionWorkingSampleActionPrefix))
+  if (!sampleId
+    || sampleEvents.length !== state.jobs.length
+    || JSON.stringify(retainedSeedEvents) !== JSON.stringify(seed.events)) return false
+  const [firstEvent] = sampleEvents
   const sampleNameMatch = /^Seed the (.+) working sample\.$/.exec(firstEvent?.reason ?? '')
   if (!firstEvent || !sampleNameMatch
-    || state.events.some((event) => event.kind !== 'job_created'
+    || sampleEvents.some((event) => event.kind !== 'job_created'
       || event.createdAt !== firstEvent.createdAt
       || event.reason !== firstEvent.reason
       || !event.actionId.startsWith(productionWorkingSampleActionPrefix))) return false

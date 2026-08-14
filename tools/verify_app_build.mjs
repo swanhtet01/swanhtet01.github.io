@@ -7394,6 +7394,7 @@ if (!productionSource.includes('startProductionMaintenance')
   || !coreSource.includes('Preventive work')
   || !coreSource.includes('Plan window')
   || !coreSource.includes('Review window')
+  || !coreSource.includes('maintenanceButtonStatus')
   || !coreSource.includes('Window not planned yet.')
   || !coreSource.includes('Review complete')
   || !coreSource.includes('Completion result')
@@ -22098,6 +22099,40 @@ async function verifyProductionRuntime() {
 
     values.clear()
     const currentState = model.createSeedProduction()
+    const seedMaintenanceAsOf = '2026-08-14T08:00:00.000Z'
+    const seedMaintenanceReview = model.productionMaintenanceCapacityReview(currentState, seedMaintenanceAsOf)
+    assert(currentState.revision === 3
+      && currentState.events.map((event) => event.kind).join(',') === 'equipment_maintenance_strategy_saved,equipment_commissioned,equipment_master_imported'
+      && currentState.equipmentMaster?.assets[0]?.id === 'MC-02',
+    'production_seed_maintenance_evidence_missing')
+    assert(seedMaintenanceReview.items.length === 1
+      && seedMaintenanceReview.items[0].assetId === 'MC-02'
+      && seedMaintenanceReview.items[0].loadStatus === 'overdue_no_load'
+      && seedMaintenanceReview.items[0].orders.length === 0,
+    'production_seed_maintenance_review_not_actionable')
+    const seedMaintenanceWindow = model.scheduleProductionMaintenanceWindow(currentState, 'MC-02', seedMaintenanceReview, '2026-08-15T08:00:00.000Z', 90, proof('ACT-DEMO-MAINTENANCE-WINDOW', 0, { capturedAt: seedMaintenanceAsOf }))
+    assert(seedMaintenanceWindow
+      && model.productionMaintenanceWindows(seedMaintenanceWindow)[0]?.equipmentId === 'MC-02'
+      && model.productionMaintenanceWindows(seedMaintenanceWindow)[0]?.durationMinutes === 90
+      && JSON.stringify(seedMaintenanceWindow.jobs) === JSON.stringify(currentState.jobs)
+      && JSON.stringify(seedMaintenanceWindow.machines) === JSON.stringify(currentState.machines),
+    'production_seed_maintenance_window_not_reviewable')
+    const legacySeedState = { schema: currentState.schema, revision: 0, jobs: currentState.jobs, issues: currentState.issues, machines: currentState.machines, events: [] }
+    values.set(model.PRODUCTION_KEY, JSON.stringify(legacySeedState))
+    const upgradedLegacySeed = model.loadProductionWorkspace(storage)
+    assert(upgradedLegacySeed.source === 'seed'
+      && upgradedLegacySeed.state.revision === 3
+      && upgradedLegacySeed.state.equipmentMaster?.assets[0]?.maintenanceStrategy?.revision === 1
+      && JSON.parse(values.get(model.PRODUCTION_KEY)).revision === 3,
+    'production_untouched_legacy_seed_not_upgraded')
+    const changedLegacySeed = { ...legacySeedState, jobs: legacySeedState.jobs.map((job, index) => index ? job : { ...job, output: job.output + 1 }) }
+    values.set(model.PRODUCTION_KEY, JSON.stringify(changedLegacySeed))
+    const retainedChangedLegacySeed = model.loadProductionWorkspace(storage)
+    assert(retainedChangedLegacySeed.source === 'current'
+      && retainedChangedLegacySeed.state.revision === 0
+      && retainedChangedLegacySeed.state.jobs[0].output === changedLegacySeed.jobs[0].output
+      && retainedChangedLegacySeed.state.equipmentMaster === undefined,
+    'production_changed_legacy_seed_was_replaced')
     values.set(model.PRODUCTION_KEY, JSON.stringify(currentState))
     values.set(model.LEGACY_PRODUCTION_KEYS[0], '{malformed')
     assert(model.productionWorkspaceCanWrite(storage, locks), 'production_valid_local_workspace_not_write_ready')
