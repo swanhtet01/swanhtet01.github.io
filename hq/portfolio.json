@@ -10,7 +10,8 @@
 {"productId":"shop","workOrderId":"shop-spa-first-day-review","checkpoint":"OPS-280"},
 {"productId":"website","workOrderId":"website-one-start","checkpoint":"OPS-281"},
 {"productId":"ecommerce","workOrderId":"ecommerce-order-lock","checkpoint":"OPS-282"},
-{"productId":"shop","workOrderId":"shop-sell-prerequisite-handoff","checkpoint":"OPS-283"}
+{"productId":"shop","workOrderId":"shop-sell-prerequisite-handoff","checkpoint":"OPS-283"},
+{"productId":"plant","workOrderId":"plant-maintenance-window-demo-acceptance","checkpoint":"OPS-284"}
 ],
 "localImprovementQueue":[
 {"contract":"supermega.product-improvement-authority.v1","productId":"shop","workOrderId":"shop-spa-managed-invitation-and-first-day-rehearsal","priority":100,"status":"ready-local","workOrder":"Shop: invite.","reason":"Owner-gated."}

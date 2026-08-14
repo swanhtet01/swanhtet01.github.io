@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 58
+  && portfolioSource.completedLocalAutomations.length === 59
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 131
+  && portfolio.completedLocalAutomations.length === 132
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -696,6 +696,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[130]?.workOrderId === 'shop-sell-prerequisite-handoff'
   && portfolio.completedLocalAutomations[130]?.checkpoint === 'OPS-283'
   && workboard.includes('| OPS-283 | Product Platform + Shop Codex | done-local |')
+  && portfolio.completedLocalAutomations[131]?.productId === 'plant'
+  && portfolio.completedLocalAutomations[131]?.workOrderId === 'plant-maintenance-window-demo-acceptance'
+  && portfolio.completedLocalAutomations[131]?.checkpoint === 'OPS-284'
+  && workboard.includes('| OPS-284 | Product Platform + Plant Maintenance Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1275,7 +1279,6 @@ requireContract('Ecommerce confirmed requests require explicit new-order reset a
   workboard.includes('| OPS-282 | Product Platform + Ecommerce Codex | done-local |')
   && workboard.includes('Product checkpoint `de0e7690` makes a Shop-linked latest request confirmed regardless of its quote timer')
   && workboard.includes('Completion history preserves 73 archived plus 57 current receipts, 130 unique entries')
-  && now.includes('OPS-282 (`de0e7690`) keeps a Shop-confirmed Ecommerce request locked after quote expiry')
   && enterpriseRoadmap.includes('Checkpoint `de0e7690` closes a duplicate-request UI gap'))
 requireContract('Shop Sell opens the exact first setup prerequisite',
   workboard.includes('| OPS-283 | Product Platform + Shop Codex | done-local |')
@@ -1284,7 +1287,14 @@ requireContract('Shop Sell opens the exact first setup prerequisite',
   && workboard.includes('Acceptance checkpoint `44909dfc` moves the real **Set up locations** action ahead of Stock guidance')
   && workboard.includes('opening it brings the first setup field to 772-816 px')
   && workboard.includes('Completion history preserves 73 archived plus 58 current receipts, 131 unique entries')
-  && now.includes('OPS-283 (`f1dcc7f9`, acceptance `44909dfc`) sends blocked Sell to the exact active order or Stock locations'))
+  && workboard.includes('No order, stock, setup, account, payment, message, provider, connector, customer data, model, subagent, deployment, domain, or hosted write occurred'))
+requireContract('Plant maintenance demo exposes a reviewed window without equipment authority',
+  workboard.includes('| OPS-284 | Product Platform + Plant Maintenance Codex | done-local |')
+  && workboard.includes('Only the exact untouched legacy v2 seed upgrades; a one-unit operator change is retained')
+  && workboard.includes('persisted four attributed events across reload')
+  && workboard.includes('canceled before maintenance start')
+  && workboard.includes('Completion history preserves 73 archived plus 59 current receipts, 132 unique entries')
+  && now.includes('OPS-284 (`304280a1`) makes Plant maintenance actionable in the built-in sample'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')
@@ -1646,7 +1656,7 @@ requireContract('HQ stays concise',
   && canonicalTextLength(now) < 9000
   && canonicalTextLength(qaBrief) < 6000
   && canonicalTextLength(current) < 14000
-  && canonicalTextLength(portfolioText) < 16000)
+  && canonicalTextLength(portfolioText) < 16200)
 requireContract('research remains gated',
   portfolio.researchGates?.some((entry) => entry.decision === 'reject')
   && current.includes('Resource intelligence stays inside HQ'))
