@@ -378,9 +378,6 @@ function documentHtml({ route, title, description, content, schema = null, robot
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="${escapeHtml(shareImageUrl)}" />${structuredDataHtml(schema)}
     <style>${sharedStyle}</style>
-    <!-- Vercel Web Analytics: cookieless aggregate pageviews, no PII. Loaded dynamically because
-         /_vercel/insights/ exists only on the deployment edge, and only on the production host. -->
-    <script>if (/(^|\.)supermega\.dev$/.test(location.hostname)) { const insights = document.createElement('script'); insights.defer = true; insights.src = '/_vercel/insights/script.js'; document.head.append(insights) }</script>
   </head>
   <body data-brand-version="${escapeHtml(brand.version)}" data-context-version="${escapeHtml(manifest.contextVersion)}">
     <a class="skip-link" href="#content">Skip to content</a>
