@@ -111,9 +111,9 @@ class Postgres17RehearsalContractTests(unittest.TestCase):
 
     def test_identity_bound_spa_staff_modules_are_in_the_evidence_boundary(self) -> None:
         module = _load_rehearsal()
-        self.assertEqual(len(module.IMPLEMENTATION_PATHS), 18)
+        self.assertEqual(len(module.IMPLEMENTATION_PATHS), 19)
         self.assertEqual(
-            module.IMPLEMENTATION_PATHS[3:5],
+            module.IMPLEMENTATION_PATHS[4:6],
             (
                 "supermega_runtime/spa_staff_access.py",
                 "supermega_runtime/supabase_auth.py",

@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 ORDER_INTAKE_SCHEMA = "supermega.order_intake.draft.v1"
-ORDER_INTAKE_PROMPT_VERSION = "supermega.order_intake.extract.v1"
+ORDER_INTAKE_PROMPT_VERSION = "supermega.order_intake.extract.v3"
 MAX_ORDER_MESSAGE_LENGTH = 4_000
 MAX_ORDER_QUANTITY = 10_000
 
@@ -39,6 +39,7 @@ OrderIntakeScope = Literal[
     "ambiguous",
 ]
 OrderIntakeStatus = Literal["ready_for_review", "needs_clarification"]
+OrderIntakeModelProvider = Literal["openai", "ollama-local"]
 OrderIntakeBlocker = Literal[
     "not_an_order",
     "multiple_items",
@@ -171,10 +172,14 @@ class OrderIntakeModelExtraction(_StrictModel):
 
 
 class OrderIntakeGeneration(_StrictModel):
-    provider: Literal["openai"] = "openai"
+    provider: OrderIntakeModelProvider = "openai"
     response_id: str = Field(min_length=1, max_length=160)
     model: str = Field(min_length=1, max_length=120)
-    prompt_version: Literal["supermega.order_intake.extract.v1"] = (
+    prompt_version: Literal[
+        "supermega.order_intake.extract.v1",
+        "supermega.order_intake.extract.v2",
+        "supermega.order_intake.extract.v3",
+    ] = (
         ORDER_INTAKE_PROMPT_VERSION
     )
 
@@ -284,6 +289,7 @@ def build_order_intake_draft(
     extraction: OrderIntakeModelExtraction,
     response_id: str,
     model: str,
+    provider: OrderIntakeModelProvider = "openai",
     request_id: str | None = None,
     generated_at: datetime | None = None,
 ) -> OrderIntakeDraft:
@@ -338,6 +344,7 @@ def build_order_intake_draft(
         generated_at=captured.isoformat().replace("+00:00", "Z"),
         message_digest=f"sha256:{sha256(request.message.encode('utf-8')).hexdigest()}",
         generation=OrderIntakeGeneration(
+            provider=provider,
             response_id=response_id,
             model=model,
         ),
@@ -370,6 +377,7 @@ __all__ = [
     "OrderIntakeDraftRequest",
     "OrderIntakeFieldProvenance",
     "OrderIntakeModelFieldProvenance",
+    "OrderIntakeModelProvider",
     "OrderIntakeModelExtraction",
     "OrderIntakeSourceQuote",
     "OrderIntakeSourceSpan",

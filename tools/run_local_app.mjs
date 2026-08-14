@@ -459,6 +459,10 @@ async function run() {
         writesEnabled: body.trial_backend?.write_enabled,
         browserServiceRoleExposed: body.trial_backend?.browser_service_role_exposed,
       },
+      ai: {
+        orderIntakeConfigured: body.ai?.order_intake_configured,
+        orderIntakeProvider: body.ai?.order_intake_provider,
+      },
       headers: {
         cacheControl: proxiedHealth.response.headers.get('cache-control'),
         nosniff: proxiedHealth.response.headers.get('x-content-type-options'),

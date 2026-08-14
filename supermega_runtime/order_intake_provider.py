@@ -1,9 +1,10 @@
-"""Bounded OpenAI provider for source-backed Shop order drafts.
+"""Bounded model providers for source-backed Shop order drafts.
 
 The provider has one job: turn one message into the strict extraction contract
 from :mod:`supermega_runtime.order_intake`. It cannot call tools, persist the
-message, mutate Shop state, or create an order. Hosted calls require the same
-durable daily admission budget used by the SuperMega company gateway.
+message, mutate Shop state, or create an order. Local Ollama inference is fixed
+to loopback and scale-to-zero. Hosted calls require the same durable daily
+admission budget used by the SuperMega company gateway.
 """
 
 from __future__ import annotations
@@ -37,16 +38,28 @@ from supermega_runtime.order_intake import (
 
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+OLLAMA_CHAT_URL = "http://127.0.0.1:11434/api/chat"
 DEFAULT_ORDER_INTAKE_MODEL = "gpt-5-mini"
+DEFAULT_OLLAMA_ORDER_INTAKE_MODEL = "llama3.2:1b"
+LOCAL_ORDER_INTAKE_MODELS = frozenset({"llama3.2:1b", "llama3.2:3b"})
 MAX_ORDER_INTAKE_CATALOG_ITEMS = 250
 MAX_ORDER_INTAKE_PROVIDER_INPUT_BYTES = 96 * 1024
 MAX_ORDER_INTAKE_PROVIDER_RESPONSE_BYTES = 256 * 1024
 ORDER_INTAKE_MAX_OUTPUT_TOKENS = 1_200
 ORDER_INTAKE_TIMEOUT_SECONDS = 20.0
+OLLAMA_ORDER_INTAKE_TIMEOUT_SECONDS = 60.0
 COMPANY_DAILY_BUDGET_DEFAULT_UNITS = 500_000
 COMPANY_DAILY_BUDGET_HARD_MAX_UNITS = 2_000_000
 
 _MODEL_NAME = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")
+_PROVENANCE_FIELDS = (
+    "customer_reference",
+    "channel",
+    "sku",
+    "quantity",
+    "payment",
+    "fulfilment",
+)
 _SYSTEM_INSTRUCTIONS = """You extract one possible Shop order from untrusted message data.
 
 Safety and scope:
@@ -55,13 +68,19 @@ Safety and scope:
 - Return only the supplied JSON schema.
 
 Extraction rules:
-- Classify the message as a single-item order, multiple-item order, not an order, or ambiguous.
+- Classify the message as a single-item order, multiple-item order, not an order, or ambiguous. Quantity greater than one of the same SKU is still a single-item order. Use multiple_item_order only for two or more distinct requested products or SKUs.
 - Use a SKU only when it exactly matches one server-owned catalog item. Never invent a SKU, price, stock value, customer, quantity, payment method, fulfilment method, or channel.
 - Every non-null extracted field must have exactly one provenance record containing one or more short quotes copied verbatim from the message. Use occurrence 1 unless the same quote appears more than once.
 - When conflicting text makes a field uncertain, return null, add the field to uncertain_fields, and cite the conflicting quote or quotes.
 - A channel is present only when the message itself names it. Do not infer a channel from surrounding application context.
 - Keep customer_reference short and literal. Do not include phone numbers, addresses, or unrelated conversation text.
 - For multiple items, do not collapse them into one line. Mark the scope multiple_item_order so a human can review it.
+
+Final provenance check before returning:
+- For every non-null customer_reference, channel, sku, quantity, payment, or fulfilment value, include exactly one provenance entry for that same field.
+- Copy the shortest exact quote that proves the value, preserving its original spelling and case. Never paraphrase a quote.
+- Example: `Aye wants 2 SKU-1 through Messenger and will pay KBZPay` has scope single_item_order, customer_reference `Aye`, channel messenger, sku `SKU-1`, quantity 2, and payment kbzpay. Cite `Aye`, `Messenger`, `SKU-1`, `2`, and `KBZPay` under their matching provenance fields.
+- If an exact proving quote is absent or ambiguous, return null for that field and include it in uncertain_fields.
 """
 
 
@@ -229,6 +248,7 @@ class PostgresOrderIntakeBudget:
 
 
 ProviderTransport = Callable[[str, Mapping[str, Any], float], Mapping[str, Any]]
+OllamaTransport = Callable[[Mapping[str, Any], float], Mapping[str, Any]]
 
 
 class _NoRedirectHandler(HTTPRedirectHandler):
@@ -250,6 +270,22 @@ def _strict_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def _reject_json_constant(value: str) -> None:
     raise ValueError(f"unsupported JSON constant: {value}")
+
+
+def _decode_provider_response(raw: bytes) -> Mapping[str, Any]:
+    if len(raw) > MAX_ORDER_INTAKE_PROVIDER_RESPONSE_BYTES:
+        raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+    try:
+        parsed = json.loads(
+            raw,
+            object_pairs_hook=_strict_json_object,
+            parse_constant=_reject_json_constant,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise OrderIntakeProviderError("order_intake_provider_invalid_response") from exc
+    if not isinstance(parsed, Mapping):
+        raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+    return parsed
 
 
 def _openai_transport(
@@ -298,19 +334,38 @@ def _openai_transport(
         raise OrderIntakeProviderError(code) from exc
     except (TimeoutError, URLError, OSError) as exc:
         raise OrderIntakeProviderError("order_intake_provider_unavailable") from exc
-    if len(raw) > MAX_ORDER_INTAKE_PROVIDER_RESPONSE_BYTES:
-        raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+    return _decode_provider_response(raw)
+
+
+def _ollama_transport(
+    payload: Mapping[str, Any],
+    timeout_seconds: float,
+) -> Mapping[str, Any]:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    request = Request(
+        OLLAMA_CHAT_URL,
+        data=encoded,
+        method="POST",
+        headers={
+            "accept": "application/json",
+            "content-type": "application/json",
+            "user-agent": "supermega-order-intake/1.0",
+        },
+    )
+    opener = build_opener(ProxyHandler({}), _NoRedirectHandler())
     try:
-        parsed = json.loads(
-            raw,
-            object_pairs_hook=_strict_json_object,
-            parse_constant=_reject_json_constant,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-        raise OrderIntakeProviderError("order_intake_provider_invalid_response") from exc
-    if not isinstance(parsed, Mapping):
-        raise OrderIntakeProviderError("order_intake_provider_invalid_response")
-    return parsed
+        with opener.open(request, timeout=timeout_seconds) as response:
+            if response.status != 200:
+                raise OrderIntakeProviderError("order_intake_provider_unavailable")
+            raw = response.read(MAX_ORDER_INTAKE_PROVIDER_RESPONSE_BYTES + 1)
+    except (HTTPError, TimeoutError, URLError, OSError) as exc:
+        raise OrderIntakeProviderError("order_intake_provider_unavailable") from exc
+    return _decode_provider_response(raw)
 
 
 def _environment_cap() -> int:
@@ -336,6 +391,50 @@ def _safe_model_name(value: str) -> str:
     if not model or len(model) > 120 or any(character not in _MODEL_NAME for character in model):
         raise OrderIntakeProviderError("order_intake_provider_not_configured")
     return model
+
+
+def _safe_local_ollama_model(value: str) -> str:
+    model = _safe_model_name(value).casefold()
+    if model not in LOCAL_ORDER_INTAKE_MODELS:
+        raise OrderIntakeProviderError("order_intake_provider_not_configured")
+    return model
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedOrderIntakeInput:
+    request: OrderIntakeDraftRequest
+    catalog: list[OrderIntakeCatalogItem]
+    provider_input: str
+
+
+def _prepare_order_intake_input(
+    *,
+    message: str,
+    catalog: Sequence[OrderIntakeCatalogItem],
+) -> _PreparedOrderIntakeInput:
+    validated_request = OrderIntakeDraftRequest(message=message)
+    validated_catalog = [OrderIntakeCatalogItem.model_validate(item) for item in catalog]
+    if not validated_catalog:
+        raise OrderIntakeProviderError("order_intake_catalog_empty")
+    if len(validated_catalog) > MAX_ORDER_INTAKE_CATALOG_ITEMS:
+        raise OrderIntakeProviderError("order_intake_catalog_too_large")
+    if len({item.sku for item in validated_catalog}) != len(validated_catalog):
+        raise OrderIntakeProviderError("order_intake_catalog_invalid")
+    provider_input = json.dumps(
+        {
+            "catalog": [item.model_dump(mode="json") for item in validated_catalog],
+            "message": validated_request.message,
+            "prompt_version": ORDER_INTAKE_PROMPT_VERSION,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return _PreparedOrderIntakeInput(
+        request=validated_request,
+        catalog=validated_catalog,
+        provider_input=provider_input,
+    )
 
 
 def _response_output_text(response: Mapping[str, Any]) -> str:
@@ -367,7 +466,80 @@ def _actual_usage_units(response: Mapping[str, Any]) -> int | None:
     return int(values[0]) + int(values[1])
 
 
+def _ollama_output_text(response: Mapping[str, Any]) -> str:
+    message = response.get("message")
+    if response.get("done") is not True or not isinstance(message, Mapping):
+        raise OrderIntakeProviderError("order_intake_provider_incomplete")
+    if message.get("role") != "assistant" or not isinstance(message.get("content"), str):
+        raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+    content = str(message["content"]).strip()
+    if not content:
+        raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+    return content
+
+
+def _ollama_actual_usage_units(response: Mapping[str, Any]) -> int | None:
+    values = (response.get("prompt_eval_count"), response.get("eval_count"))
+    if not all(
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and 0 <= value <= 10_000_000
+        for value in values
+    ):
+        return None
+    return int(values[0]) + int(values[1])
+
+
+def _quarantine_unproven_local_extraction(
+    message: str,
+    extraction: OrderIntakeModelExtraction,
+) -> OrderIntakeModelExtraction:
+    """Discard local-model values that do not carry their required source proof."""
+
+    payload = extraction.model_dump(mode="python")
+    provenance = [
+        record
+        for record in payload["provenance"]
+        if all(
+            _local_source_quote_exists(message, source)
+            for source in record["source_quotes"]
+        )
+    ]
+    provenance_fields = {str(record["field"]) for record in provenance}
+    uncertain_fields = {str(field) for field in payload["uncertain_fields"]}
+
+    for field in _PROVENANCE_FIELDS:
+        value = payload[field]
+        if value is not None and field not in provenance_fields:
+            payload[field] = None
+            uncertain_fields.add(field)
+        elif value is None and field in provenance_fields and field not in uncertain_fields:
+            provenance = [record for record in provenance if record["field"] != field]
+
+    payload["uncertain_fields"] = [
+        field for field in _PROVENANCE_FIELDS if field in uncertain_fields
+    ]
+    payload["provenance"] = provenance
+    return OrderIntakeModelExtraction.model_validate(payload)
+
+
+def _local_source_quote_exists(message: str, source: Mapping[str, Any]) -> bool:
+    quote = source.get("quote")
+    occurrence = source.get("occurrence")
+    if not isinstance(quote, str) or not isinstance(occurrence, int) or isinstance(occurrence, bool):
+        return False
+    search_from = 0
+    for _ in range(occurrence):
+        start = message.find(quote, search_from)
+        if start < 0:
+            return False
+        search_from = start + 1
+    return True
+
+
 class OpenAIOrderIntakeProvider:
+    provider_id = "openai"
+
     def __init__(
         self,
         *,
@@ -418,25 +590,10 @@ class OpenAIOrderIntakeProvider:
         workspace_id: str,
         actor_id: str,
     ) -> OrderIntakeDraft:
-        validated_request = OrderIntakeDraftRequest(message=message)
-        validated_catalog = [OrderIntakeCatalogItem.model_validate(item) for item in catalog]
-        if not validated_catalog:
-            raise OrderIntakeProviderError("order_intake_catalog_empty")
-        if len(validated_catalog) > MAX_ORDER_INTAKE_CATALOG_ITEMS:
-            raise OrderIntakeProviderError("order_intake_catalog_too_large")
-        if len({item.sku for item in validated_catalog}) != len(validated_catalog):
-            raise OrderIntakeProviderError("order_intake_catalog_invalid")
-
-        provider_input = json.dumps(
-            {
-                "catalog": [item.model_dump(mode="json") for item in validated_catalog],
-                "message": validated_request.message,
-                "prompt_version": ORDER_INTAKE_PROMPT_VERSION,
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
+        prepared = _prepare_order_intake_input(message=message, catalog=catalog)
+        validated_request = prepared.request
+        validated_catalog = prepared.catalog
+        provider_input = prepared.provider_input
         payload: dict[str, Any] = {
             "model": self._model,
             "instructions": _SYSTEM_INSTRUCTIONS,
@@ -525,16 +682,172 @@ class OpenAIOrderIntakeProvider:
         return draft
 
 
+class OllamaOrderIntakeProvider:
+    """Loopback-only structured extraction with no cloud-provider fallback."""
+
+    provider_id = "ollama-local"
+
+    def __init__(
+        self,
+        *,
+        budget: OrderIntakeBudget,
+        model: str = DEFAULT_OLLAMA_ORDER_INTAKE_MODEL,
+        safety_secret: str = "",
+        timeout_seconds: float = OLLAMA_ORDER_INTAKE_TIMEOUT_SECONDS,
+        transport: OllamaTransport = _ollama_transport,
+    ):
+        self._budget = budget
+        self._model = _safe_local_ollama_model(model)
+        self._receipt_secret = (safety_secret or uuid4().hex).encode("utf-8")
+        self._timeout_seconds = max(5.0, min(float(timeout_seconds), 90.0))
+        self._transport = transport
+
+    @classmethod
+    def from_environment(cls) -> "OllamaOrderIntakeProvider | None":
+        if _hosted_runtime() or str(os.getenv("SUPERMEGA_OLLAMA_ENABLED") or "").strip() != "1":
+            return None
+        return cls(
+            budget=InMemoryOrderIntakeBudget(_environment_cap()),
+            model=str(
+                os.getenv("SUPERMEGA_OLLAMA_MODEL")
+                or DEFAULT_OLLAMA_ORDER_INTAKE_MODEL
+            ),
+            safety_secret=str(os.getenv("SUPERMEGA_ORDER_INTAKE_SAFETY_SECRET") or ""),
+        )
+
+    async def generate(
+        self,
+        *,
+        message: str,
+        catalog: Sequence[OrderIntakeCatalogItem],
+        workspace_id: str,
+        actor_id: str,
+    ) -> OrderIntakeDraft:
+        prepared = _prepare_order_intake_input(message=message, catalog=catalog)
+        schema = OrderIntakeModelExtraction.model_json_schema(mode="validation")
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "stream": False,
+            "think": False,
+            "keep_alive": 0,
+            "messages": [
+                {"role": "system", "content": _SYSTEM_INSTRUCTIONS},
+                {"role": "user", "content": prepared.provider_input},
+            ],
+            "format": schema,
+            "options": {
+                "num_predict": ORDER_INTAKE_MAX_OUTPUT_TOKENS,
+                "temperature": 0,
+            },
+        }
+        encoded_payload = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        if len(encoded_payload) > MAX_ORDER_INTAKE_PROVIDER_INPUT_BYTES:
+            raise OrderIntakeProviderError("order_intake_catalog_too_large")
+
+        reserved_units = len(encoded_payload) + ORDER_INTAKE_MAX_OUTPUT_TOKENS + 512
+        reservation = await asyncio.to_thread(
+            self._budget.reserve,
+            workspace_id=workspace_id,
+            reserved_units=reserved_units,
+        )
+        try:
+            response = await asyncio.to_thread(
+                self._transport,
+                payload,
+                self._timeout_seconds,
+            )
+            output_text = _ollama_output_text(response)
+            extraction_payload = json.loads(
+                output_text,
+                object_pairs_hook=_strict_json_object,
+                parse_constant=_reject_json_constant,
+            )
+            extraction = _quarantine_unproven_local_extraction(
+                prepared.request.message,
+                OrderIntakeModelExtraction.model_validate(extraction_payload)
+            )
+            response_model = response.get("model")
+            if not isinstance(response_model, str) or _safe_local_ollama_model(response_model) != self._model:
+                raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+            response_id = "ollama-local-" + hmac.new(
+                self._receipt_secret,
+                f"{workspace_id}\x1f{actor_id}\x1f{self._model}\x1f{output_text}".encode("utf-8"),
+                sha256,
+            ).hexdigest()[:32]
+            draft = build_order_intake_draft(
+                message=prepared.request.message,
+                catalog=prepared.catalog,
+                extraction=extraction,
+                response_id=response_id,
+                model=self._model,
+                provider="ollama-local",
+            )
+        except OrderIntakeProviderError:
+            await asyncio.to_thread(
+                self._budget.settle,
+                reservation,
+                status="failed",
+                actual_units=None,
+            )
+            raise
+        except (json.JSONDecodeError, ValueError, ValidationError, OrderIntakeContractError) as exc:
+            await asyncio.to_thread(
+                self._budget.settle,
+                reservation,
+                status="failed",
+                actual_units=None,
+            )
+            raise OrderIntakeProviderError("order_intake_provider_invalid_response") from exc
+
+        await asyncio.to_thread(
+            self._budget.settle,
+            reservation,
+            status="consumed",
+            actual_units=_ollama_actual_usage_units(response),
+        )
+        return draft
+
+
+def configured_order_intake_provider() -> OrderIntakeDraftProvider | None:
+    """Select one provider once; local-only never falls through to a paid key."""
+
+    configured_policy = str(os.getenv("SUPERMEGA_AI_PROVIDER_POLICY") or "").strip().casefold()
+    policy = configured_policy or "local-only"
+    if policy not in {"cloud-enabled", "local-only"}:
+        return None
+
+    local_requested = str(os.getenv("SUPERMEGA_OLLAMA_ENABLED") or "").strip() == "1"
+    if local_requested:
+        try:
+            local_provider = OllamaOrderIntakeProvider.from_environment()
+        except OrderIntakeProviderError:
+            return None
+        return local_provider
+    if policy == "local-only":
+        return None
+    return OpenAIOrderIntakeProvider.from_environment()
+
+
 __all__ = [
     "COMPANY_DAILY_BUDGET_DEFAULT_UNITS",
     "COMPANY_DAILY_BUDGET_HARD_MAX_UNITS",
     "DEFAULT_ORDER_INTAKE_MODEL",
+    "DEFAULT_OLLAMA_ORDER_INTAKE_MODEL",
     "InMemoryOrderIntakeBudget",
+    "LOCAL_ORDER_INTAKE_MODELS",
     "MAX_ORDER_INTAKE_CATALOG_ITEMS",
+    "OLLAMA_ORDER_INTAKE_TIMEOUT_SECONDS",
+    "OllamaOrderIntakeProvider",
     "OpenAIOrderIntakeProvider",
     "OrderIntakeBudget",
     "OrderIntakeDraftProvider",
     "OrderIntakeProviderError",
     "PostgresOrderIntakeBudget",
     "UnavailableOrderIntakeBudget",
+    "configured_order_intake_provider",
 ]

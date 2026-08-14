@@ -26,8 +26,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from supermega_runtime.cloud_runtime import router as cloud_runtime_router
 from supermega_runtime.commerce_runtime import reduce_commerce_state
 from supermega_runtime.order_intake_provider import (
-    OpenAIOrderIntakeProvider,
     OrderIntakeProviderError,
+    configured_order_intake_provider,
 )
 from supermega_runtime.production_runtime import reduce_production_state
 from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_identity
@@ -980,7 +980,7 @@ def create_app() -> FastAPI:
         write_enabled=_flag("SUPERMEGA_TRIAL_WRITES_ENABLED"),
     )
     try:
-        order_intake_provider = OpenAIOrderIntakeProvider.from_environment()
+        order_intake_provider = configured_order_intake_provider()
     except OrderIntakeProviderError:
         order_intake_provider = None
     app = FastAPI(
@@ -1096,6 +1096,7 @@ def create_app() -> FastAPI:
             },
             "ai": {
                 "order_intake_configured": order_intake_provider is not None,
+                "order_intake_provider": getattr(order_intake_provider, "provider_id", "none"),
                 "browser_api_key_exposed": False,
                 "operational_actions_allowed": False,
             },

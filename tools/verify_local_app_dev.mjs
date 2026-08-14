@@ -62,7 +62,8 @@ requireContract('runner enforces local-only scale-to-zero AI without inherited c
   && runnerSource.includes("ANTHROPIC_API_KEY: ''")
   && runnerSource.includes("CLAUDE_API_KEY: ''")
   && runnerSource.includes("OPENROUTER_API_KEY: ''")
-  && runnerSource.includes("GEMINI_API_KEY: ''"))
+  && runnerSource.includes("GEMINI_API_KEY: ''")
+  && runnerSource.includes('orderIntakeProvider: body.ai?.order_intake_provider'))
 requireContract('runner owns child cleanup',
   runnerSource.includes("state.child.kill('SIGTERM')")
   && runnerSource.includes("state.child.kill('SIGKILL')")
@@ -191,7 +192,9 @@ requireContract('full stack reports local-only AI and scale-to-zero',
   report.safety?.localAiPolicy === 'local-only'
   && /^[a-zA-Z0-9._:-]{1,80}$/.test(report.safety?.localAiModel || '')
   && report.safety?.cloudAiCredentialsCleared === true
-  && report.safety?.modelScaleToZero === true)
+  && report.safety?.modelScaleToZero === true
+  && report.ai?.orderIntakeConfigured === true
+  && report.ai?.orderIntakeProvider === 'ollama-local')
 requireContract('full stack proves zero-write ecommerce queue validation',
   report.ecommerceOrderQueueValidation?.contract === 'supermega.ecommerce.order_queue_readiness_validation.v1'
   && report.ecommerceOrderQueueValidation?.status === 'ready_for_owner_review'
@@ -218,7 +221,7 @@ if (failures.length) {
 console.log(JSON.stringify({
   ok: true,
   contract: 'supermega_local_full_stack',
-  checks: 16,
+  checks: 17,
   operatingMode: report.runtime.operatingMode,
   writesEnabled: report.runtime.writesEnabled,
   loopbackOnly: report.safety.loopbackOnly,
