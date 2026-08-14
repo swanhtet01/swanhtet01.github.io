@@ -25,7 +25,7 @@ The active delivery focus is:
 3. **Website** — a local website builder and review workflow.
 4. **Ecommerce** — a storefront builder with request receipt and Shop handoff.
 
-AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay internal.
+AI assistance stays review-gated R&D; Order Intake has a local server prototype. Company surfaces stay internal.
 
 `Commerce` and `Production` are internal IDs. Ecommerce owns storefront/order intent; Shop owns the operating record.
 
@@ -33,6 +33,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 
 - Hosted scheduling stays dormant. Local `SuperMega Ally CEO Cycle` is source-pinned, four-hourly, idle-gated, limited, and single-flight. Six checks cover five outcomes; finished or gated work is zero-model.
 - Ally inference is Ollama-only: `llama3.2:1b` is the admitted local model, with a 256-token maximum, immediate unload, and no cloud fallback.
+- Shop Order Intake is local Ollama-only, source-checked, tool-free, and review-required.
 - Storage privacy now has a six-request owner-confirmed verifier and zero-network configuration preflight; hosted proof remains blocked.
 - HQ retains 12 dormant role definitions but admits one active assignment, one specialist, and one cycle; unloaded roles/models consume no idle compute. `multi_agent = false`; one lease blocks duplicates. Each CEO cycle selects one outcome. Owner-send uncertainty retains claims and is never auto-retried. CEO status is output-free across weekly briefs; Company Week separates recorded from delivered and fails incomplete delivery to attention. CEO brief startup is 13 files/250,926 bytes; unchanged evidence uses zero model work.
 - YTF identities cannot render in core operations. Managed workspaces retain exact requests in the Shop inbox; Shop confirmation alone creates an order.
@@ -53,7 +54,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load; 390/1280 QA passed. OPS-286 (`78dbc1f7`) removes 5,693 bytes of duplicated shared UI/schema literals; the app is 2,994,053 bytes, its largest chunk is 450,800 bytes, and completion history is 134. Current rendered acceptance and hosting remain unproven.
+- OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load. OPS-286 (`78dbc1f7`) removes 5,693 bytes of duplicated shared UI/schema literals. OPS-287 (`e6fd480e`) adds fixed-loopback local Order Intake with 17 provider checks and zero operational actions. Completion history is 135; fresh rendered and hosted acceptance remain unproven.
 
 ## Owner-gated actions
 
@@ -63,7 +64,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. Local chain `78dbc1f7` passes the exact 237-module build, 408 Production checks, and complete app/HQ gate. Artifact: 2,994,053 bytes; largest chunk: 450,800. OPS-285's 390/1280 proof remains; fresh source-bound start-review QA is pending. Hosted activation is owner-gated.
+- Codex is sole integrator. `e6fd480e` passes 237 modules, 521 Python tests, 408 Production checks, 108 security checks, and full app/HQ gates. Browser and hosting acceptance remain pending.
 - Local company inference remains Ollama-only and scale-to-zero. This Codex task does not dispatch Claude or Gemini; owner Claude/Bionic sessions were untouched.
 - Real leads remain blocked. Production schema v7 is healthy, but preview lacks v8-v10 and direct-admin proof. Keep it disconnected from Vercel/Auth until PR #412's rehearsal and every managed gate pass.
 

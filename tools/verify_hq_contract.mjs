@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 61
+  && portfolioSource.completedLocalAutomations.length === 62
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 134
+  && portfolio.completedLocalAutomations.length === 135
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -708,6 +708,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[133]?.workOrderId === 'shop-ui-artifact-headroom'
   && portfolio.completedLocalAutomations[133]?.checkpoint === 'OPS-286'
   && workboard.includes('| OPS-286 | Product Platform + App Performance Codex | done-local |')
+  && portfolio.completedLocalAutomations[134]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[134]?.workOrderId === 'shop-local-ollama-order-intake'
+  && portfolio.completedLocalAutomations[134]?.checkpoint === 'OPS-287'
+  && workboard.includes('| OPS-287 | Product Platform + Shop AI Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1318,6 +1322,14 @@ requireContract('shared UI values recover artifact headroom without capability r
   && workboard.includes('Completion history preserves 73 archived plus 61 current receipts, 134 unique entries')
   && workboard.includes('Fresh rendered QA is explicitly unclaimed')
   && now.includes('OPS-286 (`78dbc1f7`) removes 5,693 bytes of duplicated shared UI/schema literals'))
+requireContract('local Order Intake is Llama-only, review-gated, and side-effect free',
+  workboard.includes('| OPS-287 | Product Platform + Shop AI Codex | done-local |')
+  && workboard.includes('makes `local-only` the default even when a cloud key is inherited')
+  && workboard.includes('Unsupported local facts and orphan provenance are quarantined to uncertain fields')
+  && workboard.includes('it performed zero operational actions and the 1B model unloaded immediately')
+  && workboard.includes('one small-model sample is not quality, interactive, hosted, or production acceptance')
+  && workboard.includes('Completion history preserves 73 archived plus 62 current receipts, 135 unique entries')
+  && now.includes('OPS-287 (`e6fd480e`) adds fixed-loopback local Order Intake with 17 provider checks and zero operational actions'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')
