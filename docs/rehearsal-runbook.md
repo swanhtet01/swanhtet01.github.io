@@ -22,6 +22,12 @@ is bound to `supermega.supabase-rehearsal-packet.v4` and the exact reviewed
   intentionally `unconfigured`. Execution stays blocked until a separate
   owner-reviewed source change registers two distinct public keys and pins the
   exact complete policy digest in the verifier. Private keys never enter Git.
+- The hosted bootstrap is also intentionally unconfigured. The current
+  PowerShell entrypoint permits only `--self-test`, `--dry-run`, and
+  `--capture-trust-inputs`; branch-receipt capture and every credential-bearing
+  run fail with `rehearsal_hosted_bootstrap_unconfigured` before a provider read
+  or child process. A static environment flag or a digest alone is not launcher
+  authority.
 - The tool rejects the protected production ref, a dirty or non-`origin/main`
   checkout, a branch with the managed schema already present, production-data
   approval, stale approval, changed URL digests, and privileged runtime URLs.
@@ -54,7 +60,17 @@ Capture metadata-only forensics for the failed
 row contents. Its deletion is a separate owner action and is not performed by
 this tool.
 
-## 2. Create one empty branch — owner console
+## 2. Register the hosted bootstrap, then create one empty branch — owner console
+
+Current R4 work stops before this section. A separate owner-reviewed source
+change must implement and register an independently verifiable sealed
+launcher-to-runner contract that binds the Node runtime, runner, and transitive
+bootstrap imports before any approval or credential is read. Merely setting a
+constant, digest, or environment attestation does not satisfy this gate.
+
+Do not create the paid preview branch or set a Management API token/database
+URL until that implementation has passed independent review. Only after the
+bootstrap and signer policy are registered may the owner continue below.
 
 Only after cost and creation approval:
 
@@ -65,8 +81,9 @@ Only after cost and creation approval:
 4. Enable only Database, Auth, and Storage needed by this proof.
 5. Confirm the branch is not the protected production ref in `package.json`.
 
-With a fine-grained Management API token limited to `environment:read`, capture
-the authenticated, secret-free creation receipt:
+After bootstrap registration, use a fine-grained Management API token limited
+to `environment:read` to capture the authenticated, secret-free creation
+receipt:
 
 ```powershell
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools\run_preview_branch_rehearsal.ps1 --capture-branch-receipt
@@ -122,7 +139,9 @@ review. Do not edit a historical migration.
 
 ## 4. Prepare bounded credentials and private approval
 
-Set these only in the operator's process environment:
+Do not set these until the hosted bootstrap and signer policy have been
+separately implemented, registered, and accepted. Then set them only in the
+operator's process environment:
 
 | Variable | Required boundary |
 | --- | --- |
@@ -321,7 +340,10 @@ production authority, or managed-activation authority.
 
 ## 5. Execute the bounded orchestrator
 
-Review the plan once more, then run:
+The first command remains locally available. The second command is shown only
+for the future registered-bootstrap state; current source rejects it with
+`rehearsal_hosted_bootstrap_unconfigured` before reading credentials or making
+a provider request:
 
 ```powershell
 powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools\run_preview_branch_rehearsal.ps1 --dry-run
@@ -346,9 +368,11 @@ Before the first branch mutation, the tool verifies:
 - local quarantine behavior, full migration digests, PostgreSQL 17 tooling,
   and Storage privacy configuration.
 
-The pre-Node PowerShell launcher rejects unreviewed Node/runner/launcher bytes,
-removes preload, alternate-trust, and proxy variables, then starts the exact
-approved Node executable with no `process.execArgv`. The runner reads every
+The current PowerShell launcher removes preload, alternate-trust, and proxy
+variables only for its three secret-free local modes; it makes no hosted
+authority claim. A later registered bootstrap must independently authenticate
+the launcher-to-runner boundary before it may start the exact approved Node
+executable. After that gate, the runner reads every
 authoritative source from the exact reviewed Git blob and stages the signed CA,
 validators, Node executable, PGlite package, Python environment/base, and
 PostgreSQL native closure inside a new non-reparse evidence directory. One
@@ -400,6 +424,7 @@ drop an index.
 | `rehearsal_packet_invalid_or_stale` or a digest mismatch | Discard the packet; repair and review source locally. |
 | `rehearsal_approval_*` | Obtain a fresh exact owner receipt; never weaken validation. |
 | `rehearsal_signing_authority_unconfigured` or `rehearsal_authority_*` | Stop. Register and separately pin distinct owner/reviewer public keys through review; never supply an ad hoc key. |
+| `rehearsal_hosted_bootstrap_unconfigured` | Stop before creating a branch or setting credentials. Implement and independently review a sealed bootstrap contract; never substitute an environment flag or digest-only claim. |
 | `rehearsal_authenticated_branch_*` | Stop. Refresh the environment-read receipt; never substitute local branch metadata. |
 | `rehearsal_branch_or_approval_deadline_reached` | Stop all work and obtain separate deletion approval; an expired branch is never reusable. |
 | `rehearsal_prior_attempt_requires_new_empty_branch` | Stop. Preserve the evidence, delete only with approval, and start later with a new empty branch and fresh approval. |

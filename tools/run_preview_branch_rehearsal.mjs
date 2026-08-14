@@ -62,7 +62,6 @@ const REF_ENV = 'SUPERMEGA_REHEARSAL_PROJECT_REF'
 const CA_ENV = 'SUPERMEGA_SUPABASE_CA_FILE'
 const RUNTIME_URL_ENV = 'SUPERMEGA_REHEARSAL_RUNTIME_DATABASE_URL'
 const STORAGE_AUDIT_URL_ENV = 'SUPERMEGA_REHEARSAL_STORAGE_AUDIT_DATABASE_URL'
-const LAUNCHER_ATTESTATION_ENV = 'SUPERMEGA_REHEARSAL_SCRUBBED_LAUNCHER'
 const PACKET_ENV = 'SUPERMEGA_REHEARSAL_PACKET_FILE'
 const APPROVAL_ENV = 'SUPERMEGA_REHEARSAL_APPROVAL_FILE'
 const MANAGEMENT_TOKEN_ENV = 'SUPERMEGA_REHEARSAL_MANAGEMENT_API_TOKEN'
@@ -119,6 +118,11 @@ const AUTHORITY_REVIEW_DOMAIN = 'supermega.preview-rehearsal-independent-review.
 // A registered signer policy becomes executable only through a separately
 // reviewed source change that pins its complete canonical digest here.
 const TRUSTED_REGISTERED_REHEARSAL_AUTHORITY_POLICY_DIGEST = null
+// Hosted receipt capture and credential-bearing execution are deliberately
+// unavailable in this slice. A future owner-reviewed change must implement an
+// independently verifiable sealed launcher contract before pinning a digest;
+// a caller-controlled environment flag is never sufficient bootstrap proof.
+const TRUSTED_HOSTED_BOOTSTRAP_DIGEST = null
 const REQUIRED_CLEAN_TARGET_CHECKS = [
   'postgres_major_17',
   'read_only_encrypted_connection',
@@ -1005,7 +1009,6 @@ function safeChildEnvironment(source) {
 export function assertSafeNodeBootstrap({
   env = process.env,
   execArgv = process.execArgv,
-  requireLauncher = true,
 } = {}) {
   const unsafeEnvironment = [
     'NODE_OPTIONS', 'NODE_PATH', 'NPM_CONFIG_NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS',
@@ -1015,9 +1018,6 @@ export function assertSafeNodeBootstrap({
     .filter((key) => typeof env[key] === 'string' && env[key].trim())
   if (unsafeEnvironment.length || !Array.isArray(execArgv) || execArgv.length) {
     fail('rehearsal_node_bootstrap_unsafe')
-  }
-  if (requireLauncher && env[LAUNCHER_ATTESTATION_ENV] !== 'v1') {
-    fail('rehearsal_scrubbed_launcher_required')
   }
   return true
 }
@@ -1872,11 +1872,19 @@ async function runRehearsalWithAuthority({
 } = {}, {
   authorityPolicy = null,
   trustedRegisteredAuthorityDigest = TRUSTED_REGISTERED_REHEARSAL_AUTHORITY_POLICY_DIGEST,
+  trustedHostedBootstrapDigest = TRUSTED_HOSTED_BOOTSTRAP_DIGEST,
+  testOnlyHostedBootstrap = false,
   fetchBranchObservation = defaultFetchBranchObservation,
 } = {}) {
   const flags = new Set(argv)
   for (const flag of flags) {
     if (!['--dry-run', '--self-test', '--capture-branch-receipt'].includes(flag)) fail('rehearsal_arguments_invalid')
+  }
+  const hostedRequested = flags.has('--capture-branch-receipt')
+    || Boolean(String(env?.[URL_ENV] || '').trim())
+  if (hostedRequested
+    && (!testOnlyHostedBootstrap || !digestPattern.test(String(trustedHostedBootstrapDigest || '')))) {
+    fail('rehearsal_hosted_bootstrap_unconfigured')
   }
   const childBaseEnv = safeChildEnvironment(env)
   const invoke = (call) => exec({ ...call, baseEnv: childBaseEnv })
@@ -3183,6 +3191,8 @@ export async function runSelfTest() {
   const authorityContext = {
     authorityPolicy: fixture.policy,
     trustedRegisteredAuthorityDigest: fixture.trustedRegisteredAuthorityDigest,
+    trustedHostedBootstrapDigest: `sha256:${'b'.repeat(64)}`,
+    testOnlyHostedBootstrap: true,
     fetchBranchObservation: fixture.fetchBranchObservation,
   }
   const run = (options) => runRehearsalWithAuthority(
@@ -3235,6 +3245,67 @@ export async function runSelfTest() {
       throw new Error('self_test_dry_run_budget_failed')
     }
     if (plan.ownerConsoleSegments.length !== OWNER_CONSOLE_SEGMENTS.length) throw new Error('self_test_dry_run_owner_segments_failed')
+  }
+
+  // Hosted entrypoints remain closed in production until a separately
+  // reviewed, independently verifiable bootstrap is implemented and pinned.
+  // A caller-forgeable launcher flag cannot unlock either path.
+  cases += 3
+  {
+    const stub = makeExec()
+    try {
+      await runRehearsalWithAuthority({
+        env: {
+          [URL_ENV]: env[URL_ENV],
+          SUPERMEGA_REHEARSAL_SCRUBBED_LAUNCHER: 'v1',
+        },
+        exec: stub.exec,
+        log: silent,
+      })
+      throw new Error('self_test_expected_rehearsal_hosted_bootstrap_unconfigured')
+    } catch (error) {
+      if (error?.rehearsalCode !== 'rehearsal_hosted_bootstrap_unconfigured') throw error
+    }
+    if (stub.calls.length !== 0) throw new Error('self_test_unconfigured_bootstrap_spawned_child')
+  }
+  {
+    const stub = makeExec()
+    try {
+      await runRehearsalWithAuthority(
+        { env: { [URL_ENV]: env[URL_ENV] }, exec: stub.exec, log: silent },
+        { trustedHostedBootstrapDigest: `sha256:${'c'.repeat(64)}` },
+      )
+      throw new Error('self_test_expected_digest_only_bootstrap_rejection')
+    } catch (error) {
+      if (error?.rehearsalCode !== 'rehearsal_hosted_bootstrap_unconfigured') throw error
+    }
+    if (stub.calls.length !== 0) throw new Error('self_test_digest_only_bootstrap_spawned_child')
+  }
+  {
+    const stub = makeExec()
+    let providerReadAttempted = false
+    try {
+      await runRehearsalWithAuthority(
+        {
+          argv: ['--capture-branch-receipt'],
+          env: { [REF_ENV]: env[REF_ENV], [MANAGEMENT_TOKEN_ENV]: env[MANAGEMENT_TOKEN_ENV] },
+          exec: stub.exec,
+          log: silent,
+        },
+        {
+          fetchBranchObservation: async () => {
+            providerReadAttempted = true
+            return structuredClone(fixture.branchReceipt)
+          },
+        },
+      )
+      throw new Error('self_test_expected_rehearsal_hosted_bootstrap_unconfigured')
+    } catch (error) {
+      if (error?.rehearsalCode !== 'rehearsal_hosted_bootstrap_unconfigured') throw error
+    }
+    if (providerReadAttempted || stub.calls.length !== 0) {
+      throw new Error('self_test_unconfigured_bootstrap_reached_provider')
+    }
   }
 
   // A bounded receipt capture performs one mocked authenticated read, emits
@@ -3508,6 +3579,8 @@ export async function runSelfTest() {
       {
         authorityPolicy: unconfiguredPolicy,
         trustedRegisteredAuthorityDigest: null,
+        trustedHostedBootstrapDigest: authorityContext.trustedHostedBootstrapDigest,
+        testOnlyHostedBootstrap: true,
         fetchBranchObservation: async () => { throw new Error('unconfigured_authority_reached_provider') },
       },
     )
@@ -3559,6 +3632,8 @@ export async function runSelfTest() {
       {
         authorityPolicy: collidingPolicy,
         trustedRegisteredAuthorityDigest: collidingPolicy.sourceDigest,
+        trustedHostedBootstrapDigest: authorityContext.trustedHostedBootstrapDigest,
+        testOnlyHostedBootstrap: true,
         fetchBranchObservation: fixture.fetchBranchObservation,
       },
     )
@@ -3906,19 +3981,20 @@ export async function runSelfTest() {
     if (stub.calls.some((call) => call.argv.includes('--file'))) throw new Error(`self_test_${name}_reached_psql`)
   }
 
-  // The scrubbed launcher is the pre-Node boundary: preload flags and a
-  // missing launcher attestation are rejected before hosted orchestration.
+  // Visible preload flags remain rejected for every local mode. Hosted safety
+  // does not rely on this caller-observable check; the null bootstrap gate
+  // above remains authoritative even if a preload hides its own flag.
   cases += 3
   for (const [bootstrap, code] of [
-    [{ env: { [LAUNCHER_ATTESTATION_ENV]: 'v1', NODE_OPTIONS: '--require attacker.cjs' }, execArgv: [] }, 'rehearsal_node_bootstrap_unsafe'],
-    [{ env: { [LAUNCHER_ATTESTATION_ENV]: 'v1' }, execArgv: ['--import=attacker.mjs'] }, 'rehearsal_node_bootstrap_unsafe'],
-    [{ env: {}, execArgv: [] }, 'rehearsal_scrubbed_launcher_required'],
+    [{ env: { NODE_OPTIONS: '--require attacker.cjs' }, execArgv: [] }, 'rehearsal_node_bootstrap_unsafe'],
+    [{ env: {}, execArgv: ['--import=attacker.mjs'] }, 'rehearsal_node_bootstrap_unsafe'],
+    [{ env: {}, execArgv: [] }, null],
   ]) {
     try {
       assertSafeNodeBootstrap(bootstrap)
-      throw new Error(`self_test_expected_${code}`)
+      if (code) throw new Error(`self_test_expected_${code}`)
     } catch (error) {
-      if (error?.rehearsalCode !== code) throw error
+      if (!code || error?.rehearsalCode !== code) throw error
     }
   }
 
@@ -3962,9 +4038,7 @@ export async function runSelfTest() {
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   const argv = process.argv.slice(2)
   try {
-    assertSafeNodeBootstrap({
-      requireLauncher: !argv.includes('--self-test') && !argv.includes('--dry-run'),
-    })
+    assertSafeNodeBootstrap()
   } catch (error) {
     console.error(JSON.stringify({
       ok: false,
