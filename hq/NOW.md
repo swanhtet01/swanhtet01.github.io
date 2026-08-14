@@ -42,7 +42,7 @@ AI assistance stays review-gated R&D; Order Intake has a local server prototype.
 - Plant Jobs persists managed BOM/routing, WIP, minutes, genealogy, quality, replay, and rollback; operation/output requires exact authenticated Shop issue evidence. Controlled batches bind reviewed productive time and closed downtime before Availability and OEE.
 - Plant CAPA now requires structured close evidence and one due-dated human effectiveness review. Its trend is read-only. Restrictive strategy-bound maintenance findings now preserve the exact work centre and unreleased controlled-order routes. Maintenance review now shows exact unfinished order load and job IDs by work centre; it cannot schedule, reschedule, or command equipment.
 - Home keeps Shop and Plant exceptions above collapsed HQ work. Plant issues link to Problems; `/work/` stays labelled HQ.
-- `npm run dev` starts canonical FastAPI plus Vite on loopback with database, hosted-auth, model, worker, and write authority cleared. Records stay browser-local; hosted activation is not proven.
+- `npm run dev` starts canonical FastAPI plus Vite on loopback. Records stay browser-local; hosted activation is not proven.
 
 ## Verified baseline
 
@@ -53,7 +53,7 @@ AI assistance stays review-gated R&D; Order Intake has a local server prototype.
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load. OPS-286 (`78dbc1f7`) removes 5,693 bytes of duplicated shared UI/schema literals. OPS-287 (`e6fd480e`) adds fixed-loopback local Order Intake with 17 provider checks and zero operational actions. OPS-288 (`d5a7e358`) makes it usable in Shop with grounded fields and zero actions. Completion history is 136; rendered and hosted acceptance remain unproven.
+- OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load. OPS-286 (`78dbc1f7`) removes 5,693 bytes of duplicated shared UI/schema literals. OPS-287 (`e6fd480e`) adds fixed-loopback local Order Intake with 17 provider checks and zero operational actions. OPS-288 (`d5a7e358`) makes it usable in Shop with grounded fields and zero actions. OPS-289 (`d8573429`) binds AI fulfilment through Shop confirmation. Completion history is 137; rendered and hosted acceptance remain unproven.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. `d5a7e358` passes 237 modules, 524 Python tests, 408 Production checks, 109 security checks, and full app/HQ gates. Browser and hosting acceptance remain pending.
+- Codex is sole integrator. `d8573429` passes 237 modules, 35 channel checks, 524 Python tests, 110 security checks, and full app/HQ gates. Browser and hosting acceptance remain pending.
 - Local company inference remains Ollama-only and scale-to-zero. This Codex task does not dispatch Claude or Gemini; owner Claude/Bionic sessions were untouched.
 - Real leads remain blocked. Production schema v7 is healthy, but preview lacks v8-v10 and direct-admin proof. Keep it disconnected from Vercel/Auth until PR #412's rehearsal and every managed gate pass.
 

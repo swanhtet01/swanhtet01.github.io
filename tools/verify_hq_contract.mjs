@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 63
+  && portfolioSource.completedLocalAutomations.length === 64
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 136
+  && portfolio.completedLocalAutomations.length === 137
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -716,6 +716,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[135]?.workOrderId === 'shop-local-ai-message-intake'
   && portfolio.completedLocalAutomations[135]?.checkpoint === 'OPS-288'
   && workboard.includes('| OPS-288 | Product Platform + Shop AI Codex | done-local |')
+  && portfolio.completedLocalAutomations[136]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[136]?.workOrderId === 'shop-ai-fulfilment-to-order-integrity'
+  && portfolio.completedLocalAutomations[136]?.checkpoint === 'OPS-289'
+  && workboard.includes('| OPS-289 | Product Platform + Shop AI Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1343,6 +1347,15 @@ requireContract('local Order Intake is usable in Shop without granting operation
   && workboard.includes('Fresh rendered desktop/mobile acceptance remains unclaimed')
   && workboard.includes('Completion history preserves 73 archived plus 63 current receipts, 136 unique entries')
   && now.includes('OPS-288 (`d5a7e358`) makes it usable in Shop with grounded fields and zero actions'))
+requireContract('AI fulfilment stays evidence-bound through accountable Shop confirmation',
+  workboard.includes('| OPS-289 | Product Platform + Shop AI Codex | done-local |')
+  && workboard.includes('adds fulfilment as the fifth reviewed field')
+  && workboard.includes('Changing it deliberately removes the message source')
+  && workboard.includes('only `customer_reference` remained uncertain')
+  && workboard.includes('operational actions and external writes were zero')
+  && workboard.includes('Fresh rendered desktop/mobile acceptance remains unclaimed')
+  && workboard.includes('Completion history preserves 73 archived plus 64 current receipts, 137 unique entries')
+  && now.includes('OPS-289 (`d8573429`) binds AI fulfilment through Shop confirmation'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')
