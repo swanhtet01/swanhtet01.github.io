@@ -14,12 +14,19 @@
  * and the timestamp in.
  *
  * PRICING IS DELIBERATELY ABSENT. There is no plan, no tier and no amount anywhere in this file,
- * and the second door is a conversation rather than a checkout. That is a product decision, not an
- * omission: what a shop pays is agreed with the founder.
+ * and the second door is an activation request answered by a person rather than a checkout. That
+ * is a product decision, not an omission: what a shop pays is agreed with the founder.
  */
 
 export const TRIAL_SIGNUP_KEY = 'supermega.trial_signup.v1'
-export const TRIAL_SIGNUP_SCHEMA = 'supermega.trial_signup.v1' as const
+export const TRIAL_SIGNUP_SCHEMA = 'supermega.trial_signup.v2' as const
+/**
+ * The schema this module wrote before terms acceptance existed. Still restorable: a v1 record is
+ * a v2 record whose terms were never accepted, so restore defaults `termsAccepted` to an explicit
+ * false instead of refusing the record. The storage KEY above deliberately stays v1 -- it is a
+ * location registered with reset and backup, not a record format.
+ */
+export const TRIAL_SIGNUP_SCHEMA_V1 = 'supermega.trial_signup.v1' as const
 
 /** The four products a trial can start in. Mirrors ClientSolutionId without importing it, so this
  * module stays free of the onboarding graph and can be bundled alone by a guard. */
@@ -47,6 +54,15 @@ export type TrialSignupRecord = {
   shopBusinessTemplateId: string | null
   shopIndustryPackId: string | null
   contact: TrialSignupContact | null
+  /**
+   * Terms follow the consent pattern: the only value that can ever claim acceptance is the
+   * literal `true`. Unlike `consentRecorded` there IS a false -- a v1 record predates the field
+   * and restores as an explicit "not accepted" rather than being refused -- but nothing looser
+   * than the literal survives: `createTrialSignupRecord` refuses a non-boolean outright, and
+   * `restoreTrialSignup` coerces any tampered value ('yes', 1, 'true') back to false rather than
+   * trusting it. Acceptance the owner did not give cannot be smuggled in.
+   */
+  termsAccepted: true | false
 }
 
 export type TrialSignupInput = {
@@ -62,6 +78,9 @@ export type TrialSignupInput = {
    * one that refuses it. */
   email?: string
   emailConsent?: boolean
+  /** Terms are recorded from the literal `true` only. A truthy stand-in ('yes', 1) is refused
+   * rather than coerced, mirroring the email rule above: refuse, never silently reinterpret. */
+  termsAccepted?: boolean
 }
 
 const TRIAL_PRODUCTS: readonly TrialSignupProduct[] = ['commerce', 'production', 'website', 'ecommerce']
@@ -130,6 +149,12 @@ export function createTrialSignupRecord(input: TrialSignupInput): TrialSignupRec
   if (email && !input.emailConsent) throw new Error('Tick the box to keep your email on this device, or clear the field.')
   if (email && !isPlausibleContactEmail(email)) throw new Error('That email address does not look right.')
 
+  // Literal or nothing. A caller that "accepts" the terms with 'yes' or 1 wrote code this module
+  // does not trust with an acceptance record, so it gets an error, not a record.
+  if (input.termsAccepted !== undefined && typeof input.termsAccepted !== 'boolean') {
+    throw new Error('Terms acceptance must be recorded as exactly true, or not at all.')
+  }
+
   return {
     schema: TRIAL_SIGNUP_SCHEMA,
     id,
@@ -141,13 +166,17 @@ export function createTrialSignupRecord(input: TrialSignupInput): TrialSignupRec
     shopBusinessTemplateId: trimmed(input.shopBusinessTemplateId) || null,
     shopIndustryPackId: trimmed(input.shopIndustryPackId) || null,
     contact: email ? { email, consentRecorded: true } : null,
+    termsAccepted: input.termsAccepted === true,
   }
 }
 
 export function restoreTrialSignup(value: unknown): TrialSignupRecord | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Partial<TrialSignupRecord>
-  if (record.schema !== TRIAL_SIGNUP_SCHEMA) return null
+  // A v1 record is welcome back: same fields, written before terms acceptance existed. It
+  // restores with an explicit termsAccepted: false and is re-written as v2 on the next save.
+  const schema = (value as { schema?: unknown }).schema
+  if (schema !== TRIAL_SIGNUP_SCHEMA && schema !== TRIAL_SIGNUP_SCHEMA_V1) return null
   if (!trimmed(record.id) || !trimmed(record.businessName) || !trimmed(record.claimCode)) return null
   if (!TRIAL_PRODUCTS.includes(record.product as TrialSignupProduct)) return null
   if (Number.isNaN(Date.parse(trimmed(record.createdAt)))) return null
@@ -173,6 +202,9 @@ export function restoreTrialSignup(value: unknown): TrialSignupRecord | null {
     shopBusinessTemplateId: trimmed(record.shopBusinessTemplateId) || null,
     shopIndustryPackId: trimmed(record.shopIndustryPackId) || null,
     contact: restoredContact,
+    // Only the literal survives. A v1 record has no field here, a tampered one may hold 'yes' or
+    // 1 -- both restore as an explicit false, exactly like an unconsented email is dropped.
+    termsAccepted: record.termsAccepted === true,
   }
 }
 
@@ -211,17 +243,19 @@ export function writeTrialSignup(storage: TrialSignupStorage | undefined | null,
 /**
  * The two doors, and the reason this file exists.
  *
- * Both are ALWAYS available. When managed auth is off the second door is a conversation with the
- * founder rather than a sign-in form -- which is the honest description of how an account is
- * actually granted today, not a degraded state. Nothing here says "unavailable", "coming soon" or
- * "not active in this release", because none of those are true: the door works, it is just staffed
- * by a person. That also keeps commercial terms private, which is deliberate.
+ * Both are ALWAYS available. Founder decision 2026-08-12: managed pilots are self-serve -- the
+ * user names themselves. So when managed auth is off the second door is an activation REQUEST the
+ * owner sends, not a service a human performs on them. The request still travels the existing
+ * contact channel (trialSignupContactUrl) and a person answers it -- that is the founder
+ * fallback, not a degraded state. Nothing here says "unavailable", "coming soon" or "not active
+ * in this release", because none of those are true: the door works. Commercial terms stay out of
+ * the copy, which is deliberate.
  */
 export type TrialSignupDoor = {
   id: 'trial' | 'managed'
   label: string
   detail: string
-  action: 'open-product' | 'sign-in' | 'request-account'
+  action: 'open-product' | 'sign-in' | 'request-activation'
 }
 
 export function trialSignupDoors({ managedReady }: { managedReady: boolean }): readonly TrialSignupDoor[] {
@@ -241,9 +275,9 @@ export function trialSignupDoors({ managedReady }: { managedReady: boolean }): r
       }
       : {
         id: 'managed',
-        label: 'Talk to us about a company account',
-        detail: 'Shared records, your team, and your data off this device. We set each company up by hand.',
-        action: 'request-account',
+        label: 'Activate your company account',
+        detail: 'Shared records, your team, and your data off this device. You have already named your business and hold the claim code -- send your activation request, and a person is on hand whenever you want help.',
+        action: 'request-activation',
       },
   ]
 }
@@ -336,6 +370,7 @@ export function trialSignupClaimFile(record: TrialSignupRecord) {
     product: record.product,
     shopBusinessTemplateId: record.shopBusinessTemplateId,
     shopIndustryPackId: record.shopIndustryPackId,
+    termsAccepted: record.termsAccepted,
     contactEmail: record.contact?.email ?? null,
   }, null, 2)}\n`
 }

@@ -4,8 +4,8 @@ Updated: 2026-08-12
 Authority: founder / CEO
 Canonical repository: `C:\Users\thesw\Projects\supermega-platform`
 Integration branch: `main`
-Current accepted release checkpoint: `25cac2f50dfcc210d29dd1fd794ac194083f90d1`
-Current accepted product checkpoint: `25cac2f50dfcc210d29dd1fd794ac194083f90d1`
+Current accepted release checkpoint: `64e6f8431a4fb549442b7fd6b8f889b57b78eeb6`
+Current accepted product checkpoint: `64e6f8431a4fb549442b7fd6b8f889b57b78eeb6`
 Current accepted operating checkpoint: `63a245f`
 Current accepted agent-operations checkpoint: `a2e1b89`
 Current accepted security checkpoint: `98b8044`

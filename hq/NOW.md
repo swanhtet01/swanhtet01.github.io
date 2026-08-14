@@ -4,7 +4,7 @@ Updated: 2026-08-11
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
-Live release commit: `25cac2f50dfcc210d29dd1fd794ac194083f90d1`
+Live release commit: `64e6f8431a4fb549442b7fd6b8f889b57b78eeb6`
 Live state observed: `2026-08-03T14:46:45.695Z`
 Live operating mode: `isolated_demo`
 Live scheduler status: `degraded`
@@ -52,7 +52,7 @@ Five research documents in `hq/research/`: opentelemetry (adopt-with-managed-mod
 - Product: four-product setup handoff, recovery, and Plant CAPA release gates pass.
 - The deterministic 12-profile rehearsal passes 24 rows. Rendered mobile Website and Ecommerce mission acceptance is complete.
 - Proof baseline: a counter sale alone remains unproven; a completed and reconciled Shop lifecycle is `1 proven` across reload; reset returns to zero.
-- Both domains serve deployed `25cac2f50dfcc210d29dd1fd794ac194083f90d1` after guarded release `30823422205`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
+- Both domains serve deployed `64e6f8431a4fb549442b7fd6b8f889b57b78eeb6` after guarded release `31818675222`; paired brand, context, and catalog identities match, the scheduler ceiling is one job, and exact live verification passes.
 - Working-set trim is non-terminating and stops no process. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
 `hq/WORKBOARD.md` remains assignment authority for four bounded teams.
 
@@ -65,7 +65,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - Read-only hosted audit: `supermegabase` is PostgreSQL 17.6 at private schema v10 with 15 private policies, metadata RLS, and zero workspace data. The public browser quarantine is applied: zero browser-privileged objects remain, the Security Advisor is clear (27 INFO-only accepted default-deny notices), and writes stay off pending storage/recovery proof and owner authorization.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `25cac2f5`; no release drift is present. Five hosted-readiness gates still block managed activation/marketing (hosted PG17 and security are ready-hosted); external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `64e6f843`; no release drift is present. Five hosted-readiness gates still block managed activation/marketing (hosted PG17 and security are ready-hosted); external handoffs require `release:handoff:verify`.
 - No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
