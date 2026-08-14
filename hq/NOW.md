@@ -1,6 +1,6 @@
 # HQ now
 
-Updated: 2026-08-11
+Updated: 2026-08-14
 Owner: founder / CEO
 Mode: Codex-only guarded production release; managed operation remains isolated
 Live state contract: `supermega.hq-live-state.v1`
@@ -67,10 +67,10 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Blockers
 
-- Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
-- Read-only hosted audit: `supermegabase` is PostgreSQL 17.6, private schema v7, 14 private policies, and zero workspace data; its 27 Security Advisor notices are INFO-only default-deny legacy public tables. v8-v10 and the digest-bound public browser quarantine remain code-only, and writes stay off pending isolated backup/restore, target binding, tenant/Auth/Storage proof, and owner authorization.
+- Website, Plant, Ecommerce, and AI budgets lack hosted activation proof; model calls fail closed.
+- v8-v10 were proved byte-identical on an isolated branch with every browser role denied, but that branch is retired, so recovery, Storage denial, a server-only login role, and tenant separation have no target. Managed writes stay off pending a funded branch and owner authorization.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `25cac2f5`; no release drift is present. Seven hosted-readiness gates still block managed activation/marketing; external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `25cac2f5`; no release drift is present. Seven hosted-readiness gates block managed activation and marketing; external handoffs require `release:handoff:verify`.
 - No named pilot customer, managed tenant, revenue result, or time-saved baseline is verified.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
@@ -87,5 +87,11 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. On approved isolated Supabase, prove Storage, RLS, tenant isolation, and exact restore before writes.
-2. Recruit one approved Shop design partner, then require protected preview, paired verification, observability, rollback, and fresh live HQ evidence before marketing. Keep AI and scheduling dormant until their gates pass.
+1. Land the reviewed branch and promote it.
+2. Fund one isolated branch; finish the four OPS-001 gates — recovery and exact
+   restore, Storage denial, a server-only backend login role, tenant separation.
+3. Enable managed writes for one named Shop operator; measure setup time, daily
+   completion, review effort, recovery.
+4. Then open sign-up: an identity, a workspace bound to it, four products reading
+   it — the unactivated `app_private` v10 model, not new architecture.
+5. Custom work and further SaaS follow one client carried through a portal.
