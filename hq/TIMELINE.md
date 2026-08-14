@@ -70,6 +70,14 @@ _No founder decision required. Zero bundle cost._
 - [x] Database Codex: PRODUCTION v8-v10 + browser quarantine applied (founder-approved); schema v10 zero drift, advisors 0 ERROR/0 WARN/27 INFO, 73 leads intact, writes still OFF — DONE (OPS-745)
 - [x] Platform Codex: Web Analytics beacon on app + public site, cookieless/no-PII; awaiting founder dashboard toggles — DONE (OPS-746)
 - [x] Governance Codex: security audit v2 recorded from live production state; hosted_postgres17 + security gates READY-HOSTED; blocking gates 7 -> 5 — DONE (OPS-747)
+
+### Client-portal / SaaS phase plan (set 2026-08-13; goal: every client their own portal)
+- [ ] GATE NOW: founder merges PR #414 + dispatches paired release — everything above goes live for real users
+- [ ] Phase P1 (now, no gates): device-local portal IS each client's private portal today — signup names it, claim file carries it; door reframe request-account -> request-activation (OPS-748, lockstep with verify_app_build pins)
+- [ ] Phase P2 (behind hosted_storage_privacy + managed_persistence, next 2 gates): hosted storage-privacy proof + durable-commands/recovery proof on approved isolated target
+- [ ] Phase P3 (behind self_serve_pilot): POST /api/trial/v1/workspaces — claim code -> own RLS tenant, login-from-anywhere portal per client, user-named (spec: hq/strategy/SELF-SERVE-ONBOARDING-SPEC.md)
+- [ ] Phase P4 (behind production_activation, founder): writes on; first paying self-serve tenants; scheduler at reviewed 25/day ceiling at 3 tenants; analytics dashboards at 10
+- [ ] Custom solutions per client: industry packs + workflow templates are the per-client customization rail today; bespoke packs become a managed-service SKU after P3 (each tenant carries its own pack + template set by construction)
 - [x] PR #414 MERGED to main (4ce500c2) by founder; paired release dispatch still pending (founder: Actions -> SuperMega Coordinated Verified Release, commit 4ce500c29b1cca9617eeba83528293bc1af6c83e, typed confirmation) — 2026-08-13
 
 ### Aug 15–25
