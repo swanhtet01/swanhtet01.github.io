@@ -4108,7 +4108,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     setExtraOrderLines([])
     setRemovedOrderLine(null)
     setPayment(draft.payment)
-    setFulfilment('')
+    setFulfilment(draft.fulfilment)
     setFulfilmentReference(draft.sourceRecordId)
     setPromisedAt(defaultOrderPromiseInput())
     setPreparedChannelDraft(draft)
@@ -4428,7 +4428,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       || channel !== sourceDraft.channel
       || selectedLine.sku !== sourceDraft.sku
       || selectedLine.quantity !== sourceDraft.quantity
-      || payment !== sourceDraft.payment)) {
+      || payment !== sourceDraft.payment
+      || fulfilment !== sourceDraft.fulfilment)) {
       detachPreparedOrderSources({ ecommerce: false })
       setNotice('The source order changed. Review it again or continue manually.')
       return
@@ -7200,7 +7201,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setResumedOrderDraft(null)
       setOrderDraftConflict(false)
     }} ref={orderComposerRef}>
-      <div className="order-composer-head"><div><span className={coreEyebrowClass}>Shop review</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review Ecommerce request' : preparedWebsiteLead ? 'Review Website inquiry' : 'Add an order'}</h2><p>Check the source and details. Nothing changes until separate confirmation.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft && !preparedWebsiteLead ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close Shop review" className={compactButtonClass} onClick={closeOrderComposer} type="button">Close</button></div></div>
+      <div className="order-composer-head"><div><span className={coreEyebrowClass}>Shop review</span><h2 id="order-composer-title" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review Ecommerce request' : preparedWebsiteLead ? 'Review Website inquiry' : preparedChannelDraft ? 'Review message order' : 'Add an order'}</h2><p>Check the source and details. Nothing changes until separate confirmation.</p></div><div className="order-composer-actions">{orderDraftHasMeaningfulFields && !preparedChannelDraft && !preparedEcommerceDraft && !preparedWebsiteLead ? <button className="text-link danger-text" disabled={orderDraftSaving || orderDraftConflict} onClick={() => void discardSavedOrderDraft()} type="button">Discard draft</button> : null}<button aria-label="Close Shop review" className={compactButtonClass} onClick={closeOrderComposer} type="button">Close</button></div></div>
       {orderDraftActive && orderEntryMode === 'manual' && !preparedChannelDraft && !preparedEcommerceDraft && !preparedWebsiteLead && (orderDraftHasMeaningfulFields || resumedOrderDraft || orderDraftIssue) ? <div className={`order-draft-status ${orderDraftConflict || resumedOrderNeedsReview ? 'needs-review' : ''}`} role={orderDraftConflict ? 'alert' : 'status'}>
         <div>
           <strong>{orderDraftConflict
@@ -7257,7 +7258,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ channel: false }); setNotice('Ecommerce source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedChannelDraft && channelOrderDraftIsReady(preparedChannelDraft) ? <div className="channel-source-ready" ref={preparedChannelRef} tabIndex={-1}>
-          <div><span className={coreEyebrowClass}>Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>Exact excerpts reviewed; the full message was discarded.</small></div>
+          <div><span className={coreEyebrowClass}>Mapped source</span><strong>{preparedChannelDraft.sourceRecordId}</strong><small>{preparedChannelDraft.fulfilment === 'delivery' ? 'Delivery' : 'Pickup'} · exact excerpts reviewed; the full message was discarded.</small></div>
           <button className="text-link" disabled={Boolean(pendingAction)} onClick={() => { detachPreparedOrderSources({ ecommerce: false }); setNotice('Source link removed. Enter a manual handoff reference before recovery can save this order.') }} type="button">Remove source link</button>
         </div> : null}
         {preparedWebsiteLead ? <div className="channel-source-ready website-lead-source" tabIndex={-1}>
@@ -7269,10 +7270,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             <label>Customer<input disabled={commerceControlsDisabled} list={managedInventoryProjection?.clients.length ? 'shop-client-master-options' : undefined} maxLength={80} value={customer} onChange={(event) => { setCustomer(event.target.value); detachPreparedOrderSources({ website: true }) }} placeholder="Name or reference" /></label>
             {managedInventoryProjection?.clients.length ? <datalist id="shop-client-master-options">{managedInventoryProjection.clients.map((client) => <option key={client.id} value={client.name} />)}</datalist> : null}
             <label>Fulfilment<select disabled={commerceControlsDisabled} required value={fulfilment} onChange={(event) => {
-              setFulfilment(event.target.value as '' | 'pickup' | 'delivery')
+              const nextFulfilment = event.target.value as '' | 'pickup' | 'delivery'
+              setFulfilment(nextFulfilment)
               if (preparedEcommerceDraft) {
                 detachPreparedOrderSources({ channel: false })
                 setNotice('Fulfilment changed. The Ecommerce source link was removed; review this as a manual order.')
+              } else if (preparedChannelDraft && nextFulfilment !== preparedChannelDraft.fulfilment) {
+                detachPreparedOrderSources({ ecommerce: false })
+                setNotice('Fulfilment changed. The message source link was removed; review this as a manual order.')
               }
             }}><option value="">Choose pickup or delivery</option><option value="pickup">Pickup</option><option value="delivery">Delivery</option></select></label>
             <label>Promised for<input autoComplete="off" disabled={commerceControlsDisabled} id="commerce-order-promise" min={localDateTimeInputValue(new Date())} onChange={(event) => setPromisedAt(event.target.value)} ref={orderPromiseRef} required type="datetime-local" value={promisedAt} /></label>

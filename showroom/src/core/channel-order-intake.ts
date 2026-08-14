@@ -1,13 +1,15 @@
-export const CHANNEL_ORDER_DRAFT_SCHEMA = 'supermega.channel_order_draft.v1' as const
+export const CHANNEL_ORDER_DRAFT_SCHEMA = 'supermega.channel_order_draft.v2' as const
 export const CHANNEL_ORDER_MESSAGE_MAX = 4_000
 export const CHANNEL_ORDER_QUOTE_MAX = 280
 
 export const channelOrderChannels = ['Messenger', 'Viber', 'Phone'] as const
 export const channelOrderPayments = ['KBZPay', 'WavePay', 'Cash on delivery', 'Cash', 'Card'] as const
-export const channelOrderFields = ['customer', 'sku', 'quantity', 'payment'] as const
+export const channelOrderFulfilments = ['delivery', 'pickup'] as const
+export const channelOrderFields = ['customer', 'sku', 'quantity', 'payment', 'fulfilment'] as const
 
 export type ChannelOrderChannel = (typeof channelOrderChannels)[number]
 export type ChannelOrderPayment = (typeof channelOrderPayments)[number]
+export type ChannelOrderFulfilment = (typeof channelOrderFulfilments)[number]
 export type ChannelOrderField = (typeof channelOrderFields)[number]
 export type ChannelOrderAttributionInput =
   | { kind: 'quote'; quote: string }
@@ -21,6 +23,7 @@ export type ChannelOrderDraftInput = {
   sku: string
   quantity: number
   payment: string
+  fulfilment: string
   catalogSkus: string[]
   attributions: Record<ChannelOrderField, ChannelOrderAttributionInput>
 }
@@ -40,6 +43,7 @@ export type ChannelOrderDraft = {
   sku: string
   quantity: number
   payment: ChannelOrderPayment | null
+  fulfilment: ChannelOrderFulfilment | null
   status: 'needs_review' | 'ready_for_confirmation'
   blockers: string[]
   provenance: ChannelOrderProvenance[]
@@ -72,7 +76,7 @@ function occurrences(message: string, quote: string) {
   return indexes
 }
 
-function expectedEvidenceReference(draft: Pick<ChannelOrderDraft, 'sourceRecordId' | 'messageFingerprint' | 'customer' | 'sku' | 'quantity' | 'payment' | 'provenance'>) {
+function expectedEvidenceReference(draft: Pick<ChannelOrderDraft, 'sourceRecordId' | 'messageFingerprint' | 'customer' | 'sku' | 'quantity' | 'payment' | 'fulfilment' | 'provenance'>) {
   if (!draft.sourceRecordId || !draft.messageFingerprint) return null
   const mappingFingerprint = fingerprint(JSON.stringify({
     sourceRecordId: draft.sourceRecordId,
@@ -81,6 +85,7 @@ function expectedEvidenceReference(draft: Pick<ChannelOrderDraft, 'sourceRecordI
     sku: draft.sku,
     quantity: draft.quantity,
     payment: draft.payment,
+    fulfilment: draft.fulfilment,
     provenance: draft.provenance,
   }))
   return `channel-message://${draft.sourceRecordId}#msg-${draft.messageFingerprint.slice(4).toLowerCase()}-map-${mappingFingerprint}`
@@ -114,6 +119,11 @@ const managedPayments: Record<string, ChannelOrderPayment> = {
   cash_on_delivery: 'Cash on delivery',
   cash: 'Cash',
   card: 'Card',
+}
+
+const managedFulfilments: Record<string, ChannelOrderFulfilment> = {
+  delivery: 'delivery',
+  pickup: 'pickup',
 }
 
 type ManagedOrderField = 'customer_reference' | 'channel' | 'sku' | 'quantity' | 'payment' | 'fulfilment'
@@ -179,6 +189,7 @@ export async function buildManagedChannelOrderDraft(input: {
     : null
   const channel = managed.channel === null ? fallbackChannel : managedChannel
   const payment = managed.payment === null ? null : managedPayments[String(managed.payment)] ?? null
+  const fulfilment = managed.fulfilment === null ? null : managedFulfilments[String(managed.fulfilment)] ?? null
   const values: Record<ManagedOrderField, unknown> = {
     customer_reference: managed.customer_reference,
     channel: managed.channel,
@@ -205,12 +216,14 @@ export async function buildManagedChannelOrderDraft(input: {
     sku,
     quantity,
     payment: payment ?? '',
+    fulfilment: fulfilment ?? '',
     catalogSkus: input.catalogSkus,
     attributions: {
       customer: attribution('customer_reference'),
       sku: attribution('sku'),
       quantity: attribution('quantity'),
       payment: attribution('payment'),
+      fulfilment: attribution('fulfilment'),
     },
   })
 
@@ -245,6 +258,9 @@ export function buildChannelOrderDraft(input: ChannelOrderDraftInput): ChannelOr
   const payment = channelOrderPayments.includes(input.payment as ChannelOrderPayment)
     ? input.payment as ChannelOrderPayment
     : null
+  const fulfilment = channelOrderFulfilments.includes(input.fulfilment as ChannelOrderFulfilment)
+    ? input.fulfilment as ChannelOrderFulfilment
+    : null
   const catalogSkus = new Set(input.catalogSkus.map((entry) => boundedText(entry, 80).toUpperCase()).filter(Boolean))
 
   if (!sourceLabel) blockers.push('source_label_required')
@@ -256,6 +272,7 @@ export function buildChannelOrderDraft(input: ChannelOrderDraftInput): ChannelOr
   else if (!catalogSkus.has(sku)) blockers.push('sku_unknown')
   if (!Number.isSafeInteger(input.quantity) || input.quantity < 1 || input.quantity > 9_999) blockers.push('quantity_invalid')
   if (!payment) blockers.push('payment_invalid')
+  if (!fulfilment) blockers.push('fulfilment_invalid')
 
   for (const field of channelOrderFields) {
     const attribution = input.attributions[field]
@@ -306,6 +323,7 @@ export function buildChannelOrderDraft(input: ChannelOrderDraftInput): ChannelOr
     sku,
     quantity: input.quantity,
     payment,
+    fulfilment,
     status: blockers.length ? 'needs_review' : 'ready_for_confirmation',
     blockers: [...new Set(blockers)],
     provenance,
@@ -319,6 +337,7 @@ export function channelOrderDraftIsReady(draft: ChannelOrderDraft): draft is Cha
   evidenceReference: string
   channel: ChannelOrderChannel
   payment: ChannelOrderPayment
+  fulfilment: ChannelOrderFulfilment
   status: 'ready_for_confirmation'
 } {
   if (!draft || draft.schema !== CHANNEL_ORDER_DRAFT_SCHEMA || !Array.isArray(draft.provenance)) return false
@@ -350,6 +369,8 @@ export function channelOrderDraftIsReady(draft: ChannelOrderDraft): draft is Cha
     && draft.quantity > 0
     && Boolean(draft.payment)
     && channelOrderPayments.includes(draft.payment as ChannelOrderPayment)
+    && Boolean(draft.fulfilment)
+    && channelOrderFulfilments.includes(draft.fulfilment as ChannelOrderFulfilment)
     && draft.provenance.length === channelOrderFields.length
     && provenanceFields.size === channelOrderFields.length
     && channelOrderFields.every((field) => provenanceFields.has(field))

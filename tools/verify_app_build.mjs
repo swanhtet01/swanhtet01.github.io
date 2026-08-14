@@ -4086,7 +4086,7 @@ if (!ecommerceConfirmSource.includes('storefrontRequestLedgerContains')
   || !ecommerceBuyingUiSource.includes('Payment remains unauthorized.')
   || !ecommerceSource.includes('state: { ecommerceShopDraft: draft }')
   || !coreSource.includes('Ecommerce request')
-  || !coreSource.includes("<span className={coreEyebrowClass}>Shop review</span><h2 id=\"order-composer-title\" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review Ecommerce request' : preparedWebsiteLead ? 'Review Website inquiry' : 'Add an order'}</h2>")
+  || !coreSource.includes("<span className={coreEyebrowClass}>Shop review</span><h2 id=\"order-composer-title\" ref={orderComposerHeadingRef} tabIndex={-1}>{preparedEcommerceDraft ? 'Review Ecommerce request' : preparedWebsiteLead ? 'Review Website inquiry' : preparedChannelDraft ? 'Review message order' : 'Add an order'}</h2>")
   || !coreSource.includes('Check the source and details. Nothing changes until separate confirmation.')
   || !coreSource.includes('aria-label="Close Shop review"')
   || !coreSource.includes('ecommerceShopDraftLines, ecommerceShopDraftMatchesCatalog, ecommerceShopDraftMatchesOperatingContext, ecommerceShopDraftPayment')
@@ -4837,6 +4837,11 @@ if (!channelOrderUiSource.includes('Turn one message into an order draft')
   || !coreSource.includes('identity={managedIdentity ?? undefined}')
   || !channelOrderUiSource.includes('aria-label="Message field mapping"')
   || !channelOrderUiSource.includes('className="channel-intake-disclosure"')
+  || !channelOrderUiSource.includes('5 fields · exact evidence')
+  || !channelOrderUiSource.includes('Continue to order')
+  || !coreSource.includes('setFulfilment(draft.fulfilment)')
+  || !coreSource.includes("preparedChannelDraft ? 'Review message order'")
+  || !coreSource.includes('fulfilment !== sourceDraft.fulfilment')
   || !channelOrderUiSource.includes('channelOrderDraftIsReady')) fail('channel_order_intake_ui_missing')
 if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => channelOrderUiSource.includes(marker))) fail('channel_order_intake_ui_crossed_network_boundary')
 if (!coreSource.includes('aria-label="Shop attention"')
@@ -5007,7 +5012,7 @@ if (!coreSource.includes('id="commerce-manual-order-form"')
   || !coreCssSource.includes('.order-list strong, .order-list small { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }')
   || !coreCssSource.includes('.order-options > summary { min-height: 44px;')
   || !coreCssSource.includes('.order-composer-dialog { inset: auto 0 0; width: 100%; max-height: 94svh;')) fail('commerce_order_composer_missing_or_cramped')
-if (!channelOrderSource.includes("supermega.channel_order_draft.v1")
+if (!channelOrderSource.includes("supermega.channel_order_draft.v2")
   || !channelOrderSource.includes('ready_for_confirmation')
   || !channelOrderSource.includes('operator_supplied')
   || !channelOrderSource.includes('quote_not_found')
@@ -7829,13 +7834,14 @@ async function verifyChannelOrderRuntime() {
       {
         id: 'english',
         sourceLabel: 'MSG-EN-001',
-        message: 'May wants SM-1001, 2 baskets, pay with KBZPay on Messenger.',
+        message: 'May wants SM-1001, 2 baskets, pay with KBZPay on Messenger for delivery.',
         channel: 'Messenger',
         customer: 'May',
         sku: 'SM-1001',
         quantity: 2,
         payment: 'KBZPay',
-        quotes: { customer: 'May', sku: 'SM-1001', quantity: '2 baskets', payment: 'KBZPay' },
+        fulfilment: 'delivery',
+        quotes: { customer: 'May', sku: 'SM-1001', quantity: '2 baskets', payment: 'KBZPay', fulfilment: 'delivery' },
       },
       {
         id: 'burmese',
@@ -7862,8 +7868,14 @@ async function verifyChannelOrderRuntime() {
     ]
     const drafts = fixtures.map((fixture) => intake.buildChannelOrderDraft({
       ...fixture,
+      fulfilment: fixture.fulfilment ?? 'pickup',
       catalogSkus: ['SM-1001', 'SM-1002', 'SM-1003'],
-      attributions: Object.fromEntries(Object.entries(fixture.quotes).map(([field, quote]) => [field, { kind: 'quote', quote }])),
+      attributions: {
+        ...Object.fromEntries(Object.entries(fixture.quotes).map(([field, quote]) => [field, { kind: 'quote', quote }])),
+        fulfilment: fixture.quotes.fulfilment
+          ? { kind: 'quote', quote: fixture.quotes.fulfilment }
+          : { kind: 'operator_supplied' },
+      },
     }))
     drafts.forEach((draft, index) => {
       assert(intake.channelOrderDraftIsReady(draft), `channel_order_${fixtures[index].id}_not_ready`)
@@ -7891,7 +7903,7 @@ async function verifyChannelOrderRuntime() {
         sku: managedFixture.sku,
         quantity: managedFixture.quantity,
         payment: 'kbzpay',
-        fulfilment: null,
+        fulfilment: 'delivery',
         missing_fields: [],
         uncertain_fields: [],
         blockers: [],
@@ -7901,6 +7913,7 @@ async function verifyChannelOrderRuntime() {
           { field: 'sku', source_spans: [sourceSpan(managedFixture.quotes.sku)] },
           { field: 'quantity', source_spans: [sourceSpan(managedFixture.quotes.quantity)] },
           { field: 'payment', source_spans: [sourceSpan(managedFixture.quotes.payment)] },
+          { field: 'fulfilment', source_spans: [sourceSpan(managedFixture.quotes.fulfilment)] },
         ],
       },
     }
@@ -7912,6 +7925,7 @@ async function verifyChannelOrderRuntime() {
       sourceLabel: managedFixture.sourceLabel,
     })
     assert(intake.channelOrderDraftIsReady(managedDraft), 'managed_channel_order_draft_not_ready')
+    assert(managedDraft.fulfilment === 'delivery', 'managed_channel_order_fulfilment_was_discarded')
     assert(!JSON.stringify(managedDraft).includes(managedFixture.message), 'managed_channel_order_retained_full_message')
     let managedDigestRejected = false
     try {
@@ -7926,7 +7940,8 @@ async function verifyChannelOrderRuntime() {
     assert(managedDigestRejected, 'managed_channel_order_accepted_message_digest_mismatch')
     assert(!intake.channelOrderDraftIsReady({ ...drafts[0], provenance: drafts[0].provenance.slice(1) }), 'channel_order_ready_guard_accepted_missing_provenance')
     assert(!intake.channelOrderDraftIsReady({ ...drafts[0], sourceRecordId: 'CHN-TAMPERED' }), 'channel_order_ready_guard_accepted_tampered_source')
-    assert(!intake.channelOrderDraftIsReady({ ...drafts[0], schema: 'supermega.channel_order_draft.v0' }), 'channel_order_ready_guard_accepted_stale_schema')
+    assert(!intake.channelOrderDraftIsReady({ ...drafts[0], schema: 'supermega.channel_order_draft.v1' }), 'channel_order_ready_guard_accepted_stale_schema')
+    assert(!intake.channelOrderDraftIsReady({ ...drafts[0], fulfilment: 'pickup' }), 'channel_order_ready_guard_accepted_tampered_fulfilment')
     assert(!intake.channelOrderDraftIsReady({ ...drafts[0], evidenceReference: `${drafts[0].evidenceReference}tampered` }), 'channel_order_ready_guard_accepted_tampered_evidence')
     assert(!intake.channelOrderDraftIsReady({
       ...drafts[0],
@@ -7966,6 +7981,7 @@ async function verifyChannelOrderRuntime() {
         sku: { kind: 'quote', quote: 'SM-1001' },
         quantity: { kind: 'quote', quote: '2 baskets' },
         payment: { kind: 'quote', quote: 'KBZPay' },
+        fulfilment: { kind: 'quote', quote: 'delivery' },
       },
     })
     assert(incomplete.status === 'needs_review' && incomplete.blockers.includes('customer_required') && incomplete.blockers.includes('customer_quote_not_found'), 'channel_order_missing_fields_did_not_fail_closed')
@@ -7980,6 +7996,7 @@ async function verifyChannelOrderRuntime() {
         sku: { kind: 'quote', quote: 'SM-1001' },
         quantity: { kind: 'quote', quote: '2 baskets' },
         payment: { kind: 'quote', quote: 'KBZPay' },
+        fulfilment: { kind: 'quote', quote: 'delivery' },
       },
     })
     assert(intake.channelOrderDraftIsReady(operatorSupplied) && operatorSupplied.provenance.some((entry) => entry.field === 'customer' && entry.kind === 'operator_supplied'), 'channel_order_operator_supplied_provenance_missing')
@@ -7992,6 +8009,7 @@ async function verifyChannelOrderRuntime() {
         sku: { kind: 'operator_supplied' },
         quantity: { kind: 'operator_supplied' },
         payment: { kind: 'operator_supplied' },
+        fulfilment: { kind: 'operator_supplied' },
       },
     })
     assert(fullMessageQuote.status === 'needs_review'
@@ -8007,6 +8025,7 @@ async function verifyChannelOrderRuntime() {
         sku: { kind: 'quote', quote: 'SM-1001' },
         quantity: { kind: 'quote', quote: '2 baskets' },
         payment: { kind: 'quote', quote: 'KBZPay' },
+        fulfilment: { kind: 'operator_supplied' },
       },
     })
     assert(overlappingQuote.status === 'needs_review' && overlappingQuote.blockers.includes('customer_quote_ambiguous'), 'channel_order_overlapping_quote_was_not_ambiguous')
@@ -8041,6 +8060,7 @@ async function verifyChannelOrderRuntime() {
         sku: { kind: 'quote', quote: 'SM-1001' },
         quantity: { kind: 'quote', quote: '2 baskets' },
         payment: { kind: 'quote', quote: 'KBZPay' },
+        fulfilment: { kind: 'quote', quote: 'delivery' },
       },
     })
     assert(conflictingMapping.sourceRecordId === drafts[0].sourceRecordId && conflictingMapping.evidenceReference !== drafts[0].evidenceReference, 'channel_order_conflicting_mapping_not_detectable')
@@ -8059,7 +8079,7 @@ async function verifyChannelOrderRuntime() {
       payment: drafts[0].payment,
       paymentStatus: 'pending',
       refundStatus: 'none',
-      fulfilment: 'pickup',
+      fulfilment: drafts[0].fulfilment,
       fulfilmentReference: drafts[0].sourceRecordId,
       promisedAt: '2026-07-23T14:00:00.000Z',
       sourceRecordId: drafts[0].sourceRecordId,
@@ -8070,6 +8090,7 @@ async function verifyChannelOrderRuntime() {
     const accepted = commerce.reserveCommerceOrder(seed, order, proof)
     assert(commerce.reserveCommerceOrder(seed, order, { ...proof, evidenceReference: 'MSG-CONFLICTING-EVIDENCE' }) === null, 'channel_order_mismatched_action_evidence_succeeded')
     assert(accepted?.orders.some((candidate) => candidate.id === order.id && candidate.sourceRecordId === drafts[0].sourceRecordId), 'channel_order_human_confirmation_not_recorded')
+    assert(accepted?.orders.some((candidate) => candidate.id === order.id && candidate.fulfilment === 'delivery'), 'channel_order_reviewed_fulfilment_not_recorded')
     assert(accepted?.items.find((candidate) => candidate.sku === item.sku)?.onHand === item.onHand - order.quantity, 'channel_order_confirmation_did_not_reserve_stock_once')
     assert(commerce.reserveCommerceOrder(accepted, order, proof) === accepted, 'channel_order_exact_confirmation_retry_not_idempotent')
     const conflictingOrder = { ...order, id: 'ORD-CHANNEL-RUNTIME-02', customer: 'Changed customer', evidenceReference: conflictingMapping.evidenceReference }

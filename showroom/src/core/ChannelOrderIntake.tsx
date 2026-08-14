@@ -8,6 +8,7 @@ import {
   channelOrderChannels,
   channelOrderDraftIsReady,
   channelOrderFields,
+  channelOrderFulfilments,
   channelOrderPayments,
   type ChannelOrderAttributionInput,
   type ChannelOrderDraft,
@@ -28,6 +29,7 @@ const channelFieldLabels: Record<ChannelOrderField, string> = {
   sku: 'Item',
   quantity: 'Quantity',
   payment: 'Payment',
+  fulfilment: 'Fulfilment',
 }
 
 function emptyChannelAttributions(): Record<ChannelOrderField, ChannelAttributionDraft> {
@@ -36,6 +38,7 @@ function emptyChannelAttributions(): Record<ChannelOrderField, ChannelAttributio
     sku: { kind: 'quote', quote: '' },
     quantity: { kind: 'quote', quote: '' },
     payment: { kind: 'quote', quote: '' },
+    fulfilment: { kind: 'quote', quote: '' },
   }
 }
 
@@ -51,6 +54,7 @@ function channelDraftBlockerLabel(blocker: string) {
   if (blocker === 'sku_unknown') return 'The selected item is not in the current catalog.'
   if (blocker === 'quantity_invalid') return 'Enter a whole quantity from 1 to 9,999.'
   if (blocker === 'payment_invalid') return 'Choose a supported payment intent.'
+  if (blocker === 'fulfilment_invalid') return 'Choose delivery or pickup.'
   if (blocker === 'source_quote_required') return 'Map at least one field to exact words from the message.'
   if (blocker === 'ai_multiple_items' || blocker === 'ai_scope_multiple_item_order') return 'This message contains multiple items. Review them in the order form.'
   if (blocker === 'ai_not_an_order' || blocker === 'ai_scope_not_an_order') return 'This does not look like an order.'
@@ -81,6 +85,7 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
   const [sku, setSku] = useState(items[0]?.sku ?? '')
   const [quantity, setQuantity] = useState('1')
   const [payment, setPayment] = useState('KBZPay')
+  const [fulfilment, setFulfilment] = useState('')
   const [attributions, setAttributions] = useState(emptyChannelAttributions)
   const [reviewedDraft, setReviewedDraft] = useState<ChannelOrderDraft | null>(null)
   const [mappingField, setMappingField] = useState<ChannelOrderField>('customer')
@@ -115,7 +120,9 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
         ? Boolean(selectedSku)
         : field === 'quantity'
           ? Number.isInteger(Number(quantity)) && Number(quantity) > 0
-          : Boolean(payment)
+          : field === 'payment'
+            ? Boolean(payment)
+            : Boolean(fulfilment)
     return valueIsComplete && (attribution.kind === 'operator_supplied' || Boolean(attribution.quote.trim()))
   }
 
@@ -148,6 +155,7 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
       sku: selectedSku,
       quantity: Number(quantity),
       payment,
+      fulfilment,
       catalogSkus: items.map((item) => item.sku),
       attributions: normalizedAttributions,
     })
@@ -190,6 +198,7 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
       setSku(draft.sku)
       setQuantity(draft.quantity > 0 ? String(draft.quantity) : '')
       if (draft.payment) setPayment(draft.payment)
+      setFulfilment(draft.fulfilment ?? '')
       setAttributions(nextAttributions)
       setReviewedDraft(draft)
       setAiPrepared(true)
@@ -216,6 +225,7 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
     setMessage('')
     setCustomer('')
     setQuantity('1')
+    setFulfilment('')
     setAttributions(emptyChannelAttributions())
     setMappingField('customer')
     setManualOpen(false)
@@ -249,7 +259,7 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
       </div>
       {aiIssue ? <p className="form-notice" role="alert">{aiIssue}</p> : null}
       <details className="channel-intake-disclosure" onToggle={(event) => setManualOpen(event.currentTarget.open)} open={manualOpen}>
-        <summary><span>Review or fix details</span><small>4 fields · exact evidence</small></summary>
+        <summary><span>Review or fix details</span><small>5 fields · exact evidence</small></summary>
         <nav aria-label="Message field mapping" className="channel-field-nav">
           {channelOrderFields.map((field) => (
             <button
@@ -281,6 +291,10 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
             <label>Payment intent<select disabled={controlsDisabled} onChange={(event) => { setPayment(event.target.value); invalidateReview() }} value={payment}>{channelOrderPayments.map((entry) => <option key={entry}>{entry}</option>)}</select></label>
             <ChannelAttributionControl attribution={attributions.payment} disabled={controlsDisabled} field="payment" onChange={updateAttribution} />
           </div> : null}
+          {mappingField === 'fulfilment' ? <div className="channel-mapping-row">
+            <label>Fulfilment<select disabled={controlsDisabled} onChange={(event) => { setFulfilment(event.target.value); invalidateReview() }} required value={fulfilment}><option value="">Choose delivery or pickup</option>{channelOrderFulfilments.map((entry) => <option key={entry} value={entry}>{entry === 'delivery' ? 'Delivery' : 'Pickup'}</option>)}</select></label>
+            <ChannelAttributionControl attribution={attributions.fulfilment} disabled={controlsDisabled} field="fulfilment" onChange={updateAttribution} />
+          </div> : null}
         </div>
         <div className="channel-mapping-actions">
           {previousMappingField ? <button className="text-link" disabled={controlsDisabled} onClick={() => setMappingField(previousMappingField)} type="button">Back</button> : <span />}
@@ -294,7 +308,7 @@ export function ChannelOrderIntake({ disabled, identity, items, onAcceptedFocus,
       <div><span className="core-eyebrow">{aiPrepared ? 'AI draft' : 'Reviewed mapping'}</span><strong>{channelOrderDraftIsReady(reviewedDraft) ? 'Ready for human confirmation' : 'Check the order details'}</strong></div>
       {channelOrderDraftIsReady(reviewedDraft) ? <>
         <p>{reviewedDraft.sourceRecordId} / {reviewedDraft.provenance.filter((entry) => entry.kind === 'quote').length} exact source mappings</p>
-        <button className="core-button primary compact" disabled={controlsDisabled} onClick={useReviewedDraft} type="button">Use reviewed draft</button>
+        <button className="core-button primary compact" disabled={controlsDisabled} onClick={useReviewedDraft} type="button">Continue to order</button>
       </> : <ul>{reviewedDraft.blockers.slice(0, 4).map((blocker) => <li key={blocker}>{channelDraftBlockerLabel(blocker)}</li>)}</ul>}
       <small>The message is used only to prepare this draft and is not written into the order record.</small>
     </div> : null}
