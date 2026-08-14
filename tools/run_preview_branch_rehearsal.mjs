@@ -1880,8 +1880,9 @@ async function runRehearsalWithAuthority({
   for (const flag of flags) {
     if (!['--dry-run', '--self-test', '--capture-branch-receipt'].includes(flag)) fail('rehearsal_arguments_invalid')
   }
+  const databaseUrl = String(env?.[URL_ENV] || '').trim()
   const hostedRequested = flags.has('--capture-branch-receipt')
-    || Boolean(String(env?.[URL_ENV] || '').trim())
+    || Boolean(databaseUrl)
   if (hostedRequested
     && (!testOnlyHostedBootstrap || !digestPattern.test(String(trustedHostedBootstrapDigest || '')))) {
     fail('rehearsal_hosted_bootstrap_unconfigured')
@@ -1921,7 +1922,6 @@ async function runRehearsalWithAuthority({
     return { ok: true, mode: 'dry-run', plan, exitCode: 0 }
   }
 
-  const databaseUrl = String(env[URL_ENV] || '').trim()
   if (!databaseUrl) {
     const report = {
       ok: true,
@@ -3250,7 +3250,7 @@ export async function runSelfTest() {
   // Hosted entrypoints remain closed in production until a separately
   // reviewed, independently verifiable bootstrap is implemented and pinned.
   // A caller-forgeable launcher flag cannot unlock either path.
-  cases += 3
+  cases += 4
   {
     const stub = makeExec()
     try {
@@ -3280,6 +3280,29 @@ export async function runSelfTest() {
       if (error?.rehearsalCode !== 'rehearsal_hosted_bootstrap_unconfigured') throw error
     }
     if (stub.calls.length !== 0) throw new Error('self_test_digest_only_bootstrap_spawned_child')
+  }
+  {
+    const stub = makeExec()
+    let databaseUrlReads = 0
+    const statefulEnvironment = new Proxy({}, {
+      get(target, key) {
+        if (key === URL_ENV) {
+          databaseUrlReads += 1
+          return databaseUrlReads === 1 ? '' : env[URL_ENV]
+        }
+        return Reflect.get(target, key)
+      },
+    })
+    const result = await runRehearsalWithAuthority({
+      env: statefulEnvironment,
+      exec: stub.exec,
+      log: silent,
+    })
+    if (result.status !== 'rehearsal_target_not_configured'
+      || databaseUrlReads !== 1
+      || stub.calls.length !== 0) {
+      throw new Error('self_test_stateful_database_url_crossed_bootstrap_gate')
+    }
   }
   {
     const stub = makeExec()
