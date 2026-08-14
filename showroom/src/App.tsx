@@ -14,6 +14,7 @@ const WorkspaceControlsPage = lazy(() => import('./core/WorkspaceControlsPage').
 const ProductOnboardingPage = lazy(() => import('./core/ProductOnboardingPage').then((module) => ({ default: module.ProductOnboardingPage })))
 const ManagedLoginPage = lazy(() => import('./core/ManagedLoginPage').then((module) => ({ default: module.ManagedLoginPage })))
 const ManagedAccountPage = lazy(() => import('./core/ManagedAccountPage').then((module) => ({ default: module.ManagedAccountPage })))
+const SignupPage = lazy(() => import('./core/SignupPage').then((module) => ({ default: module.SignupPage })))
 const visionPreviewEnabled = import.meta.env.DEV || import.meta.env.VITE_SUPERMEGA_VISION_PREVIEW === '1'
 const VisionProduct = visionPreviewEnabled
   ? lazy(() => import('./products/vision/VisionProduct').then((module) => ({ default: module.VisionProduct })))
@@ -93,7 +94,7 @@ export default function App() {
           <Route element={<Suspense fallback={<ProductLoading name="managed access" />}><ManagedLoginPage /></Suspense>} path="login" />
           <Route element={<Suspense fallback={<ProductLoading name="account recovery" />}><ManagedAccountPage /></Suspense>} path="account/recovery" />
           <Route element={<Suspense fallback={<ProductLoading name="account setup" />}><ManagedAccountPage /></Suspense>} path="account/setup" />
-          <Route element={<Navigate replace to="/login" />} path="signup" />
+          <Route element={<Suspense fallback={<ProductLoading name="free trial" />}><SignupPage /></Suspense>} path="signup" />
           <Route element={<Navigate replace to="/" />} path="*" />
         </Route>
       </Routes>

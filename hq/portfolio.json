@@ -1,6 +1,6 @@
 {
   "schemaVersion": "supermega.hq.portfolio.v3",
-  "updatedAt": "2026-07-31",
+  "updatedAt": "2026-08-11",
   "northStar": "One real workflow reaches a measurable outcome through an accountable operating record.",
   "productLifecycle": ["discover", "define", "build", "release", "learn"],
   "completedLocalAutomations": [
@@ -174,9 +174,9 @@
         "priority": 80,
         "status": "owner-gated",
         "workOrder": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
-        "reason": "The next Shop proof requires a founder-selected operator and approved isolated tenant, so local automation must not spend a model call pretending it can complete it."
+        "reason": "Needs founder-selected operator and approved isolated tenant; automation cannot substitute founder decisions."
       },
-      "nextGate": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
+      "nextGate": "One authenticated order-to-close and return-exception pilot on isolated hosted tenant; named operator, baseline, and five-day evidence plan."
     },
     {
       "id": "plant",
@@ -196,9 +196,9 @@
         "priority": 70,
         "status": "owner-gated",
         "workOrder": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
-        "reason": "The Plant evidence gate needs named human timing evidence and an approved managed tenant; automation cannot manufacture either input."
+        "reason": "Needs named human timing evidence and approved managed tenant."
       },
-      "nextGate": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
+      "nextGate": "Validate one order-bound OEE window with named operator and supervisor on isolated managed tenant; reconcile exact downtime source; measure correction effort before costing adapters."
     },
     {
       "id": "website",
@@ -216,7 +216,7 @@
         "priority": 60,
         "status": "owner-gated",
         "workOrder": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
-        "reason": "A real named business brief and accepted owner review are missing, so a generated sample cannot truthfully close the Website gate."
+        "reason": "Needs named business brief and accepted owner review; sample cannot close the gate."
       },
       "nextGate": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
@@ -236,9 +236,9 @@
         "priority": 95,
         "status": "owner-gated",
         "workOrder": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
-        "reason": "ENG-146 completed the local correction boundary. The next proof needs a founder-selected operator and approved isolated managed tenant; automation cannot manufacture those inputs or claim hosted persistence."
+        "reason": "ENG-146 done. Needs founder-selected operator and approved isolated managed tenant; automation cannot claim hosted persistence."
       },
-      "nextGate": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
+      "nextGate": "Prove cart-to-Shop handoff and customer-safe acknowledgement on protected preview and isolated managed tenant; add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
   ],
   "sharedCapabilities": [
@@ -274,21 +274,42 @@
   "researchGates": [
     {
       "candidate": "durable-workflows",
-      "decision": "evaluate",
-      "gate": "Compare Vercel Workflows with the existing Cloud Tasks runtime using one approval-wait use case.",
-      "source": "https://vercel.com/docs/workflows"
+      "decision": "adopt-with-managed-mode",
+      "gate": "Adopt Vercel Workflows for approval-wait patterns only after managed persistence is proven, callback authentication satisfies the RLS tenant boundary, exactly-once order creation is verified, and the single-assignment lease is checked before workflow start.",
+      "source": "https://vercel.com/docs/workflows",
+      "researchDoc": "hq/research/durable-workflows-comparison-2026-08.md"
     },
     {
       "candidate": "order-intake-agent",
       "decision": "evaluate",
       "gate": "Adopt only after the existing fixture corpus, server-only structured output, provenance, budget, human review, and zero-side-effect checks pass.",
-      "source": "https://platform.openai.com/docs/guides/structured-outputs"
+      "source": "https://platform.openai.com/docs/guides/structured-outputs",
+      "researchDoc": "hq/research/order-intake-agent-evaluation-2026-08.md",
+      "evaluationStatus": "design-complete"
     },
     {
       "candidate": "opentelemetry",
       "decision": "adopt-with-managed-mode",
       "gate": "Redact customer content and correlate request, workflow, model, tool, and database operations.",
-      "source": "https://vercel.com/docs/tracing/instrumentation"
+      "source": "https://vercel.com/docs/tracing/instrumentation",
+      "researchDoc": "hq/research/opentelemetry-implementation-plan-2026-08.md",
+      "evaluationStatus": "implementation-plan-ready"
+    },
+    {
+      "candidate": "analytics",
+      "decision": "adopt",
+      "gate": "TypeScript compile passes with no PII in MetricEvent; PII review by founder; metrics page renders on fresh setup; founder approves aggregate schema; localStorage key clears on device reset.",
+      "source": "https://vercel.com/docs/analytics",
+      "researchDoc": "hq/research/analytics-design-2026-08.md",
+      "evaluationStatus": "implementation-steps-ready"
+    },
+    {
+      "candidate": "enterprise-capabilities",
+      "decision": "evaluate",
+      "gate": "Sequence: verified-statements after managed-storage-proof + shop-pilot; staff-roles after verified-statements + named operator; shared-workspace after staff-roles + OEE pilot. Each tier requires prior proven in production.",
+      "source": "https://supabase.com/docs/guides/auth/row-level-security",
+      "researchDoc": "hq/research/enterprise-capabilities-design-2026-08.md",
+      "evaluationStatus": "design-ready"
     },
     {
       "candidate": "dense-data-grid",

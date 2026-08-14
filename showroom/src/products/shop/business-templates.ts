@@ -11,6 +11,7 @@ export type ShopBusinessTemplateId =
   | 'hardware'
   | 'tea-coffee'
   | 'auto-parts'
+  | 'restaurant'
 
 export type ShopBusinessTemplateUnit = CommerceProductionMaterialUnit
 
@@ -68,7 +69,10 @@ type ItemRow = readonly [sku: string, name: string, unit: ShopBusinessTemplateUn
 const rows = (source: readonly ItemRow[]): readonly ShopBusinessTemplateItem[] =>
   source.map(([sku, name, unit, costMmk, priceMmk, openingStock, reorderAt]) => ({ sku, name, unit, costMmk, priceMmk, openingStock, reorderAt }))
 
-export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = [
+// Seeds carry the goods a trade actually stocks. The bookable services its industry pack offers
+// are appended below rather than repeated in all eight catalogs, so a new template cannot ship
+// with an unchargeable service by omission.
+const shopBusinessTemplateSeeds: readonly ShopBusinessTemplate[] = [
   {
     id: 'mini-mart',
     schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
@@ -330,7 +334,112 @@ export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = [
       lines: [{ sku: 'PAD-BRAKE-FR', quantity: 2 }, { sku: 'OIL-ENG-4L', quantity: 2 }, { sku: 'FILTER-AIR', quantity: 2 }],
     },
   },
+  {
+    id: 'restaurant',
+    schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
+    name: { en: 'Restaurant', my: 'စားသောက်ဆိုင်' },
+    description: 'Full menu with table orders, kitchen prep counts, and booked group meals.',
+    industryPackId: 'restaurant',
+    workflowTemplateId: 'restaurant-ordering',
+    catalog: rows([
+      ['CURRY-CHICKEN', 'Chicken curry set with rice and soup', 'pcs', 4_200, 8_500, 40, 12],
+      ['CURRY-PORK', 'Pork curry set with rice and soup', 'pcs', 4_600, 9_000, 32, 10],
+      ['CURRY-FISH', 'Fish curry set with rice and soup', 'pcs', 4_900, 9_500, 28, 10],
+      ['CURRY-MUTTON', 'Mutton curry set with rice and soup', 'pcs', 6_800, 12_500, 18, 6],
+      ['RICE-STEAMED', 'Steamed rice plate', 'pcs', 300, 800, 120, 30],
+      ['RICE-FRIED-EGG', 'Egg fried rice plate', 'pcs', 2_400, 5_000, 45, 15],
+      ['NOODLE-KAUKSWE', 'Ohn no kauk swe bowl', 'pcs', 2_600, 5_500, 40, 12],
+      ['NOODLE-SHAN', 'Shan noodle bowl', 'pcs', 2_200, 4_800, 38, 12],
+      ['SALAD-LAHPET', 'Lahpet thoke tea leaf salad', 'pcs', 1_900, 4_500, 50, 15],
+      ['SALAD-GINGER', 'Gyin thoke ginger salad', 'pcs', 1_700, 4_000, 4, 12],
+      ['SOUP-CHINYAY', 'Chin yay hin sour soup bowl', 'pcs', 700, 2_000, 60, 20],
+      ['GRILL-TILAPIA', 'Grilled whole tilapia', 'pcs', 6_500, 12_500, 14, 5],
+      ['DRINK-LIME', 'Fresh lime juice', 'pcs', 900, 2_200, 60, 20],
+    ]),
+    counterSales: [
+      { id: 'restaurant-sale-1', recordedAt: '2026-08-03T05:15:00.000Z', payment: 'Cash', lines: [{ sku: 'CURRY-CHICKEN', quantity: 2 }, { sku: 'RICE-STEAMED', quantity: 2 }] },
+      { id: 'restaurant-sale-2', recordedAt: '2026-08-03T06:40:00.000Z', payment: 'KBZPay', lines: [{ sku: 'NOODLE-SHAN', quantity: 1 }, { sku: 'SALAD-LAHPET', quantity: 1 }, { sku: 'DRINK-LIME', quantity: 2 }] },
+      { id: 'restaurant-sale-3', recordedAt: '2026-08-03T11:20:00.000Z', payment: 'Cash', lines: [{ sku: 'GRILL-TILAPIA', quantity: 1 }, { sku: 'RICE-STEAMED', quantity: 3 }, { sku: 'SOUP-CHINYAY', quantity: 3 }] },
+    ],
+    pendingOrder: {
+      id: 'restaurant-order-1',
+      customerName: 'Daw Nwe Nwe Aye (family booking)',
+      contact: '09-317-555-666',
+      requestedAt: '2026-08-03T07:45:00.000Z',
+      promisedFor: '2026-08-04T11:00:00.000Z',
+      status: 'pending',
+      note: 'Family dinner for 12 people. Two tables held together from 17:30.',
+      lines: [{ sku: 'CURRY-CHICKEN', quantity: 4 }, { sku: 'CURRY-FISH', quantity: 3 }, { sku: 'RICE-STEAMED', quantity: 12 }, { sku: 'SALAD-LAHPET', quantity: 2 }],
+    },
+  },
 ] as const
+
+// Every industry pack offers bookable services that carry a price, and the appointment book has
+// no path to the ledger -- a booking reaches no order, no daily close and no accounting handoff.
+// So unless the service is also a catalog item, the owner is quoted a price they cannot collect.
+// SKUs and prices mirror the pack samples in client-onboarding.ts exactly, and
+// test_industry_pack_sample_pairing.mjs pins both against shop-service-scheduling.ts so a price
+// edited in one place and not the other fails the build rather than reaching a counter.
+//
+// costMmk is the staff time the service consumes, not a purchased good; the model requires a
+// positive cost strictly below price, so it is carried at 60% of price to keep reported margin
+// honest rather than showing service revenue as pure profit.
+const packServiceRows: Readonly<Record<ShopIndustryPackId, readonly ItemRow[]>> = {
+  retail: [
+    ['RETAIL-SVC-SHOPPING', 'Personal shopping 30 min', 'pcs', 9_000, 15_000, 999, 0],
+    ['RETAIL-SVC-PICKUP', 'Pickup window 15 min', 'pcs', 3_000, 5_000, 999, 0],
+  ],
+  cafe: [
+    ['CAFE-SVC-CATERING', 'Catering consultation 30 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['CAFE-SVC-COLLECTION', 'Preorder collection 15 min', 'pcs', 3_000, 5_000, 999, 0],
+  ],
+  restaurant: [
+    ['REST-SVC-DEPOSIT', 'Table reservation deposit', 'pcs', 6_000, 10_000, 999, 0],
+    ['REST-SVC-EVENT', 'Private event consultation 45 min', 'pcs', 15_000, 25_000, 999, 0],
+  ],
+  spa: [
+    ['SPA-SVC-CONSULT', 'Consultation 30 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['SPA-SVC-MASSAGE', 'Traditional Myanmar massage 60 min', 'pcs', 27_000, 45_000, 999, 0],
+    ['SPA-SVC-OIL', 'Aromatic oil massage 90 min', 'pcs', 39_000, 65_000, 999, 0],
+    ['SPA-SVC-FOOT', 'Foot massage 45 min', 'pcs', 16_800, 28_000, 999, 0],
+    ['SPA-SVC-FACIAL', 'Facial treatment 45 min', 'pcs', 22_800, 38_000, 999, 0],
+    ['SPA-SVC-SCRUB', 'Body scrub 60 min', 'pcs', 25_200, 42_000, 999, 0],
+    ['SPA-SVC-STEAM', 'Herbal steam 30 min', 'pcs', 10_800, 18_000, 999, 0],
+  ],
+  gym: [
+    ['GYM-SVC-CONSULT', 'Fitness consultation 30 min', 'pcs', 9_000, 15_000, 999, 0],
+    ['GYM-SVC-PT', 'Personal training 60 min', 'pcs', 18_000, 30_000, 999, 0],
+    ['GYM-SVC-COMPOSITION', 'Body composition check 20 min', 'pcs', 4_800, 8_000, 999, 0],
+    ['GYM-SVC-CLASS', 'Group class 60 min', 'pcs', 7_200, 12_000, 999, 0],
+    ['GYM-SVC-YOGA', 'Yoga session 60 min', 'pcs', 9_000, 15_000, 999, 0],
+    ['GYM-SVC-NUTRITION', 'Nutrition plan review 30 min', 'pcs', 12_000, 20_000, 999, 0],
+  ],
+  school: [
+    ['SCHOOL-SVC-ENROLL', 'Enrollment consultation 30 min', 'pcs', 6_000, 10_000, 999, 0],
+    ['SCHOOL-SVC-PLACEMENT', 'Placement test 45 min', 'pcs', 3_000, 5_000, 999, 0],
+    ['SCHOOL-SVC-ENGLISH', 'English class session 60 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['SCHOOL-SVC-MATHS', 'Maths class session 60 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['SCHOOL-SVC-TUTORING', 'Private tutoring 60 min', 'pcs', 21_000, 35_000, 999, 0],
+    ['SCHOOL-SVC-EXAM', 'Exam preparation session 90 min', 'pcs', 18_000, 30_000, 999, 0],
+  ],
+}
+
+/**
+ * openingStock 999 on a service row means "always bookable", NOT deep stock on a shelf. Anything
+ * that ranks a catalog by onHand has to demote these or they win every slot: the Ecommerce working
+ * sample sorts by onHand and duly put "Catering consultation" and "Preorder collection" on a tea
+ * shop's storefront ahead of the tea. Services became catalog items so they could be CHARGED for at
+ * the counter; that is not the same as being the thing a shop merchandises online.
+ */
+const shopServiceSkus = new Set(Object.values(packServiceRows).flatMap((serviceRows) => serviceRows.map(([sku]) => sku)))
+
+export function isShopServiceSku(sku: string) {
+  return shopServiceSkus.has(sku)
+}
+
+export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = shopBusinessTemplateSeeds.map(
+  (template) => ({ ...template, catalog: [...template.catalog, ...rows(packServiceRows[template.industryPackId])] }),
+)
 
 export function shopBusinessTemplate(id: ShopBusinessTemplateId) {
   const template = shopBusinessTemplates.find((candidate) => candidate.id === id)
@@ -348,9 +457,16 @@ export function shopBusinessTemplateSetupPath(id: ShopBusinessTemplateId) {
   return `/settings/?product=shop&template=${encodeURIComponent(shopBusinessTemplate(id).id)}`
 }
 
+// Item names are the one free-text field here, and they were interpolated raw. No shipped
+// name contains a comma today, so nothing was broken -- but "Front brake pad set, ceramic"
+// is an ordinary thing to call a product, and it would have split into two columns and
+// failed the whole template's import at provisioning time, with no clue as to why.
+// Quoted per RFC 4180, which is what parseCsv in core/client-onboarding.ts already reads.
+const csvField = (value: string) => `"${value.replaceAll('"', '""')}"`
+
 export function shopBusinessTemplateCatalogCsv(id: ShopBusinessTemplateId) {
   const template = shopBusinessTemplate(id)
-  const lines = template.catalog.map((item) => `${item.sku},${item.name},${item.openingStock},${item.reorderAt},${item.priceMmk}`)
+  const lines = template.catalog.map((item) => `${item.sku},${csvField(item.name)},${item.openingStock},${item.reorderAt},${item.priceMmk}`)
   return `sku,item_name,opening_stock,reorder_at,price_mmk\r\n${lines.join('\r\n')}\r\n`
 }
 
@@ -427,6 +543,6 @@ export function validateShopBusinessTemplates() {
       if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) throw new Error(`${order.id} needs whole positive quantities.`)
     }
   }
-  if (templateIds.size !== 7) throw new Error('The Shop business template registry must carry exactly 7 templates.')
+  if (templateIds.size !== 8) throw new Error('The Shop business template registry must carry exactly 8 templates.')
   return shopBusinessTemplates
 }

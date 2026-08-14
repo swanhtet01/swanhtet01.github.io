@@ -1,6 +1,7 @@
 // Tenant-bound Agent Company operator sessions. The owner key can issue one-time codes,
 // but it is never copied into an operator session or returned by this module.
 
+import { usableOpsKey } from './ops-key.mjs'
 import {
   createHash,
   randomBytes as cryptoRandomBytes,
@@ -786,7 +787,7 @@ export async function authorizeCompanyRequest(request = {}, options = {}) {
   const env = options.env || process.env
   const providedKey = headerValue(request.headers, 'x-ops-key').trim()
   if (providedKey) {
-    const opsKey = String(options.opsKey ?? env.SUPERMEGA_OPS_KEY ?? '').trim()
+    const opsKey = usableOpsKey(options.opsKey ?? env.SUPERMEGA_OPS_KEY)
     if (!opsKey) return failure('ops_key_not_configured')
     if (!safeEqual(providedKey, opsKey)) return failure('unauthorized')
     const configuredClientId = String(options.clientId ?? env.SUPERMEGA_CLIENT_ID ?? '').trim() || null

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { handleApprovals } from './approvals.mjs'
 
-const KEY = 'ops-secret'
+const KEY = 'ops-secret-0123456789abcdef012345'
 const headers = { 'x-ops-key': KEY, 'x-operator-id': 'Swan' }
 
 test('approval API is fail-closed and exposes only explicit commands', async () => {

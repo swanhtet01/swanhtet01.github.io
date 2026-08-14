@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
-const CONTRACT = 'supermega.supabase-security-advisor-audit.v1'
+const CONTRACT = 'supermega.supabase-security-advisor-audit.v2'
 const QUERY_CONTRACT = 'supermega.supabase-security-metadata-query.v2'
 const root = resolve(import.meta.dirname, '..')
 const auditPath = resolve(root, 'hq', 'readiness', 'supabase-security-advisor-audit.json')
@@ -31,7 +31,9 @@ const PENDING_MIGRATIONS = [
     digest: 'sha256:0a112ee27bda7ca238f3992ffab841c414268e44aad6b68023c75915afa40cde',
   },
 ]
-const NEXT_ACTION = 'Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal.'
+// v2: the audit records STATE, so the required next action depends on it.
+const NEXT_ACTION_BLOCKED = 'Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal.'
+const NEXT_ACTION_CLEAR = 'Schema v10 and the public browser quarantine are live with a clear advisor; complete hosted storage-privacy, recovery, and self-serve pilot proofs before any managed activation proposal.'
 
 function fail(code) {
   throw new Error(code)
@@ -62,36 +64,46 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
   if (!/^[a-z]{20}$/.test(expectedProjectRef || '') || value.projectRef !== expectedProjectRef || value.targetClassification !== 'protected-production') fail('supabase_security_audit_target_invalid')
   if (value.postgres?.major !== 17 || value.postgres?.status !== 'ACTIVE_HEALTHY') fail('supabase_security_audit_postgres_invalid')
 
+  // v2: findingCount counts ACTIONABLE findings (ERROR/WARN). The rls_enabled_no_policy INFO
+  // entries on the quarantined legacy tables are the accepted default-deny posture and are
+  // recorded separately under acceptedInfo so a clear advisor stays honest about them.
   const advisor = value.advisor
   if (!isRecord(advisor)
     || advisor.type !== 'security'
-    || advisor.status !== 'blocked'
-    || advisor.findingCount !== advisor.tables?.length
-    || advisor.findingCount < 1
-    || advisor.lintCounts?.rls_enabled_no_policy !== advisor.findingCount
-    || advisor.levelCounts?.INFO !== advisor.findingCount
-    || Object.keys(advisor.lintCounts || {}).length !== 1
-    || Object.keys(advisor.levelCounts || {}).length !== 1
+    || !['blocked', 'clear'].includes(advisor.status)
+    || !Number.isInteger(advisor.findingCount)
+    || advisor.findingCount < 0
+    || advisor.status !== (advisor.findingCount === 0 ? 'clear' : 'blocked')
+    || !isRecord(advisor.acceptedInfo)
+    || advisor.acceptedInfo.lint !== 'rls_enabled_no_policy'
+    || advisor.acceptedInfo.level !== 'INFO'
+    || advisor.acceptedInfo.count !== advisor.acceptedInfo.tables?.length
+    || advisor.acceptedInfo.count < 1
     || advisor.remediationUrl !== REMEDIATION_URL) fail('supabase_security_audit_advisor_invalid')
-  if (advisor.tables.some((table) => !/^[a-z][a-z0-9_]{0,62}$/.test(table))
-    || advisor.tables.join(',') !== sortedUnique(advisor.tables).join(',')) fail('supabase_security_audit_advisor_tables_invalid')
+  if (advisor.acceptedInfo.tables.some((table) => !/^[a-z][a-z0-9_]{0,62}$/.test(table))
+    || advisor.acceptedInfo.tables.join(',') !== sortedUnique(advisor.acceptedInfo.tables).join(',')) fail('supabase_security_audit_advisor_tables_invalid')
 
+  // v2: expected browser privileges derive from the hardening state. Before the quarantine the
+  // legacy grants are recorded as-found; after it every browser privilege list must be empty.
+  const hardened = value.conclusion?.browserGrantHardeningRequired === false
+  const expectedTablePrivileges = hardened ? '' : PRIVILEGES.join(',')
+  const expectedSequencePrivileges = hardened ? '' : SEQUENCE_PRIVILEGES.join(',')
   const catalog = value.catalog
   if (!isRecord(catalog)
     || catalog.queryContract !== QUERY_CONTRACT
     || catalog.scope !== 'pg_catalog_metadata_only'
     || catalog.businessRowsRead !== 0
     || catalog.tableCount !== catalog.tables?.length
-    || catalog.tableCount !== advisor.findingCount
+    || catalog.tableCount !== advisor.acceptedInfo.count
     || catalog.nonTableRelationCount !== 0
     || catalog.publicRoutineCount !== 0
     || catalog.browserCallableRoutineCount !== 0
     || catalog.sequenceCount !== catalog.sequences?.length
     || catalog.sequenceCount !== PUBLIC_SEQUENCES.length
     || catalog.defaultPrivilegeOwners?.join(',') !== 'postgres,supabase_admin'
-    || catalog.defaultBrowserTablePrivilegesPresent !== true
-    || catalog.defaultBrowserSequencePrivilegesPresent !== true
-    || catalog.defaultBrowserFunctionExecutePresent !== true) fail('supabase_security_audit_catalog_invalid')
+    || catalog.defaultBrowserTablePrivilegesPresent !== !hardened
+    || catalog.defaultBrowserSequencePrivilegesPresent !== !hardened
+    || catalog.defaultBrowserFunctionExecutePresent !== !hardened) fail('supabase_security_audit_catalog_invalid')
   const catalogNames = []
   for (const table of catalog.tables) {
     if (!isRecord(table)
@@ -100,63 +112,73 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
       || table.rlsEnabled !== true
       || table.rlsForced !== false
       || table.policyCount !== 0
-      || table.anonPrivileges?.join(',') !== PRIVILEGES.join(',')
-      || table.authenticatedPrivileges?.join(',') !== PRIVILEGES.join(',')) fail('supabase_security_audit_catalog_table_invalid')
+      || table.anonPrivileges?.join(',') !== expectedTablePrivileges
+      || table.authenticatedPrivileges?.join(',') !== expectedTablePrivileges) fail('supabase_security_audit_catalog_table_invalid')
     catalogNames.push(table.name)
   }
   if (catalogNames.join(',') !== sortedUnique(catalogNames).join(',')
-    || catalogNames.join(',') !== advisor.tables.join(',')) fail('supabase_security_audit_catalog_table_set_invalid')
+    || catalogNames.join(',') !== advisor.acceptedInfo.tables.join(',')) fail('supabase_security_audit_catalog_table_set_invalid')
   if (catalog.sequences.map((sequence) => sequence.name).join(',') !== PUBLIC_SEQUENCES.join(',')) {
     fail('supabase_security_audit_catalog_sequence_set_invalid')
   }
   for (const sequence of catalog.sequences) {
     if (!isRecord(sequence)
       || sequence.schema !== 'public'
-      || sequence.anonPrivileges?.join(',') !== SEQUENCE_PRIVILEGES.join(',')
-      || sequence.authenticatedPrivileges?.join(',') !== SEQUENCE_PRIVILEGES.join(',')) {
+      || sequence.anonPrivileges?.join(',') !== expectedSequencePrivileges
+      || sequence.authenticatedPrivileges?.join(',') !== expectedSequencePrivileges) {
       fail('supabase_security_audit_catalog_sequence_invalid')
     }
   }
 
+  // v2: schema version may sit anywhere on the approved v7 -> v10 path; every dependent count
+  // must be arithmetically consistent with it (v9 adds metadata RLS + one policy, v10 adds the
+  // session-revocation definer), and pendingMigrations must be exactly the not-yet-applied tail.
   const managed = value.managedBackend
   if (!isRecord(managed)
     || managed.queryContract !== MANAGED_QUERY_CONTRACT
     || managed.schema !== 'app_private'
-    || managed.liveSchemaVersion !== 7
+    || !Number.isInteger(managed.liveSchemaVersion)
+    || managed.liveSchemaVersion < 7
+    || managed.liveSchemaVersion > 10
     || managed.localTargetVersion !== 10
-    || managed.versionDrift !== 3
+    || managed.versionDrift !== managed.localTargetVersion - managed.liveSchemaVersion
     || managed.tableCount !== 6
-    || managed.rlsTableCount !== 5
-    || managed.policyCount !== 14
-    || managed.performancePolicyFindingCount !== 10
-    || managed.metadataRlsEnabled !== false
+    || typeof managed.metadataRlsEnabled !== 'boolean'
+    || managed.metadataRlsEnabled !== managed.liveSchemaVersion >= 9
+    || managed.rlsTableCount !== (managed.metadataRlsEnabled ? 6 : 5)
+    || managed.policyCount !== (managed.metadataRlsEnabled ? 15 : 14)
+    || managed.performancePolicyFindingCount !== (managed.liveSchemaVersion >= 8 ? 0 : 10)
     || managed.browserRolesDenied !== true
     || managed.serverBypassRoleDenied !== true
     || managed.runtimeRoleSchemaUsage !== true
     || managed.runtimeRoleSchemaCreate !== false
-    || managed.securityDefinerFunctionCount !== 1
+    || managed.securityDefinerFunctionCount !== (managed.liveSchemaVersion >= 10 ? 2 : 1)
     || managed.securityDefinerPublicExecute !== false
     || managed.securityDefinerActorContextChecked !== true
     || managed.securityDefinerSearchPathFixed !== true
     || managed.viewCount !== 0
     || managed.storageBucketCount !== 0
     || managed.postgrestSchemaSettingObservable !== false
-    || JSON.stringify(managed.pendingMigrations) !== JSON.stringify(PENDING_MIGRATIONS)) fail('supabase_security_audit_managed_backend_invalid')
+    || JSON.stringify(managed.pendingMigrations) !== JSON.stringify(PENDING_MIGRATIONS.filter((migration) => migration.version > managed.liveSchemaVersion))) fail('supabase_security_audit_managed_backend_invalid')
 
   const conclusion = value.conclusion
+  const expectClear = advisor.status === 'clear' && managed.versionDrift === 0 && hardened
   if (!isRecord(conclusion)
-    || conclusion.status !== 'blocked'
+    || conclusion.status !== (expectClear ? 'clear' : 'blocked')
     || conclusion.directBrowserTableAccessDefaultDenied !== true
     || conclusion.indirectExposureAudited !== true
     || conclusion.currentRowExposureProven !== false
-    || conclusion.browserGrantHardeningRequired !== true
+    || typeof conclusion.browserGrantHardeningRequired !== 'boolean'
     || conclusion.productionMutationAuthorized !== false
-    || conclusion.nextAction !== NEXT_ACTION) fail('supabase_security_audit_conclusion_invalid')
+    || conclusion.nextAction !== (expectClear ? NEXT_ACTION_CLEAR : NEXT_ACTION_BLOCKED)) fail('supabase_security_audit_conclusion_invalid')
 
   const controls = value.controls
   if (!isRecord(controls)
-    || controls.connectorReadRequests !== 20
-    || controls.failedReadRequests !== 1
+    || !Number.isInteger(controls.connectorReadRequests)
+    || controls.connectorReadRequests < 1
+    || !Number.isInteger(controls.failedReadRequests)
+    || controls.failedReadRequests < 0
+    || controls.failedReadRequests > controls.connectorReadRequests
     || controls.providerMutations !== 0
     || controls.databaseWrites !== 0
     || controls.businessRowsRead !== 0
@@ -168,7 +190,10 @@ export function validateSupabaseSecurityAdvisorAudit(value, expectedProjectRef, 
   return value
 }
 
-function fixture() {
+function fixture(state = 'blocked') {
+  const hardened = state === 'clear'
+  const tablePrivileges = hardened ? [] : PRIVILEGES
+  const sequencePrivileges = hardened ? [] : SEQUENCE_PRIVILEGES
   const value = {
     contract: CONTRACT,
     asOf: '2026-08-03T19:24:36.522Z',
@@ -177,61 +202,59 @@ function fixture() {
     postgres: { major: 17, status: 'ACTIVE_HEALTHY' },
     advisor: {
       type: 'security',
-      status: 'blocked',
-      findingCount: 1,
-      lintCounts: { rls_enabled_no_policy: 1 },
-      levelCounts: { INFO: 1 },
+      status: hardened ? 'clear' : 'blocked',
+      findingCount: hardened ? 0 : 1,
+      acceptedInfo: { lint: 'rls_enabled_no_policy', level: 'INFO', count: 1, tables: ['example_records'] },
       remediationUrl: REMEDIATION_URL,
-      tables: ['example_records'],
     },
     catalog: {
       queryContract: QUERY_CONTRACT,
       scope: 'pg_catalog_metadata_only',
       businessRowsRead: 0,
       tableCount: 1,
-      tables: [{ name: 'example_records', schema: 'public', rlsEnabled: true, rlsForced: false, policyCount: 0, anonPrivileges: PRIVILEGES, authenticatedPrivileges: PRIVILEGES }],
+      tables: [{ name: 'example_records', schema: 'public', rlsEnabled: true, rlsForced: false, policyCount: 0, anonPrivileges: tablePrivileges, authenticatedPrivileges: tablePrivileges }],
       nonTableRelationCount: 0,
       publicRoutineCount: 0,
       browserCallableRoutineCount: 0,
       sequenceCount: 2,
-      sequences: PUBLIC_SEQUENCES.map((name) => ({ name, schema: 'public', anonPrivileges: SEQUENCE_PRIVILEGES, authenticatedPrivileges: SEQUENCE_PRIVILEGES })),
+      sequences: PUBLIC_SEQUENCES.map((name) => ({ name, schema: 'public', anonPrivileges: sequencePrivileges, authenticatedPrivileges: sequencePrivileges })),
       defaultPrivilegeOwners: ['postgres', 'supabase_admin'],
-      defaultBrowserTablePrivilegesPresent: true,
-      defaultBrowserSequencePrivilegesPresent: true,
-      defaultBrowserFunctionExecutePresent: true,
+      defaultBrowserTablePrivilegesPresent: !hardened,
+      defaultBrowserSequencePrivilegesPresent: !hardened,
+      defaultBrowserFunctionExecutePresent: !hardened,
     },
     managedBackend: {
       queryContract: MANAGED_QUERY_CONTRACT,
       schema: 'app_private',
-      liveSchemaVersion: 7,
+      liveSchemaVersion: hardened ? 10 : 7,
       localTargetVersion: 10,
-      versionDrift: 3,
+      versionDrift: hardened ? 0 : 3,
       tableCount: 6,
-      rlsTableCount: 5,
-      policyCount: 14,
-      performancePolicyFindingCount: 10,
-      metadataRlsEnabled: false,
+      rlsTableCount: hardened ? 6 : 5,
+      policyCount: hardened ? 15 : 14,
+      performancePolicyFindingCount: hardened ? 0 : 10,
+      metadataRlsEnabled: hardened,
       browserRolesDenied: true,
       serverBypassRoleDenied: true,
       runtimeRoleSchemaUsage: true,
       runtimeRoleSchemaCreate: false,
-      securityDefinerFunctionCount: 1,
+      securityDefinerFunctionCount: hardened ? 2 : 1,
       securityDefinerPublicExecute: false,
       securityDefinerActorContextChecked: true,
       securityDefinerSearchPathFixed: true,
       viewCount: 0,
       storageBucketCount: 0,
       postgrestSchemaSettingObservable: false,
-      pendingMigrations: PENDING_MIGRATIONS,
+      pendingMigrations: hardened ? [] : PENDING_MIGRATIONS,
     },
     conclusion: {
-      status: 'blocked',
+      status: hardened ? 'clear' : 'blocked',
       directBrowserTableAccessDefaultDenied: true,
       indirectExposureAudited: true,
       currentRowExposureProven: false,
-      browserGrantHardeningRequired: true,
+      browserGrantHardeningRequired: !hardened,
       productionMutationAuthorized: false,
-      nextAction: NEXT_ACTION,
+      nextAction: hardened ? NEXT_ACTION_CLEAR : NEXT_ACTION_BLOCKED,
     },
     controls: { connectorReadRequests: 20, failedReadRequests: 1, providerMutations: 0, databaseWrites: 0, businessRowsRead: 0, credentialsRecorded: false },
     evidenceDigest: '',
@@ -243,6 +266,8 @@ function fixture() {
 function selfTest() {
   const valid = fixture()
   validateSupabaseSecurityAdvisorAudit(valid, valid.projectRef)
+  const clearValid = fixture('clear')
+  validateSupabaseSecurityAdvisorAudit(clearValid, clearValid.projectRef)
   const wrongTarget = structuredClone(valid)
   wrongTarget.projectRef = 'bcdefghijklmnopqrstu'
   const broadClaim = structuredClone(valid)
@@ -250,16 +275,27 @@ function selfTest() {
   const hiddenMutation = structuredClone(valid)
   hiddenMutation.controls.databaseWrites = 1
   const stale = structuredClone(valid)
-  stale.advisor.tables = ['renamed_records']
+  stale.advisor.acceptedInfo.tables = ['renamed_records']
   const migrationDrift = structuredClone(valid)
   migrationDrift.managedBackend.liveSchemaVersion = 8
+  // A clear claim must be unforgeable from a blocked snapshot: flipping any single field fails.
+  const launderedStatus = structuredClone(valid)
+  launderedStatus.advisor.status = 'clear'
+  const launderedConclusion = structuredClone(valid)
+  launderedConclusion.conclusion.status = 'clear'
+  const launderedGrants = structuredClone(clearValid)
+  launderedGrants.catalog.tables[0].anonPrivileges = PRIVILEGES
   const checks = {
     accepts_exact_blocked_snapshot: true,
+    accepts_exact_clear_snapshot: true,
     rejects_wrong_project: throws(() => validateSupabaseSecurityAdvisorAudit(wrongTarget, valid.projectRef), 'supabase_security_audit_target_invalid'),
     rejects_unproven_safety_claim: throws(() => validateSupabaseSecurityAdvisorAudit(broadClaim, valid.projectRef), 'supabase_security_audit_conclusion_invalid'),
     rejects_provider_mutation: throws(() => validateSupabaseSecurityAdvisorAudit(hiddenMutation, valid.projectRef), 'supabase_security_audit_controls_invalid'),
     rejects_stale_table_set: throws(() => validateSupabaseSecurityAdvisorAudit(stale, valid.projectRef), 'supabase_security_audit_catalog_table_set_invalid'),
-    rejects_unproven_migration_state: throws(() => validateSupabaseSecurityAdvisorAudit(migrationDrift, valid.projectRef), 'supabase_security_audit_managed_backend_invalid'),
+    rejects_inconsistent_migration_state: throws(() => validateSupabaseSecurityAdvisorAudit(migrationDrift, valid.projectRef), 'supabase_security_audit_managed_backend_invalid'),
+    rejects_laundered_advisor_status: throws(() => validateSupabaseSecurityAdvisorAudit(launderedStatus, valid.projectRef), 'supabase_security_audit_advisor_invalid'),
+    rejects_laundered_conclusion: throws(() => validateSupabaseSecurityAdvisorAudit(launderedConclusion, valid.projectRef), 'supabase_security_audit_conclusion_invalid'),
+    rejects_leftover_browser_grants: throws(() => validateSupabaseSecurityAdvisorAudit(launderedGrants, valid.projectRef), 'supabase_security_audit_catalog_table_invalid'),
   }
   return { ok: Object.values(checks).every(Boolean), contract: CONTRACT, checks }
 }

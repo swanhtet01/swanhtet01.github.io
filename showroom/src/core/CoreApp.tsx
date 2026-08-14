@@ -8,6 +8,7 @@ import type { EcommerceCancellationIntent, EcommerceCorrectionIntent, EcommerceO
 import { readWebsiteEcommerceHandoff, type WebsiteOrderRecord } from '../products/product-handoff'
 import { type ManagedIdentity } from './managed-trial'
 import { recordBehaviorSignal } from './behavior-trail'
+import { emitMetric } from '../analytics/metrics-collector'
 import { Empty, PageHeading, type RuntimeHealth } from './CoreShell'
 import { managedTrialProofFragmentFields, type ManagedTrialProof } from './managed-trial-proof'
 import {
@@ -97,6 +98,8 @@ import {
   commerceSupplierPayablesHandoff,
   commerceSupplierPayablesHandoffCsv,
   commerceSupplierPayablesAging,
+  commerceCustomerReceivablesHandoff,
+  commerceCustomerReceivablesHandoffCsv,
   commerceSupplierReturnClaimBalance,
   commerceSupplierReturnClaimStatus,
   commerceSupplierPerformance,
@@ -152,6 +155,7 @@ import {
   type CommerceTaxConfiguration,
   type CommerceTaxMode,
   type CommerceCustomerCreditPolicyStatus,
+  type CommerceOrderAcknowledgement,
   type CommerceWebsiteOrderInput,
 } from './commerce-workspace'
 import { projectShopInventory } from './shop-inventory-foundation'
@@ -166,6 +170,7 @@ import {
   buildProductionShiftHandoff,
   buildProductionBatchGenealogy,
   buildProductionQualityCorrectiveAction,
+  isCapaEffectivenessOverdue,
   buildProductionRecallTrace,
   closeProductionJob,
   compareProductionJobSchedule,
@@ -239,6 +244,7 @@ import {
   type ShopIndustryPack,
 } from './shop-service-scheduling'
 import { decideShopNextAction } from './shop-next-action'
+import { lockedCapabilityNotice } from './capability-tiers'
 
 const ChannelOrderIntake = lazy(() => import('./ChannelOrderIntake').then((module) => ({ default: module.ChannelOrderIntake })))
 const ShopInventoryFoundation = lazy(() => import('./ShopInventoryFoundation').then((module) => ({ default: module.ShopInventoryFoundation })))
@@ -246,6 +252,7 @@ const ShopOperatingFlow = lazy(() => import('./ShopOperatingFlow').then((module)
 const ShopServiceSchedule = lazy(() => import('./ShopServiceSchedule').then((module) => ({ default: module.ShopServiceSchedule })))
 const ShopToday = lazy(() => import('./ShopToday').then((module) => ({ default: module.ShopToday })))
 const PlantOrderFoundation = lazy(() => import('./PlantOrderFoundation').then((module) => ({ default: module.PlantOrderFoundation })))
+const ReceiptDialog = lazy(() => import('./ReceiptDialog').then((module) => ({ default: module.ReceiptDialog })))
 
 type PurchaseOrderDraft =
   | { mode: 'create'; requisitionId?: string; sku: string; supplier: string; expectedAt: string; quantity: string; unitCostMmk: string }
@@ -635,6 +642,10 @@ function defaultJobDueInput() {
   return localDateTimeInputValue(new Date(Date.now() + 8 * 60 * 60 * 1000))
 }
 
+function defaultCapaEffectivenessDueInput() {
+  return localDateTimeInputValue(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+}
+
 type PlantJobImportReview = {
   status: 'ready' | 'blocked'
   totalRows: number
@@ -738,6 +749,22 @@ function commerceOrderDisplayReference(orderId: string) {
   return match ? `#${match[1]}` : canonical
 }
 
+// Ecommerce requests and after-purchase intents are named PREFIX-<uuid>, and several
+// notices print them whole — "ECR-459AAB25-5BDD-4687-BABA-82FD4E6A1578 is ready for Shop
+// review" is not something an operator can read back over a counter or a phone. The prefix
+// says which kind of record it is, so keep it and drop the rest of the UUID; the first
+// segment is already unique enough to find the record. Anything not shaped like a UUID —
+// a human-assigned reference — passes through untouched.
+function recordDisplayReference(recordId: string) {
+  const trimmed = String(recordId ?? '').trim()
+  // Upper-cased for MATCHING only. Returning the upper-cased value on the non-match path
+  // would shout every human-assigned reference — "Messenger delivery review #1042" came
+  // back as "MESSENGER DELIVERY REVIEW #1042" — which is the opposite of passing through
+  // untouched. Every caller happens to pass a generated UUID today, so this was latent.
+  const match = /^([A-Z]{2,5})-([A-F0-9]{8})(?:-[A-F0-9-]+)?$/.exec(trimmed.toUpperCase())
+  return match ? `${match[1]}-${match[2]}` : trimmed
+}
+
 function commerceOrderTargetId(orderId: string) {
   return `shop-order-${orderId.replace(/[^A-Za-z0-9_-]+/g, '-')}`
 }
@@ -833,7 +860,13 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
   returnFocus?: HTMLElement | null
 }) {
   const [trialSetup] = useSetupWorkspace()
-  const [actor, setActor] = useState(action?.actorSuggestion ?? trialSetup.owner)
+  // Only 7 of the 53 accountable actions carry an actorSuggestion, and setup leaves
+  // trialSetup.owner empty, so the person on the counter was retyping their own name for
+  // every routine step — mark ready, reconcile, close. The name is not the accountability;
+  // recording who did it is. Ask once, then default to whoever last confirmed, still
+  // editable when someone else takes over the till.
+  // '||' not '??': trialSetup.owner is an empty string when setup never captured one.
+  const [actor, setActor] = useState(() => action?.actorSuggestion || trialSetup.owner || readLastOperator())
   const [reason, setReason] = useState(action?.reasonSuggestion ?? '')
   const [evidenceReference, setEvidenceReference] = useState(action?.evidenceReferenceSuggestion ?? '')
   const [busy, setBusy] = useState(false)
@@ -874,6 +907,13 @@ function AccountableActionGate({ action, authenticatedActor, onCancel, onConfirm
     setError('')
     try {
       await onConfirm({ actor: responsibleActor, reason: confirmedReason, evidenceReference: confirmedEvidence })
+      // Remember only a name the operator actually supplied, and only after the change
+      // applied. Six actions offer a ROLE placeholder as actorSuggestion — 'Sample cashier',
+      // 'Plant operator', 'Shift supervisor'. Confirming one of those untouched must not
+      // turn the placeholder into the default identity for every later action, which would
+      // sign the whole device's audit trail with a name nobody ever claimed.
+      const offeredSuggestion = (action.actorSuggestion ?? '').trim()
+      if (!authenticatedActor && responsibleActor !== offeredSuggestion) rememberLastOperator(responsibleActor)
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : 'The change was not applied.')
       setBusy(false)
@@ -992,11 +1032,13 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   openOrderCount: number
   sampleCatalogActive: boolean
 }) {
-  const [cart, setCart] = useState<Record<string, number>>({})
-  const [customer, setCustomer] = useState('')
-  const [payment, setPayment] = useState('Cash')
+  const [restoredDraft] = useState(readShopCounterDraft)
+  const [cart, setCart] = useState<Record<string, number>>(() => restoredDraft?.cart ?? {})
+  const [customer, setCustomer] = useState(() => restoredDraft?.customer ?? '')
+  const [payment, setPayment] = useState(() => restoredDraft?.payment ?? 'Cash')
   const [query, setQuery] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
+
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const visibleItems = normalizedQuery
     ? items.filter((item) => `${item.name} ${item.variant ?? ''} ${item.sku}`.toLocaleLowerCase().includes(normalizedQuery))
@@ -1007,6 +1049,23 @@ function ShopCounter({ disabled, industryPack, items, lowStockCount, onReview, o
   })
   const unitCount = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + line.item.price * line.quantity, 0)
+
+  // Persist what the counter can actually act on, not the raw cart. `lines` is the same
+  // derived value the UI uses: catalog SKUs only, clamped to live stock. Judging emptiness
+  // from raw cart keys instead left a draft the operator could neither see nor remove —
+  // the Clear button is gated on unitCount, so a cart holding only sold-out or deleted SKUs
+  // rendered as an empty counter while quietly resurrecting a stale customer and payment
+  // method on every load. A sale exists only if it has at least one sellable line.
+  const liveCartJson = JSON.stringify(Object.fromEntries(lines.map((line) => [line.item.sku, line.quantity])))
+  useEffect(() => {
+    try {
+      if (liveCartJson === '{}') window.localStorage.removeItem(SHOP_COUNTER_DRAFT_KEY)
+      else window.localStorage.setItem(SHOP_COUNTER_DRAFT_KEY, JSON.stringify({ cart: JSON.parse(liveCartJson), customer, payment }))
+    } catch {
+      // Storage full or blocked. The counter keeps working in memory; losing persistence
+      // must never cost the operator the sale they are ringing up right now.
+    }
+  }, [liveCartJson, customer, payment])
 
   function changeQuantity(item: CommerceItem, next: number) {
     const nextQuantity = Math.max(0, Math.min(next, item.onHand))
@@ -1100,6 +1159,65 @@ function localCommerceOrderDraftScope(workspaceId?: string) {
 
 function localCommerceOrderDraftStorageKey(scope: string) {
   return `${SHOP_ORDER_DRAFT_RESET_PREFIX}${encodeURIComponent(scope)}`
+}
+
+// The half-rung sale was the only counter state held purely in React. Every link in the
+// Shop header is a route change, and setTab replaces history rather than pushing, so one
+// mis-tap on "2 open orders" discarded the basket with no Back button to return to — at a
+// real counter, in front of a customer. Persisted per device, like every other workspace
+// record, so nothing leaves the browser.
+const SHOP_COUNTER_DRAFT_KEY = 'supermega.shop.counter_draft.v1'
+// Who is on the till. Remembered so the accountable-review sheet can default to them
+// instead of demanding the same name at every step of a shift. Kept on the device only,
+// like every other workspace record, and always editable at the moment of confirming.
+const LAST_OPERATOR_KEY = 'supermega.last_operator.v1'
+
+function readLastOperator() {
+  try {
+    return (window.localStorage.getItem(LAST_OPERATOR_KEY) ?? '').slice(0, 80)
+  } catch {
+    return ''
+  }
+}
+
+function rememberLastOperator(name: string) {
+  const trimmed = name.trim().slice(0, 80)
+  if (!trimmed) return
+  try {
+    window.localStorage.setItem(LAST_OPERATOR_KEY, trimmed)
+  } catch {
+    // Storage unavailable. The name still applied to this action; only the convenience
+    // of pre-filling the next one is lost.
+  }
+}
+
+type ShopCounterDraft = { cart: Record<string, number>; customer: string; payment: string }
+
+// Validates field by field rather than trusting the parse: this value survives upgrades and
+// hand-edited storage, and a malformed draft must degrade to an empty counter, never throw
+// on the way to rendering it. Quantities are re-clamped against live stock at render, so a
+// stale SKU here is inert.
+function readShopCounterDraft(): ShopCounterDraft | null {
+  try {
+    const raw = window.localStorage.getItem(SHOP_COUNTER_DRAFT_KEY)
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    const draft = parsed as Partial<ShopCounterDraft>
+    const cart: Record<string, number> = {}
+    if (draft.cart && typeof draft.cart === 'object' && !Array.isArray(draft.cart)) {
+      for (const [sku, quantity] of Object.entries(draft.cart)) {
+        if (sku && Number.isSafeInteger(quantity) && (quantity as number) > 0) cart[sku] = quantity as number
+      }
+    }
+    return {
+      cart,
+      customer: typeof draft.customer === 'string' ? draft.customer.slice(0, 120) : '',
+      payment: typeof draft.payment === 'string' && draft.payment ? draft.payment : 'Cash',
+    }
+  } catch {
+    return null
+  }
 }
 
 function localCommerceOrderDraftCatalogState(draft: CommerceOrderDraft, catalog: CommerceItem[]) {
@@ -1215,6 +1333,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   const [orderDraftInitializedScope, setOrderDraftInitializedScope] = useState('')
   const orderDraftInitialized = orderDraftInitializedScope === orderDraftScope
   const orderComposerRef = useRef<HTMLDialogElement>(null)
+  const pendingOrderComposerReveal = useRef<'' | 'ecommerce-request' | 'ecommerce-inbox' | 'ecommerce-inbox-request'>('')
   const orderComposerHeadingRef = useRef<HTMLHeadingElement>(null)
   const orderComposerTriggerRef = useRef<HTMLButtonElement>(null)
   const orderReviewRef = useRef<HTMLButtonElement>(null)
@@ -1435,6 +1554,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     })
     return downloads
   }, [commerce])
+  const [receiptAck, setReceiptAck] = useState<CommerceOrderAcknowledgement | null>(null)
   const latestClose = commerce.closes.find((close) => close.operator)
   const latestCloseDownload = useMemo(() => {
     if (!latestClose) return null
@@ -1464,6 +1584,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       artifact,
     }
   }, [commerce])
+  const customerReceivablesDownload = useMemo(() => {
+    const artifact = commerceCustomerReceivablesHandoff(commerce, purchaseOrderClock)
+    if (!artifact) return null
+    return {
+      filename: `supermega-shop-receivables-${artifact.generatedAt.slice(0, 10)}-${artifact.digest.slice(7, 15)}.csv`,
+      href: `data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${commerceCustomerReceivablesHandoffCsv(artifact)}`)}`,
+      artifact,
+    }
+  }, [commerce, purchaseOrderClock])
   const supportWorkloadDownload = useMemo(() => {
     try {
       const artifact = commerceSupportWorkloadExport(commerce, new Date(purchaseOrderClock).toISOString())
@@ -2037,12 +2166,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setOrderDraftActive(true)
         setResumedOrderDraft(null)
         setOrderDraftConflict(false)
-        setNotice(`${ecommerceNavigationDraft.sourceRequestId} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
-        requestAnimationFrame(() => {
-          const dialog = orderComposerRef.current
-          if (dialog && !dialog.open) dialog.showModal()
-          orderPaymentRef.current?.focus({ preventScroll: true })
-        })
+        setNotice(`${recordDisplayReference(ecommerceNavigationDraft.sourceRequestId)} is ready for Shop review. Confirm the quote, promise, and payment before the accountable order gate.`)
+        pendingOrderComposerReveal.current = 'ecommerce-request'
       })
       .catch(() => {
         if (current) setNotice('The Ecommerce request guard could not load. Nothing was prepared.')
@@ -2095,7 +2220,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           sourceIntent: intent,
         })
         navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
-        setNotice(`${intent.id} is ready for Shop review. Confirm the received item and stock condition; no refund has started.`)
+        setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Confirm the received item and stock condition; no refund has started.`)
         requestAnimationFrame(() => returnEditorRef.current?.querySelector<HTMLElement>('#order-return-quantity')?.focus())
       })
       .catch(() => {
@@ -2129,7 +2254,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         setOrderAmendmentReview(null)
         setOrderRescheduleReview(null)
         setCancellationDraft(intent)
-        setNotice(`${intent.id} is ready for Shop review. Keeping the order changes nothing; cancellation still requires the accountable Shop gate.`)
+        setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Keeping the order changes nothing; cancellation still requires the accountable Shop gate.`)
         requestAnimationFrame(() => document.getElementById('shop-cancellation-review')?.focus())
       })
       .catch(() => {
@@ -2283,7 +2408,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           owner: managedIdentity?.email ?? order.owner ?? '',
           dueAt: defaultIssueDueInput(),
         })
-        setNotice(`${intent.id} is ready for Shop review. Assign priority, owner, and due time before opening it; no message or refund is sent.`)
+        setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Assign priority, owner, and due time before opening it; no message or refund is sent.`)
         requestAnimationFrame(() => document.getElementById('shop-support-open-review')?.focus())
       })
       .catch(() => {
@@ -2345,7 +2470,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           listedAmountMmk: String(intent.listedAmountMmk),
           sourceIntent: intent,
         })
-        setNotice(`${intent.id} is ready for Shop review. Recheck the calculated adjustment before recording a review-only correction note.`)
+        setNotice(`${recordDisplayReference(intent.id)} is ready for Shop review. Recheck the calculated adjustment before recording a review-only correction note.`)
         requestAnimationFrame(() => correctionEditorRef.current?.querySelector<HTMLElement>('#order-correction-amount')?.focus())
       })
       .catch((error) => {
@@ -2375,15 +2500,28 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       : pendingStorefrontRequests.length
         ? `${pendingStorefrontRequests.length} Ecommerce ${pendingStorefrontRequests.length === 1 ? 'request is' : 'requests are'} waiting for Shop review.`
         : 'The Ecommerce inbox is open. No request currently needs Shop review.')
-    const focusFrame = requestAnimationFrame(() => {
-      const dialog = orderComposerRef.current
-      if (dialog && !dialog.open) dialog.showModal()
-      if (requestedStorefrontRequestIsWaiting) ecommerceInboxTargetRef.current?.focus()
-      else orderComposerHeadingRef.current?.focus()
-      navigate('/shop/?tab=orders', { replace: true })
-    })
-    return () => cancelAnimationFrame(focusFrame)
+    pendingOrderComposerReveal.current = requestedStorefrontRequestIsWaiting ? 'ecommerce-inbox-request' : 'ecommerce-inbox'
   }, [managedIdentity, navigate, pendingStorefrontRequests.length, requestedRequestId, requestedSource, requestedStorefrontRequestIsWaiting, tab, workspaceMode])
+
+  // The composer only mounts on the orders tab, so reveal a queued Ecommerce handoff on whichever commit
+  // first has that dialog rather than on a single animation frame: requestAnimationFrame never runs while
+  // the Shop tab is hidden or backgrounded, which leaves a prepared request behind a closed composer.
+  useEffect(() => {
+    const reveal = pendingOrderComposerReveal.current
+    if (!reveal) return
+    if (tab !== 'orders') {
+      pendingOrderComposerReveal.current = ''
+      return
+    }
+    const dialog = orderComposerRef.current
+    if (!dialog) return
+    pendingOrderComposerReveal.current = ''
+    if (!dialog.open) dialog.showModal()
+    if (reveal === 'ecommerce-request') orderPaymentRef.current?.focus({ preventScroll: true })
+    else if (reveal === 'ecommerce-inbox-request') ecommerceInboxTargetRef.current?.focus()
+    else orderComposerHeadingRef.current?.focus()
+    if (reveal !== 'ecommerce-request') navigate('/shop/?tab=orders', { replace: true })
+  })
 
   async function initializeManagedCatalog(event: FormEvent) {
     event.preventDefault()
@@ -2466,6 +2604,16 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
   </div>
   const orderNotice = notice || commerceStorageError
   const commerceControlsDisabled = !commerceCanWrite || Boolean(pendingAction)
+  // The appointment book is NOT a commerce control. ShopServiceSchedule has its own storage
+  // key and does not read commerce state at all, but it was gated on commerceCanWrite -- so a
+  // company account that had not provisioned a Shop catalog yet, or a local device before
+  // onboarding finished, found every control greyed out: hold, confirm, check in, complete,
+  // cancel, add service. For a spa, whose first action is taking a booking, that is the whole
+  // product frozen behind a catalog it does not need.
+  //
+  // The pending-action half IS legitimately app-wide: it is the two-person review gate, and
+  // nothing should move while a change is awaiting confirmation.
+  const shopScheduleControlsDisabled = Boolean(pendingAction)
   const activePurchaseOrders = purchaseOrderRows.filter(({ progress }) => progress.status === 'open' || progress.status === 'partially_received')
   const procurementArrivalRows = activePurchaseOrders.map((row) => ({
     ...row,
@@ -3010,6 +3158,8 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       route: commerceLocation.pathname + commerceLocation.search,
       detail: 'Created a reviewed Shop order and reserved its stock.',
     })
+    if (pendingAction.presentation === 'counter') emitMetric({ product: 'shop', capability: 'shop-counter', action: 'sale.completed', ts: Date.now() })
+    if (pendingAction.kind === 'daily_close') emitMetric({ product: 'shop', capability: 'shop-daily-close', action: 'shift.close.confirmed', ts: Date.now() })
     setNotice(pendingAction.presentation === 'counter'
       ? `Order ${commerceOrderDisplayReference(pendingAction.subjectId)} created. Stock reserved. Finish fulfilment and reconcile payment before completion.`
       : `${pendingAction.summary} ${managedIdentity ? 'confirmed.' : 'completed.'}`)
@@ -3502,6 +3652,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
             ? reserveCommerceOrder(paymentPolicyState, ownedOrder, proof)
             : null
         })
+        emitMetric({ product: 'shop', capability: 'shop-orders', action: 'order.created', ts: Date.now() })
         if (ecommerceDraft) {
           consumedEcommerceDraftId.current = ecommerceDraft.id
           navigate({ pathname: '/shop/', search: '?tab=orders' }, { replace: true, state: null })
@@ -3653,7 +3804,27 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     }
     const next: Record<'confirmed' | 'preparing' | 'ready', CommerceOrderStatus> = { confirmed: 'preparing', preparing: 'ready', ready: 'completed' }
     const nextStatus = next[order.status]
-    queueAction({ kind: 'order_status', subjectId: orderId, summary: `Advance ${orderId} fulfilment`, before: order.status, after: nextStatus, apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status, commerceActionProof(action), managedIdentity ? 'managed-server' : 'client')) })
+    // Moving an order along is the most repeated action in a shift. The reason and the
+    // evidence are both knowable from the transition itself, so state them rather than
+    // making the counter write them out every time — the operator can still edit either.
+    const fulfilmentReason: Record<CommerceOrderStatus, string> = {
+      confirmed: 'Started preparing this order.',
+      preparing: 'Order is packed and ready for handoff.',
+      ready: 'Customer received the order.',
+      completed: 'Order closed.',
+      cancelled: 'Order cancelled.',
+    }
+    const displayReference = commerceOrderDisplayReference(order.id)
+    queueAction({
+      kind: 'order_status',
+      subjectId: orderId,
+      summary: `Advance ${displayReference} fulfilment`,
+      before: order.status,
+      after: nextStatus,
+      reasonSuggestion: fulfilmentReason[order.status],
+      evidenceReferenceSuggestion: `Order ${displayReference}`,
+      apply: (action) => mutateCommerce('commerce.order.advanced', action.commandId, commerceActionProof(action), (current) => advanceCommerceOrder(current, orderId, order.status, commerceActionProof(action), managedIdentity ? 'managed-server' : 'client')),
+    })
   }
 
   function reconcilePayment(orderId: string) {
@@ -3663,7 +3834,19 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       setNotice(`${order.id} payment is already reconciled.`)
       return
     }
-    queueAction({ kind: 'payment_reconcile', subjectId: orderId, summary: `Reconcile ${order.id} payment`, before: `${order.payment} · ${order.paymentStatus}`, after: `${order.payment} · reconciled`, apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))) })
+    // The other action a counter repeats all day. Naming the method in the reason is more
+    // useful than a blank box, and the reference is the order it settles.
+    const paymentReference = commerceOrderDisplayReference(order.id)
+    queueAction({
+      kind: 'payment_reconcile',
+      subjectId: orderId,
+      summary: `Reconcile ${paymentReference} payment`,
+      before: `${order.payment} · ${order.paymentStatus}`,
+      after: `${order.payment} · reconciled`,
+      reasonSuggestion: `${order.payment} payment received and matched.`,
+      evidenceReferenceSuggestion: `Order ${paymentReference}`,
+      apply: (action) => mutateCommerce('commerce.payment.reconciled', action.commandId, commerceActionProof(action), (current) => reconcileCommercePayment(current, orderId, commerceActionProof(action))),
+    })
   }
 
   function recordCollectionContact(orderId: string) {
@@ -4889,10 +5072,18 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           expectedHeadDigest: commerce.inventoryFoundation.headDigest,
         }
       : undefined
+    // Receiving stock is a routine back-door job, repeated on every delivery. The
+    // purchase order is the evidence and the quantities are already stated above, so
+    // there is nothing here the operator knows that the screen does not.
+    const purchaseOrderReference = recordDisplayReference(purchaseOrder.id)
     queueAction({
       kind: 'purchase_order_receive',
       subjectId: purchaseOrder.id,
-      summary: `Receive ${receiptQuantity.toLocaleString()} accepted${rejectedQuantity ? ` and reject ${rejectedQuantity.toLocaleString()}` : ''} against ${purchaseOrder.id}`,
+      summary: `Receive ${receiptQuantity.toLocaleString()} accepted${rejectedQuantity ? ` and reject ${rejectedQuantity.toLocaleString()}` : ''} against ${purchaseOrderReference}`,
+      reasonSuggestion: rejectedQuantity
+        ? `Delivery checked against ${purchaseOrderReference}; ${rejectedQuantity.toLocaleString()} rejected.`
+        : `Delivery received and counted against ${purchaseOrderReference}.`,
+      evidenceReferenceSuggestion: `Purchase order ${purchaseOrderReference}`,
       before: `${progress.received.toLocaleString()} accepted · ${progress.rejected.toLocaleString()} rejected · ${progress.remaining.toLocaleString()} due · ${expectedOnHand.toLocaleString()} on hand`,
       after: `${(progress.received + receiptQuantity).toLocaleString()} accepted · ${(progress.rejected + rejectedQuantity).toLocaleString()} rejected${rejectedQuantity ? ` for ${purchaseOrderDraft.discrepancyCode.replace('_', ' ')} / return to vendor` : ''} · ${(expectedOnHand + receiptQuantity).toLocaleString()} on hand${locationReceipt ? ` · ${purchaseReceiptLocation?.name ?? locationReceipt.locationId} · lot ${locationReceipt.trackingCode}` : ''}`,
       apply: async (action) => {
@@ -5013,9 +5204,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           expectedHeadDigest: commerce.inventoryFoundation.headDigest,
         }
       : undefined
+    // A stock count with no variance is bookkeeping and needs no explanation. A count that
+    // disagrees with the record is the opposite — that is the entry someone audits later —
+    // so state the variance and leave the operator to say what caused it.
+    const countHasVariance = countedPhysicalQuantity !== expectedPhysicalQuantity
     queueAction({
       kind: 'inventory_count',
       subjectId: item.sku,
+      ...(countHasVariance ? {} : { reasonSuggestion: `Routine stock count of ${item.name}; counted quantity matches the record.` }),
+      evidenceReferenceSuggestion: `Stock count ${item.sku}`,
       summary: stockCountBalance ? `Count ${item.name} at ${targetLabel}` : `Count available stock for ${item.name}`,
       before: stockCountBalance
         ? `${targetLabel} / ${expectedPhysicalQuantity.toLocaleString()} physical / ${stockCountBalance.reserved.toLocaleString()} reserved / ${expectedAvailable.toLocaleString()} total available`
@@ -5551,10 +5748,20 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     const closeId = uid('CLOSE')
     const paymentExceptions = expected.paymentExceptionOrderIds.length ? expected.paymentExceptionOrderIds.join(', ') : 'none'
     const stockExceptions = expected.stockExceptionSkus.length ? expected.stockExceptionSkus.join(', ') : 'none'
+    // Closing the day happens once every day the shop opens, and the interesting facts —
+    // the date, the counted total, whether the settlement balanced — are already computed
+    // and shown above. When the count does NOT match, say so in the reason rather than
+    // hiding it behind a generic line: a short close is exactly the entry someone will
+    // read back later.
+    const closeReason = settlement.status === 'matched'
+      ? `End of day ${expected.businessDate}. Counted cash matches the expected total.`
+      : `End of day ${expected.businessDate}. Settlement needs review — counted ${formatMoney(settlement.totalCountedMmk)} against expected ${formatMoney(expected.total)}.`
     queueAction({
       kind: 'daily_close',
       subjectId: closeId,
       summary: `Close ${expected.businessDate}`,
+      reasonSuggestion: closeReason,
+      evidenceReferenceSuggestion: `Daily close ${expected.businessDate}`,
       before: `${commerce.closes.length} snapshots`,
       after: `${expected.orderIds.length} orders (${expected.orderIds.length ? expected.orderIds.join(', ') : 'none'}) · expected ${formatMoney(expected.total)} · counted ${formatMoney(settlement.totalCountedMmk)} · settlement ${settlement.status.replace('_', ' ')} · payment exceptions: ${paymentExceptions} · stock exceptions: ${stockExceptions}`,
       apply: (action) => mutateCommerce(
@@ -5669,11 +5876,12 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     ['Ledger', latestCloseDownload ? 'Review import' : 'Not posted'],
     ['Tax', 'Not configured'],
     ['Payables', supplierInvoiceExceptions.length ? `${supplierInvoiceExceptions.length} blocked` : supplierInvoicesPendingReview.length ? `${supplierInvoicesPendingReview.length} match review` : supplierPayablesAging.overdueInvoiceCount ? `${supplierPayablesAging.overdueInvoiceCount} overdue` : supplierPayablesAging.dueWithin7DaysInvoiceCount ? `${supplierPayablesAging.dueWithin7DaysInvoiceCount} due this week` : supplierPayablesDownload ? `${supplierPayablesDownload.artifact.readyInvoiceCount} CSV ready` : 'None created'],
+    ['Receivables', receivablesAging.overdueOrders ? `${receivablesAging.overdueOrders} overdue` : customerReceivablesDownload ? `${customerReceivablesDownload.artifact.outstandingOrderCount} CSV ready` : 'None outstanding'],
     ['Settlement', paymentReview.length ? `${paymentReview.length} exception` : 'External proof only'],
     ['Audit', latestClose?.evidenceReference ? 'Evidence linked' : 'Need close evidence'],
   ] as const
   const shopAccountingPacket = <section className="shop-order-control" aria-label="Shop accounting export packet">
-    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload || supplierPayablesDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages reviewed sales and exact supplier payables with source evidence for accounting review. No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small>{supplierPayablesDownload ? <small><a className="text-link" data-supplier-payables-handoff="review-required" download={supplierPayablesDownload.filename} href={supplierPayablesDownload.href}>Download supplier payables CSV</a> · {formatMoney(supplierPayablesDownload.artifact.netPayableTotalMmk)} net · {supplierPayablesAging.overdueInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.overdue)} overdue` : supplierPayablesAging.dueWithin7DaysInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.due_7_days)} due within 7 days` : 'nothing due within 7 days'} · {formatMoney(supplierPayablesDownload.artifact.supplierCreditTotalMmk)} supplier credit · no payment initiated</small> : null}</div>
+    <div><span className="core-eyebrow">Accounting export packet</span><strong>{latestCloseDownload || supplierPayablesDownload || customerReceivablesDownload ? 'Ready for accountant review' : closePreview ? 'Close before export' : 'No export package yet'}</strong><small>AI packages reviewed sales and exact supplier payables with source evidence for accounting review. No ledger post, tax filing, bank settlement, refund, payment, inventory, or Shop write runs from this packet.</small>{supplierPayablesDownload ? <small><a className="text-link" data-supplier-payables-handoff="review-required" download={supplierPayablesDownload.filename} href={supplierPayablesDownload.href}>Download supplier payables CSV</a> · {formatMoney(supplierPayablesDownload.artifact.netPayableTotalMmk)} net · {supplierPayablesAging.overdueInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.overdue)} overdue` : supplierPayablesAging.dueWithin7DaysInvoiceCount ? `${formatMoney(supplierPayablesAging.totalsMmk.due_7_days)} due within 7 days` : 'nothing due within 7 days'} · {formatMoney(supplierPayablesDownload.artifact.supplierCreditTotalMmk)} supplier credit · no payment initiated</small> : null}{customerReceivablesDownload ? <small><a className="text-link" data-customer-receivables-handoff="review-required" download={customerReceivablesDownload.filename} href={customerReceivablesDownload.href}>Download customer receivables CSV</a> · {formatMoney(customerReceivablesDownload.artifact.totalOutstandingMmk)} outstanding · {customerReceivablesDownload.artifact.overdueOrderCount ? `${formatMoney(customerReceivablesDownload.artifact.overdueOutstandingMmk)} overdue` : 'nothing overdue'} · no collection initiated</small> : null}</div>
     <div className="shop-order-control-rows">{shopAccountingPacketRows.map(([label, value]) => <span key={label}><small>{label}</small><b>{value}</b></span>)}</div>
   </section>
 
@@ -5681,9 +5889,15 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
     total + (order.returns?.length ?? 0) + (order.supportCases?.length ?? 0)
   ), 0)
   const incomingRequestCount = pendingStorefrontRequests.length + (legacyWebsiteWorkWaiting ? 1 : 0)
+  const yangonDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Yangon' })
+  const todayInYangon = yangonDateFmt.format(new Date(purchaseOrderClock))
+  const todayOrders = commerce.orders.filter((order) => (
+    order.status !== 'cancelled' && yangonDateFmt.format(new Date(order.createdAt)) === todayInYangon
+  ))
+  const todayRevenue = todayOrders.reduce((sum, order) => sum + order.total, 0)
   const shopTodayMetrics = [
     { label: 'Open orders', value: String(openOrders.length), tone: actionOrders.length ? 'attention' as const : 'ready' as const },
-    { label: 'Catalog items', value: String(commerce.items.length) },
+    { label: "Today's sales", value: todayOrders.length ? formatMoney(todayRevenue) : '—' },
     { label: 'Stock alerts', value: String(lowStock.length), tone: lowStock.length ? 'attention' as const : 'ready' as const },
     { label: 'Outstanding', value: formatMoney(receivablesAging.totalOutstandingMmk), tone: receivablesAging.overdueOrders ? 'attention' as const : 'ready' as const },
   ]
@@ -5795,7 +6009,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
           <button className="core-button compact" disabled={Boolean(pendingAction)} onClick={keepOrderFromCancellation} type="button">Keep order</button>
         </div>
       </section> : null}
-      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} orders={actionOrders} />
+      <OrderList acknowledgementDownloads={orderAcknowledgementDownloads} canCancel={(orderId) => commerceOrderHasReleasableReservation(commerce, orderId)} disabled={commerceControlsDisabled} highlightedTargetId={commerceLocation.hash.startsWith('#shop-order-') ? commerceLocation.hash.slice(1) : ''} onAdvance={advanceOrder} onCancel={cancelOrder} onReconcilePayment={reconcilePayment} onSettleRefund={settleRefund} onViewReceipt={setReceiptAck} orders={actionOrders} />
       <details className="shop-business-controls">
         <summary><span>Daily tools</span><small>Reports and setup when needed</small></summary>
         <div className="shop-business-controls-content">
@@ -5833,7 +6047,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={commerceControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} /></Suspense>
+    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} disabled={shopScheduleControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)
@@ -5991,6 +6205,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
       else returnTriggerRefs.current.delete(orderId)
     }}
     acknowledgementDownloads={orderAcknowledgementDownloads}
+    onViewReceipt={setReceiptAck}
     orders={closedOrders}
     returnDraft={returnDraft}
     returnLocationPreview={returnLocationPreview}
@@ -6158,12 +6373,13 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         {latestCloseDownload ? <a className="core-button" data-close-export="accounting-csv-v1" download={latestCloseDownload.filename} href={latestCloseDownload.href}>Download close CSV</a> : null}
         {latestAccountingDownload ? <div className="form-notice" data-accounting-handoff="review-required">
           <strong>Accounting review</strong> · balanced {formatMoney(latestAccountingDownload.artifact.totalDebitMmk)} debit / credit · net orders {formatMoney(latestAccountingDownload.artifact.netOrderTotalMmk)} · {latestAccountingDownload.artifact.correctionCount ? `${latestAccountingDownload.artifact.correctionCount} correction ${latestAccountingDownload.artifact.correctionCount === 1 ? 'document' : 'documents'} · ` : ''}{latestAccountingDownload.artifact.accountMappingRevision ? `mapping revision ${latestAccountingDownload.artifact.accountMappingRevision}` : 'account mapping required'} · no external posting
-          <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href}>Download accounting CSV</a>
+          <br /><a className="text-link" download={latestAccountingDownload.filename} href={latestAccountingDownload.href} onClick={() => emitMetric({ product: 'shop', capability: 'shop-accounting-handoff', action: 'accounting.export.downloaded', ts: Date.now() })}>Download accounting CSV</a>
         </div> : null}
       </details> : null}
       {actionHistory}
     </div>
   </details>
+  <Suspense fallback={null}><ReceiptDialog ack={receiptAck} onClose={() => setReceiptAck(null)} /></Suspense>
   {actionGate}</div>
 
   if (tab === 'inventory') return <div className="operation-module">
@@ -6227,6 +6443,7 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <summary><span><strong>Purchasing &amp; locations</strong><small>Supplier planning, location stock, and available-to-promise</small></span><b>Open when needed</b></summary>
         <div className="inventory-tools-content">
           {supplierControl}
+          <section aria-label="AI demand advice" className="core-panel company-backup-panel"><div className="company-backup-head"><div><span className="core-eyebrow">AI demand advice</span><h2>{lockedCapabilityNotice('ai-demand-advice').label}</h2><p>{lockedCapabilityNotice('ai-demand-advice').outcome}</p></div><span className="status-pill">premium</span></div><p className="form-notice">{lockedCapabilityNotice('ai-demand-advice').reason} <a className="text-link" href="/contact/?product=guide&source=managed-intelligence">Talk to us about this.</a></p></section>
           {commerce.items.length ? <Suspense fallback={null}><ShopInventoryFoundation actor={managedIdentity?.userId ?? 'Local Shop operator'} commerce={commerce} disabled={commerceControlsDisabled} identity={managedIdentity} key={`${orderDraftScope}:${commerce.items.map((item) => item.sku).sort().join('|')}`} onInventory={mutateCommerce} onIssue={mutateCommerce} production={relatedProduction} scope={orderDraftScope} /></Suspense> : <p className="empty-state">Add products before enabling locations, lots, available-to-promise, or supplier policies.</p>}
         </div>
       </details>
@@ -6417,6 +6634,7 @@ function OrderList({
   onCancel,
   onReconcilePayment,
   onSettleRefund,
+  onViewReceipt,
 }: {
   acknowledgementDownloads: Map<string, OrderAcknowledgementDownload>
   orders: CommerceOrder[]
@@ -6427,6 +6645,7 @@ function OrderList({
   onCancel: (id: string) => void
   onReconcilePayment: (id: string) => void
   onSettleRefund: (id: string) => void
+  onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
 }) {
   const promiseNow = useMinuteClock()
   if (!orders.length) return <Empty>No orders need action.</Empty>
@@ -6458,11 +6677,11 @@ function OrderList({
             : `${order.lines.length} items · ${order.quantity} units`
           : `${order.item} × ${order.quantity}`}</strong>
         <details className="order-record-details">
-          <summary><span>{order.id} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
+          <summary><span>{commerceOrderDisplayReference(order.id)} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise missing'}</span><small>Details</small></summary>
           <div>
             {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
             <OrderCalculationNote order={order} />
-            <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+            <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.channel} · {order.payment}{order.paymentDueAt ? ` · payment due ${formatTime(order.paymentDueAt)}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
           </div>
         </details>
         {order.refundStatus === 'due' ? <small role="note">Record a refund already completed with the external payment provider. This does not send money.</small> : null}
@@ -6476,6 +6695,7 @@ function OrderList({
           <summary aria-label={`More options for ${order.id}`}>More</summary>
           <div>
             {order.refundStatus === 'due' && !settleRefundIsPrimary ? <button className="text-link" disabled={disabled} onClick={() => onSettleRefund(order.id)} type="button">Record settled refund</button> : null}
+            {acknowledgement ? <button className="text-link" data-order-receipt="view" onClick={() => onViewReceipt(acknowledgement.artifact)} type="button">View receipt</button> : null}
             {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
             {canCancelOrder ? <button className="text-link subtle" disabled={disabled} onClick={() => onCancel(order.id)} type="button">Cancel order</button> : null}
           </div>
@@ -6519,6 +6739,7 @@ function ClosedOrderHistory({
   onCorrectionTrigger,
   onReturnEditor,
   onReturnTrigger,
+  onViewReceipt,
   orders,
   returnDraft,
   returnLocationPreview,
@@ -6561,6 +6782,7 @@ function ClosedOrderHistory({
   onCorrectionTrigger: (orderId: string, node: HTMLButtonElement | null) => void
   onReturnEditor: (node: HTMLFormElement | null) => void
   onReturnTrigger: (orderId: string, node: HTMLButtonElement | null) => void
+  onViewReceipt: (ack: CommerceOrderAcknowledgement) => void
   orders: CommerceOrder[]
   returnDraft: CommerceReturnDraft | null
   returnLocationPreview: string
@@ -6641,7 +6863,7 @@ function ClosedOrderHistory({
           : `${order.item} × ${order.quantity}`}</strong>
         {order.lines ? <small>{order.lines.map((line) => `${line.name} × ${line.quantity} @ ${line.unitPriceMmk.toLocaleString()} MMK`).join(' · ')}</small> : null}
         <OrderCalculationNote order={order} />
-        <small>{order.id} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
+        <small>{commerceOrderDisplayReference(order.id)} · {order.owner ? `owner ${order.owner}` : 'owner not recorded'} · {order.status} · payment {order.paymentStatus}{order.refundStatus !== 'none' ? ` · refund ${order.refundStatus}` : ''}{order.fulfilment ? ` · ${fulfilmentLabel(order.fulfilment)}` : ''}{order.fulfilmentReference ? ` · ${order.fulfilmentReference}` : ''} · {order.promisedAt ? `promised ${formatTime(order.promisedAt)}` : 'promise not recorded'} · created {formatTime(order.createdAt)}</small>
         {order.refundStatus === 'settled' && order.refundSettledAt && order.refundSettledBy && order.refundEvidenceReference ? <small role="note">{order.refundSettledBy} · {formatTime(order.refundSettledAt)} · evidence {order.refundEvidenceReference}</small> : null}
         {order.status === 'completed' && order.completion ? <small role="note">Completed by {order.completion.actor} · {formatTime(order.completion.capturedAt)} · evidence {order.completion.evidenceReference}</small> : null}
         {order.status === 'completed' && !order.completion ? <small role="note">Return unavailable: this older order has no attributable completion proof.</small> : null}
@@ -6650,6 +6872,7 @@ function ClosedOrderHistory({
       <div className="order-archive-actions">
         <b>{formatMoney(adjustedTotal)}</b>
         {adjustedTotal !== order.total ? <small>original {formatMoney(order.total)}</small> : null}
+        {acknowledgement ? <button className="text-link" data-order-receipt="view" onClick={() => onViewReceipt(acknowledgement.artifact)} type="button">View receipt</button> : null}
         {acknowledgement ? <a className="text-link subtle" data-order-acknowledgement="local-download" download={acknowledgement.filename} href={acknowledgement.href}>Download acknowledgement</a> : null}
         {order.status === 'completed' && (returnable || editing) ? <button
           aria-expanded={editing}
@@ -6919,6 +7142,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
     correctiveAction: string
     verificationResult: string
     effectivenessOwner: string
+    effectivenessDue: string
   } | null>(null)
   const [machineObservation, setMachineObservation] = useState<{ machineId: string; toState: ProductionMachineState } | null>(null)
   const [downtimeDialogOpen, setDowntimeDialogOpen] = useState(false)
@@ -7301,11 +7525,13 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
             : activeJobs.length && !materialEntries.length
               ? 'Sample first production run'
               : 'Inspection queue clear'
+  const closedCapaCount = resolvedIssues.filter((issue) => issue.kind === 'quality').length
+  const overdueCapaCount = resolvedIssues.filter((issue) => issue.resolution?.qualityCorrectiveAction && isCapaEffectivenessOverdue(issue.resolution.qualityCorrectiveAction, new Date(issueClock).toISOString())).length
   const plantInspectionRows = [
     ['Sample', activeJobs.length ? `${activeJobs.length} jobs` : 'No job'],
     ['NCR', openQualityIssues.length ? `${openQualityIssues.length} open` : 'Clear'],
     ['Containment', qualityIssuesWithContainment.length === openQualityIssues.length ? 'Owned' : `${openQualityIssues.length - qualityIssuesWithContainment.length} missing`],
-    ['CAPA', resolvedIssues.filter((issue) => issue.kind === 'quality').length ? `${resolvedIssues.filter((issue) => issue.kind === 'quality').length} closed` : 'None yet'],
+    ['CAPA', closedCapaCount ? (overdueCapaCount ? `${closedCapaCount} closed · ${overdueCapaCount} review overdue` : `${closedCapaCount} closed`) : 'None yet'],
     ['Evidence', heldJobs.length || openQualityIssues.length || materialEntries.length ? 'Required' : 'Ready'],
     ['Release', productionCanWrite && !pendingAction && !heldJobs.length && !openQualityIssues.length ? 'Owner review' : 'Blocked'],
   ] as const
@@ -7703,6 +7929,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         await mutateProduction('production.output.recorded', record.commandId, productionActionProof(record), (current) => recordedOutputKind === 'scrap'
           ? recordProductionScrap(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record))
           : recordProductionOutput(current, recordedJobId, recordedQuantity, recordedShiftRef, productionActionProof(record)))
+        emitMetric({ product: 'plant', capability: 'plant-production', action: 'output.recorded', ts: Date.now() })
         if (recordedOutputKind === 'good' && recordedShiftMaterialCount === 0) {
           setMaterialGuideOpen(true)
           focusMaterialDisclosure()
@@ -8189,6 +8416,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       after: `${issue.id} · ${issue.owner} · due ${formatIssueDue(issue.dueAt ?? issue.createdAt)} · containment recorded`,
       apply: async (record) => {
         await mutateProduction('production.issue.opened', record.commandId, productionActionProof(record), (current) => openProductionIssue(current, issue, productionActionProof(record)))
+        if (issue.kind === 'quality') emitMetric({ product: 'plant', capability: 'plant-production', action: 'capa.opened', ts: Date.now() })
         setSummary('')
         setIssueOwner('')
         setContainment('')
@@ -8257,6 +8485,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         correctiveAction: '',
         verificationResult: '',
         effectivenessOwner: issue.owner ?? managedIdentity?.userId ?? 'Quality owner',
+        effectivenessDue: defaultCapaEffectivenessDueInput(),
       })
       return
     }
@@ -8308,6 +8537,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       correctiveAction: qualityCorrectiveDraft.correctiveAction.trim(),
       verificationResult: qualityCorrectiveDraft.verificationResult.trim(),
       effectivenessOwner: qualityCorrectiveDraft.effectivenessOwner.trim(),
+      effectivenessDue: new Date(qualityCorrectiveDraft.effectivenessDue).toISOString(),
     })
     if (!result) {
       setNotice('Record a stable failure mode, cause, corrective action, effectiveness evidence, and owner before review.')
@@ -8339,6 +8569,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         : `Plant issue ${issueId}`).slice(0, 180),
       apply: async (record) => {
         await mutateProduction('production.issue.resolved', record.commandId, productionActionProof(record), (current) => resolveProductionIssue(current, issueId, productionActionProof(record), maintenanceCorrectiveAction, qualityCorrectiveAction))
+        if (qualityCorrectiveAction) emitMetric({ product: 'plant', capability: 'plant-production', action: 'capa.resolved', ts: Date.now() })
       },
     })
   }
@@ -8372,6 +8603,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       after: `${job.product} · released by a named human with new evidence`,
       apply: async (record) => {
         await mutateProduction('production.quality_hold.released', record.commandId, productionActionProof(record), (current) => releaseProductionQualityHold(current, jobId, productionActionProof(record)))
+        emitMetric({ product: 'plant', capability: 'plant-production', action: 'job.released', ts: Date.now() })
       },
     }, trigger)
   }
@@ -8417,6 +8649,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         await mutateProduction('production.shift.closed', record.commandId, productionActionProof(record), (current) => current.revision === expectedRevision
           ? recordProductionShiftClose(current, reviewedHandoff, productionActionProof(record))
           : null)
+        emitMetric({ product: 'plant', capability: 'plant-production', action: 'shift.close.confirmed', ts: Date.now() })
       },
     }, trigger)
   }
@@ -8991,6 +9224,7 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
         <form autoComplete="off" className="core-form" onSubmit={reviewQualityCorrectiveResolution}>
           <label>Failure mode<input autoFocus maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, failureMode: event.target.value } : current)} placeholder="Stable name used to find repeats" required value={qualityCorrectiveDraft.failureMode} /><small>Use the same short name when the same defect happens again.</small></label>
           <div className="form-row"><label>Cause category<select onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, causeCategory: event.target.value as ProductionQualityCauseCategory } : current)} value={qualityCorrectiveDraft.causeCategory}>{productionQualityCauseCategories.map((category) => <option key={category} value={category}>{productionQualityCauseLabels[category]}</option>)}</select></label><label>Effectiveness owner<input autoComplete="off" maxLength={120} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessOwner: event.target.value } : current)} placeholder="Named person or role" required value={qualityCorrectiveDraft.effectivenessOwner} /></label></div>
+          <label>Effectiveness review by<input min={localDateTimeInputValue(new Date())} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, effectivenessDue: event.target.value } : current)} required type="datetime-local" value={qualityCorrectiveDraft.effectivenessDue} /></label>
           <label>Verified root cause<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, rootCause: event.target.value } : current)} placeholder="What evidence identifies the cause?" required value={qualityCorrectiveDraft.rootCause} /></label>
           <label>Corrective action<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, correctiveAction: event.target.value } : current)} placeholder="What changed to prevent recurrence?" required value={qualityCorrectiveDraft.correctiveAction} /></label>
           <label>Effectiveness evidence<textarea maxLength={360} onChange={(event) => setQualityCorrectiveDraft((current) => current ? { ...current, verificationResult: event.target.value } : current)} placeholder="What result proves the action worked?" required value={qualityCorrectiveDraft.verificationResult} /></label>
@@ -9048,7 +9282,7 @@ function IssueList({ disabled = false, issues, now, onResolve }: { disabled?: bo
         {issue.maintenanceFindingSource ? <small style={wrappedIssueDetail}>Maintenance finding · {issue.maintenanceFindingSource.equipmentName} · Strategy R{issue.maintenanceFindingSource.strategyRevision} · Source {issue.maintenanceFindingSource.completionActionId}</small> : null}
         {issue.status === 'resolved' ? <small style={wrappedIssueDetail}>{issue.resolution ? `Resolved by ${issue.resolution.resolvedBy} · Evidence: ${issue.resolution.evidenceReference}` : 'Legacy resolution · no attributed proof was available'}</small> : null}
         {issue.resolution?.maintenanceCorrectiveAction ? <small style={wrappedIssueDetail}>Corrective action: {issue.resolution.maintenanceCorrectiveAction.correctiveAction} · Verified: {issue.resolution.maintenanceCorrectiveAction.verificationResult} · Final disposition: {issue.resolution.maintenanceCorrectiveAction.finalDisposition.replaceAll('_', ' ')}</small> : null}
-        {issue.resolution?.qualityCorrectiveAction ? <><small style={wrappedIssueDetail}>CAPA: {productionQualityCauseLabels[issue.resolution.qualityCorrectiveAction.causeCategory]} · {issue.resolution.qualityCorrectiveAction.failureMode} · Owner {issue.resolution.qualityCorrectiveAction.effectivenessOwner}</small><small style={wrappedIssueDetail}>{issue.resolution.qualityCorrectiveAction.priorIssueIds.length ? `Repeat · linked to ${issue.resolution.qualityCorrectiveAction.priorIssueIds.join(', ')}` : 'First classified occurrence'} · Verified: {issue.resolution.qualityCorrectiveAction.verificationResult}</small></> : null}
+        {issue.resolution?.qualityCorrectiveAction ? <><small style={wrappedIssueDetail}>CAPA: {productionQualityCauseLabels[issue.resolution.qualityCorrectiveAction.causeCategory]} · {issue.resolution.qualityCorrectiveAction.failureMode} · Owner {issue.resolution.qualityCorrectiveAction.effectivenessOwner}{isCapaEffectivenessOverdue(issue.resolution.qualityCorrectiveAction, new Date(now).toISOString()) ? ' · REVIEW OVERDUE' : ` · Review by ${formatIssueDue(issue.resolution.qualityCorrectiveAction.effectivenessDue)}`}</small><small style={wrappedIssueDetail}>{issue.resolution.qualityCorrectiveAction.priorIssueIds.length ? `Repeat · linked to ${issue.resolution.qualityCorrectiveAction.priorIssueIds.join(', ')}` : 'First classified occurrence'} · Verified: {issue.resolution.qualityCorrectiveAction.verificationResult}</small></> : null}
       </div>
       {issue.status === 'open' ? <button className="text-link" disabled={disabled} onClick={() => onResolve(issue.id)} type="button">{issue.kind === 'quality' ? 'Review CAPA' : 'Review close'}</button> : <b>Resolved</b>}
     </article>

@@ -2,11 +2,12 @@
 // EXECUTES them (validated against the allow-list — money/send capabilities are never exposed), and
 // SYNTHESIZES a grounded answer from the real tool results. Ops-gated (x-ops-key); bounded to 4 steps.
 // This is the connector framework working as an agent action-toolbelt, with the draft→approve gate intact.
+import { usableOpsKey } from '../ops-key.mjs'
 import crypto from 'node:crypto'
 import gateway, { stripInjectionFrames, TIER_COST_WEIGHTS } from '../gateway.mjs'
 import { availableTools, runTool } from '../tools.mjs'
 
-const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
+const OPS_KEY = usableOpsKey(process.env.SUPERMEGA_OPS_KEY)
 const OPERATOR_USAGE_CONTRACT = 'supermega.operator-usage.v1'
 const MAX_USAGE_TOKENS_PER_CALL = 10_000_000
 

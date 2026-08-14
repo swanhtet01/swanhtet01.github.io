@@ -33,7 +33,10 @@
   --website-panel-raised: #121b25;
   --website-ink: #f5f8fb;
   --website-muted: #a4b0be;
-  --website-quiet: #718093;
+  /* #718093 measures 4.31:1 against the dark panel, under the 4.5:1 AA floor for body
+     text. The identical value was already lifted to #7a8a9c (4.91:1) for --core-quiet in
+     core-app.css; this file kept the old one, so the same defect survived here. */
+  --website-quiet: #7a8a9c;
   --website-line: rgba(166, 190, 214, .13);
   --website-line-strong: rgba(166, 190, 214, .24);
   --website-green: #56f0c1;
@@ -51,6 +54,11 @@
   background: #090f16;
   color: var(--website-ink);
 }
+.theme-dark .website-topbar { background: rgba(6,10,15,.9); }
+.theme-dark .website-sidebar { background: rgba(7,11,17,.96); }
+.theme-dark .website-panel-actions { background: var(--website-panel); }
+.theme-dark .website-preview-toolbar { background: var(--website-panel); }
+.theme-dark .website-notice { border-color: rgba(86,240,193,.2); background: rgba(12,18,26,.96); }
 
 .website-product *,
 .website-product *::before,
@@ -871,6 +879,22 @@
 .website-button.is-primary:hover:not(:disabled) {
   border-color: #075c4b;
   background: #075c4b;
+}
+
+/* --website-green is a dark green (#0b745e) in light, where white text reads cleanly, and
+   a bright mint (#56f0c1) in dark, where white text measures 1.44:1 -- the primary action
+   in this product, effectively unreadable. The fill is what carries the brand here, so the
+   text flips to the dark background colour instead (13.4:1) rather than the fill changing.
+   Hover has to move with it: the light-theme hover is a dark green that would be invisible
+   under dark text, so dark mode gets a deeper mint that keeps the same ink (10.7:1). */
+.theme-dark .website-button.is-primary {
+  color: var(--website-bg);
+}
+
+.theme-dark .website-button.is-primary:hover:not(:disabled) {
+  border-color: #3ad9a8;
+  background: #3ad9a8;
+  color: var(--website-bg);
 }
 
 .website-button.is-quiet {
@@ -3402,6 +3426,22 @@
   color: #fff;
 }
 
+/* A second copy of the white-on-primary pairing, and the reason fixing
+   `.theme-dark .website-button.is-primary` alone was not enough: this selector carries the
+   same specificity but is declared later, so it won and "Edit page" and "Save" stayed at
+   1.44:1 in dark mode while "Review edits" -- which only matches the base rule -- was
+   already fixed. Found by driving the builder into its editing state; the landing screen
+   never renders this action bar. */
+.theme-dark .website-primary-actions > .website-button.is-primary {
+  color: var(--website-bg);
+}
+
+.theme-dark .website-primary-actions > .website-button.is-primary:hover:not(:disabled) {
+  border-color: #3ad9a8;
+  background: #3ad9a8;
+  color: var(--website-bg);
+}
+
 .website-site-settings > summary::-webkit-details-marker {
   display: none;
 }
@@ -3869,6 +3909,17 @@
     var(--website-panel);
 }
 
+/* The trade question sits above the fields it fills, so it needs to read as a separate step
+   rather than as the first of those fields. Uses --website-line, which flips with the theme;
+   a hardcoded rule here would be a hairline nobody can see in dark mode.
+
+   The selector is qualified because `.website-starter-form > label` resets border and padding
+   at a higher specificity -- as a bare class this rule measured 0px wide in the browser. */
+.website-starter-form > label.website-starter-trade {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--website-line);
+}
+
 .website-starter-form {
   display: grid;
   align-content: start;
@@ -3980,4 +4031,16 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Same white-on-mint pairing as the primary buttons: --website-green is a dark green in
+   light where white reads cleanly, and a bright mint in dark where white measures 1.44:1.
+   These two carry it on a hover state and a recovery action, both of which only appear in
+   states the landing screen never renders. */
+.theme-dark .website-notice-action:hover {
+  color: var(--website-bg);
+}
+
+.theme-dark .website-recovery-actions > button {
+  color: var(--website-bg);
 }

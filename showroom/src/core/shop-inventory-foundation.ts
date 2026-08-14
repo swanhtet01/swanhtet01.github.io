@@ -3,6 +3,11 @@ export const SHOP_INVENTORY_IMPORT_CONTRACT = 'supermega.shop.inventory_import.v
 export const SHOP_INVENTORY_PROJECTION_CONTRACT = 'supermega.shop.inventory_projection.v1' as const
 export const EMPTY_SHOP_INVENTORY_DIGEST = `sha256:${'0'.repeat(64)}`
 
+// How many stock units one reviewed import may open. Exported so the setup screen bounds
+// itself by the SAME number the contract enforces: the screen once used 8 -- the LOCATION
+// limit -- and silently blocked every business template the product ships.
+export const SHOP_INVENTORY_MAX_STOCK_UNITS = 1_000
+
 export type ShopInventoryProof = {
   actionId: string
   capturedAt: string
@@ -352,7 +357,7 @@ function validateImportPackage(value: unknown, catalog: string[], requireCurrent
   const vendors = masterRows(source.vendors, 'import package.vendors', 'VEN', 200)
   const locations = masterRows(source.locations, 'import package.locations', 'LOC', 8)
   if (locations.length < 2) throw new Error('The v1 inventory foundation requires at least two locations.')
-  const stockUnits = array(source.stockUnits, 'import package.stockUnits', 1, 1_000).map((candidate, index): ShopInventoryStockUnit => {
+  const stockUnits = array(source.stockUnits, 'import package.stockUnits', 1, SHOP_INVENTORY_MAX_STOCK_UNITS).map((candidate, index): ShopInventoryStockUnit => {
     const field = `import package.stockUnits[${index}]`
     const row = exact(candidate, field, ['id', 'sku', 'tracking', 'trackingCode'])
     const tracking = text(row.tracking, `${field}.tracking`, 10)

@@ -1,6 +1,7 @@
 // Ops-gated workcell activation API.
 // GET: readiness/catalog. POST: run one fixed workcell; owner delivery is explicit.
 
+import { usableOpsKey } from '../ops-key.mjs'
 import crypto from 'node:crypto'
 import { notify } from '../alert.mjs'
 import { createActionDraft, workcellActionDraft } from '../approval-actions.mjs'
@@ -15,7 +16,7 @@ function constantTimeEqual(a, b) {
 
 export async function handleWorkcells(request = {}, options = {}) {
   const env = options.env || process.env
-  const opsKey = String(options.opsKey ?? env.SUPERMEGA_OPS_KEY ?? '').trim()
+  const opsKey = usableOpsKey(options.opsKey ?? env.SUPERMEGA_OPS_KEY)
   if (!opsKey) return { status: 503, json: { ok: false, reason: 'ops_key_not_configured' } }
   if (!constantTimeEqual(String(request.headers?.['x-ops-key'] || ''), opsKey)) {
     return { status: 401, json: { ok: false, reason: 'unauthorized' } }

@@ -1,5 +1,10 @@
 import type { WebsiteReleaseState } from './website-release-foundation'
-import { restoreWebsiteLeadLedger, type WebsiteLeadLedger } from './website-leads.ts'
+import {
+  readStoredWebsiteLeads,
+  restoreWebsiteLeadLedger,
+  websiteInboxLeads,
+  type WebsiteLeadLedger,
+} from './website-leads.ts'
 
 export const WEBSITE_SCHEMA = 'supermega.website.workspace.v2'
 export const WEBSITE_STORAGE_KEY = 'supermega.website.workspace.v2'
@@ -8,6 +13,20 @@ export const WEBSITE_RECOVERY_INDEX_KEY = 'supermega.website.workspace.recovery.
 export const WEBSITE_EDIT_SESSION_KEY = 'supermega.website.edit-session.v1'
 export const MAX_WEBSITE_PAGES = 4
 export const MAX_WEBSITE_SECTIONS = 4
+
+// An unsaved preview is NEVER stored under WEBSITE_EDIT_SESSION_KEY on its own. It is stored per
+// workspace identity, in sessionStorage, under this scoped key. The builder used to build that key
+// privately while the onboarding guard looked for the bare key in localStorage, so the guard read a
+// key nothing had ever written and let onboarding overwrite typed-but-unsaved page copy. Writer and
+// reader now share this one builder so they cannot drift apart again.
+export function websiteEditSessionStorageKey(scope: string) {
+  return `${WEBSITE_EDIT_SESSION_KEY}.${encodeURIComponent(scope)}`
+}
+
+// The scopes a device-local workspace can hold an unsaved preview under -- WebsiteProduct uses the
+// storage mode itself as the scope for anything that is not a signed-in company account. A managed
+// scope is `managed:<actorId>` and belongs to the company record, not to this device.
+export const WEBSITE_LOCAL_EDIT_SESSION_SCOPES = ['browser-local', 'session-only'] as const
 
 const WEBSITE_MUTATION_LOCK = 'supermega.website.workspace.mutation.v2'
 const WEBSITE_RECOVERY_SCHEMA = 'supermega.website.workspace.recovery.v1'
@@ -508,6 +527,15 @@ export async function activateLocalWebsitePageDrafts(input: {
   if (!storage) return { ok: false, error: 'Browser storage is unavailable.' }
   const loaded = loadWebsiteWorkspace(storage)
   if (!loaded.ok) return loaded
+  // Capturing an inquiry does not touch the workspace, so the workspace can still look pristine
+  // while the device holds real customer contact details. Swapping a different business in over
+  // that inbox would either strand those inquiries or show them to the wrong business; refuse the
+  // import instead and leave both the workspace and the inbox exactly as they are.
+  const storedLeads = readStoredWebsiteLeads(storage, 'another client draft can be initialized')
+  if (!storedLeads.ok) return storedLeads
+  if (websiteInboxLeads(storedLeads.ledger).length > 0) {
+    return { ok: false, error: 'This device already holds captured Website inquiries. Export and clear them before initializing another client draft.' }
+  }
   let imported: WebsitePageDraftsImportResult | null = null
   const mutation = await mutateWebsiteWorkspace((current) => {
     imported = importWebsitePageDrafts(current, input)

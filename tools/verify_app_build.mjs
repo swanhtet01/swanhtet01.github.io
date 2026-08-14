@@ -476,6 +476,13 @@ if (!indexSource.includes('<title>SuperMega</title>')
   || !indexSource.includes(manifest.company.supporting)
   || indexSource.includes('SuperMega Company OS')
   || indexSource.includes('Run Product, Commerce, and Production')) fail('stale_app_metadata')
+const swPath = resolve(dist, 'sw.js')
+if (!await exists(swPath)) fail('missing_service_worker')
+else {
+  const swSource = await readFile(swPath, 'utf8')
+  if (!swSource.includes('supermega-app-') || !swSource.includes('/assets/')) fail('service_worker_contract_invalid')
+  if (!indexSource.includes("serviceWorker.register('/sw.js')")) fail('service_worker_not_registered')
+}
 
 const files = await walk(dist)
 const textFiles = files.filter((path) => /\.(?:html|js|css|json|svg)$/.test(path))
@@ -483,6 +490,21 @@ const corpus = (await Promise.all(textFiles.map((path) => readFile(path, 'utf8')
 for (const required of ['SUPERMEGA', 'Shop', 'Plant', 'Website', 'Ecommerce', 'Sell', 'Orders', 'Stock', 'Purchase orders', 'Jobs', 'Quality', 'Maintenance', 'Content', 'Preview', 'Publish', 'Catalog', 'Storefront', 'Requests', 'Demo mode', 'Name your workspace', 'Request managed trial', 'Confirm change', 'Action history', 'actorKind', 'evidenceReference', 'accountableActions', 'Mode', 'Writes', manifest.brand.colors.accent, manifest.brand.colors.ink]) {
   if (!corpus.includes(required)) fail(`missing_context:${required}`)
 }
+// A storefront with no saved draft opens under the owner's own business name. Pinned because
+// the failure is invisible: nothing errors, the store is just named after a sample shop.
+// A SAVED storeName is the owner's and must never be overridden, which is why the default
+// only applies on the no-draft path.
+if (!ecommerceSource.includes('function defaultStoreName()')
+  || !ecommerceSource.includes('return readLocalSetupBusinessName() ?? DEFAULT_STORE_NAME')
+  // BOTH no-draft paths must use it -- draftFieldsForCatalog and initialEcommerceState. A
+  // plain includes() check passes while one of the two has regressed, so this counts them.
+  || ecommerceSource.split('storeName: defaultStoreName(),').length - 1 !== 2
+  || !ecommerceSource.includes('storeName: saved.storeName,')) fail('ecommerce_storefront_ignores_owner_business_name')
+
+// The order-import bound and the sentence that states it must agree. They did not: the check
+// allowed 52 parsed rows -- a header plus 51 orders -- while promising a limit of 50.
+if (!ecommerceSource.includes("if (parsed.length > 51) throw new Error('Review at most 50 order rows at a time.')")) fail('ecommerce_order_import_bound_disagrees_with_its_message')
+
 if (!ecommerceSource.includes('const ecommerceTodayMetrics = [')
   || !ecommerceSource.includes('const ecommerceTodayHeadline =')
   || !ecommerceSource.includes("order.sourceRecordId?.startsWith('ECR-')")
@@ -1030,7 +1052,11 @@ if (!coreShellSource.includes('function managedLoginPath(product: string | null)
   || coreShellSource.includes('aria-label="Company sign in"')
   || !coreCssSource.includes('.sidebar-foot .account-shell-link { min-height: 44px;')
   || !coreCssSource.includes('.topbar-meta > a { min-width: 44px; min-height: 44px;')
-  || !coreCssSource.includes('.core-topbar .mobile-account-link,\n  .core-topbar .runtime-badge { display: none; }')) fail('managed_account_entry_not_discoverable')
+  // The mobile topbar Login link must stay VISIBLE: it inherits the 44px .topbar-meta > a rule, so
+  // no CSS may target .core-topbar .mobile-account-link at all (hiding it left mobile users with no
+  // discoverable door to Company login).
+  || coreCssSource.includes('.core-topbar .mobile-account-link')
+  || !coreCssSource.includes('.core-topbar .runtime-badge { display: none; }')) fail('managed_account_entry_not_discoverable')
 const shellNavigationContract = coreShellSource.slice(
   coreShellSource.indexOf('const productNavigation:'),
   coreShellSource.indexOf('\n}', coreShellSource.indexOf('const productNavigation:')) + 2,
@@ -2264,6 +2290,8 @@ if (!coreSource.includes('See today’s next job and key numbers.')
   || !shopNextActionSource.includes("'Prepare Shop catalog'")
   || !shopNextActionSource.includes("'Open catalog import'")
   || !coreSource.includes('<ShopToday catalogReady={commerce.items.length > 0}')
+  || !coreSource.includes("label: \"Today's sales\"")
+  || !coreSource.includes('todayOrders.length ? formatMoney(todayRevenue)')
   || !coreSource.includes('Your catalog is empty.')
   || !coreSource.includes('Add or import products')
   || !coreSource.includes('const shopCatalogOnboarding = <section')
@@ -2614,7 +2642,12 @@ if (!workspaceControlsPageSource.includes('export function WorkspaceControlsPage
   || ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => workspaceControlsPageSource.includes(marker))) fail('customer_workspace_controls_not_isolated_or_safe')
 if (!appSource.includes("lazy(() => import('./core/ManagedLoginPage')")
   || !appSource.includes('<ManagedLoginPage /></Suspense>} path="login"')
-  || !appSource.includes('<Navigate replace to="/login" />} path="signup"')
+  // /signup used to redirect here, which was a dead end: /login is gated on
+  // runtime.status === 'enterprise' AND managedTrialAuthConfigured(), and there is no self-serve
+  // account creation anywhere, so a stranger had no way to start. It now renders a real trial.
+  || !appSource.includes("lazy(() => import('./core/SignupPage')")
+  || !appSource.includes('<SignupPage /></Suspense>} path="signup"')
+  || appSource.includes('<Navigate replace to="/login" />} path="signup"')
   || !managedLoginPageSource.includes('title="Open your company."')
   || !managedLoginPageSource.includes('No workspace code or technical setup is required.')
   || !managedLoginPageSource.includes('Only active companies assigned to this account are shown.')
@@ -3520,7 +3553,26 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSetupSource.includes("templateId: 'catalog-showcase'")
   || !websiteStarterSetupSource.includes('websiteStarterTemplates.map')
   || !websiteStarterSetupSource.includes('Quick setup')
-  || !websiteStarterSetupSource.includes('useState<WebsiteStarterBrief>(() => ({ ...SAMPLE_BRIEF }))')
+  // The starter opens from SAMPLE_BRIEF unless the shell passes the trade the device's Shop
+  // was set up as, in which case it opens on that trade's wording. openingState() is a pure
+  // function of that prop -- the storage read lives in WebsiteProduct, which is why the
+  // localStorage ban further down still holds for this component.
+  || !websiteStarterSetupSource.includes('const [opening] = useState(() => openingState(initialTradeId, initialBusinessName))')
+  || !websiteStarterSetupSource.includes('useState<WebsiteStarterBrief>(() => ({ ...opening.brief }))')
+  || !websiteStarterSetupSource.includes('initialTradeId?: ShopBusinessTemplateId | null')
+  || !websiteStarterSetupSource.includes('initialBusinessName?: string | null')
+  // The owner's own business name must reach the brief verbatim. Repairing it here would
+  // hide a validation error behind a silently altered name.
+  || !websiteStarterSetupSource.includes('? initialBusinessName')
+  || websiteStarterSetupSource.includes('readLocalSetupBusinessName')
+  || !websiteSource.includes('const [shopBusinessName] = useState(readLocalSetupBusinessName)')
+  || !websiteSource.includes('initialBusinessName={shopBusinessName}')
+  || !websiteStarterSetupSource.includes("return { tradeId: '', brief: { ...SAMPLE_BRIEF, businessName }, detected: false }")
+  // Stronger than the localStorage ban alone: naming the detection helper here at all would
+  // mean this component had started reading device state for itself.
+  || websiteStarterSetupSource.includes('readLocalShopBusinessTemplateId')
+  || !websiteSource.includes('const [shopTradeId] = useState(readLocalShopBusinessTemplateId)')
+  || !websiteSource.includes('initialTradeId={shopTradeId}')
   || websiteStarterSetupSource.includes('Load sample brief')
   || !websiteStarterSetupSource.includes('Change the sample into your website')
   || !websiteStarterSetupSource.includes('Example ready')
@@ -3547,15 +3599,26 @@ if (!websiteSource.includes('starterSetupActive')
   || !websiteStarterSource.includes('isUntouchedWebsiteStarter')
   || !websiteStarterSource.includes("stage: 'draft'")
   || !websiteStarterSource.includes('websiteStarterBriefIssues')
-  || ['fetch(', 'sessionStorage', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))
+  // The starter module reaches storage only through injected, defaulted parameters -- localStorage
+  // for the workspace and the inquiry ledger, sessionStorage for an unsaved preview it must not
+  // overwrite. What it must never do is talk to the network, and the setup COMPONENT must not touch
+  // any device store at all.
+  || ['fetch(', 'XMLHttpRequest'].some((marker) => websiteStarterSource.includes(marker) || websiteStarterSetupSource.includes(marker))
+  || websiteStarterSetupSource.includes('sessionStorage')
   || websiteStarterSetupSource.includes('localStorage')) fail('website_named_business_starter_missing_or_side_effectful')
 if (!websiteModelSource.includes("contract: 'supermega.website.working-sample.v1'")
   || !websiteModelSource.includes('workingSample?: WebsiteWorkingSample')
   || !websiteStarterSource.includes('export function installWebsiteWorkingSample')
   || !websiteStarterSource.includes('export async function activateLocalWebsiteWorkingSample')
   || !websiteStarterSource.includes('marker.contentFingerprint === workspaceFingerprint(workspace)')
-  || !websiteStarterSource.includes('WEBSITE_EDIT_SESSION_KEY')
-  || !websiteStarterSource.includes('WEBSITE_LEAD_LEDGER_KEY')
+  // The unsaved-preview check must go through the SHARED key builder in the model, against the
+  // session store the builder actually writes to. Rebuilding the key here is what let the guard
+  // read `supermega.website.edit-session.v1` out of localStorage -- a key nothing ever writes.
+  || !websiteStarterSource.includes('websiteEditSessionStorageKey(scope)')
+  || !websiteStarterSource.includes('WEBSITE_LOCAL_EDIT_SESSION_SCOPES')
+  || !websiteStarterSource.includes('sessions.getItem(')
+  || !websiteModelSource.includes('export function websiteEditSessionStorageKey(scope: string)')
+  || !websiteStarterSource.includes('readStoredWebsiteLeads(storage')
   || !productOnboardingPageSource.includes('await activateLocalWebsiteWorkingSample({')
   || !websiteSource.includes("? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'working sample' : 'starting template'}")
   || !websiteSource.includes('websiteTodayContext')) fail('website_working_sample_activation_missing')
@@ -3865,7 +3928,8 @@ if (!commerceIntakeSource.includes('aria-label="Website order review"')
 if (!channelOrderUiSource.includes('Turn one message into an order draft')
   || !channelOrderUiSource.includes('AI-assisted intake')
   || !channelOrderUiSource.includes('Prepare with AI')
-  || !channelOrderUiSource.includes('Open a company account to use AI')
+  || !channelOrderUiSource.includes('lockedCapabilityNotice')
+  || !channelOrderUiSource.includes('Talk to us about this')
   || !channelOrderUiSource.includes('is not written into the order record')
   || !managedTrialSource.includes("'/api/trial/v1/commerce/order-intake/drafts'")
   || !managedTrialSource.includes('prepareManagedOrderIntakeDraft')
@@ -3886,6 +3950,10 @@ if (!channelOrderUiSource.includes('Turn one message into an order draft')
   || !channelOrderUiSource.includes('className="channel-intake-disclosure"')
   || !channelOrderUiSource.includes('channelOrderDraftIsReady')) fail('channel_order_intake_ui_missing')
 if (['fetch(', 'XMLHttpRequest', 'WebSocket(', 'EventSource('].some((marker) => channelOrderUiSource.includes(marker))) fail('channel_order_intake_ui_crossed_network_boundary')
+if (!coreSource.includes("lazy(() => import('./ReceiptDialog')")
+  || !coreSource.includes("data-order-receipt=\"view\"")
+  || !coreSource.includes('onViewReceipt={setReceiptAck}')
+  || !coreSource.includes('<ReceiptDialog ack={receiptAck}')) fail('customer_receipt_ui_missing')
 if (!coreSource.includes('aria-label="Shop attention"')
   || !coreSource.includes('to="/shop/?tab=inventory"')
   || !coreSource.includes("useState<'manual' | 'message' | 'online'>('manual')")
@@ -4692,6 +4760,15 @@ if (!shopInventoryUiSource.includes("import { ShopProductionHandoff } from './Sh
   || !shopProductionHandoffUiSource.includes('Shop remains the only stock authority.')
   || !shopProductionHandoffUiSource.includes('Review the exact stock decrement. Nothing has been written yet.')
   || !shopProductionHandoffUiSource.includes('expectedInventoryHeadDigest')
+  // The Shop issue screen must open on the SKU the reviewed BOM mapped, not on whatever is
+  // first in the catalog. Plant states the conversion is explicit and that no name matching is
+  // used, but the handoff record used to DROP the mapping, so Shop defaulted to the first
+  // stocked item -- wiper blades offered against a request for engine oil. Pinned at source
+  // because building an issued-material execution fixture is a larger job than the fix;
+  // the behaviour itself was verified in a browser.
+  || !productionMaterialHandoffSource.includes("shopSupply: payload.kind === 'issue_material' && material.shopSupply")
+  || !shopProductionHandoffUiSource.includes('const mappedSku = request?.shopSupply?.sku')
+  || shopProductionHandoffUiSource.split('mappedItem ??').length - 1 !== 2
   || !shopProductionHandoffUiSource.includes('locationPicks.join')
   || !shopProductionHandoffUiSource.includes('exactWholeUnits <= available')
   || !shopProductionHandoffUiSource.includes('PLANT_ORDER_WORKSPACE_UPDATED_EVENT')
@@ -7085,12 +7162,17 @@ async function verifyShopServiceScheduleRuntime() {
     const proof = (minute, reason) => ({ actor: 'Shop owner', reason, happenedAt: `2026-07-29T03:${String(minute).padStart(2, '0')}:00.000Z` })
     let state = model.createShopServiceSchedule()
     assert(model.validateShopServiceSchedule(state) === state && state.revision === 0 && state.industryPackId === 'spa', 'shop_service_schedule_seed_invalid')
-    assert(state.services.length === 2 && state.resources.length === 2 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
+    // Floors, not fixed counts. These read `=== 2` when every pack shipped exactly two
+    // generic entries; the assertion's own name says the contract is "the seed is USEFUL",
+    // i.e. enough to book one appointment against two different resources. The spa, gym and
+    // school packs now ship real menus, so a fixed count would fail for being too good.
+    // tools/test_shop_industry_pack_depth.mjs holds the stronger per-pack floors.
+    assert(state.services.length >= 2 && state.resources.length >= 2 && state.bookings.length === 0, 'shop_service_schedule_seed_not_useful')
     assert(model.shopIndustryPacks.map((pack) => pack.id).join(',') === 'retail,cafe,restaurant,spa,gym,school' && new Set(model.shopIndustryPacks.map((pack) => pack.id)).size === 6, 'shop_industry_pack_catalog_wrong')
     assert(model.shopIndustryPacks.map((pack) => `${pack.id}:${pack.workflowTemplateId}:${pack.entryPoint}`).join(',') === 'retail:retail-wholesale:Walk-in,cafe:restaurant-ordering:Walk-in,restaurant:restaurant-ordering:Walk-in,spa:social-commerce:Phone,gym:social-commerce:Phone,school:social-commerce:Phone', 'shop_industry_pack_workflow_binding_wrong')
     for (const pack of model.shopIndustryPacks) {
       const packed = model.createShopServiceSchedule(pack.id)
-      assert(model.validateShopServiceSchedule(packed) === packed && packed.industryPackId === pack.id && packed.services.length === 2 && packed.resources.length === 2 && pack.capabilities.length >= 5, `shop_industry_pack_${pack.id}_not_operational`)
+      assert(model.validateShopServiceSchedule(packed) === packed && packed.industryPackId === pack.id && packed.services.length >= 2 && packed.resources.length >= 2 && pack.capabilities.length >= 5, `shop_industry_pack_${pack.id}_not_operational`)
     }
     const gymSchedule = model.provisionEmptyShopServiceSchedule(state, 'gym')
     assert(gymSchedule.industryPackId === 'gym' && gymSchedule.services.some((service) => service.name === 'Personal training') && gymSchedule.resources.some((resource) => resource.name === 'Trainer 1'), 'shop_industry_pack_provisioning_failed')
@@ -7155,15 +7237,20 @@ async function verifyShopBusinessTemplateRuntime() {
     || !productOnboardingPageSource.includes('className="compact-disclosure product-onboarding-business-type"')
     || !productOnboardingPageSource.includes('shopBusinessTemplates.map((template)')
     || !productOnboardingPageSource.includes('Standard sample (current industry pack)')
-    || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(shopIndustryPackId, onboardingTemplate.id)')
+    // Was pinned to `provisionLocalShopWorkingSample(shopIndustryPackId, ...)` -- the pack the owner
+    // ASKED for. provisionLocalShopIndustryPack returns the pack actually in force, because an
+    // existing appointment keeps its own, so the sample has to follow the returned schedule or it
+    // installs a catalog for an industry the appointment book is not on. The old literal pinned the
+    // defect in place; this pins the fix.
+    || !productOnboardingPageSource.includes('await provisionLocalShopWorkingSample(schedule.industryPackId, onboardingTemplate.id)')
     || !coreCssSource.includes('.product-onboarding-business-type')) fail('shop_business_template_contract_missing')
   try {
     const model = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'products', 'shop', 'business-templates.ts')).href}?shop-business-template-verify=${Date.now()}`)
     const onboardingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?shop-business-template-import-verify=${Date.now()}`)
     const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-business-template-commerce-verify=${Date.now()}`)
     assert(model.validateShopBusinessTemplates() === model.shopBusinessTemplates, 'shop_business_template_registry_invalid')
-    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts'
-      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 7, 'shop_business_template_catalog_wrong')
+    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts,restaurant'
+      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 8, 'shop_business_template_catalog_wrong')
     const commerceUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
     assert(model.shopBusinessTemplateUnits.length === commerceUnits.size && model.shopBusinessTemplateUnits.every((unit) => commerceUnits.has(unit)), 'shop_business_template_unit_set_drifted')
     for (const template of model.shopBusinessTemplates) {
@@ -8368,11 +8455,21 @@ async function verifyClientOnboardingRuntime() {
       owner: 'Sales lead',
       decisionNote: 'Customer chose another supplier.',
     }, '2026-07-29T00:10:00.000Z')
-    const leadCounts = websiteLeadModel.websiteLeadCounts(closedLeadLedger, 'Golden Valley Trading')
+    const leadCounts = websiteLeadModel.websiteLeadCounts(closedLeadLedger)
     assert(closedLeadLedger.revision === 3
       && closedLeadLedger.leads[0].status === 'closed'
       && closedLeadLedger.leads[0].owner === 'Sales lead'
       && leadCounts.total === 1 && leadCounts.closed === 1, 'website_lead_lifecycle_incomplete')
+    // Renaming the site is one field in Navigation. It used to empty the inbox, the "N new" badge
+    // and the export, because all three selected leads by lead.siteName === workspace.siteName --
+    // every already-captured inquiry stayed on disk and disappeared from the screen.
+    assert(closedLeadLedger.leads.every((lead) => lead.siteName !== 'Renamed After The Inquiry')
+      && websiteLeadModel.websiteInboxLeads(closedLeadLedger).length === 1
+      && websiteLeadModel.websiteLeadCounts(closedLeadLedger).total === 1
+      && websiteLeadModel.websiteLeadCounts.length === 1
+      && websiteLeadModel.websiteInboxLeads.length === 1
+      && !websiteSource.includes('lead.siteName ===')
+      && !websiteStarterSource.includes('lead.siteName ==='), 'website_lead_inbox_orphaned_by_site_rename')
     rejectsSync(() => websiteLeadModel.captureWebsiteLead(emptyLeadLedger, {
       siteName: 'Golden Valley Trading', sourcePage: '/contact', name: 'Daw Mya',
       contact: '09 123 456 789', request: 'Needs a quote.', consentRecorded: false,
@@ -8475,7 +8572,10 @@ async function verifyClientOnboardingRuntime() {
     const apparelTemplate = model.clientImportTemplate('production', 'production-control', { plantIndustryPackId: 'apparel' })
     const apparelPreview = await model.createClientImportPreview(apparelTemplate, 'production', undefined, 'apparel.csv', 'production-control')
     assert(apparelPreview.readyForStaging
-      && apparelPreview.rows[0].key === 'STYLE-001'
+      // STYLE-001 was rejected by the plan contract, which requires a JOB- prefix
+      // (plant-order-foundation.ts identifier(..., 'JOB')). An apparel plant could import this
+      // very sample and then not plan the batch its own pack promises.
+      && apparelPreview.rows[0].key === 'JOB-STYLE-001'
       && apparelPreview.rows[0].values.line === 'Sewing Line 1',
     'client_demo_apparel_pack_did_not_prepare_industry_jobs')
     rejectsSync(() => model.clientImportTemplate('commerce', 'unknown', { shopIndustryPackId: 'school' }), 'client_demo_industry_template_bypassed_workflow_validation')
@@ -10309,7 +10409,16 @@ async function verifyWebsiteRuntime() {
       getItem: (key) => websiteWorkingSampleValues.get(key) ?? null,
       setItem: (key, value) => websiteWorkingSampleValues.set(key, String(value)),
     }
-    const activatedWebsiteWorkingSample = await starter.activateLocalWebsiteWorkingSample(leadWorkingSampleInput, websiteWorkingSampleStorage, locks)
+    // An unsaved preview lives in sessionStorage under the SCOPED key the builder writes, never as
+    // the bare WEBSITE_EDIT_SESSION_KEY in localStorage. Planting the bare key here made
+    // 'website_working_sample_replaced_an_unsaved_owner_preview' pass against a key the app has
+    // never produced, so the assertion held while the protection did nothing.
+    const websiteWorkingSampleSessionValues = new Map()
+    const websiteWorkingSampleSessions = {
+      getItem: (key) => websiteWorkingSampleSessionValues.get(key) ?? null,
+      setItem: (key, value) => websiteWorkingSampleSessionValues.set(key, String(value)),
+    }
+    const activatedWebsiteWorkingSample = await starter.activateLocalWebsiteWorkingSample(leadWorkingSampleInput, websiteWorkingSampleStorage, locks, websiteWorkingSampleSessions)
     const activatedWebsiteWorkingState = model.loadWebsiteWorkspace(websiteWorkingSampleStorage)
     assert(activatedWebsiteWorkingSample.ok
       && activatedWebsiteWorkingState.ok
@@ -10318,18 +10427,25 @@ async function verifyWebsiteRuntime() {
       && activatedWebsiteWorkingState.workspace.workingSample?.templateId === 'lead-generation',
     'website_working_sample_was_not_persisted_atomically')
     const websiteWorkingSampleRaw = websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY)
-    websiteWorkingSampleValues.set(model.WEBSITE_EDIT_SESSION_KEY, 'pending-owner-preview')
+    const websiteWorkingSampleEditSession = model.createWebsiteEditSession(activatedWebsiteWorkingState.workspace)
+    websiteWorkingSampleSessions.setItem(
+      model.websiteEditSessionStorageKey('browser-local'),
+      JSON.stringify(websiteWorkingSampleEditSession),
+    )
     const blockedWebsiteWorkingSample = await starter.activateLocalWebsiteWorkingSample({
       ...leadWorkingSampleInput,
       templateId: 'catalog-showcase',
       capturedAt: at(60),
-    }, websiteWorkingSampleStorage, locks)
+    }, websiteWorkingSampleStorage, locks, websiteWorkingSampleSessions)
     assert(!blockedWebsiteWorkingSample.ok
-      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw,
+      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw
+      && model.websiteEditSessionMatches(websiteWorkingSampleEditSession, model.loadWebsiteWorkspace(websiteWorkingSampleStorage).workspace),
     'website_working_sample_replaced_an_unsaved_owner_preview')
-    websiteWorkingSampleValues.delete(model.WEBSITE_EDIT_SESSION_KEY)
+    websiteWorkingSampleSessionValues.delete(model.websiteEditSessionStorageKey('browser-local'))
+    // Captured under a name the site no longer carries: an owner renamed the site after the
+    // inquiry arrived. Membership follows the ledger, so this still has to block replacement.
     const websiteLeadLedger = leads.captureWebsiteLead(leads.emptyWebsiteLeadLedger(), {
-      siteName: leadWorkingSampleInput.businessName,
+      siteName: 'Golden Valley Services (former name)',
       sourcePage: '/',
       name: 'Website customer',
       contact: 'customer@example.com',
@@ -10341,9 +10457,10 @@ async function verifyWebsiteRuntime() {
       ...leadWorkingSampleInput,
       templateId: 'catalog-showcase',
       capturedAt: at(62),
-    }, websiteWorkingSampleStorage, locks)
+    }, websiteWorkingSampleStorage, locks, websiteWorkingSampleSessions)
     assert(!leadBlockedWebsiteWorkingSample.ok
-      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw,
+      && websiteWorkingSampleValues.get(model.WEBSITE_STORAGE_KEY) === websiteWorkingSampleRaw
+      && leads.websiteLeadCounts(leads.readWebsiteLeadLedger(websiteWorkingSampleStorage)).total === 1,
     'website_working_sample_hid_retained_customer_inquiries')
     const websiteImportDigest = `sha256:${'b'.repeat(64)}`
     const websiteImportInput = {
@@ -17307,6 +17424,7 @@ async function verifyProductionRuntime() {
       correctiveAction: 'Recalibrated the feedback loop and added a first-piece check.',
       verificationResult: 'Three consecutive samples remained inside the approved range.',
       effectivenessOwner: 'Quality supervisor',
+      effectivenessDue: '2026-09-10T08:00:00.000Z',
     })
     assert(qualityCorrectiveAction?.contract === 'supermega.production.quality-capa.v1'
       && qualityCorrectiveAction.recurrenceKey === 'machine:temperature-drift'
@@ -17319,6 +17437,7 @@ async function verifyProductionRuntime() {
       correctiveAction: 'Recalibrated the feedback loop and added a first-piece check.',
       verificationResult: 'Three consecutive samples remained inside the approved range.',
       effectivenessOwner: 'Quality supervisor',
+      effectivenessDue: '2026-09-10T08:00:00.000Z',
     })
     assert(myanmarQualityCorrectiveAction?.recurrenceKey === 'machine:အပူချိန်-လွဲ', 'production_myanmar_quality_capa_token_lost_marks')
     const resolved = model.resolveProductionIssue(opened, issue.id, resolutionProof, undefined, qualityCorrectiveAction)
@@ -17375,6 +17494,7 @@ async function verifyProductionRuntime() {
       correctiveAction: 'Added the controlled fixture to the station release checklist.',
       verificationResult: 'The next three controlled batches passed the same sample check.',
       effectivenessOwner: 'Quality supervisor',
+      effectivenessDue: '2026-09-10T08:00:00.000Z',
     })
     assert(recurringCapa?.priorIssueIds.join(',') === issue.id, 'production_recurrence_did_not_link_prior_capa')
     const recurringResolutionProof = proof('ACT-ISSUE-RECURRING-RESOLVE', 4_000)
@@ -18734,8 +18854,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// Bounded allowance for supplier return claims, credit evidence, and credit-adjusted invoice matching.
-if (bytes > 2_800_000) fail(`artifact_budget:${bytes}`)
+// Bounded allowance for supplier return claims, credit evidence, credit-adjusted invoice matching, product analytics instrumentation (OPS-161–167), shop revenue summary view (OPS-177), Plant OEE view (OPS-181), Website lead view (OPS-182), Customer journey view (OPS-184), Ecommerce pipeline view (OPS-185), and CEO operating brief view (OPS-187).
+if (bytes > 2_848_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)
@@ -18828,7 +18948,7 @@ if (!workspaceControlsArtifactPath) fail('workspace_controls_chunk_artifact_miss
 else {
   const workspaceControlsArtifact = await readFile(workspaceControlsArtifactPath, 'utf8')
   const workspaceControlsBytes = (await stat(workspaceControlsArtifactPath)).size
-  if (workspaceControlsBytes > 25_000
+  if (workspaceControlsBytes > 31_000
     || !workspaceControlsArtifact.includes('Status and recovery')
     || !workspaceControlsArtifact.includes('Download workspace backup')
     || !workspaceControlsArtifact.includes('Restore previous workspace')

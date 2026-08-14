@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { COMPANY_REQUEST_HEADER, COMPANY_SESSION_COOKIE } from '../agent-company-operator-auth.mjs'
 import { handleAgentCompanyAuth } from './agent-company-auth.mjs'
 
-const KEY = 'owner-secret'
+const KEY = 'owner-secret-0123456789abcdef0123'
 const TOKEN = 'a'.repeat(43)
 const ownerRequest = (body) => ({
   method: 'POST',

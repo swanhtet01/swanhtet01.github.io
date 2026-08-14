@@ -555,7 +555,7 @@ test('live verifier requires healthy status and every selected workcell', async 
   }
   const result = await verifyProvisionedClient('https://client.vercel.app', {
     fetch,
-    opsKey: 'ops-secret',
+    opsKey: 'ops-secret-0123456789abcdef012345',
     workcells: ['owner-command'],
   })
   assert.equal(result.connectors, 69)
@@ -563,9 +563,10 @@ test('live verifier requires healthy status and every selected workcell', async 
   assert.equal(result.approvalInbox.ready, true)
   assert.equal(result.approvalInbox.count, 0)
   assert.equal(result.ownerEvidenceInbox.ready, true)
-  assert.equal(fetchCalls[1].options.headers['x-ops-key'], 'ops-secret')
-  assert.equal(fetchCalls[2].options.headers['x-ops-key'], 'ops-secret')
-  assert.equal(fetchCalls[3].options.headers['x-ops-key'], 'ops-secret')
+  assert.equal(fetchCalls[1].options.headers['x-ops-key'], 'ops-secret-0123456789abcdef012345')
+  assert.equal(fetchCalls[2].options.headers['x-ops-key'], 'ops-secret-0123456789abcdef012345')
+  assert.equal(fetchCalls[3].options.headers['x-ops-key'], 'ops-secret-0123456789abcdef012345')
+  // Still matches on the 'ops-secret' prefix, so it catches a leak of the longer key too.
   assert.doesNotMatch(JSON.stringify(result), /ops-secret/)
 
   await assert.rejects(
@@ -578,7 +579,7 @@ test('live verifier requires healthy status and every selected workcell', async 
             : { ok: true, workcells: [{ slug: 'owner-command', configured: false, missing: ['tool:owner_updates_read'] }] }
         },
       }),
-      opsKey: 'ops-secret',
+      opsKey: 'ops-secret-0123456789abcdef012345',
       workcells: ['owner-command'],
     }),
     /provision_workcell_not_configured:owner-command/,
@@ -594,7 +595,7 @@ test('live verifier requires healthy status and every selected workcell', async 
             : { ok: true, workcells: [{ slug: 'owner-command', configured: true, actionDraftSupported: true, actionDraftReady: false, missing: [] }] }
         },
       }),
-      opsKey: 'ops-secret',
+      opsKey: 'ops-secret-0123456789abcdef012345',
       workcells: ['owner-command'],
     }),
     /provision_workcell_action_not_ready:owner-command/,
@@ -608,7 +609,7 @@ test('live verifier requires healthy status and every selected workcell', async 
   ]
   const noActionResult = await verifyProvisionedClient('https://client.vercel.app', {
     fetch: async () => ({ ok: true, async json() { return noActionResponses.shift() } }),
-    opsKey: 'ops-secret',
+    opsKey: 'ops-secret-0123456789abcdef012345',
     workcells: ['owner-command'],
     actionWorkcells: [],
   })
@@ -623,7 +624,7 @@ test('live verifier requires healthy status and every selected workcell', async 
   await assert.rejects(
     verifyProvisionedClient('https://client.vercel.app', {
       fetch: async () => ({ ok: true, async json() { return missingEvidenceResponses.shift() } }),
-      opsKey: 'ops-secret',
+      opsKey: 'ops-secret-0123456789abcdef012345',
       workcells: ['owner-command'],
       actionWorkcells: [],
     }),

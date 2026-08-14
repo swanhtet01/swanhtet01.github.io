@@ -27,7 +27,50 @@ const portableExactKeys = new Set([
   'supermega.team.workspace.v4',
   'supermega.pilot-outcome.v1',
   'supermega.owner-control-acknowledgements.v1',
+  // Added after a probe restored a backup onto the SAME device and destroyed four of six records.
+  // restoreCompanyBackup nulls every resettable key the snapshot did not carry, so "not portable"
+  // silently means "deleted on restore". These are a business's actual records, not scaffolding:
+  // the appointment book IS the product for a spa, a salon or a clinic, and website leads are
+  // customers who asked to be contacted. Losing either to a restore is unrecoverable.
+  'supermega.shop.service-schedule.v1',
+  'supermega.website.leads.v1',
+  'supermega.plant.industry-pack.v1',
+  'supermega.trial_signup.v1',
+  'supermega.last_operator.v1',
+  // The in-progress basket. 'supermega.shop.order_draft.v1.' is already a portable PREFIX, so
+  // leaving the counter draft behind was an inconsistency rather than a decision.
+  'supermega.shop.counter_draft.v1',
 ])
+
+/**
+ * Resettable but deliberately NOT portable, each for a stated reason. Restore clears these on
+ * purpose: they are superseded keys whose stale contents would override the records being restored,
+ * or local scaffolding with no business meaning.
+ *
+ * This list exists so the decision is explicit. test_backup_covers_business_data.mjs fails when a
+ * key is resettable, not portable, and not named here -- which is the exact shape of the bug this
+ * comment is standing on. A new key now forces a choice instead of defaulting to deletion.
+ */
+export const deliberatelyNotPortableKeys: readonly string[] = [
+  // Superseded by the .v3/.v4/.v2 keys above; migration reads them, restore must not resurrect them.
+  'supermega.approvals.v2',
+  'supermega.setup.v2',
+  'supermega.commerce.workspace.v1',
+  'supermega.shop.workspace.v2',
+  'supermega.production.workspace.v1',
+  'supermega.plant.workspace.v2',
+  'supermega.website.workspace.v1',
+  'supermega.ecommerce.storefront_draft.v1',
+  'supermega.team.workspace.v2',
+  'supermega.team.workspace.v3',
+  // Reset epochs and demo scaffolding: markers about THIS device, meaningless on another.
+  'supermega.shop.order_draft_reset.v1',
+  'supermega.ecommerce.storefront_draft_reset.v1',
+  'supermega.client-demo-workspace.v1',
+  // Analytics persistence (Step 6). Device-local usage counters; restoring them onto another device
+  // would re-assert stale activity metrics from a different session, which is misleading.
+  'supermega.hq.local-metrics.v1',
+]
 
 const portablePrefixes = [
   'supermega.shop.order_draft.v1.',
@@ -35,6 +78,15 @@ const portablePrefixes = [
   'supermega.website.release-foundation.v1:',
   'supermega.ecommerce.storefront_draft.v2.',
   'supermega.ecommerce.buying_lifecycle.v1.',
+]
+
+/** Same contract as deliberatelyNotPortableKeys, for the prefixed families. */
+export const deliberatelyNotPortablePrefixes: readonly string[] = [
+  // Superseded draft family; the .v2. prefix above carries the live one.
+  'supermega.ecommerce.storefront_draft.v1.',
+  // Recovery exports written when a website workspace fails to load. They describe a fault on THIS
+  // device, and restoring them onto another would re-assert a problem that is not there.
+  'supermega.website.workspace.recovery.v1.',
 ]
 
 const categoryMatchers: Array<[string, (key: string) => boolean]> = [

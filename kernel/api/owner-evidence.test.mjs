@@ -4,8 +4,8 @@ import assert from 'node:assert/strict'
 import { handleOwnerEvidence } from './owner-evidence.mjs'
 
 const NOW = new Date('2026-07-13T04:30:00.000Z')
-const ENV = { SUPERMEGA_OPS_KEY: 'ops-secret' }
-const HEADERS = { 'x-ops-key': 'ops-secret' }
+const ENV = { SUPERMEGA_OPS_KEY: 'ops-secret-0123456789abcdef012345' }
+const HEADERS = { 'x-ops-key': 'ops-secret-0123456789abcdef012345' }
 const BODY = {
   source: 'line',
   reviewedBy: 'Swan',

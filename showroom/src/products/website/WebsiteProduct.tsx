@@ -2,6 +2,11 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useLocation, useSearchParams } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
+import { emitMetric } from '../../analytics/metrics-collector'
+import {
+  readLocalSetupBusinessName,
+  readLocalShopBusinessTemplateId,
+} from '../../core/product-onboarding-runtime'
 import { ContentWorkspace } from './ContentWorkspace'
 import { NavigationWorkspace } from './NavigationWorkspace'
 import { PublishWorkspace } from './PublishWorkspace'
@@ -14,6 +19,7 @@ import {
   emptyWebsiteLeadLedger,
   readWebsiteLeadLedger,
   reviewWebsiteLead,
+  websiteInboxLeads,
   websiteLeadCounts,
   writeWebsiteLeadLedger,
 } from './website-leads'
@@ -45,8 +51,8 @@ import {
   recordWebsiteSnapshot,
   restoreWebsiteEditSession,
   updateWebsiteEditSession,
-  WEBSITE_EDIT_SESSION_KEY,
   websiteEditSessionMatches,
+  websiteEditSessionStorageKey,
   workspaceFingerprint,
   type EvidenceKind,
   type PreviewDevice,
@@ -141,10 +147,6 @@ function formatRecoveryDate(value: string) {
   return Number.isNaN(timestamp) ? 'Saved recovery' : new Date(timestamp).toLocaleString()
 }
 
-function editSessionStorageKey(scope: string) {
-  return `${WEBSITE_EDIT_SESSION_KEY}.${encodeURIComponent(scope)}`
-}
-
 export function WebsiteProduct() {
   const location = useLocation()
   const {
@@ -219,6 +221,10 @@ export function WebsiteProduct() {
     && workspace.workingSample.contentFingerprint === fingerprint)
   const canReview = !hasUnsavedChanges && !starterAvailable && contentChecksPass
   const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
+  // Read once for the life of this screen. The setup component is required to stay free of
+  // device reads, so the shell does it and hands the answer down as a prop.
+  const [shopTradeId] = useState(readLocalShopBusinessTemplateId)
+  const [shopBusinessName] = useState(readLocalSetupBusinessName)
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
   const activeViewCopy = view === 'content' && starterAvailable && surface === 'preview'
     ? {
@@ -290,7 +296,7 @@ export function WebsiteProduct() {
     if (editSessionRef.current?.scope === editSessionScope) return
     const restoreTimer = window.setTimeout(() => {
       if (editSessionRef.current?.scope === editSessionScope) return
-      const storageKey = editSessionStorageKey(editSessionScope)
+      const storageKey = websiteEditSessionStorageKey(editSessionScope)
       try {
         const raw = window.sessionStorage.getItem(storageKey)
         const restored = raw ? restoreWebsiteEditSession(raw) : null
@@ -353,6 +359,7 @@ export function WebsiteProduct() {
 
   function openContentSurface(nextSurface: 'work' | 'preview') {
     setSurface(nextSurface)
+    if (nextSurface === 'preview') emitMetric({ product: 'website', capability: 'website-builder', action: 'preview.opened', ts: Date.now() })
     setSiteSettingsOpen(false)
     requestHeadingFocus()
   }
@@ -394,7 +401,7 @@ export function WebsiteProduct() {
 
   function persistEditSession(next: WebsiteEditSessionState) {
     try {
-      window.sessionStorage.setItem(editSessionStorageKey(next.scope), JSON.stringify(next.session))
+      window.sessionStorage.setItem(websiteEditSessionStorageKey(next.scope), JSON.stringify(next.session))
     } catch {
       setNotice('The unsaved preview is held in this tab only. Browser draft recovery is unavailable, but Save and Discard still work.')
     }
@@ -403,7 +410,7 @@ export function WebsiteProduct() {
   function clearEditSession(target = editSessionRef.current) {
     if (target) {
       try {
-        window.sessionStorage.removeItem(editSessionStorageKey(target.scope))
+        window.sessionStorage.removeItem(websiteEditSessionStorageKey(target.scope))
       } catch {
         // The in-memory edit session can still be cleared safely.
       }
@@ -456,6 +463,7 @@ export function WebsiteProduct() {
     )
     setSavingDraft(false)
     if (!result.ok) return
+    emitMetric({ product: 'website', capability: 'website-builder', action: 'edit.saved', ts: Date.now() })
     if (editSessionRef.current === retained) clearEditSession(retained)
     setNotice(result.changed
       ? `Website saved once as content revision ${result.workspace.contentRevision}. Nothing was deployed.`
@@ -773,6 +781,7 @@ export function WebsiteProduct() {
         route: location.pathname + location.search,
         detail: 'Produced a reviewable Website preview file from saved content.',
       })
+      emitMetric({ product: 'website', capability: 'website-builder', action: 'file.downloaded', ts: Date.now() })
       setNotice(`${download.filename} downloaded. It is a standalone preview; no site or domain was deployed.`)
     } catch (error) {
       setNotice('The Website download failed closed: ' + (error instanceof Error ? error.message : 'unknown export error'))
@@ -783,8 +792,11 @@ export function WebsiteProduct() {
   const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
     && Boolean(page.hero.ctaLabel.trim())
     && Boolean(page.hero.ctaHref.trim()))
-  const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
-  const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
+  // Inbox membership follows the ledger this workspace owns, not the name shown on the site.
+  // Filtering these two on workspace.siteName meant one rename in Navigation emptied the inbox,
+  // the "N new" badge, and the export -- with every captured inquiry still sitting on disk.
+  const websiteLeads = websiteInboxLeads(leadLedger)
+  const leadCounts = websiteLeadCounts(leadLedger)
   const releaseRecordRequired = storageMode === 'managed'
   const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges
   const websiteTodayStep = storageIssue || canRepairLocalStorage
@@ -1284,6 +1296,8 @@ export function WebsiteProduct() {
               {view === 'content' ? (
                 starterSetupActive ? (
                   <WebsiteStarterSetup
+                    initialBusinessName={shopBusinessName}
+                    initialTradeId={shopTradeId}
                     onCreate={startWithBusiness}
                     onViewSample={viewWebsiteSample}
                   />

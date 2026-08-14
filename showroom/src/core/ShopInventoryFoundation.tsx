@@ -2,6 +2,7 @@ import { type FormEvent, useMemo, useState } from 'react'
 
 import {
   applyShopInventoryImport,
+  SHOP_INVENTORY_MAX_STOCK_UNITS,
   buildShopInventoryImportPackage,
   createShopInventoryMaster,
   createEmptyShopInventoryState,
@@ -320,7 +321,12 @@ export function ShopInventoryFoundation({ actor, commerce, disabled, identity, o
     try {
       const stockItems = catalog.filter((item) => Number.isSafeInteger(item.onHand) && item.onHand > 0)
       if (!stockItems.length) throw new Error('Receive or import positive stock before setting up locations.')
-      if (stockItems.length > 8) throw new Error('Location setup v1 supports eight stocked catalog items. Reduce the reviewed opening scope before setup.')
+      // The bound here is the one the inventory contract actually enforces on stock units.
+      // It used to be 8, which is the LOCATION limit -- and that blocked every business
+      // template the product ships: all seven seed 12 or 13 stocked items, so location stock,
+      // lots, ATP, transfers and the Plant material loop were unreachable for every real
+      // shop. Only the 5-item demo seed fitted, which is why it was not noticed.
+      if (stockItems.length > SHOP_INVENTORY_MAX_STOCK_UNITS) throw new Error(`Location setup supports ${SHOP_INVENTORY_MAX_STOCK_UNITS} stocked catalog items. Reduce the reviewed opening scope before setup.`)
       const importId = commandId('IMP')
       const clients = [{ id: 'CLI-DEFAULT-001', name: setupDraft.client.trim() }]
       const vendors = [{ id: 'VEN-OPENING-001', name: setupDraft.vendor.trim() }]

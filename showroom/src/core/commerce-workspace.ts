@@ -22,6 +22,7 @@ export const COMMERCE_ORDER_CALCULATION_V2_SCHEMA = 'supermega.commerce.order-ca
 export const COMMERCE_DAILY_CLOSE_EXPORT_SCHEMA = 'supermega.commerce.daily-close-export.v3' as const
 export const COMMERCE_ACCOUNTING_HANDOFF_SCHEMA = 'supermega.commerce.accounting-handoff.v3' as const
 export const COMMERCE_SUPPLIER_PAYABLES_HANDOFF_SCHEMA = 'supermega.commerce.supplier-payables-handoff.v1' as const
+export const COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA = 'supermega.commerce.customer-receivables-handoff.v1' as const
 export const COMMERCE_CLOSE_SETTLEMENT_SCHEMA = 'supermega.commerce.close-settlement.v1' as const
 export const COMMERCE_SUPPORT_WORKLOAD_EXPORT_SCHEMA = 'supermega.commerce.support-workload.v1' as const
 export const COMMERCE_ORDER_ACKNOWLEDGEMENT_SCHEMA = 'supermega.commerce.order-acknowledgement.v1' as const
@@ -813,6 +814,39 @@ export type CommerceSupplierPayablesHandoff = {
   supplierCreditTotalMmk: number
   netPayableTotalMmk: number
   rows: CommerceSupplierPayablesHandoffRow[]
+  digest: string
+}
+
+export type CommerceCustomerReceivablesHandoffRow = {
+  orderId: string
+  customer: string
+  paymentMethod: string
+  createdAt: string
+  dueAt: string
+  balanceMmk: number
+  daysPastDue: number
+  bucket: CommerceReceivableAgingBucket
+  collectionActionCount: number
+  lastCollectionAt: string | null
+  lastCollectionActor: string | null
+  lastCollectionEvidence: string | null
+  collectionAuthorized: false
+}
+
+export type CommerceCustomerReceivablesHandoff = {
+  schema: typeof COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA
+  status: 'review_required'
+  collectionAuthority: 'none'
+  paymentReceived: false
+  accountingPosted: false
+  currency: 'MMK'
+  generatedAt: string
+  outstandingOrderCount: number
+  overdueOrderCount: number
+  totalOutstandingMmk: number
+  overdueOutstandingMmk: number
+  bucketTotalsMmk: Record<CommerceReceivableAgingBucket, number>
+  rows: CommerceCustomerReceivablesHandoffRow[]
   digest: string
 }
 
@@ -2268,6 +2302,16 @@ export function createSeedCommerce(now = deterministicSeedNow): CommerceState {
 
 function sameAccountableActor(left: string, right: string) {
   return left.trim().toLowerCase() === right.trim().toLowerCase()
+}
+
+// Recovers the instant a seeded workspace was generated at, so pristine-workspace checks compare
+// against a seed rebuilt at that instant instead of assuming a fixed one. The catalog baseline
+// proof is captured at exactly the seed instant, so no offset arithmetic is involved.
+export function commerceSeedAnchor(state: CommerceState) {
+  const baseline = state.catalogBaselines?.find((candidate) => candidate.proof.actionId === 'ACT-DEMO-CATALOG-BASELINE')
+  if (!baseline) return null
+  const anchor = Date.parse(baseline.proof.capturedAt)
+  return Number.isFinite(anchor) ? anchor : null
 }
 
 export function upgradeCommerceSeedPolicies(stateValue: CommerceState) {
@@ -4416,7 +4460,12 @@ export function validateCommerceState(value: unknown): CommerceState {
         value.inventoryFoundation as ShopInventoryState,
         value.items as CommerceItem[],
       )) throw new Error('available-to-promise stock does not match the Shop catalog')
-      const inventory = projectShopInventory(value.inventoryFoundation as ShopInventoryState, itemSkus)
+      // Sorted, because projectShopInventory requires canonical SKU order and itemSkus is
+      // built in CATALOG order. Every other caller sorts; this one did not, so validating any
+      // workspace that had an inventory foundation threw for any catalog whose SKUs were not
+      // already alphabetical -- which is essentially every real shop. The effect was that
+      // location setup could never be confirmed.
+      const inventory = projectShopInventory(value.inventoryFoundation as ShopInventoryState, [...itemSkus].sort())
       for (const decision of supplierSourcingDecisionById.values()) {
         for (const quote of decision.quotes) {
           const vendor = inventory.vendors.find((candidate) => candidate.name === quote.supplier)
@@ -4551,7 +4600,7 @@ export function loadCommerceWorkspace(storage = browserStorage()): CommerceWorks
     }
   }
   if (invalidLegacyFound) return { state: createEmptyCommerce(), source: 'recovery', error: 'Legacy Commerce data is malformed. Migration failed closed and did not create v2 data.' }
-  return persistInitialState(storage, createSeedCommerce(), 'seed')
+  return persistInitialState(storage, createSeedCommerce(Date.now()), 'seed')
 }
 
 export function commerceWorkspaceCanWrite(
@@ -6375,7 +6424,9 @@ export function installCommerceWorkingSampleCatalog(stateValue: CommerceState, i
       return null
     }
   }
-  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce())) return null
+  const seedAnchor = commerceSeedAnchor(base)
+  if (seedAnchor === null) return null
+  if (JSON.stringify(base) !== JSON.stringify(createSeedCommerce(seedAnchor))) return null
   if (requestedItems.some((item) => base.items.some((existing) => existing.sku === item.sku))) return null
 
   let next = base
@@ -10161,6 +10212,117 @@ export function commerceSupplierPayablesAging(state: CommerceState, now: number)
     paymentAuthority: 'none',
     paymentInitiated: false,
   }
+}
+
+function commerceCustomerReceivablesHandoffProjection(artifact: Omit<CommerceCustomerReceivablesHandoff, 'digest'>) {
+  return [
+    artifact.schema,
+    artifact.status,
+    artifact.collectionAuthority,
+    artifact.paymentReceived,
+    artifact.accountingPosted,
+    artifact.currency,
+    artifact.generatedAt,
+    artifact.outstandingOrderCount,
+    artifact.overdueOrderCount,
+    artifact.totalOutstandingMmk,
+    artifact.overdueOutstandingMmk,
+    receivableBuckets.map((bucket) => [bucket, artifact.bucketTotalsMmk[bucket]]),
+    artifact.rows.map((row) => [
+      row.orderId,
+      row.customer,
+      row.paymentMethod,
+      row.createdAt,
+      row.dueAt,
+      row.balanceMmk,
+      row.daysPastDue,
+      row.bucket,
+      row.collectionActionCount,
+      row.lastCollectionAt,
+      row.lastCollectionActor,
+      row.lastCollectionEvidence,
+      row.collectionAuthorized,
+    ]),
+  ]
+}
+
+function commerceCustomerReceivablesHandoffDigest(artifact: Omit<CommerceCustomerReceivablesHandoff, 'digest'>) {
+  return `sha256:${sha256Hex(JSON.stringify(commerceCustomerReceivablesHandoffProjection(artifact)))}`
+}
+
+export function commerceCustomerReceivablesHandoff(state: CommerceState, now: number): CommerceCustomerReceivablesHandoff | null {
+  const aging = commerceReceivablesAging(state, now)
+  if (!aging.rows.length) return null
+  const orderMap = new Map(state.orders.map((order) => [order.id, order]))
+  const rows: CommerceCustomerReceivablesHandoffRow[] = aging.rows.map((agingRow) => {
+    const order = orderMap.get(agingRow.orderId)
+    const lastAction = agingRow.lastCollectionAction ?? null
+    return {
+      orderId: agingRow.orderId,
+      customer: agingRow.customer,
+      paymentMethod: agingRow.paymentMethod,
+      createdAt: order?.createdAt ?? agingRow.dueAt,
+      dueAt: agingRow.dueAt,
+      balanceMmk: agingRow.balanceMmk,
+      daysPastDue: agingRow.daysPastDue,
+      bucket: agingRow.bucket,
+      collectionActionCount: agingRow.collectionActionCount,
+      lastCollectionAt: lastAction?.capturedAt ?? null,
+      lastCollectionActor: lastAction?.actor ?? null,
+      lastCollectionEvidence: lastAction?.evidenceReference ?? null,
+      collectionAuthorized: false,
+    }
+  })
+  if (![aging.totalOutstandingMmk, aging.overdueMmk].every(Number.isSafeInteger)) {
+    throw new Error('Customer receivables handoff totals exceed the supported safe integer range.')
+  }
+  const artifact: Omit<CommerceCustomerReceivablesHandoff, 'digest'> = {
+    schema: COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA,
+    status: 'review_required',
+    collectionAuthority: 'none',
+    paymentReceived: false,
+    accountingPosted: false,
+    currency: 'MMK',
+    generatedAt: aging.asOf,
+    outstandingOrderCount: aging.rows.length,
+    overdueOrderCount: aging.overdueOrders,
+    totalOutstandingMmk: aging.totalOutstandingMmk,
+    overdueOutstandingMmk: aging.overdueMmk,
+    bucketTotalsMmk: aging.totalsMmk,
+    rows,
+  }
+  return { ...artifact, digest: commerceCustomerReceivablesHandoffDigest(artifact) }
+}
+
+export function commerceCustomerReceivablesHandoffCsv(artifact: CommerceCustomerReceivablesHandoff) {
+  const { digest, ...unsigned } = artifact
+  if (artifact.schema !== COMMERCE_CUSTOMER_RECEIVABLES_HANDOFF_SCHEMA
+    || digest !== commerceCustomerReceivablesHandoffDigest(unsigned)) {
+    throw new Error('Customer receivables handoff integrity check failed.')
+  }
+  const header = [
+    'schema', 'status', 'collection_authority', 'payment_received', 'accounting_posted', 'currency',
+    'generated_at', 'outstanding_order_count', 'overdue_order_count',
+    'total_outstanding_mmk', 'overdue_outstanding_mmk',
+    'bucket_current_mmk', 'bucket_1_7_mmk', 'bucket_8_30_mmk', 'bucket_31_60_mmk', 'bucket_over_60_mmk',
+    'order_id', 'customer', 'payment_method', 'created_at', 'due_at', 'balance_mmk',
+    'days_past_due', 'bucket', 'collection_action_count',
+    'last_collection_at', 'last_collection_actor', 'last_collection_evidence',
+    'row_collection_authorized', 'artifact_digest',
+  ]
+  const rows = artifact.rows.map((row): Array<string | number | null | string[]> => [
+    artifact.schema, artifact.status, artifact.collectionAuthority, String(artifact.paymentReceived),
+    String(artifact.accountingPosted), artifact.currency, artifact.generatedAt,
+    artifact.outstandingOrderCount, artifact.overdueOrderCount,
+    artifact.totalOutstandingMmk, artifact.overdueOutstandingMmk,
+    artifact.bucketTotalsMmk['current'], artifact.bucketTotalsMmk['1_7'],
+    artifact.bucketTotalsMmk['8_30'], artifact.bucketTotalsMmk['31_60'], artifact.bucketTotalsMmk['over_60'],
+    row.orderId, row.customer, row.paymentMethod, row.createdAt, row.dueAt, row.balanceMmk,
+    row.daysPastDue, row.bucket, row.collectionActionCount,
+    row.lastCollectionAt, row.lastCollectionActor, row.lastCollectionEvidence,
+    String(row.collectionAuthorized), artifact.digest,
+  ])
+  return [header, ...rows].map((row) => row.map(commerceCsvCell).join(',')).join('\r\n') + '\r\n'
 }
 
 export function advanceCommerceOrder(

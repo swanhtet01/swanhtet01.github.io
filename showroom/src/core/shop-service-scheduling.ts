@@ -7,6 +7,10 @@ export type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym
 export type ShopIndustryPack = {
   id: ShopIndustryPackId
   name: string
+  // Burmese display name. Carried alongside `name` rather than widening it to {en, my}:
+  // `name` reaches installCommerceWorkingSampleCatalog as a sampleName and is persisted
+  // in the commerce workspace, so changing its type would invalidate saved workspaces.
+  nameMy: string
   description: string
   firstWorkflow: string
   workflowTemplateId: 'social-commerce' | 'retail-wholesale' | 'restaurant-ordering'
@@ -16,9 +20,15 @@ export type ShopIndustryPack = {
   resources: readonly Omit<ShopServiceResource, 'active'>[]
 }
 
+// nameMy is optional on both of these because they are PERSISTED under
+// SHOP_SERVICE_SCHEDULE_STORAGE_KEY. Schedules saved before this field existed carry no
+// Burmese name, and readShopServiceSchedule turns any validation miss into "Saved
+// appointments are unreadable" -- so requiring it would lock owners out of their own
+// evidence. Pack seeds always supply it; owner-registered services may not.
 export type ShopService = {
   id: string
   name: string
+  nameMy?: string
   durationMinutes: number
   priceMmk: number
   active: boolean
@@ -27,6 +37,7 @@ export type ShopService = {
 export type ShopServiceResource = {
   id: string
   name: string
+  nameMy?: string
   kind: 'staff' | 'room' | 'equipment'
   active: boolean
 }
@@ -93,103 +104,133 @@ export const shopIndustryPacks: readonly ShopIndustryPack[] = [
   {
     id: 'retail',
     name: 'Retail',
+    nameMy: 'အရောင်းဆိုင်',
     description: 'Counter sales, pickup windows, stock, purchasing, and returns.',
     firstWorkflow: 'Complete a counter sale and schedule a reviewed pickup.',
     workflowTemplateId: 'retail-wholesale',
     entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Purchasing', 'Returns', 'Pickup schedule'],
     services: [
-      { id: 'service-personal-shopping', name: 'Personal shopping', durationMinutes: 30, priceMmk: 15_000 },
-      { id: 'service-pickup-window', name: 'Pickup window', durationMinutes: 15, priceMmk: 5_000 },
+      { id: 'service-personal-shopping', name: 'Personal shopping', nameMy: 'အထူးဝယ်ယူ ကူညီမှု', durationMinutes: 30, priceMmk: 15_000 },
+      { id: 'service-pickup-window', name: 'Pickup window', nameMy: 'ပစ္စည်းလာယူချိန်', durationMinutes: 15, priceMmk: 5_000 },
     ],
     resources: [
-      { id: 'resource-sales-1', name: 'Sales staff 1', kind: 'staff' },
-      { id: 'resource-pickup-1', name: 'Pickup desk 1', kind: 'room' },
+      { id: 'resource-sales-1', name: 'Sales staff 1', nameMy: 'အရောင်းဝန်ထမ်း ၁', kind: 'staff' },
+      { id: 'resource-pickup-1', name: 'Pickup desk 1', nameMy: 'ပစ္စည်းလာယူကောင်တာ ၁', kind: 'room' },
     ],
   },
   {
     id: 'cafe',
     name: 'Cafe',
+    nameMy: 'လက်ဖက်ရည်ဆိုင်',
     description: 'Counter orders, collection slots, stock, and daily close.',
     firstWorkflow: 'Take a counter order and schedule a large-order collection.',
     workflowTemplateId: 'restaurant-ordering',
     entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Daily close', 'Collection schedule'],
     services: [
-      { id: 'service-catering-consultation', name: 'Catering consultation', durationMinutes: 30, priceMmk: 20_000 },
-      { id: 'service-preorder-collection', name: 'Preorder collection', durationMinutes: 15, priceMmk: 5_000 },
+      { id: 'service-catering-consultation', name: 'Catering consultation', nameMy: 'ပွဲအတွက် တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 30, priceMmk: 20_000 },
+      { id: 'service-preorder-collection', name: 'Preorder collection', nameMy: 'ကြိုတင်မှာယူ လာယူချိန်', durationMinutes: 15, priceMmk: 5_000 },
     ],
     resources: [
-      { id: 'resource-counter-1', name: 'Counter staff 1', kind: 'staff' },
-      { id: 'resource-collection-1', name: 'Collection point 1', kind: 'room' },
+      { id: 'resource-counter-1', name: 'Counter staff 1', nameMy: 'ကောင်တာဝန်ထမ်း ၁', kind: 'staff' },
+      { id: 'resource-collection-1', name: 'Collection point 1', nameMy: 'ပစ္စည်းလာယူနေရာ ၁', kind: 'room' },
     ],
   },
   {
     id: 'restaurant',
     name: 'Restaurant',
+    nameMy: 'စားသောက်ဆိုင်',
     description: 'Orders, table reservations, deposits, stock, and payment review.',
     firstWorkflow: 'Record an order and hold one accountable table reservation.',
     workflowTemplateId: 'restaurant-ordering',
     entryPoint: 'Walk-in',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Reservations'],
     services: [
-      { id: 'service-table-reservation', name: 'Table reservation deposit', durationMinutes: 90, priceMmk: 10_000 },
-      { id: 'service-event-consultation', name: 'Private event consultation', durationMinutes: 45, priceMmk: 25_000 },
+      { id: 'service-table-reservation', name: 'Table reservation deposit', nameMy: 'စားပွဲ ကြိုတင်စရန်', durationMinutes: 90, priceMmk: 10_000 },
+      { id: 'service-event-consultation', name: 'Private event consultation', nameMy: 'ကိုယ်ပိုင်ပွဲ တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 45, priceMmk: 25_000 },
     ],
     resources: [
-      { id: 'resource-host-1', name: 'Host 1', kind: 'staff' },
-      { id: 'resource-table-zone-1', name: 'Table zone 1', kind: 'room' },
+      { id: 'resource-host-1', name: 'Host 1', nameMy: 'ဧည့်ကြိုဝန်ထမ်း ၁', kind: 'staff' },
+      { id: 'resource-table-zone-1', name: 'Table zone 1', nameMy: 'စားပွဲဇုန် ၁', kind: 'room' },
     ],
   },
+  // The three packs below are the ones with no trade template in business-templates.ts.
+  // Their depth lives HERE rather than there on purpose: a spa sells a therapist-hour, not a
+  // stock unit with a reorder level, and this file is what already models that. Service ids
+  // present before this deepening are kept so nothing that referenced them has to move.
   {
     id: 'spa',
     name: 'Spa',
+    nameMy: 'စပါနှင့် အနှိပ်ခန်း',
     description: 'Service sales, appointments, staff, rooms, stock, and payments.',
     firstWorkflow: 'Hold, confirm, check in, and complete one treatment appointment.',
     workflowTemplateId: 'social-commerce',
     entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Appointments', 'Service resources'],
     services: [
-      { id: 'service-consultation', name: 'Consultation', durationMinutes: 30, priceMmk: 20_000 },
-      { id: 'service-session', name: 'Standard treatment', durationMinutes: 60, priceMmk: 45_000 },
+      { id: 'service-consultation', name: 'Consultation', nameMy: 'အလှအပ တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 30, priceMmk: 20_000 },
+      { id: 'service-session', name: 'Traditional Myanmar massage', nameMy: 'မြန်မာ့ရိုးရာ အနှိပ်', durationMinutes: 60, priceMmk: 45_000 },
+      { id: 'service-oil-massage', name: 'Aromatic oil massage', nameMy: 'ရနံ့ဆီ အနှိပ်', durationMinutes: 90, priceMmk: 65_000 },
+      { id: 'service-foot-massage', name: 'Foot massage', nameMy: 'ခြေထောက် အနှိပ်', durationMinutes: 45, priceMmk: 28_000 },
+      { id: 'service-facial', name: 'Facial treatment', nameMy: 'မျက်နှာ အလှပြင်ခြင်း', durationMinutes: 45, priceMmk: 38_000 },
+      { id: 'service-body-scrub', name: 'Body scrub', nameMy: 'ကိုယ်ခန္ဓာ အရေပြားသန့်စင်ခြင်း', durationMinutes: 60, priceMmk: 42_000 },
+      { id: 'service-herbal-steam', name: 'Herbal steam', nameMy: 'ဆေးဖက်ဝင် ရေနွေးငွေ့ခံခြင်း', durationMinutes: 30, priceMmk: 18_000 },
     ],
     resources: [
-      { id: 'resource-staff-1', name: 'Therapist 1', kind: 'staff' },
-      { id: 'resource-room-1', name: 'Treatment room 1', kind: 'room' },
+      { id: 'resource-staff-1', name: 'Therapist 1', nameMy: 'အနှိပ်ဆရာမ ၁', kind: 'staff' },
+      { id: 'resource-staff-2', name: 'Therapist 2', nameMy: 'အနှိပ်ဆရာမ ၂', kind: 'staff' },
+      { id: 'resource-room-1', name: 'Treatment room 1', nameMy: 'ကုသခန်း ၁', kind: 'room' },
+      { id: 'resource-room-2', name: 'Treatment room 2', nameMy: 'ကုသခန်း ၂', kind: 'room' },
+      { id: 'resource-steam-room', name: 'Steam room', nameMy: 'ရေနွေးငွေ့ခန်း', kind: 'room' },
     ],
   },
   {
     id: 'gym',
     name: 'Gym',
+    nameMy: 'ကာယဗလခန်း',
     description: 'Service sales, consultations, training sessions, staff, and studios.',
     firstWorkflow: 'Schedule and complete one personal-training session.',
     workflowTemplateId: 'social-commerce',
     entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Training schedule', 'Staff resources'],
     services: [
-      { id: 'service-fitness-consultation', name: 'Fitness consultation', durationMinutes: 30, priceMmk: 15_000 },
-      { id: 'service-personal-training', name: 'Personal training', durationMinutes: 60, priceMmk: 30_000 },
+      { id: 'service-fitness-consultation', name: 'Fitness consultation', nameMy: 'ကြံ့ခိုင်ရေး တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 30, priceMmk: 15_000 },
+      { id: 'service-personal-training', name: 'Personal training', nameMy: 'တစ်ဦးချင်း လေ့ကျင့်ရေး', durationMinutes: 60, priceMmk: 30_000 },
+      { id: 'service-body-check', name: 'Body composition check', nameMy: 'ကိုယ်အလေးချိန်နှင့် အသားဓာတ် တိုင်းတာခြင်း', durationMinutes: 20, priceMmk: 8_000 },
+      { id: 'service-group-class', name: 'Group class', nameMy: 'အုပ်စုလိုက် လေ့ကျင့်ခန်း', durationMinutes: 60, priceMmk: 12_000 },
+      { id: 'service-yoga', name: 'Yoga session', nameMy: 'ယောဂ လေ့ကျင့်ခန်း', durationMinutes: 60, priceMmk: 15_000 },
+      { id: 'service-nutrition-review', name: 'Nutrition plan review', nameMy: 'အာဟာရ အစီအစဉ် သုံးသပ်ခြင်း', durationMinutes: 30, priceMmk: 20_000 },
     ],
     resources: [
-      { id: 'resource-trainer-1', name: 'Trainer 1', kind: 'staff' },
-      { id: 'resource-studio-1', name: 'Studio 1', kind: 'room' },
+      { id: 'resource-trainer-1', name: 'Trainer 1', nameMy: 'လေ့ကျင့်ရေးဆရာ ၁', kind: 'staff' },
+      { id: 'resource-trainer-2', name: 'Trainer 2', nameMy: 'လေ့ကျင့်ရေးဆရာ ၂', kind: 'staff' },
+      { id: 'resource-studio-1', name: 'Studio 1', nameMy: 'လေ့ကျင့်ခန်းမ ၁', kind: 'room' },
+      { id: 'resource-weights-floor', name: 'Weights floor', nameMy: 'အလေးမ ကစားကွင်း', kind: 'room' },
     ],
   },
   {
     id: 'school',
     name: 'School',
+    nameMy: 'သင်တန်းကျောင်း',
     description: 'Enrollment consultations, class sessions, teachers, rooms, and fee sales.',
     firstWorkflow: 'Schedule one enrollment consultation or class session.',
     workflowTemplateId: 'social-commerce',
     entryPoint: 'Phone',
     capabilities: ['Sell', 'Orders', 'Stock', 'Payments', 'Class schedule', 'Teacher resources'],
     services: [
-      { id: 'service-enrollment-consultation', name: 'Enrollment consultation', durationMinutes: 30, priceMmk: 10_000 },
-      { id: 'service-class-session', name: 'Class session', durationMinutes: 60, priceMmk: 20_000 },
+      { id: 'service-enrollment-consultation', name: 'Enrollment consultation', nameMy: 'ကျောင်းအပ် တိုင်ပင်ဆွေးနွေးခြင်း', durationMinutes: 30, priceMmk: 10_000 },
+      { id: 'service-placement-test', name: 'Placement test', nameMy: 'အဆင့်စစ်ဆေးမှု', durationMinutes: 45, priceMmk: 5_000 },
+      { id: 'service-class-session', name: 'English class session', nameMy: 'အင်္ဂလိပ်စာ သင်တန်းချိန်', durationMinutes: 60, priceMmk: 20_000 },
+      { id: 'service-maths-class', name: 'Maths class session', nameMy: 'သင်္ချာ သင်တန်းချိန်', durationMinutes: 60, priceMmk: 20_000 },
+      { id: 'service-private-tutoring', name: 'Private tutoring', nameMy: 'တစ်ဦးချင်း အထူးသင်ကြားခြင်း', durationMinutes: 60, priceMmk: 35_000 },
+      { id: 'service-exam-prep', name: 'Exam preparation session', nameMy: 'စာမေးပွဲ ပြင်ဆင်သင်တန်း', durationMinutes: 90, priceMmk: 30_000 },
     ],
     resources: [
-      { id: 'resource-teacher-1', name: 'Teacher 1', kind: 'staff' },
-      { id: 'resource-classroom-1', name: 'Classroom 1', kind: 'room' },
+      { id: 'resource-teacher-1', name: 'Teacher 1', nameMy: 'ဆရာ/ဆရာမ ၁', kind: 'staff' },
+      { id: 'resource-teacher-2', name: 'Teacher 2', nameMy: 'ဆရာ/ဆရာမ ၂', kind: 'staff' },
+      { id: 'resource-classroom-1', name: 'Classroom 1', nameMy: 'စာသင်ခန်း ၁', kind: 'room' },
+      { id: 'resource-classroom-2', name: 'Classroom 2', nameMy: 'စာသင်ခန်း ၂', kind: 'room' },
     ],
   },
 ] as const
@@ -260,6 +301,7 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
     if (serviceIds.has(id)) throw new Error(`Duplicate service ${id}.`)
     serviceIds.add(id)
     boundedText(service.name, 'Service name')
+    if (service.nameMy !== undefined) boundedText(service.nameMy, 'Service Myanmar name')
     positiveWholeNumber(service.durationMinutes, 'Service duration', 24 * 60)
     positiveWholeNumber(service.priceMmk, 'Service price', Number.MAX_SAFE_INTEGER)
     if (typeof service.active !== 'boolean') throw new Error(`Service ${id} has an invalid active state.`)
@@ -270,6 +312,7 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
     if (resourceIds.has(id)) throw new Error(`Duplicate resource ${id}.`)
     resourceIds.add(id)
     boundedText(resource.name, 'Resource name')
+    if (resource.nameMy !== undefined) boundedText(resource.nameMy, 'Resource Myanmar name')
     if (!['staff', 'room', 'equipment'].includes(resource.kind)) throw new Error(`Resource ${id} has an invalid kind.`)
     if (typeof resource.active !== 'boolean') throw new Error(`Resource ${id} has an invalid active state.`)
   }
@@ -323,6 +366,7 @@ export function registerShopService(state: ShopServiceSchedule, input: Omit<Shop
   const service: ShopService = {
     id: identifier('service', revision),
     name: boundedText(input.name, 'Service name'),
+    ...(input.nameMy === undefined ? {} : { nameMy: boundedText(input.nameMy, 'Service Myanmar name') }),
     durationMinutes: positiveWholeNumber(input.durationMinutes, 'Service duration', 24 * 60),
     priceMmk: positiveWholeNumber(input.priceMmk, 'Service price', Number.MAX_SAFE_INTEGER),
     active: true,
@@ -331,12 +375,18 @@ export function registerShopService(state: ShopServiceSchedule, input: Omit<Shop
   return validateShopServiceSchedule(next)
 }
 
-export function registerShopServiceResource(state: ShopServiceSchedule, input: Pick<ShopServiceResource, 'name' | 'kind'>, proof: ShopServiceScheduleProof) {
+export function registerShopServiceResource(state: ShopServiceSchedule, input: Pick<ShopServiceResource, 'name' | 'kind' | 'nameMy'>, proof: ShopServiceScheduleProof) {
   validateShopServiceSchedule(state)
   const evidence = proofRecord(proof)
   if (!['staff', 'room', 'equipment'].includes(input.kind)) throw new Error('Choose staff, room, or equipment.')
   const revision = state.revision + 1
-  const resource: ShopServiceResource = { id: identifier('resource', revision), name: boundedText(input.name, 'Resource name'), kind: input.kind, active: true }
+  const resource: ShopServiceResource = {
+    id: identifier('resource', revision),
+    name: boundedText(input.name, 'Resource name'),
+    ...(input.nameMy === undefined ? {} : { nameMy: boundedText(input.nameMy, 'Resource Myanmar name') }),
+    kind: input.kind,
+    active: true,
+  }
   const next = appendEvent({ ...state, resources: [...state.resources, resource] }, { type: 'resource_registered', subjectId: resource.id, ...evidence })
   return validateShopServiceSchedule(next)
 }

@@ -1,0 +1,148 @@
+import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
+
+const requireFromShowroom = createRequire(pathToFileURL('showroom/package.json').href)
+const { build } = await import(pathToFileURL(requireFromShowroom.resolve('esbuild')).href)
+
+const bundle = await build({
+  stdin: {
+    contents: `export { projectEcommerceCancellationIntentRefundStartedRatesBrief } from './ecommerce-cancellation-intent-refund-started-rates-brief.ts'`,
+    resolveDir: 'showroom/src/core',
+    sourcefile: 'entry.ts',
+    loader: 'ts',
+  },
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  write: false,
+  logLevel: 'error',
+})
+
+const { projectEcommerceCancellationIntentRefundStartedRatesBrief } = await import(
+  `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`
+)
+
+let checks = 0
+function check(condition, label) {
+  checks += 1
+  assert.ok(condition, label)
+}
+
+let intentId = 0
+function cancellationIntent({ refundStarted = false } = {}) {
+  intentId++
+  return {
+    schema: 'supermega.ecommerce.cancellation_intent.v1',
+    state: 'pending_shop_review',
+    scope: 'scope-1',
+    id: `ECI-${intentId}`,
+    idempotencyKey: `ik-${intentId}`,
+    createdAt: '2026-08-01T09:00:00Z',
+    orderId: `ORD-${intentId}`,
+    sourceRequestId: `REQ-${intentId}`,
+    orderStatus: 'confirmed',
+    paymentStatus: 'pending',
+    refundStatus: 'none',
+    reasonCode: 'customer_request',
+    reason: 'Cancellation reason',
+    totalMmk: 5000,
+    refundStarted,
+    customerMessageSent: false,
+    orderCancelled: false,
+    evidenceReference: `ev-${intentId}`,
+  }
+}
+
+function state(cancellationIntents = []) {
+  return {
+    schema: 'supermega.ecommerce.buying_lifecycle.v1',
+    scope: 'scope-1',
+    revision: 0,
+    headDigest: 'hd-1',
+    requests: [],
+    returnIntents: [],
+    supportIntents: [],
+    correctionIntents: [],
+    cancellationIntents,
+    cancellationDecisions: [],
+    amendmentIntents: [],
+    rescheduleIntents: [],
+    events: [],
+  }
+}
+
+// 1. Empty state — 5 checks
+{
+  const r = projectEcommerceCancellationIntentRefundStartedRatesBrief(state())
+  check(r.totalIntents === 0, 'empty:totalIntents')
+  check(r.refundStartedCount === 0, 'empty:refundStartedCount')
+  check(r.refundStartedRate === 0, 'empty:refundStartedRate')
+  check(r.notRefundStartedCount === 0, 'empty:notRefundStartedCount')
+  check(r.notRefundStartedRate === 0, 'empty:notRefundStartedRate')
+}
+
+// 2. Single refund started — 3 checks
+{
+  const r = projectEcommerceCancellationIntentRefundStartedRatesBrief(state([
+    cancellationIntent({ refundStarted: true }),
+  ]))
+  check(r.totalIntents === 1, 'started:total')
+  check(r.refundStartedCount === 1, 'started:count')
+  check(r.refundStartedRate === 1, 'started:rate')
+}
+
+// 3. Single not started — 3 checks
+{
+  const r = projectEcommerceCancellationIntentRefundStartedRatesBrief(state([cancellationIntent()]))
+  check(r.totalIntents === 1, 'notStarted:total')
+  check(r.notRefundStartedCount === 1, 'notStarted:count')
+  check(r.notRefundStartedRate === 1, 'notStarted:rate')
+}
+
+// 4. 2 started — 3 checks
+{
+  const r = projectEcommerceCancellationIntentRefundStartedRatesBrief(state([
+    cancellationIntent({ refundStarted: true }),
+    cancellationIntent({ refundStarted: true }),
+  ]))
+  check(r.refundStartedCount === 2, 'twoStarted:count')
+  check(r.notRefundStartedCount === 0, 'twoStarted:notCount')
+  check(r.refundStartedRate === 1, 'twoStarted:rate')
+}
+
+// 5. 2 not started — 2 checks
+{
+  const r = projectEcommerceCancellationIntentRefundStartedRatesBrief(state([
+    cancellationIntent(),
+    cancellationIntent(),
+  ]))
+  check(r.notRefundStartedCount === 2, 'twoNotStarted:count')
+  check(r.refundStartedCount === 0, 'twoNotStarted:startedCount')
+}
+
+// 6. 1 started + 1 not started — 3 checks
+{
+  const r = projectEcommerceCancellationIntentRefundStartedRatesBrief(state([
+    cancellationIntent({ refundStarted: true }),
+    cancellationIntent(),
+  ]))
+  check(r.totalIntents === 2, 'half:total')
+  check(r.refundStartedRate === 0.5, 'half:startedRate')
+  check(r.notRefundStartedRate === 0.5, 'half:notStartedRate')
+}
+
+// 7. Precision: 1 started + 2 not started (1/3 = 0.3333) — 4 checks
+{
+  const r = projectEcommerceCancellationIntentRefundStartedRatesBrief(state([
+    cancellationIntent({ refundStarted: true }),
+    cancellationIntent(),
+    cancellationIntent(),
+  ]))
+  check(r.totalIntents === 3, 'precision:total')
+  check(r.refundStartedCount === 1, 'precision:startedCount')
+  check(r.refundStartedRate === 0.3333, 'precision:startedRate')
+  check(r.notRefundStartedRate === 0.6667, 'precision:notStartedRate')
+}
+
+console.log(`ecommerce-cancellation-intent-refund-started-rates-brief: ${checks} checks passed`)

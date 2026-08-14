@@ -5,11 +5,12 @@
 // Running goes through runCrew(), so every model call is cost-capped + plan-tiered by the gateway, the
 // output_contract is enforced, and the executor has NO send/write/pay capability (draft-only). This is
 // the endpoint the console/demo/apps call to actually USE a forged crew. Mirrors api/operator.mjs auth.
+import { usableOpsKey } from '../ops-key.mjs'
 import crypto from 'node:crypto'
 import { listCrews } from '../crew-runner.mjs'
 import { runCrew } from '../crew-run.mjs'
 
-const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
+const OPS_KEY = usableOpsKey(process.env.SUPERMEGA_OPS_KEY)
 function constantTimeEqual(a, b) {
   const ha = crypto.createHash('sha256').update(String(a)).digest()
   const hb = crypto.createHash('sha256').update(String(b)).digest()

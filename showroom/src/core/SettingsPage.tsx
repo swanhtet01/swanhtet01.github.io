@@ -86,6 +86,7 @@ import {
 } from './pilot-outcome'
 import { useLocalPilotOutcome } from './useLocalPilotOutcome'
 import { buildClientCapabilityPlan } from './client-capability-plan'
+import { lockedCapabilityNotice } from './capability-tiers'
 import {
   buildClientCsvStarterPack,
   buildClientDemoBlueprint,
@@ -1979,7 +1980,7 @@ export function SettingsPage() {
               <summary><span>Customize products</span><small>{selectedDemoEntries.length} selected</small></summary>
               <div><span className="core-eyebrow">Products and workflows</span><p className="panel-copy">Keep only what this client will actually use. Every selected product shares the client name and owner.</p></div>
               <div className="form-row">
-                {demoSelections.commerce ? <label className="demo-pack-select">Shop pack<select onChange={(event) => changeShopIndustryPack(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select><small>{selectedShopIndustryPack.firstWorkflow} {selectedShopIndustryPack.description}</small></label> : null}
+                {demoSelections.commerce ? <label className="demo-pack-select">Shop pack<select onChange={(event) => changeShopIndustryPack(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>{shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} · {pack.nameMy}</option>)}</select><small>{selectedShopIndustryPack.firstWorkflow} {selectedShopIndustryPack.description}</small></label> : null}
                 {demoSelections.production ? <label className="demo-pack-select">Plant pack<select onChange={(event) => changePlantIndustryPack(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>{plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select><small>{selectedPlantIndustryPack.firstWorkflow} {selectedPlantIndustryPack.description}</small></label> : null}
               </div>
               <div aria-label="Choose products for the client demo" className="demo-solution-grid">{Object.values(productContracts).map((product) => {
@@ -2204,6 +2205,19 @@ export function SettingsPage() {
                 {resetArmed ? <><button className="text-link" disabled={resetBusy} onClick={() => setResetArmed(false)} type="button">Cancel</button><button className="core-button danger" disabled={resetBusy} onClick={() => void resetDemoWorkspace()} type="button">{resetBusy ? 'Resetting...' : 'Confirm reset'}</button></> : <button className="text-link danger-text" onClick={() => setResetArmed(true)} type="button">Reset local trial</button>}
               </div>
             </section>
+            {runtime.status !== 'enterprise' ? <section className="core-panel company-backup-panel">
+              <div className="company-backup-head">
+                <div><span className="core-eyebrow">Enterprise capabilities</span><h2>What managed mode unlocks.</h2><p>These work alongside everything in free mode. Free features can never be removed.</p></div>
+                <span className="status-pill">enterprise</span>
+              </div>
+              <ul className="capability-locked-list">
+                {(['shared-workspace', 'staff-roles', 'verified-statements'] as const).map((id) => {
+                  const notice = lockedCapabilityNotice(id)
+                  return <li key={id}><strong>{notice.label}</strong><small>{notice.outcome}</small><span>{notice.reason}</span></li>
+                })}
+              </ul>
+              <p className="form-notice">All three need managed workspace activation. <a className="text-link" href="/contact/?product=guide&source=managed-intelligence">Talk to us about this.</a></p>
+            </section> : null}
           </div>
         </div>
       </details>

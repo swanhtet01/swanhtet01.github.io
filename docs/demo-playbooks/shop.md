@@ -28,7 +28,7 @@ Parallel-lane note: a Shop business-template deep link into guided setup is land
 5. Tap `Create order`. The order is created and sample stock is reserved. The footer already told the client: `Confirm to create the order. Finish payment and handoff in Orders.`
 6. Open the `Orders` tab (`/shop/?tab=orders`). Advance the new order through its owned steps: `Start preparing`, then `Mark ready`, then `Reconcile payment` when payment review becomes the primary action, then `Complete`.
 7. Open the `Stock` tab (`/shop/?tab=inventory`). Show that the sale moved stock and where low-stock items surface; imports live at `/shop/?tab=inventory#shop-catalog-import`.
-8. Finish on the `Today` tab: the next job with `Open next step` and `New sale`, the metrics `Open orders`, `Catalog items`, `Stock alerts`, `Outstanding`, and the disclosures `More Shop tools` and `Shop safeguards`. For an owner-focused client, show `Save daily close` under finance controls at `/shop/?tab=orders#shop-close-controls`.
+8. Finish on the `Today` tab: the next job with `Open next step` and `New sale`, the metrics `Open orders`, `Today's sales`, `Stock alerts`, `Outstanding`, and the disclosures `More Shop tools` and `Shop safeguards`. For an owner-focused client, show `Save daily close` under finance controls at `/shop/?tab=orders#shop-close-controls`.
 
 ## 4. Objection handling: the boundary
 
