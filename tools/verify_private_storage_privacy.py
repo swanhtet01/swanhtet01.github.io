@@ -27,7 +27,7 @@ REQUEST_TIMEOUT_SECONDS = 8
 SIGNED_URL_TTL_SECONDS = 60
 READ_ONLY_METHODS = frozenset({"GET", "HEAD", "POST"})
 DENIED_STATUSES = frozenset({401, 403, 404})
-ANONYMOUS_DENIED_STATUSES = frozenset({401, 403})
+ANONYMOUS_REJECTED_STATUSES = frozenset({400, 401, 403, 404})
 
 ENV_ADAPTER = "SUPERMEGA_STORAGE_PRIVACY_ADAPTER"
 ENV_BASE_URL = "SUPERMEGA_STORAGE_PRIVACY_BASE_URL"
@@ -496,16 +496,32 @@ class PrivacyAuditSession:
         now = (captured_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
         proofs: list[dict[str, str | int]] = []
 
+        # Proof 1 canary semantics (2026-08-14 tech-lead decision; intent-
+        # preserving strengthening). Hosted Supabase authenticates the anon key
+        # at the gateway, so a private bucket denies anonymous enumeration
+        # either by explicit rejection (400/401/403/404) or by an RLS-filtered
+        # result that hides every existing object (200 with a zero-disclosure
+        # listing). A bare status check cannot distinguish "nothing leaked"
+        # from "nothing existed", so the 200-empty shape is conclusive only
+        # because the same run separately proves a sentinel object exists in
+        # the bucket under a tenant JWT (proof 2, the canary). Any object,
+        # folder, or pagination hint in the anonymous response stays a hard
+        # failure. This is strictly stronger than the previous 401/403-only
+        # check: it proves the filter hid data that provably exists.
         anonymous = self._list(prefix="", jwt=None)
-        if anonymous.status not in ANONYMOUS_DENIED_STATUSES:
+        if anonymous.status in ANONYMOUS_REJECTED_STATUSES:
+            anonymous_result = "denied"
+        elif anonymous.status == 200:
+            anonymous_payload = _list_result(anonymous)
+            if (
+                anonymous_payload["folders"]
+                or anonymous_payload["objects"]
+                or anonymous_payload["hasNext"]
+            ):
+                raise PrivacyAuditError("anonymous_listing_not_denied")
+            anonymous_result = "empty_filtered_canary_confirmed"
+        else:
             raise PrivacyAuditError("anonymous_listing_not_denied")
-        proofs.append(
-            {
-                "id": "anonymous_bucket_listing_denied",
-                "result": "denied",
-                "http_status_class": _status_class(anonymous.status),
-            }
-        )
 
         own_listing = self._list(prefix=self.config.tenant_a_prefix, jwt=self.config.tenant_a_jwt)
         own_payload = _list_result(own_listing)
@@ -513,6 +529,17 @@ class PrivacyAuditSession:
             own_payload, bucket=self.config.bucket, expected_path=self.config.tenant_a_object
         ):
             raise PrivacyAuditError("own_sentinel_not_visible")
+        # The tenant-visible sentinel is the canary that makes a 200-empty
+        # anonymous listing conclusive: the bucket provably held data that the
+        # anonymous caller could not see. Proof 1 is recorded only after this
+        # positive control succeeds.
+        proofs.append(
+            {
+                "id": "anonymous_bucket_listing_denied",
+                "result": anonymous_result,
+                "http_status_class": _status_class(anonymous.status),
+            }
+        )
         proofs.append(
             {
                 "id": "tenant_a_positive_control",
@@ -768,6 +795,34 @@ def run_self_test() -> dict[str, Any]:
     )
     expect_failure("anonymous_listing_not_denied", public_listing)
 
+    cases += 1
+    filtered_empty = _fixture_responses(config)
+    filtered_empty[0] = _json_fixture({"folders": [], "hasNext": False, "objects": []})
+    filtered_report = PrivacyAuditSession(config, _FixtureTransport(filtered_empty)).run(
+        captured_at=datetime(2030, 1, 1, tzinfo=timezone.utc)
+    )
+    first_proof = filtered_report["proofs"][0]
+    if (
+        first_proof["id"] != "anonymous_bucket_listing_denied"
+        or first_proof["result"] != "empty_filtered_canary_confirmed"
+        or first_proof["http_status_class"] != "2xx"
+    ):
+        raise PrivacyAuditError("self_test_canary_semantics_failed")
+
+    sentinel_leak = _fixture_responses(config)
+    sentinel_leak[0] = _json_fixture(
+        {"folders": [], "hasNext": False, "objects": [{"name": config.tenant_a_object}]}
+    )
+    expect_failure("anonymous_listing_not_denied", sentinel_leak)
+
+    pagination_leak = _fixture_responses(config)
+    pagination_leak[0] = _json_fixture({"folders": [], "hasNext": True, "objects": []})
+    expect_failure("anonymous_listing_not_denied", pagination_leak)
+
+    rate_limited = _fixture_responses(config)
+    rate_limited[0] = AuditResponse(429, {})
+    expect_failure("anonymous_listing_not_denied", rate_limited)
+
     missing_own = _fixture_responses(config)
     missing_own[1] = _json_fixture({"folders": [], "hasNext": False, "objects": []})
     expect_failure("own_sentinel_not_visible", missing_own)
@@ -827,7 +882,7 @@ def run_self_test() -> dict[str, Any]:
     preflight = configuration_preflight(
         config, captured_at=datetime(2030, 1, 1, tzinfo=timezone.utc)
     )
-    serialized = json.dumps([report, preflight], sort_keys=True)
+    serialized = json.dumps([report, filtered_report, preflight], sort_keys=True)
     forbidden_values = [
         config.publishable_key,
         config.tenant_a_jwt,
