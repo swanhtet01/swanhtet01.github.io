@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v3",
   "asOf": "2026-08-14T16:26:25.256Z",
-  "sourceDigest": "sha256:b6b9fdf86e34d8e661527493b40195021b604c94b65700da8e2d225507faf4e8",
+  "sourceDigest": "sha256:6acd382c897b614723ae1efe6954952eabcad2ec8158336fe56e74cfc521cf4d",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -141,7 +141,7 @@
       "workOrderId": "shop-managed-order-close-pilot",
       "proposedWork": "Shop: prove one named order-to-close and return on an approved tenant.",
       "blockingReason": "Needs a named operator and approved tenant.",
-      "requiredProof": "Prove one isolated order-to-close and return with a named operator and five-day baseline."
+      "requiredProof": "Prove one named five-day order-to-close and return on an isolated tenant."
     },
     {
       "productId": "plant",
@@ -171,7 +171,7 @@
       "workOrderId": "ecommerce-managed-order-exception-pilot",
       "proposedWork": "Ecommerce: run one named checkout-to-exception pilot on an approved isolated tenant.",
       "blockingReason": "Needs a named operator and approved tenant.",
-      "requiredProof": "Prove protected preview on an isolated managed tenant; tax, shipping, and payment adapters need accountable approval and duplicate-safe recovery."
+      "requiredProof": "Prove isolated managed checkout-to-Shop: approval, duplicate-safe recovery, and tax/shipping/payment adapters gated."
     }
   ],
   "controls": {
@@ -197,7 +197,7 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:af2c82ea3dd566b7196d27fc57987d547212fe5da8f77484ea27895651921c71"
+      "digest": "sha256:c9b31e76ce6c41dd24a6e060cf09194b3c20ac372d1df625c7b5959ac414164d"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
@@ -213,7 +213,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:360977ef7ef68b5a298547244bd6c47e91a9a007d8e02672f5ceb2faad18a978"
+      "digest": "sha256:b7e28183547825c20f5c640991d32aa85ecafe747276b6fcb21ade91e92ba429"
     },
     {
       "path": "package.json",

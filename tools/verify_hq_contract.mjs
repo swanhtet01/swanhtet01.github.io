@@ -277,9 +277,9 @@ requireContract('one bounded agent operating model is authoritative',
   && completedAutomationArchive.throughCheckpoint === 'OPS-225'
   && completedAutomationArchive.entries?.length === 73
   && Array.isArray(portfolioSource.completedLocalAutomations)
-  && portfolioSource.completedLocalAutomations.length === 60
+  && portfolioSource.completedLocalAutomations.length === 61
   && Array.isArray(portfolio.completedLocalAutomations)
-  && portfolio.completedLocalAutomations.length === 133
+  && portfolio.completedLocalAutomations.length === 134
   && new Set(portfolio.completedLocalAutomations.map((entry) => `${entry.productId}:${entry.workOrderId}`)).size === portfolio.completedLocalAutomations.length
   && portfolio.completedLocalAutomations.every((entry) =>
     Object.keys(entry || {}).sort().join(',') === 'checkpoint,productId,workOrderId'
@@ -704,6 +704,10 @@ requireContract('one bounded agent operating model is authoritative',
   && portfolio.completedLocalAutomations[132]?.workOrderId === 'plant-maintenance-load-acceptance'
   && portfolio.completedLocalAutomations[132]?.checkpoint === 'OPS-285'
   && workboard.includes('| OPS-285 | Product Platform + Plant Maintenance Codex | done-local |')
+  && portfolio.completedLocalAutomations[133]?.productId === 'shop'
+  && portfolio.completedLocalAutomations[133]?.workOrderId === 'shop-ui-artifact-headroom'
+  && portfolio.completedLocalAutomations[133]?.checkpoint === 'OPS-286'
+  && workboard.includes('| OPS-286 | Product Platform + App Performance Codex | done-local |')
   && portfolio.products?.find((product) => product.id === 'ecommerce')?.localAutomation.workOrderId === 'ecommerce-managed-order-exception-pilot'
   && portfolio.products?.filter((product) => product.localAutomation.status === 'ready-local').length === 0
   && portfolio.localImprovementQueue.filter((entry) => entry.status === 'ready-local').length === 1
@@ -1307,6 +1311,13 @@ requireContract('Plant maintenance exposes exact controlled load through account
   && workboard.includes('Reload preserved the planned window and controlled load')
   && workboard.includes('Completion history preserves 73 archived plus 60 current receipts, 133 unique entries')
   && now.includes("OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load"))
+requireContract('shared UI values recover artifact headroom without capability removal',
+  workboard.includes('| OPS-286 | Product Platform + App Performance Codex | done-local |')
+  && workboard.includes('centralizes seventeen immutable UI/schema values across 309 existing references')
+  && workboard.includes('reducing both cumulative size and the largest chunk by 5,693 bytes')
+  && workboard.includes('Completion history preserves 73 archived plus 61 current receipts, 134 unique entries')
+  && workboard.includes('Fresh rendered QA is explicitly unclaimed')
+  && now.includes('OPS-286 (`78dbc1f7`) removes 5,693 bytes of duplicated shared UI/schema literals'))
 requireContract('live client setup handoff release is retained without overstated authority',
   workboard.includes('| OPS-152 | Product Operations + Client Setup QA Codex | done-live |')
   && workboard.includes('Product checkpoint `ac61fd84` makes Create and Update client demo focus and reveal')
@@ -1356,9 +1367,8 @@ requireContract('Shop uses the stable commerce runtime',
   && product('shop')?.runtimeSurface === 'commerce'
   && product('shop')?.compatibilityPath === '/operations/commerce/'
   && product('shop')?.surfaces?.join(',') === 'Sell,Orders,Stock'
-  && product('shop')?.job?.includes('versioned per-order tax calculation')
-  && product('shop')?.job?.includes('correction-aware payment counts')
-  && product('shop')?.job?.includes('balanced review-only accounting handoff')
+  && product('shop')?.job?.includes('orders, stock, purchasing')
+  && product('shop')?.job?.includes('fulfilment, payments, exceptions, and close')
   && product('shop')?.templateContract?.productId === 'commerce')
 requireContract('Shop finance roadmap separates reviewed handoff from tax and posting authority',
   enterpriseRoadmap.includes('Checkpoint `369cb2b` adds `supermega.commerce.accounting-handoff.v1`')
@@ -1410,10 +1420,9 @@ requireContract('Ecommerce is separate and truthfully limited after cart-to-Shop
   && product('ecommerce')?.job?.includes('read-only Shop catalogue')
   && product('ecommerce')?.surfaces?.join(',') === 'Store,Edit store,Cart,Quote,Shop review'
   && product('ecommerce')?.templateContract?.productId === 'ecommerce'
-  && product('ecommerce')?.nextGate?.includes('protected preview')
-  && product('ecommerce')?.nextGate?.includes('isolated managed tenant')
-  && product('ecommerce')?.nextGate?.includes('tax, shipping, and payment adapters')
-  && product('ecommerce')?.nextGate?.includes('accountable approval')
+  && product('ecommerce')?.nextGate?.includes('isolated managed checkout-to-Shop')
+  && product('ecommerce')?.nextGate?.includes('tax/shipping/payment adapters gated')
+  && product('ecommerce')?.nextGate?.includes('approval')
   && product('ecommerce')?.nextGate?.includes('duplicate-safe recovery'))
 requireContract('shared AI assistance starts with Order Intake',
   sharedCapability('ai-assistance')?.status === 'gated-r-and-d'

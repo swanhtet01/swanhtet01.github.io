@@ -53,7 +53,7 @@ AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay in
 - Current-branch build and browser/managed Commerce parity checks pass. Corrected Shop closes separate reconciled payments, net sales, and correction payables, while reviewed locations keep distinct same-day books; production is unchanged.
 - Production remains an `isolated_demo`; managed data/security writes and hosted scheduling are not ready.
 - Working-set trim is non-terminating: one frontend, one idle worker, zero subagents/models; Claude/Bionic stay open. Rejected CEO outcomes remain quarantined without repair loops or hidden completion.
-- OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load. A reviewed fictional 60-minute window retained one order / 1.9 h and four attributed events without changing jobs, machines, inventory, or equipment; 390/1280 QA had zero horizontal overflow, overlay, warning, or error. Completion history: 133. Hosting remains unproven.
+- OPS-285 (`614cbe49`) shows Press 02 maintenance against JOB-202's exact unfinished load; 390/1280 QA passed. OPS-286 (`78dbc1f7`) removes 5,693 bytes of duplicated shared UI/schema literals; the app is 2,994,053 bytes, its largest chunk is 450,800 bytes, and completion history is 134. Current rendered acceptance and hosting remain unproven.
 
 ## Owner-gated actions
 
@@ -63,7 +63,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 
 ## Current coordination
 
-- Codex is sole integrator. `614cbe49` passes focused Plant lint, the 237-module build, 408 Production checks, and the complete serial app/HQ gate. The app is 2,994,923 bytes with a 455,937-byte largest JavaScript chunk under unchanged caps. At 390/1280 px, Press 02 retains JOB-202's one-order / 1.9-hour load through accountable window review with no layout or browser errors. Hosted activation stays owner-gated.
+- Codex is sole integrator. Local chain `78dbc1f7` passes the exact 237-module build, 408 Production checks, and complete app/HQ gate. Artifact: 2,994,053 bytes; largest chunk: 450,800. OPS-285's 390/1280 proof remains; fresh source-bound start-review QA is pending. Hosted activation is owner-gated.
 - Local company inference remains Ollama-only and scale-to-zero. This Codex task does not dispatch Claude or Gemini; owner Claude/Bionic sessions were untouched.
 - Real leads remain blocked. Production schema v7 is healthy, but preview lacks v8-v10 and direct-admin proof. Keep it disconnected from Vercel/Auth until PR #412's rehearsal and every managed gate pass.
 
@@ -87,6 +87,6 @@ Every slice keeps one primary action, progressive disclosure, mobile acceptance,
 
 ## Next evidence
 
-1. Create one controlled fictional order whose route uses `WC-LINE-LINE-02` and prove the planned maintenance view reports its exact remaining minutes; do not reschedule it.
+1. At 1280 and 390 px, run the exact current Plant sample through planned-window and source-bound start review, cancel before maintenance starts, reload, and prove JOB-202, current controlled load, and zero reschedule/equipment consequences remain intact.
 2. On an isolated hosted workspace, separately invite one approved fictional user, apply OPS-271 after sign-in, and prove allowed and denied mobile actions. Never activate real staff.
 3. Use CLAUDE-009 only as an optional owner-controlled review of checkpoint `0fc5cf7d`; Codex must reproduce any accepted finding. Repair or replace the failed preview only through the direct-admin, digest-bound sequence before any invite, Vercel wiring, managed write, or customer claim.
