@@ -6583,6 +6583,7 @@ const expectedPlantActionSubmitLabels = {
   machine_state: 'Record machine status',
   downtime_start: 'Start downtime',
   downtime_end: 'End downtime',
+  maintenance_window: 'Schedule maintenance',
   maintenance_start: 'Start maintenance',
   maintenance_complete: 'Complete maintenance',
   production_shift_close: 'Close shift',
@@ -6601,8 +6602,8 @@ const expectedPlantActionKinds = Object.keys(expectedPlantActionSubmitLabels).so
 const expectedActionKinds = Object.keys(expectedActionSubmitLabels).sort()
 const actualActionKinds = Object.keys(actionSubmitLabels).sort()
 const actionSubmitLabelsComplete = expectedShopActionKinds.length === 33
-  && expectedPlantActionKinds.length === 17
-  && expectedActionKinds.length === 50
+  && expectedPlantActionKinds.length === 18
+  && expectedActionKinds.length === 51
   && declaredShopActionKinds.join(',') === expectedShopActionKinds.join(',')
   && declaredPlantActionKinds.join(',') === expectedPlantActionKinds.join(',')
   && declaredActionKinds.join(',') === expectedActionKinds.join(',')
@@ -7369,30 +7370,38 @@ if (!productionSource.includes('startProductionMaintenance')
   || !productionSource.includes('productionMaintenanceDueQueue')
   || !productionSource.includes("PRODUCTION_MAINTENANCE_CAPACITY_REVIEW_SCHEMA = 'supermega.production.maintenance-capacity-review.v1'")
   || !productionSource.includes('productionMaintenanceCapacityReview')
+  || !productionSource.includes("PRODUCTION_MAINTENANCE_WINDOW_SCHEMA = 'supermega.production.maintenance-window.v1'")
+  || !productionSource.includes('scheduleProductionMaintenanceWindow')
+  || !productionSource.includes('productionMaintenanceWindows')
   || !productionSource.includes("PRODUCTION_MAINTENANCE_FINDING_SOURCE_SCHEMA = 'supermega.production.maintenance-finding-source.v2'")
   || !productionSource.includes('productionMaintenanceAffectedOrders')
   || !productionSource.includes('validateProductionMaintenanceImpactEvidence')
   || !managedProductionRuntime.includes('project_production_maintenance_due_queue')
   || !managedProductionRuntime.includes('project_production_maintenance_capacity_review')
+  || !managedProductionRuntime.includes('project_production_maintenance_windows')
   || !managedProductionRuntime.includes('_maintenance_finding_source_for_completion')
   || !managedProductionRuntime.includes('_validate_maintenance_finding_impact_history')
   || (productionSource.match(/const next = structuredClone\(state\)/g) || []).length < 2
   || !productionSource.includes('Maintenance timestamps for ${machine.id} contradict lifecycle order.')
   || !managedProductionRuntime.includes('_validate_maintenance_history')
+  || !managedProductionRuntime.includes('_validate_maintenance_window_scheduled')
   || !managedProductionRuntime.includes('_validate_maintenance_started')
   || !managedProductionRuntime.includes('_validate_maintenance_completed')
   || !managedProductionRuntime.includes('production.maintenance.started')
+  || !managedProductionRuntime.includes('production.maintenance_window.scheduled')
   || !managedProductionRuntime.includes('production.maintenance.completed')
   || !coreSource.includes('Machine maintenance')
   || !coreSource.includes('Preventive work')
-  || !coreSource.includes('Review next')
+  || !coreSource.includes('Plan window')
+  || !coreSource.includes('Review window')
+  || !coreSource.includes('Window not planned yet.')
   || !coreSource.includes('Review complete')
   || !coreSource.includes('Completion result')
   || !coreSource.includes('Order impact')
   || !coreSource.includes('Controlled load')
   || !coreSource.includes('No unreleased controlled orders')
   || !coreSource.includes('Reviewed procedure completed')
-  || !coreSource.includes('Maintenance evidence and controlled-load estimate only; no scheduling, order reschedule, machine, inventory, or job change.')) fail('production_bounded_maintenance_contract_missing')
+  || !coreSource.includes('Maintenance windows and evidence are review records only; no order reschedule, machine, inventory, job, or equipment-control change.')) fail('production_bounded_maintenance_contract_missing')
 const managedProductionCommandContract = managedTrialSource.slice(managedTrialSource.indexOf('export async function saveManagedProductionCommand'), managedTrialSource.indexOf('export async function saveManagedWebsiteCommand'))
 if (!managedProductionCommandContract.includes("surface: 'production'")
   || !managedProductionCommandContract.includes('eventType: ManagedProductionEvent')
@@ -7410,7 +7419,7 @@ if (!managedProductionCommandContract.includes("surface: 'production'")
   || !managedProductionCommandContract.includes('request.identity')
   || !workspaceRuntimeSource.includes('identity: managedIdentity')) fail('managed_production_command_client_missing')
 const managedProductionClientSources = `${coreSource}\n${workspaceRuntimeSource}\n${plantOrderUiSource}`
-for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.schedule_updated', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.order_execution.recorded', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance.started', 'production.maintenance.completed', 'production.shift.closed']) {
+for (const eventType of ['production.workspace.initialized', 'production.job.created', 'production.job.schedule_updated', 'production.job.closed', 'production.output.recorded', 'production.material.consumed', 'production.issue.opened', 'production.issue.resolved', 'production.quality_hold.placed', 'production.quality_hold.released', 'production.machine_state.changed', 'production.order_execution.recorded', 'production.downtime.started', 'production.downtime.ended', 'production.maintenance_window.scheduled', 'production.maintenance.started', 'production.maintenance.completed', 'production.shift.closed']) {
   if (!managedProductionClientSources.includes(eventType) || !managedProductionRuntime.includes(eventType)) fail(`managed_production_event_missing:${eventType}`)
 }
 if (managedProductionRuntime.includes('production.snapshot.saved')
@@ -7426,6 +7435,7 @@ if (managedProductionRuntime.includes('production.snapshot.saved')
   || !managedProductionRuntime.includes('_validate_machine_state_changed')
   || !managedProductionRuntime.includes('_validate_downtime_started')
   || !managedProductionRuntime.includes('_validate_downtime_ended')
+  || !managedProductionRuntime.includes('_validate_maintenance_window_scheduled')
   || !managedProductionRuntime.includes('_validate_maintenance_started')
   || !managedProductionRuntime.includes('_validate_maintenance_completed')
   || !managedProductionRuntime.includes('_validate_shift_closed')
@@ -12456,6 +12466,50 @@ async function verifyPlantEquipmentImportRuntime() {
       && noLoadReview.items[0].orders.length === 0
       && noLoadReview.items[0].totalRemainingMinutesMilli === 0,
     'plant_maintenance_capacity_review_no_load_wrong')
+    const windowProof = { actionId: 'ACT-MAINTENANCE-WINDOW-001', capturedAt: '2026-08-10T09:15:00.000Z', actor: identity.userId, reason: 'Reviewed maintenance timing against controlled load.', evidenceReference: 'MAINTENANCE-WINDOW-001' }
+    const windowStart = '2026-08-11T01:00:00.000Z'
+    const windowScheduled = production.scheduleProductionMaintenanceWindow(
+      impactState,
+      commissionedAsset.id,
+      capacityReview,
+      windowStart,
+      90,
+      windowProof,
+    )
+    const windows = production.productionMaintenanceWindows(windowScheduled)
+    assert(windowScheduled
+      && windowScheduled.revision === impactState.revision + 1
+      && windows.length === 1
+      && windows[0].contract === 'supermega.production.maintenance-window.v1'
+      && windows[0].equipmentId === commissionedAsset.id
+      && windows[0].plannedStartAt === windowStart
+      && windows[0].plannedEndAt === '2026-08-11T02:30:00.000Z'
+      && windows[0].durationMinutes === 90
+      && windows[0].orderCount === 1
+      && windows[0].totalRemainingMinutesMilli === 100_000
+      && windows[0].sourceRevision === impactState.revision
+      && windows[0].authority.maintenanceScheduled === true
+      && windows[0].authority.ordersRescheduled === false
+      && windows[0].authority.machineStatusChanged === false
+      && windows[0].authority.equipmentCommanded === false,
+    'plant_maintenance_window_projection_wrong')
+    assert(JSON.stringify({ jobs: windowScheduled.jobs, issues: windowScheduled.issues, machines: windowScheduled.machines, orderPortfolio: windowScheduled.orderPortfolio, equipmentMaster: windowScheduled.equipmentMaster })
+      === JSON.stringify({ jobs: impactState.jobs, issues: impactState.issues, machines: impactState.machines, orderPortfolio: impactState.orderPortfolio, equipmentMaster: impactState.equipmentMaster }),
+    'plant_maintenance_window_changed_operating_records')
+    assert(production.scheduleProductionMaintenanceWindow(windowScheduled, commissionedAsset.id, capacityReview, windowStart, 90, windowProof) === windowScheduled,
+      'plant_maintenance_window_retry_not_idempotent')
+    assert(production.scheduleProductionMaintenanceWindow(windowScheduled, commissionedAsset.id, capacityReview, windowStart, 105, windowProof) === null,
+      'plant_maintenance_window_conflicting_retry_succeeded')
+    const forgedCapacityReview = structuredClone(capacityReview)
+    forgedCapacityReview.items[0].totalRemainingMinutesMilli += 1
+    assert(production.scheduleProductionMaintenanceWindow(impactState, commissionedAsset.id, forgedCapacityReview, windowStart, 90, { ...windowProof, actionId: 'ACT-MAINTENANCE-WINDOW-FORGED' }) === null,
+      'plant_maintenance_window_forged_load_succeeded')
+    assert(production.scheduleProductionMaintenanceWindow(noLoadState, commissionedAsset.id, capacityReview, windowStart, 90, { ...windowProof, actionId: 'ACT-MAINTENANCE-WINDOW-STALE' }) === null,
+      'plant_maintenance_window_stale_source_succeeded')
+    assert(production.scheduleProductionMaintenanceWindow(windowScheduled, commissionedAsset.id, capacityReview, '2026-08-12T01:00:00.000Z', 90, { ...windowProof, actionId: 'ACT-MAINTENANCE-WINDOW-DUPLICATE', capturedAt: '2026-08-10T09:30:00.000Z' }) === null,
+      'plant_maintenance_window_duplicate_cycle_succeeded')
+    assert(production.scheduleProductionMaintenanceWindow(impactState, commissionedAsset.id, capacityReview, windowStart, 91, { ...windowProof, actionId: 'ACT-MAINTENANCE-WINDOW-DURATION' }) === null,
+      'plant_maintenance_window_unbounded_duration_succeeded')
     const maintenanceStartProof = { actionId: 'ACT-MAINTENANCE-IMPACT-START', capturedAt: '2026-07-30T10:00:00.000Z', actor: identity.userId, reason: 'Performed planned inspection.', evidenceReference: 'MAINTENANCE-START-001' }
     const maintenanceStarted = production.startProductionMaintenance(impactState, commissionedAsset.id, strategyInput.maintenanceOwner, maintenanceStartProof)
     assert(Boolean(maintenanceStarted), 'plant_maintenance_impact_start_failed')
@@ -22828,8 +22882,8 @@ await verifyBusinessCommandRuntime()
 await verifyOwnerControlRuntime()
 
 const bytes = (await Promise.all(files.map(async (path) => (await stat(path)).size))).reduce((total, size) => total + size, 0)
-// The bounded cumulative allowance includes reviewed Plant CAPA and maintenance-to-order evidence plus the realistic Spa workflow, client privacy, and staff-role controls; initial-load and 500 kB chunk budgets remain unchanged.
-if (bytes > 2_984_000) fail(`artifact_budget:${bytes}`)
+// The bounded cumulative allowance includes one reviewed Plant maintenance-window lifecycle; initial-load and 500 kB chunk budgets remain unchanged.
+if (bytes > 3_000_000) fail(`artifact_budget:${bytes}`)
 const javascriptFiles = files.filter((path) => path.endsWith('.js'))
 const builtIndexSource = await readFile(rootPage, 'utf8')
 const initialEntryMatch = builtIndexSource.match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)

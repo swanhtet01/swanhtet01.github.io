@@ -133,8 +133,9 @@ def _maintenance_finding_issue_state(
         and event["actionId"] == completion["maintenanceStartActionId"]
     )
     machine = next(machine for machine in state["machines"] if machine["id"] == completion["subjectId"])
+    asset = next(asset for asset in state["equipmentMaster"]["assets"] if asset["id"] == machine["id"])
     source = {
-        "contract": "supermega.production.maintenance-finding-source.v1",
+        "contract": "supermega.production.maintenance-finding-source.v2",
         "equipmentId": machine["id"],
         "equipmentName": machine["name"],
         "maintenanceOwner": start["maintenanceOwner"],
@@ -145,6 +146,8 @@ def _maintenance_finding_issue_state(
         "returnToService": completion["maintenanceReturnToService"],
         "findings": completion["maintenanceFindings"],
         "evidenceReference": completion["evidenceReference"],
+        "workCentreId": asset["workCentreId"],
+        "affectedOrders": [],
     }
     issue = {
         "id": issue_id,

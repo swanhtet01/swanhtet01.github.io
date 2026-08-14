@@ -32,6 +32,7 @@ from supermega_runtime.production_runtime import (
     PRODUCTION_EVENTS,
     PRODUCTION_HUMAN_EVENTS,
     project_production_maintenance_capacity_review,
+    project_production_maintenance_windows,
     project_production_quality_capa_trend,
     validate_production_state,
 )
@@ -1137,6 +1138,7 @@ class ProductionRuntimeTests(unittest.TestCase):
             "production.order_execution.recorded",
             "production.downtime.started",
             "production.downtime.ended",
+            "production.maintenance_window.scheduled",
             "production.maintenance.started",
             "production.maintenance.completed",
             "production.shift.closed",
@@ -4141,6 +4143,7 @@ class ProductionRuntimeTests(unittest.TestCase):
 
     def test_maintenance_lifecycle_is_human_gated_and_side_effect_free(self) -> None:
         maintenance_events = {
+            "production.maintenance_window.scheduled",
             "production.maintenance.started",
             "production.maintenance.completed",
         }
@@ -4399,11 +4402,113 @@ class ProductionRuntimeTests(unittest.TestCase):
             "maintenance due queue asOf must be a canonical ISO-8601 timestamp",
         ):
             project_production_maintenance_capacity_review(strategy, "not-a-time")
+
+        window_capacity = project_production_maintenance_capacity_review(
+            strategy,
+            "2026-07-24T12:15:00.000Z",
+        )
+        window_item = window_capacity["items"][0]
+        window_evidence = action_evidence(
+            "ACT-MAINTENANCE-WINDOW",
+            captured_at="2026-07-24T12:30:00.000Z",
+            evidence_reference="MAINTENANCE-WINDOW-REVIEW-001",
+        )
+        planned_start = "2026-07-24T13:00:00.000Z"
+        planned_end = "2026-07-24T14:30:00.000Z"
+        scheduled_candidate = deepcopy(strategy)
+        scheduled_candidate["revision"] += 1
+        scheduled_candidate["events"] = [
+            production_event(
+                window_evidence,
+                kind="maintenance_window_scheduled",
+                subject_id="MACHINE-MAINT-001",
+                summary=(
+                    "Scheduled maintenance for Managed line drive from "
+                    f"{planned_start} to {planned_end}"
+                ),
+                maintenanceOwner="Maintenance lead",
+                maintenanceStrategyActionId=strategy_record["actionId"],
+                maintenanceStrategyRevision=strategy_record["revision"],
+                maintenanceProcedureReference=strategy_record["procedureReference"],
+                maintenancePlannedDueAt=strategy_record["nextDueAt"],
+                maintenanceWindowStartAt=planned_start,
+                maintenanceWindowEndAt=planned_end,
+                maintenanceWindowDurationMinutes=90,
+                maintenanceWindowCapacityAsOf=window_capacity["asOf"],
+                maintenanceWindowWorkCentreId=window_item["workCentreId"],
+                maintenanceWindowOrderCount=len(window_item["orders"]),
+                maintenanceWindowLoadMinutesMilli=window_item[
+                    "totalRemainingMinutesMilli"
+                ],
+                sourceRevision=strategy["revision"],
+                sourceDigest=production_source_digest(strategy),
+            ),
+            *strategy["events"],
+        ]
+        forged_load = deepcopy(scheduled_candidate)
+        forged_load["events"][0]["maintenanceWindowLoadMinutesMilli"] += 1
+        with self.assertRaisesRegex(
+            TrialValidationError,
+            "does not match its reviewed strategy and controlled load",
+        ):
+            apply_event(
+                strategy,
+                "production.maintenance_window.scheduled",
+                forged_load,
+                window_evidence,
+            )
+        scheduled = apply_event(
+            strategy,
+            "production.maintenance_window.scheduled",
+            scheduled_candidate,
+            window_evidence,
+        )
+        window_projection = project_production_maintenance_windows(scheduled)
+        self.assertEqual(len(window_projection), 1)
+        self.assertEqual(
+            {
+                "contract": window_projection[0]["contract"],
+                "durationMinutes": window_projection[0]["durationMinutes"],
+                "orderCount": window_projection[0]["orderCount"],
+                "totalRemainingMinutesMilli": window_projection[0][
+                    "totalRemainingMinutesMilli"
+                ],
+                "authority": window_projection[0]["authority"],
+            },
+            {
+                "contract": "supermega.production.maintenance-window.v1",
+                "durationMinutes": 90,
+                "orderCount": 1,
+                "totalRemainingMinutesMilli": 100_000,
+                "authority": {
+                    "maintenanceScheduled": True,
+                    "ordersRescheduled": False,
+                    "machineStatusChanged": False,
+                    "equipmentCommanded": False,
+                },
+            },
+        )
+        self.assertEqual(
+            {
+                "jobs": scheduled["jobs"],
+                "issues": scheduled["issues"],
+                "machines": scheduled["machines"],
+                "orderPortfolio": scheduled["orderPortfolio"],
+                "equipmentMaster": scheduled["equipmentMaster"],
+            },
+            {
+                "jobs": strategy["jobs"],
+                "issues": strategy["issues"],
+                "machines": strategy["machines"],
+                "orderPortfolio": strategy["orderPortfolio"],
+                "equipmentMaster": strategy["equipmentMaster"],
+            },
+        )
         start_evidence = action_evidence(
             "ACT-MAINTENANCE-IMPACT-START",
             captured_at="2026-07-24T13:00:00.000Z",
         )
-        started = deepcopy(strategy)
+        started = deepcopy(scheduled)
         started["revision"] += 1
         started["events"] = [
             production_event(
@@ -4417,10 +4522,10 @@ class ProductionRuntimeTests(unittest.TestCase):
                 maintenanceProcedureReference=strategy_record["procedureReference"],
                 maintenancePlannedDueAt=strategy_record["nextDueAt"],
             ),
-            *strategy["events"],
+            *scheduled["events"],
         ]
         started = apply_event(
-            strategy,
+            scheduled,
             "production.maintenance.started",
             started,
             start_evidence,
