@@ -444,14 +444,16 @@ const customerProducts = [
 export function ProductHomeEntry({ productDemoPath }: { productDemoPath: (value: string | null) => string | null }) {
   const location = useLocation()
   const params = new URLSearchParams(location.search)
-  const route = productDemoPath(params.get('demo'))
+  const productIntent = params.get('demo') ?? params.get('product')
+  const route = productDemoPath(productIntent)
+  const explicitProductIntent = params.has('demo') || params.has('product')
   const choosingProduct = params.get('choose') === '1'
   const lastProduct = !route && !choosingProduct && typeof window !== 'undefined'
     ? readLastProduct(window.localStorage)
     : null
   return route
     ? <Navigate replace to={route} />
-    : choosingProduct
+    : choosingProduct || explicitProductIntent
       ? <ProductHomePage />
       : <Navigate replace to={productWorkspacePath(lastProduct ?? DEFAULT_ENTRY_PRODUCT)} />
 }

@@ -23,12 +23,15 @@ function ProductLoading({ name }: { name: string }) {
   return <div aria-live="polite" className="product-route-loading" role="status"><span>&gt;_</span><p>Loading {name}…</p></div>
 }
 
-function productDemoPath(value: string | null) {
+function productEntryPath(value: string | null) {
   const demo = value?.toLowerCase()
   if (demo === 'plant' || demo === 'factory') return '/plant/'
-  if (demo === 'shop' || demo === 'retail') return '/shop/'
+  if (demo === 'shop' || demo === 'commerce' || demo === 'retail') return '/shop/'
   if (demo === 'website' || demo === 'site') return '/website/'
   if (demo === 'ecommerce' || demo === 'storefront' || demo === 'online-orders') return '/ecommerce/'
+  if (demo === 'production' || demo === 'planting') return '/plant/'
+  if (demo === 'web' || demo === 'websites') return '/website/'
+  if (demo === 'ecom' || demo === 'store' || demo === 'online') return '/ecommerce/'
   if (visionPreviewEnabled && (demo === 'vision' || demo === 'computer-vision')) return '/vision/'
   return null
 }
@@ -45,7 +48,7 @@ function setupProductFromQuery(value: string | null) {
 function LegacyEntryRedirect() {
   const location = useLocation()
   const params = new URLSearchParams(location.search)
-  const route = productDemoPath(params.get('demo'))
+  const route = productEntryPath(params.get('demo') || params.get('product'))
 
   return <Navigate replace to={route ?? '/'} />
 }
@@ -62,7 +65,7 @@ function SettingsEntry() {
     return <Suspense fallback={<ProductLoading name="workspace controls" />}><WorkspaceControlsPage /></Suspense>
   }
 
-  return <Navigate replace to="/" />
+  return <Navigate replace to="/?choose=1" />
 }
 
 export default function App() {
@@ -70,7 +73,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<CoreLayout />}>
-          <Route element={<ProductHomeEntry productDemoPath={productDemoPath} />} index />
+          <Route element={<ProductHomeEntry productDemoPath={productEntryPath} />} index />
           <Route element={<Suspense fallback={<ProductLoading name="Shop" />}><OperationsPage product="commerce" /></Suspense>} path="shop/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Plant" />}><OperationsPage product="production" /></Suspense>} path="plant/*" />
           <Route element={<Suspense fallback={<ProductLoading name="Website" />}><WebsiteProduct /></Suspense>} path="website/*" />

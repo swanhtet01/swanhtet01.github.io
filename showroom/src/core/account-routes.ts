@@ -27,3 +27,8 @@ export function managedAccountPath(path: '/login' | '/account/recovery', value: 
   const product = accountProductSlug(value)
   return product ? `${path}?product=${encodeURIComponent(product)}` : path
 }
+
+export function managedAccountDestination(value: string | null) {
+  const product = accountProductSlug(value)
+  return product ? `/${product}/` : '/?choose=1'
+}

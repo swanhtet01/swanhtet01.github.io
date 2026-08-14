@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { PageHeading, type RuntimeHealth } from './CoreShell'
-import { managedAccountPath, managedAccountRequestUrl } from './account-routes'
+import { managedAccountDestination, managedAccountPath, managedAccountRequestUrl } from './account-routes'
 import {
   beginManagedAccountSetup,
   completeManagedAccountPassword,
@@ -17,7 +17,7 @@ import {
 function ManagedUnavailable({ productIntent }: { productIntent: string | null }) {
   return <section className="managed-login-panel" aria-label="Company account unavailable">
     <div><span className="core-eyebrow">Company account</span><h2>Company account access is not active in this release.</h2><p>Use the complete local demo now, or request a company account.</p></div>
-    <div className="managed-login-actions"><Link className="core-button primary" to="/">Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
+    <div className="managed-login-actions"><Link className="core-button primary" to={managedAccountDestination(productIntent)}>Try free demo</Link><a className="core-button" href={managedAccountRequestUrl(productIntent)}>Request company account</a></div>
   </section>
 }
 
@@ -57,7 +57,7 @@ export function ManagedAccountPage() {
   async function openWorkspace(signIn: ManagedWorkspaceSignIn, selectedWorkspaceId: string) {
     const identity = await completeManagedWorkspaceSignIn(signIn, selectedWorkspaceId)
     await loadManagedBootstrap(identity)
-    navigate('/settings/#controls')
+    navigate(managedAccountDestination(productIntent))
   }
 
   async function requestRecovery(event: FormEvent) {
