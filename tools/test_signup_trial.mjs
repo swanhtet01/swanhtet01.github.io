@@ -41,6 +41,8 @@ const bundle = await build({
 
 const {
   TRIAL_SIGNUP_KEY,
+  TRIAL_SIGNUP_SCHEMA,
+  TRIAL_SIGNUP_SCHEMA_V1,
   createTrialSignupRecord,
   readTrialSignup,
   restoreTrialSignup,
@@ -96,6 +98,37 @@ const consented = createTrialSignupRecord({ ...base, email: 'ko@yangontyre.com',
 check(consented.contact?.email === 'ko@yangontyre.com', 'a consented email is kept')
 check(consented.contact?.consentRecorded === true, 'and the consent is recorded alongside it')
 
+// --- terms: the literal true, an explicit false, and nothing in between -------------
+// Schema v2 adds termsAccepted, mirroring consentRecorded one step further: only the literal
+// `true` can ever claim the terms. A v1 record predates the field and restores as an explicit
+// false; a looser value is refused at create and dropped at restore, never coerced to accepted.
+check(minimal.termsAccepted === false, 'terms DEFAULT TO AN EXPLICIT FALSE -- unaccepted, not merely absent')
+check(minimal.schema === TRIAL_SIGNUP_SCHEMA, 'a fresh record carries the v2 schema')
+const agreed = createTrialSignupRecord({ ...base, termsAccepted: true })
+check(agreed.termsAccepted === true, 'accepted terms are recorded as the literal true')
+check(createTrialSignupRecord({ ...base, termsAccepted: false }).termsAccepted === false, 'an explicit false stays false')
+throws(
+  () => createTrialSignupRecord({ ...base, termsAccepted: 'yes' }),
+  'A TRUTHY STAND-IN IS REFUSED AT CREATE -- acceptance is the literal true, never a coerced string',
+)
+throws(
+  () => createTrialSignupRecord({ ...base, termsAccepted: 1 }),
+  'a numeric stand-in is refused at create too',
+)
+check(restoreTrialSignup(agreed)?.termsAccepted === true, 'accepted terms survive restore')
+check(
+  restoreTrialSignup({ ...agreed, termsAccepted: 'yes' })?.termsAccepted === false,
+  'A TAMPERED TERMS VALUE RESTORES AS FALSE -- acceptance cannot be smuggled in by editing the file',
+)
+check(restoreTrialSignup({ ...agreed, termsAccepted: 1 })?.termsAccepted === false, 'a numeric tamper restores as false')
+const v1Record = { ...minimal, schema: TRIAL_SIGNUP_SCHEMA_V1 }
+delete v1Record.termsAccepted
+const restoredV1 = restoreTrialSignup(v1Record)
+check(restoredV1 !== null, 'A V1 RECORD STILL RESTORES -- the schema bump does not orphan existing trials')
+check(restoredV1.termsAccepted === false, 'and its terms default to an explicit false, not accepted')
+check(restoredV1.schema === TRIAL_SIGNUP_SCHEMA, 'and it comes back as v2, so the next save upgrades it')
+check(restoredV1.claimCode === minimal.claimCode, 'with its claim code intact')
+
 // --- tamper: a stored email without consent is dropped on the way back in ---------
 const tampered = restoreTrialSignup({ ...consented, contact: { email: 'ko@yangontyre.com' } })
 check(tampered !== null, 'a record with a tampered contact still restores')
@@ -149,15 +182,18 @@ for (const managedReady of [true, false]) {
   const managed = doors.find((door) => door.id === 'managed')
   check(Boolean(doors.find((door) => door.id === 'trial')), `the trial door exists when managedReady=${managedReady}`)
   check(
-    managed.action === (managedReady ? 'sign-in' : 'request-account'),
-    `the managed door routes to a ${managedReady ? 'sign-in' : 'conversation'} when managedReady=${managedReady}`,
+    managed.action === (managedReady ? 'sign-in' : 'request-activation'),
+    `the managed door routes to ${managedReady ? 'sign-in' : 'an activation request'} when managedReady=${managedReady}`,
   )
-  // Never tell an owner the door is broken. When managed auth is off the account is granted by a
-  // person, which is a real route, not a degraded one.
+  // Never tell an owner the door is broken. When managed auth is off the activation request is
+  // answered by a person, which is a real route, not a degraded one.
   const words = `${managed.label} ${managed.detail}`.toLowerCase()
   for (const dead of ['not active', 'unavailable', 'coming soon', 'disabled', 'not configured']) {
     check(!words.includes(dead), `the managed door never reads as broken (managedReady=${managedReady}): "${dead}"`)
   }
+  // Founder decision 2026-08-12: self-serve. The owner names themselves and sends the activation
+  // request -- the door must not describe a service performed on them by hand.
+  check(!words.includes('by hand'), `the managed door sells self-setup, not hand setup (managedReady=${managedReady})`)
 }
 
 // --- the contact handoff carries only what the receiving page reads -----------------
@@ -187,6 +223,8 @@ const claim = JSON.parse(trialSignupClaimFile(consented))
 check(claim.claimCode === consented.claimCode, 'the claim file carries the code')
 check(claim.contactEmail === 'ko@yangontyre.com', 'and the email the owner consented to')
 check(JSON.parse(trialSignupClaimFile(minimal)).contactEmail === null, 'and null when no email was given')
+check(claim.termsAccepted === false, 'the claim file carries unaccepted terms as an explicit false')
+check(JSON.parse(trialSignupClaimFile(agreed)).termsAccepted === true, 'and accepted terms as the literal true')
 
 // --- every industry pack must be reachable from signup ----------------------------------
 // Offering only trade templates silently excluded spa, gym and school -- the three packs with no
@@ -244,6 +282,18 @@ const storageSource = readFileSync('showroom/src/core/local-workspace-storage.ts
 check(
   storageSource.includes(`'${TRIAL_SIGNUP_KEY}'`),
   `${TRIAL_SIGNUP_KEY} is a registered workspace key, so "Reset this device" erases the stored email`,
+)
+
+// The terms checkbox is wired into the form, above the submit button, in the same 12px
+// signup-consent styling as the email consent row.
+check(pageSource.includes('I accept the SuperMega trial terms'), 'the signup form offers the terms checkbox')
+check(
+  pageSource.split('className="signup-consent"').length - 1 === 2,
+  'both consent-style rows share the signup-consent styling',
+)
+check(
+  pageSource.indexOf('I accept the SuperMega trial terms') < pageSource.indexOf('Start my free trial'),
+  'the terms checkbox sits above the submit button',
 )
 
 console.log(`signup trial contract: ${checks} checks passed`)

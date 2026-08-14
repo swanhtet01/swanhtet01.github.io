@@ -54,6 +54,7 @@ export function SignupPage() {
   ))
   const [email, setEmail] = useState('')
   const [emailConsent, setEmailConsent] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const [noticeTone, setNoticeTone] = useState<'quiet' | 'error'>('quiet')
@@ -102,6 +103,7 @@ export function SignupPage() {
         shopIndustryPackId: industryPackId,
         email,
         emailConsent,
+        termsAccepted,
       })
 
       // Written BEFORE navigating, and confirmed by read-back. If storage refuses, the owner stays
@@ -157,7 +159,7 @@ export function SignupPage() {
       <div className="managed-login-actions">
         {managedDoor?.action === 'sign-in'
           ? <Link className="core-button primary" to="/login?product=shop">Sign in to your company</Link>
-          : <a className="core-button primary" href={trialSignupContactUrl(record)}>Talk to us</a>}
+          : <a className="core-button primary" href={trialSignupContactUrl(record)}>Request activation</a>}
         <button className="core-button" onClick={() => downloadClaim(record)} type="button">Save my claim file</button>
       </div>
     </section>
@@ -209,6 +211,10 @@ export function SignupPage() {
         <label className="signup-consent">
           <input checked={emailConsent} onChange={(event) => setEmailConsent(event.target.checked)} type="checkbox" />
           <span>Keep my email on this device so SuperMega can contact me about a company account.</span>
+        </label>
+        <label className="signup-consent">
+          <input checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} type="checkbox" />
+          <span>I accept the SuperMega trial terms, recorded on this device with my trial record.</span>
         </label>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Preparing your workspace...' : 'Start my free trial'}</button>
         <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
