@@ -24,10 +24,18 @@ from supermega_runtime.trial_store import (
     TrialPrincipal,
     TrialValidationError,
 )
+from supermega_runtime.website_brief_provider import (
+    WebsiteBriefModelExtraction,
+    build_website_brief_draft,
+)
 
 
 STRONG_TEST_IDENTITY_SECRET = "mN7!qP2#vR9$kT4@xC8&dF5*zH1_wS6+"
 LOCAL_ORDER_MESSAGE = "May wants 2 SM-1001 through Messenger and will pay KBZPay."
+LOCAL_WEBSITE_BRIEF = (
+    "Mya Beauty Spa serves busy women in Yangon. "
+    "Facials and massage are available daily. Open since 2024."
+)
 
 
 class FakeLocalOrderIntakeProvider:
@@ -78,6 +86,41 @@ class FakeLocalOrderIntakeProvider:
             response_id="local-route-test",
             model="llama3.2:1b",
             provider="ollama-local",
+        )
+
+
+class FakeLocalWebsiteBriefProvider:
+    provider_id = "ollama-local"
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    async def generate(self, *, source_text: str, workspace_id: str, actor_id: str):
+        self.calls.append({
+            "source_text": source_text,
+            "workspace_id": workspace_id,
+            "actor_id": actor_id,
+        })
+        extraction = WebsiteBriefModelExtraction.model_validate({
+            "template_id": "lead-generation",
+            "business_name": "Mya Beauty Spa",
+            "audience": "busy women in Yangon",
+            "offer": "Facials and massage are available daily",
+            "proof": "Open since 2024",
+            "contact_href": None,
+            "uncertain_fields": [],
+            "provenance": [
+                {"field": "business_name", "quote": "Mya Beauty Spa", "occurrence": 1},
+                {"field": "audience", "quote": "busy women in Yangon", "occurrence": 1},
+                {"field": "offer", "quote": "Facials and massage are available daily", "occurrence": 1},
+                {"field": "proof", "quote": "Open since 2024", "occurrence": 1},
+            ],
+        })
+        return build_website_brief_draft(
+            source_text=source_text,
+            extraction=extraction,
+            receipt_id="ollama-local-route-receipt",
+            model="llama3.2:1b",
         )
 
 
@@ -278,6 +321,84 @@ class CanonicalRuntimeTests(unittest.TestCase):
                 )
         self.assertEqual(remote.status_code, 404)
         self.assertFalse(write_health["ai"]["local_order_intake_review_enabled"])
+        self.assertEqual(write_enabled.status_code, 404)
+
+    def test_local_website_brief_is_loopback_origin_bound_and_review_only(self) -> None:
+        origin = "http://127.0.0.1:5190"
+        payload = {"source_label": "website-starter", "brief": LOCAL_WEBSITE_BRIEF}
+        provider = FakeLocalWebsiteBriefProvider()
+        with patch(
+            "supermega_runtime.runtime.configured_website_brief_provider",
+            return_value=provider,
+        ):
+            with self._client(
+                base_url="http://127.0.0.1:8790",
+                client_host="127.0.0.1",
+                SUPERMEGA_CORS_ORIGINS=origin,
+            ) as client:
+                health = client.get("/api/health").json()
+                missing_header = client.post(
+                    "/api/local/v1/website/brief-drafts",
+                    headers={"origin": origin},
+                    json=payload,
+                )
+                invalid_body = client.post(
+                    "/api/local/v1/website/brief-drafts",
+                    headers={"origin": origin, "x-supermega-local-review": "website-brief-v1"},
+                    json={**payload, "unexpected": True},
+                )
+                response = client.post(
+                    "/api/local/v1/website/brief-drafts",
+                    headers={"origin": origin, "x-supermega-local-review": "website-brief-v1"},
+                    json=payload,
+                )
+
+        self.assertTrue(health["ai"]["local_website_brief_review_enabled"])
+        self.assertEqual(health["ai"]["website_brief_provider"], "ollama-local")
+        self.assertEqual(missing_header.status_code, 404)
+        self.assertEqual(invalid_body.status_code, 422)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["draft"]["status"], "ready_for_review")
+        self.assertFalse(body["raw_brief_retained"])
+        self.assertEqual(body["website_changes_performed"], 0)
+        self.assertFalse(body["publish_performed"])
+        self.assertFalse(body["external_writes_performed"])
+        self.assertEqual(
+            body["source_label_digest"],
+            f"sha256:{hashlib.sha256(payload['source_label'].encode()).hexdigest()}",
+        )
+        self.assertEqual(provider.calls[0]["workspace_id"], "local-demo-website")
+        self.assertEqual(provider.calls[0]["actor_id"], "local-human-review")
+
+        with patch(
+            "supermega_runtime.runtime.configured_website_brief_provider",
+            return_value=FakeLocalWebsiteBriefProvider(),
+        ):
+            with self._client(
+                base_url="http://127.0.0.1:8790",
+                client_host="10.0.0.8",
+                SUPERMEGA_CORS_ORIGINS=origin,
+            ) as remote_client:
+                remote = remote_client.post(
+                    "/api/local/v1/website/brief-drafts",
+                    headers={"origin": origin, "x-supermega-local-review": "website-brief-v1"},
+                    json=payload,
+                )
+            with self._client(
+                base_url="http://127.0.0.1:8790",
+                client_host="127.0.0.1",
+                SUPERMEGA_CORS_ORIGINS=origin,
+                SUPERMEGA_TRIAL_WRITES_ENABLED="true",
+            ) as write_client:
+                write_health = write_client.get("/api/health").json()
+                write_enabled = write_client.post(
+                    "/api/local/v1/website/brief-drafts",
+                    headers={"origin": origin, "x-supermega-local-review": "website-brief-v1"},
+                    json=payload,
+                )
+        self.assertEqual(remote.status_code, 404)
+        self.assertFalse(write_health["ai"]["local_website_brief_review_enabled"])
         self.assertEqual(write_enabled.status_code, 404)
 
     def test_trial_identity_fails_closed_without_a_valid_gateway_signature(self) -> None:

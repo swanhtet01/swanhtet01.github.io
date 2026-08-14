@@ -45,6 +45,11 @@ from supermega_runtime.trial_store import (
     TrialPrincipal,
     TrialValidationError,
 )
+from supermega_runtime.website_brief_provider import (
+    WebsiteBriefProviderError,
+    WebsiteBriefRequest,
+    configured_website_brief_provider,
+)
 from supermega_runtime.website_runtime import reduce_website_state
 
 
@@ -64,6 +69,8 @@ _MAX_CORS_CONFIGURATION_BYTES = 8 * 1024
 _MAX_CORS_ORIGIN_BYTES = 512
 _LOCAL_ORDER_INTAKE_MAX_BODY_BYTES = 256 * 1024
 _LOCAL_ORDER_INTAKE_REVIEW_HEADER = "order-intake-v1"
+_LOCAL_WEBSITE_BRIEF_MAX_BODY_BYTES = 16 * 1024
+_LOCAL_WEBSITE_BRIEF_REVIEW_HEADER = "website-brief-v1"
 _DNS_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _IDENTITY_SECRET_PLACEHOLDER_MARKERS = frozenset(
     {
@@ -255,6 +262,28 @@ def _local_order_intake_request_allowed(
         and _loopback_host(origin_host)
         and request.headers.get("x-supermega-local-review")
         == _LOCAL_ORDER_INTAKE_REVIEW_HEADER
+    )
+
+
+def _local_website_brief_request_allowed(
+    request: Request,
+    origins: list[str],
+) -> bool:
+    """Admit the exact loopback UI without cookies or remote reachability."""
+
+    origin = _text(request.headers.get("origin"))
+    try:
+        origin_host = urlsplit(origin).hostname
+    except ValueError:
+        return False
+    return bool(
+        request.client
+        and _loopback_host(request.client.host)
+        and _loopback_host(request.url.hostname)
+        and origin in origins
+        and _loopback_host(origin_host)
+        and request.headers.get("x-supermega-local-review")
+        == _LOCAL_WEBSITE_BRIEF_REVIEW_HEADER
     )
 
 
@@ -1024,6 +1053,7 @@ def create_app() -> FastAPI:
         order_intake_provider = configured_order_intake_provider()
     except OrderIntakeProviderError:
         order_intake_provider = None
+    website_brief_provider = configured_website_brief_provider()
     app = FastAPI(
         title="SuperMega Service",
         version=SERVICE_VERSION,
@@ -1036,6 +1066,12 @@ def create_app() -> FastAPI:
         not database_url
         and not _flag("SUPERMEGA_TRIAL_WRITES_ENABLED")
         and getattr(order_intake_provider, "provider_id", "") == "ollama-local"
+        and any(_loopback_host(urlsplit(origin).hostname) for origin in origins)
+    )
+    local_website_brief_enabled = bool(
+        not database_url
+        and not _flag("SUPERMEGA_TRIAL_WRITES_ENABLED")
+        and getattr(website_brief_provider, "provider_id", "") == "ollama-local"
         and any(_loopback_host(urlsplit(origin).hostname) for origin in origins)
     )
     app.add_middleware(
@@ -1146,6 +1182,8 @@ def create_app() -> FastAPI:
                 "order_intake_configured": order_intake_provider is not None,
                 "order_intake_provider": getattr(order_intake_provider, "provider_id", "none"),
                 "local_order_intake_review_enabled": local_order_intake_enabled,
+                "website_brief_provider": getattr(website_brief_provider, "provider_id", "none"),
+                "local_website_brief_review_enabled": local_website_brief_enabled,
                 "browser_api_key_exposed": False,
                 "operational_actions_allowed": False,
             },
@@ -1223,6 +1261,56 @@ def create_app() -> FastAPI:
             "source_label_digest": f"sha256:{hashlib.sha256(source_label.encode('utf-8')).hexdigest()}",
             "raw_message_retained": False,
             "operational_actions_performed": 0,
+            "external_writes_performed": False,
+        }
+
+    @app.post("/api/local/v1/website/brief-drafts")
+    async def local_website_brief_draft(request: Request) -> dict[str, Any]:
+        if (
+            not local_website_brief_enabled
+            or website_brief_provider is None
+            or not _local_website_brief_request_allowed(request, origins)
+        ):
+            raise HTTPException(status_code=404, detail={"code": "local_website_brief_unavailable"})
+        content_type = _text(request.headers.get("content-type")).casefold()
+        if not content_type.startswith("application/json"):
+            raise HTTPException(status_code=415, detail={"code": "local_website_brief_json_required"})
+        encoded_body = await request.body()
+        if not encoded_body or len(encoded_body) > _LOCAL_WEBSITE_BRIEF_MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail={"code": "local_website_brief_request_too_large"})
+        try:
+            body = json.loads(encoded_body)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail={"code": "local_website_brief_json_invalid"}) from exc
+        if not isinstance(body, dict) or set(body) != {"source_label", "brief"}:
+            raise HTTPException(status_code=422, detail={"code": "local_website_brief_request_invalid"})
+        source_label = body.get("source_label")
+        if (
+            not isinstance(source_label, str)
+            or source_label != source_label.strip()
+            or not 1 <= len(source_label) <= 120
+        ):
+            raise HTTPException(status_code=422, detail={"code": "local_website_brief_request_invalid"})
+        try:
+            brief = WebsiteBriefRequest.model_validate({"source_text": body.get("brief")}).source_text
+            draft = await website_brief_provider.generate(
+                source_text=brief,
+                workspace_id="local-demo-website",
+                actor_id="local-human-review",
+            )
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail={"code": "local_website_brief_request_invalid"}) from exc
+        except WebsiteBriefProviderError as exc:
+            status_code = 422 if exc.code == "website_brief_request_invalid" else 503
+            if exc.code in {"website_brief_provider_invalid_response", "website_brief_provider_incomplete"}:
+                status_code = 502
+            raise HTTPException(status_code=status_code, detail={"code": exc.code}) from exc
+        return {
+            "draft": draft.model_dump(mode="json"),
+            "source_label_digest": f"sha256:{hashlib.sha256(source_label.encode('utf-8')).hexdigest()}",
+            "raw_brief_retained": False,
+            "website_changes_performed": 0,
+            "publish_performed": False,
             "external_writes_performed": False,
         }
 

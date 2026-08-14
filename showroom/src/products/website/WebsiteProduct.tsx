@@ -21,7 +21,6 @@ import type { WebsiteReleaseState } from './website-release-foundation'
 import {
   applyWebsiteStarterBrief,
   isUntouchedWebsiteStarter,
-  websiteStarterTemplates,
   type WebsiteStarterBrief,
 } from './website-starter'
 import {
@@ -317,11 +316,6 @@ export function WebsiteProduct() {
   const approvalIsCurrent = Boolean(approval)
   const publishIsCurrent = Boolean(publish)
   const starterAvailable = !hasUnsavedChanges && !hasClosedEditSession && isUntouchedWebsiteStarter(editorWorkspace)
-  const workingSampleTemplate = workspace.workingSample
-    ? websiteStarterTemplates.find((template) => template.id === workspace.workingSample?.templateId) ?? null
-    : null
-  const workingSampleIsCurrent = Boolean(workspace.workingSample
-    && workspace.workingSample.contentFingerprint === fingerprint)
   const canReview = !hasUnsavedChanges && !hasClosedEditSession && !starterAvailable && contentChecksPass
   const view: WebsiteView = requestedView === 'publish' && canReview ? 'publish' : 'content'
   const starterSetupActive = view === 'content' && starterAvailable && !starterDismissed
@@ -371,6 +365,15 @@ export function WebsiteProduct() {
   const repairArmed = canRepairLocalStorage
     && repairCandidateRevision > 0
     && repairConfirmationRevision === repairCandidateRevision
+
+  useEffect(() => {
+    recordBehaviorSignal(window.localStorage, {
+      event: 'agent_job_seen',
+      product: 'website',
+      route: location.pathname + location.search,
+      detail: starterAvailable ? 'Start website' : 'Website workspace',
+    })
+  }, [location.pathname, location.search, starterAvailable])
 
   useEffect(() => {
     document.title = 'Website | SuperMega'
@@ -1128,109 +1131,12 @@ export function WebsiteProduct() {
     }
   }
 
-  const failingContentChecks = checks.filter((check) => !check.id.startsWith('evidence-') && !check.passed)
   const readyBuyerCtaPages = workspace.pages.filter((page) => page.stage === 'ready'
     && Boolean(page.hero.ctaLabel.trim())
     && Boolean(page.hero.ctaHref.trim()))
   const websiteLeads = leadLedger.leads.filter((lead) => lead.siteName === workspace.siteName)
   const leadCounts = websiteLeadCounts(leadLedger, workspace.siteName)
-  const releaseRecordRequired = storageMode === 'managed'
   const localPreviewReady = storageMode !== 'managed' && !starterAvailable && !hasUnsavedChanges && !hasClosedEditSession
-  const websiteTodayStep = storageIssue || canRepairLocalStorage
-    ? 'recover'
-    : hasClosedEditSession
-      ? 'recover-edit'
-    : starterSetupActive || starterAvailable
-      ? 'setup'
-      : hasUnsavedChanges
-        ? 'edit'
-        : localPreviewReady
-          ? 'preview-file'
-        : failingContentChecks.length
-          ? 'checks'
-          : leadCounts.new
-            ? 'inquiries'
-            : releaseRecordRequired && !approvalIsCurrent
-              ? 'review'
-              : releaseRecordRequired && !publishIsCurrent
-                ? 'file'
-                : 'ready'
-  const websiteAgentJob = storageIssue || canRepairLocalStorage
-    ? 'Recover Website workspace'
-    : hasClosedEditSession
-      ? closedEditSessionReview?.ok ? 'Resume unsaved edits' : 'Discard outdated edits'
-    : starterSetupActive
-      ? 'Answer 5 questions'
-    : starterAvailable
-        ? 'Start your website'
-        : hasUnsavedChanges
-          ? 'Save or discard edits'
-          : localPreviewReady
-            ? 'Download your website preview'
-          : failingContentChecks.length
-            ? 'Fix page checks'
-            : leadCounts.new
-              ? 'Review new inquiries'
-              : releaseRecordRequired && !approvalIsCurrent
-                ? 'Final review'
-                : releaseRecordRequired && !publishIsCurrent
-                  ? 'Save website file'
-                  : releaseRecordRequired
-                    ? 'Review go-live plan'
-                    : 'Download website'
-  const websiteAgentReason = storageIssue || canRepairLocalStorage
-    ? 'Fix local saving first.'
-    : hasClosedEditSession
-      ? closedEditSessionReview?.ok
-        ? 'A previous tab closed before these edits were saved.'
-        : 'The saved Website changed, so the older edits cannot be resumed.'
-    : starterAvailable || starterSetupActive
-      ? 'Answer five questions to create a preview.'
-      : hasUnsavedChanges
-        ? 'Save or discard this preview.'
-        : failingContentChecks.length
-          ? `${failingContentChecks.length} page check${failingContentChecks.length === 1 ? '' : 's'} remain.`
-          : leadCounts.new
-            ? `${leadCounts.new} inquir${leadCounts.new === 1 ? 'y needs' : 'ies need'} review.`
-            : 'Complete this step; nothing goes live automatically.'
-  const websiteReviewNote = hasClosedEditSession
-    ? 'Resume or discard; recovery never saves automatically.'
-    : hasUnsavedChanges
-    ? 'Save or discard first.'
-    : 'You approve every save, download, and go-live action.'
-  const websiteAgentActionLabel = storageIssue || canRepairLocalStorage
-    ? 'Open recovery'
-    : hasClosedEditSession
-      ? 'Review recovery'
-    : starterSetupActive || starterAvailable
-      ? 'Start website'
-      : websiteAgentJob
-  const websiteTodayState = storageIssue || canRepairLocalStorage
-    ? 'blocked'
-    : hasClosedEditSession
-      ? closedEditSessionReview?.ok ? 'attention' : 'blocked'
-    : starterAvailable || starterSetupActive
-      ? 'setup'
-      : hasUnsavedChanges || failingContentChecks.length || leadCounts.new
-        ? 'attention'
-        : 'ready'
-  const statusWorkspace = hasUnsavedChanges
-    ? editorWorkspace
-    : activeClosedEditSession?.session.workspace ?? workspace
-  const websiteTodayMetrics = [
-    ['Pages', `${statusWorkspace.pages.filter((page) => page.stage === 'ready').length}/${statusWorkspace.pages.length} ready`],
-    ['Readiness', hasClosedEditSession ? 'Recovery waiting' : hasUnsavedChanges ? 'Review draft' : failingContentChecks.length ? `${failingContentChecks.length} to fix` : 'Clear'],
-    ['Inquiries', leadCounts.new ? `${leadCounts.new} new` : websiteLeads.length ? `${websiteLeads.length} total` : 'None yet'],
-    ['File', hasClosedEditSession || hasUnsavedChanges ? 'Blocked by draft' : releaseRecordRequired ? publishIsCurrent ? 'Ready' : 'Needed' : 'Ready to download'],
-  ] as const
-  const websiteTodaySource = storageMode === 'managed'
-    ? `Company account · ${managedActorId || 'signed in'}`
-    : storageMode === 'browser-local'
-      ? 'Saved on this device'
-      : 'Available in this browser session'
-  const websiteTodayContext = workingSampleTemplate
-    ? `${workingSampleTemplate.label} ${workingSampleIsCurrent ? 'working sample' : 'starting template'} · ${websiteTodaySource}`
-    : websiteTodaySource
   const leadExportHref = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify({
     contract: 'supermega.website.lead-export.v1',
     exportedAt: new Date().toISOString(),
@@ -1239,54 +1145,6 @@ export function WebsiteProduct() {
     leads: websiteLeads,
     controls: { localOnly: true, externalWritesPerformed: false, humanReviewRequired: true },
   }, null, 2))}`
-  useEffect(() => {
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_seen',
-      product: 'website',
-      route: location.pathname + location.search,
-      detail: websiteAgentJob,
-    })
-  }, [location.pathname, location.search, websiteAgentJob])
-
-  function runWebsiteAutopilot() {
-    recordBehaviorSignal(window.localStorage, {
-      event: 'agent_job_chosen',
-      product: 'website',
-      route: location.pathname + location.search,
-      detail: `Website next step: ${websiteAgentJob}`,
-    })
-    if (storageIssue || canRepairLocalStorage) {
-      requestRecoveryFocus()
-      return
-    }
-    if (hasClosedEditSession) {
-      requestRecoveryFocus()
-      return
-    }
-    if (starterAvailable || starterSetupActive) {
-      openStarterSetup()
-      return
-    }
-    if (localPreviewReady) {
-      downloadTrialSite()
-      return
-    }
-    if (hasUnsavedChanges || failingContentChecks.length) {
-      openContentSurface('work')
-      return
-    }
-    if (leadCounts.new) {
-      const controls = document.querySelector<HTMLDetailsElement>('.website-business-controls')
-      if (controls) controls.open = true
-      requestAnimationFrame(() => {
-        const inbox = document.getElementById('website-lead-inbox')
-        inbox?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        document.getElementById('website-lead-inbox-title')?.focus({ preventScroll: true })
-      })
-      return
-    }
-    openWorkspaceView('publish')
-  }
 
   function inquiryRecoveryIsCurrent(target: WebsiteInquiryEntryRecoveryState) {
     try {
@@ -1593,22 +1451,6 @@ export function WebsiteProduct() {
             ) : null}
           </header>
 
-          {!starterSetupActive ? <section aria-labelledby="website-today-title" className="website-today" data-state={websiteTodayState} data-step={websiteTodayStep}>
-            <div className="website-today-priority">
-              <span className="core-eyebrow">Start here</span>
-              <h2 id="website-today-title">{websiteAgentJob}</h2>
-              <p>{websiteAgentReason}</p>
-              <button className="website-button is-primary is-compact" onClick={runWebsiteAutopilot} type="button">{websiteAgentActionLabel}</button>
-            </div>
-            <div aria-label="Website today status" className="website-today-metrics" role="group">
-              {websiteTodayMetrics.map(([label, value]) => <span key={label}><small>{label}</small><strong>{value}</strong></span>)}
-            </div>
-            <div className="website-today-source" role="status">
-              <span>{websiteTodayContext}</span>
-              <small>{websiteReviewNote}</small>
-            </div>
-          </section> : null}
-
           {view === 'content' && !hasClosedEditSession ? (
             <section
               aria-label="Website actions"
@@ -1715,14 +1557,18 @@ export function WebsiteProduct() {
                     </div>
                   </details>
                 ) : null}
-                {!starterAvailable ? <button
-                  className={`website-button ${surface === 'preview' ? 'is-primary' : 'is-secondary'}`}
-                  onClick={() => {
-                    if (surface === 'preview') openContentSurface('work')
-                    else previewPage()
-                  }}
-                  type="button"
-                >{websiteSurfaceActionLabel}</button> : null}
+                {starterAvailable ? (
+                  <button className="website-button is-primary" onClick={openStarterSetup} type="button">Start website</button>
+                ) : (
+                  <button
+                    className={`website-button ${surface === 'preview' ? 'is-primary' : 'is-secondary'}`}
+                    onClick={() => {
+                      if (surface === 'preview') openContentSurface('work')
+                      else previewPage()
+                    }}
+                    type="button"
+                  >{websiteSurfaceActionLabel}</button>
+                )}
                 {hasUnsavedChanges ? (
                   <>
                     <button
