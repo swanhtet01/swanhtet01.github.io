@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 import unittest
 
 from fastapi import FastAPI, Request
@@ -24,6 +25,35 @@ from tests.test_plant_equipment_commissioning import _commission_payload, _equip
 from tests.test_plant_equipment_import import _equipment_payload, _opening_state, _package
 
 
+# Due dates are validated against BOTH clocks: within intervalDays of the evidence capturedAt
+# (reducer) and after the real save clock (router) -- so fixed strings expire the moment real
+# time crosses them (this file failed CI on exactly the morning its first nextDueAt passed).
+# The entire fixture timeline is therefore re-anchored at import-time now, preserving the
+# original relative offsets (anchor was 2026-07-30T09:00Z) so every ordering still holds.
+_NOW = datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _ts(days: int, hours: int = 0, minutes: int = 0, seconds: int = 0) -> str:
+    return (_NOW + timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+CAPTURED_AT = _ts(0)
+CAPTURED_AT_H1 = _ts(0, 1)
+CAPTURED_AT_M30 = _ts(0, 0, 30)
+PAST_NEXT_DUE_AT = _ts(0, -1)
+STRATEGY_NEXT_DUE_AT = _ts(16)
+REVISED_NEXT_DUE_AT = _ts(21, 1)
+SECOND_NEXT_DUE_AT = _ts(11, 0, 30)
+SECOND_QUEUE_AT = _ts(12, 0, 30)
+EXEC_AT_H1 = _ts(17, 1)
+EXEC_AT_H2 = _ts(17, 2)
+EXEC_AT_H2M30 = _ts(17, 2, 30)
+EXEC_AT_H3 = _ts(17, 3)
+EXEC_PREDATE_AT = _ts(17, 0, 59, 59)
+FINDING_DUE_AT = _ts(18, 3)
+COMPLETED_NEXT_DUE_AT = _ts(47, 1)
+
+
 def _commissioned_state() -> dict[str, object]:
     current, _ = _equipment_state()
     return reduce_production_state(
@@ -36,14 +66,14 @@ def _commissioned_state() -> dict[str, object]:
 def _strategy_payload(
     *,
     action_id: str = "ACT-EQUIPMENT-MAINTENANCE-STRATEGY-00000000-0000-4000-8000-000000000501",
-    captured_at: str = "2026-07-30T09:00:00.000Z",
+    captured_at: str = CAPTURED_AT,
 ) -> dict[str, object]:
     safety_reference = "SAFETY-PM-EQ-MIX-01-R1"
     return {
         "equipmentId": "EQ-MIX-01",
         "maintenanceOwner": "Maintenance lead",
         "intervalDays": 30,
-        "nextDueAt": "2026-08-15T09:00:00.000Z",
+        "nextDueAt": STRATEGY_NEXT_DUE_AT,
         "procedureReference": "SOP-PM-MIXER-001-R3",
         "safetyBaselineReference": safety_reference,
         "evidence": {
@@ -109,7 +139,7 @@ def _strategy_maintenance_state(
         event["maintenanceFindings"] = findings
         event["maintenanceProcedureCompleted"] = True
         event["maintenanceReturnToService"] = return_to_service
-        event["nextDueAt"] = "2026-09-15T10:00:00.000Z"
+        event["nextDueAt"] = COMPLETED_NEXT_DUE_AT
         strategy["nextDueAt"] = event["nextDueAt"]
     else:
         event["maintenanceOwner"] = strategy["maintenanceOwner"]
@@ -155,7 +185,7 @@ def _maintenance_finding_issue_state(
         "status": "open",
         "severity": "high",
         "owner": start["maintenanceOwner"],
-        "dueAt": "2026-08-17T12:00:00.000Z",
+        "dueAt": FINDING_DUE_AT,
         "containment": "Keep the asset out of service pending reviewed corrective action.",
         "maintenanceFindingSource": source,
     }
@@ -233,16 +263,16 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         strategy = saved["equipmentMaster"]["assets"][0]["maintenanceStrategy"]
         self.assertEqual(strategy["revision"], 1)
         self.assertEqual(strategy["intervalDays"], 30)
-        self.assertEqual(strategy["nextDueAt"], "2026-08-15T09:00:00.000Z")
+        self.assertEqual(strategy["nextDueAt"], STRATEGY_NEXT_DUE_AT)
         self.assertEqual(saved["events"][0]["kind"], "equipment_maintenance_strategy_saved")
         self.assertNotIn("maintenanceStartActionId", saved["events"][0])
 
         revised_payload = _strategy_payload(
             action_id="ACT-EQUIPMENT-MAINTENANCE-STRATEGY-00000000-0000-4000-8000-000000000502",
-            captured_at="2026-07-30T10:00:00.000Z",
+            captured_at=CAPTURED_AT_H1,
         )
         revised_payload["intervalDays"] = 45
-        revised_payload["nextDueAt"] = "2026-08-20T10:00:00.000Z"
+        revised_payload["nextDueAt"] = REVISED_NEXT_DUE_AT
         revised = reduce_production_state(
             "production.equipment_maintenance_strategy.saved",
             saved,
@@ -265,10 +295,10 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         current = _commissioned_state()
         cases = []
         past = _strategy_payload()
-        past["nextDueAt"] = "2026-07-30T08:00:00.000Z"
+        past["nextDueAt"] = PAST_NEXT_DUE_AT
         cases.append(past)
         too_far = _strategy_payload()
-        too_far["nextDueAt"] = "2026-09-15T09:00:00.000Z"
+        too_far["nextDueAt"] = _ts(31)
         cases.append(too_far)
         mismatch = _strategy_payload()
         mismatch["evidence"]["evidenceReference"] = "OTHER-SAFETY"
@@ -313,7 +343,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         start_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-START-501",
-            "2026-08-15T09:00:00.000Z",
+            STRATEGY_NEXT_DUE_AT,
             "Performed reviewed mixer preventive maintenance procedure",
         )
         started = reduce_production_state(
@@ -326,7 +356,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(
             started["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"],
-            "2026-08-15T09:00:00.000Z",
+            STRATEGY_NEXT_DUE_AT,
         )
         self.assertEqual(
             started["events"][0]["maintenanceProcedureReference"],
@@ -335,7 +365,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
 
         completion_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-501",
-            "2026-08-16T10:00:00.000Z",
+            EXEC_AT_H1,
             "Inspected, lubricated, and returned mixer to reviewed service condition",
         )
         completed = reduce_production_state(
@@ -352,7 +382,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(
             completed["events"][0]["nextDueAt"],
-            "2026-09-15T10:00:00.000Z",
+            COMPLETED_NEXT_DUE_AT,
         )
         self.assertEqual(
             {
@@ -373,9 +403,9 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(
             completed["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"],
-            "2026-09-15T10:00:00.000Z",
+            COMPLETED_NEXT_DUE_AT,
         )
-        self.assertEqual(saved["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"], "2026-08-15T09:00:00.000Z")
+        self.assertEqual(saved["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"], STRATEGY_NEXT_DUE_AT)
 
     def test_strategy_execution_tamper_and_unbound_start_fail_closed(self) -> None:
         saved = reduce_production_state(
@@ -385,7 +415,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         start_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-START-502",
-            "2026-08-15T09:00:00.000Z",
+            STRATEGY_NEXT_DUE_AT,
             "Performed reviewed mixer preventive maintenance procedure",
         )
         valid_start = _strategy_maintenance_state(saved, start_evidence)
@@ -423,7 +453,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         completion_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-502",
-            "2026-08-16T10:00:00.000Z",
+            EXEC_AT_H1,
             "Completed reviewed preventive maintenance",
         )
         valid_completion = _strategy_maintenance_state(
@@ -433,8 +463,8 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         completion_cases = []
         forged_completion = deepcopy(valid_completion)
-        forged_completion["events"][0]["nextDueAt"] = "2026-09-14T10:00:00.000Z"
-        forged_completion["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"] = "2026-09-14T10:00:00.000Z"
+        forged_completion["events"][0]["nextDueAt"] = _ts(46, 1)
+        forged_completion["equipmentMaster"]["assets"][0]["maintenanceStrategy"]["nextDueAt"] = _ts(46, 1)
         completion_cases.append(forged_completion)
         missing_result = deepcopy(valid_completion)
         for field in (
@@ -470,7 +500,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         start_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-START-504",
-            "2026-08-15T09:00:00.000Z",
+            STRATEGY_NEXT_DUE_AT,
             "Performed reviewed mixer preventive maintenance procedure",
         )
         started = reduce_production_state(
@@ -480,7 +510,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         completion_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-504",
-            "2026-08-16T10:00:00.000Z",
+            EXEC_AT_H1,
             "Completed reviewed preventive maintenance with a limiting finding",
         )
         completed = reduce_production_state(
@@ -500,7 +530,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         issue_evidence = _maintenance_evidence(
             "ACT-MAINTENANCE-FINDING-PROBLEM-504",
-            "2026-08-16T11:00:00.000Z",
+            EXEC_AT_H2,
             "Reviewed maintenance finding and assigned corrective action",
         )
         proposed = _maintenance_finding_issue_state(completed, issue_evidence)
@@ -533,9 +563,9 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         wrong_kind["events"][0]["summary"] = "Opened quality issue for Mixer 01"
         tampered_states.append(wrong_kind)
         predating = deepcopy(proposed)
-        predating["issues"][0]["createdAt"] = "2026-08-16T09:59:59.000Z"
-        predating["events"][0]["createdAt"] = "2026-08-16T09:59:59.000Z"
-        predating["events"][0]["issueDueAt"] = "2026-08-17T12:00:00.000Z"
+        predating["issues"][0]["createdAt"] = EXEC_PREDATE_AT
+        predating["events"][0]["createdAt"] = EXEC_PREDATE_AT
+        predating["events"][0]["issueDueAt"] = FINDING_DUE_AT
         tampered_states.append(predating)
         missing_event_source = deepcopy(proposed)
         missing_event_source["events"][0].pop("maintenanceFindingSource")
@@ -553,7 +583,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
 
         duplicate_evidence = _maintenance_evidence(
             "ACT-MAINTENANCE-FINDING-PROBLEM-505",
-            "2026-08-16T11:30:00.000Z",
+            EXEC_AT_H2M30,
             "Attempted duplicate maintenance finding problem",
         )
         duplicate = _maintenance_finding_issue_state(
@@ -570,7 +600,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
 
         resolution_evidence = _maintenance_evidence(
             "ACT-MAINTENANCE-CORRECTIVE-CLOSE-504",
-            "2026-08-16T12:00:00.000Z",
+            EXEC_AT_H3,
             "Reviewed corrective action and final service disposition",
         )
         corrective_action = {
@@ -645,10 +675,10 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         second_payload = _strategy_payload(
             action_id="ACT-EQUIPMENT-MAINTENANCE-STRATEGY-00000000-0000-4000-8000-000000000503",
-            captured_at="2026-07-30T09:30:00.000Z",
+            captured_at=CAPTURED_AT_M30,
         )
         second_payload["equipmentId"] = "EQ-PRESS-02"
-        second_payload["nextDueAt"] = "2026-08-10T09:30:00.000Z"
+        second_payload["nextDueAt"] = SECOND_NEXT_DUE_AT
         second_saved = reduce_production_state(
             "production.equipment_maintenance_strategy.saved",
             first_saved,
@@ -657,7 +687,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         snapshot = deepcopy(second_saved)
         queue = project_production_maintenance_due_queue(
             second_saved,
-            "2026-08-11T09:30:00.000Z",
+            SECOND_QUEUE_AT,
         )
         self.assertEqual(queue["contract"], "supermega.production.maintenance-due-queue.v1")
         self.assertEqual(
@@ -671,12 +701,12 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         with self.assertRaises(TrialValidationError):
             project_production_maintenance_due_queue(
                 second_saved,
-                "2026-08-11T09:30:00Z",
+                SECOND_QUEUE_AT.replace(".000Z", "Z"),
             )
 
         start_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-START-503",
-            "2026-08-15T09:00:00.000Z",
+            STRATEGY_NEXT_DUE_AT,
             "Performed reviewed mixer preventive maintenance procedure",
         )
         started = reduce_production_state(
@@ -686,7 +716,7 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         completion_evidence = _maintenance_evidence(
             "ACT-EQUIPMENT-MAINTENANCE-COMPLETE-503",
-            "2026-08-16T10:00:00.000Z",
+            EXEC_AT_H1,
             "Completed reviewed preventive maintenance",
         )
         completed = reduce_production_state(
@@ -703,12 +733,12 @@ class PlantEquipmentMaintenanceStrategyRuntimeTests(unittest.TestCase):
         )
         completed_queue = project_production_maintenance_due_queue(
             completed,
-            "2026-08-17T10:00:00.000Z",
+            _ts(18, 1),
         )
         mixer = next(item for item in completed_queue["items"] if item["assetId"] == "EQ-MIX-01")
         self.assertEqual(mixer["lastCompletionActionId"], completion_evidence["actionId"])
         self.assertEqual(mixer["lastCompletedAt"], completion_evidence["capturedAt"])
-        self.assertEqual(mixer["dueAt"], "2026-09-15T10:00:00.000Z")
+        self.assertEqual(mixer["dueAt"], COMPLETED_NEXT_DUE_AT)
 
 
 class PlantEquipmentMaintenanceStrategyRouteTests(unittest.TestCase):
@@ -790,7 +820,7 @@ class PlantEquipmentMaintenanceStrategyRouteTests(unittest.TestCase):
             "equipment_id": "EQ-MIX-01",
             "maintenance_owner": "Maintenance lead",
             "interval_days": 30,
-            "next_due_at": "2026-08-15T09:00:00.000Z",
+            "next_due_at": STRATEGY_NEXT_DUE_AT,
             "procedure_reference": "SOP-PM-MIXER-001-R3",
             "safety_baseline_reference": "SAFETY-PM-EQ-MIX-01-R1",
             "confirmation": "SAVE MAINTENANCE EQ-MIX-01",
