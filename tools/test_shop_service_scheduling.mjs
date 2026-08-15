@@ -23,6 +23,9 @@ const bundle = await build({
       advanceShopServiceBooking, prepareShopServiceCharge,
       validateShopServiceSchedule, projectShopServiceSchedule, readShopServiceSchedule,
       catalogNameSellsShopService, shopServiceSaleSku,
+      anonymizeShopServiceClient, recordShopServiceClientExport,
+      setShopServiceClientRetention, shopServiceClientAnonymizationReadiness,
+      shopServiceClientCsv,
     } from './shop-service-scheduling.ts'
     export {
       projectShopAppointmentTillReconciliation,
@@ -43,6 +46,9 @@ const {
   advanceShopServiceBooking, prepareShopServiceCharge,
   validateShopServiceSchedule, projectShopServiceSchedule, readShopServiceSchedule,
   catalogNameSellsShopService, shopServiceSaleSku, projectShopAppointmentTillReconciliation,
+  anonymizeShopServiceClient, recordShopServiceClientExport,
+  setShopServiceClientRetention, shopServiceClientAnonymizationReadiness,
+  shopServiceClientCsv,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
 let checks = 0
@@ -130,8 +136,32 @@ const legacyV2 = {
   bookings: first.bookings.map(({ clientId: _clientId, appointmentUpdates: _appointmentUpdates, ...legacy }) => legacy),
 }
 const migratedV2 = readShopServiceSchedule(JSON.stringify(legacyV2))
-check(migratedV2.schema === 'supermega.shop.service_schedule.v3' && migratedV2.clients.length === 1, 'a v2 appointment book migrates to privacy-minimal clients')
+check(migratedV2.schema === 'supermega.shop.service_schedule.v4' && migratedV2.clients.length === 1, 'a v2 appointment book migrates to privacy-minimal clients')
 check(migratedV2.bookings[0].appointmentUpdates === 'not_recorded', 'legacy bookings do not invent messaging consent')
+const legacyV3 = { ...first, schema: 'supermega.shop.service_schedule.v3', privacyPolicy: undefined }
+const migratedV3 = readShopServiceSchedule(JSON.stringify(legacyV3))
+check(migratedV3.schema === 'supermega.shop.service_schedule.v4' && migratedV3.privacyPolicy.clientRetentionDays === null, 'a v3 schedule migrates to an explicit unset retention policy')
+
+// --- owner-governed privacy lifecycle ----------------------------------------
+rejects(() => setShopServiceClientRetention(first, 29, proof()), 'retention shorter than 30 days is refused')
+const privacyClosed = cancelShopServiceBooking(first, booking.id, proof('2026-07-24T08:30:00.000Z'))
+const retained = setShopServiceClientRetention(privacyClosed, 30, proof('2026-07-24T09:00:00.000Z'))
+check(retained.privacyPolicy.clientRetentionDays === 30 && retained.events.at(-1).type === 'client_retention_set', 'owner retention is explicit and evidenced')
+const csvInjectionSchedule = scheduleShopServiceBooking(schedule, {
+  customerName: '=SUM(A1:A2)', contact: '+959000000', appointmentUpdates: 'declined', serviceId: service.id,
+  resourceId: resource.id, startsAt: START,
+}, proof())
+check(shopServiceClientCsv(csvInjectionSchedule).includes("\"'=SUM(A1:A2)\"") && shopServiceClientCsv(csvInjectionSchedule).includes("\"'+959000000\""), 'client CSV neutralizes spreadsheet formulas')
+const exported = recordShopServiceClientExport(retained, `sha256:${'a'.repeat(64)}`, proof('2026-07-24T09:01:00.000Z'))
+check(exported.events.at(-1).type === 'client_exported', 'client export appends an attributable digest receipt')
+check(!shopServiceClientAnonymizationReadiness(first, booking.clientId, [], new Date('2026-09-01T00:00:00.000Z')).allowed, 'an open visit blocks anonymization')
+const due = shopServiceClientAnonymizationReadiness(retained, booking.clientId, [], new Date('2026-07-25T00:00:00.000Z'))
+check(!due.allowed && Boolean(due.dueAt), 'active retention blocks anonymization with a due date')
+const ready = shopServiceClientAnonymizationReadiness(retained, booking.clientId, [], new Date('2026-09-01T00:00:00.000Z'))
+check(ready.allowed, 'a closed unpaid-free visit can reach owner anonymization review after retention')
+const anonymized = anonymizeShopServiceClient(retained, booking.clientId, [], proof('2026-09-01T00:00:00.000Z'))
+check(anonymized.clients[0].anonymizedAt && anonymized.clients[0].contact.startsWith('anonymized:'), 'anonymization removes the client contact')
+check(anonymized.bookings[0].note === '' && anonymized.bookings[0].customerName.startsWith('Former client'), 'anonymization scrubs linked appointment identity and notes')
 
 const justBefore = book(first, new Date(Date.parse(START) - DURATION * 60_000).toISOString())
 check(justBefore.bookings.length === 2, 'and one ending exactly when the next begins is allowed too')

@@ -673,10 +673,15 @@ class TrialRuntimeTests(unittest.TestCase):
         self.assertEqual(empty.status_code, 200, empty.text)
         self.assertEqual(
             empty.json(),
-            {"workspace_id": "workspace-a", "version": 1, "schedule": None},
+            {
+                "workspace_id": "workspace-a",
+                "version": 1,
+                "privacy_owner": False,
+                "schedule": None,
+            },
         )
         schedule = {
-            "schema": "supermega.shop.service_schedule.v3",
+            "schema": "supermega.shop.service_schedule.v4",
             "industryPackId": "spa",
             "revision": 1,
             "services": [
@@ -703,6 +708,7 @@ class TrialRuntimeTests(unittest.TestCase):
                     "active": True,
                 }
             ],
+            "privacyPolicy": {"clientRetentionDays": None},
             "clients": [],
             "bookings": [],
             "events": [
@@ -786,6 +792,70 @@ class TrialRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(forbidden_identity.status_code, 422)
         self.assertEqual(forbidden_identity.json()["detail"]["code"], "client_identity_forbidden")
+
+        current_schedule = first.json()["result"]["state"]["serviceSchedule"]
+        retention_at = "2026-07-29T04:06:00.000Z"
+        retention_schedule = {
+            **current_schedule,
+            "revision": 2,
+            "privacyPolicy": {
+                "clientRetentionDays": 365,
+                "updatedAt": retention_at,
+                "updatedBy": "fabricated-client-actor",
+            },
+            "events": [
+                *current_schedule["events"],
+                {
+                    "revision": 2,
+                    "type": "client_retention_set",
+                    "subjectId": "retention-365-days",
+                    "actor": "fabricated-client-actor",
+                    "reason": "Owner approved a 365-day client retention period.",
+                    "happenedAt": retention_at,
+                },
+            ],
+        }
+        owner_required = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 3,
+                "captured_at": retention_at,
+                "schedule": retention_schedule,
+            },
+        )
+        self.assertEqual(owner_required.status_code, 403, owner_required.text)
+        self.assertEqual(owner_required.json()["detail"]["code"], "spa_owner_action_required")
+
+        store.provision_membership(
+            workspace_id="workspace-a",
+            actor_id="actor-operator",
+            actor_kind="human",
+            capabilities=("commerce.write", "company.write", "product.shop"),
+        )
+        owner_view = client.get(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+        )
+        self.assertTrue(owner_view.json()["privacy_owner"])
+        retained = client.post(
+            "/api/trial/v1/commerce/service-schedule",
+            headers=self._headers(),
+            json={
+                "command_id": str(uuid4()),
+                "expected_version": 3,
+                "captured_at": retention_at,
+                "schedule": retention_schedule,
+            },
+        )
+        self.assertEqual(retained.status_code, 200, retained.text)
+        retained_schedule = retained.json()["result"]["state"]["serviceSchedule"]
+        server_event = retained_schedule["events"][-1]
+        self.assertEqual(server_event["actor"], "actor-operator")
+        self.assertNotEqual(server_event["happenedAt"], retention_at)
+        self.assertEqual(retained_schedule["privacyPolicy"]["updatedAt"], server_event["happenedAt"])
+        self.assertEqual(retained_schedule["privacyPolicy"]["updatedBy"], "actor-operator")
         client.close()
 
     def test_runtime_checks_membership_and_capability(self) -> None:

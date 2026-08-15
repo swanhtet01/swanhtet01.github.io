@@ -8471,7 +8471,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         validate_commerce_state(current)
         schedule = {
-            "schema": "supermega.shop.service_schedule.v3",
+            "schema": "supermega.shop.service_schedule.v4",
             "industryPackId": "spa",
             "revision": 1,
             "services": [
@@ -8491,10 +8491,11 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "active": True,
                 }
             ],
+            "privacyPolicy": {"clientRetentionDays": None},
             "clients": [
                 {
                     "id": "client-0001",
-                    "name": "Client A",
+                    "name": "Mya Thandar",
                     "contact": "09-111-111",
                     "appointmentUpdates": "declined",
                     "createdAt": "2026-07-29T04:00:00.000Z",
@@ -8505,7 +8506,7 @@ class CommerceRuntimeTests(unittest.TestCase):
                 {
                     "id": "booking-0001",
                     "clientId": "client-0001",
-                    "customerName": "Client A",
+                    "customerName": "Mya Thandar",
                     "contact": "09-111-111",
                     "appointmentUpdates": "declined",
                     "serviceId": "service-session",
@@ -8576,6 +8577,144 @@ class CommerceRuntimeTests(unittest.TestCase):
             first_evidence,
         )
         self.assertEqual(accepted["serviceSchedule"], schedule)
+
+        privacy_schedule = deepcopy(schedule)
+        privacy_schedule["revision"] = 2
+        privacy_schedule["bookings"][0]["status"] = "cancelled"
+        privacy_schedule["bookings"][0]["updatedAt"] = "2026-07-29T04:10:00.000Z"
+        privacy_schedule["events"].append({
+            "revision": 2,
+            "type": "booking_cancelled",
+            "subjectId": "booking-0001",
+            "actor": "operator-1",
+            "reason": "Cancelled by the responsible Shop operator.",
+            "happenedAt": "2026-07-29T04:10:00.000Z",
+        })
+        privacy_state = apply_event(
+            accepted,
+            "commerce.service_schedule.saved",
+            {**accepted, "serviceSchedule": privacy_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R2",
+                "capturedAt": "2026-07-29T04:10:00.000Z",
+                "actor": "operator-1",
+                "reason": "Cancelled by the responsible Shop operator.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R2",
+            },
+        )
+        retained_schedule = deepcopy(privacy_schedule)
+        retained_schedule["revision"] = 3
+        retained_schedule["privacyPolicy"] = {
+            "clientRetentionDays": 30,
+            "updatedAt": "2026-07-29T04:11:00.000Z",
+            "updatedBy": "owner-1",
+        }
+        retained_schedule["events"].append({
+            "revision": 3,
+            "type": "client_retention_set",
+            "subjectId": "retention-30-days",
+            "actor": "owner-1",
+            "reason": "Owner approved a 30-day client retention period.",
+            "happenedAt": "2026-07-29T04:11:00.000Z",
+        })
+        retained_state = apply_event(
+            privacy_state,
+            "commerce.service_schedule.saved",
+            {**privacy_state, "serviceSchedule": retained_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R3",
+                "capturedAt": "2026-07-29T04:11:00.000Z",
+                "actor": "owner-1",
+                "reason": "Owner approved a 30-day client retention period.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R3",
+            },
+        )
+        client_csv = (
+            '"Name","Contact","Appointment updates","Consent recorded","Appointments","Completed visits"\r\n'
+            '"Mya Thandar","09-111-111","declined","","0","0"'
+        )
+        export_digest = f"sha256:{sha256(client_csv.encode('utf-8')).hexdigest()}"
+        exported_schedule = deepcopy(retained_schedule)
+        exported_schedule["revision"] = 4
+        exported_schedule["events"].append({
+            "revision": 4,
+            "type": "client_exported",
+            "subjectId": export_digest,
+            "actor": "owner-1",
+            "reason": "Exported 1 privacy-minimal client record.",
+            "happenedAt": "2026-07-29T04:12:00.000Z",
+        })
+        exported_state = apply_event(
+            retained_state,
+            "commerce.service_schedule.saved",
+            {**retained_state, "serviceSchedule": exported_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R4",
+                "capturedAt": "2026-07-29T04:12:00.000Z",
+                "actor": "owner-1",
+                "reason": "Exported 1 privacy-minimal client record.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R4",
+            },
+        )
+        forged_export = deepcopy(exported_schedule)
+        forged_export["events"][-1]["subjectId"] = f"sha256:{'0' * 64}"
+        with self.assertRaises(TrialValidationError):
+            apply_event(
+                retained_state,
+                "commerce.service_schedule.saved",
+                {**retained_state, "serviceSchedule": forged_export},
+                {
+                    "actionId": "ACT-SERVICE-SCHEDULE-R4",
+                    "capturedAt": "2026-07-29T04:12:00.000Z",
+                    "actor": "owner-1",
+                    "reason": "Exported 1 privacy-minimal client record.",
+                    "evidenceReference": "SHOP-SERVICE-SCHEDULE:R4",
+                },
+            )
+        anonymized_schedule = deepcopy(exported_schedule)
+        anonymized_schedule["revision"] = 5
+        anonymized_at = "2026-09-01T00:00:00.000Z"
+        anonymized_schedule["clients"][0] = {
+            "id": "client-0001",
+            "name": "Former client client-0001",
+            "contact": "anonymized:client-0001",
+            "appointmentUpdates": "not_recorded",
+            "createdAt": "2026-07-29T04:00:00.000Z",
+            "updatedAt": anonymized_at,
+            "anonymizedAt": anonymized_at,
+            "anonymizedBy": "owner-1",
+        }
+        anonymized_schedule["bookings"][0].update({
+            "customerName": "Former client client-0001",
+            "contact": "anonymized:client-0001",
+            "appointmentUpdates": "not_recorded",
+            "note": "",
+            "updatedAt": anonymized_at,
+        })
+        anonymized_schedule["events"].append({
+            "revision": 5,
+            "type": "client_anonymized",
+            "subjectId": "client-0001",
+            "actor": "owner-1",
+            "reason": "Owner reviewed and confirmed client anonymization after retention and financial closure.",
+            "happenedAt": anonymized_at,
+        })
+        anonymized_state = apply_event(
+            exported_state,
+            "commerce.service_schedule.saved",
+            {**exported_state, "serviceSchedule": anonymized_schedule},
+            {
+                "actionId": "ACT-SERVICE-SCHEDULE-R5",
+                "capturedAt": anonymized_at,
+                "actor": "owner-1",
+                "reason": "Owner reviewed and confirmed client anonymization after retention and financial closure.",
+                "evidenceReference": "SHOP-SERVICE-SCHEDULE:R5",
+            },
+        )
+        self.assertEqual(
+            anonymized_state["serviceSchedule"]["clients"][0]["contact"],
+            "anonymized:client-0001",
+        )
 
         confirmed_schedule = deepcopy(schedule)
         confirmed_schedule["revision"] = 2

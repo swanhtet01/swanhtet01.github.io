@@ -1,7 +1,8 @@
-export const SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v3' as const
+export const SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v4' as const
 export const SHOP_SERVICE_SCHEDULE_STORAGE_KEY = 'supermega.shop.service-schedule.v1'
 const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA = 'supermega.shop.service_schedule.v1' as const
 const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V2 = 'supermega.shop.service_schedule.v2' as const
+const LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V3 = 'supermega.shop.service_schedule.v3' as const
 
 export type ShopIndustryPackId = 'retail' | 'cafe' | 'restaurant' | 'spa' | 'gym' | 'school'
 
@@ -64,6 +65,14 @@ export type ShopServiceClient = {
   consentRecordedAt?: string
   createdAt: string
   updatedAt: string
+  anonymizedAt?: string
+  anonymizedBy?: string
+}
+
+export type ShopServicePrivacyPolicy = {
+  clientRetentionDays: number | null
+  updatedAt?: string
+  updatedBy?: string
 }
 
 export type ShopServiceBooking = {
@@ -84,7 +93,7 @@ export type ShopServiceBooking = {
 
 export type ShopServiceScheduleEvent = {
   revision: number
-  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'package_redeemed'
+  type: 'service_registered' | 'resource_registered' | 'booking_scheduled' | 'booking_advanced' | 'booking_cancelled' | 'package_redeemed' | 'client_retention_set' | 'client_exported' | 'client_anonymized'
   subjectId: string
   actor: string
   reason: string
@@ -97,6 +106,7 @@ export type ShopServiceSchedule = {
   revision: number
   services: ShopService[]
   resources: ShopServiceResource[]
+  privacyPolicy: ShopServicePrivacyPolicy
   clients: ShopServiceClient[]
   bookings: ShopServiceBooking[]
   events: ShopServiceScheduleEvent[]
@@ -345,6 +355,7 @@ export function createShopServiceSchedule(industryPackId: ShopIndustryPackId = '
     revision: 0,
     services: pack.services.map((service) => ({ ...service, active: true })),
     resources: pack.resources.map((resource) => ({ ...resource, active: true })),
+    privacyPolicy: { clientRetentionDays: null },
     clients: [],
     bookings: [],
     events: [],
@@ -355,7 +366,7 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   if (!state || state.schema !== SHOP_SERVICE_SCHEDULE_SCHEMA) throw new Error('Unsupported Shop service schedule.')
   shopIndustryPack(state.industryPackId)
   if (!Number.isSafeInteger(state.revision) || state.revision < 0) throw new Error('Invalid Shop service schedule revision.')
-  if (!Array.isArray(state.services) || !Array.isArray(state.resources) || !Array.isArray(state.clients) || !Array.isArray(state.bookings) || !Array.isArray(state.events)) throw new Error('Incomplete Shop service schedule.')
+  if (!Array.isArray(state.services) || !Array.isArray(state.resources) || !state.privacyPolicy || typeof state.privacyPolicy !== 'object' || Array.isArray(state.privacyPolicy) || !Array.isArray(state.clients) || !Array.isArray(state.bookings) || !Array.isArray(state.events)) throw new Error('Incomplete Shop service schedule.')
   const serviceIds = new Set<string>()
   for (const service of state.services) {
     const id = boundedText(service.id, 'Service ID', 80)
@@ -377,6 +388,15 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
     if (!['staff', 'room', 'equipment'].includes(resource.kind)) throw new Error(`Resource ${id} has an invalid kind.`)
     if (typeof resource.active !== 'boolean') throw new Error(`Resource ${id} has an invalid active state.`)
   }
+  if (state.privacyPolicy.clientRetentionDays === null) {
+    if (state.privacyPolicy.updatedAt !== undefined || state.privacyPolicy.updatedBy !== undefined) throw new Error('An unset client retention policy cannot claim approval evidence.')
+  } else {
+    positiveWholeNumber(state.privacyPolicy.clientRetentionDays, 'Client retention days', 3650)
+    if (state.privacyPolicy.clientRetentionDays < 30) throw new Error('Client retention must be at least 30 days.')
+    if (!state.privacyPolicy.updatedAt || !state.privacyPolicy.updatedBy) throw new Error('Client retention approval evidence is incomplete.')
+    validIso(state.privacyPolicy.updatedAt, 'Client retention update time')
+    boundedText(state.privacyPolicy.updatedBy, 'Client retention approver', 120)
+  }
   const clientIds = new Set<string>()
   const clientContacts = new Set<string>()
   for (const client of state.clients) {
@@ -395,6 +415,14 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
       validIso(client.consentRecordedAt, 'Client consent time')
     } else if (client.consentRecordedAt !== undefined) {
       throw new Error(`Client ${id} consent evidence is invalid.`)
+    }
+    const hasAnonymizedAt = client.anonymizedAt !== undefined
+    const hasAnonymizedBy = client.anonymizedBy !== undefined
+    if (hasAnonymizedAt !== hasAnonymizedBy) throw new Error(`Client ${id} anonymization evidence is incomplete.`)
+    if (hasAnonymizedAt) {
+      if (client.name !== `Former client ${id}` || client.contact !== `anonymized:${id}` || client.appointmentUpdates !== 'not_recorded' || client.updatedAt !== client.anonymizedAt) throw new Error(`Client ${id} anonymization is invalid.`)
+      validIso(client.anonymizedAt as string, 'Client anonymization time')
+      boundedText(client.anonymizedBy as string, 'Client anonymization actor', 120)
     }
   }
   const clientById = new Map(state.clients.map((client) => [client.id, client]))
@@ -432,12 +460,15 @@ export function validateShopServiceSchedule(state: ShopServiceSchedule) {
   if (state.events.length !== state.revision) throw new Error('Shop service schedule evidence is incomplete.')
   state.events.forEach((event, index) => {
     if (event.revision !== index + 1) throw new Error('Shop service schedule evidence revisions are not continuous.')
-    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'package_redeemed'].includes(event.type)) throw new Error('Shop service schedule evidence type is unsupported.')
+    if (!['service_registered', 'resource_registered', 'booking_scheduled', 'booking_advanced', 'booking_cancelled', 'package_redeemed', 'client_retention_set', 'client_exported', 'client_anonymized'].includes(event.type)) throw new Error('Shop service schedule evidence type is unsupported.')
     boundedText(event.subjectId, 'Evidence subject', 80)
     if (event.type === 'package_redeemed' && !state.bookings.some((booking) => booking.id === event.subjectId && booking.status === 'completed')) throw new Error('Package redemption must reference a completed booking.')
     boundedText(event.actor, 'Evidence actor', 120)
     boundedText(event.reason, 'Evidence reason', 240)
     validIso(event.happenedAt, 'Evidence time')
+    if (event.type === 'client_anonymized' && !clientIds.has(event.subjectId)) throw new Error('Client anonymization evidence references an unknown client.')
+    if (event.type === 'client_exported' && !/^sha256:[a-f0-9]{64}$/.test(event.subjectId)) throw new Error('Client export evidence digest is invalid.')
+    if (event.type === 'client_retention_set' && !/^retention-(?:[3-9]\d|[1-9]\d{2,3})-days$/.test(event.subjectId)) throw new Error('Client retention evidence is invalid.')
   })
   return state
 }
@@ -601,6 +632,115 @@ export function projectShopServiceSchedule(state: ShopServiceSchedule, now = new
   }
 }
 
+export function setShopServiceClientRetention(state: ShopServiceSchedule, clientRetentionDays: number, proof: ShopServiceScheduleProof) {
+  validateShopServiceSchedule(state)
+  const evidence = proofRecord(proof)
+  positiveWholeNumber(clientRetentionDays, 'Client retention days', 3650)
+  if (clientRetentionDays < 30) throw new Error('Client retention must be at least 30 days.')
+  if (state.privacyPolicy.clientRetentionDays === clientRetentionDays) throw new Error('Choose a different client retention period.')
+  return validateShopServiceSchedule(appendEvent({
+    ...state,
+    privacyPolicy: { clientRetentionDays, updatedAt: evidence.happenedAt, updatedBy: evidence.actor },
+  }, { type: 'client_retention_set', subjectId: `retention-${clientRetentionDays}-days`, ...evidence }))
+}
+
+export function shopServiceClientExportRows(state: ShopServiceSchedule) {
+  validateShopServiceSchedule(state)
+  return state.clients.filter((client) => !client.anonymizedAt).map((client) => ({
+    name: client.name,
+    contact: client.contact,
+    appointmentUpdates: client.appointmentUpdates,
+    consentRecordedAt: client.consentRecordedAt ?? '',
+    appointments: state.bookings.filter((booking) => booking.clientId === client.id && booking.status !== 'cancelled').length,
+    completedVisits: state.bookings.filter((booking) => booking.clientId === client.id && booking.status === 'completed').length,
+  }))
+}
+
+function csvCell(value: string | number) {
+  const text = String(value)
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text
+  return `"${safe.replaceAll('"', '""')}"`
+}
+
+export function shopServiceClientCsv(state: ShopServiceSchedule) {
+  const rows = shopServiceClientExportRows(state)
+  return [
+    ['Name', 'Contact', 'Appointment updates', 'Consent recorded', 'Appointments', 'Completed visits'],
+    ...rows.map((row) => [row.name, row.contact, row.appointmentUpdates, row.consentRecordedAt, row.appointments, row.completedVisits]),
+  ].map((row) => row.map(csvCell).join(',')).join('\r\n')
+}
+
+export function recordShopServiceClientExport(state: ShopServiceSchedule, digest: string, proof: ShopServiceScheduleProof) {
+  validateShopServiceSchedule(state)
+  const evidence = proofRecord(proof)
+  if (!/^sha256:[a-f0-9]{64}$/.test(digest)) throw new Error('Client export digest is invalid.')
+  const count = shopServiceClientExportRows(state).length
+  return validateShopServiceSchedule(appendEvent(state, {
+    type: 'client_exported',
+    subjectId: digest,
+    ...evidence,
+    reason: `Exported ${count} privacy-minimal client ${count === 1 ? 'record' : 'records'}.`,
+  }))
+}
+
+export type ShopServiceClientAnonymizationReadiness = { allowed: boolean; reason: string; dueAt: string | null }
+
+function evidenceContainsIdentifier(events: readonly ShopServiceScheduleEvent[], identifier: string) {
+  const needle = identifier.trim().toLocaleLowerCase()
+  return needle.length > 0 && events.some((event) => [event.subjectId, event.actor, event.reason].some((value) => value.toLocaleLowerCase().includes(needle)))
+}
+
+export function shopServiceClientAnonymizationReadiness(
+  state: ShopServiceSchedule,
+  clientId: string,
+  settledSourceRecordIds: readonly string[],
+  now = new Date(),
+): ShopServiceClientAnonymizationReadiness {
+  validateShopServiceSchedule(state)
+  const client = state.clients.find((candidate) => candidate.id === clientId)
+  if (!client) return { allowed: false, reason: 'Client record not found.', dueAt: null }
+  if (client.anonymizedAt) return { allowed: false, reason: 'This client is already anonymized.', dueAt: client.anonymizedAt }
+  const retentionDays = state.privacyPolicy.clientRetentionDays
+  if (retentionDays === null) return { allowed: false, reason: 'Set the owner-approved retention period first.', dueAt: null }
+  const bookings = state.bookings.filter((booking) => booking.clientId === clientId)
+  if (bookings.some((booking) => ['held', 'confirmed', 'checked_in'].includes(booking.status))) return { allowed: false, reason: 'Close or cancel every open visit first.', dueAt: null }
+  const settled = new Set(settledSourceRecordIds)
+  if (bookings.some((booking) => booking.status === 'completed' && !settled.has(`SHOP-BOOKING-${booking.id}`))) return { allowed: false, reason: 'Complete payment and close every finished visit first.', dueAt: null }
+  if ([client.name, client.contact].some((identifier) => evidenceContainsIdentifier(state.events, identifier))) return { allowed: false, reason: 'Identity remains in immutable appointment evidence; review support before anonymizing.', dueAt: null }
+  const lastActivity = Math.max(Date.parse(client.updatedAt), ...bookings.map((booking) => Date.parse(booking.updatedAt)))
+  const dueAt = new Date(lastActivity + retentionDays * 24 * 60 * 60 * 1000).toISOString()
+  if (!Number.isFinite(now.getTime()) || now.getTime() < Date.parse(dueAt)) return { allowed: false, reason: `Retention runs until ${new Date(dueAt).toLocaleDateString()}.`, dueAt }
+  return { allowed: true, reason: 'Ready for owner review.', dueAt }
+}
+
+export function anonymizeShopServiceClient(state: ShopServiceSchedule, clientId: string, settledSourceRecordIds: readonly string[], proof: ShopServiceScheduleProof) {
+  validateShopServiceSchedule(state)
+  const evidence = proofRecord(proof)
+  const readiness = shopServiceClientAnonymizationReadiness(state, clientId, settledSourceRecordIds, new Date(evidence.happenedAt))
+  if (!readiness.allowed) throw new Error(readiness.reason)
+  const anonymousName = `Former client ${clientId}`
+  const anonymousContact = `anonymized:${clientId}`
+  const clients = state.clients.map((client) => client.id === clientId ? {
+    id: client.id,
+    name: anonymousName,
+    contact: anonymousContact,
+    appointmentUpdates: 'not_recorded' as const,
+    createdAt: client.createdAt,
+    updatedAt: evidence.happenedAt,
+    anonymizedAt: evidence.happenedAt,
+    anonymizedBy: evidence.actor,
+  } : client)
+  const bookings = state.bookings.map((booking) => booking.clientId === clientId ? {
+    ...booking,
+    customerName: anonymousName,
+    contact: anonymousContact,
+    appointmentUpdates: 'not_recorded' as const,
+    note: '',
+    updatedAt: evidence.happenedAt,
+  } : booking)
+  return validateShopServiceSchedule(appendEvent({ ...state, clients, bookings }, { type: 'client_anonymized', subjectId: clientId, ...evidence }))
+}
+
 export function readShopServiceSchedule(value: string | null) {
   if (!value) return createShopServiceSchedule()
   try {
@@ -630,8 +770,9 @@ export function readShopServiceSchedule(value: string | null) {
         }
         return { ...booking, clientId: client.id, customerName: client.name, contact: client.contact, appointmentUpdates: 'not_recorded' as const }
       })
-      return validateShopServiceSchedule({ ...v2, schema: SHOP_SERVICE_SCHEDULE_SCHEMA, clients, bookings } as unknown as ShopServiceSchedule)
+      return validateShopServiceSchedule({ ...v2, schema: SHOP_SERVICE_SCHEDULE_SCHEMA, privacyPolicy: { clientRetentionDays: null }, clients, bookings } as unknown as ShopServiceSchedule)
     }
+    if (v2.schema === LEGACY_SHOP_SERVICE_SCHEDULE_SCHEMA_V3) return validateShopServiceSchedule({ ...v2, schema: SHOP_SERVICE_SCHEDULE_SCHEMA, privacyPolicy: { clientRetentionDays: null } } as unknown as ShopServiceSchedule)
     return validateShopServiceSchedule(v2 as unknown as ShopServiceSchedule)
   } catch {
     throw new Error('Saved appointments are unreadable. Export or clear the local evidence before continuing.')

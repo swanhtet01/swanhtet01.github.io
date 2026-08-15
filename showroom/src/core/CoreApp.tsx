@@ -6705,7 +6705,14 @@ function CommercePage({ ecommerceCancellationNavigationIntent, ecommerceCorrecti
         <ReceivablesAging aging={receivablesAging} disabled={commerceControlsDisabled} onRecordContact={recordCollectionContact} />
       </div>
     </details>
-    <Suspense fallback={null}><ShopServiceSchedule actor={managedIdentity?.email ?? 'Local Shop operator'} commerce={commerce} disabled={shopScheduleControlsDisabled} initiallyOpen={commerceLocation.hash === '#shop-service-schedule'} onScheduleChange={setShopSchedule} /></Suspense>
+    <Suspense fallback={null}><ShopServiceSchedule
+      actor={managedIdentity?.email ?? 'Local Shop operator'}
+      commerce={commerce}
+      settledSourceRecordIds={new Set(commerce.orders.flatMap((order) => order.sourceRecordId && order.status === 'completed' && order.paymentStatus === 'reconciled' && order.refundStatus !== 'due' ? [order.sourceRecordId] : []))}
+      disabled={shopScheduleControlsDisabled}
+      initiallyOpen={commerceLocation.hash === '#shop-service-schedule'}
+      onScheduleChange={setShopSchedule}
+    /></Suspense>
     <dialog aria-labelledby="order-composer-title" className="order-composer-dialog" onClose={() => {
       setOrderDraftActive(false)
       setResumedOrderDraft(null)

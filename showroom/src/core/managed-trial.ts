@@ -266,6 +266,7 @@ export type ManagedCommandEvidence = {
 export type ManagedServiceScheduleRecord = {
   version: number
   schedule: ShopServiceSchedule | null
+  privacyOwner?: boolean
 }
 
 export type ManagedBootstrap = {
@@ -3637,7 +3638,8 @@ export async function loadManagedServiceSchedule(
     || response.workspace_id !== identity.workspaceId
     || typeof response.version !== 'number'
     || !Number.isSafeInteger(response.version)
-    || response.version < 1) {
+    || response.version < 1
+    || typeof response.privacy_owner !== 'boolean') {
     throw new ManagedTrialError('The managed appointment response is invalid.', {
       code: 'managed_service_schedule_response_invalid',
     })
@@ -3645,6 +3647,7 @@ export async function loadManagedServiceSchedule(
   return {
     version: response.version,
     schedule: managedServiceSchedule(response.schedule),
+    privacyOwner: response.privacy_owner,
   }
 }
 
