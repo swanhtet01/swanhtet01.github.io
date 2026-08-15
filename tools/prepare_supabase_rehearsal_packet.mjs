@@ -136,6 +136,7 @@ async function browserQuarantineInventory(repositoryRoot, sourceReader) {
       evidenceDigest: audit.evidenceDigest,
       publicTableCount: audit.catalog.tables.length,
       publicSequenceCount: audit.catalog.sequenceCount,
+      futureProviderOwnedDefaultGrantRisk: true,
       businessRowsRead: 0,
     },
     browserRolesDenied: ['anon', 'authenticated'],

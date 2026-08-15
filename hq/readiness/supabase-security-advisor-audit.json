@@ -1,6 +1,6 @@
 {
-  "contract": "supermega.supabase-security-advisor-audit.v1",
-  "asOf": "2026-08-04T10:56:25.412Z",
+  "contract": "supermega.supabase-security-advisor-audit.v2",
+  "asOf": "2026-08-13T06:40:00.000Z",
   "projectRef": "zvtzwcimpvvtkowflhda",
   "targetClassification": "protected-production",
   "postgres": {
@@ -9,44 +9,43 @@
   },
   "advisor": {
     "type": "security",
-    "status": "blocked",
-    "findingCount": 27,
-    "lintCounts": {
-      "rls_enabled_no_policy": 27
+    "status": "clear",
+    "findingCount": 0,
+    "acceptedInfo": {
+      "lint": "rls_enabled_no_policy",
+      "level": "INFO",
+      "count": 27,
+      "tables": [
+        "assets",
+        "enterprise_agent_runs",
+        "enterprise_audit_events",
+        "enterprise_connector_events",
+        "enterprise_knowledge_chunks",
+        "enterprise_knowledge_embeddings",
+        "enterprise_lead_activities",
+        "enterprise_lead_hunt_profiles",
+        "enterprise_leads",
+        "enterprise_memberships",
+        "enterprise_metric_records",
+        "enterprise_module_definitions",
+        "enterprise_sessions",
+        "enterprise_source_change_events",
+        "enterprise_source_records",
+        "enterprise_users",
+        "enterprise_workspace_domains",
+        "enterprise_workspace_modules",
+        "enterprise_workspace_profiles",
+        "enterprise_workspace_tasks",
+        "enterprise_workspaces",
+        "iot_telemetry",
+        "production_ledger",
+        "supermega_campaign_clicks",
+        "supermega_leads",
+        "supermega_sales_runs",
+        "wcm_incidents"
+      ]
     },
-    "levelCounts": {
-      "INFO": 27
-    },
-    "remediationUrl": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
-    "tables": [
-      "assets",
-      "enterprise_agent_runs",
-      "enterprise_audit_events",
-      "enterprise_connector_events",
-      "enterprise_knowledge_chunks",
-      "enterprise_knowledge_embeddings",
-      "enterprise_lead_activities",
-      "enterprise_lead_hunt_profiles",
-      "enterprise_leads",
-      "enterprise_memberships",
-      "enterprise_metric_records",
-      "enterprise_module_definitions",
-      "enterprise_sessions",
-      "enterprise_source_change_events",
-      "enterprise_source_records",
-      "enterprise_users",
-      "enterprise_workspace_domains",
-      "enterprise_workspace_modules",
-      "enterprise_workspace_profiles",
-      "enterprise_workspace_tasks",
-      "enterprise_workspaces",
-      "iot_telemetry",
-      "production_ledger",
-      "supermega_campaign_clicks",
-      "supermega_leads",
-      "supermega_sales_runs",
-      "wcm_incidents"
-    ]
+    "remediationUrl": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy"
   },
   "catalog": {
     "queryContract": "supermega.supabase-security-metadata-query.v2",
@@ -54,103 +53,325 @@
     "businessRowsRead": 0,
     "tableCount": 27,
     "tables": [
-      { "name": "assets", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_agent_runs", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_audit_events", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_connector_events", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_knowledge_chunks", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_knowledge_embeddings", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_lead_activities", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_lead_hunt_profiles", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_leads", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_memberships", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_metric_records", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_module_definitions", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_sessions", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_source_change_events", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_source_records", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_users", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_workspace_domains", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_workspace_modules", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_workspace_profiles", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_workspace_tasks", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "enterprise_workspaces", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "iot_telemetry", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "production_ledger", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "supermega_campaign_clicks", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "supermega_leads", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "supermega_sales_runs", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] },
-      { "name": "wcm_incidents", "schema": "public", "rlsEnabled": true, "rlsForced": false, "policyCount": 0, "anonPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"], "authenticatedPrivileges": ["SELECT", "INSERT", "UPDATE", "DELETE"] }
+      {
+        "name": "assets",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_agent_runs",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_audit_events",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_connector_events",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_knowledge_chunks",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_knowledge_embeddings",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_lead_activities",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_lead_hunt_profiles",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_leads",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_memberships",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_metric_records",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_module_definitions",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_sessions",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_source_change_events",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_source_records",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_users",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_workspace_domains",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_workspace_modules",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_workspace_profiles",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_workspace_tasks",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "enterprise_workspaces",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "iot_telemetry",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "production_ledger",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "supermega_campaign_clicks",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "supermega_leads",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "supermega_sales_runs",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "wcm_incidents",
+        "schema": "public",
+        "rlsEnabled": true,
+        "rlsForced": false,
+        "policyCount": 0,
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      }
     ],
     "nonTableRelationCount": 0,
     "publicRoutineCount": 0,
     "browserCallableRoutineCount": 0,
     "sequenceCount": 2,
     "sequences": [
-      { "name": "supermega_leads_id_seq", "schema": "public", "anonPrivileges": ["USAGE", "SELECT"], "authenticatedPrivileges": ["USAGE", "SELECT"] },
-      { "name": "supermega_sales_runs_id_seq", "schema": "public", "anonPrivileges": ["USAGE", "SELECT"], "authenticatedPrivileges": ["USAGE", "SELECT"] }
+      {
+        "name": "supermega_leads_id_seq",
+        "schema": "public",
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      },
+      {
+        "name": "supermega_sales_runs_id_seq",
+        "schema": "public",
+        "anonPrivileges": [],
+        "authenticatedPrivileges": []
+      }
     ],
-    "defaultPrivilegeOwners": ["postgres", "supabase_admin"],
-    "defaultBrowserTablePrivilegesPresent": true,
-    "defaultBrowserSequencePrivilegesPresent": true,
-    "defaultBrowserFunctionExecutePresent": true
+    "defaultPrivilegeOwners": [
+      "postgres",
+      "supabase_admin"
+    ],
+    "defaultBrowserTablePrivilegesPresent": false,
+    "defaultBrowserSequencePrivilegesPresent": false,
+    "defaultBrowserFunctionExecutePresent": false
   },
   "managedBackend": {
     "queryContract": "supermega.supabase-managed-schema-metadata.v1",
     "schema": "app_private",
-    "liveSchemaVersion": 7,
+    "liveSchemaVersion": 10,
     "localTargetVersion": 10,
-    "versionDrift": 3,
+    "versionDrift": 0,
     "tableCount": 6,
-    "rlsTableCount": 5,
-    "policyCount": 14,
-    "performancePolicyFindingCount": 10,
-    "metadataRlsEnabled": false,
+    "rlsTableCount": 6,
+    "policyCount": 15,
+    "performancePolicyFindingCount": 0,
+    "metadataRlsEnabled": true,
     "browserRolesDenied": true,
     "serverBypassRoleDenied": true,
     "runtimeRoleSchemaUsage": true,
     "runtimeRoleSchemaCreate": false,
-    "securityDefinerFunctionCount": 1,
+    "securityDefinerFunctionCount": 2,
     "securityDefinerPublicExecute": false,
     "securityDefinerActorContextChecked": true,
     "securityDefinerSearchPathFixed": true,
     "viewCount": 0,
     "storageBucketCount": 0,
     "postgrestSchemaSettingObservable": false,
-    "pendingMigrations": [
-      {
-        "version": 8,
-        "path": "supabase/migrations/20260802161500_private_trial_backend_v8_rls_initplan.sql",
-        "digest": "sha256:2886d53c39a08cbd129ca0a3def051b9129bbc96c49add058122520ee3d7d0ab"
-      },
-      {
-        "version": 9,
-        "path": "supabase/migrations/20260803063822_private_trial_backend_v9_metadata_rls.sql",
-        "digest": "sha256:1dc908aeaf88bc91e03c566e31652816fba699aaf0bcce5b0d5c512ad9ab0115"
-      },
-      {
-        "version": 10,
-        "path": "supabase/migrations/20260804102000_private_trial_backend_v10_supabase_session_revocation.sql",
-        "digest": "sha256:0a112ee27bda7ca238f3992ffab841c414268e44aad6b68023c75915afa40cde"
-      }
-    ]
+    "pendingMigrations": []
   },
   "conclusion": {
-    "status": "blocked",
+    "status": "clear",
     "directBrowserTableAccessDefaultDenied": true,
     "indirectExposureAudited": true,
     "currentRowExposureProven": false,
-    "browserGrantHardeningRequired": true,
+    "browserGrantHardeningRequired": false,
     "productionMutationAuthorized": false,
-    "nextAction": "Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal."
+    "nextAction": "Schema v10 and the public browser quarantine are live with a clear advisor; complete hosted storage-privacy, recovery, and self-serve pilot proofs before any managed activation proposal."
   },
   "controls": {
-    "connectorReadRequests": 20,
+    "connectorReadRequests": 6,
     "failedReadRequests": 1,
     "providerMutations": 0,
     "databaseWrites": 0,
     "businessRowsRead": 0,
     "credentialsRecorded": false
   },
-  "evidenceDigest": "sha256:6745aab0e75c6650e86f502ae8cf4a51e49063c47864e0e2cfa69885b9c6c63d"
+  "evidenceDigest": "sha256:3ca09771bdaa44221d2450ba66c96b6dcc402cc6667bb5ce4891bb141882ea1e",
+  "productionMigrations": {
+    "liveManagedSchemaVersion": 10,
+    "sourceTargetVersion": 10,
+    "versionDrift": 0,
+    "publicBrowserQuarantine": {
+      "present": true
+    },
+    "managedWritesEnabled": false
+  }
 }
