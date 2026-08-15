@@ -80,7 +80,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
   }
   const [notice, setNotice] = useState(initial.error)
   const [workspaceOpen, setWorkspaceOpen] = useState(initiallyOpen)
-  const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
+  const [bookingDraft, setBookingDraft] = useState({ customerName: '', contact: '', appointmentUpdates: 'declined' as 'allowed' | 'declined', serviceId: initial.schedule?.services[0]?.id ?? '', resourceId: initial.schedule?.resources[0]?.id ?? '', startsAt: nextLocalStart(), note: '' })
   const [serviceDraft, setServiceDraft] = useState({ name: '', durationMinutes: '60', priceMmk: '' })
   const [resourceDraft, setResourceDraft] = useState({ name: '', kind: 'staff' as 'staff' | 'room' | 'equipment' })
   const [managedLoading, setManagedLoading] = useState(true)
@@ -308,7 +308,7 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       <div className="service-schedule-summary" aria-label={`${vocabulary.plural} summary`}>
         <span><small>Today</small><strong>{projection.today.length}</strong></span>
         <span><small>Expected</small><strong>{formatMmk(projection.expectedRevenueMmk)}</strong></span>
-        <span><small>Services</small><strong>{projection.activeServices}</strong></span>
+        <span><small>Clients</small><strong>{projection.clients}</strong></span>
         <span><small>Staff / rooms</small><strong>{projection.activeResources}</strong></span>
       </div>
       {schedule.industryPackId === 'spa' && membershipBalances.length ? <div className="service-schedule-summary" aria-label="Prepaid package summary">
@@ -319,7 +319,8 @@ export function ShopServiceSchedule({ actor = 'Local Shop operator', commerce = 
       <form className="service-booking-form" onSubmit={createBooking}>
         <div><span className="core-eyebrow">New {vocabulary.singular}</span><h3>{vocabulary.holdAction}</h3><p>Shop blocks overlapping bookings for the same staff member, room, or equipment.</p></div>
         <label>Customer<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, customerName: event.target.value }))} placeholder="Customer name" required value={bookingDraft.customerName} /></label>
-        <label>Contact<input disabled={disabled} maxLength={160} onChange={(event) => setBookingDraft((current) => ({ ...current, contact: event.target.value }))} placeholder="Phone or reference" required value={bookingDraft.contact} /></label>
+        <label>Contact<input disabled={disabled} list="spa-client-contacts" maxLength={160} onChange={(event) => { const contact = event.target.value; const client = schedule.clients.find((candidate) => candidate.contact === contact); setBookingDraft((current) => ({ ...current, contact, customerName: client?.name ?? current.customerName, appointmentUpdates: client?.appointmentUpdates === 'allowed' ? 'allowed' : 'declined' })) }} placeholder="Phone or reference" required value={bookingDraft.contact} /><datalist id="spa-client-contacts">{schedule.clients.map((client) => <option key={client.id} value={client.contact}>{client.name}</option>)}</datalist></label>
+        <label>Appointment updates<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, appointmentUpdates: event.target.value as 'allowed' | 'declined' }))} value={bookingDraft.appointmentUpdates}><option value="declined">No messages</option><option value="allowed">Customer allowed updates</option></select></label>
         <label>Service<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, serviceId: event.target.value }))} required value={bookingDraft.serviceId}>{schedule.services.filter((service) => service.active).map((service) => <option key={service.id} value={service.id}>{service.nameMy ? `${service.name} · ${service.nameMy}` : service.name} · {service.durationMinutes} min · {formatMmk(service.priceMmk)}</option>)}</select></label>
         <label>Staff, room, or equipment<select disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, resourceId: event.target.value }))} required value={bookingDraft.resourceId}>{schedule.resources.filter((resource) => resource.active).map((resource) => <option key={resource.id} value={resource.id}>{resource.nameMy ? `${resource.name} · ${resource.nameMy}` : resource.name} · {resource.kind}</option>)}</select></label>
         <label>Starts<input disabled={disabled} onChange={(event) => setBookingDraft((current) => ({ ...current, startsAt: event.target.value }))} required type="datetime-local" value={bookingDraft.startsAt} /></label>

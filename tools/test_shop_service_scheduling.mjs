@@ -20,7 +20,8 @@ const bundle = await build({
   stdin: {
     contents: `export {
       createShopServiceSchedule, scheduleShopServiceBooking, cancelShopServiceBooking,
-      advanceShopServiceBooking, validateShopServiceSchedule, projectShopServiceSchedule,
+      advanceShopServiceBooking, prepareShopServiceCharge,
+      validateShopServiceSchedule, projectShopServiceSchedule, readShopServiceSchedule,
       catalogNameSellsShopService, shopServiceSaleSku,
     } from './shop-service-scheduling.ts'
     export {
@@ -39,7 +40,8 @@ const bundle = await build({
 
 const {
   createShopServiceSchedule, scheduleShopServiceBooking, cancelShopServiceBooking,
-  advanceShopServiceBooking, validateShopServiceSchedule, projectShopServiceSchedule,
+  advanceShopServiceBooking, prepareShopServiceCharge,
+  validateShopServiceSchedule, projectShopServiceSchedule, readShopServiceSchedule,
   catalogNameSellsShopService, shopServiceSaleSku, projectShopAppointmentTillReconciliation,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
 
@@ -76,13 +78,14 @@ const proof = (happenedAt = '2026-07-24T08:00:00.000Z') => ({
 
 const book = (state, startsAt, resourceId = resource.id, customerName = 'May') =>
   scheduleShopServiceBooking(state, {
-    customerName, contact: '09-777-000111', serviceId: service.id, resourceId, startsAt,
+    customerName, contact: '09-777-000111', appointmentUpdates: 'declined', serviceId: service.id, resourceId, startsAt,
   }, proof())
 
 // --- a first booking ----------------------------------------------------------
 const START = '2026-07-25T03:00:00.000Z'
 const first = book(schedule, START)
 check(first.bookings.length === 1, 'a booking is recorded')
+check(first.clients.length === 1 && first.bookings[0].clientId === first.clients[0].id, 'the booking is linked to one privacy-minimal client record')
 const booking = first.bookings[0]
 check(booking.status === 'held', 'and starts held rather than confirmed')
 check(
@@ -107,6 +110,28 @@ for (const [label, startsAt] of overlapping) {
 // This is the other half. A guard using <= would refuse these and make the book unusable.
 const backToBack = book(first, booking.endsAt)
 check(backToBack.bookings.length === 2, 'a booking starting exactly when the previous one ends IS allowed')
+check(backToBack.clients.length === 1, 'a matching contact reuses one client record')
+
+rejects(
+  () => book(first, booking.endsAt, resource.id, 'Different customer'),
+  'a contact already bound to a client cannot silently change identity',
+)
+
+const updatesAllowed = scheduleShopServiceBooking(schedule, {
+  customerName: 'Mya', contact: '09-777-000222', appointmentUpdates: 'allowed', serviceId: service.id,
+  resourceId: resource.id, startsAt: START,
+}, proof())
+check(updatesAllowed.clients[0].appointmentUpdates === 'allowed' && updatesAllowed.clients[0].consentRecordedAt === proof().happenedAt, 'allowed appointment updates retain explicit consent evidence')
+
+const legacyV2 = {
+  ...first,
+  schema: 'supermega.shop.service_schedule.v2',
+  clients: undefined,
+  bookings: first.bookings.map(({ clientId: _clientId, appointmentUpdates: _appointmentUpdates, ...legacy }) => legacy),
+}
+const migratedV2 = readShopServiceSchedule(JSON.stringify(legacyV2))
+check(migratedV2.schema === 'supermega.shop.service_schedule.v3' && migratedV2.clients.length === 1, 'a v2 appointment book migrates to privacy-minimal clients')
+check(migratedV2.bookings[0].appointmentUpdates === 'not_recorded', 'legacy bookings do not invent messaging consent')
 
 const justBefore = book(first, new Date(Date.parse(START) - DURATION * 60_000).toISOString())
 check(justBefore.bookings.length === 2, 'and one ending exactly when the next begins is allowed too')
@@ -140,7 +165,7 @@ const noService = {
 rejects(() => book(noService, START), 'booking an inactive service is refused')
 rejects(
   () => scheduleShopServiceBooking(schedule, {
-    customerName: 'May', contact: '09-777-000111', serviceId: 'SVC-DOES-NOT-EXIST',
+    customerName: 'May', contact: '09-777-000111', appointmentUpdates: 'declined', serviceId: 'SVC-DOES-NOT-EXIST',
     resourceId: resource.id, startsAt: START,
   }, proof()),
   'booking a service that does not exist is refused',

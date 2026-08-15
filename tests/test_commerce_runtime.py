@@ -8471,7 +8471,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         )
         validate_commerce_state(current)
         schedule = {
-            "schema": "supermega.shop.service_schedule.v2",
+            "schema": "supermega.shop.service_schedule.v3",
             "industryPackId": "spa",
             "revision": 1,
             "services": [
@@ -8491,11 +8491,23 @@ class CommerceRuntimeTests(unittest.TestCase):
                     "active": True,
                 }
             ],
+            "clients": [
+                {
+                    "id": "client-0001",
+                    "name": "Client A",
+                    "contact": "09-111-111",
+                    "appointmentUpdates": "declined",
+                    "createdAt": "2026-07-29T04:00:00.000Z",
+                    "updatedAt": "2026-07-29T04:00:00.000Z",
+                }
+            ],
             "bookings": [
                 {
                     "id": "booking-0001",
+                    "clientId": "client-0001",
                     "customerName": "Client A",
                     "contact": "09-111-111",
+                    "appointmentUpdates": "declined",
                     "serviceId": "service-session",
                     "resourceId": "resource-room-1",
                     "startsAt": "2026-07-29T04:30:00.000Z",
@@ -8519,6 +8531,7 @@ class CommerceRuntimeTests(unittest.TestCase):
         }
         clean_schedule = deepcopy(schedule)
         clean_schedule["revision"] = 0
+        clean_schedule["clients"] = []
         clean_schedule["bookings"] = []
         clean_schedule["events"] = []
         initialized = apply_event(

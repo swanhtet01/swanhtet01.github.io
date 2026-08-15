@@ -221,7 +221,7 @@ _MAX_SUPPORT_SERVICE_EVENTS_PER_CASE = 100
 _MAX_CORRECTIONS_PER_ORDER = 100
 _MAX_COLLECTION_ACTIONS_PER_ORDER = 100
 _MAX_MOVEMENT_ID_LENGTH = 2_000
-_SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v2"
+_SERVICE_SCHEDULE_SCHEMA = "supermega.shop.service_schedule.v3"
 _SERVICE_SCHEDULE_PACKS = frozenset({"retail", "cafe", "restaurant", "spa", "gym", "school"})
 _SERVICE_SCHEDULE_EVENT_TYPES = frozenset(
     {
@@ -290,7 +290,7 @@ _ISO_TIMESTAMP_PATTERN = re.compile(
 
 _STATE_FIELDS = frozenset({"schema", "items", "orders", "movements", "closes"})
 _SERVICE_SCHEDULE_FIELDS = frozenset(
-    {"schema", "industryPackId", "revision", "services", "resources", "bookings", "events"}
+    {"schema", "industryPackId", "revision", "services", "resources", "clients", "bookings", "events"}
 )
 _ITEM_FIELDS = frozenset({"sku", "name", "variant", "onHand", "reorderAt", "price"})
 _CATALOG_CHANGE_FIELDS = frozenset(
@@ -1023,9 +1023,10 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
     )
     services = _list(schedule.get("services"), "commerce state.serviceSchedule.services")
     resources = _list(schedule.get("resources"), "commerce state.serviceSchedule.resources")
+    clients = _list(schedule.get("clients"), "commerce state.serviceSchedule.clients")
     bookings = _list(schedule.get("bookings"), "commerce state.serviceSchedule.bookings")
     events = _list(schedule.get("events"), "commerce state.serviceSchedule.events")
-    if len(services) > 100 or len(resources) > 100 or len(bookings) > 500 or len(events) > 1000:
+    if len(services) > 100 or len(resources) > 100 or len(clients) > 500 or len(bookings) > 500 or len(events) > 1000:
         raise TrialValidationError("commerce state.serviceSchedule exceeds managed workspace limits.")
 
     service_ids: list[str] = []
@@ -1036,9 +1037,12 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             service,
             field,
             required=frozenset({"id", "name", "durationMinutes", "priceMmk", "active"}),
+            optional=frozenset({"nameMy"}),
         )
         service_ids.append(_text(service.get("id"), f"{field}.id", maximum=80))
         _text(service.get("name"), f"{field}.name", maximum=160)
+        if service.get("nameMy") is not None:
+            _text(service.get("nameMy"), f"{field}.nameMy", maximum=160)
         duration = _integer(service.get("durationMinutes"), f"{field}.durationMinutes", minimum=1)
         _integer(service.get("priceMmk"), f"{field}.priceMmk", minimum=1)
         if duration > 1440 or not isinstance(service.get("active"), bool):
@@ -1054,14 +1058,50 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             resource,
             field,
             required=frozenset({"id", "name", "kind", "active"}),
+            optional=frozenset({"nameMy"}),
         )
         resource_ids.append(_text(resource.get("id"), f"{field}.id", maximum=80))
         _text(resource.get("name"), f"{field}.name", maximum=160)
+        if resource.get("nameMy") is not None:
+            _text(resource.get("nameMy"), f"{field}.nameMy", maximum=160)
         if resource.get("kind") not in {"staff", "room", "equipment"} or not isinstance(
             resource.get("active"), bool
         ):
             raise TrialValidationError(f"{field} kind or active state is invalid.")
     _unique(resource_ids, "commerce state.serviceSchedule resource ID")
+
+    client_ids: list[str] = []
+    client_contacts: list[str] = []
+    clients_by_id: dict[str, dict[str, Any]] = {}
+    for index, candidate in enumerate(clients):
+        field = f"commerce state.serviceSchedule.clients[{index}]"
+        client = _object(candidate, field)
+        _exact_fields(
+            client,
+            field,
+            required=frozenset({"id", "name", "contact", "appointmentUpdates", "createdAt", "updatedAt"}),
+            optional=frozenset({"consentRecordedAt"}),
+        )
+        client_id = _text(client.get("id"), f"{field}.id", maximum=80)
+        if re.fullmatch(r"client-(?:legacy-)?[0-9]{4,10}", client_id) is None:
+            raise TrialValidationError(f"{field}.id is invalid.")
+        client_ids.append(client_id)
+        _text(client.get("name"), f"{field}.name", maximum=160)
+        contact = _text(client.get("contact"), f"{field}.contact", maximum=160)
+        client_contacts.append(contact.casefold())
+        appointment_updates = client.get("appointmentUpdates")
+        if appointment_updates not in {"allowed", "declined", "not_recorded"}:
+            raise TrialValidationError(f"{field}.appointmentUpdates is invalid.")
+        consent_recorded_at = client.get("consentRecordedAt")
+        if appointment_updates == "allowed":
+            _timestamp(consent_recorded_at, f"{field}.consentRecordedAt")
+        elif consent_recorded_at is not None:
+            raise TrialValidationError(f"{field}.consentRecordedAt is invalid.")
+        _timestamp(client.get("createdAt"), f"{field}.createdAt")
+        _timestamp(client.get("updatedAt"), f"{field}.updatedAt")
+        clients_by_id[client_id] = client
+    _unique(client_ids, "commerce state.serviceSchedule client ID")
+    _unique(client_contacts, "commerce state.serviceSchedule client contact")
 
     booking_ids: list[str] = []
     normalized_bookings: list[dict[str, Any]] = []
@@ -1073,15 +1113,26 @@ def _validate_service_schedule(value: object) -> dict[str, Any]:
             field,
             required=frozenset(
                 {
-                    "id", "customerName", "contact", "serviceId", "resourceId", "startsAt",
-                    "endsAt", "status", "note", "createdAt", "updatedAt",
+                    "id", "clientId", "customerName", "contact", "appointmentUpdates", "serviceId",
+                    "resourceId", "startsAt", "endsAt", "status", "note", "createdAt", "updatedAt",
                 }
             ),
         )
         booking_id = _text(booking.get("id"), f"{field}.id", maximum=80)
         booking_ids.append(booking_id)
+        client = clients_by_id.get(booking.get("clientId"))
+        if client is None:
+            raise TrialValidationError(f"{field} references an unknown client.")
         _text(booking.get("customerName"), f"{field}.customerName", maximum=160)
         _text(booking.get("contact"), f"{field}.contact", maximum=160)
+        if booking.get("appointmentUpdates") not in {"allowed", "declined", "not_recorded"}:
+            raise TrialValidationError(f"{field}.appointmentUpdates is invalid.")
+        if (
+            booking.get("customerName") != client.get("name")
+            or booking.get("contact") != client.get("contact")
+            or booking.get("appointmentUpdates") != client.get("appointmentUpdates")
+        ):
+            raise TrialValidationError(f"{field} client details are stale.")
         if booking.get("serviceId") not in service_ids or booking.get("resourceId") not in resource_ids:
             raise TrialValidationError(f"{field} references an unknown service or resource.")
         starts_at = _timestamp(booking.get("startsAt"), f"{field}.startsAt")

@@ -676,7 +676,7 @@ class TrialRuntimeTests(unittest.TestCase):
             {"workspace_id": "workspace-a", "version": 1, "schedule": None},
         )
         schedule = {
-            "schema": "supermega.shop.service_schedule.v2",
+            "schema": "supermega.shop.service_schedule.v3",
             "industryPackId": "spa",
             "revision": 1,
             "services": [
@@ -703,6 +703,7 @@ class TrialRuntimeTests(unittest.TestCase):
                     "active": True,
                 }
             ],
+            "clients": [],
             "bookings": [],
             "events": [
                 {
