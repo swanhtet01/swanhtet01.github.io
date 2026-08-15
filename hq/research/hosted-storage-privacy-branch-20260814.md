@@ -115,3 +115,22 @@ and requiring a NoSuchKey/not_found discriminator, or pinning a storage
 version whose renderer preserves outer status. Not decided or implemented
 by the executing agent. No evidence JSON written; gate stays blocked.
 Proofs 5-6 not reached. Branch delete-by 2026-08-15T16:49Z stands.
+
+## Addendum 2026-08-15 (3): final run authorized, blocked by permission
+
+The tech-lead decision on object-path denial semantics (body-discriminated
+outer-400, strengthen-never-loosen) was implemented and landed as commit
+ea13161ad951 (OPS-751); working tree verified clean; self-test green
+(20 cases, 0 network) including the four required adversarial shapes plus
+the run-2 listing variant.
+
+The authorized final six-request run could not be executed: the session's
+permission system hard-denied the audit command (twice, after transient
+denials all session on this same script shape). Fail-closed holds: no live
+requests were made this round, no evidence JSON exists, the gate stays
+blocked. Everything is staged for a permitted operator: instrument at
+ea13161ad951, fixtures healthy on branch lzemsljybmzuyfqaeqey, runbook and
+env bindings in hq/strategy/HOSTED-STORAGE-PRIVACY-PLAN.md section 4.
+Expected live shapes: proof 1 denied (4xx), proof 3 denied or
+empty_filtered, proof 4 denied via not_found discriminator, proofs 5-6
+tenant B sign + 2xx ranged access. Branch delete-by 2026-08-15T16:49Z.

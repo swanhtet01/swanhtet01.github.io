@@ -39,7 +39,8 @@ const NEXT_ACTION_REQUIREMENTS = ['approve_preview_branch_target', 'approve_self
 const NEXT_ACTION_DECISION_ID = 'bounded-managed-pilot-rehearsal'
 const LOCAL_GATE_EVIDENCE = '56 checks, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup and restore.'
 const REQUIRED_DATABASE_CHECK_COUNT = 56
-const REQUIRED_SOURCE_RECEIPT_COUNT = 7
+const REQUIRED_SOURCE_RECEIPT_COUNT = 8
+export const STORAGE_PRIVACY_PROOF_CONTRACT = 'supermega.hosted-storage-privacy-proof.v1'
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -111,7 +112,27 @@ export function buildManagedPilotReadiness(input = {}) {
   if (!isRecord(database) || database.schemaVersion !== 'supermega.hq.database-rehearsal.v2' || Object.keys(database.checks || {}).length !== REQUIRED_DATABASE_CHECK_COUNT || Object.values(database.checks || {}).some((value) => value !== true)) fail('managed_pilot_readiness_database_evidence_invalid')
   if (REQUIRED_QUARANTINE_CHECKS.some((name) => database.checks?.[name] !== true)) fail('managed_pilot_readiness_database_quarantine_invalid')
   if (database.storage?.hostedStoragePrivacyProofRequired !== true || database.localVerification?.externallyHosted !== false) fail('managed_pilot_readiness_database_scope_invalid')
-  if (!storage.includes('Status: local verifier ready; hosted proof blocked')) fail('managed_pilot_readiness_storage_evidence_invalid')
+  // Hosted storage-privacy proof intake (2026-08-15): when the six-request audit evidence exists
+  // it must be internally complete -- passed audit, exactly six read-only requests, no secrets,
+  // no mutations, and the disposable branch already deleted -- and the pilots doc must say so.
+  // Without evidence the doc must still carry the blocked phrase; the gate computes from this.
+  const storageProof = input.storagePrivacyEvidence ?? null
+  if (storageProof !== null) {
+    if (!isRecord(storageProof)
+      || storageProof.contract !== STORAGE_PRIVACY_PROOF_CONTRACT
+      || !String(storageProof.approvalId || '').trim()
+      || storageProof.audit?.ok !== true
+      || storageProof.audit?.provider_requests_performed !== 6
+      || storageProof.audit?.secrets_exposed !== false
+      || storageProof.audit?.persistent_mutations_performed !== 0
+      || storageProof.branch?.deleteAfterEvidence !== true
+      || !Number.isFinite(Date.parse(storageProof.branch?.deletedAt || ''))
+      || !Number.isFinite(Date.parse(storageProof.recordedAt || ''))) fail('managed_pilot_readiness_storage_proof_invalid')
+  }
+  const storageProofComplete = storageProof !== null
+  if (!storage.includes(storageProofComplete
+    ? 'Status: hosted proof complete; six-request audit passed on a deleted isolated branch'
+    : 'Status: local verifier ready; hosted proof blocked')) fail('managed_pilot_readiness_storage_evidence_invalid')
   if (!isRecord(packageManifest?.supermega) || packageManifest.supermega.productionSupabaseTargetStatus !== 'protected-unapproved') fail('managed_pilot_readiness_production_boundary_invalid')
   // v4: the audit is read as STATE, not pinned to the blocked snapshot. Schema version may sit
   // anywhere on the approved v7 -> v10 path, drift must be arithmetically consistent, and the
@@ -192,7 +213,11 @@ export function buildManagedPilotReadiness(input = {}) {
   const gates = [
     gate('local_postgres17', 'ready-local', LOCAL_GATE_EVIDENCE, 'Keep the digest-bound rehearsal current.'),
     gate('hosted_postgres17', hostedGateReady(auditSummary) ? 'ready-hosted' : 'blocked', hostedGateEvidence(auditSummary), hostedGateReady(auditSummary) ? 'Keep the hosted schema at the local target and the audit current.' : 'Apply v8 through v10 plus the digest-bound public browser quarantine on an approved isolated Supabase target, then rerun the hosted validator and session-revocation proof.'),
-    gate('hosted_storage_privacy', 'blocked', 'The six-request verifier is ready, but hosted proof is absent.', 'Run the verifier against an owner-approved isolated private bucket.'),
+    gate('hosted_storage_privacy', storageProofComplete ? 'ready-hosted' : 'blocked', storageProofComplete
+      ? 'Six-request hosted audit passed: anonymous and cross-tenant access denied with canary confirmation, owner and signed access working, zero mutations, branch deleted after evidence.'
+      : 'The six-request verifier is ready, but hosted proof is absent.', storageProofComplete
+      ? 'Keep the storage-privacy evidence and instrument current.'
+      : 'Run the verifier against an owner-approved isolated private bucket.'),
     gate('live_product_contract', 'blocked', 'The exact paired release is verified, but its managed product contract remains isolated_demo.', 'Prove managed persistence and security on the approved isolated target before any managed-pilot claim.'),
     gate('managed_persistence', 'blocked', 'Live managed persistence ready is false.', 'Prove durable commands, recovery, and tenant isolation on the isolated target.'),
     gate('security', securityGateReady(auditSummary) ? 'ready-hosted' : 'blocked', securityGateEvidence(auditSummary), securityAudit.conclusion.nextAction),
@@ -247,6 +272,13 @@ export function buildManagedPilotReadiness(input = {}) {
       doesNotAuthorize: [...FORBIDDEN_ACTIONS],
     },
     securityAudit: auditSummary,
+    storagePrivacy: {
+      proofComplete: storageProofComplete,
+      contract: storageProofComplete ? STORAGE_PRIVACY_PROOF_CONTRACT : null,
+      approvalId: storageProofComplete ? storageProof.approvalId : null,
+      recordedAt: storageProofComplete ? storageProof.recordedAt : null,
+      branchDeletedAt: storageProofComplete ? storageProof.branch.deletedAt : null,
+    },
     gates,
     products,
     controls: {
@@ -319,14 +351,27 @@ export function validateManagedPilotReadiness(value) {
     || audit.storageBucketCount < 0
     || audit.productionMutationAuthorized !== false
     || audit.databaseWrites !== 0) fail('managed_pilot_readiness_security_audit_invalid')
-  // Only the two hosted-evidence gates may leave 'blocked', and only for their computed reason;
+  // Only the three hosted-evidence gates may leave 'blocked', and only for their computed reason;
   // the stored blocking count must equal the count derived from the gates themselves.
+  const storagePrivacy = value.storagePrivacy
+  if (!isRecord(storagePrivacy)
+    || typeof storagePrivacy.proofComplete !== 'boolean'
+    || (storagePrivacy.proofComplete
+      ? (storagePrivacy.contract !== STORAGE_PRIVACY_PROOF_CONTRACT
+        || !String(storagePrivacy.approvalId || '').trim()
+        || !Number.isFinite(Date.parse(storagePrivacy.recordedAt || ''))
+        || !Number.isFinite(Date.parse(storagePrivacy.branchDeletedAt || '')))
+      : (storagePrivacy.contract !== null
+        || storagePrivacy.approvalId !== null
+        || storagePrivacy.recordedAt !== null
+        || storagePrivacy.branchDeletedAt !== null))) fail('managed_pilot_readiness_storage_privacy_invalid')
   if (!Array.isArray(value.gates)
     || value.gates.map((entry) => entry.id).join(',') !== GATE_IDS.join(',')
     || value.gates[0]?.status !== 'ready-local'
-    || value.gates.slice(1).some((entry) => entry.status !== 'blocked' && !(entry.status === 'ready-hosted' && ['hosted_postgres17', 'security'].includes(entry.id)))
+    || value.gates.slice(1).some((entry) => entry.status !== 'blocked' && !(entry.status === 'ready-hosted' && ['hosted_postgres17', 'security', 'hosted_storage_privacy'].includes(entry.id)))
     || value.gates.find((entry) => entry.id === 'hosted_postgres17')?.status !== (hostedGateReady(audit) ? 'ready-hosted' : 'blocked')
     || value.gates.find((entry) => entry.id === 'security')?.status !== (securityGateReady(audit) ? 'ready-hosted' : 'blocked')
+    || value.gates.find((entry) => entry.id === 'hosted_storage_privacy')?.status !== (storagePrivacy.proofComplete ? 'ready-hosted' : 'blocked')
     || value.overall.blockingGateCount !== value.gates.filter((entry) => entry.status === 'blocked').length
     || value.gates.some((entry) => !String(entry?.evidence || '').trim() || !String(entry?.nextAction || '').trim())) fail('managed_pilot_readiness_gates_invalid')
   if (value.gates[0].evidence !== LOCAL_GATE_EVIDENCE
