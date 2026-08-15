@@ -70,6 +70,7 @@ _No founder decision required. Zero bundle cost._
 - [x] Database Codex: PRODUCTION v8-v10 + browser quarantine applied (founder-approved); schema v10 zero drift, advisors 0 ERROR/0 WARN/27 INFO, 73 leads intact, writes still OFF — DONE (OPS-745)
 - [x] Platform Codex: Web Analytics beacon on app + public site, cookieless/no-PII; awaiting founder dashboard toggles — DONE (OPS-746)
 - [x] Governance Codex: security audit v2 recorded from live production state; hosted_postgres17 + security gates READY-HOSTED; blocking gates 7 -> 5 — DONE (OPS-747)
+- [x] Storage Codex + tech lead: HOSTED STORAGE PRIVACY PROVEN — six-request audit six-for-six on a created-proven-deleted branch; two contract strengthenings (canary OPS-750, body discrimination OPS-751); gates 5 -> 4 — DONE (OPS-752)
 
 ### Client-portal / SaaS phase plan (set 2026-08-13; goal: every client their own portal)
 - [ ] GATE NOW: founder merges PR #414 + dispatches paired release — everything above goes live for real users

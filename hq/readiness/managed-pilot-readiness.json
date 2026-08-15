@@ -1,12 +1,12 @@
 {
   "contract": "supermega.managed-pilot-readiness.v4",
   "asOf": "2026-08-13T11:03:48.050Z",
-  "sourceDigest": "sha256:0aaf9fc7df9c88c9b371678743eac52e0d759a3c0179be432573f1019541f5ea",
+  "sourceDigest": "sha256:698e2ae4fb51010e4e42d76f97e7acc2093b4b47314077a5943b9b7891d74a1c",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 5,
+    "blockingGateCount": 4,
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "bounded-managed-pilot-rehearsal",
@@ -80,6 +80,13 @@
     "productionMutationAuthorized": false,
     "databaseWrites": 0
   },
+  "storagePrivacy": {
+    "proofComplete": true,
+    "contract": "supermega.hosted-storage-privacy-proof.v1",
+    "approvalId": "storage-privacy-proof-24h-20260814",
+    "recordedAt": "2026-08-14T20:46:15.344Z",
+    "branchDeletedAt": "2026-08-14T20:46:15.349Z"
+  },
   "gates": [
     {
       "id": "local_postgres17",
@@ -95,9 +102,9 @@
     },
     {
       "id": "hosted_storage_privacy",
-      "status": "blocked",
-      "evidence": "The six-request verifier is ready, but hosted proof is absent.",
-      "nextAction": "Run the verifier against an owner-approved isolated private bucket."
+      "status": "ready-hosted",
+      "evidence": "Six-request hosted audit passed: anonymous and cross-tenant access denied with canary confirmation, owner and signed access working, zero mutations, branch deleted after evidence.",
+      "nextAction": "Keep the storage-privacy evidence and instrument current."
     },
     {
       "id": "live_product_contract",
@@ -203,15 +210,19 @@
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
-      "digest": "sha256:392c1d5e65efacd355ad0e879376f4ca9b4b1bc2aa4d192105a518a2586d63fc"
+      "digest": "sha256:ff953f951b5f4e29025f3dc22f7e7e7af21685075e5b88997e55e3d63dedacec"
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
       "digest": "sha256:a3fe4fdf06e0a1bd0b4e0be1a63a1f91bb0fda03d1ccd085eab85935157e98c3"
     },
     {
+      "path": "hq/readiness/hosted-storage-privacy-proof.json",
+      "digest": "sha256:d6c5d2eda403adfe130d461ca9b314b2482360e67bb61d2b11d91c82347fa734"
+    },
+    {
       "path": "hq/NOW.md",
-      "digest": "sha256:c9ff9ad6cce3b65f444aba7b7e36b53bb17fcaab48497e9b7902485437bfd708"
+      "digest": "sha256:ff588ed352118af82a3543ecdd0f2effb4ab29de6211c702f7f12be533b41da6"
     },
     {
       "path": "package.json",
@@ -219,7 +230,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:8b5c91f78c12e196f5586a1a8d8cdb45cba59e99508290ec5e2c9140320cd2a3"
+      "digest": "sha256:f565903010f53bb9efc9629e1a114a3f9b78e5cc1f716642cccbef27b18b0d6d"
     }
   ]
 }

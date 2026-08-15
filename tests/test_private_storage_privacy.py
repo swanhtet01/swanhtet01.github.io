@@ -87,9 +87,18 @@ class PrivateStoragePrivacyTests(unittest.TestCase):
             self.assertEqual(verifier.main(["--preflight"]), 0)
         self.assertEqual(json.loads(output.getvalue())["network_requests_performed"], 0)
 
-    def test_anonymous_listing_must_be_explicitly_denied(self) -> None:
+    def test_anonymous_zero_disclosure_listing_is_canary_conclusive(self) -> None:
+        # OPS-750: hosted gateways authenticate the anon key, so denial may arrive as an
+        # RLS-filtered empty listing. That shape passes ONLY because the same run proves a
+        # sentinel exists under a tenant JWT (the canary) -- strictly stronger than a bare 403.
         responses = verifier._fixture_responses(self.config)
         responses[0] = verifier._json_fixture({"folders": [], "hasNext": False, "objects": []})
+        report, _ = self.run_fixture(responses)
+        self.assertTrue(report["ok"])
+
+    def test_anonymous_listing_disclosure_stays_denied(self) -> None:
+        responses = verifier._fixture_responses(self.config)
+        responses[0] = verifier._json_fixture({"folders": [], "hasNext": False, "objects": [{"name": "leaked.txt"}]})
         self.assert_fixture_error("anonymous_listing_not_denied", responses)
 
     def test_own_positive_control_is_required(self) -> None:
