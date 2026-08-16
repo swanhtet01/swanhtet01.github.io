@@ -12,6 +12,9 @@ on:
 
 permissions:
   contents: read
+  # The failure alert below files/updates an issue with the built-in GITHUB_TOKEN.
+  # No other write scope is granted; the check itself stays read-only.
+  issues: write
 
 concurrency:
   group: supermega-public-live-health
@@ -39,3 +42,28 @@ jobs:
           PUBLIC_BASE_URL: https://supermega.dev
           EXPECTED_RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || '' }}
         run: npm run public:verify:live
+
+      # Failure alert on the GitHub-native rail. Before this step a failed daily
+      # health run was a silent red X. Workflows here hold no notify secrets (only
+      # VERCEL_TOKEN exists), so instead of inventing a new secret requirement the
+      # alert uses the built-in GITHUB_TOKEN: it opens one issue the first time the
+      # check fails and comments on that same open issue on every repeat, which
+      # emails the owner through normal issue notifications. Fail-open by contract:
+      # continue-on-error means a broken alert can never change the health check's
+      # own conclusion, and this step never blocks or rolls back a release.
+      - name: Alert owner on failed live verification
+        if: ${{ failure() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          title='Live health check failing on supermega.dev'
+          body="$(printf 'Automated alert from .github/workflows/supermega-public-live-health.yml: live verification of https://supermega.dev failed.\n\nTrigger: %s\nRun: %s\n\nThis alert is fail-open and never blocks or rolls back a release. Close this issue once the check is green again.' "$TRIGGER" "$RUN_URL")"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty")"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

@@ -39,8 +39,9 @@ const NEXT_ACTION_REQUIREMENTS = ['approve_preview_branch_target', 'approve_self
 const NEXT_ACTION_DECISION_ID = 'bounded-managed-pilot-rehearsal'
 const LOCAL_GATE_EVIDENCE = '56 checks, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup and restore.'
 const REQUIRED_DATABASE_CHECK_COUNT = 56
-const REQUIRED_SOURCE_RECEIPT_COUNT = 8
+const REQUIRED_SOURCE_RECEIPT_COUNT = 9
 export const STORAGE_PRIVACY_PROOF_CONTRACT = 'supermega.hosted-storage-privacy-proof.v1'
+export const MANAGED_PERSISTENCE_PROOF_CONTRACT = 'supermega.managed-persistence-proof.v1'
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -133,6 +134,25 @@ export function buildManagedPilotReadiness(input = {}) {
   if (!storage.includes(storageProofComplete
     ? 'Status: hosted proof complete; six-request audit passed on a deleted isolated branch'
     : 'Status: local verifier ready; hosted proof blocked')) fail('managed_pilot_readiness_storage_evidence_invalid')
+  // Hosted managed-persistence proof intake (2026-08-16): same two-state discipline as storage.
+  // The seven-proof audit must be internally complete -- passed, exactly 4 sessions and 49
+  // statements, no secrets, no tenant rows, writes confined to fixtures, branch deleted.
+  const persistenceProof = input.managedPersistenceEvidence ?? null
+  if (persistenceProof !== null) {
+    if (!isRecord(persistenceProof)
+      || persistenceProof.contract !== MANAGED_PERSISTENCE_PROOF_CONTRACT
+      || !String(persistenceProof.approvalId || '').trim()
+      || persistenceProof.audit?.ok !== true
+      || persistenceProof.audit?.sessions_performed !== 4
+      || persistenceProof.audit?.statements_performed !== 49
+      || persistenceProof.audit?.secrets_exposed !== false
+      || persistenceProof.audit?.tenant_rows_exposed !== false
+      || persistenceProof.audit?.writes_confined_to_fixture_workspaces !== true
+      || persistenceProof.branch?.deleteAfterEvidence !== true
+      || !Number.isFinite(Date.parse(persistenceProof.branch?.deletedAt || ''))
+      || !Number.isFinite(Date.parse(persistenceProof.recordedAt || ''))) fail('managed_pilot_readiness_persistence_proof_invalid')
+  }
+  const persistenceProofComplete = persistenceProof !== null
   if (!isRecord(packageManifest?.supermega) || packageManifest.supermega.productionSupabaseTargetStatus !== 'protected-unapproved') fail('managed_pilot_readiness_production_boundary_invalid')
   // v4: the audit is read as STATE, not pinned to the blocked snapshot. Schema version may sit
   // anywhere on the approved v7 -> v10 path, drift must be arithmetically consistent, and the
@@ -219,7 +239,11 @@ export function buildManagedPilotReadiness(input = {}) {
       ? 'Keep the storage-privacy evidence and instrument current.'
       : 'Run the verifier against an owner-approved isolated private bucket.'),
     gate('live_product_contract', 'blocked', 'The exact paired release is verified, but its managed product contract remains isolated_demo.', 'Prove managed persistence and security on the approved isolated target before any managed-pilot claim.'),
-    gate('managed_persistence', 'blocked', 'Live managed persistence ready is false.', 'Prove durable commands, recovery, and tenant isolation on the isolated target.'),
+    gate('managed_persistence', persistenceProofComplete ? 'ready-hosted' : 'blocked', persistenceProofComplete
+      ? 'Seven-proof hosted audit passed: durable writes with read-back, exact idempotent retry, version-conflict rejection, event immutability, cross-tenant denial, recovery round-trip, and induced atomic rollback, on a deleted isolated branch.'
+      : 'Live managed persistence ready is false.', persistenceProofComplete
+      ? 'Keep the persistence evidence and instrument current.'
+      : 'Prove durable commands, recovery, and tenant isolation on the isolated target.'),
     gate('security', securityGateReady(auditSummary) ? 'ready-hosted' : 'blocked', securityGateEvidence(auditSummary), securityAudit.conclusion.nextAction),
     gate('self_serve_pilot', 'blocked', 'HQ records no completed self-serve pilot setup or measured baseline.', 'Open the self-serve activation window on the approved isolated target.'),
     gate('production_activation', 'blocked', 'The production Supabase target remains protected-unapproved.', 'Keep writes disabled until separate founder approval after every hosted gate passes.'),
@@ -278,6 +302,13 @@ export function buildManagedPilotReadiness(input = {}) {
       approvalId: storageProofComplete ? storageProof.approvalId : null,
       recordedAt: storageProofComplete ? storageProof.recordedAt : null,
       branchDeletedAt: storageProofComplete ? storageProof.branch.deletedAt : null,
+    },
+    managedPersistence: {
+      proofComplete: persistenceProofComplete,
+      contract: persistenceProofComplete ? MANAGED_PERSISTENCE_PROOF_CONTRACT : null,
+      approvalId: persistenceProofComplete ? persistenceProof.approvalId : null,
+      recordedAt: persistenceProofComplete ? persistenceProof.recordedAt : null,
+      branchDeletedAt: persistenceProofComplete ? persistenceProof.branch.deletedAt : null,
     },
     gates,
     products,
@@ -365,13 +396,26 @@ export function validateManagedPilotReadiness(value) {
         || storagePrivacy.approvalId !== null
         || storagePrivacy.recordedAt !== null
         || storagePrivacy.branchDeletedAt !== null))) fail('managed_pilot_readiness_storage_privacy_invalid')
+  const managedPersistence = value.managedPersistence
+  if (!isRecord(managedPersistence)
+    || typeof managedPersistence.proofComplete !== 'boolean'
+    || (managedPersistence.proofComplete
+      ? (managedPersistence.contract !== MANAGED_PERSISTENCE_PROOF_CONTRACT
+        || !String(managedPersistence.approvalId || '').trim()
+        || !Number.isFinite(Date.parse(managedPersistence.recordedAt || ''))
+        || !Number.isFinite(Date.parse(managedPersistence.branchDeletedAt || '')))
+      : (managedPersistence.contract !== null
+        || managedPersistence.approvalId !== null
+        || managedPersistence.recordedAt !== null
+        || managedPersistence.branchDeletedAt !== null))) fail('managed_pilot_readiness_persistence_invalid')
   if (!Array.isArray(value.gates)
     || value.gates.map((entry) => entry.id).join(',') !== GATE_IDS.join(',')
     || value.gates[0]?.status !== 'ready-local'
-    || value.gates.slice(1).some((entry) => entry.status !== 'blocked' && !(entry.status === 'ready-hosted' && ['hosted_postgres17', 'security', 'hosted_storage_privacy'].includes(entry.id)))
+    || value.gates.slice(1).some((entry) => entry.status !== 'blocked' && !(entry.status === 'ready-hosted' && ['hosted_postgres17', 'security', 'hosted_storage_privacy', 'managed_persistence'].includes(entry.id)))
     || value.gates.find((entry) => entry.id === 'hosted_postgres17')?.status !== (hostedGateReady(audit) ? 'ready-hosted' : 'blocked')
     || value.gates.find((entry) => entry.id === 'security')?.status !== (securityGateReady(audit) ? 'ready-hosted' : 'blocked')
     || value.gates.find((entry) => entry.id === 'hosted_storage_privacy')?.status !== (storagePrivacy.proofComplete ? 'ready-hosted' : 'blocked')
+    || value.gates.find((entry) => entry.id === 'managed_persistence')?.status !== (managedPersistence.proofComplete ? 'ready-hosted' : 'blocked')
     || value.overall.blockingGateCount !== value.gates.filter((entry) => entry.status === 'blocked').length
     || value.gates.some((entry) => !String(entry?.evidence || '').trim() || !String(entry?.nextAction || '').trim())) fail('managed_pilot_readiness_gates_invalid')
   if (value.gates[0].evidence !== LOCAL_GATE_EVIDENCE

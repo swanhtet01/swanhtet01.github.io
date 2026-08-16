@@ -1,12 +1,12 @@
 {
   "contract": "supermega.managed-pilot-readiness.v4",
-  "asOf": "2026-08-13T11:03:48.050Z",
-  "sourceDigest": "sha256:698e2ae4fb51010e4e42d76f97e7acc2093b4b47314077a5943b9b7891d74a1c",
+  "asOf": "2026-08-16T10:00:59.584Z",
+  "sourceDigest": "sha256:82d802057f2bd6fe7c24aa34ac428922cf0acb85657a9b1f6b0161f07ca6615c",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 4,
+    "blockingGateCount": 3,
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "bounded-managed-pilot-rehearsal",
@@ -87,6 +87,13 @@
     "recordedAt": "2026-08-14T20:46:15.344Z",
     "branchDeletedAt": "2026-08-14T20:46:15.349Z"
   },
+  "managedPersistence": {
+    "proofComplete": true,
+    "contract": "supermega.managed-persistence-proof.v1",
+    "approvalId": "persistence-proof-24h-20260816",
+    "recordedAt": "2026-08-16T09:14:56.804Z",
+    "branchDeletedAt": "2026-08-16T09:14:56.808Z"
+  },
   "gates": [
     {
       "id": "local_postgres17",
@@ -114,9 +121,9 @@
     },
     {
       "id": "managed_persistence",
-      "status": "blocked",
-      "evidence": "Live managed persistence ready is false.",
-      "nextAction": "Prove durable commands, recovery, and tenant isolation on the isolated target."
+      "status": "ready-hosted",
+      "evidence": "Seven-proof hosted audit passed: durable writes with read-back, exact idempotent retry, version-conflict rejection, event immutability, cross-tenant denial, recovery round-trip, and induced atomic rollback, on a deleted isolated branch.",
+      "nextAction": "Keep the persistence evidence and instrument current."
     },
     {
       "id": "security",
@@ -206,7 +213,7 @@
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:8b89ab637572acf1606b4397dc0893621f093f8f7e4c70dd2a27af668fb3061f"
+      "digest": "sha256:094d7a48aef775ccecda91bbadfe99b612ea6c9bb1382b1cbabc22c1fac57775"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
@@ -221,8 +228,12 @@
       "digest": "sha256:d6c5d2eda403adfe130d461ca9b314b2482360e67bb61d2b11d91c82347fa734"
     },
     {
+      "path": "hq/readiness/managed-persistence-proof.json",
+      "digest": "sha256:7a5313676672cf55fafdbbdbf53b27c08db97ef01a400101a8fbf7a7726472a0"
+    },
+    {
       "path": "hq/NOW.md",
-      "digest": "sha256:ff588ed352118af82a3543ecdd0f2effb4ab29de6211c702f7f12be533b41da6"
+      "digest": "sha256:db7f966745c5e0a880841583beeecc35c716f1aeda7184af781177e7fc03c391"
     },
     {
       "path": "package.json",
@@ -230,7 +241,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:f565903010f53bb9efc9629e1a114a3f9b78e5cc1f716642cccbef27b18b0d6d"
+      "digest": "sha256:7db3039de69a520e7926dad61c539ea17363df53ec55bd62df99a83f07a8a486"
     }
   ]
 }

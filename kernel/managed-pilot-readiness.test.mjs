@@ -16,7 +16,7 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
     reason: 'Named operator and isolated tenant are missing.',
   },
 }))
-const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((path) => ({ path, digest: readinessDigest(path) }))
+const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map((path) => ({ path, digest: readinessDigest(path) }))
 const input = {
   portfolio: { schemaVersion: 'supermega.hq.portfolio.v3', products },
   databaseEvidence: {

@@ -4044,3 +4044,18 @@
 .theme-dark .website-recovery-actions > button {
   color: var(--website-bg);
 }
+
+/* 375px audit, deferred P2 sweep: the Website workspace's own controls kept desktop sizing
+   on phones. The site-preview chrome (.preview-site-header nav, .preview-cta) is deliberately
+   left out: it renders a miniature of the client's website, not product UI, and inherits the
+   preview's scaled type on purpose. */
+@media screen and (max-width: 900px) {
+  .website-disclosure > summary {
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  .website-recovery-actions > button {
+    min-height: 44px;
+  }
+}

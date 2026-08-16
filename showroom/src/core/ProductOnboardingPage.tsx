@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useOutletContext } from 'react-router'
 
 import { activateLocalWebsiteWorkingSample } from '../products/website/website-starter'
@@ -31,8 +31,8 @@ import {
   shopBusinessTemplate,
   shopBusinessTemplateFromQuery,
   shopBusinessTemplates,
-  type ShopBusinessTemplateId,
 } from '../products/shop/business-templates'
+import { signupBusinessChoices } from './signup-trial'
 import {
   plantIndustryPack,
   plantIndustryPacks,
@@ -97,15 +97,31 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
   const [plantTypeOpen, setPlantTypeOpen] = useState(() => product === 'production')
   const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
-  const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
-    () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
-  )
+  // One grouped picker, ported from the signup page so both doors ask the product's first
+  // question the same way. A choice is either 'trade:<template>' or 'pack:<industry pack>';
+  // the empty string keeps the standard sample on whatever pack this device already carries.
+  const [businessChoiceId, setBusinessChoiceId] = useState(() => {
+    if (product !== 'commerce') return ''
+    const requestedTrade = shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))
+    return requestedTrade ? `trade:${requestedTrade}` : ''
+  })
+  const businessTemplateId = businessChoiceId.startsWith('trade:')
+    ? shopBusinessTemplateFromQuery(businessChoiceId.slice('trade:'.length))
+    : null
+  // Only the packs with no trade template. signupBusinessChoices already applies that rule for
+  // /signup, and it is the same rule here on purpose: a pack reachable through a trade listed
+  // twice is two doors to the same room, a choice an owner cannot make correctly.
+  const servicePackIds = useMemo(() => new Set(
+    signupBusinessChoices(shopBusinessTemplates, shopIndustryPacks)
+      .filter((choice) => choice.kind === 'pack')
+      .map((choice) => choice.industryPackId),
+  ), [])
   // Open by default for Shop. It used to open only when a ?template= deep link supplied the
   // answer, so an owner arriving at /settings/?product=shop -- which is how everyone actually
   // arrives -- saw a collapsed summary and completed setup on the default retail catalog. That
   // silently mis-onboarded every spa, gym and school, the exact businesses that have to choose
   // here because they have no trade template to pick.
-  const [businessTypeOpen, setBusinessTypeOpen] = useState(() => businessTemplateId !== null || product === 'commerce')
+  const [businessTypeOpen, setBusinessTypeOpen] = useState(() => product === 'commerce')
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]
@@ -160,9 +176,9 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     return () => window.clearTimeout(packTimer)
   }, [product, selectedShopIndustryPack.entryPoint, selectedShopIndustryPack.workflowTemplateId, setSetup, setup.entryPoint, setup.product, setup.templateId])
 
-  function changeBusinessTemplate(value: string) {
-    const next = shopBusinessTemplateFromQuery(value)
-    setBusinessTemplateId(next)
+  function changeBusinessChoice(value: string) {
+    setBusinessChoiceId(value)
+    if (value.startsWith('pack:')) setShopIndustryPackId(value.slice('pack:'.length) as ShopIndustryPackId)
     setSetup((current) => (current.product === 'commerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
   }
 
@@ -300,26 +316,25 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
                   who are the whole reason this fallback exists -- was told their starter data was
                   retail. Lowercasing keeps the retail wording identical to before. */}
               <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : `Standard ${selectedShopIndustryPack.name.toLowerCase()} sample`}</small></summary>
-              <label className="demo-pack-select">Starter data
-                <select onChange={(event) => changeBusinessTemplate(event.target.value)} value={businessTemplateId ?? ''}>
+              {/* The signup page's grouped picker, ported so both doors speak one vocabulary.
+                  Trades cover shops that sell goods; a spa, gym or school has no trade template,
+                  so the service packs are listed directly -- without them, that owner's only
+                  route to their own industry pack was the Settings demo panel, which a real
+                  client never opens, and they onboarded onto a retail catalog. */}
+              <label className="demo-pack-select">What kind of business?
+                <select onChange={(event) => changeBusinessChoice(event.target.value)} value={businessChoiceId}>
                   <option value="">Standard sample (current industry pack)</option>
-                  {shopBusinessTemplates.map((template) => <option key={template.id} value={template.id}>{template.name.en} · {template.name.my}</option>)}
+                  <optgroup label="Shops and trades">
+                    {shopBusinessTemplates.map((template) => <option key={template.id} value={`trade:${template.id}`}>{template.name.en} · {template.name.my}</option>)}
+                  </optgroup>
+                  <optgroup label="Service businesses">
+                    {shopIndustryPacks.filter((pack) => servicePackIds.has(pack.id)).map((pack) => <option key={pack.id} value={`pack:${pack.id}`}>{pack.name} · {pack.nameMy}</option>)}
+                  </optgroup>
                 </select>
-                <small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.` : 'Keep the standard sample, or pick a business type for a fuller starter catalog.'}</small>
+                <small>{selectedBusinessTemplate
+                  ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.`
+                  : `${selectedShopIndustryPack.firstWorkflow} ${selectedShopIndustryPack.description}`}</small>
               </label>
-              {/* The trade list above covers shops that sell goods. A spa, gym or school has no
-                  trade template, so without this select their only route to their own industry
-                  pack was the Settings demo panel -- which a real client never opens. That left a
-                  spa owner onboarding onto a retail catalog. Choosing a trade template still wins,
-                  because the template names its own pack. */}
-              {selectedBusinessTemplate ? null : (
-                <label className="demo-pack-select">Type of business
-                  <select onChange={(event) => setShopIndustryPackId(event.target.value as ShopIndustryPackId)} value={shopIndustryPackId}>
-                    {shopIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name} · {pack.nameMy}</option>)}
-                  </select>
-                  <small>{selectedShopIndustryPack.firstWorkflow} {selectedShopIndustryPack.description}</small>
-                </label>
-              )}
             </details>
           ) : null}
           {/* Plant shipped five industry packs and reached one. plantIndustryPackId was read from
@@ -339,8 +354,11 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
             </details>
           ) : null}
           <div className="product-onboarding-primary">
-            <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
-            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
+            {/* The hint below is the reason the button is disabled. aria-describedby ties them,
+                so a screen reader landing on the disabled control hears "Enter a business name
+                to continue" instead of an unexplained dead end. */}
+            <button aria-describedby="product-onboarding-submit-hint" className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
+            <small id="product-onboarding-submit-hint">{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help">Need help bringing real data? <a href={managedTrialRequestUrl(product, onboardingTemplate.id)} onClick={recordGuidedSetupRequest}>Ask SuperMega to set up {onboardingProduct.name}</a>.</p>

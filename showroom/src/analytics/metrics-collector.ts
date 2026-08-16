@@ -27,7 +27,10 @@ const SURFACE_MAP: Record<string, { product: MetricProduct; surface: string }> =
   '/settings': { product: 'hq', surface: 'settings' },
 }
 
-function surfaceFromHash(): { product: MetricProduct; surface: string } | null {
+// Exported for the client error reporter (core/client-error-reporter.ts), which reuses
+// this closed map so an error event can carry a coarse surface label without ever
+// touching the raw hash or its query params.
+export function surfaceFromHash(): { product: MetricProduct; surface: string } | null {
   const hash = location.hash.replace('#', '').split('?')[0]
   const sorted = Object.keys(SURFACE_MAP).sort((a, b) => b.length - a.length)
   for (const prefix of sorted) {
