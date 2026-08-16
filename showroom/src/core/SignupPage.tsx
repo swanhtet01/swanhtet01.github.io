@@ -5,6 +5,7 @@ import { PageHeading, type RuntimeHealth } from './CoreShell'
 import { shopBusinessTemplates } from '../products/shop/business-templates'
 import { shopIndustryPacks } from './shop-service-scheduling'
 import { managedTrialAuthConfigured } from './managed-trial'
+import { TRIAL_TERMS } from './trial-terms'
 import {
   provisionLocalShopBusinessTemplateSample,
   provisionLocalShopIndustryPack,
@@ -214,8 +215,14 @@ export function SignupPage() {
         </label>
         <label className="signup-consent">
           <input checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} type="checkbox" />
-          <span>I accept the SuperMega trial terms, recorded on this device with my trial record.</span>
+          <span>I accept the SuperMega trial terms below, recorded on this device with my trial record.</span>
         </label>
+        <details className="signup-consent-terms">
+          <summary>Read the trial terms ({TRIAL_TERMS.length} plain-language points)</summary>
+          <ol>
+            {TRIAL_TERMS.map((term) => <li key={term.title}><strong>{term.title}.</strong> {term.body}</li>)}
+          </ol>
+        </details>
         <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Preparing your workspace...' : 'Start my free trial'}</button>
         <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
       </form>

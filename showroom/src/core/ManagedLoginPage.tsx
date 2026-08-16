@@ -5,13 +5,16 @@ import { PageHeading, type RuntimeHealth } from './CoreShell'
 import { managedAccountPath, managedAccountRequestUrl } from './account-routes'
 import {
   completeManagedWorkspaceSignIn,
+  createSelfServeWorkspace,
   currentManagedIdentity,
+  discoverManagedWorkspacesForCurrentSession,
   loadManagedBootstrap,
   managedTrialAuthConfigured,
   signInAndDiscoverManagedWorkspaces,
   type ManagedIdentity,
   type ManagedWorkspaceSignIn,
 } from './managed-trial'
+import { readTrialSignup } from './signup-trial'
 
 export function ManagedLoginPage() {
   const runtime = useOutletContext<RuntimeHealth>()
@@ -23,6 +26,9 @@ export function ManagedLoginPage() {
   const [workspaceId, setWorkspaceId] = useState('')
   const [directory, setDirectory] = useState<ManagedWorkspaceSignIn | null>(null)
   const [existingIdentity, setExistingIdentity] = useState<ManagedIdentity | null>(null)
+  const [activating, setActivating] = useState(false)
+  const [claimCode, setClaimCode] = useState(() => readTrialSignup(window.localStorage)?.claimCode ?? '')
+  const [businessName, setBusinessName] = useState(() => readTrialSignup(window.localStorage)?.businessName ?? '')
   const [notice, setNotice] = useState('')
   const [noticeTone, setNoticeTone] = useState<'quiet' | 'error'>('quiet')
   const [busy, setBusy] = useState(false)
@@ -30,7 +36,26 @@ export function ManagedLoginPage() {
 
   useEffect(() => {
     if (!managedReady) return
-    currentManagedIdentity().then(setExistingIdentity).catch(() => setExistingIdentity(null))
+    let active = true
+    currentManagedIdentity()
+      .then(async (identity) => {
+        if (!active) return
+        setExistingIdentity(identity)
+        if (identity) return
+        // A session without any company (e.g. fresh account from an invite or
+        // recovery link) lands here signed in: open the activation panel so the
+        // claim code becomes a company instead of a dead end.
+        try {
+          const signIn = await discoverManagedWorkspacesForCurrentSession()
+          if (!active || signIn.workspaces.length > 0) return
+          setActivating(true)
+          setNotice(`No company is assigned to ${signIn.email} yet. Activate yours with the claim code from your free trial.`)
+        } catch {
+          // No usable session: stay on the sign-in form.
+        }
+      })
+      .catch(() => setExistingIdentity(null))
+    return () => { active = false }
   }, [managedReady])
 
   async function openWorkspace(signIn: ManagedWorkspaceSignIn, selectedWorkspaceId: string) {
@@ -57,6 +82,13 @@ export function ManagedLoginPage() {
         await openWorkspace(signIn, signIn.workspaces[0].workspaceId)
         return
       }
+      if (signIn.workspaces.length === 0) {
+        // A verified account with no company yet is the self-serve moment, not
+        // a dead end: offer activation with the claim code from the trial.
+        setActivating(true)
+        setNotice(`No company is assigned to ${signIn.email} yet. Activate yours with the claim code from your free trial.`)
+        return
+      }
       setDirectory(signIn)
       setWorkspaceId(signIn.workspaces[0].workspaceId)
       setNotice(`Choose one of ${signIn.workspaces.length} companies assigned to ${signIn.email}.`)
@@ -68,13 +100,47 @@ export function ManagedLoginPage() {
     }
   }
 
+  async function activate(event: FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setNoticeTone('quiet')
+    setNotice('Creating your company from the claim...')
+    try {
+      const workspace = await createSelfServeWorkspace(claimCode, businessName)
+      setNotice(workspace.created
+        ? `${workspace.label} is ready. Opening your company...`
+        : `${workspace.label} was already activated with this claim. Opening it...`)
+      const refreshed = await discoverManagedWorkspacesForCurrentSession()
+      await openWorkspace(refreshed, workspace.workspaceId)
+    } catch (error) {
+      setNoticeTone('error')
+      const code = error instanceof Error && 'code' in error ? String((error as { code?: unknown }).code ?? '') : ''
+      if (code === 'activation_window_closed' || code === 'http_503') {
+        setNotice('Self-serve activation is not open yet. Your claim code stays valid — send an activation request and a person finishes setup with you.')
+      } else if (code === 'claim_code_conflict') {
+        setNotice('This claim code is already linked to a different account. If that was you on another email, sign in with it; otherwise request help.')
+      } else {
+        setNotice(error instanceof Error ? error.message : 'The company could not be activated.')
+      }
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="workspace-screen managed-login-screen">
       <PageHeading eyebrow="Company account" title="Open your company." copy="Sign in once. SuperMega finds the companies assigned to you." />
       {existingIdentity ? <section className="managed-login-panel" aria-label="Current managed account">
         <div><span className="core-eyebrow">Connected</span><h2>{existingIdentity.email}</h2><p>Your company account is ready.</p></div>
         <Link className="core-button primary" to="/settings/#controls">Open company</Link>
-      </section> : managedReady ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
+      </section> : managedReady && activating ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void activate(event)}>
+        <div><span className="core-eyebrow">Activate your company</span><h2>Claim your company.</h2><p>Use the claim code from your free trial. The company is created for this signed-in account and only this account owns it.</p></div>
+        <label>Claim code<input autoComplete="off" maxLength={12} onChange={(event) => setClaimCode(event.target.value)} placeholder="SM-XXXX-XXXX" required value={claimCode} /></label>
+        <label>Business name<input maxLength={120} onChange={(event) => setBusinessName(event.target.value)} placeholder="Your business name" required value={businessName} /></label>
+        <button className="core-button primary" disabled={busy} type="submit">{busy ? 'Activating...' : 'Activate my company'}</button>
+        <a className="account-inline-link" href={managedAccountRequestUrl(productIntent)}>Ask a person to finish setup instead</a>
+        <button className="account-inline-link account-link-button" onClick={() => { setActivating(false); setNotice(''); setNoticeTone('quiet') }} type="button">Back to sign in</button>
+        <p className="form-notice" data-tone={noticeTone} role="status">{notice}</p>
+      </form> : managedReady ? <form aria-busy={busy} className="managed-login-panel core-form" onSubmit={(event) => void submit(event)}>
         <div><span className="core-eyebrow">Company account</span><h2>{directory ? 'Choose your company.' : 'Use your work account.'}</h2><p>{directory ? 'Only active companies assigned to this account are shown.' : 'No workspace code or technical setup is required.'}</p></div>
         {directory ? <label>Company<select onChange={(event) => setWorkspaceId(event.target.value)} required value={workspaceId}>{directory.workspaces.map((workspace) => <option key={workspace.workspaceId} value={workspace.workspaceId}>{workspace.label} - {workspace.access}</option>)}</select></label> : <>
           <label>Email<input autoComplete="username" maxLength={160} onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label>
