@@ -24,12 +24,30 @@ Fixed script: exactly MAX_SESSIONS database connections and MAX_STATEMENTS
 statements (transaction control excluded); the run fails closed unless the
 final statement count equals the budget exactly.
 
+Session-pooler lane (2026-08-16 tech-lead decision; intent-preserving
+strengthening, same principle as the storage verifier's proof-1 canary). The
+original pooler rejection exists because TRANSACTION-mode pooling (port 6543)
+breaks the exact semantics the seven proofs rely on: transaction-local GUC
+identity, cross-statement backend affinity, and session state. SESSION-mode
+pooling on port 5432 assigns one dedicated backend per connection and
+preserves all of them, so it is accepted as a second lane WITHOUT weakening
+anything: (a) the pooler username must carry the project-ref suffix and that
+ref must equal the ref bound by the direct ALLOWED_HOST, (b) port 6543 is
+hard-rejected with its own error code in both lanes, and (c) session 1 opens
+with a live two-statement posture probe proving cross-transaction backend
+stability (stable pg_backend_pid) and session-GUC round-trip; any deviation
+fails closed as pooler_transaction_mode_detected. The production ref stays
+hard-rejected in both lanes.
+
 Branch fixture contract (founder-approved setup SQL, phase F3 of the plan):
   - workspace_memberships holds exactly (workspace_a, actor_a, 'human',
     'active', {'commerce.write'}) and (workspace_b, actor_b, 'human',
     'active', {'commerce.write'});
   - workspace_state / workspace_events / approval_requests hold zero rows for
-    all three fixture workspaces; the restore workspace is entirely empty;
+    all three fixture workspaces; the restore workspace has no membership;
+  - workspace_access_controls holds one ACTIVE row for each of the three
+    fixture workspaces (the v6 restrictive access gate denies every
+    runtime-role read/write without it; discovered during 20260816 staging);
   - the runtime URL logs in as a branch-only role that inherits
     supermega_trial_backend (no SUPERUSER, no BYPASSRLS);
   - the recovery URL logs in as a branch role with recovery authority
@@ -81,7 +99,7 @@ ADAPTER = "postgres_trial_backend_v1"
 SCHEMA_COMPONENT = "private_trial_backend"
 EXPECTED_SCHEMA_VERSION = 10
 MAX_SESSIONS = 4
-MAX_STATEMENTS = 47
+MAX_STATEMENTS = 49
 MAX_RESULT_ROWS = 8
 MAX_ROW_BYTES = 32_768
 MAX_ROW_KEYS = 32
@@ -148,8 +166,10 @@ ENV_ACTOR_A = "SUPERMEGA_MANAGED_PERSISTENCE_ACTOR_A"
 ENV_ACTOR_B = "SUPERMEGA_MANAGED_PERSISTENCE_ACTOR_B"
 ENV_DATABASE_URL = "SUPERMEGA_MANAGED_PERSISTENCE_DATABASE_URL"
 ENV_RECOVERY_DATABASE_URL = "SUPERMEGA_MANAGED_PERSISTENCE_RECOVERY_DATABASE_URL"
+ENV_POOLER_HOST = "SUPERMEGA_MANAGED_PERSISTENCE_POOLER_HOST"
 
 _DB_HOST_PATTERN = re.compile(r"db\.([a-z0-9]{20})\.supabase\.co\Z")
+_POOLER_HOST_PATTERN = re.compile(r"aws-\d+-[a-z0-9-]+\.pooler\.supabase\.com\Z")
 _APPROVAL_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._:-]{6,126}[A-Za-z0-9])?\Z")
 _ACTOR_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _SAFE_ERROR_PATTERN = re.compile(r"[a-z][a-z0-9_]{2,80}\Z")
@@ -217,7 +237,21 @@ def _validate_actor(value: str) -> str:
     return actor
 
 
-def _validate_database_url(raw_url: str, *, allowed_host: str) -> str:
+def _validate_database_url(
+    raw_url: str,
+    *,
+    allowed_host: str,
+    pooler_host: str | None,
+    project_ref: str,
+) -> tuple[str, str]:
+    """Validate one connection URL and return (url, lane).
+
+    Two lanes only (2026-08-16 tech-lead decision, see module docstring):
+    the direct host db.<ref>.supabase.co, or the SESSION-mode pooler host on
+    port 5432 with the project-ref-suffixed username bound to the same ref as
+    ALLOWED_HOST. Port 6543 (transaction-mode pooling) is hard-rejected with
+    its own code in both lanes; nothing else is accepted.
+    """
     url = raw_url.strip()
     try:
         validate_database_url(url)
@@ -232,10 +266,26 @@ def _validate_database_url(raw_url: str, *, allowed_host: str) -> str:
     except ValueError as exc:
         raise PersistenceProofError("database_url_invalid") from exc
     host = str(parsed.hostname or "").lower().rstrip(".")
-    if host != allowed_host:
+    if port == 6543:
+        raise PersistenceProofError("transaction_pooler_port_forbidden")
+    if host == allowed_host:
+        lane = "direct"
+        if port not in {None, 5432}:
+            raise PersistenceProofError("direct_port_required")
+    elif pooler_host is not None and host == pooler_host:
+        lane = "session_pooler"
+        if port not in {None, 5432}:
+            raise PersistenceProofError("pooler_session_port_required")
+        username = str(parsed.username or "")
+        if "." not in username:
+            raise PersistenceProofError("pooler_username_ref_missing")
+        base_role, _, username_ref = username.rpartition(".")
+        if not base_role:
+            raise PersistenceProofError("pooler_username_ref_missing")
+        if username_ref != project_ref:
+            raise PersistenceProofError("pooler_username_ref_mismatch")
+    else:
         raise PersistenceProofError("database_url_host_mismatch")
-    if port not in {None, 5432}:
-        raise PersistenceProofError("direct_port_required")
     if parsed.path != "/postgres":
         raise PersistenceProofError("database_name_invalid")
     query = parse_qs(parsed.query, keep_blank_values=True)
@@ -244,13 +294,15 @@ def _validate_database_url(raw_url: str, *, allowed_host: str) -> str:
     ssl_modes = [value.lower() for value in query.get("sslmode", [])]
     if len(ssl_modes) != 1 or ssl_modes[0] not in SAFE_SSL_MODES:
         raise PersistenceProofError("database_url_tls_required")
-    return url
+    return url, lane
 
 
 @dataclass(frozen=True)
 class AuditConfig:
     host: str
     project_ref: str
+    pooler_host: str | None
+    connection_lane: str
     owner_approval_id: str
     workspace_a: str
     workspace_b: str
@@ -289,18 +341,35 @@ def load_config(environment: dict[str, str] | None = None) -> AuditConfig:
     if actor_a == actor_b:
         raise PersistenceProofError("fixture_actors_not_distinct")
 
-    database_url = _validate_database_url(
-        _require_environment(values, ENV_DATABASE_URL), allowed_host=allowed_host
+    pooler_host: str | None = str(values.get(ENV_POOLER_HOST, "")).strip().lower().rstrip(".") or None
+    if pooler_host is not None and not _POOLER_HOST_PATTERN.fullmatch(pooler_host):
+        raise PersistenceProofError("pooler_host_invalid")
+
+    database_url, runtime_lane = _validate_database_url(
+        _require_environment(values, ENV_DATABASE_URL),
+        allowed_host=allowed_host,
+        pooler_host=pooler_host,
+        project_ref=project_ref,
     )
-    recovery_database_url = _validate_database_url(
-        _require_environment(values, ENV_RECOVERY_DATABASE_URL), allowed_host=allowed_host
+    recovery_database_url, recovery_lane = _validate_database_url(
+        _require_environment(values, ENV_RECOVERY_DATABASE_URL),
+        allowed_host=allowed_host,
+        pooler_host=pooler_host,
+        project_ref=project_ref,
     )
     if database_url == recovery_database_url:
         raise PersistenceProofError("runtime_and_recovery_url_identical")
+    connection_lane = (
+        "session_pooler"
+        if "session_pooler" in {runtime_lane, recovery_lane}
+        else "direct"
+    )
 
     return AuditConfig(
         host=allowed_host,
         project_ref=project_ref,
+        pooler_host=pooler_host,
+        connection_lane=connection_lane,
         owner_approval_id=owner_approval_id,
         workspace_a=workspace_a,
         workspace_b=workspace_b,
@@ -315,6 +384,15 @@ def load_config(environment: dict[str, str] | None = None) -> AuditConfig:
 # The complete fixed statement script. Live SQL per tag is a pinned constant;
 # the run must consume the tags in exactly this order and exactly this count.
 _SQL: dict[str, str] = {
+    # Session-mode posture probe (2026-08-16 tech-lead decision): statement one
+    # seeds a SESSION-level GUC and reports the backend pid; statement two runs
+    # in the NEXT transaction and must observe the same pid and the same GUC
+    # value. A transaction-mode pooler hands consecutive transactions to
+    # different backends and resets session state, so either mismatch fails
+    # closed as pooler_transaction_mode_detected. The probe GUC is never read
+    # by any RLS policy.
+    "session_mode_seed": "select pg_backend_pid(), set_config('app.pooler_probe', %s, false)",
+    "session_mode_verify": "select pg_backend_pid(), current_setting('app.pooler_probe', true)",
     "role_posture": "select rolsuper, rolbypassrls from pg_roles where rolname = current_user",
     "schema_version": (
         "select schema_version from app_private.trial_schema_meta where component = %s"
@@ -434,6 +512,7 @@ for _section in SECTION_ORDER:
     )
 
 EXPECTED_TAG_SEQUENCE = (
+    "session_mode_seed", "session_mode_verify",
     "role_posture", "schema_version",
     "set_identity", "insert_state", "insert_event",
     "set_identity", "retry_event", "select_event_fingerprint", "select_state_version",
@@ -692,6 +771,19 @@ class ManagedPersistenceAudit:
         # ---- Session 1: runtime, tenant A -------------------------------
         session = self._open("runtime")
         try:
+            # Session-mode posture probe (2026-08-16 tech-lead decision): the
+            # seed statement commits in its own transaction; the verify
+            # statement must then see the SAME backend pid and the SAME
+            # session GUC value from a new transaction. Anything else means
+            # transaction-mode pooling and the run stops before any proof.
+            probe_nonce = uuid.uuid4().hex
+            seeded = session.run("session_mode_seed", (probe_nonce,))
+            if len(seeded) != 1 or seeded[0][1] != probe_nonce:
+                raise PersistenceProofError("pooler_transaction_mode_detected")
+            session.commit()
+            verified = session.run("session_mode_verify")
+            if verified != [(seeded[0][0], probe_nonce)]:
+                raise PersistenceProofError("pooler_transaction_mode_detected")
             posture = session.run("role_posture")
             if posture != [(False, False)]:
                 raise PersistenceProofError("runtime_role_posture_invalid")
@@ -986,6 +1078,7 @@ class ManagedPersistenceAudit:
         evidence = {
             "contract": CONTRACT,
             "adapter": ADAPTER,
+            "connection_lane": config.connection_lane,
             "target_host_digest": _digest_text(config.host),
             "owner_approval_digest": _digest_text(config.owner_approval_id),
             "workspace_a_digest": _digest_text(config.workspace_a),
@@ -1014,6 +1107,7 @@ def configuration_preflight(
         "contract": CONTRACT,
         "mode": "offline_configuration_preflight",
         "adapter": ADAPTER,
+        "connection_lane": config.connection_lane,
         "target_host_digest": _digest_text(config.host),
         "owner_approval_digest": _digest_text(config.owner_approval_id),
         "workspace_a_digest": _digest_text(config.workspace_a),
@@ -1088,11 +1182,24 @@ class _FixtureSession:
         self.working: dict[str, dict[Any, dict[str, Any]]] | None = None
         self.identity: tuple[str, str, str] | None = None
         self._restore_written = False
+        # Session-scoped connection posture: a dedicated backend keeps one pid
+        # and its session GUCs for the whole connection. The
+        # 'pooler_transaction_mode' defect models a transaction-mode pooler:
+        # every transaction lands on a fresh backend (new pid) and session
+        # state is discarded between transactions.
+        self.session_gucs: dict[str, str] = {}
+        self._transaction_serial = 0
+
+    def _backend_pid(self) -> int:
+        if "pooler_transaction_mode" in self.factory.defects:
+            return 4242 + self._transaction_serial
+        return 4242
 
     # -- transaction plumbing ------------------------------------------
     def _work(self) -> dict[str, dict[Any, dict[str, Any]]]:
         if self.working is None:
             self.working = deepcopy(self.factory.store)
+            self._transaction_serial += 1
         return self.working
 
     def commit(self) -> None:
@@ -1105,6 +1212,8 @@ class _FixtureSession:
         self.working = None
         self.identity = None
         self._restore_written = False
+        if "pooler_transaction_mode" in self.factory.defects:
+            self.session_gucs.clear()
 
     def rollback(self) -> None:
         if self.working is not None and "rollback_leaks" in self.factory.defects:
@@ -1112,6 +1221,8 @@ class _FixtureSession:
         self.working = None
         self.identity = None
         self._restore_written = False
+        if "pooler_transaction_mode" in self.factory.defects:
+            self.session_gucs.clear()
 
     def close(self) -> None:
         return None
@@ -1144,6 +1255,12 @@ class _FixtureSession:
         work = self._work()
         config = self.factory.config
 
+        if tag == "session_mode_seed":
+            (nonce,) = params
+            self.session_gucs["app.pooler_probe"] = str(nonce)
+            return [(self._backend_pid(), str(nonce))]
+        if tag == "session_mode_verify":
+            return [(self._backend_pid(), self.session_gucs.get("app.pooler_probe"))]
         if tag == "role_posture":
             return [("role_superuser" in defects, "role_bypassrls" in defects)]
         if tag in {"schema_version", "recovery_schema"}:
@@ -1454,6 +1571,22 @@ def _fixture_environment() -> dict[str, str]:
     }
 
 
+def _pooler_environment() -> dict[str, str]:
+    pooler_host = "aws-0-ap-southeast-1.pooler.supabase.com"
+    return {
+        **_fixture_environment(),
+        ENV_POOLER_HOST: pooler_host,
+        ENV_DATABASE_URL: (
+            "postgresql://persistence_proof_runtime.fixturebranch0000001:fixture-secret-a"
+            f"@{pooler_host}:5432/postgres?sslmode=require"
+        ),
+        ENV_RECOVERY_DATABASE_URL: (
+            "postgresql://persistence_proof_recovery.fixturebranch0000001:fixture-secret-b"
+            f"@{pooler_host}:5432/postgres?sslmode=require"
+        ),
+    }
+
+
 def run_self_test() -> dict[str, Any]:
     cases = 0
     environment = _fixture_environment()
@@ -1466,6 +1599,7 @@ def run_self_test() -> dict[str, Any]:
     report = ManagedPersistenceAudit(config, happy_factory).run(captured_at=frozen_now)
     if (
         report["ok"] is not True
+        or report["connection_lane"] != "direct"
         or report["sessions_performed"] != MAX_SESSIONS
         or report["statements_performed"] != MAX_STATEMENTS
         or [proof["id"] for proof in report["proofs"]] != list(PROOF_IDS)
@@ -1475,18 +1609,51 @@ def run_self_test() -> dict[str, Any]:
     ):
         raise PersistenceProofError("self_test_happy_path_failed")
 
-    def expect_failure(code: str, defects: frozenset[str]) -> PersistenceProofError:
+    # Case: the session-pooler lane passes the identical fixed script with the
+    # ref-suffixed usernames and reports its lane in the evidence.
+    cases += 1
+    pooler_config = load_config(_pooler_environment())
+    pooler_factory = _FixtureFactory(pooler_config)
+    pooler_report = ManagedPersistenceAudit(pooler_config, pooler_factory).run(
+        captured_at=frozen_now
+    )
+    if (
+        pooler_report["ok"] is not True
+        or pooler_report["connection_lane"] != "session_pooler"
+        or pooler_report["statements_performed"] != MAX_STATEMENTS
+        or [proof["id"] for proof in pooler_report["proofs"]] != list(PROOF_IDS)
+        or tuple(pooler_factory.tags) != EXPECTED_TAG_SEQUENCE
+    ):
+        raise PersistenceProofError("self_test_pooler_lane_failed")
+
+    def expect_failure(
+        code: str,
+        defects: frozenset[str],
+        audit_config: AuditConfig | None = None,
+    ) -> PersistenceProofError:
         nonlocal cases
         cases += 1
+        target_config = audit_config or config
         try:
-            ManagedPersistenceAudit(config, _FixtureFactory(config, defects)).run(
-                captured_at=frozen_now
-            )
+            ManagedPersistenceAudit(
+                target_config, _FixtureFactory(target_config, defects)
+            ).run(captured_at=frozen_now)
         except PersistenceProofError as exc:
             if exc.code == code:
                 return exc
             raise PersistenceProofError("self_test_expected_failure_missing") from exc
         raise PersistenceProofError("self_test_expected_failure_missing")
+
+    # Cases: a transaction-mode pooler is detected live in either lane before
+    # any proof statement runs.
+    expect_failure(
+        "pooler_transaction_mode_detected",
+        frozenset({"pooler_transaction_mode"}),
+        pooler_config,
+    )
+    expect_failure(
+        "pooler_transaction_mode_detected", frozenset({"pooler_transaction_mode"})
+    )
 
     # Cases: every laundering / defect path fails closed with its exact code.
     expect_failure("runtime_role_posture_invalid", frozenset({"role_superuser"}))
@@ -1556,10 +1723,63 @@ def run_self_test() -> dict[str, Any]:
         "direct_port_required",
         {
             ENV_DATABASE_URL: (
+                f"postgresql://runtime:secret@{environment[ENV_ALLOWED_HOST]}:5433/postgres"
+                "?sslmode=require"
+            )
+        },
+    )
+    expect_config_failure(
+        "transaction_pooler_port_forbidden",
+        {
+            ENV_DATABASE_URL: (
                 f"postgresql://runtime:secret@{environment[ENV_ALLOWED_HOST]}:6543/postgres"
                 "?sslmode=require"
             )
         },
+    )
+    pooler_environment = _pooler_environment()
+
+    def expect_pooler_config_failure(code: str, mutation: dict[str, str]) -> None:
+        nonlocal cases
+        cases += 1
+        try:
+            load_config({**pooler_environment, **mutation})
+        except PersistenceProofError as exc:
+            if exc.code == code:
+                return
+            raise PersistenceProofError("self_test_config_rejection_failed") from exc
+        raise PersistenceProofError("self_test_config_rejection_failed")
+
+    pooler_host_value = pooler_environment[ENV_POOLER_HOST]
+    expect_pooler_config_failure(
+        "transaction_pooler_port_forbidden",
+        {
+            ENV_DATABASE_URL: (
+                "postgresql://persistence_proof_runtime.fixturebranch0000001:fixture-secret-a"
+                f"@{pooler_host_value}:6543/postgres?sslmode=require"
+            )
+        },
+    )
+    expect_pooler_config_failure(
+        "pooler_username_ref_mismatch",
+        {
+            ENV_DATABASE_URL: (
+                "postgresql://persistence_proof_runtime.wrongref000000000001:fixture-secret-a"
+                f"@{pooler_host_value}:5432/postgres?sslmode=require"
+            )
+        },
+    )
+    expect_pooler_config_failure(
+        "pooler_username_ref_missing",
+        {
+            ENV_DATABASE_URL: (
+                "postgresql://persistence_proof_runtime:fixture-secret-a"
+                f"@{pooler_host_value}:5432/postgres?sslmode=require"
+            )
+        },
+    )
+    expect_pooler_config_failure(
+        "pooler_host_invalid", {ENV_POOLER_HOST: "evil.example.com"}
     )
     expect_config_failure(
         "database_url_tls_required",
@@ -1640,10 +1860,15 @@ def run_self_test() -> dict[str, Any]:
     # values, connection strings, or raw error text.
     cases += 1
     failure_report = _failure_report(leak_error, sessions=1, statements=4)
-    serialized = json.dumps([report, preflight, failure_report], sort_keys=True)
+    serialized = json.dumps(
+        [report, pooler_report, preflight, failure_report], sort_keys=True
+    )
     forbidden_values = [
         environment[ENV_DATABASE_URL],
         environment[ENV_RECOVERY_DATABASE_URL],
+        pooler_environment[ENV_DATABASE_URL],
+        pooler_environment[ENV_RECOVERY_DATABASE_URL],
+        "persistence_proof_runtime.fixturebranch0000001",
         "fixture-secret-a",
         "fixture-secret-b",
         "hunter2",
