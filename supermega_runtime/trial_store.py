@@ -27,6 +27,11 @@ TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
 # v11 branch) only AFTER the matching migration has been applied to that target.
 TRIAL_SCHEMA_VERSION = int(os.environ.get("SUPERMEGA_TRIAL_SCHEMA_VERSION", "10"))
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
+# TLS transit is enforced by connection configuration (finding 6): psycopg refuses
+# to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
+# authoritative client->server (or client->Supavisor-pooler) guarantee -- a
+# per-backend pg_stat_ssl read cannot observe the client leg through a pooler.
+TRIAL_TLS_SSLMODES = frozenset({"require", "verify-ca", "verify-full"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 TRUSTED_IDENTITY_PROVIDERS = frozenset({"gateway", "supabase"})
 HUMAN_ACTOR_KIND = "human"
@@ -3008,17 +3013,23 @@ class PostgresTrialStore:
             raise TrialNotReadyError(("database_ready",))
         try:
             import psycopg
-            from psycopg.conninfo import conninfo_to_dict
             from psycopg.rows import dict_row
         except ImportError as exc:
             raise TrialNotReadyError(("postgres_driver_ready",)) from exc
-        # The Vercel runtime uses short-lived pooled connections. Keep
-        # autocommit explicitly disabled so every request can bind its identity
-        # to one transaction, disable automatic prepared statements for
-        # Supavisor transaction mode, and enforce encrypted transport even if a
-        # manually supplied URL omitted sslmode. A stronger URL setting
-        # (verify-ca / verify-full) remains in the DSN and should be used where
-        # the provider certificate is pinned.
+        # Enforce encrypted transport by CONNECTION CONFIGURATION -- the only place
+        # it holds for BOTH the direct-host lane and the Supavisor session pooler
+        # that production must use (the Supabase direct host is IPv6-only). psycopg
+        # refuses to open the connection unless the channel negotiates TLS under an
+        # sslmode of require/verify-ca/verify-full, so a successful connect proves
+        # the client->server (or client->pooler) leg is encrypted. A per-backend
+        # pg_stat_ssl read reflects the pooler->Postgres leg, not the client leg,
+        # and reads FALSE through Supavisor even when the client leg is TLS
+        # (finding 6) -- so this configuration assertion, not a query, is the
+        # authoritative guarantee. Fail closed; never silently downgrade or force.
+        self._require_dsn_tls(self.database_url)
+        # Keep autocommit explicitly disabled so every request can bind its
+        # identity to one transaction, and disable automatic prepared statements
+        # for Supavisor transaction mode.
         connection_kwargs: dict[str, Any] = {
             "row_factory": dict_row,
             "connect_timeout": 5,
@@ -3026,10 +3037,30 @@ class PostgresTrialStore:
             "prepare_threshold": None,
             "application_name": "supermega-trial-runtime",
         }
-        configured_sslmode = str(conninfo_to_dict(self.database_url).get("sslmode", "")).lower()
-        if configured_sslmode not in {"require", "verify-ca", "verify-full"}:
-            connection_kwargs["sslmode"] = "require"
         return psycopg.connect(self.database_url, **connection_kwargs)
+
+    @staticmethod
+    def _require_dsn_tls(database_url: str) -> None:
+        """Fail closed unless the connection DSN configures TLS transport.
+
+        sslmode must be one of require/verify-ca/verify-full; prefer, allow,
+        disable, or an omitted mode are rejected. This is where transit
+        encryption is actually enforced (see _connect); the DSN is never
+        surfaced in the raised error.
+        """
+
+        try:
+            from psycopg.conninfo import conninfo_to_dict
+        except ImportError as exc:
+            raise TrialNotReadyError(("postgres_driver_ready",)) from exc
+        try:
+            configured_sslmode = (
+                str(conninfo_to_dict(str(database_url)).get("sslmode", "")).strip().lower()
+            )
+        except Exception:  # noqa: BLE001 - never surface the DSN in the error
+            raise TrialNotReadyError(("database_url_invalid",)) from None
+        if configured_sslmode not in TRIAL_TLS_SSLMODES:
+            raise TrialNotReadyError(("tls_required",))
 
     @staticmethod
     def _set_context(cursor: Any, principal: TrialPrincipal) -> None:
@@ -3203,6 +3234,13 @@ class PostgresTrialStore:
 
     @staticmethod
     def _assert_runtime_role(cursor: Any) -> None:
+        # Finding 6: transit TLS is enforced by the sslmode connection assertion in
+        # _connect (require/verify-ca/verify-full), which holds through the Supavisor
+        # session pooler production must use. The old per-backend SSL-status read
+        # reflected the pooler->Postgres leg, not the client leg, so it was FALSE
+        # over the pooler even when the client leg was encrypted. The tls_active
+        # column below now only sanity-checks that the server supports TLS; the
+        # authoritative client-leg guarantee lives in _connect.
         cursor.execute(
             """
             with runtime_role as (
@@ -3305,7 +3343,7 @@ class PostgresTrialStore:
                 where runtime_role.oid <> elevated_role.oid
                   and pg_has_role(runtime_role.oid, elevated_role.oid, 'USAGE')
               ) as no_elevated_membership,
-              coalesce((select ssl from pg_stat_ssl where pid = pg_backend_pid()), false) as tls_active
+              coalesce((select setting = 'on' from pg_settings where name = 'ssl'), false) as tls_active
             """
         )
         row = cursor.fetchone() or {}

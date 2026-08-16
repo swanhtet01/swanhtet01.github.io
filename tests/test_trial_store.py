@@ -474,7 +474,13 @@ class TrialStoreTests(unittest.TestCase):
         safe_cursor = RoleCursor(safe)
         PostgresTrialStore._assert_runtime_role(safe_cursor)
         self.assertIn("rolbypassrls", safe_cursor.query.lower())
-        self.assertIn("pg_stat_ssl", safe_cursor.query.lower())
+        # Finding 6: transit TLS is enforced by the connection-config assertion in
+        # _connect, not by a per-backend pg_stat_ssl read (which is FALSE through
+        # the Supavisor pooler). The runtime-role query only sanity-checks that the
+        # server supports TLS.
+        self.assertNotIn("pg_stat_ssl", safe_cursor.query.lower())
+        self.assertIn("pg_settings", safe_cursor.query.lower())
+        self.assertIn("'ssl'", safe_cursor.query.lower())
         self.assertIn("pg_auth_members", safe_cursor.query.lower())
         self.assertIn("membership.inherit_option", safe_cursor.query.lower())
         self.assertIn("not membership.set_option", safe_cursor.query.lower())
@@ -1123,6 +1129,54 @@ class TrialStoreTests(unittest.TestCase):
                 proposal=_decision_packet(),
                 evidence_refs=("review://different/1",),
             )
+
+
+class PostgresConnectTlsTests(unittest.TestCase):
+    """Transit encryption is enforced by connection configuration (finding 6):
+    the DSN must declare an encrypting sslmode, which holds through the Supavisor
+    pooler where a per-backend pg_stat_ssl read cannot see the client TLS leg."""
+
+    @staticmethod
+    def _reducer(surface, event_type, current, payload):  # pragma: no cover
+        return dict(current)
+
+    _BASE = "postgresql://user:pw@db.example.invalid:5432/postgres"
+
+    def test_require_dsn_tls_rejects_weak_or_absent_sslmode(self) -> None:
+        for dsn in (
+            f"{self._BASE}?sslmode=disable",
+            f"{self._BASE}?sslmode=allow",
+            f"{self._BASE}?sslmode=prefer",
+            self._BASE,  # sslmode omitted entirely
+        ):
+            with self.subTest(dsn=dsn):
+                with self.assertRaises(TrialNotReadyError) as raised:
+                    PostgresTrialStore._require_dsn_tls(dsn)
+                self.assertIn("tls_required", raised.exception.reasons)
+
+    def test_require_dsn_tls_accepts_encrypting_sslmodes(self) -> None:
+        for mode in ("require", "verify-ca", "verify-full"):
+            with self.subTest(mode=mode):
+                self.assertIsNone(
+                    PostgresTrialStore._require_dsn_tls(f"{self._BASE}?sslmode={mode}")
+                )
+
+    def test_require_dsn_tls_never_surfaces_the_dsn(self) -> None:
+        dsn = "postgresql://user:sup3rsecret@db.example.invalid:5432/postgres?sslmode=disable"
+        with self.assertRaises(TrialNotReadyError) as raised:
+            PostgresTrialStore._require_dsn_tls(dsn)
+        self.assertNotIn("sup3rsecret", str(raised.exception))
+        self.assertNotIn("sup3rsecret", " ".join(raised.exception.reasons))
+
+    def test_connect_fails_closed_on_weak_sslmode_before_connecting(self) -> None:
+        store = PostgresTrialStore(
+            f"{self._BASE}?sslmode=disable",
+            reducer=self._reducer,
+            write_enabled=True,
+        )
+        with self.assertRaises(TrialNotReadyError) as raised:
+            store._connect()
+        self.assertIn("tls_required", raised.exception.reasons)
 
 
 if __name__ == "__main__":
