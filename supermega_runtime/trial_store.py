@@ -3248,22 +3248,56 @@ class PostgresTrialStore:
                 join pg_roles parent_role on parent_role.oid = membership.roleid
               ), false) as direct_parent_membership_exact,
               coalesce((
+                -- Exactly one conforming runtime-login member, plus at most the
+                -- Supabase-managed conforming `postgres` admin member that
+                -- supabase_admin auto-grants and the customer cannot revoke. This
+                -- mirrors the v4 backend_role_guard tolerance verbatim (that guard
+                -- runs before the login role exists; this check runs after, so it
+                -- must admit both members). postgres is the project's top role and
+                -- already outranks the backend role; its membership grants no
+                -- application escalation (RLS is GUC-actor-bound, not login-bound).
                 select
-                  count(*) = 1
+                  count(*) filter (
+                    where member_role.rolname = current_user
+                      and membership.inherit_option
+                      and not membership.set_option
+                      and not membership.admin_option
+                  ) = 1
                   and bool_and(
-                    member_role.rolname = current_user
-                    and membership.inherit_option
-                    and not membership.set_option
-                    and not membership.admin_option
+                    (
+                      member_role.rolname = current_user
+                      and membership.inherit_option
+                      and not membership.set_option
+                      and not membership.admin_option
+                    )
+                    or (
+                      member_role.rolname = 'postgres'
+                      and grantor_role.rolname in ('postgres', 'supabase_admin')
+                      and membership.admin_option
+                      and not membership.inherit_option
+                      and not membership.set_option
+                    )
                   )
                 from backend_role
                 join pg_auth_members membership on membership.roleid = backend_role.oid
                 join pg_roles member_role on member_role.oid = membership.member
+                join pg_roles grantor_role on grantor_role.oid = membership.grantor
               ), false) as backend_member_exact,
               not exists (
+                -- The runtime login role may carry only the same Supabase-managed
+                -- conforming `postgres` admin membership; any other member fails.
                 select 1
                 from runtime_role
                 join pg_auth_members membership on membership.roleid = runtime_role.oid
+                join pg_roles member_role on member_role.oid = membership.member
+                join pg_roles grantor_role on grantor_role.oid = membership.grantor
+                where not (
+                  member_role.rolname = 'postgres'
+                  and grantor_role.rolname in ('postgres', 'supabase_admin')
+                  and membership.admin_option
+                  and not membership.inherit_option
+                  and not membership.set_option
+                )
               ) as no_runtime_role_members,
               not exists (
                 select 1
