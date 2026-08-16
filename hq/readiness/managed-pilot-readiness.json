@@ -1,12 +1,12 @@
 {
   "contract": "supermega.managed-pilot-readiness.v4",
   "asOf": "2026-08-13T11:03:48.050Z",
-  "sourceDigest": "sha256:258a3e48e0602b992f60b1f82fc93ee956ae0c5d8c999a1edcf97e5b8222160c",
+  "sourceDigest": "sha256:4ccbee4cff5972e8dc93477a6a72e3aecb12ce93a46143d9edd79e6f35564a8d",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 4,
+    "blockingGateCount": 3,
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "bounded-managed-pilot-rehearsal",
@@ -87,6 +87,13 @@
     "recordedAt": "2026-08-14T20:46:15.344Z",
     "branchDeletedAt": "2026-08-14T20:46:15.349Z"
   },
+  "managedPersistence": {
+    "proofComplete": true,
+    "contract": "supermega.managed-persistence-proof.v1",
+    "approvalId": "persistence-proof-24h-20260816",
+    "recordedAt": "2026-08-16T09:14:56.804Z",
+    "branchDeletedAt": "2026-08-16T09:14:56.808Z"
+  },
   "gates": [
     {
       "id": "local_postgres17",
@@ -114,9 +121,9 @@
     },
     {
       "id": "managed_persistence",
-      "status": "blocked",
-      "evidence": "Live managed persistence ready is false.",
-      "nextAction": "Prove durable commands, recovery, and tenant isolation on the isolated target."
+      "status": "ready-hosted",
+      "evidence": "Seven-proof hosted audit passed: durable writes with read-back, exact idempotent retry, version-conflict rejection, event immutability, cross-tenant denial, recovery round-trip, and induced atomic rollback, on a deleted isolated branch.",
+      "nextAction": "Keep the persistence evidence and instrument current."
     },
     {
       "id": "security",
@@ -221,8 +228,12 @@
       "digest": "sha256:d6c5d2eda403adfe130d461ca9b314b2482360e67bb61d2b11d91c82347fa734"
     },
     {
+      "path": "hq/readiness/managed-persistence-proof.json",
+      "digest": "sha256:7a5313676672cf55fafdbbdbf53b27c08db97ef01a400101a8fbf7a7726472a0"
+    },
+    {
       "path": "hq/NOW.md",
-      "digest": "sha256:72acb67b982a0356026fdc5715f2003f16187ffa578b234e492046eadf54158c"
+      "digest": "sha256:db7f966745c5e0a880841583beeecc35c716f1aeda7184af781177e7fc03c391"
     },
     {
       "path": "package.json",
@@ -230,7 +241,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:f565903010f53bb9efc9629e1a114a3f9b78e5cc1f716642cccbef27b18b0d6d"
+      "digest": "sha256:7db3039de69a520e7926dad61c539ea17363df53ec55bd62df99a83f07a8a486"
     }
   ]
 }
