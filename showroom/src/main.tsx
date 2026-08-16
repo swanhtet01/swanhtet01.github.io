@@ -4,8 +4,14 @@ import './index.css'
 import App from './App.tsx'
 import { RouteErrorBoundary } from './core/RouteErrorBoundary'
 import { startMetricsCollector } from './analytics/metrics-collector'
+import { isBeaconHost, startClientErrorReporter } from './core/client-error-reporter'
 
 startMetricsCollector()
+
+// Error lane rides the same production-hostname gate as the Vercel beacon loader in
+// index.html: on any other host the listeners are never installed, so local and dev
+// sessions observe errors in the console only and send nothing.
+if (isBeaconHost()) startClientErrorReporter()
 
 // The inner boundary in CoreShell covers route content. This one is the last line of
 // defence: if the shell itself throws, or a chunk fails before any route mounts, without
