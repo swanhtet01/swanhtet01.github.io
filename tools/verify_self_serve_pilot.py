@@ -118,7 +118,10 @@ from supermega_runtime.trial_store import (  # noqa: E402
 CONTRACT = "supermega.self-serve-pilot.v1"
 ADAPTER = "postgres_self_serve_workspace_v1"
 SCHEMA_COMPONENT = "private_trial_backend"
-EXPECTED_SCHEMA_VERSION = 10
+# Harness and store agree on the expected live schema through one env var
+# (default 10). Set SUPERMEGA_TRIAL_SCHEMA_VERSION=11 for a v11 branch so both
+# the posture probe here and the store's _assert_schema accept it.
+EXPECTED_SCHEMA_VERSION = int(os.environ.get("SUPERMEGA_TRIAL_SCHEMA_VERSION", "10"))
 MAX_SESSIONS = 3
 MAX_STATEMENTS = 23
 MAX_STORE_CALLS = 4

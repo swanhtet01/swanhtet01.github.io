@@ -21,7 +21,11 @@ from supermega_runtime.shop_inventory_runtime import (
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
-TRIAL_SCHEMA_VERSION = 10
+# The exact live schema version the store fail-closes on: _assert_schema rejects
+# any database whose app_private schema is not EXACTLY this. Default 10 keeps
+# deployed/production behavior unchanged; an operator raises it (e.g. to 11 for a
+# v11 branch) only AFTER the matching migration has been applied to that target.
+TRIAL_SCHEMA_VERSION = int(os.environ.get("SUPERMEGA_TRIAL_SCHEMA_VERSION", "10"))
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 TRUSTED_ACTOR_KINDS = frozenset({"human", "service", "agent"})
 TRUSTED_IDENTITY_PROVIDERS = frozenset({"gateway", "supabase"})
@@ -3546,7 +3550,13 @@ class PostgresTrialStore:
                             (
                                 workspace_id,
                                 command_id,
-                                f"self-serve-claim-{claim.lower()}",
+                                # authorization_id is a uuid column: derive a deterministic uuid5
+                                # from the workspace + claim so replay reuses the exact value (the
+                                # UNIQUE constraint makes idempotency safe) and distinct from the
+                                # activation_id's 'self-serve-create:' name. A raw
+                                # 'self-serve-claim-<claim>' string is not valid uuid syntax (22P02)
+                                # and would abort every self-serve creation on a real database.
+                                str(uuid5(UUID(workspace_id), f"self-serve-authorization:{claim}")),
                                 SELF_SERVE_ACTIVATION_AUTHORIZATION_CONTRACT,
                                 fingerprint,
                                 principal.actor_id,
