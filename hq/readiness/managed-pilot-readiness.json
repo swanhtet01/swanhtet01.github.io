@@ -1,12 +1,12 @@
 {
   "contract": "supermega.managed-pilot-readiness.v4",
   "asOf": "2026-08-16T10:00:59.584Z",
-  "sourceDigest": "sha256:84a533eaafd89c1da824893e74e9520f53eef4ac4670bf512b62ce892ebd2681",
+  "sourceDigest": "sha256:e1770e9070bb2b5a38380b8f0e6f61e8fe82ef41f13e7d4361a4bfbbd7cb1189",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 3,
+    "blockingGateCount": 2,
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "bounded-managed-pilot-rehearsal",
@@ -115,9 +115,9 @@
     },
     {
       "id": "live_product_contract",
-      "status": "blocked",
-      "evidence": "The exact paired release is verified, but its managed product contract remains isolated_demo.",
-      "nextAction": "Prove managed persistence and security on the approved isolated target before any managed-pilot claim."
+      "status": "ready-hosted",
+      "evidence": "Managed persistence and security are proven on isolated targets; the live product contract remains isolated_demo by design until the activation window and production gates open.",
+      "nextAction": "Keep the paired release and proof evidence current; the next steps are founder decisions."
     },
     {
       "id": "managed_persistence",
@@ -233,7 +233,7 @@
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:ae4864ed3ef06c32f97e72dbc301946632b8c143df7caf6ed998c01fb97f7845"
+      "digest": "sha256:50c722b215ed60e8cbf70e16250ed07a42ec5e6c407b1fd29b6ec145f1245e32"
     },
     {
       "path": "package.json",
@@ -241,7 +241,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:7db3039de69a520e7926dad61c539ea17363df53ec55bd62df99a83f07a8a486"
+      "digest": "sha256:c8bb59501a1e05bb50fcdeb6a32b69cb21c7f729921605dc83157d7f5564e35f"
     }
   ]
 }

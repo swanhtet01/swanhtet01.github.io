@@ -20,10 +20,10 @@ Prove one measured workflow where SuperMega keeps the record and a responsible o
 
 The active delivery focus is:
 
-1. **Shop** â€” orders, stock, fulfilment, payment status, exceptions, and daily close.
-2. **Plant** â€” jobs, output, problems, equipment, maintenance, and shift handoff.
-3. **Website** â€” a local website builder and review workflow.
-4. **Ecommerce** â€” a storefront builder with request receipt and Shop handoff.
+1. **Shop** Ã¢â‚¬â€ orders, stock, fulfilment, payment status, exceptions, and daily close.
+2. **Plant** Ã¢â‚¬â€ jobs, output, problems, equipment, maintenance, and shift handoff.
+3. **Website** Ã¢â‚¬â€ a local website builder and review workflow.
+4. **Ecommerce** Ã¢â‚¬â€ a storefront builder with request receipt and Shop handoff.
 
 AI assistance remains gated R&D; HQ, Work, Agents, R&D, Ops, and Console stay internal.
 
@@ -65,7 +65,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - Website, Plant, Ecommerce, and AI budgets still lack hosted activation proof; model calls fail closed.
 - Read-only hosted audit: `supermegabase` is PostgreSQL 17.6 at private schema v10 with 15 private policies, metadata RLS, and zero workspace data. The public browser quarantine is applied: zero browser-privileged objects remain, the Security Advisor is clear (27 INFO-only accepted default-deny notices), and writes stay off pending storage/recovery proof and owner authorization.
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
-- Live HQ and both domains agree on `12ade3db`; no release drift is present. Three hosted-readiness gates still block managed activation/marketing (hosted PG17, security, storage privacy, and managed persistence are ready-hosted); external handoffs require `release:handoff:verify`.
+- Live HQ and both domains agree on `12ade3db`; no release drift is present. Two hosted-readiness gates still block managed activation/marketing (hosted PG17, security, storage privacy, managed persistence, and the live product contract prerequisites are ready-hosted); external handoffs require `release:handoff:verify`.
 - No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 

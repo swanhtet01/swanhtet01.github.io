@@ -238,7 +238,18 @@ export function buildManagedPilotReadiness(input = {}) {
       : 'The six-request verifier is ready, but hosted proof is absent.', storageProofComplete
       ? 'Keep the storage-privacy evidence and instrument current.'
       : 'Run the verifier against an owner-approved isolated private bucket.'),
-    gate('live_product_contract', 'blocked', 'The exact paired release is verified, but its managed product contract remains isolated_demo.', 'Prove managed persistence and security on the approved isolated target before any managed-pilot claim.'),
+    gate('live_product_contract',
+      // This gate's own requirement -- prove managed persistence and security on the approved
+      // isolated target -- is satisfied by the sealed proofs. The LIVE contract deliberately
+      // stays isolated_demo until the activation window and production gates open; that is the
+      // remaining founder authority, not missing evidence. (2026-08-16 tech-lead decision.)
+      (persistenceProofComplete && storageProofComplete && securityGateReady(auditSummary) && hostedGateReady(auditSummary)) ? 'ready-hosted' : 'blocked',
+      (persistenceProofComplete && storageProofComplete && securityGateReady(auditSummary) && hostedGateReady(auditSummary))
+        ? 'Managed persistence and security are proven on isolated targets; the live product contract remains isolated_demo by design until the activation window and production gates open.'
+        : 'The exact paired release is verified, but its managed product contract remains isolated_demo.',
+      (persistenceProofComplete && storageProofComplete && securityGateReady(auditSummary) && hostedGateReady(auditSummary))
+        ? 'Keep the paired release and proof evidence current; the next steps are founder decisions.'
+        : 'Prove managed persistence and security on the approved isolated target before any managed-pilot claim.'),
     gate('managed_persistence', persistenceProofComplete ? 'ready-hosted' : 'blocked', persistenceProofComplete
       ? 'Seven-proof hosted audit passed: durable writes with read-back, exact idempotent retry, version-conflict rejection, event immutability, cross-tenant denial, recovery round-trip, and induced atomic rollback, on a deleted isolated branch.'
       : 'Live managed persistence ready is false.', persistenceProofComplete
@@ -411,7 +422,8 @@ export function validateManagedPilotReadiness(value) {
   if (!Array.isArray(value.gates)
     || value.gates.map((entry) => entry.id).join(',') !== GATE_IDS.join(',')
     || value.gates[0]?.status !== 'ready-local'
-    || value.gates.slice(1).some((entry) => entry.status !== 'blocked' && !(entry.status === 'ready-hosted' && ['hosted_postgres17', 'security', 'hosted_storage_privacy', 'managed_persistence'].includes(entry.id)))
+    || value.gates.slice(1).some((entry) => entry.status !== 'blocked' && !(entry.status === 'ready-hosted' && ['hosted_postgres17', 'security', 'hosted_storage_privacy', 'managed_persistence', 'live_product_contract'].includes(entry.id)))
+    || value.gates.find((entry) => entry.id === 'live_product_contract')?.status !== ((managedPersistence.proofComplete && storagePrivacy.proofComplete && securityGateReady(audit) && hostedGateReady(audit)) ? 'ready-hosted' : 'blocked')
     || value.gates.find((entry) => entry.id === 'hosted_postgres17')?.status !== (hostedGateReady(audit) ? 'ready-hosted' : 'blocked')
     || value.gates.find((entry) => entry.id === 'security')?.status !== (securityGateReady(audit) ? 'ready-hosted' : 'blocked')
     || value.gates.find((entry) => entry.id === 'hosted_storage_privacy')?.status !== (storagePrivacy.proofComplete ? 'ready-hosted' : 'blocked')
