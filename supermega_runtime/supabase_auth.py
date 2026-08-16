@@ -61,10 +61,16 @@ class SupabaseAuthConfig:
 
 @dataclass(frozen=True, slots=True)
 class VerifiedSupabaseUser:
-    """A named Supabase user bound to the exact signed Auth session."""
+    """A named Supabase user bound to the exact signed Auth session.
+
+    ``email_verified`` is true only when the server-confirmed Auth user record
+    carries a confirmed email address. Self-serve tenant creation requires it;
+    workspace authorization continues to rely on membership, not this flag.
+    """
 
     user_id: str
     session_id: str
+    email_verified: bool = False
 
 
 def _normalize_base_url(value: str) -> str:
@@ -201,7 +207,21 @@ def verify_supabase_user_identity(
     if not isinstance(user, dict) or user.get("is_anonymous") is not False:
         return None
     user_id = _canonical_uuid(user.get("id"))
-    return token_identity if user_id == token_identity.user_id else None
+    if user_id != token_identity.user_id:
+        return None
+    email = user.get("email")
+    email_confirmed_at = user.get("email_confirmed_at")
+    email_verified = bool(
+        isinstance(email, str)
+        and email.strip()
+        and isinstance(email_confirmed_at, str)
+        and email_confirmed_at.strip()
+    )
+    return VerifiedSupabaseUser(
+        user_id=token_identity.user_id,
+        session_id=token_identity.session_id,
+        email_verified=email_verified,
+    )
 
 
 def verify_supabase_user_token(

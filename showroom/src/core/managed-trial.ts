@@ -63,6 +63,15 @@ export type ManagedWorkspaceSignIn = {
   workspaces: ManagedWorkspaceDirectoryEntry[]
 }
 
+export type ManagedSelfServeWorkspace = {
+  workspaceId: string
+  label: string
+  access: 'owner'
+  claimCode: string
+  /** False when the server replayed an activation this claim already completed. */
+  created: boolean
+}
+
 export type ManagedAccountSetup = {
   purpose: 'account' | 'invite' | 'recovery'
   email: string
@@ -2780,6 +2789,117 @@ export async function signOutManagedTrial() {
   const supabase = await authClient()
   if (supabase) await supabase.auth.signOut({ scope: 'local' })
   forgetWorkspace()
+}
+
+/**
+ * Mirrors the claim generator in signup-trial.ts: Crockford-ish alphabet with
+ * no I, L, O or U. The server revalidates with the same rule; this check only
+ * exists so an obvious typo fails before a network round trip.
+ */
+const SELF_SERVE_CLAIM_CODE = /^SM-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/
+const SELF_SERVE_WORKSPACE_CONTRACT = 'supermega.self_serve_workspace_activation.v1'
+const MAX_SELF_SERVE_BUSINESS_NAME = 120
+
+export function normalizeSelfServeClaimCode(value: string) {
+  const claimCode = value.trim().toUpperCase()
+  if (!SELF_SERVE_CLAIM_CODE.test(claimCode)) {
+    throw new ManagedTrialError('Enter the claim code exactly as SM-XXXX-XXXX.', {
+      code: 'claim_code_invalid',
+    })
+  }
+  return claimCode
+}
+
+function normalizeSelfServeBusinessName(value: string) {
+  const businessName = value.trim()
+  if (!businessName || businessName.length > MAX_SELF_SERVE_BUSINESS_NAME) {
+    throw new ManagedTrialError('Enter the business name, up to 120 characters.', {
+      code: 'business_name_invalid',
+    })
+  }
+  return businessName
+}
+
+function parseSelfServeWorkspace(value: unknown, claimCode: string): ManagedSelfServeWorkspace {
+  if (!isRecord(value)
+    || value.contract !== SELF_SERVE_WORKSPACE_CONTRACT
+    || (value.status !== 'created' && value.status !== 'already_created')
+    || typeof value.idempotent_replay !== 'boolean'
+    || (value.status === 'created') !== (value.idempotent_replay === false)
+    || typeof value.external_writes_performed !== 'boolean'
+    || value.secret_values_exposed !== false
+    || !isRecord(value.workspace)
+    || !isRecord(value.claim)
+    || value.claim.claimCode !== claimCode) {
+    throw new ManagedTrialError('The workspace activation returned an invalid response.', {
+      code: 'self_serve_workspace_invalid',
+    })
+  }
+  const workspace = value.workspace
+  if (typeof workspace.workspace_id !== 'string'
+    || !WORKSPACE_ID.test(workspace.workspace_id)
+    || typeof workspace.label !== 'string'
+    || !workspace.label.trim()
+    || workspace.label.length > 120
+    || workspace.access !== 'owner'
+    || value.claim.workspaceId !== workspace.workspace_id) {
+    throw new ManagedTrialError('The workspace activation returned an invalid company.', {
+      code: 'self_serve_workspace_invalid',
+    })
+  }
+  return {
+    workspaceId: workspace.workspace_id,
+    label: workspace.label.trim(),
+    access: 'owner',
+    claimCode,
+    created: value.status === 'created',
+  }
+}
+
+/**
+ * POST the claim to the fail-closed tenant-creation endpoint with an explicit
+ * session. Exported for the future activation window UI and for tests; the
+ * server keeps every authority: it re-verifies the session and email, derives
+ * the tenant from the claim, and stays dark (503 activation_window_closed)
+ * until the founder opens the activation window.
+ */
+export async function requestSelfServeWorkspace(
+  session: Session,
+  claimCode: string,
+  businessName: string,
+): Promise<ManagedSelfServeWorkspace> {
+  const claim = normalizeSelfServeClaimCode(claimCode)
+  const name = normalizeSelfServeBusinessName(businessName)
+  const response = await fetch('/api/trial/v1/workspaces', {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${session.access_token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ claimCode: claim, businessName: name }),
+  })
+  if (!response.ok) throw await parseError(response)
+  return parseSelfServeWorkspace(await response.json(), claim)
+}
+
+export async function createSelfServeWorkspace(
+  claimCode: string,
+  businessName: string,
+): Promise<ManagedSelfServeWorkspace> {
+  const supabase = await authClient()
+  if (!supabase) {
+    throw new ManagedTrialError('Self-serve activation is not configured in this app build.', {
+      code: 'auth_not_configured',
+    })
+  }
+  const { data, error } = await supabase.auth.getSession()
+  if (error || !validNamedUserSession(data.session)) {
+    throw new ManagedTrialError('Sign in with your verified work email first.', {
+      code: 'auth_required',
+    })
+  }
+  return requestSelfServeWorkspace(data.session, claimCode, businessName)
 }
 
 async function parseError(response: Response) {

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
+import os
 from typing import Any, Literal, TypeVar
 from uuid import UUID
 
@@ -65,6 +67,7 @@ from supermega_runtime.trial_store import (
     SURFACE_WRITE_CAPABILITIES,
     ApprovalRecord,
     CommandResult,
+    TrialClaimConflict,
     TrialIdempotencyConflict,
     TrialHumanApprovalRequired,
     TrialInvalidTransition,
@@ -72,6 +75,7 @@ from supermega_runtime.trial_store import (
     TrialNotReadyError,
     TrialPermissionDenied,
     TrialPrincipal,
+    TrialRateLimited,
     TrialReadiness,
     TrialState,
     TrialStore,
@@ -81,6 +85,8 @@ from supermega_runtime.trial_store import (
     StatePrecondition,
     has_approval_read_capability,
     has_surface_read_capability,
+    validate_self_serve_business_name,
+    validate_self_serve_claim_code,
 )
 from supermega_runtime.website_runtime import WEBSITE_HUMAN_EVENTS, validate_website_snapshot_source
 
@@ -88,9 +94,40 @@ from supermega_runtime.website_runtime import WEBSITE_HUMAN_EVENTS, validate_web
 TRIAL_API_PREFIX = "/api/trial/v1"
 TRIAL_SURFACE_ORDER = ("company", "commerce", "production", "website", "setup")
 
+SELF_SERVE_ACTIVATION_WINDOW_ENV = "SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW"
+SELF_SERVE_ACTIVATION_CONTRACT = "supermega.self_serve_workspace_activation.v1"
+
+
+@dataclass(frozen=True, slots=True)
+class TrialSignupSession:
+    """A verified authenticated user who is not yet a workspace member.
+
+    Tenant creation is the one trial route that cannot present a workspace
+    identity, so it carries only what the server-side auth wiring confirmed:
+    the named actor, the signed session, and the email-verification state.
+    """
+
+    actor_id: str
+    session_id: str = ""
+    email_verified: bool = False
+    identity_provider: str = "supabase"
+
+
 PrincipalResolver = Callable[[Request], TrialPrincipal | None]
+SignupSessionResolver = Callable[[Request], TrialSignupSession | None]
 DateResolver = Callable[[], date]
 ResultT = TypeVar("ResultT")
+
+
+def self_serve_activation_window_open() -> bool:
+    """The fail-closed service gate for self-serve tenant creation.
+
+    Setting ``SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW`` to exactly ``open`` IS
+    the founder's self_serve_pilot decision (spec section 4). Absent, blank,
+    or any other value keeps the endpoint dark with a 503.
+    """
+
+    return os.environ.get(SELF_SERVE_ACTIVATION_WINDOW_ENV) == "open"
 
 _YANGON_TIME_ZONE = timezone(timedelta(hours=6, minutes=30))
 
@@ -135,6 +172,13 @@ class TrialCommandRequest(_StrictRequest):
     event_type: str = Field(min_length=1, max_length=80)
     expected_version: int = Field(ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class TrialSelfServeWorkspaceRequest(_StrictRequest):
+    """Spec step D request contract: { claimCode, businessName }, nothing else."""
+
+    claimCode: str = Field(min_length=1, max_length=40)
+    businessName: str = Field(min_length=1, max_length=120)
 
 
 class TrialClientImportApplyRequest(_StrictRequest):
@@ -476,6 +520,10 @@ def _invoke(operation: Callable[[], ResultT]) -> ResultT:
         raise _error(409, "trial_idempotency_conflict", command_id=exc.command_id) from exc
     except TrialInvalidTransition as exc:
         raise _error(409, "trial_invalid_transition") from exc
+    except TrialClaimConflict as exc:
+        raise _error(409, "claim_code_conflict") from exc
+    except TrialRateLimited as exc:
+        raise _error(429, "self_serve_rate_limited", limit=exc.limit) from exc
     except TrialNotFound as exc:
         raise _error(404, "trial_not_found") from exc
     except TrialValidationError as exc:
@@ -917,6 +965,7 @@ def create_trial_router(
     *,
     store: TrialStore,
     resolve_principal: PrincipalResolver,
+    resolve_signup_session: SignupSessionResolver | None = None,
     order_intake_provider: OrderIntakeDraftProvider | None = None,
     current_date: DateResolver = _current_yangon_date,
 ) -> APIRouter:
@@ -925,9 +974,75 @@ def create_trial_router(
     ``resolve_principal`` must validate a server-side session or token and return
     its workspace and actor. This module never accepts either identity from a
     request body and never holds a browser-facing Supabase credential.
+
+    ``resolve_signup_session`` authenticates self-serve tenant creation, the one
+    route whose caller has no workspace yet. It must confirm the named user and
+    the email-verification state through trusted server-side wiring; without it
+    the tenant-creation endpoint answers 503.
     """
 
     router = APIRouter(prefix=TRIAL_API_PREFIX, tags=["private-trial"])
+
+    @router.post("/workspaces")
+    async def trial_self_serve_workspace(request: Request) -> dict[str, Any]:
+        # Fail-closed service gate FIRST: until the founder opens the
+        # activation window the endpoint is dark for every caller, before any
+        # auth, parsing, or storage work happens (spec section 4).
+        if not self_serve_activation_window_open():
+            raise _error(503, "activation_window_closed")
+        if resolve_signup_session is None:
+            raise _error(503, "trial_auth_unavailable")
+        try:
+            session = resolve_signup_session(request)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise _error(503, "trial_auth_unavailable") from exc
+        if session is None:
+            raise _error(401, "trial_auth_required")
+        if not isinstance(session, TrialSignupSession) or not str(session.actor_id or "").strip():
+            raise _error(503, "trial_auth_unavailable")
+        if not session.email_verified:
+            raise _error(403, "email_verification_required")
+        raw_body = await _bounded_json_body(request, maximum_bytes=4096)
+        try:
+            body = TrialSelfServeWorkspaceRequest.model_validate(raw_body)
+        except ValidationError as exc:
+            raise _error(422, "self_serve_request_invalid") from exc
+        try:
+            claim_code = validate_self_serve_claim_code(body.claimCode)
+        except TrialValidationError as exc:
+            raise _error(422, "claim_code_invalid") from exc
+        try:
+            business_name = validate_self_serve_business_name(body.businessName)
+        except TrialValidationError as exc:
+            raise _error(422, "business_name_invalid") from exc
+        result = _invoke(
+            lambda: store.create_self_serve_workspace(
+                actor_id=session.actor_id,
+                claim_code=claim_code,
+                business_name=business_name,
+                session_id=session.session_id,
+                identity_provider=session.identity_provider,
+            )
+        )
+        return {
+            "contract": SELF_SERVE_ACTIVATION_CONTRACT,
+            "status": "already_created" if result.idempotent_replay else "created",
+            "workspace": {
+                "workspace_id": result.workspace_id,
+                "label": result.label,
+                "access": result.access,
+            },
+            "claim": {
+                "claimCode": result.claim_code,
+                "workspaceId": result.workspace_id,
+            },
+            "created_at": result.created_at,
+            "idempotent_replay": result.idempotent_replay,
+            "external_writes_performed": not result.idempotent_replay,
+            "secret_values_exposed": False,
+        }
 
     @router.get("/readiness")
     def trial_readiness(request: Request) -> dict[str, Any]:
@@ -2164,9 +2279,15 @@ def create_trial_router(
 
 __all__ = [
     "PrincipalResolver",
+    "SELF_SERVE_ACTIVATION_CONTRACT",
+    "SELF_SERVE_ACTIVATION_WINDOW_ENV",
+    "SignupSessionResolver",
     "TRIAL_API_PREFIX",
     "TrialApprovalDecisionRequest",
     "TrialApprovalRequest",
     "TrialCommandRequest",
+    "TrialSelfServeWorkspaceRequest",
+    "TrialSignupSession",
     "create_trial_router",
+    "self_serve_activation_window_open",
 ]

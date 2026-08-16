@@ -31,7 +31,7 @@ from supermega_runtime.order_intake_provider import (
 )
 from supermega_runtime.production_runtime import reduce_production_state
 from supermega_runtime.supabase_auth import SupabaseAuthConfig, verify_supabase_user_identity
-from supermega_runtime.trial_runtime import create_trial_router
+from supermega_runtime.trial_runtime import TrialSignupSession, create_trial_router
 from supermega_runtime.trial_store import (
     PostgresTrialStore,
     TrialNotReadyError,
@@ -361,6 +361,28 @@ def resolve_workspace_discovery_principal(request: Request) -> TrialPrincipal | 
         actor_kind="human",
         authenticated=True,
         session_id=identity.session_id,
+        identity_provider="supabase",
+    )
+
+
+def resolve_self_serve_signup_session(request: Request) -> TrialSignupSession | None:
+    """Resolve a verified named user for self-serve workspace creation.
+
+    The caller has no workspace yet, so only the Supabase-confirmed identity,
+    signed session, and email-verification state travel. The trial store
+    derives the tenant identity from the claim code on the server side.
+    """
+
+    token = _bearer_token(request)
+    if not token:
+        return None
+    identity = verify_supabase_user_identity(token, SupabaseAuthConfig.from_environment())
+    if identity is None or not _IDENTIFIER.fullmatch(identity.user_id):
+        return None
+    return TrialSignupSession(
+        actor_id=identity.user_id,
+        session_id=identity.session_id,
+        email_verified=identity.email_verified,
         identity_provider="supabase",
     )
 
@@ -1228,6 +1250,7 @@ def create_app() -> FastAPI:
         create_trial_router(
             store=store,
             resolve_principal=resolve_trial_principal,
+            resolve_signup_session=resolve_self_serve_signup_session,
             order_intake_provider=order_intake_provider,
         )
     )
@@ -1238,4 +1261,10 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-__all__ = ["app", "create_app", "reduce_trial_state", "resolve_trial_principal"]
+__all__ = [
+    "app",
+    "create_app",
+    "reduce_trial_state",
+    "resolve_self_serve_signup_session",
+    "resolve_trial_principal",
+]
