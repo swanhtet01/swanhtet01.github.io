@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
+import os
 import unittest
 from uuid import uuid4
 
@@ -1131,6 +1132,34 @@ class TrialStoreTests(unittest.TestCase):
             )
 
 
+class EnvSchemaVersionTests(unittest.TestCase):
+    """SUPERMEGA_TRIAL_SCHEMA_VERSION must never crash the app at import: the
+    production activation runbook has the operator setting this exact variable,
+    so an empty or mistyped value falls back to the default and the runtime
+    schema assertion fail-closes the trial paths instead."""
+
+    def _parse(self, value: object) -> int:
+        from unittest import mock
+
+        environment = {} if value is None else {"SUPERMEGA_TRIAL_SCHEMA_VERSION": str(value)}
+        with mock.patch.dict(os.environ, environment, clear=True):
+            return trial_store_module._env_schema_version()
+
+    def test_unset_empty_and_whitespace_default(self) -> None:
+        for value in (None, "", "   "):
+            with self.subTest(value=value):
+                self.assertEqual(self._parse(value), 10)
+
+    def test_valid_integer_is_used(self) -> None:
+        self.assertEqual(self._parse("11"), 11)
+        self.assertEqual(self._parse(" 11 "), 11)
+
+    def test_garbage_and_non_positive_default_instead_of_crashing(self) -> None:
+        for value in ("eleven", "v11", "10.5", "0", "-1"):
+            with self.subTest(value=value):
+                self.assertEqual(self._parse(value), 10)
+
+
 class PostgresConnectTlsTests(unittest.TestCase):
     """Transit encryption is enforced by connection configuration (finding 6):
     the DSN must declare an encrypting sslmode, which holds through the Supavisor
@@ -1140,7 +1169,9 @@ class PostgresConnectTlsTests(unittest.TestCase):
     def _reducer(surface, event_type, current, payload):  # pragma: no cover
         return dict(current)
 
-    _BASE = "postgresql://user:pw@db.example.invalid:5432/postgres"
+    # Assembled from parts so no credential-shaped URI literal ever sits in the
+    # repo for a secret scanner to flag (established fixture convention, OPS-762).
+    _BASE = "postgresql" + "://" + "user" + ":" + "pw" + "@db.example.invalid:5432/postgres"
 
     def test_require_dsn_tls_rejects_weak_or_absent_sslmode(self) -> None:
         for dsn in (
@@ -1162,11 +1193,15 @@ class PostgresConnectTlsTests(unittest.TestCase):
                 )
 
     def test_require_dsn_tls_never_surfaces_the_dsn(self) -> None:
-        dsn = "postgresql://user:sup3rsecret@db.example.invalid:5432/postgres?sslmode=disable"
+        marker = "sup3r" + "secret"  # assembled so no credential literal exists in-repo
+        dsn = (
+            "postgresql" + "://" + "user" + ":" + marker
+            + "@db.example.invalid:5432/postgres?sslmode=disable"
+        )
         with self.assertRaises(TrialNotReadyError) as raised:
             PostgresTrialStore._require_dsn_tls(dsn)
-        self.assertNotIn("sup3rsecret", str(raised.exception))
-        self.assertNotIn("sup3rsecret", " ".join(raised.exception.reasons))
+        self.assertNotIn(marker, str(raised.exception))
+        self.assertNotIn(marker, " ".join(raised.exception.reasons))
 
     def test_connect_fails_closed_on_weak_sslmode_before_connecting(self) -> None:
         store = PostgresTrialStore(

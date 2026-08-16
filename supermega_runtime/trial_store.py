@@ -21,11 +21,35 @@ from supermega_runtime.shop_inventory_runtime import (
 
 
 TRIAL_SCHEMA_COMPONENT = "private_trial_backend"
+
+
+def _env_schema_version(default: int = 10) -> int:
+    """Parse SUPERMEGA_TRIAL_SCHEMA_VERSION without ever crashing at import.
+
+    This module is imported by the whole app runtime, and the production
+    activation runbook has the operator setting this exact variable -- an empty
+    or mistyped value must not take the entire app down with an import-time
+    ValueError. A non-parsable value falls back to the default, and if that
+    default then disagrees with the live schema, _assert_schema fail-closes the
+    trial paths cleanly at runtime (the operator's verification step surfaces
+    it) while everything else keeps serving.
+    """
+
+    raw = str(os.environ.get("SUPERMEGA_TRIAL_SCHEMA_VERSION") or "").strip()
+    if not raw:
+        return default
+    try:
+        parsed = int(raw, 10)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
 # The exact live schema version the store fail-closes on: _assert_schema rejects
 # any database whose app_private schema is not EXACTLY this. Default 10 keeps
 # deployed/production behavior unchanged; an operator raises it (e.g. to 11 for a
 # v11 branch) only AFTER the matching migration has been applied to that target.
-TRIAL_SCHEMA_VERSION = int(os.environ.get("SUPERMEGA_TRIAL_SCHEMA_VERSION", "10"))
+TRIAL_SCHEMA_VERSION = _env_schema_version()
 TRIAL_SURFACES = frozenset({"company", "commerce", "production", "website", "setup"})
 # TLS transit is enforced by connection configuration (finding 6): psycopg refuses
 # to connect unless the DSN negotiates TLS under one of these sslmodes. This is the
