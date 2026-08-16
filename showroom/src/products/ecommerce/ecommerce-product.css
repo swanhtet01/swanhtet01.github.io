@@ -1854,3 +1854,21 @@
 .theme-dark .ecommerce-enterprise-controls > summary small {
   color: var(--core-quiet);
 }
+
+/* 375px audit, deferred P2 sweep: interactive text below 12px and tap targets below 44px on
+   the Ecommerce workspace at phone width. The storefront request button and cart line
+   controls already meet 44px; only their label text was under 12px. */
+@media (max-width: 840px) {
+  .ecommerce-order-import-upload {
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  .storefront-request-button {
+    font-size: 12px;
+  }
+
+  .ecommerce-cart-line > button {
+    font-size: 12px;
+  }
+}

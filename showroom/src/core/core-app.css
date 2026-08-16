@@ -1741,11 +1741,11 @@ textarea { min-height: 72px; resize: vertical; }
   .core-topbar .topbar-meta { display: flex; }
   .mobile-brand { display: flex !important; }
   .topbar-title, .topbar-meta > span { display: none !important; }
-  .topbar-meta > a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; color: var(--core-muted); font-size: 10px; font-weight: 720; text-decoration: none; }
+  .topbar-meta > a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; color: var(--core-muted); font-size: 12px; font-weight: 720; text-decoration: none; }
   .core-topbar .runtime-badge { display: none; }
-  .core-topbar .mobile-signup-topbar-link { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; color: var(--core-green); font-size: 10px; font-weight: 720; text-decoration: none; }
+  .core-topbar .mobile-signup-topbar-link { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; color: var(--core-green); font-size: 12px; font-weight: 720; text-decoration: none; }
   .mobile-nav { position: fixed; inset: auto 0 0; z-index: 40; width: 100%; max-width: 100%; min-height: 64px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line); padding-bottom: env(safe-area-inset-bottom); background: rgba(255,255,255,.97); box-shadow: 0 -12px 34px rgba(25,54,42,.1); backdrop-filter: blur(18px); }
-  .mobile-nav a { min-width: 0; display: grid; place-items: center; border-top: 2px solid transparent; padding-inline: 2px; overflow: hidden; color: var(--core-quiet); font-size: 9px; font-weight: 740; text-align: center; text-overflow: ellipsis; text-decoration: none; white-space: nowrap; }
+  .mobile-nav a { min-width: 0; display: grid; place-items: center; border-top: 2px solid transparent; padding-inline: 2px; overflow: hidden; color: var(--core-quiet); font-size: 12px; font-weight: 740; text-align: center; text-overflow: ellipsis; text-decoration: none; white-space: nowrap; }
   .mobile-nav a.active { border-top-color: var(--core-green); color: var(--core-green); }
   .core-main { width: min(calc(100% - 24px),760px); max-width: calc(100% - 24px); height: auto; min-height: 0; padding: 18px 0 calc(88px + env(safe-area-inset-bottom)); overflow: visible; }
   .product-system-navigator > summary { min-height: 46px; padding-inline: 12px; }
@@ -2156,6 +2156,21 @@ textarea { min-height: 72px; resize: vertical; }
   .order-entry-methods button { min-height: 46px; font-size: 14px; }
   .order-draft-recovery, .order-draft-status { align-items: stretch; flex-direction: column; }
   .order-draft-recovery-actions { justify-content: flex-start; flex-wrap: wrap; }
+  /* 375px audit, deferred P2 sweep: interactive text below 12px and tap targets below 44px
+     that survived the earlier pass. Text-only bumps where the 44px floor above already covers
+     the target; explicit floors where a component rule outranks it. Non-interactive captions
+     (record metadata, eyebrows, summary sub-lines) deliberately keep their smaller sizes. */
+  .segmented-control button, .segmented-control a, .view-tabs button, .core-button.compact, .text-link { font-size: 12px; }
+  .compact-disclosure > summary, .order-row-more > summary { font-size: 12px; }
+  .action-history summary { font-size: 12px; }
+  .catalog-import-technical > summary { min-height: 44px; font-size: 12px; }
+  .shop-payment-options button { min-height: 44px; font-size: 12px; }
+  .shop-pack-context a { min-height: 44px; font-size: 12px; }
+  .shop-counter-summary a { font-size: 12px; }
+  .shop-quantity-stepper { grid-template-columns: 40px 30px 40px; }
+  .shop-quantity-stepper button { width: 40px; min-height: 44px; }
+  .production-mode-banner > a { min-height: 44px; }
+  .evidence-disclosure .inline-evidence input, .evidence-disclosure .inline-evidence select, .evidence-disclosure .inline-evidence .core-button, .evidence-verification-form input, .evidence-verification-form .core-button { min-height: 44px; }
 }
 
 @media (max-width: 720px) {
@@ -2187,7 +2202,7 @@ textarea { min-height: 72px; resize: vertical; }
   .shop-current-sale { position: fixed; right: 6px; bottom: calc(67px + env(safe-area-inset-bottom)); z-index: 72; width: min(430px,calc(100% - 12px)); max-height: calc(100svh - 78px - env(safe-area-inset-bottom)); border-radius: 18px 18px 8px 8px; padding: 16px; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(24px) scale(.985); transition: opacity .18s ease, transform .18s ease, visibility .18s; }
   .shop-current-sale.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: none; }
   .shop-cart-lines { overflow-y: auto; }
-  .shop-cart-close { width: 38px; min-height: 38px; display: grid; place-items: center; border: 1px solid var(--core-line); border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 24px; cursor: pointer; }
+  .shop-cart-close { width: 44px; min-height: 44px; display: grid; place-items: center; border: 1px solid var(--core-line); border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 24px; cursor: pointer; }
   .shop-cart-backdrop { position: fixed; inset: 0 0 calc(64px + env(safe-area-inset-bottom)); z-index: 71; display: block; border: 0; background: rgba(0,3,7,.68); opacity: 0; visibility: hidden; pointer-events: none; backdrop-filter: blur(4px); transition: opacity .18s ease, visibility .18s; }
   .shop-cart-backdrop.is-open { opacity: 1; visibility: visible; pointer-events: auto; }
   .shop-mobile-cart { position: fixed; right: 12px; bottom: calc(74px + env(safe-area-inset-bottom)); left: 12px; z-index: 45; min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid rgba(86,240,193,.42); border-radius: 15px; padding: 0 17px; background: #56f0c1; color: #03140f; box-shadow: 0 14px 40px rgba(0,0,0,.38); cursor: pointer; }
