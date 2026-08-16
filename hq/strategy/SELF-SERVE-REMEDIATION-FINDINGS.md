@@ -1,7 +1,9 @@
 # Self-serve remediation findings — the hosted store was never validated against real Supabase
 
 Date: 2026-08-16. Branch: fix/self-serve-remediation. Author: tech lead.
-Status: 5 fixed, 1 open (needs a security-design decision). NOT merged; trunk green.
+Status: 7 findings, ALL FIXED. Proven end-to-end six-for-six on a deleted
+isolated branch through the real production connection path. NOT merged; trunk
+green. The remaining step is a founder production_activation decision.
 
 ## The pattern (read this first)
 
@@ -9,11 +11,11 @@ The self-serve tenant endpoint (OPS-761) and the hosted trial store path were
 written and unit-tested only against a LOCAL, direct-TLS PostgreSQL. They were
 never exercised against Supabase's real production connection path: Supavisor
 session pooler, over IPv4 (the Supabase direct host is IPv6-only, so a Vercel
-serverless app has no choice but the pooler). Consequently the store carries a
-CLASS of environment incompatibilities — each isolated-branch proof attempt
-surfaces the next one. Six found so far. This is not a typo hunt; it is a
-hosted-connection hardening pass that should be done deliberately, with review,
-not as endless autonomous point-fixes.
+serverless app has no choice but the pooler), as the non-BYPASSRLS runtime role
+under real Row-Level Security. Consequently the store carried a CLASS of
+environment incompatibilities — each isolated-branch proof attempt surfaced the
+next one. Seven found in total. This was not a typo hunt; it was a
+hosted-connection hardening pass done deliberately, with review.
 
 Every one of these would have broken the first real customer. All were caught on
 disposable branches; none reached production (self-serve ships dark behind 503).
@@ -27,50 +29,69 @@ disposable branches; none reached production (self-serve ships dark behind 503).
 | 3 | Runtime role has no INSERT policy on access_controls/memberships → every self-serve create denied | v6 reserved those writes for the privileged activation role | FIXED (v11 GUC-bound INSERT policies + grants) |
 | 4 | Store `TRIAL_SCHEMA_VERSION=10` hard-pin can't run against v11 | rigid constant | FIXED (env-configurable, default 10) |
 | 5 | `_assert_runtime_role` rejects Supabase's auto-granted, unremovable `postgres` admin member | store stricter than its own v4 backend_role_guard | FIXED (founder-approved; mirrors v4 tolerance) |
-| 6 | `_assert_runtime_role` `tls_active` check reads `pg_stat_ssl` = FALSE via the pooler, even though the client→pooler leg IS TLS (`sslmode=require`) | pg_stat_ssl reflects the Supavisor→Postgres leg, not the client leg; unreliable through any pooler | **OPEN — needs decision** |
+| 6 | `_assert_runtime_role` `tls_active` reads `pg_stat_ssl` = FALSE via the pooler even though the client→pooler leg IS TLS | pg_stat_ssl reflects the Supavisor→Postgres leg, not the client leg; unreliable through any pooler | FIXED (founder-approved; TLS enforced at DSN config, server-side `show ssl=on` sanity check retained) |
+| 7 | Cross-actor claim conflict raised the WRONG error class (`TrialInvalidTransition` "identity conflicts with durable history") instead of `claim_code_conflict` | the conflict guard read `workspace_memberships`, but the `workspace_memberships_self_read` RLS policy only exposes the caller's OWN row — a second user claiming a taken claim sees zero membership rows, so the guard is silently defeated and execution falls through to a generic durable-history error | FIXED (detect the collision via the workspace-scoped `workspace_access_controls` read, comparing `owner_actor_id`) |
 
-Finding 6 confirmed live: connected as the runtime role via
-`aws-0-us-east-1.pooler.supabase.com:5432` with `sslmode=require`, all 13 other
-role checks TRUE, `tls_active` FALSE. Since production must use this pooler
-(direct host is IPv6-only), this check would reject every production connection.
+## Finding 7 in detail (the one only real RLS could expose)
 
-## The decision finding 6 needs
+The store's create path guarded cross-actor claim collisions by selecting
+`workspace_memberships` for the derived workspace and raising `TrialClaimConflict`
+if any member was not the caller. That guard assumed the query could SEE another
+actor's owner row. It cannot: the v8 `workspace_memberships_self_read` policy is
+`actor_id = current_setting('app.actor_id')` — member-self visibility. So when a
+DIFFERENT user claims an already-owned claim, the membership select returns zero
+rows, the guard never fires, and the code falls through to the
+`workspace_access_controls` existence check, which raises the generic
+`TrialInvalidTransition("...identity conflicts with durable history.")`. The
+endpoint would surface that as a confusing 409/500 instead of the correct
+"this claim code is already in use." The fix uses the access-control read (whose
+policy IS workspace-scoped, so the other actor's row is visible) and compares
+`owner_actor_id`: a foreign owner → `TrialClaimConflict` → `claim_code_conflict`;
+a same-owner corrupt state → the durable-history transition error, unchanged.
 
-The security goal is: the runtime's DB connection is encrypted in transit. The
-current check verifies this per-backend via `pg_stat_ssl`, which is correct for a
-direct connection but WRONG through a pooler (it can't see the client's TLS leg).
+The offline self-test fixture modeled membership visibility as workspace-scoped,
+which is why it passed proof 4 all along — it was faithful to what the store CODE
+assumed, not to what production RLS actually does. Closing that fixture-fidelity
+gap (so the offline self-test would catch this class of bug without a live branch)
+is tracked as a follow-up hardening item.
 
-Correct direction (recommended, needs review because it changes how TLS is
-verified — a security assertion):
-- Enforce TLS at the CONNECTION CONFIG: require `sslmode=require` (or stronger,
-  `verify-full`) in the DSN the store connects with. `psycopg` refuses to connect
-  otherwise, so client→pooler TLS is guaranteed by configuration, not by a query.
-- Optionally keep a server-side `show ssl = on` sanity check (server supports
-  TLS) but drop the per-backend `pg_stat_ssl.ssl` requirement that breaks pooled
-  connections.
-- Document that the pooler→Postgres leg is inside Supabase's network; if that leg
-  must also be provably encrypted, that is a Supabase platform question, stated
-  honestly, not something the app can assert from a query.
+## The green proof
 
-This is a deliberate security-design change. It should be made with review (the
-harness classifier correctly gates edits to these assertions), then re-proven on
-a fresh branch via the pooler lane — the same six-proof audit, which should then
-pass all six.
+Sealed evidence: `hq/readiness/self-serve-pilot-proof.json`
+(contract `supermega.self-serve-pilot-proof.v1`). Six-for-six on branch
+`self-serve-proof-v11c-24h-20260816` (ref xhumqlinowwetqcbeisw), run as the
+`self_serve_pilot_runtime` login role via
+`aws-0-us-east-1.pooler.supabase.com:5432` (session pooler, `sslmode=require`),
+schema v11, then the branch was deleted:
+
+1. window_closed_refused — the 503 gate refuses before the store is touched.
+2. claim_creates_isolated_tenant — one owner tenant, 15 caps, claim linkage bound.
+3. exact_idempotent_replay — same owner + claim replays with zero new rows.
+4. different_user_same_claim_rejected — `claim_code_conflict` (finding 7 fixed).
+5. created_event_immutable — update/delete rejected with SQLSTATE 55000.
+6. cross_tenant_invisible — a second owner sees zero of the first tenant's rows.
+
+`secrets_exposed: false`, `tenant_rows_exposed: false`,
+`writes_confined_to_fixtures: true`.
 
 ## What is solid right now
 
 - v11 migration: security-reviewed, replays clean on hosted PG17, fingerprints
   pinned. GUC-bound, no escalation path.
-- Fixes 1,4,5: correct, full python suite 500 OK.
-- The six-proof harness itself: 40 offline adversarial self-test cases; it has
-  now caught 6 real hosted incompatibilities — it is doing exactly its job.
+- All 7 store fixes: correct, full python suite green, proven end-to-end.
+- The six-proof harness: 40 offline adversarial self-test cases; it caught 7 real
+  hosted incompatibilities — it did exactly its job.
 
 ## Recommended next step
 
-Treat this as one hosted-connection hardening task: land the finding-6 TLS
-redesign (with review), then re-run the full six-proof audit on a fresh pooler
-branch. Expect it to pass all six — findings 1–5 are already proven individually
-(role posture probe returned 14/14 with fix 5; the schema, policies, and auth all
-staged clean). Only the TLS check stands between here and a green end-to-end
-proof. After that: the v11 target cascade, then the founder's production_activation
-runbook (hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md).
+The end-to-end proof is done. The remaining work is:
+
+1. The v11 target cascade in the kernel readiness contract (self_serve_pilot
+   computed gate + localTargetVersion 10→11, which honestly reverts hosted_pg17
+   and security to blocked because production is now one version behind the
+   repo's target). This is on this branch only; trunk stays green.
+2. A real PR presenting the founder's single `production_activation` decision
+   (hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md): apply v11 to production, set
+   the store schema version to 11, open the activation window, enable writes.
+   Applying v11 brings hosted_pg17 and security back to green AND turns on
+   self-serve — one coordinated, reversible, founder-run sequence.
