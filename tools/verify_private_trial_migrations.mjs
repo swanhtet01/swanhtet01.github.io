@@ -25,6 +25,7 @@ const expectedMigrations = [
   '20260802161500_private_trial_backend_v8_rls_initplan.sql',
   '20260803063822_private_trial_backend_v9_metadata_rls.sql',
   '20260804102000_private_trial_backend_v10_supabase_session_revocation.sql',
+  '20260816120000_private_trial_backend_v11_self_serve_grants.sql',
 ]
 const expectedPolicyFingerprints = {
   approval_requests_access_gate: {
@@ -63,6 +64,12 @@ const expectedPolicyFingerprints = {
     qual: '69de59bcd4afae8fbd45a1f90dbe0513d14c3b4b168ea102636f9abb6f6daadd',
     check: null,
   },
+  workspace_access_controls_self_serve_insert: {
+    command: 'INSERT',
+    permissive: 'PERMISSIVE',
+    qual: null,
+    check: '5ad38c2accb211f72152b09fc0d9ecf0af10b3d446f594bed9d91111a943b3ab',
+  },
   workspace_events_access_gate: {
     command: 'ALL',
     permissive: 'RESTRICTIVE',
@@ -92,6 +99,12 @@ const expectedPolicyFingerprints = {
     permissive: 'PERMISSIVE',
     qual: 'c80e91747fc9319e19ff36d373cb2d07e01ea65c4085d8e766902b67b488b0b7',
     check: null,
+  },
+  workspace_memberships_self_serve_insert: {
+    command: 'INSERT',
+    permissive: 'PERMISSIVE',
+    qual: null,
+    check: '07bf986e840d33e2681b98000b0c30e16907bb17148cbcfed045fa8674bd11d6',
   },
   workspace_state_access_gate: {
     command: 'ALL',
@@ -348,7 +361,7 @@ await applyMigrations(database)
 const version = await database.query(
   "select schema_version from app_private.trial_schema_meta where component = 'private_trial_backend'",
 )
-requireCheck('schema version ten', version.rows[0]?.schema_version === 10)
+requireCheck('schema version eleven', version.rows[0]?.schema_version === 11)
 
 const relations = await database.query(`
   select relation.relname as relation_name, relation.relkind::text as relation_kind,
@@ -768,7 +781,7 @@ const hostedVersion = await hostedDatabase.query(
 )
 requireCheck(
   'exact Supabase hosted administrative membership accepted',
-  hostedVersion.rows[0]?.schema_version === 10,
+  hostedVersion.rows[0]?.schema_version === 11,
 )
 
 const memberDatabase = new PGlite()

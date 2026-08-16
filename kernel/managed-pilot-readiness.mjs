@@ -39,9 +39,19 @@ const NEXT_ACTION_REQUIREMENTS = ['approve_preview_branch_target', 'approve_self
 const NEXT_ACTION_DECISION_ID = 'bounded-managed-pilot-rehearsal'
 const LOCAL_GATE_EVIDENCE = '56 checks, TLS, RLS, tenant isolation, active-session revocation, public browser quarantine, durable owner control, backup and restore.'
 const REQUIRED_DATABASE_CHECK_COUNT = 56
-const REQUIRED_SOURCE_RECEIPT_COUNT = 9
+const REQUIRED_SOURCE_RECEIPT_COUNT = 10
 export const STORAGE_PRIVACY_PROOF_CONTRACT = 'supermega.hosted-storage-privacy-proof.v1'
 export const MANAGED_PERSISTENCE_PROOF_CONTRACT = 'supermega.managed-persistence-proof.v1'
+export const SELF_SERVE_PILOT_PROOF_CONTRACT = 'supermega.self-serve-pilot-proof.v1'
+// The self_serve_pilot gate stays BLOCKED even when the proof is complete: the six-proof audit
+// proves self-serve tenant creation on hosted v11, but v11 (a feature migration, not a
+// security-hardening step) is not yet applied to production, so the gate's real blocker is the
+// founder production_activation decision. The evidence and next action below are computed from
+// whether the proof exists so the ledger honestly records the banked proof without overclaiming.
+const SELF_SERVE_PILOT_BLOCKED_EVIDENCE = 'HQ records no completed self-serve pilot proof or measured baseline.'
+const SELF_SERVE_PILOT_PROVEN_EVIDENCE = 'Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch through the session pooler under real RLS: window refusal before the store, one isolated owner tenant, exact idempotent replay, cross-actor claim_code_conflict, event immutability (SQLSTATE 55000), and cross-tenant invisibility. Production remains at v10, so applying the reviewed v11 self-serve grants and opening the activation window is the founder production_activation decision.'
+const SELF_SERVE_PILOT_BLOCKED_NEXT_ACTION = 'Open the self-serve activation window on the approved isolated target.'
+const SELF_SERVE_PILOT_PROVEN_NEXT_ACTION = 'Run hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md as the founder production_activation decision: apply the reviewed v11 migration to production, set the store schema version to 11, open the activation window, then enable writes.'
 
 const isRecord = (value) => value && typeof value === 'object' && !Array.isArray(value)
 
@@ -101,6 +111,14 @@ function hostedGateEvidence(audit) {
   return `Protected production is PostgreSQL 17 at managed schema v${audit.liveSchemaVersion}; no owner-approved isolated hosted rehearsal exists.`
 }
 
+function selfServePilotGateEvidence(complete) {
+  return complete ? SELF_SERVE_PILOT_PROVEN_EVIDENCE : SELF_SERVE_PILOT_BLOCKED_EVIDENCE
+}
+
+function selfServePilotGateNextAction(complete) {
+  return complete ? SELF_SERVE_PILOT_PROVEN_NEXT_ACTION : SELF_SERVE_PILOT_BLOCKED_NEXT_ACTION
+}
+
 export function buildManagedPilotReadiness(input = {}) {
   const portfolio = input.portfolio
   const database = input.databaseEvidence
@@ -153,6 +171,42 @@ export function buildManagedPilotReadiness(input = {}) {
       || !Number.isFinite(Date.parse(persistenceProof.recordedAt || ''))) fail('managed_pilot_readiness_persistence_proof_invalid')
   }
   const persistenceProofComplete = persistenceProof !== null
+  // Hosted self-serve pilot proof intake (2026-08-16): same two-state discipline. The six-proof
+  // audit must be internally complete -- passed, exactly 3 sessions / 23 statements / 4 store
+  // calls, schema v11 observed, no secrets, no tenant rows, writes confined to fixtures, exactly
+  // six proofs, the cross-actor collision surfaced as claim_code_conflict, and the branch deleted.
+  // Completing it records the proof but does NOT flip the gate: v11 is not on production, so the
+  // gate stays blocked on the founder production_activation decision.
+  const selfServeProof = input.selfServePilotEvidence ?? null
+  if (selfServeProof !== null) {
+    const proofs = Array.isArray(selfServeProof.audit?.proofs) ? selfServeProof.audit.proofs : []
+    const conflictProof = proofs.find((entry) => entry?.id === 'different_user_same_claim_rejected')
+    const expectedProofIds = [
+      'window_closed_refused',
+      'claim_creates_isolated_tenant',
+      'exact_idempotent_replay',
+      'different_user_same_claim_rejected',
+      'created_event_immutable',
+      'cross_tenant_invisible',
+    ]
+    if (!isRecord(selfServeProof)
+      || selfServeProof.contract !== SELF_SERVE_PILOT_PROOF_CONTRACT
+      || !String(selfServeProof.approvalId || '').trim()
+      || selfServeProof.audit?.ok !== true
+      || selfServeProof.audit?.sessions_performed !== 3
+      || selfServeProof.audit?.statements_performed !== 23
+      || selfServeProof.audit?.store_calls_performed !== 4
+      || selfServeProof.audit?.schema_version_observed !== 11
+      || selfServeProof.audit?.secrets_exposed !== false
+      || selfServeProof.audit?.tenant_rows_exposed !== false
+      || selfServeProof.audit?.writes_confined_to_fixtures !== true
+      || proofs.map((entry) => entry?.id).join(',') !== expectedProofIds.join(',')
+      || conflictProof?.conflict_class !== 'claim_code_conflict'
+      || selfServeProof.branch?.deleteAfterEvidence !== true
+      || !Number.isFinite(Date.parse(selfServeProof.branch?.deletedAt || ''))
+      || !Number.isFinite(Date.parse(selfServeProof.recordedAt || ''))) fail('managed_pilot_readiness_self_serve_proof_invalid')
+  }
+  const selfServePilotProofComplete = selfServeProof !== null
   if (!isRecord(packageManifest?.supermega) || packageManifest.supermega.productionSupabaseTargetStatus !== 'protected-unapproved') fail('managed_pilot_readiness_production_boundary_invalid')
   // v4: the audit is read as STATE, not pinned to the blocked snapshot. Schema version may sit
   // anywhere on the approved v7 -> v10 path, drift must be arithmetically consistent, and the
@@ -256,7 +310,7 @@ export function buildManagedPilotReadiness(input = {}) {
       ? 'Keep the persistence evidence and instrument current.'
       : 'Prove durable commands, recovery, and tenant isolation on the isolated target.'),
     gate('security', securityGateReady(auditSummary) ? 'ready-hosted' : 'blocked', securityGateEvidence(auditSummary), securityAudit.conclusion.nextAction),
-    gate('self_serve_pilot', 'blocked', 'HQ records no completed self-serve pilot setup or measured baseline.', 'Open the self-serve activation window on the approved isolated target.'),
+    gate('self_serve_pilot', 'blocked', selfServePilotGateEvidence(selfServePilotProofComplete), selfServePilotGateNextAction(selfServePilotProofComplete)),
     gate('production_activation', 'blocked', 'The production Supabase target remains protected-unapproved.', 'Keep writes disabled until separate founder approval after every hosted gate passes.'),
   ]
 
@@ -320,6 +374,15 @@ export function buildManagedPilotReadiness(input = {}) {
       approvalId: persistenceProofComplete ? persistenceProof.approvalId : null,
       recordedAt: persistenceProofComplete ? persistenceProof.recordedAt : null,
       branchDeletedAt: persistenceProofComplete ? persistenceProof.branch.deletedAt : null,
+    },
+    selfServePilot: {
+      proofComplete: selfServePilotProofComplete,
+      contract: selfServePilotProofComplete ? SELF_SERVE_PILOT_PROOF_CONTRACT : null,
+      approvalId: selfServePilotProofComplete ? selfServeProof.approvalId : null,
+      recordedAt: selfServePilotProofComplete ? selfServeProof.recordedAt : null,
+      branchDeletedAt: selfServePilotProofComplete ? selfServeProof.branch.deletedAt : null,
+      schemaVersionProven: selfServePilotProofComplete ? 11 : null,
+      liveActivationBlockedOn: 'production_activation',
     },
     gates,
     products,
@@ -419,6 +482,21 @@ export function validateManagedPilotReadiness(value) {
         || managedPersistence.approvalId !== null
         || managedPersistence.recordedAt !== null
         || managedPersistence.branchDeletedAt !== null))) fail('managed_pilot_readiness_persistence_invalid')
+  const selfServePilot = value.selfServePilot
+  if (!isRecord(selfServePilot)
+    || typeof selfServePilot.proofComplete !== 'boolean'
+    || selfServePilot.liveActivationBlockedOn !== 'production_activation'
+    || (selfServePilot.proofComplete
+      ? (selfServePilot.contract !== SELF_SERVE_PILOT_PROOF_CONTRACT
+        || !String(selfServePilot.approvalId || '').trim()
+        || !Number.isFinite(Date.parse(selfServePilot.recordedAt || ''))
+        || !Number.isFinite(Date.parse(selfServePilot.branchDeletedAt || ''))
+        || selfServePilot.schemaVersionProven !== 11)
+      : (selfServePilot.contract !== null
+        || selfServePilot.approvalId !== null
+        || selfServePilot.recordedAt !== null
+        || selfServePilot.branchDeletedAt !== null
+        || selfServePilot.schemaVersionProven !== null))) fail('managed_pilot_readiness_self_serve_invalid')
   if (!Array.isArray(value.gates)
     || value.gates.map((entry) => entry.id).join(',') !== GATE_IDS.join(',')
     || value.gates[0]?.status !== 'ready-local'
@@ -432,7 +510,9 @@ export function validateManagedPilotReadiness(value) {
     || value.gates.some((entry) => !String(entry?.evidence || '').trim() || !String(entry?.nextAction || '').trim())) fail('managed_pilot_readiness_gates_invalid')
   if (value.gates[0].evidence !== LOCAL_GATE_EVIDENCE
     || value.gates.find((entry) => entry.id === 'hosted_postgres17')?.evidence !== hostedGateEvidence(audit)
-    || value.gates.find((entry) => entry.id === 'security')?.evidence !== securityGateEvidence(audit)) fail('managed_pilot_readiness_gate_evidence_invalid')
+    || value.gates.find((entry) => entry.id === 'security')?.evidence !== securityGateEvidence(audit)
+    || value.gates.find((entry) => entry.id === 'self_serve_pilot')?.evidence !== selfServePilotGateEvidence(selfServePilot.proofComplete)
+    || value.gates.find((entry) => entry.id === 'self_serve_pilot')?.nextAction !== selfServePilotGateNextAction(selfServePilot.proofComplete)) fail('managed_pilot_readiness_gate_evidence_invalid')
   if (!Array.isArray(value.products) || value.products.map((product) => product.productId).join(',') !== PRODUCT_IDS.join(',') || value.products.some((product) => product.managedPilotStatus !== 'blocked' || product.automationStatus !== 'owner-gated')) fail('managed_pilot_readiness_products_invalid')
   if (value.controls?.externalWritesPerformed !== false || value.controls?.connectorRequestsPerformed !== 0 || value.controls?.modelCallsRequiredToBuild !== 0 || value.controls?.productionWritesEnabled !== false || value.controls?.ownerApprovalRequired !== true) fail('managed_pilot_readiness_controls_invalid')
   const serialized = JSON.stringify(value).toLowerCase()
