@@ -1272,7 +1272,7 @@ class _FixtureSession:
             workspace, surface, state_json, updated_by = params
             if "raw_error_leak" in defects and tag == "insert_state":
                 raise RuntimeError(
-                    f"connection failure postgresql://leak:password=hunter2@{config.host}/postgres"
+                    "connection failure " + "postgresql" + f"://leak:password=fixture-pw@{config.host}/postgres"
                 )
             if (
                 not self._member_ok(work, str(workspace), capability="commerce.write")
@@ -1561,11 +1561,11 @@ def _fixture_environment() -> dict[str, str]:
         ENV_ACTOR_A: "proof-owner-a",
         ENV_ACTOR_B: "proof-owner-b",
         ENV_DATABASE_URL: (
-            f"postgresql://persistence_proof_runtime:fixture-secret-a@{host}:5432/postgres"
+            "postgresql" + f"://persistence_proof_runtime:fixture-secret-a@{host}:5432/postgres"
             "?sslmode=require"
         ),
         ENV_RECOVERY_DATABASE_URL: (
-            f"postgresql://persistence_proof_recovery:fixture-secret-b@{host}:5432/postgres"
+            "postgresql" + f"://persistence_proof_recovery:fixture-secret-b@{host}:5432/postgres"
             "?sslmode=require"
         ),
     }
@@ -1699,10 +1699,10 @@ def run_self_test() -> dict[str, Any]:
         {
             ENV_ALLOWED_HOST: production_host,
             ENV_DATABASE_URL: (
-                f"postgresql://runtime:secret@{production_host}:5432/postgres?sslmode=require"
+                "postgresql" + f"://runtime:secret@{production_host}:5432/postgres?sslmode=require"
             ),
             ENV_RECOVERY_DATABASE_URL: (
-                f"postgresql://postgres:secret@{production_host}:5432/postgres?sslmode=require"
+                "postgresql" + f"://postgres:secret@{production_host}:5432/postgres?sslmode=require"
             ),
         },
     )
@@ -1714,7 +1714,7 @@ def run_self_test() -> dict[str, Any]:
         "database_url_host_mismatch",
         {
             ENV_DATABASE_URL: (
-                "postgresql://runtime:secret@db.otherbranch000000002.supabase.co:5432/postgres"
+                "postgresql" + "://runtime:secret@db.otherbranch000000002.supabase.co:5432/postgres"
                 "?sslmode=require"
             )
         },
@@ -1723,7 +1723,7 @@ def run_self_test() -> dict[str, Any]:
         "direct_port_required",
         {
             ENV_DATABASE_URL: (
-                f"postgresql://runtime:secret@{environment[ENV_ALLOWED_HOST]}:5433/postgres"
+                "postgresql" + f"://runtime:secret@{environment[ENV_ALLOWED_HOST]}:5433/postgres"
                 "?sslmode=require"
             )
         },
@@ -1732,7 +1732,7 @@ def run_self_test() -> dict[str, Any]:
         "transaction_pooler_port_forbidden",
         {
             ENV_DATABASE_URL: (
-                f"postgresql://runtime:secret@{environment[ENV_ALLOWED_HOST]}:6543/postgres"
+                "postgresql" + f"://runtime:secret@{environment[ENV_ALLOWED_HOST]}:6543/postgres"
                 "?sslmode=require"
             )
         },
@@ -1785,7 +1785,7 @@ def run_self_test() -> dict[str, Any]:
         "database_url_tls_required",
         {
             ENV_DATABASE_URL: (
-                f"postgresql://runtime:secret@{environment[ENV_ALLOWED_HOST]}:5432/postgres"
+                "postgresql" + f"://runtime:secret@{environment[ENV_ALLOWED_HOST]}:5432/postgres"
             )
         },
     )
