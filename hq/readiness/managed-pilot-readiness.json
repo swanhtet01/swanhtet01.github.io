@@ -1,7 +1,7 @@
 {
   "contract": "supermega.managed-pilot-readiness.v4",
   "asOf": "2026-08-16T10:00:59.584Z",
-  "sourceDigest": "sha256:e1770e9070bb2b5a38380b8f0e6f61e8fe82ef41f13e7d4361a4bfbbd7cb1189",
+  "sourceDigest": "sha256:041d1db12de3390f0af7707090c116f28d7be0c827ab2aad384d1c6da124dac3",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
@@ -94,6 +94,15 @@
     "recordedAt": "2026-08-16T09:14:56.804Z",
     "branchDeletedAt": "2026-08-16T09:14:56.808Z"
   },
+  "selfServePilot": {
+    "proofComplete": true,
+    "contract": "supermega.self-serve-pilot-proof.v1",
+    "approvalId": "self-serve-proof-v11c-20260816",
+    "recordedAt": "2026-08-16T17:00:52.000Z",
+    "branchDeletedAt": "2026-08-16T17:00:52.000Z",
+    "schemaVersionProven": 11,
+    "liveActivationBlockedOn": "production_activation"
+  },
   "gates": [
     {
       "id": "local_postgres17",
@@ -134,8 +143,8 @@
     {
       "id": "self_serve_pilot",
       "status": "blocked",
-      "evidence": "HQ records no completed self-serve pilot setup or measured baseline.",
-      "nextAction": "Open the self-serve activation window on the approved isolated target."
+      "evidence": "Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch through the session pooler under real RLS: window refusal before the store, one isolated owner tenant, exact idempotent replay, cross-actor claim_code_conflict, event immutability (SQLSTATE 55000), and cross-tenant invisibility. Production remains at v10, so applying the reviewed v11 self-serve grants and opening the activation window is the founder production_activation decision.",
+      "nextAction": "Run hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md as the founder production_activation decision: apply the reviewed v11 migration to production, set the store schema version to 11, open the activation window, then enable writes."
     },
     {
       "id": "production_activation",
@@ -232,8 +241,12 @@
       "digest": "sha256:7a5313676672cf55fafdbbdbf53b27c08db97ef01a400101a8fbf7a7726472a0"
     },
     {
+      "path": "hq/readiness/self-serve-pilot-proof.json",
+      "digest": "sha256:ec6f171cd45d983de86e52344ad65a6e40c332da1af0fd8a2d3078bd4dd47146"
+    },
+    {
       "path": "hq/NOW.md",
-      "digest": "sha256:50c722b215ed60e8cbf70e16250ed07a42ec5e6c407b1fd29b6ec145f1245e32"
+      "digest": "sha256:549599b208964a4c641513c002f7c27e9ee29d113176445d47e81e959f780887"
     },
     {
       "path": "package.json",
@@ -241,7 +254,7 @@
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:c8bb59501a1e05bb50fcdeb6a32b69cb21c7f729921605dc83157d7f5564e35f"
+      "digest": "sha256:d6f0b75868f7a7b2f77f5e274788adf762e3889870bf6224c9a0fafa46327743"
     }
   ]
 }

@@ -67,6 +67,7 @@ No external send, payment, refund, publish, domain change, connector write, merg
 - The live products remain isolated samples; managed persistence and tenant security are unproven.
 - Live HQ and both domains agree on `12ade3db`; no release drift is present. Two hosted-readiness gates still block managed activation/marketing (hosted PG17, security, storage privacy, managed persistence, and the live product contract prerequisites are ready-hosted); external handoffs require `release:handoff:verify`.
 - No self-serve pilot tenant, managed tenant, revenue result, or time-saved baseline is verified. Founder decision 2026-08-12: pilots are self-serve; the user names themselves.
+- Self-serve tenant creation is proven six-for-six on a deleted isolated v11 branch (`hq/readiness/self-serve-pilot-proof.json`): window refusal, isolated owner tenant, idempotent replay, cross-actor `claim_code_conflict`, event immutability, cross-tenant invisibility — all through the session pooler under real RLS. It is not live: production stays at v10 behind the 503 window, so a real tenant awaits the founder `production_activation` decision (`hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md`).
 - Hosted scheduling has no signed bundle, credentials, worker URL, or allowlist and stays blocked until managed storage, security, recovery, and owner evidence pass.
 
 ## Decisions in force

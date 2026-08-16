@@ -84,14 +84,24 @@ schema v11, then the branch was deleted:
 
 ## Recommended next step
 
-The end-to-end proof is done. The remaining work is:
+The end-to-end proof is done. The kernel readiness cascade is applied on this
+branch (trunk stays green):
 
-1. The v11 target cascade in the kernel readiness contract (self_serve_pilot
-   computed gate + localTargetVersion 10→11, which honestly reverts hosted_pg17
-   and security to blocked because production is now one version behind the
-   repo's target). This is on this branch only; trunk stays green.
+1. `self_serve_pilot` is now a computed gate that binds the sealed proof
+   (`hq/readiness/self-serve-pilot-proof.json`) into the ledger, but STAYS
+   blocked: v11 is not on production, so the real blocker is the founder
+   `production_activation` decision. The security `localTargetVersion` stays 10
+   on purpose — v11 is a FEATURE migration (self-serve grants), not a
+   security-hardening step, so production's security posture is genuinely still
+   hardened and clear at v10; bumping the security target to 11 would falsely
+   report production as un-hardened. The `verify_supabase_security_advisor_audit`
+   contract pins `localTargetVersion === 10`, which encodes exactly this. The
+   five already-green hosted gates do NOT regress; `blockingGateCount` stays 2
+   (self_serve_pilot, production_activation). Changing `trial_store.py` (finding
+   7) forced a fresh local Postgres 17 rehearsal re-record (the implementation
+   digest is bound); the six-for-six local checks pass unchanged.
 2. A real PR presenting the founder's single `production_activation` decision
    (hq/strategy/PRODUCTION-ACTIVATION-RUNBOOK.md): apply v11 to production, set
    the store schema version to 11, open the activation window, enable writes.
-   Applying v11 brings hosted_pg17 and security back to green AND turns on
-   self-serve — one coordinated, reversible, founder-run sequence.
+   That is the one coordinated, reversible, founder-run sequence that turns the
+   proven self-serve capability into a live one.

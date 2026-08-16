@@ -190,7 +190,12 @@ class _StatementRejected(Exception):
 
 
 def _canonical_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    # psycopg returns uuid/timestamptz columns as Python UUID/datetime objects, which
+    # json.dumps cannot serialize natively; default=str renders them to their canonical
+    # string form deterministically (fine for the byte-length, redaction, and digest uses).
+    return json.dumps(
+        value, ensure_ascii=True, separators=(",", ":"), sort_keys=True, default=str
+    )
 
 
 def _digest_text(value: str) -> str:
