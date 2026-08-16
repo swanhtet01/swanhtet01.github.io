@@ -26,6 +26,7 @@ from supermega_runtime.trial_store import (
     SELF_SERVE_OWNER_CAPABILITIES,
     PostgresTrialStore,
     SelfServeWorkspaceResult,
+    TrialClaimConflict,
     _self_serve_command_identity,
 )
 
@@ -252,6 +253,52 @@ class SelfServeStoreSchemaConformanceTests(unittest.TestCase):
         self.assertEqual(owner_actor_id, ACTOR_ID)
         self.assertRegex(str(project_ref), r"^[a-z0-9]{20}$")
         self.assertRegex(str(release_commit), r"^[0-9a-f]{40}$")
+
+
+class _DuplicateKeyCursor(_FakeCursor):
+    """Simulates the unique-constraint rejection a losing concurrent claimant
+    hits: the SERIALIZABLE snapshot predates the advisory lock, so the guards
+    read nothing and the access-control INSERT collides on workspace_id."""
+
+    def execute(self, sql: str, params: object = None) -> None:
+        if "insert into app_private.workspace_access_controls" in sql:
+            error = Exception("duplicate key value violates unique constraint")
+            error.sqlstate = "23505"
+            raise error
+        super().execute(sql, params)
+
+
+class _DuplicateKeyConnection(_FakeConnection):
+    def __init__(self, *, created_at: datetime, read_back: dict) -> None:
+        super().__init__(created_at=created_at, read_back=read_back)
+        self._cursor = _DuplicateKeyCursor(self)
+
+
+class SelfServeClaimRaceConformanceTests(unittest.TestCase):
+    def test_duplicate_key_on_access_control_insert_is_a_claim_conflict(self) -> None:
+        connection = _DuplicateKeyConnection(
+            created_at=datetime(2026, 8, 16, tzinfo=timezone.utc),
+            read_back={},
+        )
+        store = _RecordingStore(connection)
+        with patch.dict(
+            os.environ,
+            {
+                "SUPERMEGA_SUPABASE_PROJECT_REF": PROJECT_REF,
+                "SUPERMEGA_RELEASE_COMMIT": RELEASE_COMMIT,
+            },
+        ):
+            with self.assertRaises(TrialClaimConflict) as raised:
+                store.create_self_serve_workspace(
+                    actor_id=ACTOR_ID,
+                    claim_code=CLAIM_CODE,
+                    business_name=BUSINESS_NAME,
+                    session_id=SESSION_ID,
+                    identity_provider="supabase",
+                )
+        # No driver detail (which can embed key values) may reach the caller.
+        self.assertNotIn("duplicate key", str(raised.exception))
+        self.assertIsNone(raised.exception.__cause__)
 
 
 if __name__ == "__main__":

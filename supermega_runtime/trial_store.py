@@ -3654,31 +3654,47 @@ class PostgresTrialStore:
                             raise TrialInvalidTransition(
                                 "Self-serve workspace identity conflicts with durable history."
                             )
-                        cursor.execute(
-                            """
-                            insert into app_private.workspace_access_controls (
-                              workspace_id, activation_id, authorization_id,
-                              authorization_contract, plan_digest, owner_actor_id,
-                              project_ref, release_commit, status
-                            ) values (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
-                            """,
-                            (
-                                workspace_id,
-                                command_id,
-                                # authorization_id is a uuid column: derive a deterministic uuid5
-                                # from the workspace + claim so replay reuses the exact value (the
-                                # UNIQUE constraint makes idempotency safe) and distinct from the
-                                # activation_id's 'self-serve-create:' name. A raw
-                                # 'self-serve-claim-<claim>' string is not valid uuid syntax (22P02)
-                                # and would abort every self-serve creation on a real database.
-                                str(uuid5(UUID(workspace_id), f"self-serve-authorization:{claim}")),
-                                SELF_SERVE_ACTIVATION_AUTHORIZATION_CONTRACT,
-                                fingerprint,
-                                principal.actor_id,
-                                project_ref,
-                                release_commit,
-                            ),
-                        )
+                        try:
+                            cursor.execute(
+                                """
+                                insert into app_private.workspace_access_controls (
+                                  workspace_id, activation_id, authorization_id,
+                                  authorization_contract, plan_digest, owner_actor_id,
+                                  project_ref, release_commit, status
+                                ) values (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
+                                """,
+                                (
+                                    workspace_id,
+                                    command_id,
+                                    # authorization_id is a uuid column: derive a deterministic uuid5
+                                    # from the workspace + claim so replay reuses the exact value (the
+                                    # UNIQUE constraint makes idempotency safe) and distinct from the
+                                    # activation_id's 'self-serve-create:' name. A raw
+                                    # 'self-serve-claim-<claim>' string is not valid uuid syntax (22P02)
+                                    # and would abort every self-serve creation on a real database.
+                                    str(uuid5(UUID(workspace_id), f"self-serve-authorization:{claim}")),
+                                    SELF_SERVE_ACTIVATION_AUTHORIZATION_CONTRACT,
+                                    fingerprint,
+                                    principal.actor_id,
+                                    project_ref,
+                                    release_commit,
+                                ),
+                            )
+                        except TrialStoreError:
+                            raise
+                        except Exception as exc:
+                            # Under true concurrency the SERIALIZABLE snapshot is taken
+                            # before pg_advisory_xact_lock is acquired, so the losing
+                            # claimant's guards above can miss the winner's committed
+                            # rows entirely and fall through to this insert. The unique
+                            # constraint on workspace_id is the authoritative arbiter:
+                            # a duplicate-key rejection here IS the claim collision and
+                            # must surface as claim_code_conflict, not the generic
+                            # not-ready error. `from None` so no driver detail (which
+                            # can embed key values) ever reaches a caller.
+                            if getattr(exc, "sqlstate", None) == "23505":
+                                raise TrialClaimConflict(claim) from None
+                            raise
                         cursor.execute(
                             """
                             insert into app_private.workspace_memberships (

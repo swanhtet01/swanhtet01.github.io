@@ -181,6 +181,14 @@ export function buildManagedPilotReadiness(input = {}) {
   if (selfServeProof !== null) {
     const proofs = Array.isArray(selfServeProof.audit?.proofs) ? selfServeProof.audit.proofs : []
     const conflictProof = proofs.find((entry) => entry?.id === 'different_user_same_claim_rejected')
+    const expectedProofIds = [
+      'window_closed_refused',
+      'claim_creates_isolated_tenant',
+      'exact_idempotent_replay',
+      'different_user_same_claim_rejected',
+      'created_event_immutable',
+      'cross_tenant_invisible',
+    ]
     if (!isRecord(selfServeProof)
       || selfServeProof.contract !== SELF_SERVE_PILOT_PROOF_CONTRACT
       || !String(selfServeProof.approvalId || '').trim()
@@ -192,7 +200,7 @@ export function buildManagedPilotReadiness(input = {}) {
       || selfServeProof.audit?.secrets_exposed !== false
       || selfServeProof.audit?.tenant_rows_exposed !== false
       || selfServeProof.audit?.writes_confined_to_fixtures !== true
-      || proofs.length !== 6
+      || proofs.map((entry) => entry?.id).join(',') !== expectedProofIds.join(',')
       || conflictProof?.conflict_class !== 'claim_code_conflict'
       || selfServeProof.branch?.deleteAfterEvidence !== true
       || !Number.isFinite(Date.parse(selfServeProof.branch?.deletedAt || ''))

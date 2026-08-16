@@ -1,8 +1,10 @@
 # Production activation runbook — the founder's one turnkey decision
 
-Status: PREP (living doc; final env names/order confirmed by the self-serve
-end-to-end proof, task #14). Nothing here is executed by writing it.
-Author: tech lead. Date: 2026-08-16.
+Status: READY — the self-serve end-to-end proof is complete (six-for-six,
+`hq/readiness/self-serve-pilot-proof.json`, approvalId
+`self-serve-proof-v11c-20260816`), so the env names and ordering below are
+proof-confirmed. Nothing here is executed by writing it; only the founder runs
+these steps. Author: tech lead. Date: 2026-08-16 (updated 2026-08-17).
 
 This is the single consolidated `production_activation` decision. Every
 technical proof it depends on is done on isolated infrastructure; this
@@ -15,12 +17,15 @@ self-serve product real for customers. Read top to bottom before running.
 - security: proven (OPS-747, advisor clear, quarantine applied).
 - hosted_storage_privacy: proven on isolated branch (OPS-752, six-for-six).
 - managed_persistence: proven on isolated branch (OPS-759, seven-for-seven).
-- self_serve_pilot: five defects fixed (fix/self-serve-remediation), proven
-  end-to-end on an isolated branch (task #14 — six-for-six). **Do not run this
-  runbook until that proof evidence exists in hq/readiness/.**
+- self_serve_pilot: SEVEN hosted defects fixed (fix/self-serve-remediation) and
+  proven end-to-end on a deleted isolated v11 branch — six-for-six through the
+  session pooler under real RLS. Evidence: `hq/readiness/self-serve-pilot-proof.json`
+  (approvalId `self-serve-proof-v11c-20260816`). This precondition is SATISFIED.
 - The remediation branch is merged to trunk and released (paired release, live
-  verified) so the deployed app carries the five fixes + the env-configurable
-  store version.
+  verified) so the deployed app carries the seven fixes + the env-configurable
+  store version. **This is the one precondition still open — do not run steps
+  B-D until that release is live.** (Step A, applying v11, is safe prep at any
+  time: additive, opens nothing by itself.)
 
 ## 1. What this decision does (and what stays reversible)
 
@@ -40,7 +45,8 @@ opens the door; step D lets writes land. You can do A-B, watch, then C-D.
 
 ## 2. Exact sequence (founder-run; each step verifiable)
 
-Precise env names/values are finalized by the task-14 proof; current best:
+Env names/values below are proof-confirmed (the six-proof audit exercised this
+exact store configuration through the production connection path):
 
 **Step A — apply v11 to production** (Supabase MCP or dashboard SQL editor):
 - Apply `supabase/migrations/20260816120000_private_trial_backend_v11_self_serve_grants.sql`
@@ -49,9 +55,12 @@ Precise env names/values are finalized by the task-14 proof; current best:
 - Verify advisor still clear (get_advisors security → 0 ERROR / 0 WARN).
 
 **Step B — tell the store to expect v11** (Vercel env, app runtime project):
-- `SUPERMEGA_TRIAL_SCHEMA_VERSION=11`
+- `SUPERMEGA_TRIAL_SCHEMA_VERSION=11` (exactly the digits `11`).
 - Redeploy the app so the runtime picks it up (or it reads at boot per config).
 - The store now requires schema 11 AND production is at 11 → consistent.
+- Safety net: an empty or mistyped value can NOT crash the app — the store
+  falls back to expecting v10 and only the trial paths fail closed until the
+  value is corrected (your step-D verification would catch it).
 
 **Step C — open the activation window** (Vercel env):
 - `SUPERMEGA_SELF_SERVE_ACTIVATION_WINDOW=open` (exactly the string `open`).
