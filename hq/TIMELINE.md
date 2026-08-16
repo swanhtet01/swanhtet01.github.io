@@ -1,4 +1,4 @@
-﻿# SuperMega Timeline
+# SuperMega Timeline
 
 Updated: 2026-08-12
 Owner: founder / CEO
@@ -71,6 +71,9 @@ _No founder decision required. Zero bundle cost._
 - [x] Platform Codex: Web Analytics beacon on app + public site, cookieless/no-PII; awaiting founder dashboard toggles â€” DONE (OPS-746)
 - [x] Governance Codex: security audit v2 recorded from live production state; hosted_postgres17 + security gates READY-HOSTED; blocking gates 7 -> 5 â€” DONE (OPS-747)
 - [x] Storage Codex + tech lead: HOSTED STORAGE PRIVACY PROVEN â€” six-request audit six-for-six on a created-proven-deleted branch; two contract strengthenings (canary OPS-750, body discrimination OPS-751); gates 5 -> 4 â€” DONE (OPS-752)
+- [x] Tech lead: CI python fixes — canary companion test + time-anchored fixtures both directions — DONE (OPS-753)
+- [x] A+ campaign wave: persistence instrument (OPS-754), 8 connector fail-closed test files incl. forged-IPN rejection (OPS-755), UX polish round 2 (OPS-756), observability floor: error lane + health alerting (OPS-757)
+- [x] Persistence Codex + tech lead: MANAGED PERSISTENCE PROVEN — seven-proof audit via session-pooler lane (OPS-758 amendment) on a created-staged-proven-deleted branch; gates 4 -> 3 — DONE (OPS-759)
 
 ### Client-portal / SaaS phase plan (set 2026-08-13; goal: every client their own portal)
 - [ ] GATE NOW: founder merges PR #414 + dispatches paired release â€” everything above goes live for real users
