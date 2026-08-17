@@ -38,6 +38,8 @@ from supermega_runtime.order_intake import (
     OrderIntakeModelExtraction,
     build_order_intake_draft,
 )
+from supermega_runtime.telemetry import schema as telemetry_schema
+from supermega_runtime.telemetry.tracing import domain_span
 
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -518,6 +520,24 @@ def _actual_usage_units(response: Mapping[str, Any]) -> int | None:
     return int(values[0]) + int(values[1])
 
 
+def _usage_token_counts(response: Mapping[str, Any]) -> tuple[int | None, int | None]:
+    """Return (input_tokens, output_tokens) for the `ai.invocation` span.
+
+    Token counts only — never the prompt or completion text itself (plan
+    section 3: "Safe to include in spans" lists token counts as "Cost
+    telemetry; no text content").
+    """
+
+    usage = response.get("usage")
+    if not isinstance(usage, Mapping):
+        return None, None
+
+    def _safe_count(value: object) -> int | None:
+        return int(value) if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+    return _safe_count(usage.get("input_tokens")), _safe_count(usage.get("output_tokens"))
+
+
 class OpenAIOrderIntakeProvider:
     def __init__(
         self,
@@ -578,102 +598,115 @@ class OpenAIOrderIntakeProvider:
         if len({item.sku for item in validated_catalog}) != len(validated_catalog):
             raise OrderIntakeProviderError("order_intake_catalog_invalid")
 
-        provider_input = json.dumps(
-            {
-                "catalog": [item.model_dump(mode="json") for item in validated_catalog],
-                "message": validated_request.message,
-                "prompt_version": ORDER_INTAKE_PROMPT_VERSION,
+        with domain_span(
+            telemetry_schema.AI_INVOCATION,
+            **{
+                "ai.model": self._model,
+                "ai.operation": "order_intake",
+                "ai.provider": "openai",
             },
-            ensure_ascii=False,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        payload: dict[str, Any] = {
-            "model": self._model,
-            "instructions": _SYSTEM_INSTRUCTIONS,
-            "input": provider_input,
-            "max_output_tokens": ORDER_INTAKE_MAX_OUTPUT_TOKENS,
-            "safety_identifier": hmac.new(
-                self._safety_secret,
-                f"{workspace_id}\x1f{actor_id}".encode("utf-8"),
-                sha256,
-            ).hexdigest(),
-            "store": False,
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "supermega_order_intake",
-                    "strict": True,
-                    "schema": OrderIntakeModelExtraction.model_json_schema(mode="validation"),
-                }
-            },
-        }
-        encoded_payload = json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")
-        if len(encoded_payload) > MAX_ORDER_INTAKE_PROVIDER_INPUT_BYTES:
-            raise OrderIntakeProviderError("order_intake_catalog_too_large")
-
-        reserved_units = len(encoded_payload) + ORDER_INTAKE_MAX_OUTPUT_TOKENS + 512
-        reservation = await asyncio.to_thread(
-            self._budget.reserve,
-            workspace_id=workspace_id,
-            reserved_units=reserved_units,
-        )
-        try:
-            response = await asyncio.to_thread(
-                self._transport,
-                self._api_key,
+        ) as span:
+            provider_input = json.dumps(
+                {
+                    "catalog": [item.model_dump(mode="json") for item in validated_catalog],
+                    "message": validated_request.message,
+                    "prompt_version": ORDER_INTAKE_PROMPT_VERSION,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            payload: dict[str, Any] = {
+                "model": self._model,
+                "instructions": _SYSTEM_INSTRUCTIONS,
+                "input": provider_input,
+                "max_output_tokens": ORDER_INTAKE_MAX_OUTPUT_TOKENS,
+                "safety_identifier": hmac.new(
+                    self._safety_secret,
+                    f"{workspace_id}\x1f{actor_id}".encode("utf-8"),
+                    sha256,
+                ).hexdigest(),
+                "store": False,
+                "text": {
+                    "format": {
+                        "type": "json_schema",
+                        "name": "supermega_order_intake",
+                        "strict": True,
+                        "schema": OrderIntakeModelExtraction.model_json_schema(mode="validation"),
+                    }
+                },
+            }
+            encoded_payload = json.dumps(
                 payload,
-                self._timeout_seconds,
-            )
-            output_text = _response_output_text(response)
-            extraction_payload = json.loads(
-                output_text,
-                object_pairs_hook=_strict_json_object,
-                parse_constant=_reject_json_constant,
-            )
-            extraction = OrderIntakeModelExtraction.model_validate(extraction_payload)
-            response_id = response.get("id")
-            response_model = response.get("model")
-            if not isinstance(response_id, str) or not response_id.strip() or len(response_id) > 160:
-                raise OrderIntakeProviderError("order_intake_provider_invalid_response")
-            if not isinstance(response_model, str):
-                raise OrderIntakeProviderError("order_intake_provider_invalid_response")
-            draft = build_order_intake_draft(
-                message=validated_request.message,
-                catalog=validated_catalog,
-                extraction=extraction,
-                response_id=response_id.strip(),
-                model=_safe_model_name(response_model),
-            )
-        except OrderIntakeProviderError:
-            await asyncio.to_thread(
-                self._budget.settle,
-                reservation,
-                status="failed",
-                actual_units=None,
-            )
-            raise
-        except (json.JSONDecodeError, ValueError, ValidationError, OrderIntakeContractError) as exc:
-            await asyncio.to_thread(
-                self._budget.settle,
-                reservation,
-                status="failed",
-                actual_units=None,
-            )
-            raise OrderIntakeProviderError("order_intake_provider_invalid_response") from exc
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+            if len(encoded_payload) > MAX_ORDER_INTAKE_PROVIDER_INPUT_BYTES:
+                raise OrderIntakeProviderError("order_intake_catalog_too_large")
 
-        await asyncio.to_thread(
-            self._budget.settle,
-            reservation,
-            status="consumed",
-            actual_units=_actual_usage_units(response),
-        )
-        return draft
+            reserved_units = len(encoded_payload) + ORDER_INTAKE_MAX_OUTPUT_TOKENS + 512
+            reservation = await asyncio.to_thread(
+                self._budget.reserve,
+                workspace_id=workspace_id,
+                reserved_units=reserved_units,
+            )
+            try:
+                response = await asyncio.to_thread(
+                    self._transport,
+                    self._api_key,
+                    payload,
+                    self._timeout_seconds,
+                )
+                output_text = _response_output_text(response)
+                extraction_payload = json.loads(
+                    output_text,
+                    object_pairs_hook=_strict_json_object,
+                    parse_constant=_reject_json_constant,
+                )
+                extraction = OrderIntakeModelExtraction.model_validate(extraction_payload)
+                response_id = response.get("id")
+                response_model = response.get("model")
+                if not isinstance(response_id, str) or not response_id.strip() or len(response_id) > 160:
+                    raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+                if not isinstance(response_model, str):
+                    raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+                draft = build_order_intake_draft(
+                    message=validated_request.message,
+                    catalog=validated_catalog,
+                    extraction=extraction,
+                    response_id=response_id.strip(),
+                    model=_safe_model_name(response_model),
+                )
+            except OrderIntakeProviderError:
+                await asyncio.to_thread(
+                    self._budget.settle,
+                    reservation,
+                    status="failed",
+                    actual_units=None,
+                )
+                raise
+            except (json.JSONDecodeError, ValueError, ValidationError, OrderIntakeContractError) as exc:
+                await asyncio.to_thread(
+                    self._budget.settle,
+                    reservation,
+                    status="failed",
+                    actual_units=None,
+                )
+                raise OrderIntakeProviderError("order_intake_provider_invalid_response") from exc
+
+            await asyncio.to_thread(
+                self._budget.settle,
+                reservation,
+                status="consumed",
+                actual_units=_actual_usage_units(response),
+            )
+            input_tokens, output_tokens = _usage_token_counts(response)
+            if input_tokens is not None:
+                span.set_attribute("ai.input_tokens", input_tokens)
+            if output_tokens is not None:
+                span.set_attribute("ai.output_tokens", output_tokens)
+            return draft
 
 
 class AnthropicOrderIntakeProvider:
@@ -742,107 +775,120 @@ class AnthropicOrderIntakeProvider:
         if len({item.sku for item in validated_catalog}) != len(validated_catalog):
             raise OrderIntakeProviderError("order_intake_catalog_invalid")
 
-        provider_input = json.dumps(
-            {
-                "catalog": [item.model_dump(mode="json") for item in validated_catalog],
-                "message": validated_request.message,
-                "prompt_version": ORDER_INTAKE_PROMPT_VERSION,
+        with domain_span(
+            telemetry_schema.AI_INVOCATION,
+            **{
+                "ai.model": self._model,
+                "ai.operation": "order_intake",
+                "ai.provider": "anthropic",
             },
-            ensure_ascii=False,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-        payload: dict[str, Any] = {
-            "model": self._model,
-            "system": _SYSTEM_INSTRUCTIONS,
-            "messages": [{"role": "user", "content": provider_input}],
-            "max_tokens": ORDER_INTAKE_MAX_OUTPUT_TOKENS,
-            "metadata": {
-                "user_id": hmac.new(
-                    self._safety_secret,
-                    f"{workspace_id}\x1f{actor_id}".encode("utf-8"),
-                    sha256,
-                ).hexdigest(),
-            },
-            # Thinking shares the bounded output budget, so an extraction that
-            # must fit in ORDER_INTAKE_MAX_OUTPUT_TOKENS turns it off.
-            "thinking": {"type": "disabled"},
-            "output_config": {
-                "format": {
-                    "type": "json_schema",
-                    "schema": _anthropic_structured_output_schema(
-                        OrderIntakeModelExtraction.model_json_schema(mode="validation")
-                    ),
-                }
-            },
-        }
-        encoded_payload = json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")
-        if len(encoded_payload) > MAX_ORDER_INTAKE_PROVIDER_INPUT_BYTES:
-            raise OrderIntakeProviderError("order_intake_catalog_too_large")
-
-        reserved_units = len(encoded_payload) + ORDER_INTAKE_MAX_OUTPUT_TOKENS + 512
-        reservation = await asyncio.to_thread(
-            self._budget.reserve,
-            workspace_id=workspace_id,
-            reserved_units=reserved_units,
-        )
-        try:
-            response = await asyncio.to_thread(
-                self._transport,
-                self._api_key,
+        ) as span:
+            provider_input = json.dumps(
+                {
+                    "catalog": [item.model_dump(mode="json") for item in validated_catalog],
+                    "message": validated_request.message,
+                    "prompt_version": ORDER_INTAKE_PROMPT_VERSION,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            payload: dict[str, Any] = {
+                "model": self._model,
+                "system": _SYSTEM_INSTRUCTIONS,
+                "messages": [{"role": "user", "content": provider_input}],
+                "max_tokens": ORDER_INTAKE_MAX_OUTPUT_TOKENS,
+                "metadata": {
+                    "user_id": hmac.new(
+                        self._safety_secret,
+                        f"{workspace_id}\x1f{actor_id}".encode("utf-8"),
+                        sha256,
+                    ).hexdigest(),
+                },
+                # Thinking shares the bounded output budget, so an extraction that
+                # must fit in ORDER_INTAKE_MAX_OUTPUT_TOKENS turns it off.
+                "thinking": {"type": "disabled"},
+                "output_config": {
+                    "format": {
+                        "type": "json_schema",
+                        "schema": _anthropic_structured_output_schema(
+                            OrderIntakeModelExtraction.model_json_schema(mode="validation")
+                        ),
+                    }
+                },
+            }
+            encoded_payload = json.dumps(
                 payload,
-                self._timeout_seconds,
-            )
-            output_text = _anthropic_response_output_text(response)
-            extraction_payload = json.loads(
-                output_text,
-                object_pairs_hook=_strict_json_object,
-                parse_constant=_reject_json_constant,
-            )
-            extraction = OrderIntakeModelExtraction.model_validate(extraction_payload)
-            response_id = response.get("id")
-            response_model = response.get("model")
-            if not isinstance(response_id, str) or not response_id.strip() or len(response_id) > 160:
-                raise OrderIntakeProviderError("order_intake_provider_invalid_response")
-            if not isinstance(response_model, str):
-                raise OrderIntakeProviderError("order_intake_provider_invalid_response")
-            draft = build_order_intake_draft(
-                message=validated_request.message,
-                catalog=validated_catalog,
-                extraction=extraction,
-                response_id=response_id.strip(),
-                model=_safe_model_name(response_model),
-            )
-        except OrderIntakeProviderError:
-            await asyncio.to_thread(
-                self._budget.settle,
-                reservation,
-                status="failed",
-                actual_units=None,
-            )
-            raise
-        except (json.JSONDecodeError, ValueError, ValidationError, OrderIntakeContractError) as exc:
-            await asyncio.to_thread(
-                self._budget.settle,
-                reservation,
-                status="failed",
-                actual_units=None,
-            )
-            raise OrderIntakeProviderError("order_intake_provider_invalid_response") from exc
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+            if len(encoded_payload) > MAX_ORDER_INTAKE_PROVIDER_INPUT_BYTES:
+                raise OrderIntakeProviderError("order_intake_catalog_too_large")
 
-        # Anthropic reports usage under the same input_tokens / output_tokens names.
-        await asyncio.to_thread(
-            self._budget.settle,
-            reservation,
-            status="consumed",
-            actual_units=_actual_usage_units(response),
-        )
-        return draft
+            reserved_units = len(encoded_payload) + ORDER_INTAKE_MAX_OUTPUT_TOKENS + 512
+            reservation = await asyncio.to_thread(
+                self._budget.reserve,
+                workspace_id=workspace_id,
+                reserved_units=reserved_units,
+            )
+            try:
+                response = await asyncio.to_thread(
+                    self._transport,
+                    self._api_key,
+                    payload,
+                    self._timeout_seconds,
+                )
+                output_text = _anthropic_response_output_text(response)
+                extraction_payload = json.loads(
+                    output_text,
+                    object_pairs_hook=_strict_json_object,
+                    parse_constant=_reject_json_constant,
+                )
+                extraction = OrderIntakeModelExtraction.model_validate(extraction_payload)
+                response_id = response.get("id")
+                response_model = response.get("model")
+                if not isinstance(response_id, str) or not response_id.strip() or len(response_id) > 160:
+                    raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+                if not isinstance(response_model, str):
+                    raise OrderIntakeProviderError("order_intake_provider_invalid_response")
+                draft = build_order_intake_draft(
+                    message=validated_request.message,
+                    catalog=validated_catalog,
+                    extraction=extraction,
+                    response_id=response_id.strip(),
+                    model=_safe_model_name(response_model),
+                )
+            except OrderIntakeProviderError:
+                await asyncio.to_thread(
+                    self._budget.settle,
+                    reservation,
+                    status="failed",
+                    actual_units=None,
+                )
+                raise
+            except (json.JSONDecodeError, ValueError, ValidationError, OrderIntakeContractError) as exc:
+                await asyncio.to_thread(
+                    self._budget.settle,
+                    reservation,
+                    status="failed",
+                    actual_units=None,
+                )
+                raise OrderIntakeProviderError("order_intake_provider_invalid_response") from exc
+
+            # Anthropic reports usage under the same input_tokens / output_tokens names.
+            await asyncio.to_thread(
+                self._budget.settle,
+                reservation,
+                status="consumed",
+                actual_units=_actual_usage_units(response),
+            )
+            input_tokens, output_tokens = _usage_token_counts(response)
+            if input_tokens is not None:
+                span.set_attribute("ai.input_tokens", input_tokens)
+            if output_tokens is not None:
+                span.set_attribute("ai.output_tokens", output_tokens)
+            return draft
 
 
 def order_intake_provider_from_environment() -> OrderIntakeDraftProvider | None:
