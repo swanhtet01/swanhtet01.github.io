@@ -170,6 +170,7 @@ import type {
 import {
   buildProductionShiftHandoff,
   buildProductionBatchGenealogy,
+  buildProductionCertificateOfConformance,
   buildProductionQualityCorrectiveAction,
   isCapaEffectivenessOverdue,
   buildProductionRecallTrace,
@@ -180,7 +181,9 @@ import {
   endProductionDowntime,
   formatProductionShiftHandoff,
   formatProductionBatchGenealogy,
+  formatProductionCertificateOfConformance,
   formatProductionRecallTrace,
+  productionCertificateOfConformanceText,
   openProductionIssue,
   parseProductionMaterialQuantity,
   placeProductionQualityHold,
@@ -228,6 +231,7 @@ import {
   type ProductionQualityCauseCategory,
   type ProductionQualityCorrectiveAction,
   type ProductionShiftHandoff,
+  type ProductionCertificateOfConformance,
 } from './production-workspace'
 import {
   projectShopProductionDemand,
@@ -7049,6 +7053,36 @@ function formatDowntimeDuration(durationMs: number) {
   return minutes ? `${hours} hr ${minutes} min` : `${hours} hr`
 }
 
+// Same technique as ReceiptDialog's openPrintWindow: a Blob-backed print view,
+// no PDF dependency. Read-only text; nothing here writes to Plant records.
+function openProductionCertificatePrintWindow(certificate: ProductionCertificateOfConformance) {
+  const text = productionCertificateOfConformanceText(certificate)
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Certificate ${certificate.job.id.replace(/[^A-Za-z0-9._-]/g, '-')}</title>
+  <style>
+    body { font-family: ui-monospace, 'Courier New', monospace; padding: 1rem 2rem; font-size: 0.9rem; line-height: 1.5; }
+    pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
+    @media print { @page { margin: 1cm; } }
+  </style>
+</head>
+<body><pre>${escaped}</pre></body>
+</html>`
+  const blob = new Blob([html], { type: 'text/html' })
+  const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank')
+  if (win) {
+    win.addEventListener('load', () => win.print())
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
+  }
+}
+
 function productionJobPlanEventDetail(event: ProductionEvent) {
   const previousSchedule = event.fromJobPriority && event.fromJobDueAt
     ? `${productionJobPriorityLabels[event.fromJobPriority]} / ${formatIssueDue(event.fromJobDueAt)}`
@@ -7294,6 +7328,18 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
       href: `data:application/json;charset=utf-8,${encodeURIComponent(formatProductionBatchGenealogy(report))}`,
     }
   }, [production, selectedGenealogyJobId])
+  const certificateOfConformance = useMemo(() => {
+    if (!selectedGenealogyJobId) return null
+    return buildProductionCertificateOfConformance(production, selectedGenealogyJobId)
+  }, [production, selectedGenealogyJobId])
+  const certificateOfConformanceDownload = useMemo(() => {
+    if (!certificateOfConformance) return null
+    return {
+      report: certificateOfConformance,
+      filename: `supermega-plant-certificate-${certificateOfConformance.job.id}-${certificateOfConformance.digest.slice(7, 15)}.json`,
+      href: `data:application/json;charset=utf-8,${encodeURIComponent(formatProductionCertificateOfConformance(certificateOfConformance))}`,
+    }
+  }, [certificateOfConformance])
   const recallTraceDownload = useMemo(() => {
     const report = buildProductionRecallTrace(production, recallSearchId)
     if (!report) return null
@@ -9112,6 +9158,14 @@ function ProductionPage({ managedIdentity, tab }: { managedIdentity: ManagedIden
                 <p className="panel-copy">{batchGenealogyDownload.report.shopDemandSource ? `${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length || 'Reorder'} Shop source ${batchGenealogyDownload.report.shopDemandSource.snapshot.sourceOrderIds.length === 1 ? 'order' : 'orders'} retained without customer details.` : 'No retained Shop-demand source exists for this legacy or manual job.'}</p>
                 <a className="core-button" download={batchGenealogyDownload.filename} href={batchGenealogyDownload.href}>Download batch genealogy</a>
                 <p className="panel-copy">Read-only evidence. It does not issue inventory, control equipment, post costs, issue a certificate, or contact another system.</p>
+                {certificateOfConformance ? <>
+                  <p className="panel-copy"><strong>Certificate of Conformance ready</strong> · closed {certificateOfConformance.closure.closedAt} by {certificateOfConformance.closure.closedBy} · {certificateOfConformance.materialLots.length} material {certificateOfConformance.materialLots.length === 1 ? 'lot' : 'lots'} traced · quality {certificateOfConformance.qualityReleaseStatus === 'released' ? 'released' : certificateOfConformance.qualityReleaseStatus === 'not_released' ? 'not formally released' : 'not tracked'}.</p>
+                  <div className="form-actions">
+                    <button className="core-button" onClick={() => openProductionCertificatePrintWindow(certificateOfConformance)} type="button">Print certificate</button>
+                    {certificateOfConformanceDownload ? <a className="core-button" download={certificateOfConformanceDownload.filename} href={certificateOfConformanceDownload.href}>Download certificate</a> : null}
+                  </div>
+                  <p className="panel-copy">Read-only Certificate of Conformance for this closed job. It issues no inventory, changes no equipment, posts no cost, and sends no message to any customer or external system.</p>
+                </> : <p className="panel-copy">A certificate becomes available once this job closes with recorded evidence and carries no unresolved controlled-batch quality hold.</p>}
               </> : null}
               <form className="core-form compact-form" onSubmit={(event) => { event.preventDefault(); setRecallSearchId(recallQuery.trim()) }}>
                 <label>Recall lot or output batch<input autoCapitalize="characters" maxLength={120} onChange={(event) => { setRecallQuery(event.target.value); setRecallSearchId('') }} placeholder="LOT-INPUT-001 or BATCH-OUTPUT-001" required spellCheck={false} value={recallQuery} /></label>

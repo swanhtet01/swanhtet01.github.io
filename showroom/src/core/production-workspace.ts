@@ -12,6 +12,7 @@ export const PRODUCTION_SHOP_DEMAND_SOURCE_CONTRACT = 'supermega.production.shop
 export const PRODUCTION_BATCH_GENEALOGY_SCHEMA = 'supermega.production.batch-genealogy.v1' as const
 export const PRODUCTION_RECALL_TRACE_SCHEMA = 'supermega.production.recall-trace.v1' as const
 export const PRODUCTION_QUALITY_CAPA_SCHEMA = 'supermega.production.quality-capa.v1' as const
+export const PRODUCTION_CERTIFICATE_OF_CONFORMANCE_SCHEMA = 'supermega.production.certificate-of-conformance.v1' as const
 
 export type ProductionIssueKind = 'quality' | 'maintenance' | 'materials' | 'operations'
 export type ProductionIssueSeverity = 'critical' | 'high' | 'medium' | 'low'
@@ -3040,6 +3041,129 @@ export function formatProductionRecallTrace(report: ProductionRecallTrace) {
   const { digest, ...payload } = report
   if (digest !== plantOrderEvidenceDigest(payload)) throw new Error('Production recall trace digest does not match its evidence.')
   return `${JSON.stringify(report, null, 2)}\n`
+}
+
+/**
+ * A read-only Certificate of Conformance for one closed Plant job. It is a pure
+ * projection of buildProductionBatchGenealogy's own evidence — no new fact is
+ * derived or fabricated here.
+ *
+ * Eligibility (returns null otherwise):
+ * - The job must carry closure evidence (`genealogy.job.status === 'closed_short'`):
+ *   this is the only Plant job lifecycle event that records who closed the job,
+ *   when, and why. A job that merely reached its target without an explicit,
+ *   evidenced close (`status === 'complete'`) has no such accountable record to
+ *   certify against, so it is not eligible.
+ * - The job must carry no unresolved controlled-batch quality hold. A job-level
+ *   quality hold (`job.qualityHold`) can never coexist with `job.closure` — the
+ *   closure action itself is blocked while one is active — but a job bound to a
+ *   controlled execution plan (BOM/routing/quality) carries its own, separate
+ *   hold/release state. If that controlled plan still shows an unreleased
+ *   quality hold, a certificate would misrepresent the batch as clean, so it is
+ *   blocked.
+ */
+export function buildProductionCertificateOfConformance(state: ProductionState, jobId: string) {
+  const genealogy = buildProductionBatchGenealogy(state, jobId)
+  if (!genealogy) return null
+  if (genealogy.job.status !== 'closed_short' || !genealogy.closure) return null
+  const controlledExecution = genealogy.controlledExecution
+  const qualityReleaseStatus = controlledExecution?.batchRelease
+    ? 'released' as const
+    : controlledExecution?.qualityHold
+      ? 'held' as const
+      : controlledExecution
+        ? 'not_released' as const
+        : 'not_tracked' as const
+  if (qualityReleaseStatus === 'held') return null
+  const materialLots = [...new Set(genealogy.materialEntries.map((entry) => entry.materialLot).filter((lot): lot is string => Boolean(lot)))].sort()
+  const payload = {
+    schema: PRODUCTION_CERTIFICATE_OF_CONFORMANCE_SCHEMA,
+    sourceRevision: genealogy.sourceRevision,
+    sourceStateDigest: genealogy.sourceStateDigest,
+    genealogyDigest: genealogy.digest,
+    job: { ...genealogy.job },
+    closure: { ...genealogy.closure },
+    materialLots,
+    materialEntryCount: genealogy.materialEntries.length,
+    materialLotEntryCount: genealogy.evidenceCoverage.materialLotEntryCount,
+    outputEntryCount: genealogy.outputEntries.length,
+    qualityEvents: genealogy.qualityEvents.map((event) => ({ ...event })),
+    qualityReleaseStatus,
+    controlledExecution: controlledExecution ? {
+      planId: controlledExecution.planId,
+      outputBatchId: controlledExecution.outputBatchId,
+      batchRelease: controlledExecution.batchRelease ? {
+        id: controlledExecution.batchRelease.id,
+        inspectionId: controlledExecution.batchRelease.inspectionId,
+        proof: { ...controlledExecution.batchRelease.proof },
+      } : null,
+    } : null,
+    controls: {
+      issuesInventory: false,
+      changesEquipment: false,
+      postsCosting: false,
+      confirmsRegulatoryCompliance: false,
+      performsExternalAction: false,
+    },
+  }
+  return { ...payload, digest: plantOrderEvidenceDigest(payload) }
+}
+
+export type ProductionCertificateOfConformance = NonNullable<ReturnType<typeof buildProductionCertificateOfConformance>>
+
+export function formatProductionCertificateOfConformance(certificate: ProductionCertificateOfConformance) {
+  const { digest, ...payload } = certificate
+  if (digest !== plantOrderEvidenceDigest(payload)) throw new Error('Production certificate of conformance digest does not match its evidence.')
+  return `${JSON.stringify(certificate, null, 2)}\n`
+}
+
+export function productionCertificateOfConformanceText(certificate: ProductionCertificateOfConformance) {
+  const lines = [
+    'SUPERMEGA CERTIFICATE OF CONFORMANCE',
+    'Read-only production record. Not a legal, regulatory, or contractual certification beyond the retained evidence listed below.',
+    '',
+    `Job / batch: ${handoffLine(certificate.job.id)}`,
+    `Product: ${handoffLine(certificate.job.product)}`,
+    `Line: ${handoffLine(certificate.job.line)}`,
+    `Owner: ${certificate.job.owner ? handoffLine(certificate.job.owner) : 'Not recorded'}`,
+    '',
+    'OUTPUT',
+    `Good units: ${certificate.job.goodUnits}`,
+    `Scrap units: ${certificate.job.scrapUnits}`,
+    `Target units: ${certificate.job.targetUnits}`,
+    `Units not produced at close: ${certificate.closure.remainingUnits}`,
+    '',
+    `Quality release status: ${certificate.qualityReleaseStatus === 'released' ? 'Released' : certificate.qualityReleaseStatus === 'not_released' ? 'Controlled batch recorded, not formally released' : 'No controlled batch execution bound to this job'}`,
+    ...(certificate.controlledExecution?.batchRelease ? [
+      `Batch release: ${certificate.controlledExecution.batchRelease.proof.capturedAt} by ${handoffLine(certificate.controlledExecution.batchRelease.proof.actor)} · evidence ${handoffLine(certificate.controlledExecution.batchRelease.proof.evidenceReference)} · action ${handoffLine(certificate.controlledExecution.batchRelease.proof.actionId)}`,
+    ] : []),
+    ...(certificate.controlledExecution?.outputBatchId ? [`Output batch ID: ${handoffLine(certificate.controlledExecution.outputBatchId)}`] : []),
+    '',
+    `Material lot traceability (${certificate.materialLots.length} lot${certificate.materialLots.length === 1 ? '' : 's'} · ${certificate.materialEntryCount} recorded ${certificate.materialEntryCount === 1 ? 'entry' : 'entries'})`,
+  ]
+  if (!certificate.materialLots.length) lines.push('- No material lot was recorded for this job.')
+  for (const lot of certificate.materialLots) lines.push(`- ${lot}`)
+  lines.push('', `Quality hold history during this job (${certificate.qualityEvents.length} event${certificate.qualityEvents.length === 1 ? '' : 's'})`)
+  if (!certificate.qualityEvents.length) lines.push('- No quality hold was placed on this job.')
+  for (const event of certificate.qualityEvents) {
+    lines.push(`- ${event.action === 'hold_placed' ? 'Held' : 'Released'} ${event.createdAt} by ${handoffLine(event.actor)} · ${handoffLine(event.reason)} · evidence ${handoffLine(event.evidenceReference)} · action ${handoffLine(event.actionId)}`)
+  }
+  lines.push(
+    '',
+    'CLOSURE',
+    `Closed: ${certificate.closure.closedAt} by ${handoffLine(certificate.closure.closedBy)}`,
+    `Shift: ${handoffLine(certificate.closure.shiftRef)}`,
+    `Reason: ${handoffLine(certificate.closure.reason)}`,
+    `Evidence: ${handoffLine(certificate.closure.evidenceReference)}`,
+    `Closure action: ${handoffLine(certificate.closure.actionId)}`,
+    '',
+    `Source Plant record revision: ${certificate.sourceRevision}`,
+    `Batch genealogy evidence digest: ${certificate.genealogyDigest}`,
+    `Document digest: ${certificate.digest}`,
+    '',
+    'This certificate reflects exactly the retained Plant record above. It issues no inventory, changes no equipment, posts no cost, and sends no message to any customer or external system.',
+  )
+  return lines.join('\n')
 }
 
 export function registerProductionJob(state: ProductionState, job: ProductionJob, proof: ProductionActionProof) {

@@ -6,6 +6,7 @@ import {
   PRODUCTION_QUALITY_CAPA_SCHEMA,
   appendGuidedSampleProductionActivity,
   buildProductionBatchGenealogy,
+  buildProductionCertificateOfConformance,
   buildProductionQualityCorrectiveAction,
   buildProductionRecallTrace,
   buildProductionShiftHandoff,
@@ -16,8 +17,10 @@ import {
   createSeedProduction,
   endProductionDowntime,
   formatProductionBatchGenealogy,
+  formatProductionCertificateOfConformance,
   formatProductionRecallTrace,
   formatProductionShiftHandoff,
+  productionCertificateOfConformanceText,
   hasGuidedSampleProductionActivity,
   importProductionJobs,
   installProductionWorkingSampleJobs,
@@ -534,6 +537,81 @@ test('batch genealogy captures material, output, and quality-hold events for a j
 
   // Unknown job returns null.
   assert.equal(buildProductionBatchGenealogy(withHold, 'UNKNOWN-JOB'), null)
+})
+
+test('certificate of conformance is only available for a closed job and carries its closure, lot, and quality-hold evidence', () => {
+  const pack = plantIndustryPacks[0]
+  const state = installedSample(pack)
+  const jobId = state.jobs[0].id
+  const proofAt = (actionId, at) => ({
+    actionId,
+    capturedAt: at,
+    actor: 'Shift operator',
+    reason: 'Recorded during shift.',
+    evidenceReference: 'SHIFT-LOG-COC-001',
+  })
+
+  // An active job (no closure) has no certificate.
+  assert.equal(buildProductionCertificateOfConformance(state, jobId), null, 'an active job must not yield a certificate')
+
+  const withMaterial = recordProductionMaterialConsumption(
+    state, jobId,
+    pack.setup.materialId,
+    'LOT-COC-001',
+    50,
+    pack.setup.materialUnit,
+    SHIFT_REF,
+    proofAt('ACT-COC-MAT-001', `${PLANNING_DAY}T02:00:00.000Z`),
+  )
+  assert.ok(withMaterial, 'material consumption must record')
+
+  const withOutput = recordProductionOutput(withMaterial, jobId, 40, SHIFT_REF, proofAt('ACT-COC-OUT-001', `${PLANNING_DAY}T03:00:00.000Z`))
+  assert.ok(withOutput, 'output must record')
+
+  // A hold placed and released during the job's life must not block eligibility;
+  // it must appear in the certificate's quality-hold history instead.
+  const holdProof = { actionId: 'ACT-COC-HOLD-001', capturedAt: `${PLANNING_DAY}T03:30:00.000Z`, actor: 'Quality lead', reason: 'Hold for inspection.', evidenceReference: 'QA-COC-001' }
+  const withHold = placeProductionQualityHold(withOutput, jobId, holdProof)
+  assert.ok(withHold, 'hold must be placed')
+
+  // While the hold is active, the job cannot be closed and has no certificate.
+  assert.equal(closeProductionJob(withHold, jobId, SHIFT_REF, proofAt('ACT-COC-CLOSE-BLOCKED', `${PLANNING_DAY}T03:45:00.000Z`)), null, 'closing a held job must be blocked')
+  assert.equal(buildProductionCertificateOfConformance(withHold, jobId), null, 'a job under an active quality hold must not yield a certificate')
+
+  const releaseProof = { actionId: 'ACT-COC-HOLD-002', capturedAt: `${PLANNING_DAY}T04:00:00.000Z`, actor: 'Quality lead', reason: 'Inspection complete: cleared.', evidenceReference: 'QA-COC-002' }
+  const released = releaseProductionQualityHold(withHold, jobId, releaseProof)
+  assert.ok(released, 'hold must be released')
+
+  const closeProof = proofAt('ACT-COC-CLOSE-001', `${PLANNING_DAY}T05:00:00.000Z`)
+  const closed = closeProductionJob(released, jobId, SHIFT_REF, closeProof)
+  assert.ok(closed, 'job must close after the hold is released')
+
+  const certificate = buildProductionCertificateOfConformance(closed, jobId)
+  assert.ok(certificate, 'a closed, quality-clear job must yield a certificate')
+  assert.equal(certificate.job.id, jobId)
+  assert.equal(certificate.job.goodUnits, 40)
+  assert.deepEqual(certificate.materialLots, ['LOT-COC-001'])
+  assert.equal(certificate.qualityEvents.length, 2, 'both the hold and its release must appear in the certificate')
+  assert.equal(certificate.closure.actionId, 'ACT-COC-CLOSE-001')
+  assert.equal(certificate.closure.closedBy, 'Shift operator')
+  assert.equal(certificate.qualityReleaseStatus, 'not_tracked', 'a job with no bound controlled execution plan has no controlled batch-release status')
+  assert.ok(certificate.digest, 'certificate must carry a digest')
+
+  // formatProductionCertificateOfConformance: valid JSON that round-trips the job id.
+  const certificateJson = formatProductionCertificateOfConformance(certificate)
+  assert.ok(typeof certificateJson === 'string' && certificateJson.trim().length > 0)
+  assert.equal(JSON.parse(certificateJson).job.id, jobId)
+
+  // productionCertificateOfConformanceText: a human-readable, printable document
+  // that includes the retained closure and material-lot evidence.
+  const certificateText = productionCertificateOfConformanceText(certificate)
+  assert.ok(certificateText.startsWith('SUPERMEGA CERTIFICATE OF CONFORMANCE'))
+  assert.ok(certificateText.includes(jobId))
+  assert.ok(certificateText.includes('LOT-COC-001'))
+  assert.ok(certificateText.includes('ACT-COC-CLOSE-001'))
+
+  // Unknown job returns null.
+  assert.equal(buildProductionCertificateOfConformance(closed, 'UNKNOWN-JOB'), null)
 })
 
 test('recall trace finds a job by input lot and returns null for an unrecognised lot', () => {
