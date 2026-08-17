@@ -7249,8 +7249,8 @@ async function verifyShopBusinessTemplateRuntime() {
     const onboardingModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'client-onboarding.ts')).href}?shop-business-template-import-verify=${Date.now()}`)
     const commerceModel = await import(`${pathToFileURL(resolve(root, 'showroom', 'src', 'core', 'commerce-workspace.ts')).href}?shop-business-template-commerce-verify=${Date.now()}`)
     assert(model.validateShopBusinessTemplates() === model.shopBusinessTemplates, 'shop_business_template_registry_invalid')
-    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts,restaurant'
-      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 8, 'shop_business_template_catalog_wrong')
+    assert(model.shopBusinessTemplates.map((template) => template.id).join(',') === 'mini-mart,pharmacy,phone-electronics,fashion,hardware,tea-coffee,auto-parts,restaurant,beauty-spa'
+      && new Set(model.shopBusinessTemplates.map((template) => template.id)).size === 9, 'shop_business_template_catalog_wrong')
     const commerceUnits = new Set(['kg', 'g', 'l', 'ml', 'pcs', 'pack', 'bag', 'roll', 'sheet', 'm', 'cm'])
     assert(model.shopBusinessTemplateUnits.length === commerceUnits.size && model.shopBusinessTemplateUnits.every((unit) => commerceUnits.has(unit)), 'shop_business_template_unit_set_drifted')
     for (const template of model.shopBusinessTemplates) {

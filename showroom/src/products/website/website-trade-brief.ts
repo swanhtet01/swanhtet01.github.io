@@ -110,11 +110,18 @@ const TRADE_COPY: Readonly<Record<ShopBusinessTemplateId, TradeCopy>> = {
     offer: 'A full menu served at the table, with group bookings agreed for a set time and party size before you arrive.',
     proof: 'Table bookings are held against a named zone and party size, so a time confirmed for your group is reserved rather than promised twice.',
   },
+  'beauty-spa': {
+    label: 'Beauty spa',
+    templateId: 'lead-generation',
+    audience: 'clients booking treatments and buying spa products',
+    offer: 'Massage, facial and body treatments booked for a set time, with spa oils and gift sets available at the counter.',
+    proof: 'Every treatment is held against a named therapist and time, so a booking confirmed for you is reserved rather than promised twice.',
+  },
 }
 
 // Presentation order, matching the order Shop lists its trade templates in.
 const TRADE_ORDER: readonly ShopBusinessTemplateId[] = [
-  'mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant',
+  'mini-mart', 'pharmacy', 'phone-electronics', 'fashion', 'hardware', 'tea-coffee', 'auto-parts', 'restaurant', 'beauty-spa',
 ] as const
 
 /**

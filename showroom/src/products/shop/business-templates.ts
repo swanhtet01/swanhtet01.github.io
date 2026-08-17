@@ -12,6 +12,7 @@ export type ShopBusinessTemplateId =
   | 'tea-coffee'
   | 'auto-parts'
   | 'restaurant'
+  | 'beauty-spa'
 
 export type ShopBusinessTemplateUnit = CommerceProductionMaterialUnit
 
@@ -372,6 +373,42 @@ const shopBusinessTemplateSeeds: readonly ShopBusinessTemplate[] = [
       lines: [{ sku: 'CURRY-CHICKEN', quantity: 4 }, { sku: 'CURRY-FISH', quantity: 3 }, { sku: 'RICE-STEAMED', quantity: 12 }, { sku: 'SALAD-LAHPET', quantity: 2 }],
     },
   },
+  {
+    id: 'beauty-spa',
+    schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
+    name: { en: 'Beauty spa', my: 'စပါ အလှပြင်ဆိုင်' },
+    description: 'Bookable treatments plus retail products, with the appointment book and a counter for both.',
+    industryPackId: 'spa',
+    workflowTemplateId: 'social-commerce',
+    // Retail goods a spa sells alongside its services; the seven spa treatments
+    // (SPA-SVC-*) are appended automatically from the spa industry pack.
+    catalog: rows([
+      ['SPA-OIL-AROMA', 'Aromatic massage oil 250ml', 'pcs', 6_000, 12_000, 24, 8],
+      ['SPA-SCRUB-JAR', 'Herbal body scrub jar 200g', 'pcs', 5_000, 10_000, 18, 6],
+      ['SPA-SERUM', 'Facial serum 30ml', 'pcs', 9_000, 18_000, 15, 5],
+      ['SPA-THANAKA', 'Thanaka face pack 100g', 'pcs', 2_500, 5_500, 40, 12],
+      ['SPA-TEA', 'Herbal wellness tea box', 'pcs', 3_000, 6_500, 30, 10],
+      ['SPA-COMB', 'Bamboo hair comb', 'pcs', 1_200, 3_000, 25, 8],
+      ['SPA-ROBE', 'Cotton spa robe', 'pcs', 12_000, 24_000, 12, 4],
+      ['SPA-GIFT', 'Spa gift voucher card', 'pcs', 500, 2_000, 50, 15],
+      ['SPA-ROLLON', 'Essential oil roll-on 10ml', 'pcs', 3_200, 7_000, 4, 6],
+    ]),
+    counterSales: [
+      { id: 'beauty-spa-sale-1', recordedAt: '2026-08-03T04:30:00.000Z', payment: 'Cash', lines: [{ sku: 'SPA-SVC-MASSAGE', quantity: 1 }, { sku: 'SPA-OIL-AROMA', quantity: 1 }] },
+      { id: 'beauty-spa-sale-2', recordedAt: '2026-08-03T07:15:00.000Z', payment: 'KBZPay', lines: [{ sku: 'SPA-SVC-FACIAL', quantity: 1 }, { sku: 'SPA-SERUM', quantity: 1 }] },
+      { id: 'beauty-spa-sale-3', recordedAt: '2026-08-03T10:00:00.000Z', payment: 'Cash', lines: [{ sku: 'SPA-SVC-FOOT', quantity: 2 }] },
+    ],
+    pendingOrder: {
+      id: 'beauty-spa-order-1',
+      customerName: 'Daw Su Su Hlaing (bridal package)',
+      contact: '09-255-444-333',
+      requestedAt: '2026-08-03T08:00:00.000Z',
+      promisedFor: '2026-08-05T02:00:00.000Z',
+      status: 'pending',
+      note: 'Bridal spa package for 3 before the wedding. Two therapists held for the morning.',
+      lines: [{ sku: 'SPA-SVC-OIL', quantity: 3 }, { sku: 'SPA-SVC-FACIAL', quantity: 3 }, { sku: 'SPA-THANAKA', quantity: 3 }],
+    },
+  },
 ] as const
 
 // Every industry pack offers bookable services that carry a price, and the appointment book has
@@ -543,6 +580,6 @@ export function validateShopBusinessTemplates() {
       if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) throw new Error(`${order.id} needs whole positive quantities.`)
     }
   }
-  if (templateIds.size !== 8) throw new Error('The Shop business template registry must carry exactly 8 templates.')
+  if (templateIds.size !== 9) throw new Error('The Shop business template registry must carry exactly 9 templates.')
   return shopBusinessTemplates
 }
