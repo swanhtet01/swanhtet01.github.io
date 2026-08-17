@@ -11,8 +11,13 @@ no database, no credentials anywhere.
 
 from __future__ import annotations
 
+from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from io import StringIO
+import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -20,6 +25,7 @@ import supermega_runtime.trial_store as trial_store_module
 from supermega_runtime.billing_rail import (
     BILLING_EVENT_RESULT_CONTRACT,
     BILLING_STATE_CONTRACT,
+    CONFIRM_BILLING_ACTION_PHRASE,
     INVOICE_PACKET_CONTRACT,
     MANAGED_BILLING_CONTRACT,
     PREMIUM_TIER,
@@ -28,6 +34,7 @@ from supermega_runtime.billing_rail import (
     BillingRailConflict,
     BillingRailError,
     _digest,
+    main,
     validate_founder_evidence,
     validate_invoice_packet,
 )
@@ -850,6 +857,154 @@ class PremiumUnlockedReadPathTests(unittest.TestCase):
         )
         self.assertFalse(readiness.premium_unlocked)
         self.assertFalse(readiness.to_dict()["premiumUnlocked"])
+
+
+class BillingRailCliTests(unittest.TestCase):
+    """Drives the real CLI entrypoint (main) end-to-end against the same
+    FakeBillingDatabase used by BillingLedgerTests. main() builds its own
+    BillingLedger(database_url) with no connection_factory hook -- exactly
+    like managed_activation.py's CLI -- so the fake transport is installed by
+    patching BillingLedger._connect for the duration of each test, the same
+    "swap only the transport" idea as FakeBillingConnection itself."""
+
+    def setUp(self) -> None:
+        self.database = FakeBillingDatabase()
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tempdir.cleanup)
+        self.directory = Path(self._tempdir.name)
+        patcher = patch.object(
+            BillingLedger,
+            "_connect",
+            lambda ledger_self: self.database.connect(ledger_self._database_url),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.database_url_file = self._write_text("database-url.txt", DATABASE_URL)
+
+    def _write_text(self, name: str, content: str) -> str:
+        path = self.directory / name
+        path.write_text(content, encoding="utf-8")
+        return str(path)
+
+    def _write_json(self, name: str, value: object) -> str:
+        return self._write_text(name, json.dumps(value))
+
+    @staticmethod
+    def run_cli(argv: list[str]) -> tuple[int, str]:
+        output = StringIO()
+        with redirect_stdout(output):
+            code = main(argv)
+        return code, output.getvalue()
+
+    def test_issue_invoice_cli_records_a_real_invoice_and_prints_the_receipt(self) -> None:
+        packet_file = self._write_json("packet.json", sample_packet())
+        evidence_file = self._write_json(
+            "evidence.json", founder_evidence("issue-0001", "viber:handover:2026-08-17")
+        )
+        code, stdout = self.run_cli(
+            [
+                "issue-invoice",
+                "--database-url-file", self.database_url_file,
+                "--workspace-id", WORKSPACE_ID,
+                "--evidence-file", evidence_file,
+                "--confirm-billing-action", CONFIRM_BILLING_ACTION_PHRASE,
+                "--packet-file", packet_file,
+            ]
+        )
+        self.assertEqual(code, 0)
+        result = json.loads(stdout)
+        self.assertEqual(result["contract"], BILLING_EVENT_RESULT_CONTRACT)
+        self.assertEqual(result["status"], "issued")
+        self.assertEqual(result["invoiceId"], INVOICE_ID)
+        self.assertFalse(result["replayed"])
+        self.assertFalse(result["secretValuesExposed"])
+        self.assertIn((WORKSPACE_ID, INVOICE_ID), self.database.invoices)
+
+    def test_missing_confirm_billing_action_is_rejected_before_any_database_call(self) -> None:
+        packet_file = self._write_json("packet.json", sample_packet())
+        evidence_file = self._write_json(
+            "evidence.json", founder_evidence("issue-0001", "viber:handover:2026-08-17")
+        )
+        with redirect_stderr(StringIO()):
+            with self.assertRaises(SystemExit) as raised:
+                main(
+                    [
+                        "issue-invoice",
+                        "--database-url-file", self.database_url_file,
+                        "--workspace-id", WORKSPACE_ID,
+                        "--evidence-file", evidence_file,
+                        "--packet-file", packet_file,
+                    ]
+                )
+        self.assertEqual(raised.exception.code, 2)
+        self.assertEqual(self.database.statements, [])
+        self.assertEqual(self.database.invoices, {})
+
+    def test_wrong_confirmation_phrase_is_rejected_before_any_database_call(self) -> None:
+        code, stdout = self.run_cli(
+            [
+                "void-invoice",
+                "--database-url-file", self.database_url_file,
+                "--workspace-id", WORKSPACE_ID,
+                "--evidence-file", self._write_json("evidence.json", founder_evidence("void-0001", "renegotiated")),
+                "--confirm-billing-action", "please do the thing",
+                "--invoice-id", INVOICE_ID,
+                "--expected-revision", "1",
+            ]
+        )
+        self.assertEqual(code, 1)
+        result = json.loads(stdout)
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("confirm-billing-action", result["error"])
+        self.assertFalse(result["externalMutationPerformed"])
+        self.assertFalse(result["secretValuesExposed"])
+        # The confirmation phrase is checked before the database URL file is
+        # even read, so the fake transport was never touched.
+        self.assertEqual(self.database.statements, [])
+
+    def test_status_cli_returns_get_billing_state_shape(self) -> None:
+        code, stdout = self.run_cli(
+            [
+                "status",
+                "--database-url-file", self.database_url_file,
+                "--workspace-id", WORKSPACE_ID,
+            ]
+        )
+        self.assertEqual(code, 0)
+        result = json.loads(stdout)
+        self.assertEqual(result["contract"], BILLING_STATE_CONTRACT)
+        self.assertEqual(result["workspaceId"], WORKSPACE_ID)
+        self.assertEqual(result["invoices"], [])
+        self.assertFalse(result["premiumUnlocked"])
+        self.assertEqual(result["entitlement"]["tier"], PREMIUM_TIER)
+        self.assertEqual(result["entitlement"]["status"], "none")
+
+    def test_generic_exception_path_never_leaks_a_raw_driver_message(self) -> None:
+        leaky_message = (
+            'connection to server at "10.0.0.5", port 5432 failed: '
+            'FATAL: password authentication failed for user "postgres"'
+        )
+
+        def _boom(_ledger_self):
+            raise RuntimeError(leaky_message)
+
+        with patch.object(BillingLedger, "_connect", _boom):
+            code, stdout = self.run_cli(
+                [
+                    "status",
+                    "--database-url-file", self.database_url_file,
+                    "--workspace-id", WORKSPACE_ID,
+                ]
+            )
+        self.assertEqual(code, 1)
+        result = json.loads(stdout)
+        self.assertEqual(result["status"], "blocked")
+        self.assertNotIn("password", result["error"])
+        self.assertNotIn("10.0.0.5", result["error"])
+        self.assertNotIn("postgres", result["error"])
+        self.assertNotIn(leaky_message, stdout)
+        self.assertFalse(result["secretValuesExposed"])
+        self.assertFalse(result["externalMutationPerformed"])
 
 
 if __name__ == "__main__":

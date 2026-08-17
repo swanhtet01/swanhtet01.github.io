@@ -261,22 +261,23 @@ Why the surface route is wrong here, concretely:
 - Touching `TRIAL_SURFACES` ripples through every member path, permission check, and surface
   test; a dedicated module's blast radius is three new tables and one new file.
 
-**Itemized estimate (repo units):**
+**Itemized estimate (repo units) — status as of 2026-08-17, all items landed:**
 
-| Item | Size |
-| --- | --- |
-| Migration `..._private_trial_backend_v12_billing_rail.sql` (3 tables, triggers, RLS, version guard) | 1 migration, v6-shaped; register in `tools/verify_private_trial_migrations.mjs` |
-| `supermega_runtime/billing_rail.py` — `BillingLedger` in the provisioner style: `issue_invoice`, `confirm_payment`, `void_invoice`, `grant_entitlement`, `revoke_entitlement`, `record_refund`, `get_billing_state` (~7 methods, direct SQL, idempotent replay, evidence validation reusing `_exact`/`_visible_text`/proof-shape checks) | roughly half the managed-activation slice; the validation idioms are all imports or copies |
-| Trial-store read-path touch: entitlement in the workspace/session payload (one query + one field; `TrialStore` protocol gains `get_entitlement` or `readiness` carries it) | small; the only member-path change |
-| Cherry-pick `tools/prepare_managed_invoice.mjs` + npm scripts from `3aab5edc`; regenerate the readiness ledger (package.json is a digest-bound readiness source) and re-prove `npm run hq:verify` | mostly mechanical |
-| Showroom plumbing: pass server-supplied `premiumUnlocked` into `currentCapabilityTier` at the call sites that today pass nothing | small; `capability-tiers.ts` itself untouched, guard intact |
-| Tests: python suite for `billing_rail` (lifecycle, CAS conflicts, evidence-mismatch rejections, replay), migration verifier, CLI `--self-test` already exists | the usual: tests ≈ the module in size |
+| Item | Size | Status |
+| --- | --- | --- |
+| Migration `..._private_trial_backend_v12_billing_rail.sql` (3 tables, triggers, RLS, version guard) | 1 migration, v6-shaped; registered in `tools/verify_private_trial_migrations.mjs` | **Built.** |
+| Migration `..._v13_billing_entitlement_read.sql` — the narrow GUC-scoped SELECT-only read this doc's DEVIATION named | 1 small migration | **Built, reviewed, locally verified. Not yet proven on a hosted branch or applied anywhere** (decision D6). |
+| `supermega_runtime/billing_rail.py` — `BillingLedger` in the provisioner style: `issue_invoice`, `confirm_payment`, `void_invoice`, `grant_entitlement`, `revoke_entitlement`, `record_refund`, `get_billing_state` | ~7 methods, direct SQL, idempotent replay, evidence validation | **Built.** |
+| **Founder CLI entrypoint** — `python -m supermega_runtime.billing_rail <subcommand>`, one per `BillingLedger` method plus `status`. Database URL and evidence always read from files, never CLI args (so nothing touches shell history); every mutating subcommand requires `--confirm-billing-action "CONFIRM BILLING ACTION"` (checked BEFORE the database URL file is even read); structured JSON stdout; two-tier exception handling that never leaks driver/provider detail (verified: a raise carrying an IP, port, and password never surfaces in the output). Mirrors `managed_activation.py`'s CLI shape exactly. | This was the one missing piece named throughout this document | **Built and tested** (26 tests in `test_billing_rail.py`, incl. 5 CLI-level tests). **This is the actual operational entrypoint — a founder can now run a real billing transition against a real database, gated by the confirmation phrase and the evidence the CLI requires.** |
+| Trial-store read-path touch: entitlement in the workspace/session payload | one query + one field | **Built** (`premiumUnlocked` on `TrialReadiness`, fail-closed dark pending v13's application). |
+| Cherry-pick `tools/prepare_managed_invoice.mjs` + npm scripts from `3aab5edc` | mostly mechanical | **Built** (`billing:invoice:prepare` / `:self-test`, 20/20 self-test). |
+| Showroom plumbing: pass server-supplied `premiumUnlocked` into `currentCapabilityTier` | small; `capability-tiers.ts` itself untouched | **Not yet done** — the only remaining wiring item, and it has no effect until v13 is applied and a real entitlement is granted, so it is not urgent. |
+| Tests: python suite for `billing_rail` + CLI, migration verifier | the usual | **Built** (26 unit tests, 23-check migration verifier). |
 
-Total: comparable to the v6 managed-activation slice — **on the order of one focused working
-day of implementation plus one of adversarial verification**, in this repo's demonstrated
-cadence. Nothing blocks on hosted credentials until the migration is applied; everything
-above it is local, testable, and gate-runnable later with v12 riding the same runbook step
-that applies v11.
+**What remains before a real invoice can be issued against production:** (1) prove v13 on a
+disposable hosted branch and apply it (same protocol as v11), (2) the founder's five pricing
+decisions D1-D5, (3) the small showroom plumbing item above. The CLI itself, and everything
+it depends on, is done.
 
 ---
 
