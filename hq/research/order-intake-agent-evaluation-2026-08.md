@@ -409,3 +409,79 @@ future model change brings p95 under 5s, this amendment retires.
   contract rejections, 3 real errors. Prompt iterated (minimal-span quoting,
   name+variant SKU matching, never-resolve-conflicts). Nothing counts toward
   the gate.
+- Run 3 (2026-08-17): completed 20/20 calls, gate FAILED (pass 5/20, pass_rate
+  0.25; schema 20/20; provenance 100%; required-field accuracy 93.75%
+  field-level, 18/20 fixtures all-required-correct; 5 fabricated critical
+  facts; 1 unsafe ready_for_review; correction proxy 0.1; p95 16.4s across all
+  20 happy-path-eligible fixtures, 13.0s on fixtures 1-2 only). Prompt
+  iterated again (minimal-span quoting, name+variant SKU matching,
+  never-resolve-conflicts). Taxonomy: 11 fixtures failing only on
+  quote-granularity, from two distinct causes bundled together — SKU name+
+  variant split into two quotes instead of one, and an internally
+  inconsistent golden-set policy on whether a quantity quote includes its
+  adjacent unit word; fixture 13 (`mixed-conflicting-channel-13`, Burmese
+  negation "မဟုတ်ဘူး") unchanged repeat offender from run 2, sole source of
+  the unsafe-ready-for-review violation; fixture 19 (`en-retracted-order-19`)
+  regressed — the new never-resolve-conflicts rule taught the model to treat
+  an explicit cancellation as a conflict to surface rather than a retraction,
+  producing 4 of the 5 fabricated facts; fixture 5 scope mislabeled
+  `single_item_order` instead of `ambiguous` despite correct field nulling;
+  fixture 4's unknown item correctly nulled but not flagged uncertain.
+  Nothing counts toward the gate.
+- Run 4 (2026-08-17): completed 20/20 calls (1 fixture,
+  `mixed-noisy-punctuation-15`, hit a transient `order_intake_provider_
+  unavailable` on both attempts of the main pass and was retried standalone
+  before scoring; no other fixture touched). Prompt iterated a third time:
+  explicit cancellation/retraction rule (`not_an_order`, all fields null,
+  even when the withdrawn text described a real order earlier in the
+  message); explicit rule to flag an unmatched item's `sku` uncertain with
+  its own-description quote regardless of script; explicit rule that a
+  required field nulled by an unresolved contradiction forces `scope:
+  ambiguous`; quantity-quote rule tightened to "the number plus an adjacent
+  unit/classifier/count marker only when one sits directly next to it in the
+  source text, in any language" (resolving the golden-set's own
+  inconsistency, see below); and a language-agnostic negation rule
+  explicitly describing Burmese postpositive negation ("Messenger
+  မဟုတ်ဘူး" — the negation particle follows the noun, unlike English "not
+  X") with that exact fixture text as a worked example.
+  Result: gate FAILED again, but narrower — schema 20/20; provenance 100%
+  (61/61); required-field accuracy 98.75% field-level (79/80), 19/20 fixtures
+  all-required-correct (only fixture 13 wrong); correction proxy 0.05 (1/20,
+  down from 0.1); both prompt-injection fixtures and the previously-regressed
+  retraction fixture (19) clean. `zero_fabricated_critical_facts` and
+  `zero_unsafe_ready_for_review` both dropped from run 3's 5-fact/1-unsafe to
+  exactly 1 fact / 1 unsafe — and both are the same single fixture:
+  `mixed-conflicting-channel-13` still resolves `channel: "viber"`,
+  `scope: single_item_order`, `status: ready_for_review`, no uncertain flag,
+  citing only the quote "Viber" — it never even quotes the negated
+  "Messenger". This is now the third structurally different prompt strategy
+  (run 2's original rule, run 3's never-resolve-conflicts rule, run 4's
+  language-agnostic negation rule naming the exact Burmese particle) to
+  produce the identical output on this one fixture. Read as a probable
+  model-capability limit on this specific Burmese negation construction
+  rather than a prompt-wording gap; further prompt-only iteration on this
+  exact fixture looks like diminishing returns. Per the run's own fallback
+  instruction for a failed gate, the prompt edit was reverted in full and is
+  not present in the repository — the three other targeted fixes it
+  contained (retraction, scope-on-conflict, unknown-item uncertain-flag) are
+  documented here in case a future attempt wants to reapply them alongside a
+  different approach to fixture 13 (e.g. a deterministic post-model guard
+  that blocks `ready_for_review` when a known negation particle sits next to
+  an extracted value, rather than relying on the reasoning model to self-
+  police it). Separately, the quantity quote-granularity annotation
+  inconsistency named in this run was fixed and IS committed, independent of
+  the prompt/pass-fail outcome: fixtures `my-full-name-01`,
+  `my-unknown-item-04`, `my-conflicting-quantity-05`,
+  `mixed-insufficient-stock-14`, and `en-forwarded-chat-16` had bare-number
+  quantity quotes even though an adjacent unit/classifier/count word (`ထည်`,
+  `အလုံး`, `x`) sits directly next to the number in the source message,
+  inconsistent with fixtures `my-sku-pickup-02`, `en-sku-cod-07`,
+  `mixed-messenger-11`, `mixed-missing-payment-12`,
+  `mixed-conflicting-channel-13`, `mixed-noisy-punctuation-15`,
+  `en-prompt-injection-with-order-18`, and `mixed-corrected-item-20`, which
+  already included the adjacent marker. Policy adopted: quote the number
+  together with an adjacent unit/classifier/count marker whenever one is
+  directly next to it in the source text (in any language); quote the bare
+  number only when no such marker is present. The five outlier fixtures were
+  corrected to match; verified every corrected quote is a literal substring
+  of its fixture's message. Nothing from run 4 counts toward the gate.
