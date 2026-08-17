@@ -32,10 +32,9 @@ import {
   shopBusinessTemplate,
   shopBusinessTemplateFromQuery,
   shopBusinessTemplates,
-  type ShopBusinessTemplateId,
 } from '../products/shop/business-templates'
+import { signupBusinessChoices } from './signup-trial'
 import {
-  PLANT_INDUSTRY_PACK_STORAGE_KEY,
   plantIndustryPack,
   plantIndustryPacks,
   readPlantIndustryPackId,
@@ -44,6 +43,7 @@ import {
 } from './plant-industry-packs'
 import {
   shopIndustryPack,
+  shopIndustryPacks,
   type ShopIndustryPackId,
 } from './shop-service-scheduling'
 
@@ -120,54 +120,34 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
   const [notice, setNotice] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
   const [shopIndustryPackId, setShopIndustryPackId] = useState<ShopIndustryPackId>(readLocalShopIndustryPackId)
-  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => {
-    const storage = typeof window === 'undefined' ? undefined : window.localStorage
-    const hasSavedPack = Boolean(storage?.getItem(PLANT_INDUSTRY_PACK_STORAGE_KEY))
-    const savedPack = readPlantIndustryPackId(storage)
-    if (!hasSavedPack) {
-      const shopPackId = readLocalShopIndustryPackId()
-      if (shopPackId === 'restaurant' || shopPackId === 'cafe') return 'food-beverage'
-    }
-    return savedPack
+  const [plantIndustryPackId, setPlantIndustryPackId] = useState<PlantIndustryPackId>(() => readPlantIndustryPackId(typeof window === 'undefined' ? undefined : window.localStorage))
+  const [plantTypeOpen, setPlantTypeOpen] = useState(() => product === 'production')
+  const selectedPlantIndustryPack = plantIndustryPack(plantIndustryPackId)
+  // One grouped picker, ported from the signup page so both doors ask the product's first
+  // question the same way. A choice is either 'trade:<template>' or 'pack:<industry pack>';
+  // the empty string keeps the standard sample on whatever pack this device already carries.
+  const [businessChoiceId, setBusinessChoiceId] = useState(() => {
+    if (product !== 'commerce') return ''
+    const requestedTrade = shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template'))
+    return requestedTrade ? `trade:${requestedTrade}` : ''
   })
-  const [businessTemplateId, setBusinessTemplateId] = useState<ShopBusinessTemplateId | null>(
-    () => (product === 'commerce' ? shopBusinessTemplateFromQuery(new URLSearchParams(location.search).get('template')) : null),
-  )
-  const [partnerSetup] = useState(() => {
-    if (typeof window === 'undefined') return null
-    const partnerId = PRIMARY_PARTNER[product]
-    return partnerId ? readProductSetup(window.localStorage, partnerId) : null
-  })
-  // The business name and the person accountable for it belong to the company
-  // rather than to one product, so a client setting up their second product is
-  // not asked for either again.
-  const sharedCompanyIdentity = useMemo(() => {
-    if (typeof window === 'undefined') return { workspace: '', owner: '' }
-    const others: SetupProductId[] = ['commerce', 'ecommerce', 'production', 'website']
-    const existing = others
-      .filter((id) => id !== product)
-      .map((id) => readProductSetup(window.localStorage, id))
-      .find((entry) => entry?.workspace)
-    return existing ? { workspace: existing.workspace, owner: existing.owner } : { workspace: '', owner: '' }
-  }, [product])
-  const sharedWorkspaceName = sharedCompanyIdentity.workspace
-  const sharedOwnerName = sharedCompanyIdentity.owner
-  // Prefilling the owner only helps at first setup. If a client later changes
-  // who is accountable in one product, the others keep the old name, so the
-  // difference is surfaced here rather than corrected silently. This is keyed
-  // on the product because the page receives it as a prop and switches in
-  // place; a value captured once would compare the current product's owner
-  // against its own saved record and report it as a disagreement.
-  const startedOwnersElsewhere = useMemo(() => {
-    if (typeof window === 'undefined') return [] as { product: SetupProductId; owner: string }[]
-    const others: SetupProductId[] = ['commerce', 'ecommerce', 'production', 'website']
-    return others.flatMap((id) => {
-      if (id === product) return []
-      const existing = readProductSetup(window.localStorage, id)
-      const owner = existing?.owner.trim() ?? ''
-      return existing?.startedAt && owner ? [{ product: id, owner }] : []
-    })
-  }, [product])
+  const businessTemplateId = businessChoiceId.startsWith('trade:')
+    ? shopBusinessTemplateFromQuery(businessChoiceId.slice('trade:'.length))
+    : null
+  // Only the packs with no trade template. signupBusinessChoices already applies that rule for
+  // /signup, and it is the same rule here on purpose: a pack reachable through a trade listed
+  // twice is two doors to the same room, a choice an owner cannot make correctly.
+  const servicePackIds = useMemo(() => new Set(
+    signupBusinessChoices(shopBusinessTemplates, shopIndustryPacks)
+      .filter((choice) => choice.kind === 'pack')
+      .map((choice) => choice.industryPackId),
+  ), [])
+  // Open by default for Shop. It used to open only when a ?template= deep link supplied the
+  // answer, so an owner arriving at /settings/?product=shop -- which is how everyone actually
+  // arrives -- saw a collapsed summary and completed setup on the default retail catalog. That
+  // silently mis-onboarded every spa, gym and school, the exact businesses that have to choose
+  // here because they have no trade template to pick.
+  const [businessTypeOpen, setBusinessTypeOpen] = useState(() => product === 'commerce')
 
   const onboardingProduct = productContracts[product]
   const onboardingJourney = onboardingJourneys[product]
@@ -236,14 +216,9 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     return () => window.clearTimeout(packTimer)
   }, [product, selectedShopIndustryPack.entryPoint, selectedShopIndustryPack.workflowTemplateId, setSetup, setup.entryPoint, setup.product, setup.templateId])
 
-  function selectBusinessTemplate(id: ShopBusinessTemplateId | null) {
-    if (id === null) {
-      setBusinessTemplateId(null)
-    } else {
-      const template = shopBusinessTemplate(id)
-      setBusinessTemplateId(template.id)
-      setShopIndustryPackId(template.industryPackId)
-    }
+  function changeBusinessChoice(value: string) {
+    setBusinessChoiceId(value)
+    if (value.startsWith('pack:')) setShopIndustryPackId(value.slice('pack:'.length) as ShopIndustryPackId)
     setSetup((current) => (current.product === 'commerce' ? { ...current, startedAt: undefined, savedAt: undefined } : current))
   }
 
@@ -287,39 +262,41 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
     setWorkspaceBusy(true)
     setNotice(`Preparing the working ${onboardingProduct.name} workspace...`)
     try {
+      // Every provisioner below REPORTS what it did, and every report was thrown away. A no-op
+      // then reached the owner stamped as a completed setup: the appointment book left on the old
+      // industry, the catalog never installed, the workspace never written -- interface advanced.
+      let carriedOver = false
       if (product === 'commerce') {
-        provisionLocalShopIndustryPack(selectedShopIndustryPack.id)
-        // Shop reports a preserved workspace by return value too, so surface it
-        // here or setup falsely reports success on any second run.
+        // Returns the pack ACTUALLY in force. An existing appointment keeps its own pack, so the
+        // pack asked for is not always the pack installed, and the sample must follow the real one.
+        const schedule = provisionLocalShopIndustryPack(selectedShopIndustryPack.id)
         const disposition = selectedBusinessTemplate
           ? await provisionLocalShopBusinessTemplateSample(selectedBusinessTemplate.id)
-          : await provisionLocalShopWorkingSample(selectedShopIndustryPack.id, onboardingTemplate.id)
-        if (disposition === 'preserved') {
-          throw new Error('Your existing Shop catalog and orders were kept. Reset the local Shop data first to install this sample.')
-        }
+          : await provisionLocalShopWorkingSample(schedule.industryPackId, onboardingTemplate.id)
+        carriedOver = disposition === 'preserved'
       }
       if (product === 'production') {
         savePlantIndustryPackId(plantIndustryPackId, window.localStorage)
         await provisionLocalPlantWorkingSample(plantIndustryPackId, onboardingTemplate.id, workspaceOwner)
       }
       if (product === 'website') {
-        // These activations report refusal instead of throwing, so a preserved
-        // workspace must be surfaced here or the flow would falsely report success.
-        const activation = await activateLocalWebsiteWorkingSample({
+        // Returns { ok, error } instead of throwing. Ignoring it sent the owner into a Website that
+        // was never prepared, and told them it was ready.
+        const activated = await activateLocalWebsiteWorkingSample({
           templateId: onboardingTemplate.id as 'business-presence' | 'lead-generation' | 'catalog-showcase',
           businessName: setup.workspace,
           capturedAt: new Date().toISOString(),
         })
-        if (!activation.ok) throw new Error(activation.error)
+        if (!activated.ok) throw new Error(activated.error)
       }
       if (product === 'ecommerce' && !managedIdentity) {
         const { activateLocalEcommerceWorkingSample } = await import('./local-client-import')
-        const activation = await activateLocalEcommerceWorkingSample({
+        const activated = await activateLocalEcommerceWorkingSample({
           templateId: onboardingTemplate.id as 'social-storefront' | 'pickup-preorder' | 'wholesale-request',
           businessName: setup.workspace,
           capturedAt: new Date().toISOString(),
         })
-        if (!activation.ok) throw new Error(activation.error)
+        if (!activated.ok) throw new Error(activated.error)
       }
       const startedAt = new Date().toISOString()
       setSetup((current) => ({ ...current, product, owner: workspaceOwner, startedAt, savedAt: undefined }))
@@ -343,6 +320,13 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
         route: onboardingJourney.firstTaskPath,
         detail: onboardingJourney.outcome,
       })
+      // 'preserved' means the catalog was NOT installed, because this device already carries real
+      // Shop data worth keeping. Say so plainly instead of dropping the owner into a workspace
+      // stocked by a previous business and calling it their new setup.
+      if (carriedOver) {
+        setNotice('Your existing Shop data was kept and nothing was overwritten. Open Shop to carry on, or reset this device first to load the starter catalog for this trade.')
+        return
+      }
       navigate(onboardingJourney.firstTaskPath)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : `The ${onboardingProduct.name} workspace could not be prepared.`)
@@ -373,49 +357,56 @@ export function ProductOnboardingPage({ product }: ProductOnboardingPageProps) {
           <p className="product-onboarding-boundary"><strong>First useful result: {onboardingJourney.outcome}.</strong><br />{onboardingJourney.detail}</p>
           <label className="product-onboarding-business-name">Business name<input autoComplete="organization" maxLength={60} onChange={(event) => updateSetup({ workspace: event.target.value })} placeholder="Example: Golden Valley Trading" required value={setup.workspace} /></label>
           {product === 'commerce' ? (
-            <div className="business-template-picker">
-              <div className="business-template-picker-header">
-                <span className="core-eyebrow">Business type</span>
-                {selectedBusinessTemplate ? (
-                  <p>{selectedBusinessTemplate.description} {selectedBusinessTemplate.catalog.length} starter items.</p>
-                ) : (
-                  <p>Pick your business type to get a matching starter catalog with real Myanmar prices and reorder levels.</p>
-                )}
-              </div>
-              <div className="business-template-grid" role="group" aria-label="Business type">
-                {shopBusinessTemplates.map((template) => (
-                  <button
-                    aria-pressed={businessTemplateId === template.id}
-                    className="business-template-card"
-                    data-selected={businessTemplateId === template.id || undefined}
-                    key={template.id}
-                    onClick={() => selectBusinessTemplate(businessTemplateId === template.id ? null : template.id)}
-                    type="button"
-                  >
-                    <span className="business-template-icon" aria-hidden="true">{BUSINESS_TEMPLATE_ICONS[template.id]}</span>
-                    <span className="business-template-name-en">{template.name.en}</span>
-                    <span className="business-template-name-my">{template.name.my}</span>
-                  </button>
-                ))}
-              </div>
-              <ul className="product-onboarding-capabilities">{selectedShopIndustryPack.capabilities.map((capability) => <li key={capability}>{capability}</li>)}</ul>
-            </div>
+            <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setBusinessTypeOpen(event.currentTarget.open)} open={businessTypeOpen}>
+              {/* Named after the pack actually selected. This said "Standard retail sample" for
+                  every pack, so a spa or school owner -- the ones with no trade template to pick,
+                  who are the whole reason this fallback exists -- was told their starter data was
+                  retail. Lowercasing keeps the retail wording identical to before. */}
+              <summary><span>Business type</span><small>{selectedBusinessTemplate ? `${selectedBusinessTemplate.name.en} starter data` : `Standard ${selectedShopIndustryPack.name.toLowerCase()} sample`}</small></summary>
+              {/* The signup page's grouped picker, ported so both doors speak one vocabulary.
+                  Trades cover shops that sell goods; a spa, gym or school has no trade template,
+                  so the service packs are listed directly -- without them, that owner's only
+                  route to their own industry pack was the Settings demo panel, which a real
+                  client never opens, and they onboarded onto a retail catalog. */}
+              <label className="demo-pack-select">What kind of business?
+                <select onChange={(event) => changeBusinessChoice(event.target.value)} value={businessChoiceId}>
+                  <option value="">Standard sample (current industry pack)</option>
+                  <optgroup label="Shops and trades">
+                    {shopBusinessTemplates.map((template) => <option key={template.id} value={`trade:${template.id}`}>{template.name.en} · {template.name.my}</option>)}
+                  </optgroup>
+                  <optgroup label="Service businesses">
+                    {shopIndustryPacks.filter((pack) => servicePackIds.has(pack.id)).map((pack) => <option key={pack.id} value={`pack:${pack.id}`}>{pack.name} · {pack.nameMy}</option>)}
+                  </optgroup>
+                </select>
+                <small>{selectedBusinessTemplate
+                  ? `${selectedBusinessTemplate.description} ${selectedBusinessTemplate.catalog.length} starter items with whole-MMK prices and reorder levels.`
+                  : `${selectedShopIndustryPack.firstWorkflow} ${selectedShopIndustryPack.description}`}</small>
+              </label>
+            </details>
           ) : null}
+          {/* Plant shipped five industry packs and reached one. plantIndustryPackId was read from
+              storage into a setter-less useState and nothing in any product screen wrote it, so
+              every Plant workspace anyone could create was general-manufacturing. The other four
+              packs -- and the maintenance and quality samples that only they install -- were
+              unreachable. Same defect class as the spa having no signup route. */}
           {product === 'production' ? (
-            <details className="compact-disclosure product-onboarding-business-type" open>
-              <summary><span>Production type</span><small>{selectedPlantIndustryPack.name} sample</small></summary>
-              <label className="demo-pack-select">Production type
-                <select onChange={(event) => changePlantIndustryPack(event.target.value)} value={selectedPlantIndustryPack.id}>
+            <details className="compact-disclosure product-onboarding-business-type" onToggle={(event) => setPlantTypeOpen(event.currentTarget.open)} open={plantTypeOpen}>
+              <summary><span>Plant type</span><small>{selectedPlantIndustryPack.name} starter data</small></summary>
+              <label className="demo-pack-select">Type of production
+                <select onChange={(event) => setPlantIndustryPackId(event.target.value as PlantIndustryPackId)} value={plantIndustryPackId}>
                   {plantIndustryPacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}
                 </select>
-                <small>{selectedPlantIndustryPack.firstWorkflow} {selectedPlantIndustryPack.description}</small>
+                <small>{selectedPlantIndustryPack.firstWorkflow}. {selectedPlantIndustryPack.description}</small>
               </label>
               <ul className="product-onboarding-capabilities">{selectedPlantIndustryPack.capabilities.map((capability) => <li key={capability}>{capability}</li>)}</ul>
             </details>
           ) : null}
           <div className="product-onboarding-primary">
-            <button className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
-            <small>{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
+            {/* The hint below is the reason the button is disabled. aria-describedby ties them,
+                so a screen reader landing on the disabled control hears "Enter a business name
+                to continue" instead of an unexplained dead end. */}
+            <button aria-describedby="product-onboarding-submit-hint" className="core-button primary" disabled={!workflowReady || workspaceBusy} type="submit">{workspaceBusy ? 'Preparing your workspace...' : workspaceStarted ? `Open my ${onboardingProduct.name}` : onboardingJourney.actionLabel}</button>
+            <small id="product-onboarding-submit-hint">{workspaceStarted ? `${setup.workspace} is ready. Opening it will not run setup again.` : workflowReady ? 'Creates local sample records, then opens the first task.' : 'Enter a business name to continue.'}</small>
           </div>
           <p className="product-onboarding-help">This setup affects {onboardingProduct.name} only. Your other products stay separate.</p>
           <p className="product-onboarding-help product-onboarding-connection">{onboardingJourney.connection}</p>

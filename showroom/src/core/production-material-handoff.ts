@@ -98,6 +98,15 @@ function stockUnitsFor(quantityMilli: number, materialQuantityMilliPerStockUnit:
 
 export type ProductionMaterialHandoff = CommerceProductionMaterialRequest & {
   materialName: string
+  // The Shop SKU this material is mapped to in the reviewed BOM, and how much material one
+  // stock unit supplies. Carried across the handoff on purpose: Plant states plainly that
+  // the conversion is explicit and 'no name matching is used', but the Shop issue screen had
+  // no way to know which SKU was meant, so it defaulted to the first stocked item in the
+  // catalog. An operator could issue wiper blades against a request for engine oil.
+  //
+  // Null when the BOM row was left unmapped ('Map later'), which is legitimate -- the
+  // operator then chooses, as before.
+  shopSupply: { sku: string; materialQuantityMilliPerStockUnit: number } | null
   substitution: null | {
     approvalId: string
     originalMaterialId: string
@@ -160,6 +169,9 @@ export function productionMaterialHandoffs(
     return [{
       ...request,
       materialName: payload.kind === 'issue_material' ? material.name : approval!.substituteName,
+      // A substitute is a different material, so the original row's Shop mapping does not
+      // apply to it; only a straight issue carries the mapping through.
+      shopSupply: payload.kind === 'issue_material' && material.shopSupply ? { ...material.shopSupply } : null,
       substitution: payload.kind === 'issue_material' ? null : {
         approvalId: approval!.id,
         originalMaterialId: material.materialId,

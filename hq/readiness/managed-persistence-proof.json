@@ -1,0 +1,98 @@
+{
+    "contract":  "supermega.managed-persistence-proof.v1",
+    "approvalId":  "persistence-proof-24h-20260816",
+    "recordedAt":  "2026-08-16T09:14:56.804Z",
+    "operator":  "tech-lead session, founder-directed",
+    "branch":  {
+                   "name":  "persistence-proof-24h-20260816",
+                   "projectRef":  "gsnvyskfwbyglgzykifl",
+                   "parentProjectRef":  "zvtzwcimpvvtkowflhda",
+                   "createdAt":  "2026-08-16T08:13:38.461902+00:00",
+                   "deletedAt":  "2026-08-16T09:14:56.808Z",
+                   "maximumLifetimeHours":  24,
+                   "deleteAfterEvidence":  true
+               },
+    "instrument":  {
+                       "path":  "tools/verify_managed_persistence.py",
+                       "commit":  "92afebaf7ea88b91ca5ec69b38d0f2997472a8c7",
+                       "selfTestCases":  45,
+                       "connectionLane":  "session_pooler"
+                   },
+    "audit":  {
+                  "adapter":  "postgres_trial_backend_v1",
+                  "captured_at":  "2026-08-16T09:13:37Z",
+                  "connection_lane":  "session_pooler",
+                  "contract":  "supermega.managed-persistence.v1",
+                  "evidence_digest":  "sha256:630bf12275d1dd81209f34296a15adb3589c03eca601d9f36c3593e5445a7ff6",
+                  "export_row_counts":  {
+                                            "approval_requests":  0,
+                                            "workspace_events":  1,
+                                            "workspace_memberships":  1,
+                                            "workspace_state":  1
+                                        },
+                  "export_section_sha256":  {
+                                                "approval_requests":  "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                                                "workspace_events":  "sha256:b20fa5adb5f21fc34950eb1fd095c22663f574e00af0c3d3de5088c56e7fb70b",
+                                                "workspace_memberships":  "sha256:c7b87100130a0d4571a12390d8b57c5d31734b1c4c67229b211a8ea5ac3a7aec",
+                                                "workspace_state":  "sha256:258eb21e6ed6778b6cdda37cd513775da8e88d161cb62e0dfff1e5af529c74d1"
+                                            },
+                  "fixture_rows_committed":  {
+                                                 "approval_requests":  0,
+                                                 "workspace_events":  2,
+                                                 "workspace_memberships":  1,
+                                                 "workspace_state":  2
+                                             },
+                  "ok":  true,
+                  "owner_approval_digest":  "sha256:c9a1fe0e8533f753f0596a0abd4794df62cf781187cf7e36553229972c24af53",
+                  "proofs":  [
+                                 {
+                                     "id":  "durable_write_readback",
+                                     "result":  "readback_exact",
+                                     "state_version":  1
+                                 },
+                                 {
+                                     "duplicate_rows_created":  0,
+                                     "id":  "exact_idempotent_retry",
+                                     "result":  "no_op_replay"
+                                 },
+                                 {
+                                     "denial_sqlstate":  "40001",
+                                     "id":  "version_conflict_rejected",
+                                     "result":  "rejected",
+                                     "stale_rows_matched":  0
+                                 },
+                                 {
+                                     "delete_sqlstate":  "42501",
+                                     "id":  "event_immutability_enforced",
+                                     "result":  "update_and_delete_rejected",
+                                     "update_sqlstate":  "42501"
+                                 },
+                                 {
+                                     "foreign_rows_visible":  0,
+                                     "id":  "cross_tenant_read_denied",
+                                     "result":  "denied_with_canary"
+                                 },
+                                 {
+                                     "id":  "workspace_backup_restore_roundtrip",
+                                     "result":  "roundtrip_exact",
+                                     "rows_restored":  3
+                                 },
+                                 {
+                                     "id":  "induced_failure_atomic_rollback",
+                                     "induced_sqlstate":  "23505",
+                                     "residual_event_rows":  0,
+                                     "result":  "rolled_back_clean"
+                                 }
+                             ],
+                  "restore_workspace_digest":  "sha256:819ff8b67f33a7641a2804789f35a30e50860f51ff80d8e0d47a707486a2afab",
+                  "schema_version_observed":  10,
+                  "secrets_exposed":  false,
+                  "sessions_performed":  4,
+                  "statements_performed":  49,
+                  "target_host_digest":  "sha256:39f5075a617eae9861968a8a43c43a0a08cb52e61421a67d52688ffb313a1b1a",
+                  "tenant_rows_exposed":  false,
+                  "workspace_a_digest":  "sha256:34f9ee29ac7e48cbf8471e15d7212056b981fd0f6950ed9a2935ceccd995d86c",
+                  "workspace_b_digest":  "sha256:fabc41ab3326b25c70d4ec2d8648fcd3a0d7551830ad060ff8fcae4c7c8d0f60",
+                  "writes_confined_to_fixture_workspaces":  true
+              }
+}

@@ -7,11 +7,12 @@
 // Shape returned (200):
 //   { ok, mode, counts:{total,configured,healthy}, byCategory:{payment,messaging,data,ai}, connectors:[...] }
 
+import { usableOpsKey } from '../ops-key.mjs'
 import connectors from '../connectors/index.mjs'
 import store from '../store.mjs'
 import crypto from 'node:crypto'
 
-const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
+const OPS_KEY = usableOpsKey(process.env.SUPERMEGA_OPS_KEY)
 function constantTimeEqual(a, b) {
   const ha = crypto.createHash('sha256').update(String(a)).digest()
   const hb = crypto.createHash('sha256').update(String(b)).digest()

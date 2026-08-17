@@ -1,0 +1,70 @@
+{
+    "contract":  "supermega.hosted-storage-privacy-proof.v1",
+    "approvalId":  "storage-privacy-proof-24h-20260814",
+    "recordedAt":  "2026-08-14T20:46:15.344Z",
+    "operator":  "tech-lead session, founder-directed",
+    "branch":  {
+                   "name":  "storage-privacy-proof-24h-20260814",
+                   "projectRef":  "lzemsljybmzuyfqaeqey",
+                   "parentProjectRef":  "zvtzwcimpvvtkowflhda",
+                   "createdAt":  "2026-08-14T16:49:24.874166+00:00",
+                   "deletedAt":  "2026-08-14T20:46:15.349Z",
+                   "maximumLifetimeHours":  24,
+                   "deleteAfterEvidence":  true
+               },
+    "instrument":  {
+                       "path":  "tools/verify_private_storage_privacy.py",
+                       "commit":  "ea13161ad951b3b139eeb28a2e82bf68c6cb86ee",
+                       "selfTestCases":  20
+                   },
+    "audit":  {
+                  "adapter":  "supabase_storage_rest_v2",
+                  "bucket_digest":  "sha256:e85af3711b7d4e0b0c94e976c31e6bd2005bc6eed03b23f8c22e3dab648df335",
+                  "bucket_or_object_names_exposed":  false,
+                  "captured_at":  "2026-08-14T20:44:47Z",
+                  "contract":  "supermega.private-storage-privacy.v1",
+                  "evidence_digest":  "sha256:c4049f2386cb938f806258b5b29e6e28cf1d70c00a190178feb81a42832c18be",
+                  "http_post_requests_performed":  4,
+                  "object_body_bytes_returned":  0,
+                  "ok":  true,
+                  "owner_approval_digest":  "sha256:2edf5bae15a6b6b0c20cb5a00e7aefbc65135409a190cfee9abf234525d7c2b6",
+                  "persistent_mutations_performed":  0,
+                  "proofs":  [
+                                 {
+                                     "http_status_class":  "4xx",
+                                     "id":  "anonymous_bucket_listing_denied",
+                                     "result":  "denied"
+                                 },
+                                 {
+                                     "http_status_class":  "2xx",
+                                     "id":  "tenant_a_positive_control",
+                                     "result":  "sentinel_visible"
+                                 },
+                                 {
+                                     "http_status_class":  "2xx",
+                                     "id":  "cross_tenant_listing_denied",
+                                     "result":  "empty_filtered"
+                                 },
+                                 {
+                                     "denial_discriminator":  "not_found",
+                                     "http_status_class":  "4xx",
+                                     "id":  "cross_tenant_object_denied",
+                                     "result":  "denied"
+                                 },
+                                 {
+                                     "http_status_class":  "2xx",
+                                     "id":  "tenant_b_short_lived_url_created",
+                                     "result":  "created",
+                                     "ttl_seconds":  60
+                                 },
+                                 {
+                                     "http_status_class":  "2xx",
+                                     "id":  "tenant_b_signed_object_access",
+                                     "result":  "accessible"
+                                 }
+                             ],
+                  "provider_requests_performed":  6,
+                  "secrets_exposed":  false,
+                  "target_host_digest":  "sha256:21eb3812f2a7fcb4ac1bc0b9e68426c282d7982e4cef4b092f3cb99c9e7bd352"
+              }
+}

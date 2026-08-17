@@ -12,9 +12,6 @@ export type ShopBusinessTemplateId =
   | 'tea-coffee'
   | 'auto-parts'
   | 'restaurant'
-  | 'spa'
-  | 'gym'
-  | 'school'
 
 export type ShopBusinessTemplateUnit = CommerceProductionMaterialUnit
 
@@ -100,7 +97,10 @@ type ItemRow = readonly [sku: string, name: string, unit: ShopBusinessTemplateUn
 const rows = (source: readonly ItemRow[]): readonly ShopBusinessTemplateItem[] =>
   source.map(([sku, name, unit, costMmk, priceMmk, openingStock, reorderAt]) => ({ sku, name, unit, costMmk, priceMmk, openingStock, reorderAt }))
 
-export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = [
+// Seeds carry the goods a trade actually stocks. The bookable services its industry pack offers
+// are appended below rather than repeated in all eight catalogs, so a new template cannot ship
+// with an unchargeable service by omission.
+const shopBusinessTemplateSeeds: readonly ShopBusinessTemplate[] = [
   {
     id: 'mini-mart',
     schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
@@ -366,156 +366,108 @@ export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = [
     id: 'restaurant',
     schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
     name: { en: 'Restaurant', my: 'စားသောက်ဆိုင်' },
-    description: 'Myanmar restaurant with rice, noodles, and curries served at table or counter.',
+    description: 'Full menu with table orders, kitchen prep counts, and booked group meals.',
     industryPackId: 'restaurant',
     workflowTemplateId: 'restaurant-ordering',
     catalog: rows([
-      ['SHAN-NOODLE', 'Shan noodle bowl', 'pcs', 2_000, 4_000, 50, 15],
-      ['MOHINGA', 'Mohinga fish soup', 'pcs', 1_800, 3_500, 60, 20],
-      ['FRIED-RICE-CHIC', 'Chicken fried rice', 'pcs', 3_000, 6_000, 40, 15],
-      ['CHICKEN-CURRY', 'Chicken curry with rice', 'pcs', 3_500, 7_000, 30, 10],
-      ['PORK-CURRY', 'Pork curry with rice', 'pcs', 3_500, 7_000, 25, 10],
-      ['VEG-CURRY', 'Mixed vegetable curry rice', 'pcs', 2_500, 5_000, 20, 8],
-      ['LAPHET-THOKE', 'Tea leaf salad', 'pcs', 2_500, 5_000, 20, 8],
-      ['SAMOSA', 'Fried samosa', 'pcs', 400, 1_000, 80, 25],
-      ['PRAWN-CURRY', 'Prawn curry with rice', 'pcs', 5_000, 10_000, 2, 6],
-      ['SOFT-DRINK', 'Soft drink can', 'pcs', 600, 1_200, 48, 12],
-      ['LIME-JUICE', 'Fresh lime juice', 'pcs', 500, 1_200, 40, 12],
-      ['WATER-BTL', 'Drinking water bottle', 'pcs', 300, 700, 60, 20],
-      ['SUGAR-CANE', 'Fresh sugar cane juice', 'pcs', 800, 1_800, 30, 10],
-      ['ICE-CREAM-SCOOP', 'Ice cream scoop', 'pcs', 800, 1_800, 20, 6],
+      ['CURRY-CHICKEN', 'Chicken curry set with rice and soup', 'pcs', 4_200, 8_500, 40, 12],
+      ['CURRY-PORK', 'Pork curry set with rice and soup', 'pcs', 4_600, 9_000, 32, 10],
+      ['CURRY-FISH', 'Fish curry set with rice and soup', 'pcs', 4_900, 9_500, 28, 10],
+      ['CURRY-MUTTON', 'Mutton curry set with rice and soup', 'pcs', 6_800, 12_500, 18, 6],
+      ['RICE-STEAMED', 'Steamed rice plate', 'pcs', 300, 800, 120, 30],
+      ['RICE-FRIED-EGG', 'Egg fried rice plate', 'pcs', 2_400, 5_000, 45, 15],
+      ['NOODLE-KAUKSWE', 'Ohn no kauk swe bowl', 'pcs', 2_600, 5_500, 40, 12],
+      ['NOODLE-SHAN', 'Shan noodle bowl', 'pcs', 2_200, 4_800, 38, 12],
+      ['SALAD-LAHPET', 'Lahpet thoke tea leaf salad', 'pcs', 1_900, 4_500, 50, 15],
+      ['SALAD-GINGER', 'Gyin thoke ginger salad', 'pcs', 1_700, 4_000, 4, 12],
+      ['SOUP-CHINYAY', 'Chin yay hin sour soup bowl', 'pcs', 700, 2_000, 60, 20],
+      ['GRILL-TILAPIA', 'Grilled whole tilapia', 'pcs', 6_500, 12_500, 14, 5],
+      ['DRINK-LIME', 'Fresh lime juice', 'pcs', 900, 2_200, 60, 20],
     ]),
     counterSales: [
-      { id: 'restaurant-sale-1', recordedAt: '2026-08-03T02:00:00.000Z', payment: 'Cash', lines: [{ sku: 'SHAN-NOODLE', quantity: 2 }, { sku: 'LIME-JUICE', quantity: 2 }] },
-      { id: 'restaurant-sale-2', recordedAt: '2026-08-03T05:30:00.000Z', payment: 'KBZPay', lines: [{ sku: 'CHICKEN-CURRY', quantity: 1 }, { sku: 'SOFT-DRINK', quantity: 1 }] },
-      { id: 'restaurant-sale-3', recordedAt: '2026-08-03T08:00:00.000Z', payment: 'Cash', lines: [{ sku: 'SAMOSA', quantity: 3 }, { sku: 'WATER-BTL', quantity: 2 }] },
+      { id: 'restaurant-sale-1', recordedAt: '2026-08-03T05:15:00.000Z', payment: 'Cash', lines: [{ sku: 'CURRY-CHICKEN', quantity: 2 }, { sku: 'RICE-STEAMED', quantity: 2 }] },
+      { id: 'restaurant-sale-2', recordedAt: '2026-08-03T06:40:00.000Z', payment: 'KBZPay', lines: [{ sku: 'NOODLE-SHAN', quantity: 1 }, { sku: 'SALAD-LAHPET', quantity: 1 }, { sku: 'DRINK-LIME', quantity: 2 }] },
+      { id: 'restaurant-sale-3', recordedAt: '2026-08-03T11:20:00.000Z', payment: 'Cash', lines: [{ sku: 'GRILL-TILAPIA', quantity: 1 }, { sku: 'RICE-STEAMED', quantity: 3 }, { sku: 'SOUP-CHINYAY', quantity: 3 }] },
     ],
     pendingOrder: {
       id: 'restaurant-order-1',
-      customerName: 'Daw Nilar (Golden Palace Hotel)',
-      contact: '09-421-777-888',
-      requestedAt: '2026-08-03T03:00:00.000Z',
-      promisedFor: '2026-08-04T04:30:00.000Z',
+      customerName: 'Daw Nwe Nwe Aye (family booking)',
+      contact: '09-317-555-666',
+      requestedAt: '2026-08-03T07:45:00.000Z',
+      promisedFor: '2026-08-04T11:00:00.000Z',
       status: 'pending',
-      note: 'Corporate lunch for 15 guests. Mixed curries and rice. Delivery to hotel by noon.',
-      lines: [{ sku: 'CHICKEN-CURRY', quantity: 8 }, { sku: 'PORK-CURRY', quantity: 5 }, { sku: 'VEG-CURRY', quantity: 2 }],
-    },
-  },
-  {
-    id: 'spa',
-    schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
-    name: { en: 'Spa & beauty salon', my: 'စပါနှင့်အလှဆိုင်' },
-    description: 'Traditional massage, facial, and beauty treatments with retail products at the counter.',
-    industryPackId: 'spa',
-    workflowTemplateId: 'social-commerce',
-    catalog: rows([
-      ['TRAD-MASSAGE', 'Traditional body massage 60 min', 'pcs', 15_000, 25_000, 5, 2],
-      ['FOOT-MASSAGE', 'Foot massage 45 min', 'pcs', 10_000, 18_000, 8, 3],
-      ['FACIAL-BASIC', 'Basic facial 45 min', 'pcs', 12_000, 22_000, 6, 2],
-      ['FACIAL-DEEP', 'Deep cleanse facial 60 min', 'pcs', 20_000, 35_000, 4, 2],
-      ['HAIR-WASH', 'Hair wash and blow-dry', 'pcs', 6_000, 12_000, 10, 4],
-      ['HAIR-TREATMENT', 'Hair deep conditioning 30 min', 'pcs', 12_000, 22_000, 5, 2],
-      ['MANICURE', 'Manicure 30 min', 'pcs', 6_000, 12_000, 8, 3],
-      ['PEDICURE', 'Pedicure 45 min', 'pcs', 8_000, 15_000, 6, 2],
-      ['BODY-SCRUB', 'Full body scrub 45 min', 'pcs', 18_000, 32_000, 4, 2],
-      ['COUPLE-MASSAGE', 'Couple massage 60 min', 'pcs', 30_000, 50_000, 2, 3],
-      ['LOTION-200ML', 'Moisturizing body lotion 200ml', 'ml', 8_000, 14_000, 15, 5],
-      ['SERUM-30ML', 'Anti-ageing face serum 30ml', 'ml', 25_000, 42_000, 10, 4],
-      ['SCRUB-300G', 'Sugar body scrub 300g', 'g', 9_000, 16_000, 12, 4],
-    ]),
-    counterSales: [
-      { id: 'spa-sale-1', recordedAt: '2026-08-03T04:00:00.000Z', payment: 'KBZPay', lines: [{ sku: 'FOOT-MASSAGE', quantity: 1 }, { sku: 'MANICURE', quantity: 1 }] },
-      { id: 'spa-sale-2', recordedAt: '2026-08-03T07:30:00.000Z', payment: 'Cash', lines: [{ sku: 'FACIAL-BASIC', quantity: 1 }, { sku: 'LOTION-200ML', quantity: 1 }] },
-    ],
-    pendingOrder: {
-      id: 'spa-order-1',
-      customerName: 'Ma Su Myat',
-      contact: '09-511-333-444',
-      requestedAt: '2026-08-03T03:30:00.000Z',
-      promisedFor: '2026-08-05T04:00:00.000Z',
-      status: 'pending',
-      note: 'Bridal party package for 4 guests. Needs separate receipts and one group photo slot.',
-      lines: [{ sku: 'TRAD-MASSAGE', quantity: 4 }, { sku: 'FACIAL-DEEP', quantity: 4 }],
-    },
-  },
-  {
-    id: 'gym',
-    schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
-    name: { en: 'Gym & fitness centre', my: 'ကိုယ်လက်လေ့ကျင့်ရေးဆိုင်' },
-    description: 'Membership plans, fitness supplements, and counter retail for gym clients.',
-    industryPackId: 'gym',
-    workflowTemplateId: 'social-commerce',
-    catalog: rows([
-      ['MEMBER-1M', 'Monthly membership', 'pcs', 30_000, 50_000, 20, 5],
-      ['MEMBER-3M', '3-month membership', 'pcs', 80_000, 130_000, 10, 3],
-      ['MEMBER-TRIAL', 'Weekly trial pass', 'pcs', 8_000, 15_000, 30, 8],
-      ['DAY-PASS', 'Day pass', 'pcs', 3_000, 6_000, 50, 15],
-      ['PROTEIN-1KG', 'Whey protein 1kg', 'kg', 45_000, 65_000, 8, 3],
-      ['PROTEIN-2KG', 'Whey protein 2kg', 'kg', 80_000, 115_000, 5, 2],
-      ['BCAA-300G', 'BCAA supplement 300g', 'g', 22_000, 38_000, 6, 2],
-      ['CREATINE-300G', 'Creatine monohydrate 300g', 'g', 18_000, 32_000, 4, 3],
-      ['GYM-GLOVES', 'Gym workout gloves', 'pcs', 8_000, 14_000, 2, 3],
-      ['WATER-BTL-500', 'Sports water bottle 500ml', 'pcs', 3_500, 7_000, 20, 5],
-      ['GYM-TOWEL', 'Microfibre gym towel', 'pcs', 4_000, 8_000, 15, 5],
-      ['ENERGY-GEL', 'Energy gel sachet', 'pcs', 1_200, 2_500, 40, 12],
-      ['PROTEIN-BAR', 'Protein bar', 'pcs', 1_800, 3_500, 30, 10],
-      ['SHAKER-CUP', 'Protein shaker cup', 'pcs', 5_000, 10_000, 12, 4],
-    ]),
-    counterSales: [
-      { id: 'gym-sale-1', recordedAt: '2026-08-03T02:30:00.000Z', payment: 'Cash', lines: [{ sku: 'DAY-PASS', quantity: 2 }, { sku: 'ENERGY-GEL', quantity: 1 }] },
-      { id: 'gym-sale-2', recordedAt: '2026-08-03T06:00:00.000Z', payment: 'KBZPay', lines: [{ sku: 'MEMBER-1M', quantity: 1 }, { sku: 'PROTEIN-1KG', quantity: 1 }] },
-    ],
-    pendingOrder: {
-      id: 'gym-order-1',
-      customerName: 'Ko Aung Thu (Golden Fortune Co.)',
-      contact: '09-770-444-555',
-      requestedAt: '2026-08-03T05:00:00.000Z',
-      promisedFor: '2026-08-10T03:00:00.000Z',
-      status: 'pending',
-      note: 'Company wellness package for 8 employees. Monthly memberships. HR will collect receipts.',
-      lines: [{ sku: 'MEMBER-1M', quantity: 8 }],
-    },
-  },
-  {
-    id: 'school',
-    schema: SHOP_BUSINESS_TEMPLATE_SCHEMA,
-    name: { en: 'School & learning centre', my: 'ကျောင်းနှင့်သင်တန်းဆိုင်' },
-    description: 'Course registrations and learning materials for a Myanmar tutoring centre or school.',
-    industryPackId: 'school',
-    workflowTemplateId: 'social-commerce',
-    catalog: rows([
-      ['COURSE-BASIC', 'Basic computing course', 'pcs', 40_000, 65_000, 15, 5],
-      ['COURSE-ADVANCED', 'Advanced computing course', 'pcs', 70_000, 110_000, 8, 3],
-      ['COURSE-ENGLISH', 'English conversation course', 'pcs', 45_000, 75_000, 12, 4],
-      ['COURSE-MYANMAR', 'Myanmar literacy course', 'pcs', 25_000, 42_000, 10, 3],
-      ['EXAM-PREP', 'Exam preparation module', 'pcs', 20_000, 35_000, 6, 2],
-      ['TEXTBOOK-A', 'Course textbook level A', 'pcs', 5_000, 9_000, 20, 6],
-      ['TEXTBOOK-B', 'Course textbook level B', 'pcs', 5_500, 10_000, 15, 5],
-      ['NOTEBOOK-A5', 'Exercise notebook A5', 'pcs', 800, 1_500, 60, 20],
-      ['PENCIL-PACK', 'Pencil pack of 12', 'pack', 1_200, 2_200, 2, 5],
-      ['PEN-PACK', 'Ballpoint pen pack of 10', 'pack', 2_000, 3_500, 25, 8],
-      ['ERASER', 'Large eraser', 'pcs', 200, 500, 40, 12],
-      ['RULER-30CM', 'Plastic ruler 30cm', 'pcs', 300, 700, 30, 10],
-      ['SCHOOL-BAG', 'School backpack', 'pcs', 18_000, 30_000, 12, 4],
-      ['PENCIL-CASE', 'Pencil case', 'pcs', 3_000, 6_000, 18, 5],
-    ]),
-    counterSales: [
-      { id: 'school-sale-1', recordedAt: '2026-08-03T02:15:00.000Z', payment: 'Cash', lines: [{ sku: 'NOTEBOOK-A5', quantity: 2 }, { sku: 'PEN-PACK', quantity: 1 }] },
-      { id: 'school-sale-2', recordedAt: '2026-08-03T04:45:00.000Z', payment: 'KBZPay', lines: [{ sku: 'COURSE-BASIC', quantity: 1 }] },
-      { id: 'school-sale-3', recordedAt: '2026-08-03T07:00:00.000Z', payment: 'Cash', lines: [{ sku: 'TEXTBOOK-A', quantity: 1 }, { sku: 'TEXTBOOK-B', quantity: 1 }] },
-    ],
-    pendingOrder: {
-      id: 'school-order-1',
-      customerName: 'U Kyaw Win',
-      contact: '09-254-222-333',
-      requestedAt: '2026-08-03T06:00:00.000Z',
-      promisedFor: '2026-08-06T03:00:00.000Z',
-      status: 'pending',
-      note: 'Enrolling two children for computing and English courses. Confirm schedule before invoice.',
-      lines: [{ sku: 'COURSE-BASIC', quantity: 2 }, { sku: 'COURSE-ENGLISH', quantity: 2 }, { sku: 'TEXTBOOK-A', quantity: 2 }, { sku: 'TEXTBOOK-B', quantity: 2 }],
+      note: 'Family dinner for 12 people. Two tables held together from 17:30.',
+      lines: [{ sku: 'CURRY-CHICKEN', quantity: 4 }, { sku: 'CURRY-FISH', quantity: 3 }, { sku: 'RICE-STEAMED', quantity: 12 }, { sku: 'SALAD-LAHPET', quantity: 2 }],
     },
   },
 ] as const
+
+// Every industry pack offers bookable services that carry a price, and the appointment book has
+// no path to the ledger -- a booking reaches no order, no daily close and no accounting handoff.
+// So unless the service is also a catalog item, the owner is quoted a price they cannot collect.
+// SKUs and prices mirror the pack samples in client-onboarding.ts exactly, and
+// test_industry_pack_sample_pairing.mjs pins both against shop-service-scheduling.ts so a price
+// edited in one place and not the other fails the build rather than reaching a counter.
+//
+// costMmk is the staff time the service consumes, not a purchased good; the model requires a
+// positive cost strictly below price, so it is carried at 60% of price to keep reported margin
+// honest rather than showing service revenue as pure profit.
+const packServiceRows: Readonly<Record<ShopIndustryPackId, readonly ItemRow[]>> = {
+  retail: [
+    ['RETAIL-SVC-SHOPPING', 'Personal shopping 30 min', 'pcs', 9_000, 15_000, 999, 0],
+    ['RETAIL-SVC-PICKUP', 'Pickup window 15 min', 'pcs', 3_000, 5_000, 999, 0],
+  ],
+  cafe: [
+    ['CAFE-SVC-CATERING', 'Catering consultation 30 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['CAFE-SVC-COLLECTION', 'Preorder collection 15 min', 'pcs', 3_000, 5_000, 999, 0],
+  ],
+  restaurant: [
+    ['REST-SVC-DEPOSIT', 'Table reservation deposit', 'pcs', 6_000, 10_000, 999, 0],
+    ['REST-SVC-EVENT', 'Private event consultation 45 min', 'pcs', 15_000, 25_000, 999, 0],
+  ],
+  spa: [
+    ['SPA-SVC-CONSULT', 'Consultation 30 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['SPA-SVC-MASSAGE', 'Traditional Myanmar massage 60 min', 'pcs', 27_000, 45_000, 999, 0],
+    ['SPA-SVC-OIL', 'Aromatic oil massage 90 min', 'pcs', 39_000, 65_000, 999, 0],
+    ['SPA-SVC-FOOT', 'Foot massage 45 min', 'pcs', 16_800, 28_000, 999, 0],
+    ['SPA-SVC-FACIAL', 'Facial treatment 45 min', 'pcs', 22_800, 38_000, 999, 0],
+    ['SPA-SVC-SCRUB', 'Body scrub 60 min', 'pcs', 25_200, 42_000, 999, 0],
+    ['SPA-SVC-STEAM', 'Herbal steam 30 min', 'pcs', 10_800, 18_000, 999, 0],
+  ],
+  gym: [
+    ['GYM-SVC-CONSULT', 'Fitness consultation 30 min', 'pcs', 9_000, 15_000, 999, 0],
+    ['GYM-SVC-PT', 'Personal training 60 min', 'pcs', 18_000, 30_000, 999, 0],
+    ['GYM-SVC-COMPOSITION', 'Body composition check 20 min', 'pcs', 4_800, 8_000, 999, 0],
+    ['GYM-SVC-CLASS', 'Group class 60 min', 'pcs', 7_200, 12_000, 999, 0],
+    ['GYM-SVC-YOGA', 'Yoga session 60 min', 'pcs', 9_000, 15_000, 999, 0],
+    ['GYM-SVC-NUTRITION', 'Nutrition plan review 30 min', 'pcs', 12_000, 20_000, 999, 0],
+  ],
+  school: [
+    ['SCHOOL-SVC-ENROLL', 'Enrollment consultation 30 min', 'pcs', 6_000, 10_000, 999, 0],
+    ['SCHOOL-SVC-PLACEMENT', 'Placement test 45 min', 'pcs', 3_000, 5_000, 999, 0],
+    ['SCHOOL-SVC-ENGLISH', 'English class session 60 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['SCHOOL-SVC-MATHS', 'Maths class session 60 min', 'pcs', 12_000, 20_000, 999, 0],
+    ['SCHOOL-SVC-TUTORING', 'Private tutoring 60 min', 'pcs', 21_000, 35_000, 999, 0],
+    ['SCHOOL-SVC-EXAM', 'Exam preparation session 90 min', 'pcs', 18_000, 30_000, 999, 0],
+  ],
+}
+
+/**
+ * openingStock 999 on a service row means "always bookable", NOT deep stock on a shelf. Anything
+ * that ranks a catalog by onHand has to demote these or they win every slot: the Ecommerce working
+ * sample sorts by onHand and duly put "Catering consultation" and "Preorder collection" on a tea
+ * shop's storefront ahead of the tea. Services became catalog items so they could be CHARGED for at
+ * the counter; that is not the same as being the thing a shop merchandises online.
+ */
+const shopServiceSkus = new Set(Object.values(packServiceRows).flatMap((serviceRows) => serviceRows.map(([sku]) => sku)))
+
+export function isShopServiceSku(sku: string) {
+  return shopServiceSkus.has(sku)
+}
+
+export const shopBusinessTemplates: readonly ShopBusinessTemplate[] = shopBusinessTemplateSeeds.map(
+  (template) => ({ ...template, catalog: [...template.catalog, ...rows(packServiceRows[template.industryPackId])] }),
+)
 
 export function shopBusinessTemplate(id: ShopBusinessTemplateId) {
   const template = shopBusinessTemplates.find((candidate) => candidate.id === id)
@@ -533,9 +485,16 @@ export function shopBusinessTemplateSetupPath(id: ShopBusinessTemplateId) {
   return `/settings/?product=shop&template=${encodeURIComponent(shopBusinessTemplate(id).id)}`
 }
 
+// Item names are the one free-text field here, and they were interpolated raw. No shipped
+// name contains a comma today, so nothing was broken -- but "Front brake pad set, ceramic"
+// is an ordinary thing to call a product, and it would have split into two columns and
+// failed the whole template's import at provisioning time, with no clue as to why.
+// Quoted per RFC 4180, which is what parseCsv in core/client-onboarding.ts already reads.
+const csvField = (value: string) => `"${value.replaceAll('"', '""')}"`
+
 export function shopBusinessTemplateCatalogCsv(id: ShopBusinessTemplateId) {
   const template = shopBusinessTemplate(id)
-  const lines = template.catalog.map((item) => `${item.sku},${item.name},${item.openingStock},${item.reorderAt},${item.priceMmk}`)
+  const lines = template.catalog.map((item) => `${item.sku},${csvField(item.name)},${item.openingStock},${item.reorderAt},${item.priceMmk}`)
   return `sku,item_name,opening_stock,reorder_at,price_mmk\r\n${lines.join('\r\n')}\r\n`
 }
 
@@ -612,6 +571,6 @@ export function validateShopBusinessTemplates() {
       if (!Number.isSafeInteger(line.quantity) || line.quantity < 1) throw new Error(`${order.id} needs whole positive quantities.`)
     }
   }
-  if (templateIds.size !== 11) throw new Error('The Shop business template registry must carry exactly 11 templates.')
+  if (templateIds.size !== 8) throw new Error('The Shop business template registry must carry exactly 8 templates.')
   return shopBusinessTemplates
 }

@@ -63,7 +63,7 @@ function portfolio(overrides = {}, automationOverrides = {}) {
 }
 
 function managedReadiness() {
-  const sourceReceipts = ['portfolio', 'database', 'storage', 'security', 'now', 'package', 'kernel']
+  const sourceReceipts = ['portfolio', 'database', 'storage', 'security', 'storageproof', 'persistenceproof', 'now', 'package', 'kernel']
     .map((path) => ({ path, digest: readinessDigest(path) }))
   return JSON.stringify(buildManagedPilotReadiness({
     portfolio: JSON.parse(portfolio({}, { ecommerce: { status: 'owner-gated' } })),
@@ -81,7 +81,7 @@ function managedReadiness() {
     },
     storageAudit: 'Status: local verifier ready; hosted proof blocked',
     securityAudit: {
-      contract: 'supermega.supabase-security-advisor-audit.v1',
+      contract: 'supermega.supabase-security-advisor-audit.v2',
       asOf: '2026-07-31T10:00:00.000Z',
       projectRef: 'abcdefghijklmnopqrst',
       targetClassification: 'protected-production',
@@ -92,7 +92,7 @@ function managedReadiness() {
       conclusion: { productionMutationAuthorized: false, indirectExposureAudited: true, nextAction: 'Rehearse hardening on an isolated target.' },
       controls: { databaseWrites: 0 },
     },
-    hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\nno release drift is present\nNo named pilot customer',
+    hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\nno release drift is present\nNo self-serve pilot tenant',
     packageManifest: { supermega: { productionSupabaseTargetStatus: 'protected-unapproved', productionSupabaseProjectRef: 'abcdefghijklmnopqrst' } },
     sourceReceipts,
   }))

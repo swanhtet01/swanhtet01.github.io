@@ -16,6 +16,21 @@
   --core-danger: #b42336;
   --core-radius: 14px;
   --core-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  /* Referenced by var() further down but never defined. An undefined custom property
+     makes the whole declaration invalid at computed value time, so these silently
+     removed a card border, a shadow and a focus ring — and, worst, the colour that
+     tells "1 low stock" apart from ordinary counts on the Shop home screen.
+     --core-surface-soft existed only inside .theme-dark, so it was missing in light.
+     NOTE: these are substituted against :root, so every one of them is repeated in the
+     .theme-dark block below. Adding an alias here without adding it there ships a token
+     that is silently stuck on the light value in dark mode. */
+  --core-accent: var(--core-green);
+  --core-focus: var(--core-green);
+  --core-warning: var(--core-warn);
+  --core-text: var(--core-ink);
+  --core-soft: var(--core-panel-raised);
+  --core-surface-soft: var(--core-panel-raised);
+  --core-shadow: 0 1px 2px rgba(23, 35, 29, .04), 0 8px 24px rgba(23, 35, 29, .06);
 }
 
 * { box-sizing: border-box; }
@@ -60,6 +75,7 @@ details:not([open]) > :not(summary) { display: none; }
 .sidebar-foot a { min-height: 36px; display: inline-flex; align-items: center; color: var(--core-muted); font-size: 12px; text-decoration: none; }
 .sidebar-foot .account-shell-link { min-height: 44px; justify-content: center; border: 1px solid var(--core-line); border-radius: 8px; padding-inline: 10px; font-weight: 720; }
 .sidebar-foot .account-shell-link:hover { border-color: var(--core-green); background: var(--core-green-soft); color: var(--core-ink); }
+.sidebar-foot .signup-shell-link { background: var(--core-green-soft); border-color: var(--core-green); color: var(--core-ink); }
 .theme-toggle { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 8px; padding: 0 10px; background: transparent; color: var(--core-muted); font-size: 11px; font-weight: 720; cursor: pointer; }
 .theme-toggle:hover { border-color: var(--core-green); color: var(--core-ink); }
 .theme-toggle span { color: var(--core-green); font-family: var(--core-mono); font-size: 14px; }
@@ -298,9 +314,27 @@ textarea { min-height: 72px; resize: vertical; }
 .template-contract small { grid-column: 2; color: var(--core-quiet); font-size: 7px; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .form-notice { min-height: 16px; margin: 7px 0 0; color: var(--core-quiet); font-size: 12px; line-height: 1.5; }
+.form-notice[data-tone="error"] { color: var(--core-danger); }
 .accountable-action-gate { position: fixed; inset: 0; width: min(680px,calc(100% - 36px)); max-height: calc(100svh - 36px); margin: auto; overflow: auto; border: 1px solid var(--core-line-strong); border-radius: 16px; padding: 24px; color: var(--core-ink); background: #fff; box-shadow: 0 30px 90px rgba(25,54,42,.24); }
 .accountable-action-gate[open] { display: grid; gap: 20px; }
 .accountable-action-gate::backdrop { background: rgba(19,25,41,.5); backdrop-filter: blur(6px); }
+.receipt-dialog { position: fixed; inset: 0; width: min(440px,calc(100% - 24px)); max-height: calc(100svh - 24px); margin: auto; overflow: auto; padding: 0; border: 1px solid var(--core-line-strong); border-radius: 14px; color: var(--core-ink); background: #fff; box-shadow: 0 20px 60px rgba(25,54,42,.22); }
+.receipt-dialog::backdrop { background: rgba(19,25,41,.46); backdrop-filter: blur(4px); }
+.receipt-dialog-header { padding: 16px 18px 12px; border-bottom: 1px solid var(--core-line); }
+.receipt-dialog-header h2 { margin: 4px 0 2px; font-size: 18px; }
+.receipt-dialog-header p { margin: 0; color: var(--core-quiet); font-size: 13px; }
+.receipt-dialog-header small { color: var(--core-quiet); font-size: 11px; font-variant-numeric: tabular-nums; }
+.receipt-dialog-lines { width: 100%; border-collapse: collapse; padding: 10px 0; }
+.receipt-dialog-lines td { padding: 4px 18px; font-size: 13px; vertical-align: top; }
+.receipt-num { text-align: right; white-space: nowrap; padding-left: 8px !important; font-variant-numeric: tabular-nums; }
+.receipt-dialog-totals { padding: 10px 18px; border-top: 1px solid var(--core-line); font-size: 13px; }
+.receipt-dialog-totals > div { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.receipt-total-row { border-top: 1px solid var(--core-line); margin-top: 4px; padding-top: 4px; font-size: 14px; font-weight: 600; }
+.receipt-dialog-payment { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 18px; border-top: 1px solid var(--core-line); font-size: 13px; }
+.receipt-dialog-payment small { flex-basis: 100%; color: var(--core-quiet); }
+.receipt-dialog-delivery { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 18px; border-top: 1px solid var(--core-line); font-size: 13px; color: var(--core-quiet); }
+.receipt-dialog-notice { margin: 0; padding: 8px 18px; font-size: 11px; color: var(--core-quiet); border-top: 1px solid var(--core-line); }
+.receipt-dialog-actions { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--core-line); }
 .action-change h2 { margin: 5px 0 10px; font-size: 22px; }
 .action-change-flow { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 0; }
 .action-change-flow > div { min-width: 0; border: 1px solid var(--core-line); border-radius: 10px; padding: 10px; background: var(--core-surface-soft); }
@@ -378,8 +412,6 @@ textarea { min-height: 72px; resize: vertical; }
 .brief-divider { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; border-top: 1px solid var(--core-line); color: var(--core-muted); font-size: 8px; }
 .brief-output.compact { gap: 3px; }
 .brief-output.compact p { font-size: 8px; }
-.decision-dialog { position: fixed; inset: 0; width: min(820px,calc(100% - 36px)); max-height: calc(100svh - 36px); margin: auto; overflow: auto; border: 1px solid rgba(11,116,94,.24); border-radius: var(--core-radius); padding: 18px; color: var(--core-ink); background: #fff; box-shadow: 0 26px 80px rgba(25,54,42,.2); }
-.decision-dialog::backdrop { background: rgba(2,4,3,.82); backdrop-filter: blur(8px); }
 .decision-packet-meta, .decision-outcomes { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid var(--core-line); border-radius: 5px; }
 .decision-packet-meta span, .decision-outcomes span { min-width: 0; display: grid; gap: 4px; border-right: 1px solid var(--core-line); padding: 9px 10px; }
 .decision-packet-meta span:last-child, .decision-outcomes span:last-child { border-right: 0; }
@@ -534,7 +566,7 @@ textarea { min-height: 72px; resize: vertical; }
 .order-composer-actions { flex: 0 0 auto; }
 .order-entry-methods { flex: 0 0 auto; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; margin-bottom: 0; border-radius: 12px; padding: 4px; background: var(--core-panel-raised); }
 .order-entry-methods button { min-height: 42px; border: 0; border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 13px; font-weight: 740; cursor: pointer; }
-.order-entry-methods button[aria-pressed="true"] { background: #fff; color: var(--core-ink); box-shadow: 0 2px 10px rgba(31,68,51,.09); }
+.order-entry-methods button[aria-pressed="true"] { background: var(--core-panel); color: var(--core-ink); box-shadow: 0 2px 10px rgba(31,68,51,.09); }
 .order-entry-methods button:disabled { cursor: not-allowed; opacity: .55; }
 .order-entry-panel { min-width: 0; min-height: 0; flex: 1; overflow: auto; }
 .order-submit-bar { flex: 0 0 auto; border-top: 1px solid var(--core-line); padding-top: 11px; background: var(--core-panel); }
@@ -569,13 +601,13 @@ textarea { min-height: 72px; resize: vertical; }
 .channel-field-nav { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 4px; padding: 10px; }
 .channel-field-nav button { min-height: 38px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--core-muted); font-size: 11px; font-weight: 720; cursor: pointer; }
 .channel-field-nav button.is-complete::before { margin-right: 4px; color: var(--core-green); content: "•"; }
-.channel-field-nav button[aria-current="step"] { border-color: var(--core-line-strong); background: #fff; color: var(--core-ink); box-shadow: 0 1px 5px rgba(31,68,51,.07); }
+.channel-field-nav button[aria-current="step"] { border-color: var(--core-line-strong); background: var(--core-panel); color: var(--core-ink); box-shadow: 0 1px 5px rgba(31,68,51,.07); }
 .channel-intake-form { max-width: none; gap: 10px; }
 .channel-intake-form > label > textarea { min-height: 66px; }
 .channel-intake-actions { display: grid; grid-template-columns: minmax(150px,auto) minmax(0,1fr); align-items: center; gap: 10px; }
 .channel-intake-actions > small { color: var(--core-quiet); font-size: 11px; line-height: 1.4; }
 .channel-intake-actions > .core-button { min-height: 44px; }
-.channel-mapping-list { border-top: 1px solid var(--core-line); background: #fff; }
+.channel-mapping-list { border-top: 1px solid var(--core-line); background: var(--core-panel); }
 .channel-mapping-row { display: grid; grid-template-columns: minmax(130px,.8fr) minmax(180px,1.2fr); gap: 9px; padding: 12px; }
 .channel-mapping-row:last-child { border-bottom: 0; }
 .channel-mapping-actions { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--core-line); padding: 8px 10px; }
@@ -738,7 +770,10 @@ textarea { min-height: 72px; resize: vertical; }
 .job-list article > div { min-width: 0; display: grid; gap: 3px; }
 .job-list span, .job-list small { color: var(--core-quiet); font-size: 11px; }
 .job-list strong { font-size: 13px; }
-.job-list .job-schedule { color: var(--core-green); font-family: var(--core-mono); font-size: 10px; font-weight: 760; letter-spacing: .02em; }
+/* Owner, priority and due date — and the only element on the card that turns amber for
+   urgent or overdue — was the smallest text on it, below both the product name at 13px and
+   ordinary detail at 11px. A line supervisor reads the deadline before anything else. */
+.job-list .job-schedule { color: var(--core-green); font-family: var(--core-mono); font-size: 12px; font-weight: 760; letter-spacing: .02em; }
 .job-list .job-schedule[data-priority="urgent"], .job-list .job-schedule.overdue { color: var(--core-warn); }
 .job-list .job-schedule[data-priority="low"], .job-list .job-schedule[data-priority="legacy"] { color: var(--core-quiet); }
 .job-list .job-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -848,7 +883,7 @@ textarea { min-height: 72px; resize: vertical; }
 .settings-step-fields[hidden] { display: none; }
 .setup-product-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .setup-product-grid button { min-width: 0; min-height: 92px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: start; border: 1px solid var(--core-line); border-radius: 10px; padding: 13px; background: var(--core-panel-raised); color: var(--core-ink); text-align: left; cursor: pointer; }
-.setup-product-grid button:hover { border-color: var(--core-line-strong); background: #fff; }
+.setup-product-grid button:hover { border-color: var(--core-line-strong); background: var(--core-panel); }
 .setup-product-grid button[aria-pressed="true"] { border-color: var(--core-green); box-shadow: inset 0 0 0 1px var(--core-green); background: var(--core-green-soft); }
 .setup-product-grid button > span { min-width: 0; display: grid; gap: 5px; }
 .setup-product-grid strong { font-size: 15px; }
@@ -997,13 +1032,13 @@ textarea { min-height: 72px; resize: vertical; }
 .plant-job-import strong { color: var(--core-ink); font-size: 12px; }
 .plant-job-import small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
 .plant-job-import-actions { min-width: 0; display: grid; gap: 7px; }
-.plant-job-import-upload { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed rgba(29,78,216,.42); border-radius: 7px; padding: 8px 10px; color: var(--core-ink); background: #fff; font-size: 11px; font-weight: 760; cursor: pointer; }
+.plant-job-import-upload { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px dashed rgba(29,78,216,.42); border-radius: 7px; padding: 8px 10px; color: var(--core-ink); background: var(--core-panel); font-size: 11px; font-weight: 760; cursor: pointer; }
 .plant-job-import-upload input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
 .plant-job-import-repair { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
 .plant-job-import-repair span { min-width: 0; display: grid; gap: 2px; border: 1px solid rgba(217,119,6,.18); border-radius: 7px; padding: 7px; background: rgba(255,251,235,.9); }
 .plant-job-import-repair small { overflow: hidden; color: #9a4b0b; font-family: var(--core-mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .plant-job-import-repair strong { min-width: 0; color: var(--core-ink); font-size: 10px; line-height: 1.3; overflow-wrap: anywhere; }
-.plant-job-import-review { display: grid; gap: 3px; border: 1px solid var(--core-line); border-radius: 7px; padding: 8px; background: #fff; }
+.plant-job-import-review { display: grid; gap: 3px; border: 1px solid var(--core-line); border-radius: 7px; padding: 8px; background: var(--core-panel); }
 .plant-job-import-review.ready { border-color: rgba(5,150,105,.35); background: rgba(5,150,105,.07); }
 .plant-job-import-review.blocked { border-color: rgba(217,119,6,.35); background: rgba(217,119,6,.07); }
 .plant-job-import-review span { color: var(--core-muted); font-size: 11px; line-height: 1.45; }
@@ -1022,7 +1057,7 @@ textarea { min-height: 72px; resize: vertical; }
 .activation-runbook-head > div { min-width: 0; display: grid; gap: 3px; }
 .activation-runbook-head strong { color: var(--core-ink); font-size: 12px; }
 .activation-runbook-head small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
-.activation-runbook-steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 7px; background: #fff; }
+.activation-runbook-steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 7px; background: var(--core-panel); }
 .activation-runbook-steps span { min-width: 0; min-height: 68px; display: grid; align-content: center; gap: 2px; border-right: 1px solid var(--core-line); border-bottom: 1px solid var(--core-line); padding: 7px 8px; }
 .activation-runbook-steps span:nth-child(3n) { border-right: 0; }
 .activation-runbook-steps span:nth-last-child(-n+3) { border-bottom: 0; }
@@ -1116,10 +1151,15 @@ textarea { min-height: 72px; resize: vertical; }
 .managed-login-panel > div:first-child { display: grid; gap: 6px; }
 .managed-login-panel h2 { margin: 0; color: var(--core-ink); font-size: 18px; }
 .managed-login-panel p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.55; }
-.managed-login-panel label { display: grid; gap: 6px; color: var(--core-muted); font-size: 10px; font-weight: 760; }
-.managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0; height: 42px; border: 1px solid var(--core-line); border-radius: 6px; padding: 0 10px; background: var(--core-panel-raised); color: var(--core-ink); font-size: 12px; }
+.managed-login-panel label { display: grid; gap: 6px; color: var(--core-muted); font-size: 12px; font-weight: 760; }
+.managed-login-panel input, .managed-login-panel select { width: 100%; min-width: 0; border: 1px solid var(--core-line); border-radius: 6px; padding: 0 10px; background: var(--core-panel-raised); color: var(--core-ink); font-size: 12px; }
 .managed-login-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.account-inline-link { width: fit-content; color: var(--core-accent); font-size: 11px; font-weight: 760; text-decoration: none; }
+/* The consent row is a label inside .managed-login-panel, whose labels are grids -- a checkbox
+   there stretches to full width and reads as an empty text field. Flow it inline instead, and keep
+   the sentence at body weight so it reads as a promise rather than a field label. */
+.managed-login-panel label.signup-consent { grid-auto-flow: column; grid-template-columns: auto 1fr; align-items: start; gap: 8px; font-weight: 600; line-height: 1.5; }
+.managed-login-panel label.signup-consent input { width: 20px; min-width: 20px; height: 20px; margin-top: 1px; }
+.account-inline-link { width: fit-content; min-height: 44px; display: inline-flex; align-items: center; color: var(--core-accent); font-size: 12px; font-weight: 760; text-decoration: none; }
 .account-inline-link:hover { text-decoration: underline; }
 .account-link-button { font: inherit; cursor: pointer; }
 .premium-pilot-boundary { padding-top: 10px; border-top: 1px solid var(--core-line); }
@@ -1156,6 +1196,12 @@ textarea { min-height: 72px; resize: vertical; }
 .company-backup-categories small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .company-backup-categories strong { color: var(--core-ink); font-size: 12px; }
 .company-backup-notice { min-height: 32px; margin: 0; }
+.capability-locked-list { display: grid; gap: 0; margin: 0; padding: 0; border: 1px solid var(--core-line); border-radius: 8px; overflow: hidden; list-style: none; }
+.capability-locked-list li { display: grid; gap: 2px; border-bottom: 1px solid var(--core-line); padding: 9px 10px; }
+.capability-locked-list li:last-child { border-bottom: 0; }
+.capability-locked-list strong { color: var(--core-ink); font-size: 10px; }
+.capability-locked-list small { color: var(--core-muted); font-size: 9px; line-height: 1.45; }
+.capability-locked-list span { color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; line-height: 1.45; }
 .learning-plan { display: grid; gap: 12px; margin-top: 12px; border: 1px solid rgba(11,116,94,.22); border-radius: 10px; padding: 13px; background: var(--core-panel-raised); }
 .learning-plan h3 { margin: 3px 0 4px; color: var(--core-ink); font-size: 15px; line-height: 1.2; }
 .learning-plan p { margin: 0; color: var(--core-muted); font-size: 11px; line-height: 1.45; }
@@ -1268,9 +1314,9 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-file-actions { display: grid; justify-items: end; gap: 8px; }
 .catalog-import-template-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .catalog-import-file-actions label { display: grid; gap: 4px; color: var(--core-muted); font-size: 11px; font-weight: 700; }
-.catalog-import-file-actions input { width: min(270px,100%); min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 5px; padding: 6px; background: #fff; color: var(--core-muted); font-size: 11px; }
+.catalog-import-file-actions input { width: min(270px,100%); min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 5px; padding: 6px; background: var(--core-panel); color: var(--core-muted); font-size: 11px; }
 .catalog-import-file-actions input::file-selector-button { min-height: 30px; margin-right: 8px; border: 0; border-radius: 4px; padding: 0 10px; background: var(--core-green-soft); color: var(--core-ink); font: inherit; font-weight: 760; cursor: pointer; }
-.catalog-import-help, .catalog-import-advanced { border: 1px solid var(--core-line); border-radius: 8px; background: #fff; }
+.catalog-import-help, .catalog-import-advanced { border: 1px solid var(--core-line); border-radius: 8px; background: var(--core-panel); }
 .catalog-import-help > summary, .catalog-import-advanced > summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 11px; cursor: pointer; color: var(--core-ink); font-size: 11px; font-weight: 760; }
 .catalog-import-help > summary small, .catalog-import-advanced > summary small { color: var(--core-muted); font-size: 9px; font-weight: 600; }
 .catalog-import-help-body, .catalog-import-advanced-body { display: grid; gap: 9px; border-top: 1px solid var(--core-line); padding: 10px; }
@@ -1278,7 +1324,7 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-next-step > div:first-child { min-width: 0; display: grid; gap: 3px; }
 .catalog-import-next-step strong { color: var(--core-ink); font-size: 12px; }
 .catalog-import-next-step small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
-.catalog-import-checklist { display: grid; gap: 9px; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: #fff; }
+.catalog-import-checklist { display: grid; gap: 9px; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: var(--core-panel); }
 .catalog-import-checklist > div:first-child { min-width: 0; display: grid; gap: 3px; }
 .catalog-import-checklist strong { color: var(--core-ink); font-size: 12px; }
 .catalog-import-checklist small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
@@ -1291,12 +1337,16 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-checklist-grid code { overflow: hidden; color: var(--core-green); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .catalog-import-checklist-grid span[data-required="true"] { background: var(--core-green-soft); }
 .catalog-import-boundary { margin: 0; border-left: 2px solid var(--core-green); padding-left: 10px; color: var(--core-muted); font-size: 11px; line-height: 1.5; }
-.catalog-onboarding-status { min-width: 0; flex: 1 0 100%; order: 2; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 7px; background: #fff; }
+/* background was a hardcoded #fff while the strong inside it uses var(--core-ink), so in
+   dark mode near-white text landed on pure white: 1.07:1, invisible, on the Stock tab where
+   the shopkeeper reads their catalog counts. --core-panel IS #ffffff in light, so this is
+   byte-identical there and only changes dark. */
+.catalog-onboarding-status { min-width: 0; flex: 1 0 100%; order: 2; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 7px; background: var(--core-panel); }
 .catalog-onboarding-status span { min-width: 0; min-height: 48px; display: grid; align-content: center; gap: 2px; border-right: 1px solid var(--core-line); padding: 7px 8px; }
 .catalog-onboarding-status span:last-child { border-right: 0; }
 .catalog-onboarding-status small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .catalog-onboarding-status strong { overflow: hidden; color: var(--core-ink); font-size: 10px; line-height: 1.28; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-import-autopilot { display: grid; grid-template-columns: minmax(0,1fr) minmax(320px,.9fr); gap: 12px; align-items: center; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: #fff; }
+.catalog-import-autopilot { display: grid; grid-template-columns: minmax(0,1fr) minmax(320px,.9fr); gap: 12px; align-items: center; border: 1px solid var(--core-line); border-radius: 8px; padding: 10px; background: var(--core-panel); }
 .catalog-import-autopilot > div:first-child { min-width: 0; display: grid; gap: 3px; }
 .catalog-import-autopilot strong { color: var(--core-ink); font-size: 12px; }
 .catalog-import-autopilot small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
@@ -1309,12 +1359,12 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-coach > div:first-child { min-width: 0; display: grid; gap: 3px; }
 .catalog-import-coach strong { color: var(--core-ink); font-size: 12px; }
 .catalog-import-coach small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
-.catalog-import-coach-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 6px; background: #fff; }
+.catalog-import-coach-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 6px; background: var(--core-panel); }
 .catalog-import-coach-list span { min-width: 0; min-height: 44px; display: grid; align-content: center; gap: 2px; border-right: 1px solid var(--core-line); padding: 6px 8px; }
 .catalog-import-coach-list span:last-child { border-right: 0; }
 .catalog-import-coach-list small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .catalog-import-coach-list b { overflow: hidden; color: var(--core-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-import-handoff { display: grid; grid-template-columns: minmax(0,1fr) minmax(320px,.9fr); gap: 12px; align-items: center; border: 1px solid rgba(44,103,91,.28); border-radius: 8px; padding: 10px; background: #fff; }
+.catalog-import-handoff { display: grid; grid-template-columns: minmax(0,1fr) minmax(320px,.9fr); gap: 12px; align-items: center; border: 1px solid rgba(44,103,91,.28); border-radius: 8px; padding: 10px; background: var(--core-panel); }
 .catalog-import-handoff > div:first-child { min-width: 0; display: grid; gap: 3px; }
 .catalog-import-handoff strong { color: var(--core-ink); font-size: 12px; }
 .catalog-import-handoff small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
@@ -1334,11 +1384,11 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-repair strong { color: var(--core-ink); font-size: 12px; }
 .catalog-import-repair small { color: var(--core-muted); font-size: 10px; line-height: 1.45; }
 .catalog-import-repair-list { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); overflow: hidden; border: 1px solid var(--core-line); border-radius: 6px; }
-.catalog-import-repair-list span { min-width: 0; min-height: 44px; display: grid; align-content: center; gap: 2px; border-right: 1px solid var(--core-line); padding: 6px 8px; background: #fff; }
+.catalog-import-repair-list span { min-width: 0; min-height: 44px; display: grid; align-content: center; gap: 2px; border-right: 1px solid var(--core-line); padding: 6px 8px; background: var(--core-panel); }
 .catalog-import-repair-list span:last-child { border-right: 0; }
 .catalog-import-repair-list small { overflow: hidden; color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .catalog-import-repair-list b { overflow: hidden; color: var(--core-ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-import-mapping-review, .catalog-import-row-review { border: 1px solid var(--core-line); border-radius: 8px; background: #fff; }
+.catalog-import-mapping-review, .catalog-import-row-review { border: 1px solid var(--core-line); border-radius: 8px; background: var(--core-panel); }
 .catalog-import-mapping-review > summary, .catalog-import-row-review > summary { min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 11px; color: var(--core-ink); font-size: 11px; font-weight: 760; cursor: pointer; list-style: none; }
 .catalog-import-mapping-review > summary::-webkit-details-marker, .catalog-import-row-review > summary::-webkit-details-marker { display: none; }
 .catalog-import-mapping-review > summary::before, .catalog-import-row-review > summary::before { color: var(--core-green); font-family: var(--core-mono); content: ">_"; }
@@ -1358,7 +1408,12 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-totals span[data-result="issue"] strong { color: var(--core-warn); }
 .catalog-import-totals small { color: var(--core-quiet); font-family: var(--core-mono); font-size: 7px; text-transform: uppercase; }
 .catalog-import-file-issues { display: grid; gap: 4px; margin: 0; border: 1px solid rgba(148,98,0,.22); border-radius: 8px; padding: 9px 9px 9px 27px; background: rgba(148,98,0,.06); color: var(--core-warn); font-size: 9px; }
-.catalog-import-table { max-height: 340px; overflow: auto; background: #fff; }
+/* The import preview rows. A static audit passed over this one because the rule declares no
+   colour of its own -- the SKU and status text INHERIT --core-ink from an ancestor, so there
+   is no `color: var(...)` here to notice. In dark mode that put near-white SKUs on pure white
+   at 2.2:1 and the Ready badge at 1.44:1, on the screen where a shopkeeper checks their
+   catalog before importing it. Found by opening the flow, not by reading the stylesheet. */
+.catalog-import-table { max-height: 340px; overflow: auto; background: var(--core-panel); }
 .catalog-import-row-review .panel-copy { margin: 8px 11px 11px; }
 .catalog-import-row { min-height: 48px; display: grid; grid-template-columns: 44px minmax(120px,.6fr) 110px minmax(220px,1.4fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--core-line); padding: 7px 10px; color: var(--core-muted); font-size: 10px; }
 .catalog-import-row:last-child { border-bottom: 0; }
@@ -1375,7 +1430,7 @@ textarea { min-height: 72px; resize: vertical; }
 .catalog-import-technical { margin-top: 3px; }
 .catalog-import-technical > summary { width: max-content; color: var(--core-quiet); font-size: 9px; cursor: pointer; }
 .catalog-import-technical p { margin: 5px 0 0; color: var(--core-quiet); font-family: var(--core-mono); font-size: 8px; line-height: 1.45; overflow-wrap: anywhere; }
-.agent-create-form { position: absolute; z-index: 8; top: 42px; right: 0; width: 300px; border: 1px solid var(--core-line-strong); border-radius: 12px; padding: 12px; background: #fff; box-shadow: 0 18px 50px rgba(25,54,42,.16); }
+.agent-create-form { position: absolute; z-index: 8; top: 42px; right: 0; width: 300px; border: 1px solid var(--core-line-strong); border-radius: 12px; padding: 12px; background: var(--core-panel); box-shadow: 0 18px 50px rgba(25,54,42,.16); }
 .evidence-disclosure .compact-disclosure { margin-top: 2px; }
 .evidence-disclosure .inline-evidence { margin-bottom: 3px; }
 .evidence-disclosure .evidence-record-list { max-height: 190px; }
@@ -1419,7 +1474,7 @@ textarea { min-height: 72px; resize: vertical; }
 .legacy-website-intake > summary::after { color: var(--core-green); font-size: 18px; content: "+"; }
 .legacy-website-intake[open] > summary::after { content: "−"; }
 .legacy-website-intake > .website-intake { border: 0; border-top: 1px solid var(--core-line); border-radius: 0; box-shadow: none; }
-.website-intake-confirm { min-height: 44px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 9px; padding: 7px 9px; background: #fff; font-size: 9px; line-height: 1.35; }
+.website-intake-confirm { min-height: 44px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--core-line); border-radius: 9px; padding: 7px 9px; background: var(--core-panel); font-size: 9px; line-height: 1.35; }
 .website-intake-confirm input { width: 16px; min-height: 16px; margin: 0; }
 .website-intake-completion { display: grid; gap: 8px; }
 .website-intake-completion > .core-button { justify-self: start; }
@@ -1448,12 +1503,12 @@ textarea { min-height: 72px; resize: vertical; }
 .ecommerce-preview-panel { overflow: visible; }
 .ecommerce-copy-fields { display: grid; grid-template-columns: minmax(0,.72fr) minmax(0,1.28fr); gap: 9px; margin-top: 2px; }
 .ecommerce-copy-fields label { display: grid; gap: 6px; color: var(--core-muted); font-size: 10px; font-weight: 720; }
-.ecommerce-copy-fields input, .ecommerce-copy-fields textarea { width: 100%; min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 9px; padding: 10px 11px; background: #fff; color: var(--core-ink); font-size: 13px; resize: none; }
+.ecommerce-copy-fields input, .ecommerce-copy-fields textarea { width: 100%; min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 9px; padding: 10px 11px; background: var(--core-panel); color: var(--core-ink); font-size: 13px; resize: none; }
 .ecommerce-catalog-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 15px 0 7px; }
 .ecommerce-catalog-head strong { font-size: 12px; }
 .ecommerce-catalog-head small { color: var(--core-quiet); font-size: 9px; }
 .ecommerce-catalog-list { min-height: 0; display: grid; align-content: start; gap: 6px; overflow: visible; }
-.ecommerce-catalog-item { width: 100%; min-height: 58px; display: grid; grid-template-columns: minmax(0,1fr) auto 28px; align-items: center; gap: 10px; border: 1px solid var(--core-line); border-radius: 10px; padding: 8px 9px 8px 11px; background: #fff; color: var(--core-ink); text-align: left; cursor: pointer; }
+.ecommerce-catalog-item { width: 100%; min-height: 58px; display: grid; grid-template-columns: minmax(0,1fr) auto 28px; align-items: center; gap: 10px; border: 1px solid var(--core-line); border-radius: 10px; padding: 8px 9px 8px 11px; background: var(--core-panel); color: var(--core-ink); text-align: left; cursor: pointer; }
 .ecommerce-catalog-item:hover { border-color: rgba(11,116,94,.34); }
 .ecommerce-catalog-item[aria-pressed="true"] { border-color: rgba(11,116,94,.34); background: var(--core-green-soft); }
 .ecommerce-catalog-item:disabled { cursor: not-allowed; opacity: .48; }
@@ -1511,7 +1566,7 @@ textarea { min-height: 72px; resize: vertical; }
 .ecommerce-request-body { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(180px,.6fr); gap: 10px; padding: 11px; }
 .ecommerce-request-body form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .ecommerce-request-body form label { display: grid; gap: 5px; color: var(--core-muted); font-size: 9px; font-weight: 720; }
-.ecommerce-request-body form input, .ecommerce-request-body form select { width: 100%; min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 8px; padding: 0 9px; background: #fff; color: var(--core-ink); font-size: 11px; }
+.ecommerce-request-body form input, .ecommerce-request-body form select { width: 100%; min-height: 44px; border: 1px solid var(--core-line-strong); border-radius: 8px; padding: 0 9px; background: var(--core-panel); color: var(--core-ink); font-size: 11px; }
 .ecommerce-request-body form .core-button { grid-column: 1/-1; }
 .ecommerce-request-receipt { min-width: 0; display: grid; align-content: center; gap: 5px; border: 1px solid rgba(11,116,94,.18); border-radius: 9px; padding: 11px; background: var(--core-green-soft); }
 .ecommerce-request-receipt strong { overflow: hidden; font-family: var(--core-mono); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1529,7 +1584,10 @@ textarea { min-height: 72px; resize: vertical; }
   --core-surface-soft: #111923;
   --core-ink: #f5f8fb;
   --core-muted: #a4b0be;
-  --core-quiet: #718093;
+  /* #718093 measured 4.31:1 against the raised panel behind the counter tiles — under the
+     4.5:1 AA floor for text this size, and it carries the stock reading. Lightened just far
+     enough to clear it at 4.91:1 rather than restyling the palette. */
+  --core-quiet: #7a8a9c;
   --core-line: rgba(166,190,214,.13);
   --core-line-strong: rgba(166,190,214,.24);
   --core-green: #56f0c1;
@@ -1538,11 +1596,28 @@ textarea { min-height: 72px; resize: vertical; }
   --core-success-soft: rgba(86,240,193,.11);
   --core-warn: #ffcc7a;
   --core-danger: #ff8291;
+  /* The aliases must be restated here. A var() inside a custom property is substituted
+     against the element the property is DECLARED on — :root — not the element that uses it,
+     so `--core-accent: var(--core-green)` on :root freezes at the light green and never sees
+     this block. .theme-dark is a descendant div, not :root, so it cannot retroactively
+     change what :root already computed. Verified: before this, --core-accent read #0b745e
+     and --core-text read #17231d inside dark mode. */
+  --core-accent: var(--core-green);
+  --core-focus: var(--core-green);
+  --core-warning: var(--core-warn);
+  --core-text: var(--core-ink);
+  --core-soft: var(--core-panel-raised);
+  --core-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px rgba(0, 0, 0, .38);
   background: radial-gradient(circle at 72% -10%, rgba(42,120,133,.2), transparent 32%), #05080d;
   color: var(--core-ink);
 }
 .theme-dark .core-sidebar { border-color: var(--core-line); background: rgba(7,11,17,.96); }
 .theme-dark .core-topbar { border-color: var(--core-line); background: rgba(6,10,15,.9); }
+.theme-dark .next-task-card { border-color: rgba(86,240,193,.18); background: linear-gradient(135deg, rgba(86,240,193,.08), var(--core-panel) 48%); }
+.theme-dark .product-trial-context { border-color: rgba(86,240,193,.18); background: linear-gradient(105deg, rgba(86,240,193,.09), var(--core-panel) 94%); }
+.theme-dark .plant-job-import-repair span { border-color: rgba(217,119,6,.25); background: rgba(40,30,8,.9); }
+.theme-dark .plant-job-import-repair small { color: #e89a4a; }
+.theme-dark .website-intake { border-color: rgba(86,240,193,.2); background: linear-gradient(110deg, rgba(86,240,193,.07), var(--core-panel) 48%); }
 .theme-dark .core-main { background: transparent; }
 .theme-dark .core-nav a:hover { background: rgba(86,240,193,.07); }
 .theme-dark .core-nav a.active { border-color: rgba(86,240,193,.22); background: rgba(86,240,193,.1); }
@@ -1551,11 +1626,12 @@ textarea { min-height: 72px; resize: vertical; }
 .theme-dark .core-button.primary { border-color: var(--core-green); background: var(--core-green); color: #02120d; }
 .theme-dark input, .theme-dark select, .theme-dark textarea { border-color: var(--core-line-strong); background: #090f16; color: var(--core-ink); }
 .theme-dark input::placeholder, .theme-dark textarea::placeholder { color: #657386; }
-.theme-dark .core-panel, .theme-dark .production-mode-banner, .theme-dark .accountable-action-gate { border-color: var(--core-line); background: var(--core-panel); box-shadow: 0 18px 48px rgba(0,0,0,.22); }
+.theme-dark .core-panel, .theme-dark .production-mode-banner, .theme-dark .accountable-action-gate, .theme-dark .receipt-dialog { border-color: var(--core-line); background: var(--core-panel); box-shadow: 0 18px 48px rgba(0,0,0,.22); }
 .theme-dark .runtime-badge.demo, .theme-dark .runtime-badge.enterprise { border-color: rgba(86,240,193,.22); color: var(--core-green); }
 .theme-dark .mobile-nav { border-color: var(--core-line); background: rgba(7,11,17,.97); box-shadow: 0 -12px 34px rgba(0,0,0,.28); }
 .theme-dark .mobile-nav a.active { border-color: var(--core-green); color: var(--core-green); }
 .theme-dark .accountable-action-gate::backdrop { background: rgba(0,3,7,.76); }
+.theme-dark .receipt-dialog::backdrop { background: rgba(0,3,7,.68); }
 .theme-dark :focus-visible { outline-color: rgba(86,240,193,.48); }
 
 .commerce-screen { gap: 10px; }
@@ -1596,8 +1672,12 @@ textarea { min-height: 72px; resize: vertical; }
 .shop-product-art .art-highlight { fill: none; stroke: rgba(255,255,255,.8); stroke-linecap: round; stroke-linejoin: round; stroke-width: 4; }
 .shop-product-copy { min-width: 0; display: grid; gap: 3px; }
 .shop-product-copy strong { overflow: hidden; font-size: 14px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
-.shop-product-copy b { margin-top: 3px; color: var(--core-ink); font-family: var(--core-mono); font-size: 12px; }
-.shop-product-copy small { overflow: hidden; color: var(--core-quiet); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+/* Price and stock are the two numbers the counter actually reads, and they were the
+   smallest text on the screen — 12px and 9px, on a tile 220px tall. Burmese script needs
+   more height than Latin to stay legible, and the reader is often standing over a phone in
+   a bright shop. The price now leads the tile. */
+.shop-product-copy b { margin-top: 3px; color: var(--core-ink); font-family: var(--core-mono); font-size: 15px; }
+.shop-product-copy small { overflow: hidden; color: var(--core-quiet); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .shop-product-copy small.is-low { color: var(--core-warn); }
 .shop-product-add, .shop-product-quantity { position: absolute; top: 18px; right: 18px; min-width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(4,9,13,.72); color: #fff; font-size: 18px; font-weight: 800; backdrop-filter: blur(8px); }
 .shop-product-quantity { border-color: var(--art); background: var(--art); color: #07110e; font-family: var(--core-mono); font-size: 12px; }
@@ -1695,11 +1775,11 @@ textarea { min-height: 72px; resize: vertical; }
   .core-topbar .topbar-meta { display: flex; }
   .mobile-brand { display: flex !important; }
   .topbar-title, .topbar-meta > span { display: none !important; }
-  .topbar-meta > a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; color: var(--core-muted); font-size: 10px; font-weight: 720; text-decoration: none; }
-  .core-topbar .mobile-account-link,
+  .topbar-meta > a { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; color: var(--core-muted); font-size: 12px; font-weight: 720; text-decoration: none; }
   .core-topbar .runtime-badge { display: none; }
+  .core-topbar .mobile-signup-topbar-link { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; color: var(--core-green); font-size: 12px; font-weight: 720; text-decoration: none; }
   .mobile-nav { position: fixed; inset: auto 0 0; z-index: 40; width: 100%; max-width: 100%; min-height: 64px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); overflow: hidden; border-top: 1px solid var(--core-line); padding-bottom: env(safe-area-inset-bottom); background: rgba(255,255,255,.97); box-shadow: 0 -12px 34px rgba(25,54,42,.1); backdrop-filter: blur(18px); }
-  .mobile-nav a { min-width: 0; display: grid; place-items: center; border-top: 2px solid transparent; padding-inline: 2px; overflow: hidden; color: var(--core-quiet); font-size: 9px; font-weight: 740; text-align: center; text-overflow: ellipsis; text-decoration: none; white-space: nowrap; }
+  .mobile-nav a { min-width: 0; display: grid; place-items: center; border-top: 2px solid transparent; padding-inline: 2px; overflow: hidden; color: var(--core-quiet); font-size: 12px; font-weight: 740; text-align: center; text-overflow: ellipsis; text-decoration: none; white-space: nowrap; }
   .mobile-nav a.active { border-top-color: var(--core-green); color: var(--core-green); }
   .core-main { width: min(calc(100% - 24px),760px); max-width: calc(100% - 24px); height: auto; min-height: 0; padding: 18px 0 calc(88px + env(safe-area-inset-bottom)); overflow: visible; }
   .product-system-navigator > summary { min-height: 46px; padding-inline: 12px; }
@@ -1756,6 +1836,12 @@ textarea { min-height: 72px; resize: vertical; }
   .production-operation-module > .control-workspace { min-height: 0; flex: none; }
   .production-operation-module > .production-view > .output-panel { position: fixed; top: auto; right: 6px; bottom: calc(67px + env(safe-area-inset-bottom)); width: min(480px,calc(100% - 12px)); height: auto; max-height: calc(100svh - 78px - env(safe-area-inset-bottom)); border-radius: 18px 18px 8px 8px; padding: 16px; transform: translateY(24px) scale(.985); }
   .operation-module > .split-workspace, .operation-module > .module-today, .operation-module > .control-workspace, .operation-module > .inventory-panel { flex: none; }
+  /* The mobile override above restates the panel's closed transform, and it has the same
+     specificity as `.production-view .output-panel.is-open` while sitting later in the
+     file — so on phones the open panel kept its closed offset and never settled: 1.5%
+     undersized and nudged 24px down, over the whole shift. Restate the open transform
+     here so the open state wins on mobile too. */
+  .production-operation-module > .production-view > .output-panel.is-open { transform: none; }
   .plant-output-backdrop { inset: 0 0 calc(64px + env(safe-area-inset-bottom)); }
   .production-view .output-panel :is(button,input,select,summary) { min-height: 46px; }
   .accountable-action-gate, .action-history { min-height: 0; }
@@ -2012,7 +2098,6 @@ textarea { min-height: 72px; resize: vertical; }
   .operations-toolbar-actions .view-tabs { min-width: 0; overflow-x: auto; }
   .form-row, .record-controls, .order-essential-fields { grid-template-columns: 1fr; }
   .order-submit-bar[data-ecommerce-payment="true"] { grid-template-columns: 1fr; }
-  .decision-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 10px 10px 0 0; padding: 15px; }
   .accountable-action-gate { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 16px 16px 0 0; padding: 18px; }
   .action-change-flow { grid-template-columns: 1fr; }
   .production-issue-dialog { inset: auto 0 0; width: 100%; max-height: 92svh; margin: 0 auto; border-radius: 16px 16px 0 0; padding: 18px; }
@@ -2100,6 +2185,8 @@ textarea { min-height: 72px; resize: vertical; }
   .compact-disclosure > summary { min-height: 44px; }
   .core-button, .core-button.compact, .text-link, .core-topbar .mobile-brand .core-brand, .topbar-meta > a, .segmented-control button, .segmented-control a, .view-tabs button, .mobile-nav a { min-height: 44px; }
   input, select, textarea { font-size: 16px; }
+  /* Component rules outrank the element floor above; re-assert it where they win, or iOS zooms mid-form. */
+  .managed-login-panel input, .managed-login-panel select { font-size: 16px; }
   .module-today .summary-strip.compact-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .module-today .summary-strip.compact-summary > span { border-bottom: 0; }
   .module-today .summary-strip.compact-summary > span:first-child { border-right: 1px solid var(--core-line); }
@@ -2107,6 +2194,21 @@ textarea { min-height: 72px; resize: vertical; }
   .order-entry-methods button { min-height: 46px; font-size: 14px; }
   .order-draft-recovery, .order-draft-status { align-items: stretch; flex-direction: column; }
   .order-draft-recovery-actions { justify-content: flex-start; flex-wrap: wrap; }
+  /* 375px audit, deferred P2 sweep: interactive text below 12px and tap targets below 44px
+     that survived the earlier pass. Text-only bumps where the 44px floor above already covers
+     the target; explicit floors where a component rule outranks it. Non-interactive captions
+     (record metadata, eyebrows, summary sub-lines) deliberately keep their smaller sizes. */
+  .segmented-control button, .segmented-control a, .view-tabs button, .core-button.compact, .text-link { font-size: 12px; }
+  .compact-disclosure > summary, .order-row-more > summary { font-size: 12px; }
+  .action-history summary { font-size: 12px; }
+  .catalog-import-technical > summary { min-height: 44px; font-size: 12px; }
+  .shop-payment-options button { min-height: 44px; font-size: 12px; }
+  .shop-pack-context a { min-height: 44px; font-size: 12px; }
+  .shop-counter-summary a { font-size: 12px; }
+  .shop-quantity-stepper { grid-template-columns: 40px 30px 40px; }
+  .shop-quantity-stepper button { width: 40px; min-height: 44px; }
+  .production-mode-banner > a { min-height: 44px; }
+  .evidence-disclosure .inline-evidence input, .evidence-disclosure .inline-evidence select, .evidence-disclosure .inline-evidence .core-button, .evidence-verification-form input, .evidence-verification-form .core-button { min-height: 44px; }
 }
 
 @media (max-width: 720px) {
@@ -2138,7 +2240,7 @@ textarea { min-height: 72px; resize: vertical; }
   .shop-current-sale { position: fixed; right: 6px; bottom: calc(67px + env(safe-area-inset-bottom)); z-index: 72; width: min(430px,calc(100% - 12px)); max-height: calc(100svh - 78px - env(safe-area-inset-bottom)); border-radius: 18px 18px 8px 8px; padding: 16px; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(24px) scale(.985); transition: opacity .18s ease, transform .18s ease, visibility .18s; }
   .shop-current-sale.is-open { opacity: 1; visibility: visible; pointer-events: auto; transform: none; }
   .shop-cart-lines { overflow-y: auto; }
-  .shop-cart-close { width: 38px; min-height: 38px; display: grid; place-items: center; border: 1px solid var(--core-line); border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 24px; cursor: pointer; }
+  .shop-cart-close { width: 44px; min-height: 44px; display: grid; place-items: center; border: 1px solid var(--core-line); border-radius: 9px; background: transparent; color: var(--core-muted); font-size: 24px; cursor: pointer; }
   .shop-cart-backdrop { position: fixed; inset: 0 0 calc(64px + env(safe-area-inset-bottom)); z-index: 71; display: block; border: 0; background: rgba(0,3,7,.68); opacity: 0; visibility: hidden; pointer-events: none; backdrop-filter: blur(4px); transition: opacity .18s ease, visibility .18s; }
   .shop-cart-backdrop.is-open { opacity: 1; visibility: visible; pointer-events: auto; }
   .shop-mobile-cart { position: fixed; right: 12px; bottom: calc(74px + env(safe-area-inset-bottom)); left: 12px; z-index: 45; min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border: 1px solid rgba(86,240,193,.42); border-radius: 15px; padding: 0 17px; background: #56f0c1; color: #03140f; box-shadow: 0 14px 40px rgba(0,0,0,.38); cursor: pointer; }
@@ -2160,7 +2262,9 @@ textarea { min-height: 72px; resize: vertical; }
   .shop-product-tile { min-height: 190px; border-radius: 14px; padding: 8px; }
   .shop-product-art { height: 96px; }
   .shop-product-copy strong { font-size: 12px; }
-  .shop-product-copy b { font-size: 10px; }
+  /* The price previously shrank to 10px here — smaller on the phone at the counter than on
+     the desktop nobody sells from. Hold it at the readable size; the tile has the room. */
+  .shop-product-copy b { font-size: 14px; }
   .shop-product-add, .shop-product-quantity { top: 14px; right: 14px; }
   .shop-current-sale { right: 0; bottom: calc(64px + env(safe-area-inset-bottom)); width: 100%; max-height: calc(100svh - 64px - env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; }
   .shop-current-sale > footer { position: sticky; bottom: 0; background: var(--core-panel); }

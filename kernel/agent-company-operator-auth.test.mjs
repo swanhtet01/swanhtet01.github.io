@@ -309,9 +309,9 @@ test('owner access inventory fails closed on non-durable or integrity-invalid re
 
 test('owner key remains a separate bootstrap path and never falls through to a session', async () => {
   const state = harness()
-  const owner = await authorizeCompanyRequest({ headers: { 'x-ops-key': 'owner-secret' } }, {
+  const owner = await authorizeCompanyRequest({ headers: { 'x-ops-key': 'owner-secret-0123456789abcdef0123' } }, {
     ...state.options,
-    opsKey: 'owner-secret',
+    opsKey: 'owner-secret-0123456789abcdef0123',
     clientId: 'client-acme',
   })
   assert.equal(owner.ok, true)
@@ -326,7 +326,7 @@ test('owner key remains a separate bootstrap path and never falls through to a s
   })
   assert.equal((await authorizeCompanyRequest({ headers: { 'x-ops-key': 'wrong' } }, {
     ...state.options,
-    opsKey: 'owner-secret',
+    opsKey: 'owner-secret-0123456789abcdef0123',
   })).reason, 'unauthorized')
   assert.equal((await authorizeCompanyRequest({ headers: {} }, state.options)).reason, 'unauthorized')
 })

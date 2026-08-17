@@ -1,6 +1,7 @@
 // SUPERMEGA console — API handlers (host-agnostic). One handle() the dev server and a
 // Vercel function both call. Passcode-gated (x-ops-key). See ../../PLATFORM.md.
 
+import { usableOpsKey } from '../ops-key.mjs'
 import store from '../store.mjs'
 import { generateDeal } from './deal.mjs'
 import { onDealSaved, onProjectShipped } from './graduation.mjs'
@@ -9,7 +10,20 @@ import { companyDailyBudgetCap, currentDailyBudgetWindow, providerChain } from '
 import { listLeadsForReview, markLeadReviewed } from './leads-review.mjs'
 import crypto from 'node:crypto'
 
-const OPS_KEY = (process.env.SUPERMEGA_OPS_KEY || '').trim()
+// One implementation of the floor for every owner surface — see kernel/ops-key.mjs. A key
+// below it reads as absent here, so the existing missing-key branch refuses everything and
+// the console behaves identically to crew, approvals, operator and the workcell endpoints.
+const OPS_KEY = usableOpsKey(process.env.SUPERMEGA_OPS_KEY)
+// A rejected request is worth recording — a credential-stuffing run against the console
+// currently leaves no trace at all. But the log write happens BEFORE authentication, so
+// writing one row per failure would hand an unauthenticated caller a way to flood the
+// activity table. Collapse bursts to one row per window; sustained volume control belongs
+// at the WAF, not here.
+const AUTH_FAILURE_LOG_INTERVAL_MS = 60_000
+let lastAuthFailureLoggedAt = 0
+let authFailureCount = 0
+// Next count that forces an entry: 1, then 10, 100, 1000 …
+let nextAuthFailureThreshold = 1
 // Constant-time, length-safe equality (hash both to fixed-width digests so timingSafeEqual
 // never throws on unequal lengths and no length is leaked via timing).
 function constantTimeEqual(a, b) {
@@ -74,11 +88,53 @@ const ok = (json) => ({ status: 200, json })
 const bad = (status, reason) => ({ status, json: { ok: false, reason } })
 const log = (kind, summary, ref) => store.logActivity({ kind, summary, ref }).catch(() => {})
 
+// Packet fields are generated text seeded from public contact-form input and can contain
+// characters that are markup in HTML. Interpolating them raw does not just risk injection
+// — it routinely mangles ordinary content, e.g. a Burmese business name containing '&' or
+// an MMK range written with '<'. Escape before any deliberate markup is added.
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+// Records a rejected console request. Never logs the supplied key or any part of it —
+// only that a rejection happened, where, and how many were folded into this entry.
+function recordAuthFailure(method, path) {
+  authFailureCount += 1
+  const now = Date.now()
+  // Log on the first failure, then at each power of ten, and otherwise at most once per
+  // window. A time window alone silently loses a burst that STOPS inside it: 500 attempts
+  // in thirty seconds logged the first and discarded the other 499, so the entry meant to
+  // reveal credential stuffing under-reported it 500-fold. The count thresholds guarantee a
+  // burst is always visible while the number of writes grows logarithmically rather than
+  // with the attack — 500 attempts produce three entries, not five hundred.
+  const hitThreshold = authFailureCount >= nextAuthFailureThreshold
+  const windowElapsed = now - lastAuthFailureLoggedAt >= AUTH_FAILURE_LOG_INTERVAL_MS
+  if (!hitThreshold && !windowElapsed) return
+  if (hitThreshold) nextAuthFailureThreshold *= 10
+  lastAuthFailureLoggedAt = now
+  const route = String(path || '').slice(0, 120)
+  // The running total is reported, not a delta, so a reader never has to add up entries.
+  // It is per process: serverless fan-out means several instances each count their own,
+  // which errs toward more entries rather than fewer.
+  const summary = authFailureCount > 1
+    ? `Rejected ${authFailureCount} console requests on this instance (latest ${method} ${route})`
+    : `Rejected console request ${method} ${route}`
+  log('console.auth_rejected', summary, route)
+}
+
 /** @param {{method:string, path:string, query?:object, body?:object, headers?:object}} req */
 export async function handle({ method, path, query = {}, body = {}, headers = {} }) {
   // Fail CLOSED: a missing/blank ops key must DENY all requests — never authenticate everyone.
+  // usableOpsKey has already reduced a below-floor key to '', so this one branch covers both
+  // "never set" and "too short" with a single reason that discloses nothing.
   if (!OPS_KEY) return bad(503, 'ops_key_not_configured')
-  if (!constantTimeEqual(String(headers['x-ops-key'] || ''), OPS_KEY)) return bad(401, 'unauthorized')
+  if (!constantTimeEqual(String(headers['x-ops-key'] || ''), OPS_KEY)) {
+    recordAuthFailure(method, path)
+    return bad(401, 'unauthorized')
+  }
   const seg = path.replace(/^\/api\//, '').replace(/\/+$/, '').split('/')
 
   try {
@@ -122,7 +178,9 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
       // `leads_source_not_configured` (never a silent empty list). Read + record only.
       if (method === 'GET' && seg[1] === 'review' && !seg[2]) {
         const limit = query.limit != null && String(query.limit).trim() !== '' ? Number(query.limit) : 50
-        const result = await listLeadsForReview({ limit })
+        // Smoke-test submissions share this table with customers; they stay hidden unless asked for.
+        const includeSynthetic = String(query.includeSynthetic ?? '').trim() === '1'
+        const result = await listLeadsForReview({ limit, includeSynthetic })
         if (!result.ok) return { status: result.reason === 'leads_source_not_configured' ? 503 : 400, json: result }
         return ok(result)
       }
@@ -267,13 +325,15 @@ export async function handle({ method, path, query = {}, body = {}, headers = {}
         if (!to) return bad(400, 'no_recipient_email')
         const p = deal.packet || {}
         const subject = p.headline ? `Proposal: ${String(p.headline).slice(0, 160)}` : 'A custom software proposal from SuperMega'
-        const modulesHtml = (p.modules || []).map((m) => `<li><strong>${m.name}</strong> — ${m.why}</li>`).join('')
+        const modulesHtml = (p.modules || []).map((m) => `<li><strong>${escapeHtml(m.name)}</strong> — ${escapeHtml(m.why)}</li>`).join('')
         const html = [
           '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a1a1a;line-height:1.6">',
-          p.outreach_en ? `<p>${p.outreach_en.replace(/\n/g, '<br>')}</p>` : '',
+          // Escaped first, so only these <br> are markup — anything markup-shaped in the
+          // author's text stays visible text.
+          p.outreach_en ? `<p>${escapeHtml(p.outreach_en).replace(/\n/g, '<br>')}</p>` : '',
           modulesHtml ? `<p><strong>What we'd build for you:</strong></p><ul>${modulesHtml}</ul>` : '',
-          p.pricing?.build_fee_mmk ? `<p><strong>Build fee:</strong> ${p.pricing.build_fee_mmk}${p.pricing.pro_mrr_mmk ? ` &middot; Care: ${p.pricing.pro_mrr_mmk}/mo` : ''}</p>` : '',
-          p.first_proof ? `<p><strong>First result you'd see:</strong> ${p.first_proof}</p>` : '',
+          p.pricing?.build_fee_mmk ? `<p><strong>Build fee:</strong> ${escapeHtml(p.pricing.build_fee_mmk)}${p.pricing.pro_mrr_mmk ? ` &middot; Care: ${escapeHtml(p.pricing.pro_mrr_mmk)}/mo` : ''}</p>` : '',
+          p.first_proof ? `<p><strong>First result you'd see:</strong> ${escapeHtml(p.first_proof)}</p>` : '',
           '<p style="margin-top:24px">— Swan Htet, SuperMega<br><a href="https://supermega.dev">supermega.dev</a></p>',
           '</div>',
         ].filter(Boolean).join('\n')

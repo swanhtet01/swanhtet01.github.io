@@ -16,7 +16,7 @@ const products = ['shop', 'plant', 'website', 'ecommerce'].map((id) => ({
     reason: 'Named operator and isolated tenant are missing.',
   },
 }))
-const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((path) => ({ path, digest: readinessDigest(path) }))
+const sourceReceipts = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map((path) => ({ path, digest: readinessDigest(path) }))
 const input = {
   portfolio: { schemaVersion: 'supermega.hq.portfolio.v3', products },
   databaseEvidence: {
@@ -33,7 +33,7 @@ const input = {
   },
   storageAudit: 'Status: local verifier ready; hosted proof blocked',
   securityAudit: {
-    contract: 'supermega.supabase-security-advisor-audit.v1',
+    contract: 'supermega.supabase-security-advisor-audit.v2',
     asOf: '2026-08-04T05:28:37.850Z',
     projectRef: 'abcdefghijklmnopqrst',
     targetClassification: 'protected-production',
@@ -44,14 +44,14 @@ const input = {
     conclusion: { productionMutationAuthorized: false, indirectExposureAudited: true, nextAction: 'Rehearse hardening on an isolated target.' },
     controls: { databaseWrites: 0 },
   },
-  hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\nno release drift is present\nNo named pilot customer',
+  hqNow: 'Live operating mode: `isolated_demo`\nLive managed persistence ready: `false`\nLive security ready: `false`\nno release drift is present\nNo self-serve pilot tenant',
   packageManifest: { supermega: { productionSupabaseTargetStatus: 'protected-unapproved', productionSupabaseProjectRef: 'abcdefghijklmnopqrst' } },
   sourceReceipts,
 }
 
 test('derives one blocked four-product ledger from current bounded evidence', () => {
   const ledger = buildManagedPilotReadiness(input)
-  assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v3')
+  assert.equal(ledger.contract, 'supermega.managed-pilot-readiness.v4')
   assert.equal(ledger.overall.blockingGateCount, 7)
   assert.equal(ledger.gates[0].status, 'ready-local')
   assert.equal(
@@ -80,7 +80,7 @@ test('derives one blocked four-product ledger from current bounded evidence', ()
   assert.deepEqual(ledger.overall.nextAction, {
     kind: 'founder_decision',
     decisionId: 'bounded-managed-pilot-rehearsal',
-    requires: ['approve_preview_branch_target', 'name_shop_pilot_operator'],
+    requires: ['approve_preview_branch_target', 'approve_self_serve_activation_window'],
     targetEnvironment: 'preview_branch',
     operatorProductId: 'shop',
     maximumLifetimeHours: 24,

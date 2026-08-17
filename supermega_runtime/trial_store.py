@@ -8,9 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
+import os
+import re
 from threading import RLock
 from typing import Any, Callable, Iterator, Mapping, Protocol, Sequence
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from supermega_runtime.shop_inventory_runtime import (
     ShopInventoryValidationError,
@@ -117,6 +119,38 @@ APPROVAL_REQUEST_CAPABILITY = "approvals.request"
 APPROVAL_DECIDE_CAPABILITY = "approvals.decide"
 DECISION_PACKET_CONTRACT = "decision_packet.v1"
 MAX_JSON_BYTES = 64 * 1024
+
+# Self-serve tenant provisioning (SELF-SERVE-ONBOARDING-SPEC.md step D).
+# The claim alphabet mirrors the client generator in
+# showroom/src/core/signup-trial.ts: Crockford-ish, no I, L, O, or U.
+SELF_SERVE_CLAIM_CODE_PATTERN = re.compile(r"^SM-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$")
+SELF_SERVE_MAX_BUSINESS_NAME = 120
+SELF_SERVE_RATE_LIMIT_MAX = 5
+SELF_SERVE_WORKSPACE_EVENT_TYPE = "company.workspace.created"
+SELF_SERVE_ACTIVATION_AUTHORIZATION_CONTRACT = "self_serve_claim_v1"
+# The user names themselves and owns the tenant they created: every read,
+# write, baseline, control, and approval capability on their own workspace.
+SELF_SERVE_OWNER_CAPABILITIES = frozenset(
+    {
+        "approvals.decide",
+        "approvals.read",
+        "approvals.request",
+        "commerce.read",
+        "commerce.write",
+        "company.baseline.approve",
+        "company.control.approve",
+        "company.read",
+        "company.write",
+        "production.read",
+        "production.write",
+        "setup.read",
+        "setup.write",
+        "website.read",
+        "website.write",
+    }
+)
+_SELF_SERVE_PROJECT_REF_PATTERN = re.compile(r"^[a-z0-9]{20}$")
+_SELF_SERVE_RELEASE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 JsonObject = dict[str, Any]
 StateReducer = Callable[[str, str, Mapping[str, Any], Mapping[str, Any]], Mapping[str, Any]]
@@ -299,6 +333,20 @@ class TrialValidationError(TrialStoreError):
     pass
 
 
+class TrialRateLimited(TrialStoreError):
+    def __init__(self, *, limit: int):
+        self.limit = int(limit)
+        super().__init__(
+            f"Self-serve workspace creation is limited to {self.limit} attempts per user."
+        )
+
+
+class TrialClaimConflict(TrialStoreError):
+    def __init__(self, claim_code: str):
+        self.claim_code = str(claim_code)
+        super().__init__("The claim code is already linked to a different owner.")
+
+
 @dataclass(frozen=True, slots=True)
 class TrialPrincipal:
     workspace_id: str
@@ -330,6 +378,32 @@ class ManagedWorkspaceAccess:
             "workspace_id": self.workspace_id,
             "label": self.label,
             "access": self.access,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SelfServeWorkspaceResult:
+    """The directory entry a completed self-serve tenant creation returns."""
+
+    workspace_id: str
+    label: str
+    access: str
+    claim_code: str
+    owner_actor_id: str
+    event_id: str
+    created_at: str
+    idempotent_replay: bool = False
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "workspace_id": self.workspace_id,
+            "label": self.label,
+            "access": self.access,
+            "claim_code": self.claim_code,
+            "owner_actor_id": self.owner_actor_id,
+            "event_id": self.event_id,
+            "created_at": self.created_at,
+            "idempotent_replay": self.idempotent_replay,
         }
 
 
@@ -479,6 +553,16 @@ class TrialStore(Protocol):
         *,
         limit: int = 50,
     ) -> tuple[list[ManagedWorkspaceAccess], bool]: ...
+
+    def create_self_serve_workspace(
+        self,
+        *,
+        actor_id: str,
+        claim_code: str,
+        business_name: str,
+        session_id: str = "",
+        identity_provider: str = "supabase",
+    ) -> SelfServeWorkspaceResult: ...
 
     def get_state(self, principal: TrialPrincipal, surface: str) -> TrialState: ...
 
@@ -2735,6 +2819,64 @@ def _canonical_fingerprint(kind: str, payload: Mapping[str, Any]) -> str:
     return sha256(encoded).hexdigest()
 
 
+def validate_self_serve_claim_code(value: object) -> str:
+    claim_code = str(value or "").strip()
+    if not SELF_SERVE_CLAIM_CODE_PATTERN.fullmatch(claim_code):
+        raise TrialValidationError(
+            "claim code must match SM-XXXX-XXXX using the Crockford alphabet without I, L, O, or U."
+        )
+    return claim_code
+
+
+def validate_self_serve_business_name(value: object) -> str:
+    business_name = str(value or "")
+    if (
+        not business_name.strip()
+        or business_name != business_name.strip()
+        or len(business_name) > SELF_SERVE_MAX_BUSINESS_NAME
+    ):
+        raise TrialValidationError(
+            "business name must be canonical visible text of at most 120 characters."
+        )
+    return business_name
+
+
+def self_serve_workspace_id(claim_code: str) -> str:
+    """Derive the one workspace identity a claim code can ever provision.
+
+    The claim is the join key between the device trial and the managed tenant
+    (spec step D), so the tenant id is derived rather than generated: the same
+    claim always replays the same workspace and can never mint a second tenant.
+    """
+
+    claim = validate_self_serve_claim_code(claim_code)
+    return str(uuid5(NAMESPACE_URL, f"supermega:self-serve-workspace:{claim}"))
+
+
+def _self_serve_command_identity(claim_code: str, business_name: str) -> tuple[str, str, str]:
+    workspace_id = self_serve_workspace_id(claim_code)
+    command_id = str(uuid5(UUID(workspace_id), f"self-serve-create:{claim_code}"))
+    fingerprint = _canonical_fingerprint(
+        "self_serve_workspace",
+        {
+            "workspace_id": workspace_id,
+            "claim_code": claim_code,
+            "business_name": business_name,
+            "event_type": SELF_SERVE_WORKSPACE_EVENT_TYPE,
+        },
+    )
+    return workspace_id, command_id, fingerprint
+
+
+def _count_self_serve_attempt(attempts: dict[str, int], actor_id: str) -> None:
+    """One fail-closed counter per user; the caller holds the store lock."""
+
+    total = attempts.get(actor_id, 0) + 1
+    attempts[actor_id] = total
+    if total > SELF_SERVE_RATE_LIMIT_MAX:
+        raise TrialRateLimited(limit=SELF_SERVE_RATE_LIMIT_MAX)
+
+
 def _required_surface_capability(surface: str) -> str:
     return SURFACE_WRITE_CAPABILITIES[_normalize_surface(surface)]
 
@@ -2854,6 +2996,8 @@ class PostgresTrialStore:
         self.database_url = str(database_url or "").strip()
         self.reducer = reducer
         self.write_enabled = bool(write_enabled)
+        self._self_serve_attempts: dict[str, int] = {}
+        self._self_serve_attempt_lock = RLock()
 
     def _connect(self):
         if not self.database_url:
@@ -3236,6 +3380,279 @@ class PostgresTrialStore:
                                 )
                             )
                         return workspaces, truncated
+        except TrialStoreError:
+            raise
+        except Exception as exc:
+            raise TrialNotReadyError(("database_or_schema_ready",)) from exc
+
+    def create_self_serve_workspace(
+        self,
+        *,
+        actor_id: str,
+        claim_code: str,
+        business_name: str,
+        session_id: str = "",
+        identity_provider: str = "supabase",
+    ) -> SelfServeWorkspaceResult:
+        """Provision one RLS-isolated self-serve tenant for a verified user.
+
+        Mirrors the hosted managed-persistence proof semantics: the identity is
+        bound to the transaction through the GUC context, the claim is locked
+        for the transaction, the ``company.workspace.created`` event carries a
+        command fingerprint, replays are exact-idempotent per claim, and every
+        write is read back before the directory entry is returned.
+        """
+
+        claim = validate_self_serve_claim_code(claim_code)
+        label = validate_self_serve_business_name(business_name)
+        workspace_id, command_id, fingerprint = _self_serve_command_identity(claim, label)
+        principal = TrialPrincipal(
+            workspace_id=workspace_id,
+            actor_id=actor_id,
+            actor_kind=HUMAN_ACTOR_KIND,
+            authenticated=True,
+            session_id=session_id,
+            identity_provider=identity_provider,
+        ).normalized()
+        if not _principal_auth_ready(principal):
+            raise TrialNotReadyError(("auth_ready",))
+        if not self.write_enabled:
+            raise TrialNotReadyError(("write_enabled",))
+        # The activation target metadata is required, never fabricated: without
+        # the approved project reference and release commit the endpoint stays
+        # closed rather than minting a tenant with an unaccountable identity.
+        project_ref = str(os.getenv("SUPERMEGA_SUPABASE_PROJECT_REF") or "").strip().lower()
+        release_commit = (
+            str(
+                os.getenv("SUPERMEGA_RELEASE_COMMIT")
+                or os.getenv("VERCEL_GIT_COMMIT_SHA")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
+        if not _SELF_SERVE_PROJECT_REF_PATTERN.fullmatch(project_ref) or not (
+            _SELF_SERVE_RELEASE_COMMIT_PATTERN.fullmatch(release_commit)
+        ):
+            raise TrialNotReadyError(("self_serve_target_ready",))
+        with self._self_serve_attempt_lock:
+            _count_self_serve_attempt(self._self_serve_attempts, principal.actor_id)
+        try:
+            connection = self._connect()
+        except TrialStoreError:
+            raise
+        except Exception as exc:
+            raise TrialNotReadyError(("database_ready",)) from exc
+        try:
+            with connection:
+                with connection.transaction():
+                    with connection.cursor() as cursor:
+                        cursor.execute("set transaction isolation level serializable")
+                        try:
+                            self._assert_runtime_role(cursor)
+                            self._assert_schema(cursor)
+                            self._set_context(cursor, principal)
+                            self._assert_active_identity_session(cursor, principal)
+                            self._assert_audit(cursor)
+                        except TrialStoreError:
+                            raise
+                        except Exception as exc:
+                            raise TrialNotReadyError(("database_or_schema_ready",)) from exc
+                        self._lock(cursor, f"self-serve-claim:{claim}")
+                        cursor.execute(
+                            """
+                            select actor_id, actor_kind, status, capabilities
+                            from app_private.workspace_memberships
+                            where workspace_id = %s
+                            """,
+                            (workspace_id,),
+                        )
+                        membership_rows = cursor.fetchall()
+                        if any(
+                            str(row.get("actor_id", "")) != principal.actor_id
+                            for row in membership_rows
+                        ):
+                            raise TrialClaimConflict(claim)
+                        cursor.execute(
+                            """
+                            select command_fingerprint, actor_id, result_json, created_at
+                            from app_private.workspace_events
+                            where workspace_id = %s and command_id = %s
+                            """,
+                            (workspace_id, command_id),
+                        )
+                        event_row = cursor.fetchone()
+                        if event_row is not None:
+                            if (
+                                str(event_row.get("command_fingerprint", "")) != fingerprint
+                                or str(event_row.get("actor_id", "")) != principal.actor_id
+                            ):
+                                raise TrialIdempotencyConflict(command_id)
+                            owner_membership_active = any(
+                                str(row.get("actor_id", "")) == principal.actor_id
+                                and str(row.get("status", "")) == "active"
+                                for row in membership_rows
+                            )
+                            if not owner_membership_active:
+                                raise TrialInvalidTransition(
+                                    "Self-serve claim history exists without an active owner membership."
+                                )
+                            result_json = event_row.get("result_json") or {}
+                            if isinstance(result_json, str):
+                                result_json = json.loads(result_json)
+                            stored = (
+                                result_json.get("self_serve_workspace")
+                                if isinstance(result_json, Mapping)
+                                else None
+                            )
+                            if not isinstance(stored, Mapping):
+                                raise TrialInvalidTransition(
+                                    "Self-serve claim history is not replayable."
+                                )
+                            return SelfServeWorkspaceResult(
+                                workspace_id=str(stored.get("workspace_id", workspace_id)),
+                                label=str(stored.get("label", label)),
+                                access="owner",
+                                claim_code=claim,
+                                owner_actor_id=principal.actor_id,
+                                event_id=str(stored.get("event_id", command_id)),
+                                created_at=_iso_timestamp(event_row.get("created_at")),
+                                idempotent_replay=True,
+                            )
+                        if membership_rows:
+                            raise TrialInvalidTransition(
+                                "Self-serve workspace identity conflicts with durable history."
+                            )
+                        cursor.execute(
+                            """
+                            select status
+                            from app_private.workspace_access_controls
+                            where workspace_id = %s
+                            """,
+                            (workspace_id,),
+                        )
+                        if cursor.fetchone() is not None:
+                            raise TrialInvalidTransition(
+                                "Self-serve workspace identity conflicts with durable history."
+                            )
+                        cursor.execute(
+                            """
+                            insert into app_private.workspace_access_controls (
+                              workspace_id, activation_id, authorization_id,
+                              authorization_contract, plan_digest, owner_actor_id,
+                              project_ref, release_commit, status
+                            ) values (%s, %s, %s, %s, %s, %s, %s, %s, 'active')
+                            """,
+                            (
+                                workspace_id,
+                                command_id,
+                                f"self-serve-claim-{claim.lower()}",
+                                SELF_SERVE_ACTIVATION_AUTHORIZATION_CONTRACT,
+                                fingerprint,
+                                principal.actor_id,
+                                project_ref,
+                                release_commit,
+                            ),
+                        )
+                        cursor.execute(
+                            """
+                            insert into app_private.workspace_memberships (
+                              workspace_id, actor_id, actor_kind, status, capabilities
+                            ) values (%s, %s, 'human', 'active', %s)
+                            """,
+                            (
+                                workspace_id,
+                                principal.actor_id,
+                                sorted(SELF_SERVE_OWNER_CAPABILITIES),
+                            ),
+                        )
+                        result = {
+                            "self_serve_workspace": {
+                                "workspace_id": workspace_id,
+                                "label": label,
+                                "access": "owner",
+                                "claim_code": claim,
+                                "owner_actor_id": principal.actor_id,
+                                "event_id": command_id,
+                            }
+                        }
+                        payload = {
+                            "claimLinkage": {
+                                "claimCode": claim,
+                                "workspaceId": workspace_id,
+                                "linkedBy": principal.actor_id,
+                            },
+                            "businessName": label,
+                            "ownerCapabilities": sorted(SELF_SERVE_OWNER_CAPABILITIES),
+                        }
+                        cursor.execute(
+                            """
+                            insert into app_private.workspace_events (
+                              event_id, workspace_id, command_id, command_fingerprint,
+                              surface, event_type, actor_id, actor_kind, expected_version,
+                              resulting_version, payload_json, result_json
+                            ) values (
+                              %s, %s, %s, %s, 'company', %s,
+                              %s, 'human', null, null, %s::jsonb, %s::jsonb
+                            )
+                            returning created_at
+                            """,
+                            (
+                                command_id,
+                                workspace_id,
+                                command_id,
+                                fingerprint,
+                                SELF_SERVE_WORKSPACE_EVENT_TYPE,
+                                principal.actor_id,
+                                json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                                json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                            ),
+                        )
+                        inserted = cursor.fetchone() or {}
+                        created_at = _iso_timestamp(inserted.get("created_at"))
+                        if not created_at:
+                            raise TrialStoreError(
+                                "Self-serve workspace event timestamp was not returned durably."
+                            )
+                        cursor.execute(
+                            """
+                            select access_control.status as access_status,
+                                   membership.status as membership_status,
+                                   membership.capabilities as capabilities,
+                                   events.command_fingerprint as command_fingerprint
+                            from app_private.workspace_access_controls access_control
+                            join app_private.workspace_memberships membership
+                              on membership.workspace_id = access_control.workspace_id
+                            join app_private.workspace_events events
+                              on events.workspace_id = access_control.workspace_id
+                             and events.command_id = %s
+                            where access_control.workspace_id = %s
+                              and membership.actor_id = %s
+                            """,
+                            (command_id, workspace_id, principal.actor_id),
+                        )
+                        read_back = cursor.fetchone() or {}
+                        if (
+                            str(read_back.get("access_status", "")) != "active"
+                            or str(read_back.get("membership_status", "")) != "active"
+                            or frozenset(
+                                str(item) for item in (read_back.get("capabilities") or [])
+                            )
+                            != SELF_SERVE_OWNER_CAPABILITIES
+                            or str(read_back.get("command_fingerprint", "")) != fingerprint
+                        ):
+                            raise TrialStoreError(
+                                "Self-serve workspace writes could not be read back durably."
+                            )
+                        return SelfServeWorkspaceResult(
+                            workspace_id=workspace_id,
+                            label=label,
+                            access="owner",
+                            claim_code=claim,
+                            owner_actor_id=principal.actor_id,
+                            event_id=command_id,
+                            created_at=created_at,
+                        )
         except TrialStoreError:
             raise
         except Exception as exc:
@@ -3905,6 +4322,9 @@ class InMemoryTrialStore:
         self._commerce_action_ids: dict[tuple[str, str], str] = {}
         self._approvals: dict[tuple[str, str], ApprovalRecord] = {}
         self._approval_commands: dict[tuple[str, str], str] = {}
+        self._self_serve_links: dict[str, JsonObject] = {}
+        self._self_serve_attempts: dict[str, int] = {}
+        self._workspace_labels: dict[str, str] = {}
         self._lock = RLock()
 
     def provision_membership(
@@ -3928,6 +4348,118 @@ class InMemoryTrialStore:
             normalized_actor_kind,
             frozenset(str(item).strip() for item in capabilities if str(item).strip()),
         )
+
+    def create_self_serve_workspace(
+        self,
+        *,
+        actor_id: str,
+        claim_code: str,
+        business_name: str,
+        session_id: str = "",
+        identity_provider: str = "supabase",
+    ) -> SelfServeWorkspaceResult:
+        """Parity double for the hosted self-serve provisioning semantics."""
+
+        del session_id, identity_provider  # The parity double keeps no live auth sessions.
+        claim = validate_self_serve_claim_code(claim_code)
+        label = validate_self_serve_business_name(business_name)
+        actor = str(actor_id or "").strip()
+        if not actor:
+            raise TrialNotReadyError(("auth_ready",))
+        workspace_id, command_id, fingerprint = _self_serve_command_identity(claim, label)
+        with self._lock:
+            infrastructure_blockers = tuple(
+                name
+                for name, ready in (
+                    ("database_ready", self.database_ready),
+                    ("role_ready", self.role_ready),
+                    ("schema_ready", self.schema_ready),
+                    ("audit_ready", self.audit_ready),
+                    ("write_enabled", self.write_enabled),
+                )
+                if not ready
+            )
+            if infrastructure_blockers:
+                raise TrialNotReadyError(infrastructure_blockers)
+            _count_self_serve_attempt(self._self_serve_attempts, actor)
+            link = self._self_serve_links.get(claim)
+            if link is not None:
+                if str(link.get("owner_actor_id", "")) != actor:
+                    raise TrialClaimConflict(claim)
+                replay = self._replay(workspace_id, actor, HUMAN_ACTOR_KIND, command_id, fingerprint)
+                membership = self._memberships.get((workspace_id, actor))
+                if replay is None or membership is None or membership[0] != "active":
+                    raise TrialInvalidTransition(
+                        "Self-serve claim history exists without an active owner membership."
+                    )
+                stored = replay.get("self_serve_workspace")
+                if not isinstance(stored, Mapping):
+                    raise TrialInvalidTransition("Self-serve claim history is not replayable.")
+                return SelfServeWorkspaceResult(
+                    workspace_id=str(stored.get("workspace_id", workspace_id)),
+                    label=str(stored.get("label", label)),
+                    access="owner",
+                    claim_code=claim,
+                    owner_actor_id=actor,
+                    event_id=str(stored.get("event_id", command_id)),
+                    created_at=str(stored.get("created_at", "")),
+                    idempotent_replay=True,
+                )
+            if any(
+                existing_workspace == workspace_id
+                for existing_workspace, _ in self._memberships
+            ):
+                raise TrialInvalidTransition(
+                    "Self-serve workspace identity conflicts with durable history."
+                )
+            now = _utc_now()
+            self.provision_membership(
+                workspace_id=workspace_id,
+                actor_id=actor,
+                actor_kind=HUMAN_ACTOR_KIND,
+                capabilities=sorted(SELF_SERVE_OWNER_CAPABILITIES),
+            )
+            link_record: JsonObject = {
+                "claim_code": claim,
+                "workspace_id": workspace_id,
+                "owner_actor_id": actor,
+                "business_name": label,
+                "linked_at": now,
+            }
+            self._self_serve_links[claim] = deepcopy(link_record)
+            self._workspace_labels[workspace_id] = label
+            result = SelfServeWorkspaceResult(
+                workspace_id=workspace_id,
+                label=label,
+                access="owner",
+                claim_code=claim,
+                owner_actor_id=actor,
+                event_id=command_id,
+                created_at=now,
+            )
+            self._events[(workspace_id, command_id)] = (
+                fingerprint,
+                actor,
+                HUMAN_ACTOR_KIND,
+                {"self_serve_workspace": result.to_dict()},
+            )
+            # Durable read-back before the directory entry is returned (parity
+            # with the hosted persistence-proof semantics).
+            stored_membership = self._memberships.get((workspace_id, actor))
+            stored_event = self._events.get((workspace_id, command_id))
+            if (
+                stored_membership is None
+                or stored_membership[0] != "active"
+                or stored_membership[1] != HUMAN_ACTOR_KIND
+                or stored_membership[2] != SELF_SERVE_OWNER_CAPABILITIES
+                or stored_event is None
+                or stored_event[0] != fingerprint
+                or self._self_serve_links.get(claim) != link_record
+            ):
+                raise TrialStoreError(
+                    "Self-serve workspace writes could not be read back durably."
+                )
+            return result
 
     def readiness(self, principal: TrialPrincipal | None) -> TrialReadiness:
         auth_ready = _principal_auth_ready(principal)

@@ -1,3 +1,6 @@
+// Explicit .ts extension: verify_app_build.mjs imports this module directly under node, where an
+// extensionless specifier does not resolve. Vite tolerates either, so the omission only shows in CI.
+import { isShopServiceSku } from '../shop/business-templates.ts'
 import {
   COMMERCE_KEY,
   commerceWorkingSampleCatalogId,
@@ -84,11 +87,12 @@ function workingSamplePlan(
 ) {
   const vocabulary = packVocabulary(packId)
   if (!workingSampleTemplateIds.includes(input.templateId)) throw new Error('Choose a supported Ecommerce working sample.')
-  // The client's own working-sample products come before the generic Shop seed
-  // items, so a storefront shows that business rather than demo household goods.
-  const preferred = new Set(preferredSkus)
+  // Bookable services carry onHand 999 to mean "always available", not deep stock, so every
+  // onHand-based sort put them first: a tea shop's storefront led with "Catering consultation"
+  // ahead of the tea. Demote them behind real goods rather than excluding them, because a spa has
+  // nothing BUT services and must still get a storefront.
   const ranked = catalog.filter((item) => item.onHand > 0).sort((left, right) => (
-    Number(preferred.has(right.sku)) - Number(preferred.has(left.sku))
+    Number(isShopServiceSku(left.sku)) - Number(isShopServiceSku(right.sku))
   ) || (
     input.templateId === 'pickup-preorder'
       ? left.price - right.price || right.onHand - left.onHand

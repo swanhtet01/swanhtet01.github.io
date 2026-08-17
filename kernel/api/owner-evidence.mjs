@@ -1,3 +1,4 @@
+import { usableOpsKey } from '../ops-key.mjs'
 import crypto from 'node:crypto'
 
 import {
@@ -23,7 +24,7 @@ function evidenceInput(body) {
 
 export async function handleOwnerEvidence(request = {}, options = {}) {
   const env = options.env || process.env
-  const opsKey = String(options.opsKey ?? env.SUPERMEGA_OPS_KEY ?? '').trim()
+  const opsKey = usableOpsKey(options.opsKey ?? env.SUPERMEGA_OPS_KEY)
   if (!opsKey) return { status: 503, json: { ok: false, reason: 'ops_key_not_configured' } }
   if (!constantTimeEqual(String(request.headers?.['x-ops-key'] || ''), opsKey)) {
     return { status: 401, json: { ok: false, reason: 'unauthorized' } }

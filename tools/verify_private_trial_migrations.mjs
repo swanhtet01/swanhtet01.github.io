@@ -6,6 +6,13 @@ import { PGlite } from '@electric-sql/pglite'
 
 const root = resolve(import.meta.dirname, '..')
 const migrationDirectory = resolve(root, 'supabase', 'migrations')
+// Present in the directory but deliberately outside this verifier's scope. The legacy
+// baseline rebuilds the pre-existing public catalog (27 tables the earlier enterprise app
+// created outside migrations) so a fresh database can be built from history at all. It is
+// not part of the private-trial backend contract these checks cover, and it requires
+// pgvector, which PGlite does not provide — applying it here would fail for reasons
+// unrelated to what is being verified.
+const outOfScopeMigrations = ['20260711081300_public_legacy_baseline.sql']
 const expectedMigrations = [
   '20260722004500_private_trial_backend_role_preflight.sql',
   '20260722005134_private_trial_backend_foundation.sql',
@@ -322,13 +329,16 @@ const rejection = async (operation) => {
   }
 }
 
-const migrationNames = (await readdir(migrationDirectory))
+const allMigrationNames = (await readdir(migrationDirectory))
   .filter((name) => name.endsWith('.sql'))
   .sort()
+// Still an exact inventory: every file must be either an in-scope trial migration or a
+// named out-of-scope one, so a new file can never enter the directory unnoticed.
 requireCheck(
   'exact migration inventory',
-  JSON.stringify(migrationNames) === JSON.stringify(expectedMigrations),
+  JSON.stringify(allMigrationNames) === JSON.stringify([...outOfScopeMigrations, ...expectedMigrations].sort()),
 )
+const migrationNames = allMigrationNames.filter((name) => !outOfScopeMigrations.includes(name))
 
 const database = new PGlite()
 await database.waitReady

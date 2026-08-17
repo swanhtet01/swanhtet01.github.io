@@ -2,6 +2,8 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 
 import { recordBehaviorSignal } from '../../core/behavior-trail'
+import { emitMetric } from '../../analytics/metrics-collector'
+import { readLocalSetupBusinessName } from '../../core/product-onboarding-runtime'
 import {
   COMMERCE_KEY,
   commerceCatalogDigest,
@@ -99,6 +101,16 @@ type ManagedStorefrontView = {
   availableSku: string
 }
 const DEFAULT_STORE_NAME = 'Mingalar Market'
+
+// The owner named their business during onboarding. Opening their storefront under a sample
+// shop's name is the same "nothing you did was remembered" signal the website starter had.
+//
+// Only used where there is no saved draft -- a saved storeName is always the owner's own and
+// is never overridden. The managed-identity branch keeps the sample default deliberately,
+// because a signed-in company's store name comes from its managed record, not this device.
+function defaultStoreName() {
+  return readLocalSetupBusinessName() ?? DEFAULT_STORE_NAME
+}
 const DEFAULT_STORE_SUMMARY = 'Everyday essentials for pickup or delivery, with clear local pricing.'
 
 function formatMmk(value: number) {
@@ -201,7 +213,7 @@ function savedLocalDraft(draft: StorefrontDraft | LegacyStorefrontDraft | null):
 function draftFieldsForCatalog(saved: SavedStorefrontState | null, items: CommerceItem[]) {
   if (!saved) {
     return {
-      storeName: DEFAULT_STORE_NAME,
+      storeName: defaultStoreName(),
       summary: DEFAULT_STORE_SUMMARY,
       selectedSkus: defaultSelection(items),
       merchandising: null,
@@ -247,7 +259,7 @@ function initialEcommerceState() {
   return {
     catalog,
     commerceState,
-    storeName: DEFAULT_STORE_NAME,
+    storeName: defaultStoreName(),
     summary: DEFAULT_STORE_SUMMARY,
     selectedSkus: defaultSelection(catalog.items),
     merchandising: null,
@@ -588,7 +600,9 @@ export function EcommerceProduct() {
   function buildOrderImportReview(csvText: string): EcommerceOrderImportReview {
     const parsed = parseOrderImportCsv(csvText)
     if (parsed.length < 2) throw new Error('Paste or upload the order CSV header and at least one order row.')
-    if (parsed.length > 52) throw new Error('Review at most 50 order rows at a time.')
+    // 51 = one header row plus the 50 order rows the message promises. It was 52, which let a
+    // 51st order row through while telling the operator the limit was 50.
+    if (parsed.length > 51) throw new Error('Review at most 50 order rows at a time.')
     const [header, ...rows] = parsed
     const normalizedHeaders = header.map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''))
     const required = ['customer_reference', 'channel', 'sku', 'quantity', 'fulfilment', 'payment', 'source_message']
@@ -911,6 +925,7 @@ export function EcommerceProduct() {
 
   function addToCart(sku: string) {
     if (catalogHydrating || !previewResult.preview || !digest || (Boolean(managedIdentity) && !savedDraftIsCurrent)) return
+    if (!buyingCart.some((line) => line.sku === sku)) emitMetric({ product: 'ecommerce', capability: 'ecommerce-storefront', action: 'cart.built', ts: Date.now() })
     setBuyingCart((current) => current.some((line) => line.sku === sku)
       ? current
       : [...current, { sku, quantity: 1 }])
@@ -932,6 +947,18 @@ export function EcommerceProduct() {
       return
     }
     addToCart(customerPreviewItems[0].sku)
+  }
+
+  // The cart and checkout live inside a collapsed <details>. Opening it is what "Review
+  // checkout" has always said it does.
+  function openBuyingWorkspace() {
+    const workspace = document.getElementById('ecommerce-buying-workspace')
+    if (!(workspace instanceof HTMLDetailsElement)) return false
+    workspace.open = true
+    const summary = workspace.querySelector('summary')
+    if (summary instanceof HTMLElement) summary.focus({ preventScroll: true })
+    requestAnimationFrame(() => workspace.scrollIntoView({ block: 'start' }))
+    return true
   }
 
   function focusCurrentRequestReceipt() {
@@ -1699,6 +1726,12 @@ export function EcommerceProduct() {
       navigate('/shop/?tab=orders')
       return
     }
+    // With items already in the cart the button reads "Review checkout", but every branch
+    // above missed and it fell through to prepareQuoteRecovery — which adds the first
+    // preview item to the cart. If that item was already in there (the normal case, since
+    // it is what put the cart in this state) nothing changed at all, so the primary action
+    // did nothing in exactly the situation it advertises. Open the checkout instead.
+    if (ecommerceTodayCartUnits && openBuyingWorkspace()) return
     prepareQuoteRecovery()
   }
 

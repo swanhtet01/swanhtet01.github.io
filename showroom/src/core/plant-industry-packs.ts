@@ -37,6 +37,15 @@ export type PlantIndustryPack = {
   }
 }
 
+// Every outputPrefix MUST begin with BATCH. plant-order-foundation.ts validates outputBatchId
+// with identifier(..., 'BATCH') in four places -- the execution plan, recording output,
+// inspection, and batch release -- so a prefix like STYLE or LOT is rejected before a batch
+// can even be planned.
+//
+// Four of the five packs shipped prefixes the contract refuses (LOT, FOOD-LOT, STYLE, BUILD),
+// which meant only general-manufacturing could run a controlled batch at all. The industry
+// wording is kept as a second segment -- BATCH-STYLE-001 reads as well as STYLE-001 and
+// actually validates.
 export const plantIndustryPacks: readonly PlantIndustryPack[] = [
   {
     id: 'general-manufacturing',
@@ -61,16 +70,7 @@ export const plantIndustryPacks: readonly PlantIndustryPack[] = [
     description: 'Batch inputs, process routing, yield, holds and release evidence.',
     firstWorkflow: 'Make and release one controlled batch',
     capabilities: ['Batch inputs', 'Routing', 'Yield', 'Quality hold', 'Genealogy'],
-    setup: {
-      outputPrefix: 'LOT', materialId: 'MAT-BATCH-INPUT-001', materialName: 'Primary batch input', materialUnit: 'kg',
-      workCentrePrefix: 'WC-PROCESS', workCentreName: 'Process line',
-      machines: [
-        { id: 'MC-01', name: 'Mixer 01', state: 'running' },
-        { id: 'MC-02', name: 'Reactor 02', state: 'attention' },
-        { id: 'MC-03', name: 'Filling line 01', state: 'running' },
-      ],
-      issue: { area: 'Reactor 02', summary: 'Temperature drift requires supervisor review' },
-    },
+    setup: { outputPrefix: 'BATCH-LOT', materialId: 'MAT-BATCH-INPUT-001', materialName: 'Primary batch input', materialUnit: 'kg', workCentrePrefix: 'WC-PROCESS', workCentreName: 'Process line' },
   },
   {
     id: 'food-beverage',
@@ -78,16 +78,7 @@ export const plantIndustryPacks: readonly PlantIndustryPack[] = [
     description: 'Ingredient lots, process steps, inspection and released batch trace.',
     firstWorkflow: 'Make, inspect and release one food batch',
     capabilities: ['Ingredient lots', 'Batch routing', 'Inspection', 'Release', 'Traceability'],
-    setup: {
-      outputPrefix: 'FOOD-LOT', materialId: 'MAT-INGREDIENT-001', materialName: 'Primary ingredient', materialUnit: 'kg',
-      workCentrePrefix: 'WC-KITCHEN', workCentreName: 'Batch kitchen',
-      machines: [
-        { id: 'MC-01', name: 'Batch kettle 01', state: 'running' },
-        { id: 'MC-02', name: 'Filling line 02', state: 'attention' },
-        { id: 'MC-03', name: 'Packing line 01', state: 'running' },
-      ],
-      issue: { area: 'Filling line 02', summary: 'Fill weight drift requires supervisor review' },
-    },
+    setup: { outputPrefix: 'BATCH-FOOD', materialId: 'MAT-INGREDIENT-001', materialName: 'Primary ingredient', materialUnit: 'kg', workCentrePrefix: 'WC-KITCHEN', workCentreName: 'Batch kitchen' },
   },
   {
     id: 'apparel',
@@ -95,16 +86,7 @@ export const plantIndustryPacks: readonly PlantIndustryPack[] = [
     description: 'Style orders, fabric issue, cut-and-sew routing and quality evidence.',
     firstWorkflow: 'Run one style order through production',
     capabilities: ['Style order', 'Fabric issue', 'Routing', 'WIP', 'Inspection'],
-    setup: {
-      outputPrefix: 'STYLE', materialId: 'MAT-FABRIC-001', materialName: 'Primary fabric', materialUnit: 'm',
-      workCentrePrefix: 'WC-SEW', workCentreName: 'Sewing line',
-      machines: [
-        { id: 'MC-01', name: 'Cutting table 01', state: 'running' },
-        { id: 'MC-02', name: 'Sewing line 02', state: 'attention' },
-        { id: 'MC-03', name: 'Finishing and press 01', state: 'running' },
-      ],
-      issue: { area: 'Sewing line 02', summary: 'Seam strength below specification requires supervisor review' },
-    },
+    setup: { outputPrefix: 'BATCH-STYLE', materialId: 'MAT-FABRIC-001', materialName: 'Primary fabric', materialUnit: 'm', workCentrePrefix: 'WC-SEW', workCentreName: 'Sewing line' },
   },
   {
     id: 'assembly',
@@ -112,16 +94,7 @@ export const plantIndustryPacks: readonly PlantIndustryPack[] = [
     description: 'Component issue, assembly routing, serial-ready inspection and release.',
     firstWorkflow: 'Build and inspect one assembly order',
     capabilities: ['Components', 'Assembly routing', 'Capacity', 'Inspection', 'Genealogy'],
-    setup: {
-      outputPrefix: 'BUILD', materialId: 'MAT-COMPONENT-001', materialName: 'Primary component', materialUnit: 'pcs',
-      workCentrePrefix: 'WC-ASSEMBLY', workCentreName: 'Assembly cell',
-      machines: [
-        { id: 'MC-01', name: 'Assembly cell 01', state: 'running' },
-        { id: 'MC-02', name: 'Assembly cell 02', state: 'attention' },
-        { id: 'MC-03', name: 'Test bench 01', state: 'running' },
-      ],
-      issue: { area: 'Assembly cell 02', summary: 'Torque check out of tolerance requires supervisor review' },
-    },
+    setup: { outputPrefix: 'BATCH-BUILD', materialId: 'MAT-COMPONENT-001', materialName: 'Primary component', materialUnit: 'pcs', workCentrePrefix: 'WC-ASSEMBLY', workCentreName: 'Assembly cell' },
   },
 ] as const
 

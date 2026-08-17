@@ -93,6 +93,7 @@ export type ProductionQualityCorrectiveAction = {
   correctiveAction: string
   verificationResult: string
   effectivenessOwner: string
+  effectivenessDue: string
   recurrenceKey: string
   priorIssueIds: string[]
 }
@@ -558,7 +559,7 @@ const productionShopDemandSnapshotFields = ['schema', 'operatingUnitLocationId',
 const productionIssueFields = ['id', 'createdAt', 'area', 'kind', 'summary', 'status', 'severity', 'owner', 'dueAt', 'containment', 'maintenanceFindingSource', 'resolution']
 const productionMaintenanceFindingSourceFields = ['contract', 'equipmentId', 'equipmentName', 'maintenanceOwner', 'completionActionId', 'completedAt', 'strategyActionId', 'strategyRevision', 'returnToService', 'findings', 'evidenceReference']
 const productionMaintenanceCorrectiveActionFields = ['contract', 'correctiveAction', 'verificationResult', 'finalDisposition']
-const productionQualityCorrectiveActionFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'recurrenceKey', 'priorIssueIds']
+const productionQualityCorrectiveActionFields = ['contract', 'failureMode', 'causeCategory', 'rootCause', 'correctiveAction', 'verificationResult', 'effectivenessOwner', 'effectivenessDue', 'recurrenceKey', 'priorIssueIds']
 const productionIssueResolutionFields = ['actionId', 'resolvedAt', 'resolvedBy', 'reason', 'evidenceReference', 'maintenanceCorrectiveAction', 'qualityCorrectiveAction']
 const productionMachineFields = ['id', 'name', 'state']
 const productionEquipmentMasterFields = ['contract', 'assets']
@@ -589,6 +590,8 @@ const eventFieldsByKind: Record<ProductionEventKind, string[]> = {
   shift_closed: shiftClosedEventFields,
 }
 const deterministicSeedNow = Date.parse('2026-07-23T08:00:00.000Z')
+const productionSeedAnchorIssueId = 'ISS-301'
+const productionSeedAnchorOffsetMs = 82 * 60 * 1000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -773,6 +776,7 @@ function validateProductionQualityCorrectiveAction(value: unknown, field: string
   canonicalText(value.correctiveAction, `${field}.correctiveAction`, 360)
   canonicalText(value.verificationResult, `${field}.verificationResult`, 360)
   canonicalText(value.effectivenessOwner, `${field}.effectivenessOwner`, 120)
+  if (!validTimestamp(value.effectivenessDue)) throw new Error(`${field}.effectivenessDue is invalid.`)
   const recurrenceKey = canonicalText(value.recurrenceKey, `${field}.recurrenceKey`, 160)
   if (!productionQualityRecurrenceToken(failureMode) || recurrenceKey !== productionQualityRecurrenceKey(failureMode, value.causeCategory as ProductionQualityCauseCategory)) throw new Error(`${field}.recurrenceKey is invalid.`)
   if (!Array.isArray(value.priorIssueIds) || value.priorIssueIds.length > 500) throw new Error(`${field}.priorIssueIds is invalid.`)
@@ -800,6 +804,7 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
   correctiveAction: string
   verificationResult: string
   effectivenessOwner: string
+  effectivenessDue: string
 }) {
   const issue = state.issues.find((candidate) => candidate.id === issueId)
   if (!issue || issue.kind !== 'quality' || issue.status !== 'open'
@@ -808,7 +813,8 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
     || !validCanonicalText(input.rootCause, 360)
     || !validCanonicalText(input.correctiveAction, 360)
     || !validCanonicalText(input.verificationResult, 360)
-    || !validCanonicalText(input.effectivenessOwner, 120)) return null
+    || !validCanonicalText(input.effectivenessOwner, 120)
+    || !validTimestamp(input.effectivenessDue)) return null
   const recurrenceToken = productionQualityRecurrenceToken(input.failureMode)
   if (!recurrenceToken) return null
   const recurrenceKey = `${input.causeCategory}:${recurrenceToken}`
@@ -820,6 +826,10 @@ export function buildProductionQualityCorrectiveAction(state: ProductionState, i
     priorIssueIds: productionQualityPriorIssueIds(state.issues, issueId, recurrenceKey),
   }
   try { return validateProductionQualityCorrectiveAction(result, 'qualityCorrectiveAction') } catch { return null }
+}
+
+export function isCapaEffectivenessOverdue(capa: ProductionQualityCorrectiveAction, asOf: string): boolean {
+  return timestampBefore(capa.effectivenessDue, asOf)
 }
 
 function validateProductionShopDemandSource(value: unknown, field: string): ProductionShopDemandSource {
@@ -950,6 +960,17 @@ export function createSeedProduction(now = deterministicSeedNow): ProductionStat
     ],
     events: [],
   }
+}
+
+// The seed is generated relative to a caller-supplied instant so a demo opened today reads as
+// today's work. Pristine-workspace checks recover that instant from the seeded issue rather than
+// assuming a fixed one, mirroring how upgradeCommerceSeedPolicies recovers the catalog baseline
+// time. A wrong recovery cannot pass a check: the regenerated seed simply fails to match.
+export function productionSeedAnchor(state: ProductionState) {
+  const issue = state.issues.find((candidate) => candidate.id === productionSeedAnchorIssueId)
+  if (!issue) return null
+  const createdAt = Date.parse(issue.createdAt)
+  return Number.isFinite(createdAt) ? createdAt + productionSeedAnchorOffsetMs : null
 }
 
 export function validateProductionState(value: unknown): ProductionState {
@@ -2006,7 +2027,7 @@ export function loadProductionWorkspace(storage = browserStorage()): ProductionW
       return { state: createEmptyProduction(), source: 'recovery', error: 'Legacy Production data is malformed. Migration failed closed and did not create v2 data.' }
     }
   }
-  return persistInitialState(storage, createSeedProduction(), 'seed')
+  return persistInitialState(storage, createSeedProduction(Date.now()), 'seed')
 }
 
 export function productionWorkspaceCanWrite(
@@ -3123,7 +3144,9 @@ export function installProductionWorkingSampleJobs(stateValue: ProductionState, 
     && sampleEvents.every((event) => event.actionId.startsWith(requestedPrefix))
     && JSON.stringify(currentSampleJobs) === JSON.stringify(requestedJobs)) return source
 
-  const seed = createSeedProduction()
+  const seedAnchor = productionSeedAnchor(source)
+  if (seedAnchor === null) return null
+  const seed = createSeedProduction(seedAnchor)
   const seedWithoutJobs = validateProductionState({ ...seed, jobs: [] })
   // Installing a sample is the only path that writes these, and every other way
   // to touch a machine appends an event this comparison still rejects. So a

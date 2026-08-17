@@ -290,7 +290,7 @@ test('operator rejects identity, hash, and boundary drift across server response
 test('API client fixes the production endpoint and keeps the Ops key out of payloads and errors', async () => {
   const seen = []
   const request = createAgentCompanyApi({
-    opsKey: 'owner-only-key',
+    opsKey: 'owner-only-key-0123456789abcdef01',
     fetchImpl: async (url, options) => {
       seen.push({ url, options })
       return { ok: true, json: async () => ({ ok: true, agents: [] }) }
@@ -298,12 +298,12 @@ test('API client fixes the production endpoint and keeps the Ops key out of payl
   })
   await request('GET')
   assert.equal(seen[0].url, AGENT_COMPANY_ENDPOINT)
-  assert.equal(seen[0].options.headers['x-ops-key'], 'owner-only-key')
+  assert.equal(seen[0].options.headers['x-ops-key'], 'owner-only-key-0123456789abcdef01')
   assert.equal(seen[0].options.body, undefined)
-  assert.equal(JSON.stringify(seen[0].options.body || {}).includes('owner-only-key'), false)
+  assert.equal(JSON.stringify(seen[0].options.body || {}).includes('owner-only-key-0123456789abcdef01'), false)
 
   const failed = createAgentCompanyApi({
-    opsKey: 'owner-only-key',
+    opsKey: 'owner-only-key-0123456789abcdef01',
     fetchImpl: async () => ({ ok: false, json: async () => ({ reason: 'provider leaked secret text' }) }),
   })
   await assert.rejects(failed('POST', { action: 'plan' }), /^Error: agent_company_request_failed$/)

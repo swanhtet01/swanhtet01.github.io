@@ -1063,14 +1063,14 @@ requireContract('local PostgreSQL rehearsal remains bounded',
   && databaseRehearsal.safety?.vercelMutated === false)
 
 requireContract('managed pilot readiness is derived and fail closed',
-  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v3'
+  managedPilotReadiness.contract === 'supermega.managed-pilot-readiness.v4'
   && managedPilotReadiness.overall?.status === 'blocked'
   && managedPilotReadiness.overall?.localDatabaseProofReady === true
   && managedPilotReadiness.overall?.hostedActivationReady === false
-  && managedPilotReadiness.overall?.blockingGateCount === 7
+  && managedPilotReadiness.overall?.blockingGateCount === managedPilotReadiness.gates?.filter((entry) => entry.status === 'blocked').length
   && managedPilotReadiness.overall?.nextAction?.kind === 'founder_decision'
   && managedPilotReadiness.overall?.nextAction?.decisionId === 'bounded-managed-pilot-rehearsal'
-  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_preview_branch_target,name_shop_pilot_operator'
+  && managedPilotReadiness.overall?.nextAction?.requires?.join(',') === 'approve_preview_branch_target,approve_self_serve_activation_window'
   && managedPilotReadiness.overall?.nextAction?.targetEnvironment === 'preview_branch'
   && managedPilotReadiness.overall?.nextAction?.operatorProductId === 'shop'
   && managedPilotReadiness.overall?.nextAction?.maximumLifetimeHours === 24
@@ -1093,23 +1093,29 @@ requireContract('managed pilot readiness is derived and fail closed',
   && managedPilotReadiness.controls?.connectorRequestsPerformed === 0
   && managedPilotReadiness.controls?.modelCallsRequiredToBuild === 0
   && managedPilotReadiness.controls?.productionWritesEnabled === false
-  && managedPilotReadiness.sourceReceipts?.length === 7
+  && managedPilotReadiness.sourceReceipts?.length === 9
   && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/supabase-security-advisor-audit.json')
-  && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v1'
+  && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/hosted-storage-privacy-proof.json')
+  && managedPilotReadiness.sourceReceipts?.some((receipt) => receipt.path === 'hq/readiness/managed-persistence-proof.json')
+  && managedPilotReadiness.securityAudit?.contract === 'supermega.supabase-security-advisor-audit.v2'
   && managedPilotReadiness.securityAudit?.asOf === supabaseSecurityAudit.asOf
   && managedPilotReadiness.securityAudit?.findingCount === supabaseSecurityAudit.advisor?.findingCount
   && managedPilotReadiness.securityAudit?.liveSchemaVersion === supabaseSecurityAudit.managedBackend?.liveSchemaVersion
   && managedPilotReadiness.securityAudit?.localTargetVersion === supabaseSecurityAudit.managedBackend?.localTargetVersion
   && managedPilotReadiness.securityAudit?.productionMutationAuthorized === false
   && managedPilotReadiness.securityAudit?.databaseWrites === 0
-  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === `${supabaseSecurityAudit.advisor?.findingCount} fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} trails local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`
+  && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.evidence === (supabaseSecurityAudit.conclusion?.status === 'clear'
+    ? `Advisor is clear on protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} with metadata RLS enabled and zero drift from local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`
+    : `${supabaseSecurityAudit.advisor?.findingCount} fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v${supabaseSecurityAudit.managedBackend?.liveSchemaVersion} trails local target v${supabaseSecurityAudit.managedBackend?.localTargetVersion}.`)
   && managedPilotReadiness.gates?.find((gate) => gate.id === 'security')?.nextAction === supabaseSecurityAudit.conclusion?.nextAction
   && supabaseSecurityAudit.projectRef === JSON.parse(packageText).supermega?.productionSupabaseProjectRef
   && supabaseSecurityAudit.targetClassification === 'protected-production'
-  && supabaseSecurityAudit.managedBackend?.liveSchemaVersion === 7
+  && Number.isInteger(supabaseSecurityAudit.managedBackend?.liveSchemaVersion)
+  && supabaseSecurityAudit.managedBackend.liveSchemaVersion >= 7
+  && supabaseSecurityAudit.managedBackend.liveSchemaVersion <= 10
   && supabaseSecurityAudit.managedBackend?.localTargetVersion === 10
   && supabaseSecurityAudit.managedBackend?.browserRolesDenied === true
-  && supabaseSecurityAudit.managedBackend?.metadataRlsEnabled === false
+  && supabaseSecurityAudit.managedBackend?.metadataRlsEnabled === (supabaseSecurityAudit.managedBackend.liveSchemaVersion >= 9)
   && supabaseSecurityAudit.conclusion?.productionMutationAuthorized === false
   && supabaseSecurityAudit.controls?.databaseWrites === 0
   && packageText.includes('"readiness:supabase-security:verify": "node tools/verify_supabase_security_advisor_audit.mjs"')

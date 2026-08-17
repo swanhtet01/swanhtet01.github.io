@@ -53,9 +53,13 @@
   backdrop-filter: blur(16px);
 }
 
+.theme-dark .ecommerce-workspace-switch { border-color: rgba(86,240,193,.12); background: rgba(12,18,26,.96); }
+
 .ecommerce-workspace-switch > span,
 .ecommerce-preview-size > span {
-  color: #56665d;
+  /* --core-muted is #56665d in light, so this is byte-identical there and only changes
+     dark mode, where the literal measured 3.07:1 on the themed panel behind it. */
+  color: var(--core-muted);
   font-size: 11px;
   font-weight: 760;
 }
@@ -139,6 +143,12 @@
 .ecommerce-today-priority h2 {
   max-width: 560px;
   margin: 0;
+  /* Deliberately a literal, not var(--core-ink). The card behind this heading is painted
+     with a hardcoded light gradient (.ecommerce-today, background: linear-gradient(135deg,
+     #fff, #f3f8f4)) and this stylesheet has no .theme-dark overrides at all, so the card
+     stays white in dark mode. A token that flips with the theme therefore puts near-white
+     text on a white card: measured 1.07:1, against 16.22:1 for this literal. Until the card
+     itself becomes theme-aware, the text on it must be theme-blind too. */
   color: #17231d;
   font-size: clamp(22px, 2.4vw, 34px);
   line-height: 1.04;
@@ -177,6 +187,10 @@
 
 .ecommerce-today-metrics small,
 .ecommerce-today-source small {
+  /* Also deliberately a literal, for the same reason as the heading above: this sits on the
+     same hardcoded light gradient. Measured on that card, #6b786f is 4.62:1 and passes;
+     var(--core-quiet) resolves to #7a8a9c in dark and drops to 3.53:1. An earlier reading of
+     4.2:1 here was taken against the page ground rather than the card. */
   color: #6b786f;
   font-size: 9px;
   font-weight: 760;
@@ -1125,7 +1139,7 @@
 
 .ecommerce-cart-line > b {
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .ecommerce-cart-line > button {
@@ -1136,7 +1150,7 @@
   background: transparent;
   color: #7a5142;
   font: inherit;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
   cursor: pointer;
 }
@@ -1438,15 +1452,20 @@
   font-size: 10px;
 }
 
+/* This block sits on the themed panel, so its light-theme literals carried straight into
+   dark mode and failed AA there: #66746b measured 3.80:1 and #0b745e 3.26:1 against
+   --core-panel. --core-green is exactly #0b745e in light, so that one is byte-identical
+   there. #66746b is not a token; --core-quiet (#5f6f67 light) is the nearest and is a
+   shade darker, which only moves light mode further above the floor. */
 .ecommerce-after-purchase > summary small,
 .ecommerce-after-purchase > div p {
-  color: #66746b;
+  color: var(--core-quiet);
   font-size: 9px;
   line-height: 1.4;
 }
 
 .ecommerce-after-purchase > summary b {
-  color: #0b745e;
+  color: var(--core-green);
   font-size: 9px;
   text-transform: uppercase;
 }
@@ -1546,6 +1565,7 @@
   background: #fff;
   color: #17231d;
   font: inherit;
+  font-size: 12px;
 }
 
 .ecommerce-return-form textarea {
@@ -1562,6 +1582,18 @@
 @media (max-width: 560px) {
   .ecommerce-product {
     overflow-x: clip;
+  }
+
+  /* Component font sizes (9-12px) outrank the core 16px element floor; re-assert it here or iOS
+     zooms the viewport on focus mid-checkout and stays zoomed. */
+  .ecommerce-buying-body > form input,
+  .ecommerce-buying-body > form select,
+  .ecommerce-buying-body > form textarea,
+  .ecommerce-cart-line input,
+  .ecommerce-return-form input,
+  .ecommerce-return-form select,
+  .ecommerce-return-form textarea {
+    font-size: 16px;
   }
 
   .ecommerce-heading h1 {
@@ -1782,5 +1814,61 @@
 
   .ecommerce-buying-workspace {
     scroll-margin-top: 112px;
+  }
+}
+
+/* The cockpits keep their light tints in dark mode -- see the .ecommerce-today-priority h2
+   note above for why the cards themselves cannot flip while their text is theme-blind. The
+   consequence is that any SHARED token-coloured text landing on them inherits the dark
+   theme's palette and disappears: --core-accent resolves to the bright mint #56f0c1, which
+   measured 1.36:1 on the ops cockpits and 1.44:1 on the AI desk across 23 elements.
+   Only reachable with the enterprise controls expanded, which is why earlier sweeps of this
+   route reported it clean.
+   The fix matches the rest of this file: on a theme-blind card, the text must be theme-blind
+   too. #0b745e is exactly what --core-green resolves to in LIGHT, so these read identically
+   in both themes rather than introducing a new colour. Verified: 5.9:1 on the cockpit tint,
+   5.73:1 on white.
+   Attempting the opposite -- darkening the cards -- was measured and reverted: it took the
+   failures from 25 to 201, because it hid every deliberately dark literal already on them. */
+.theme-dark .ecommerce-ops-cockpit .core-eyebrow,
+.theme-dark .ecommerce-ops-cockpit .text-link,
+.theme-dark .ecommerce-ai-desk .core-eyebrow,
+.theme-dark .ecommerce-ai-desk .text-link {
+  color: #0b745e;
+}
+
+/* The mirror image of the block above, and the reason a blanket rule would be wrong here.
+   This summary sits on .ecommerce-business-controls, which DOES use var(--core-panel) and so
+   is genuinely dark in dark mode -- but its text is a theme-blind dark literal, giving
+   1.42:1 for the label and 3.8:1 for the sub-line. On a themed card the text must be themed
+   too, which is the exact opposite of what the light cockpits need. */
+.theme-dark .ecommerce-enterprise-controls > summary {
+  color: var(--core-ink);
+}
+
+/* Scoped to the enterprise-controls summary ALONE. The original rule these share also
+   styles .ecommerce-order-import-workspace summaries, which sit on a LIGHT cockpit -- and
+   --core-quiet resolves to #7a8a9c in dark, giving 3.34:1 there. Including it made one
+   surface better and another worse; the light one keeps its #66746b literal, which measures
+   4.6:1 on that tint. */
+.theme-dark .ecommerce-enterprise-controls > summary small {
+  color: var(--core-quiet);
+}
+
+/* 375px audit, deferred P2 sweep: interactive text below 12px and tap targets below 44px on
+   the Ecommerce workspace at phone width. The storefront request button and cart line
+   controls already meet 44px; only their label text was under 12px. */
+@media (max-width: 840px) {
+  .ecommerce-order-import-upload {
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  .storefront-request-button {
+    font-size: 12px;
+  }
+
+  .ecommerce-cart-line > button {
+    font-size: 12px;
   }
 }

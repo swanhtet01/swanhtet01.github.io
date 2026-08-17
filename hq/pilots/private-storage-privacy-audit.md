@@ -1,6 +1,7 @@
 # Private Storage privacy audit handoff
 
-Status: local verifier ready; hosted proof blocked
+Status: hosted proof complete; six-request audit passed on a deleted isolated branch
+Proof: hq/readiness/hosted-storage-privacy-proof.json (2026-08-14, approval storage-privacy-proof-24h-20260814; branch created, proven, deleted within its 24h window)
 Authority: founder / CEO
 Verifier: `supermega.private-storage-privacy.v1`
 Adapter: `supabase_storage_rest_v2`

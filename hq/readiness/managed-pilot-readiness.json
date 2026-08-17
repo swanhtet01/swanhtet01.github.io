@@ -1,18 +1,18 @@
 {
-  "contract": "supermega.managed-pilot-readiness.v3",
-  "asOf": "2026-08-04T11:04:24.490Z",
-  "sourceDigest": "sha256:370ca0e0cc5e302a627fbf8a1c7af9bf1eb57042f03fafd463b3fde50fd27e51",
+  "contract": "supermega.managed-pilot-readiness.v4",
+  "asOf": "2026-08-16T10:00:59.584Z",
+  "sourceDigest": "sha256:82d802057f2bd6fe7c24aa34ac428922cf0acb85657a9b1f6b0161f07ca6615c",
   "overall": {
     "status": "blocked",
     "localDatabaseProofReady": true,
     "hostedActivationReady": false,
-    "blockingGateCount": 7,
+    "blockingGateCount": 3,
     "nextAction": {
       "kind": "founder_decision",
       "decisionId": "bounded-managed-pilot-rehearsal",
       "requires": [
         "approve_preview_branch_target",
-        "name_shop_pilot_operator"
+        "approve_self_serve_activation_window"
       ],
       "targetEnvironment": "preview_branch",
       "operatorProductId": "shop",
@@ -41,15 +41,17 @@
     },
     "operator": {
       "productId": "shop",
-      "namedBusinessRequired": true,
-      "namedOperatorRequired": true,
+      "selfServeAllowed": true,
+      "verifiedEmailRequired": true,
+      "termsAcceptanceRequired": true,
+      "tenantIsolationProofRequired": true,
       "measuredBaselineRequired": true,
       "acceptanceEvidenceRequired": true
     },
     "proposedActions": [
       "create_one_preview_branch",
       "apply_reviewed_migrations_to_preview",
-      "create_one_named_preview_operator",
+      "provision_one_self_serve_preview_tenant",
       "run_hosted_isolation_storage_recovery_proof",
       "delete_preview_branch_after_evidence"
     ],
@@ -64,19 +66,33 @@
     ]
   },
   "securityAudit": {
-    "contract": "supermega.supabase-security-advisor-audit.v1",
-    "asOf": "2026-08-04T10:56:25.412Z",
+    "contract": "supermega.supabase-security-advisor-audit.v2",
+    "asOf": "2026-08-13T06:40:00.000Z",
     "targetClassification": "protected-production",
-    "advisorStatus": "blocked",
-    "findingCount": 27,
-    "liveSchemaVersion": 7,
+    "advisorStatus": "clear",
+    "findingCount": 0,
+    "liveSchemaVersion": 10,
     "localTargetVersion": 10,
-    "versionDrift": 3,
+    "versionDrift": 0,
     "browserRolesDenied": true,
-    "metadataRlsEnabled": false,
+    "metadataRlsEnabled": true,
     "storageBucketCount": 0,
     "productionMutationAuthorized": false,
     "databaseWrites": 0
+  },
+  "storagePrivacy": {
+    "proofComplete": true,
+    "contract": "supermega.hosted-storage-privacy-proof.v1",
+    "approvalId": "storage-privacy-proof-24h-20260814",
+    "recordedAt": "2026-08-14T20:46:15.344Z",
+    "branchDeletedAt": "2026-08-14T20:46:15.349Z"
+  },
+  "managedPersistence": {
+    "proofComplete": true,
+    "contract": "supermega.managed-persistence-proof.v1",
+    "approvalId": "persistence-proof-24h-20260816",
+    "recordedAt": "2026-08-16T09:14:56.804Z",
+    "branchDeletedAt": "2026-08-16T09:14:56.808Z"
   },
   "gates": [
     {
@@ -87,15 +103,15 @@
     },
     {
       "id": "hosted_postgres17",
-      "status": "blocked",
-      "evidence": "Protected production is PostgreSQL 17 at managed schema v7; no owner-approved isolated hosted rehearsal exists.",
-      "nextAction": "Apply v8 through v10 plus the digest-bound public browser quarantine on an approved isolated Supabase target, then rerun the hosted validator and session-revocation proof."
+      "status": "ready-hosted",
+      "evidence": "Protected production is PostgreSQL 17 at managed schema v10 with zero drift from local target v10.",
+      "nextAction": "Keep the hosted schema at the local target and the audit current."
     },
     {
       "id": "hosted_storage_privacy",
-      "status": "blocked",
-      "evidence": "The six-request verifier is ready, but hosted proof is absent.",
-      "nextAction": "Run the verifier against an owner-approved isolated private bucket."
+      "status": "ready-hosted",
+      "evidence": "Six-request hosted audit passed: anonymous and cross-tenant access denied with canary confirmation, owner and signed access working, zero mutations, branch deleted after evidence.",
+      "nextAction": "Keep the storage-privacy evidence and instrument current."
     },
     {
       "id": "live_product_contract",
@@ -105,21 +121,21 @@
     },
     {
       "id": "managed_persistence",
-      "status": "blocked",
-      "evidence": "Live managed persistence ready is false.",
-      "nextAction": "Prove durable commands, recovery, and tenant isolation on the isolated target."
+      "status": "ready-hosted",
+      "evidence": "Seven-proof hosted audit passed: durable writes with read-back, exact idempotent retry, version-conflict rejection, event immutability, cross-tenant denial, recovery round-trip, and induced atomic rollback, on a deleted isolated branch.",
+      "nextAction": "Keep the persistence evidence and instrument current."
     },
     {
       "id": "security",
-      "status": "blocked",
-      "evidence": "27 fail-closed public-table advisor findings remain; browser object/default grants are not yet quarantined on hosted Supabase, and protected managed schema v7 trails local target v10.",
-      "nextAction": "Apply the digest-bound v8 through v10 chain and prepared public browser quarantine only on an owner-approved isolated target, then rerun advisor, exact relation and default-grant catalog, active-session revocation, role-boundary, storage, backup, and restore checks before any production proposal."
+      "status": "ready-hosted",
+      "evidence": "Advisor is clear on protected managed schema v10 with metadata RLS enabled and zero drift from local target v10.",
+      "nextAction": "Schema v10 and the public browser quarantine are live with a clear advisor; complete hosted storage-privacy, recovery, and self-serve pilot proofs before any managed activation proposal."
     },
     {
-      "id": "named_pilot",
+      "id": "self_serve_pilot",
       "status": "blocked",
-      "evidence": "HQ records no named pilot customer or measured baseline.",
-      "nextAction": "Select one Shop design partner, named operator, baseline, and acceptance evidence."
+      "evidence": "HQ records no completed self-serve pilot setup or measured baseline.",
+      "nextAction": "Open the self-serve activation window on the approved isolated target."
     },
     {
       "id": "production_activation",
@@ -136,8 +152,8 @@
       "automationStatus": "owner-gated",
       "workOrderId": "shop-managed-order-close-pilot",
       "proposedWork": "Shop: rehearse one authenticated order-to-close and return exception with a named operator on an isolated managed tenant.",
-      "blockingReason": "The next Shop proof requires a founder-selected operator and approved isolated tenant, so local automation must not spend a model call pretending it can complete it.",
-      "requiredProof": "Repeat one authenticated order-to-close and return-exception pilot on an isolated hosted tenant with a named operator, baseline, and five-day evidence plan."
+      "blockingReason": "Needs founder-selected operator and approved isolated tenant; automation cannot substitute founder decisions.",
+      "requiredProof": "One authenticated order-to-close and return-exception pilot on isolated hosted tenant; named operator, baseline, and five-day evidence plan."
     },
     {
       "productId": "plant",
@@ -146,8 +162,8 @@
       "automationStatus": "owner-gated",
       "workOrderId": "plant-managed-oee-pilot",
       "proposedWork": "Plant: validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant.",
-      "blockingReason": "The Plant evidence gate needs named human timing evidence and an approved managed tenant; automation cannot manufacture either input.",
-      "requiredProof": "Validate one order-bound OEE window with an operator and supervisor on an isolated managed tenant, reconcile the exact work-centre downtime source, and measure correction effort before adding costing or calibration adapters."
+      "blockingReason": "Needs named human timing evidence and approved managed tenant.",
+      "requiredProof": "Validate one order-bound OEE window with named operator and supervisor on isolated managed tenant; reconcile exact downtime source; measure correction effort before costing adapters."
     },
     {
       "productId": "website",
@@ -156,7 +172,7 @@
       "automationStatus": "owner-gated",
       "workOrderId": "website-managed-brief-acceptance",
       "proposedWork": "Website: run one named business brief through responsive review and retain the accepted managed artifact.",
-      "blockingReason": "A real named business brief and accepted owner review are missing, so a generated sample cannot truthfully close the Website gate.",
+      "blockingReason": "Needs named business brief and accepted owner review; sample cannot close the gate.",
       "requiredProof": "Complete one named-business brief through accepted responsive preview and retained managed artifact before connecting domain or publish authority."
     },
     {
@@ -166,8 +182,8 @@
       "automationStatus": "owner-gated",
       "workOrderId": "ecommerce-managed-order-exception-pilot",
       "proposedWork": "Ecommerce: prove checkout, acknowledgement, contact or delivery correction, and Shop replacement review with a named operator on one isolated managed tenant.",
-      "blockingReason": "ENG-146 completed the local correction boundary. The next proof needs a founder-selected operator and approved isolated managed tenant; automation cannot manufacture those inputs or claim hosted persistence.",
-      "requiredProof": "Prove the completed cart-to-Shop handoff and customer-safe acknowledgement on a protected preview and isolated managed tenant, then add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
+      "blockingReason": "ENG-146 done. Needs founder-selected operator and approved isolated managed tenant; automation cannot claim hosted persistence.",
+      "requiredProof": "Prove cart-to-Shop handoff and customer-safe acknowledgement on protected preview and isolated managed tenant; add tax, shipping, and payment adapters only behind accountable approval and duplicate-safe recovery."
     }
   ],
   "controls": {
@@ -193,31 +209,39 @@
   "sourceReceipts": [
     {
       "path": "hq/portfolio.json",
-      "digest": "sha256:2f428cb0adf5b24f58c9a3ff0a3f33741a34ddc548c49f8adc211a2fd55adef4"
+      "digest": "sha256:7ed06f9f44edc57a3a58eef99fa0d0031b482cdb4a1b76b3baf08930226f4f87"
     },
     {
       "path": "hq/research/postgres17-rehearsal.json",
-      "digest": "sha256:b5df3bc61f5c5af1992209c8e69cdb4b8b5f26ad079fb1d19332b01907948a1c"
+      "digest": "sha256:094d7a48aef775ccecda91bbadfe99b612ea6c9bb1382b1cbabc22c1fac57775"
     },
     {
       "path": "hq/pilots/private-storage-privacy-audit.md",
-      "digest": "sha256:392c1d5e65efacd355ad0e879376f4ca9b4b1bc2aa4d192105a518a2586d63fc"
+      "digest": "sha256:ff953f951b5f4e29025f3dc22f7e7e7af21685075e5b88997e55e3d63dedacec"
     },
     {
       "path": "hq/readiness/supabase-security-advisor-audit.json",
-      "digest": "sha256:c74d7794ce200a16612a7503be2a9b7e1c4ce02b462d0c9fa7d0806869af55b1"
+      "digest": "sha256:a3fe4fdf06e0a1bd0b4e0be1a63a1f91bb0fda03d1ccd085eab85935157e98c3"
+    },
+    {
+      "path": "hq/readiness/hosted-storage-privacy-proof.json",
+      "digest": "sha256:d6c5d2eda403adfe130d461ca9b314b2482360e67bb61d2b11d91c82347fa734"
+    },
+    {
+      "path": "hq/readiness/managed-persistence-proof.json",
+      "digest": "sha256:7a5313676672cf55fafdbbdbf53b27c08db97ef01a400101a8fbf7a7726472a0"
     },
     {
       "path": "hq/NOW.md",
-      "digest": "sha256:2a5a0de7d52b148841c560bea949fec09daa810515c337e66ef249a7c407b6b7"
+      "digest": "sha256:db7f966745c5e0a880841583beeecc35c716f1aeda7184af781177e7fc03c391"
     },
     {
       "path": "package.json",
-      "digest": "sha256:4881cf520572b388d670a8bebaec889920f01769bcbb815fbc0b5cb27f6234f7"
+      "digest": "sha256:2ccb065cfce6852aa97e094d2dd7e4ba80bdf3c43c805cbccc4541e2dd911f42"
     },
     {
       "path": "kernel/managed-pilot-readiness.mjs",
-      "digest": "sha256:0ba0ac92c48fcc43ebd6418f7559291228f4692a03aedac93ec5264126c21b77"
+      "digest": "sha256:7db3039de69a520e7926dad61c539ea17363df53ec55bd62df99a83f07a8a486"
     }
   ]
 }

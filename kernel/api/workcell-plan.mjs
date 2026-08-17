@@ -1,6 +1,7 @@
 // Ops-gated, no-mutation client activation planner.
 // It validates one client manifest and returns only names/checklists; secret values are never read.
 
+import { usableOpsKey } from '../ops-key.mjs'
 import crypto from 'node:crypto'
 
 import { buildProvisionPlan, validateClientManifest } from '../workcell-provision.mjs'
@@ -13,7 +14,7 @@ function constantTimeEqual(a, b) {
 
 export async function handleWorkcellPlan(request = {}, options = {}) {
   const env = options.env || process.env
-  const opsKey = String(options.opsKey ?? env.SUPERMEGA_OPS_KEY ?? '').trim()
+  const opsKey = usableOpsKey(options.opsKey ?? env.SUPERMEGA_OPS_KEY)
   if (!opsKey) return { status: 503, json: { ok: false, reason: 'ops_key_not_configured' } }
   if (!constantTimeEqual(String(request.headers?.['x-ops-key'] || ''), opsKey)) {
     return { status: 401, json: { ok: false, reason: 'unauthorized' } }

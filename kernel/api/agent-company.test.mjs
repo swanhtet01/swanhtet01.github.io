@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { handleAgentCompany } from './agent-company.mjs'
 import { SUPERMEGA_HQ_AUTHORITY } from '../supermega-hq-authority.mjs'
 
-const KEY = 'ops-secret'
+const KEY = 'ops-secret-0123456789abcdef012345'
 const CYCLE_NOW = new Date('2026-07-14T09:00:00.000Z')
 const validBody = {
   action: 'plan',

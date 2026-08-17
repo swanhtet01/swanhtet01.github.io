@@ -1,5 +1,6 @@
 // Ops-gated approval inbox. Agents may draft; only explicit owner commands approve or execute.
 
+import { usableOpsKey } from '../ops-key.mjs'
 import { createHash, timingSafeEqual } from 'node:crypto'
 
 import {
@@ -29,7 +30,7 @@ function statusFor(result, successStatus = 200) {
 
 export async function handleApprovals(request = {}, options = {}) {
   const env = options.env || process.env
-  const opsKey = String(options.opsKey ?? env.SUPERMEGA_OPS_KEY ?? '').trim()
+  const opsKey = usableOpsKey(options.opsKey ?? env.SUPERMEGA_OPS_KEY)
   if (!opsKey) return { status: 503, json: { ok: false, reason: 'ops_key_not_configured' } }
   if (!equal(request.headers?.['x-ops-key'] || '', opsKey)) {
     return { status: 401, json: { ok: false, reason: 'unauthorized' } }
