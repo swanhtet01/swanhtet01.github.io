@@ -59,7 +59,7 @@ function req({ hoursAgo, totalMmk = 10000, fulfilment = 'pickup' }) {
   }
 }
 
-function state({ requests = [], returnIntents = [], cancellationIntents = [] } = {}) {
+function state({ requests = [], returnIntents = [], cancellationIntents = [], cancellationDecisions = [] } = {}) {
   return {
     schema: 'supermega.ecommerce.buying_lifecycle.v1',
     scope: 's1',
@@ -70,7 +70,7 @@ function state({ requests = [], returnIntents = [], cancellationIntents = [] } =
     supportIntents: [],
     correctionIntents: [],
     cancellationIntents,
-    cancellationDecisions: [],
+    cancellationDecisions,
     amendmentIntents: [],
   }
 }
@@ -195,6 +195,30 @@ function state({ requests = [], returnIntents = [], cancellationIntents = [] } =
   check(r.pendingReturnIntents === 1, 'combined: one return intent')
   check(r.pendingCancellationIntents === 2, 'combined: two cancellation intents')
   check(r.oldestRequestAgeHours === 96, 'combined: oldestAgeHours is 96')
+}
+
+// 13. A cancellation intent with a matching decision is excluded from pendingCancellationIntents
+{
+  const r = projectEcommerceRequestAgeSummary(
+    state({
+      cancellationIntents: [{ id: 'ci1' }],
+      cancellationDecisions: [{ intentId: 'ci1' }],
+    }),
+    ASOF,
+  )
+  check(r.pendingCancellationIntents === 0, 'decided cancellation intent excluded from pending count')
+}
+
+// 14. Only the decided cancellation intent is excluded, others remain pending
+{
+  const r = projectEcommerceRequestAgeSummary(
+    state({
+      cancellationIntents: [{ id: 'ci1' }, { id: 'ci2' }],
+      cancellationDecisions: [{ intentId: 'ci1' }],
+    }),
+    ASOF,
+  )
+  check(r.pendingCancellationIntents === 1, 'only the undecided cancellation intent remains pending')
 }
 
 console.log(JSON.stringify({ ok: true, checks }))

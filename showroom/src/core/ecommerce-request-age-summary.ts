@@ -43,11 +43,18 @@ export function projectEcommerceRequestAgeSummary(
     }
   }
 
+  // returnIntents has no resolution marker of its own — a return only resolves via a
+  // Shop CommerceOrder's .returns array (see projectEcommerceReturnOutcome), which this
+  // projection doesn't receive, so it cannot exclude resolved returns here.
+  const cancellationDecisionIntentIds = new Set(buying.cancellationDecisions.map((d) => d.intentId))
+  const pendingCancellationIntents = buying.cancellationIntents
+    .filter((c) => !cancellationDecisionIntentIds.has(c.id)).length
+
   return {
     totalPending: buying.requests.length,
     byAge: { fresh, aging, stale },
     oldestRequestAgeHours: oldestAgeHours,
     pendingReturnIntents: buying.returnIntents.length,
-    pendingCancellationIntents: buying.cancellationIntents.length,
+    pendingCancellationIntents,
   }
 }

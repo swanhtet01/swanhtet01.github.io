@@ -166,7 +166,7 @@ function parseOrderImportCsv(source: string) {
       field = ''
     } else if (character === '\n') {
       row.push(field.trim())
-      rows.push(row)
+      if (row.some(Boolean)) rows.push(row)
       row = []
       field = ''
     } else if (character !== '\r') field += character
