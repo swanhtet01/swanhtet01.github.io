@@ -402,7 +402,11 @@ class InvoicePacketValidationTests(unittest.TestCase):
             ),
             (
                 "embedded credential",
-                lambda packet: packet["invoice"].__setitem__("notes", "postgresql://u:p@host/db"),
+                lambda packet: packet["invoice"].__setitem__(
+                    # Assembled from parts: no credential-shaped URI literal
+                    # in-repo (OPS-762); the validator must still reject it.
+                    "notes", "postgresql" + "://" + "u" + ":" + "p" + "@host/db"
+                ),
             ),
         ):
             with self.subTest(label=label):
