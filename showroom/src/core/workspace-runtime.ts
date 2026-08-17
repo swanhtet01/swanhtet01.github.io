@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react'
 
 import {
+  COMMERCE_KEY,
   commerceWorkspaceCanWrite,
   createEmptyCommerce,
   loadCommerceWorkspace,
@@ -544,6 +545,19 @@ export function useCommerceWorkspace(managedIdentity: ManagedIdentity | null = n
       })
     return () => { active = false }
   }, [managedIdentity, updateSyncStatus])
+
+  useEffect(() => {
+    if (managedIdentity) return undefined
+    function refreshFromStorage(event: StorageEvent) {
+      if (event.key !== COMMERCE_KEY) return
+      const local = loadCommerceWorkspace()
+      const next = { state: local.state, mode: 'local' as const, workspaceId: '', version: null, error: local.error, writeReady: !local.error && commerceWorkspaceCanWrite() }
+      snapshotRef.current = next
+      setLocalSnapshot(next)
+    }
+    window.addEventListener('storage', refreshFromStorage)
+    return () => window.removeEventListener('storage', refreshFromStorage)
+  }, [managedIdentity])
 
   useEffect(() => {
     if (!managedIdentity) return undefined
