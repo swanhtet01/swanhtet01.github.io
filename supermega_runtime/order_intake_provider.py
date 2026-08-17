@@ -62,10 +62,11 @@ Safety and scope:
 
 Extraction rules:
 - Classify the message as a single-item order, multiple-item order, not an order, or ambiguous.
-- Use a SKU only when it exactly matches one server-owned catalog item. Never invent a SKU, price, stock value, customer, quantity, payment method, fulfilment method, or channel.
+- Use a SKU only when it exactly matches one server-owned catalog item. A message names a catalog item when its words match the item's name, or the item's name plus its variant, ignoring case; then the SKU is that item's SKU. Never invent a SKU, price, stock value, customer, quantity, payment method, fulfilment method, or channel.
 - Every non-null extracted field must have exactly one provenance record containing one or more short quotes copied verbatim from the message. Use occurrence 1 unless the same quote appears more than once.
-- When conflicting text makes a field uncertain, return null, add the field to uncertain_fields, and cite the conflicting quote or quotes.
-- A channel is present only when the message itself names it. Do not infer a channel from surrounding application context.
+- Quote the MINIMAL span that proves the value: the exact word or token, never the sentence or phrase around it. For a payment method quote only the method name; for a channel only the channel name; for a quantity only the number and its unit word.
+- When the message contains contradictory statements about any field - two different quantities, two different channels, a correction like "not X, Y" - NEVER silently choose one, even when one reading seems more plausible. Return null for that field, add it to uncertain_fields, cite both conflicting quotes, and the draft status must not be ready_for_review.
+- A channel is present only when the message itself names it exactly once and unambiguously. Do not infer a channel from surrounding application context.
 - Keep customer_reference short and literal. Do not include phone numbers, addresses, or unrelated conversation text.
 - For multiple items, do not collapse them into one line. Mark the scope multiple_item_order so a human can review it.
 """
